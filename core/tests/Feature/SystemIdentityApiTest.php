@@ -6,6 +6,7 @@ use App\Jobs\ApplyPlatformDnsSettings;
 use App\Models\Operation;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -15,6 +16,7 @@ class SystemIdentityApiTest extends TestCase
 
     public function test_admin_validates_and_applies_typed_dns_identity_through_an_operation(): void
     {
+        Queue::fake();
         $admin = User::factory()->admin()->create();
         $payload = $this->validPayload();
 
@@ -28,6 +30,10 @@ class SystemIdentityApiTest extends TestCase
             ->assertJsonPath('data.status', 'pending');
 
         $operationId = $response->json('data.id');
+        Queue::assertPushed(
+            ApplyPlatformDnsSettings::class,
+            fn (ApplyPlatformDnsSettings $job): bool => $job->operationId === $operationId,
+        );
         (new ApplyPlatformDnsSettings($operationId))->handle();
         $this->assertDatabaseHas('operations', ['id' => $operationId, 'type' => 'platform_dns_identity.update', 'status' => 'succeeded']);
         $this->assertDatabaseHas('platform_dns_settings', ['id' => 1, 'platform_domain' => 'cdnf.test']);

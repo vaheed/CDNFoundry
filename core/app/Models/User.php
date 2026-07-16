@@ -5,6 +5,8 @@ namespace App\Models;
 use App\Enums\UserType;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,7 +16,7 @@ use Laravel\Sanctum\HasApiTokens;
 
 #[Fillable(['name', 'email', 'password', 'type', 'disabled_at'])]
 #[Hidden(['password', 'remember_token'])]
-class User extends Authenticatable
+class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
@@ -27,6 +29,19 @@ class User extends Authenticatable
     public function isDisabled(): bool
     {
         return $this->disabled_at !== null;
+    }
+
+    public function canAccessPanel(Panel $panel): bool
+    {
+        if ($this->isDisabled()) {
+            return false;
+        }
+
+        return match ($panel->getId()) {
+            'admin' => $this->isAdmin(),
+            'app' => ! $this->isAdmin(),
+            default => false,
+        };
     }
 
     /**
