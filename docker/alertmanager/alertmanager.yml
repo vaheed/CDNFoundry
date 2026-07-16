@@ -1,0 +1,5 @@
+route:
+  receiver: local
+receivers:
+  - name: local
+
