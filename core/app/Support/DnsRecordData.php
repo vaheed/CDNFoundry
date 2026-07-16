@@ -1,0 +1,124 @@
+<?php
+
+namespace App\Support;
+
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
+
+final class DnsRecordData
+{
+    public const TYPES = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'CAA', 'SRV', 'PTR'];
+
+    /** @return array{type:string,name:string,content:string,content_hash:string,ttl:int,priority:int,weight:int,port:int,mode:string} */
+    public static function validate(array $input, string $zone): array
+    {
+        if (isset($input['type']) && is_string($input['type'])) {
+            $input['type'] = strtoupper($input['type']);
+        }
+        $validator = Validator::make($input, [
+            'type' => ['required', 'string', 'in:'.implode(',', self::TYPES)],
+            'name' => ['required', 'string', 'max:253'],
+            'content' => ['required', 'string', 'max:4096'],
+            'ttl' => ['required', 'integer', 'between:30,2147483647'],
+            'priority' => ['nullable', 'integer', 'between:0,65535'],
+            'weight' => ['nullable', 'integer', 'between:0,65535'],
+            'port' => ['nullable', 'integer', 'between:0,65535'],
+            'mode' => ['nullable', 'in:dns_only'],
+        ]);
+        $validator->after(function ($validator) use ($input, $zone): void {
+            try {
+                $type = strtoupper((string) ($input['type'] ?? ''));
+                $name = self::normalizeOwner((string) ($input['name'] ?? ''), $zone);
+                self::normalizeContent($type, (string) ($input['content'] ?? ''), $zone);
+                if ($type === 'MX' && ! array_key_exists('priority', $input)) {
+                    $validator->errors()->add('priority', 'MX records require a priority.');
+                }
+                if ($type === 'SRV' && (! array_key_exists('priority', $input) || ! array_key_exists('weight', $input) || ! array_key_exists('port', $input))) {
+                    $validator->errors()->add('priority', 'SRV records require priority, weight, and port.');
+                }
+                if ($type === 'SRV' && preg_match('/^_[a-z0-9-]+\._(?:tcp|udp|sctp)\./', $name) !== 1) {
+                    $validator->errors()->add('name', 'SRV owners must begin with _service._protocol.');
+                }
+                if ($type !== 'SRV' && str_contains($name, '_')) {
+                    $validator->errors()->add('name', 'Underscores are allowed only in SRV record owners.');
+                }
+            } catch (\InvalidArgumentException $exception) {
+                $validator->errors()->add('content', $exception->getMessage());
+            }
+        });
+
+        if ($validator->fails()) {
+            throw new ValidationException($validator);
+        }
+
+        $type = strtoupper((string) $input['type']);
+        $content = self::normalizeContent($type, (string) $input['content'], $zone);
+
+        return [
+            'type' => $type,
+            'name' => self::normalizeOwner((string) $input['name'], $zone),
+            'content' => $content,
+            'content_hash' => hash('sha256', $content),
+            'ttl' => (int) $input['ttl'],
+            'priority' => (int) ($input['priority'] ?? 0),
+            'weight' => (int) ($input['weight'] ?? 0),
+            'port' => (int) ($input['port'] ?? 0),
+            'mode' => 'dns_only',
+        ];
+    }
+
+    public static function normalizeOwner(string $value, string $zone): string
+    {
+        $value = trim($value);
+        if ($value === '@') {
+            return $zone;
+        }
+        $bare = rtrim(mb_strtolower($value), '.');
+        $fqdn = ($bare === $zone || str_ends_with($bare, '.'.$zone)) ? $bare : $bare.'.'.$zone;
+        $ascii = idn_to_ascii(mb_strtolower($fqdn), IDNA_NONTRANSITIONAL_TO_ASCII, INTL_IDNA_VARIANT_UTS46);
+        if ($ascii === false || strlen($ascii) > 253 || ($ascii !== $zone && ! str_ends_with($ascii, '.'.$zone))) {
+            throw new \InvalidArgumentException('The record owner must be inside the managed zone.');
+        }
+        foreach (explode('.', $ascii) as $label) {
+            if ($label === '' || strlen($label) > 63 || preg_match('/^(?!-)[a-z0-9_-]+(?<!-)$/', $label) !== 1) {
+                throw new \InvalidArgumentException('The record owner is invalid.');
+            }
+        }
+
+        return $ascii;
+    }
+
+    private static function normalizeContent(string $type, string $value, string $zone): string
+    {
+        $value = trim($value);
+
+        return match ($type) {
+            'A' => filter_var($value, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false ? $value : throw new \InvalidArgumentException('Content must be a valid IPv4 address.'),
+            'AAAA' => filter_var($value, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false ? strtolower($value) : throw new \InvalidArgumentException('Content must be a valid IPv6 address.'),
+            'CNAME', 'NS', 'MX', 'PTR' => self::normalizeTarget($value, $zone),
+            'TXT' => strlen($value) <= 4096 && $value !== '' ? $value : throw new \InvalidArgumentException('TXT content is invalid.'),
+            'CAA' => preg_match('/^(?:0|[1-9][0-9]{0,2})\s+(?:issue|issuewild|iodef)\s+"[^"\r\n]+"$/', $value) === 1 ? $value : throw new \InvalidArgumentException('CAA content must contain flags, a supported tag, and a quoted value.'),
+            'SRV' => self::normalizeTarget($value, $zone),
+            default => throw new \InvalidArgumentException('The record type is unsupported.'),
+        };
+    }
+
+    private static function normalizeTarget(string $value, string $zone): string
+    {
+        if ($value === '.') {
+            return $value;
+        }
+        $fqdn = str_ends_with($value, '.') ? rtrim($value, '.') : $value.'.'.$zone;
+        $ascii = idn_to_ascii(mb_strtolower($fqdn), IDNA_NONTRANSITIONAL_TO_ASCII, INTL_IDNA_VARIANT_UTS46);
+        if ($ascii === false || strlen($ascii) > 253) {
+            throw new \InvalidArgumentException('Content must be a valid DNS name.');
+        }
+        foreach (explode('.', $ascii) as $label) {
+            if ($label === '' || strlen($label) > 63 || preg_match('/^(?!-)[a-z0-9-]+(?<!-)$/', $label) !== 1) {
+                throw new \InvalidArgumentException('Content must be a valid DNS name.');
+            }
+        }
+
+        return $ascii.'.';
+    }
+}

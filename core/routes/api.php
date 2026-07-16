@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\DomainUserController;
 use App\Http\Controllers\Admin\PlatformDnsSettingsController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\DnsRecordController;
 use App\Http\Controllers\DomainController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\OperationController;
@@ -29,6 +30,12 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function (): void {
     Route::get('/domains/{domain}', [DomainController::class, 'show']);
     Route::post('/domains/{domain}/disable', [DomainController::class, 'disable'])->middleware('idempotent');
     Route::delete('/domains/{domain}', [DomainController::class, 'destroy'])->middleware('idempotent');
+    Route::get('/domains/{domain}/dns/records', [DnsRecordController::class, 'index']);
+    Route::post('/domains/{domain}/dns/records', [DnsRecordController::class, 'store'])->middleware('idempotent');
+    Route::post('/domains/{domain}/dns/records/bulk', [DnsRecordController::class, 'bulk'])->middleware('idempotent');
+    Route::get('/domains/{domain}/dns/records/{record}', [DnsRecordController::class, 'show']);
+    Route::patch('/domains/{domain}/dns/records/{record}', [DnsRecordController::class, 'update'])->middleware('idempotent');
+    Route::delete('/domains/{domain}/dns/records/{record}', [DnsRecordController::class, 'destroy'])->middleware('idempotent');
 
     Route::prefix('admin')->middleware('admin')->group(function (): void {
         Route::get('/users', [UserController::class, 'index']);

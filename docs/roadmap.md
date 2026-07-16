@@ -1149,8 +1149,8 @@ No origin is requested.
 
 - [ ] All supported types pass validation and real `dig` tests.
 - [ ] A and AAAA behaviour is equivalent.
-- [ ] Bulk updates are atomic.
-- [ ] One bulk update creates one zone revision.
+- [x] Bulk updates are atomic.
+- [x] One bulk update creates one zone revision.
 - [ ] Duplicate jobs do not duplicate records or corrupt serials.
 - [ ] Invalid desired zones do not replace active zones.
 - [ ] DNSdist is the only public DNS service.
