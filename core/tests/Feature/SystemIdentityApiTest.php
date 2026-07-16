@@ -46,10 +46,12 @@ class SystemIdentityApiTest extends TestCase
     {
         $admin = User::factory()->admin()->create();
         $payload = $this->validPayload();
+        $payload['nameservers'][0]['ipv4'] = 'not-ipv4';
         $payload['nameservers'][0]['ipv6'] = 'not-ipv6';
 
         $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)
-            ->assertUnprocessable()->assertJsonValidationErrors('nameservers.0.ipv6');
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['nameservers.0.ipv4', 'nameservers.0.ipv6']);
     }
 
     public function test_domain_user_cannot_read_dns_identity_or_other_users_operation(): void

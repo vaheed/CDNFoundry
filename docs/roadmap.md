@@ -891,52 +891,68 @@ Both panels share design components and models. They are responsive and avoid de
 
 #### Completion Checklist
 
+Implementation and non-browser qualification evidence: [Phase 1 qualification](phase-1-qualification.md). Browser automation is a manual user-owned release job.
+
 ##### Application
 
-- [ ] A clean `compose.dev.yml` deployment becomes healthy.
-- [ ] Migrations run through an explicit deploy command.
-- [ ] Application startup never silently changes the database schema.
-- [ ] Web, Horizon, and Scheduler restart independently.
-- [ ] Horizon access is administrator-only.
-- [ ] The two Filament panels use the same application and authorization model.
-- [ ] `compose.prod.yml` documents explicit service-set commands for control, DNS, telemetry, and edge hosts.
+- [x] A clean `compose.dev.yml` deployment becomes healthy.
+- [x] Migrations run through an explicit deploy command.
+- [x] Application startup never silently changes the database schema.
+- [x] Web, Horizon, and Scheduler restart independently.
+- [x] Horizon access is administrator-only.
+- [x] The two Filament panels use the same application and authorization model.
+- [x] `compose.prod.yml` documents explicit service-set commands for control, DNS, telemetry, and edge hosts.
 
 ##### Access
 
-- [ ] `users.type` accepts only `admin` or `user`.
-- [ ] Administrators can create, edit, disable, enable, and safely delete eligible users.
-- [ ] Disabled users lose sessions and tokens according to policy.
-- [ ] API tokens are named, shown once, hashed at rest, and revocable.
-- [ ] Browser and API permission-boundary tests match.
+- [x] `users.type` accepts only `admin` or `user`.
+- [x] Administrators can create, edit, disable, enable, and safely delete eligible users.
+- [x] Disabled users lose sessions and tokens according to policy.
+- [x] API tokens are named, shown once, hashed at rest, and revocable.
+- [x] Browser-session and API permission-boundary tests match.
 
 ##### Reliability
 
-- [ ] Every user or administrator mutation creates an audit entry.
-- [ ] Every mutating endpoint supports idempotency.
-- [ ] Key reuse with a different payload is rejected.
-- [ ] Cursor pagination is used for all lists.
-- [ ] Queue and Scheduler restart tests pass.
-- [ ] Bulk work cannot starve interactive, runtime, certificate, or purge work.
-- [ ] Queue depth and oldest-job age are visible per lane.
-- [ ] Health checks have bounded timeouts.
-- [ ] Development PowerAdmin changes are documented as unsupported runtime drift.
-- [ ] IPv4 and IPv6 platform identity validation both pass.
+- [x] Every user or administrator mutation creates an audit entry.
+- [x] Every mutating endpoint supports idempotency.
+- [x] Key reuse with a different payload is rejected.
+- [x] Cursor pagination is used for all lists.
+- [x] Queue and Scheduler restart tests pass.
+- [x] Bulk work cannot starve interactive, runtime, certificate, or purge work.
+- [x] Queue depth and oldest-job age are visible per lane.
+- [x] Health checks have bounded timeouts.
+- [x] Development PowerAdmin changes are documented as unsupported runtime drift.
+- [x] IPv4 and IPv6 platform identity validation both pass.
 
 ##### Browser and Real Runtime
 
 - [ ] Administrator login, user creation, disable, enable, profile, and token flows pass in a real browser.
-- [ ] Domain-user navigation cannot expose administrator pages.
-- [ ] Restarting web, Horizon, and Scheduler does not lose committed user changes.
+- [x] Domain-user navigation cannot expose administrator pages.
+- [x] Restarting web, Horizon, and Scheduler does not lose committed user changes.
 
 ##### Documentation
 
-- [ ] Installation guide
-- [ ] Development stack guide
-- [ ] Production service-layout guide
-- [ ] Authentication and token API documentation
-- [ ] System DNS identity guide
-- [ ] Root `AGENTS.md` matches Appendix A and forbids microservices, custom RBAC, CQRS, repositories, synchronous deployment work, and per-domain runtime processes
-- [ ] The required project-local coding-agent skills from Appendix B exist and pass one representative dry run each
+- [x] Installation guide
+- [x] Development stack guide
+- [x] Production service-layout guide
+- [x] Authentication and token API documentation
+- [x] System DNS identity guide
+- [x] Root `AGENTS.md` matches Appendix A and forbids microservices, custom RBAC, CQRS, repositories, synchronous deployment work, and per-domain runtime processes
+- [x] The required project-local coding-agent skills from Appendix B exist and pass one representative dry run each
+
+---
+
+#### Phase 1 Completion Appendix
+
+Phase 1 engineering is complete. The application, access model, typed system identity, asynchronous operation foundation, Compose topologies, documentation, repository contracts, and non-UI qualification are implemented.
+
+Automated end-to-end qualification is Python-based and intentionally limited to backend and runtime behavior. `make dev-e2e` exercises the real Compose API, authentication, authorization boundaries, idempotency, token lifecycle, user disable/enable behavior, auditing, queue execution, and asynchronous system DNS identity application. Coding agents must keep this test non-UI.
+
+Rendered UI and browser usability remain project-owner acceptance responsibilities. The owner follows `docs/manual-browser-qualification.md`; coding agents do not install or launch browser automation. This manual responsibility does not block Phase 2 development, but its roadmap checkbox remains open until the owner records a successful release acceptance run.
+
+GitHub Actions runs PHP tests and formatting, OpenAPI contract checks, frontend asset compilation, development and production Compose validation, the Python real-stack E2E, and test/build commands for every Go module present in the repository. The Go job reports a clean no-op until Phase 2 introduces the first module.
+
+Qualification evidence is maintained in `docs/phase-1-qualification.md`.
 
 ---
 
@@ -3626,4 +3642,3 @@ Do not create skills for:
 - [ ] Skill instructions do not permit phase names in production files.
 - [ ] Skills do not introduce dependencies or patterns forbidden by `AGENTS.md`.
 - [ ] Obsolete skills are removed instead of accumulating conflicting versions.
-

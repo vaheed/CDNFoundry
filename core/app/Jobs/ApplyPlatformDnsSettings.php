@@ -6,15 +6,18 @@ use App\Models\AuditLog;
 use App\Models\Operation;
 use App\Models\PlatformDnsSetting;
 use App\Models\User;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Throwable;
 
-class ApplyPlatformDnsSettings implements ShouldQueue
+class ApplyPlatformDnsSettings implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
     public int $tries = 3;
+
+    public int $uniqueFor = 3600;
 
     public function __construct(public string $operationId)
     {
@@ -24,10 +27,18 @@ class ApplyPlatformDnsSettings implements ShouldQueue
     public function handle(): void
     {
         $operation = Operation::query()->findOrFail($this->operationId);
+        if ($operation->status === 'succeeded') {
+            return;
+        }
         $operation->update(['status' => 'running', 'started_at' => now(), 'attempts' => $operation->attempts + 1]);
         PlatformDnsSetting::query()->updateOrCreate(['id' => 1], $operation->input);
         $operation->update(['status' => 'succeeded', 'result' => ['settings_id' => 1], 'finished_at' => now(), 'error' => null]);
         AuditLog::record($operation->actor_id ? User::find($operation->actor_id) : null, 'platform_dns_settings.applied', $operation);
+    }
+
+    public function uniqueId(): string
+    {
+        return $this->operationId;
     }
 
     public function failed(Throwable $exception): void

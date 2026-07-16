@@ -2,11 +2,13 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Domain\Pages\DomainDashboard;
+use App\Filament\Shared\Pages\ApiTokens;
+use App\Filament\Shared\Pages\EditProfile;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
@@ -28,8 +30,10 @@ class DomainPanelProvider extends PanelProvider
             ->path('app')
             ->login()
             ->brandName('CDNFoundry')
+            ->profile(EditProfile::class)
             ->colors(['primary' => Color::Amber])
-            ->pages([Dashboard::class])
+            ->discoverPages(in: app_path('Filament/Domain/Pages'), for: 'App\\Filament\\Domain\\Pages')
+            ->pages([DomainDashboard::class, ApiTokens::class])
             ->widgets([AccountWidget::class])
             ->middleware([
                 EncryptCookies::class,

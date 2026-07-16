@@ -27,12 +27,10 @@ class OperationController extends Controller
     public function retry(Request $request, Operation $operation): JsonResponse
     {
         abort_unless($operation->status === 'failed', 409, 'Only failed operations can be retried.');
+        abort_unless($operation->type === 'platform_dns_identity.update', 422, 'Unsupported operation type.');
         $operation->update(['status' => 'pending', 'error' => null, 'finished_at' => null]);
         AuditLog::record($request->user(), 'operation.retry_requested', $operation, [], $request->ip());
-        match ($operation->type) {
-            'platform_dns_identity.update' => ApplyPlatformDnsSettings::dispatch($operation->getKey()),
-            default => abort(422, 'Unsupported operation type.'),
-        };
+        ApplyPlatformDnsSettings::dispatch($operation->getKey());
 
         return response()->json(['data' => $operation->refresh()], 202);
     }

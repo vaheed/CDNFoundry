@@ -93,4 +93,65 @@ class AccessApiTest extends TestCase
         $this->actingAs($user)->deleteJson("/api/me/tokens/$tokenId")->assertOk();
         $this->assertDatabaseMissing('personal_access_tokens', ['id' => $tokenId]);
     }
+
+    public function test_profile_and_password_mutations_are_audited_and_revoke_other_tokens(): void
+    {
+        $user = User::factory()->create(['password' => 'CorrectHorseBattery9']);
+        $first = $user->createToken('first')->accessToken;
+        $second = $user->createToken('second')->accessToken;
+
+        $this->actingAs($user)->withHeader('Idempotency-Key', (string) Str::uuid())->patchJson('/api/me', [
+            'name' => 'Updated Operator',
+            'email' => 'updated@example.test',
+        ])->assertOk()->assertJsonPath('data.name', 'Updated Operator');
+
+        $this->actingAs($user)->withHeader('Idempotency-Key', (string) Str::uuid())->putJson('/api/me/password', [
+            'current_password' => 'CorrectHorseBattery9',
+            'password' => 'AnotherStrongPassword9',
+            'password_confirmation' => 'AnotherStrongPassword9',
+        ])->assertOk();
+
+        $this->assertDatabaseMissing('personal_access_tokens', ['id' => $first->id]);
+        $this->assertDatabaseMissing('personal_access_tokens', ['id' => $second->id]);
+        $this->assertDatabaseHas('audit_logs', ['actor_id' => $user->id, 'action' => 'profile.updated']);
+        $this->assertDatabaseHas('audit_logs', ['actor_id' => $user->id, 'action' => 'profile.password_changed']);
+    }
+
+    public function test_disabling_a_user_revokes_existing_tokens_and_blocks_the_next_request(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $user = User::factory()->create();
+        $plainTextToken = $user->createToken('automation')->plainTextToken;
+
+        $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->postJson("/api/admin/users/{$user->id}/disable")->assertOk();
+
+        $this->assertDatabaseCount('personal_access_tokens', 0);
+        $this->app['auth']->forgetGuards();
+        $this->withToken($plainTextToken)->getJson('/api/me')->assertUnauthorized();
+    }
+
+    public function test_user_deletion_requires_token_revocation_and_is_audited(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $user = User::factory()->create();
+        $user->createToken('still-active');
+
+        $this->actingAs($admin)->deleteJson("/api/admin/users/{$user->id}")
+            ->assertConflict()->assertJsonPath('code', 'conflict');
+
+        $user->tokens()->delete();
+        $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->deleteJson("/api/admin/users/{$user->id}")->assertNoContent();
+        $this->assertDatabaseMissing('users', ['id' => $user->id]);
+        $this->assertDatabaseHas('audit_logs', ['actor_id' => $admin->id, 'action' => 'user.deleted']);
+    }
+
+    public function test_validation_errors_have_the_stable_api_shape(): void
+    {
+        $this->postJson('/api/auth/login', [])
+            ->assertUnprocessable()
+            ->assertJsonPath('code', 'validation_failed')
+            ->assertJsonStructure(['message', 'code', 'errors' => ['email', 'password']]);
+    }
 }

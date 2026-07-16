@@ -23,14 +23,29 @@ x-core: &core
   environment: *core-env
   volumes:
     - ./core:/app
+    - ./docs:/docs
+    - ./AGENTS.md:/AGENTS.md:ro
+    - ./.agents:/.agents:ro
     - core-vendor:/app/vendor
+    - core-storage:/app/storage
+    - core-bootstrap-cache:/app/bootstrap/cache
   depends_on:
+    vendor-init: { condition: service_completed_successfully }
     control-db: { condition: service_healthy }
     redis: { condition: service_healthy }
   networks: [control]
   restart: unless-stopped
 
 services:
+  vendor-init:
+    build:
+      context: ./core
+      target: development
+    entrypoint: [sh, -c]
+    command: ["find /target -mindepth 1 -delete && cp -a /opt/cdnf-vendor/. /target/"]
+    volumes: [core-vendor:/target]
+    restart: "no"
+
   core:
     <<: *core
     healthcheck:
@@ -50,7 +65,7 @@ services:
     networks: [control, ingress]
     restart: unless-stopped
     healthcheck:
-      test: [CMD, wget, -qO-, http://127.0.0.1:8080/healthz]
+      test: [CMD, wget, -qO-, http://127.0.0.1:8080/api/health]
       interval: 10s
       timeout: 3s
       retries: 10
@@ -171,8 +186,21 @@ services:
     networks: [edge]
 
   origin-https:
-    image: nginx:1.30.3-alpine
-    volumes: [./docker/nginx/origin.conf:/etc/nginx/conf.d/default.conf:ro]
+    build:
+      context: ./docker/nginx
+      dockerfile: Dockerfile.origin-https
+    command:
+      - sh
+      - -c
+      - >-
+        mkdir -p /run/origin &&
+        openssl req -x509 -newkey rsa:2048 -nodes -days 1
+        -subj /CN=origin-https
+        -addext subjectAltName=DNS:origin-https
+        -keyout /run/origin/tls.key -out /run/origin/tls.crt >/dev/null 2>&1 &&
+        exec nginx -g 'daemon off;'
+    tmpfs: [/run/origin]
+    volumes: [./docker/nginx/origin-https.conf:/etc/nginx/conf.d/default.conf:ro]
     networks: [edge]
 
   edge-a:
@@ -222,6 +250,8 @@ networks:
 
 volumes:
   core-vendor: {}
+  core-storage: {}
+  core-bootstrap-cache: {}
   control-db: {}
   redis: {}
   pdns-db: {}

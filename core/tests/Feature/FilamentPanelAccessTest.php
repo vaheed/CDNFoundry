@@ -35,4 +35,29 @@ class FilamentPanelAccessTest extends TestCase
         $this->actingAs($disabledAdmin)->get('/admin')->assertForbidden();
         $this->actingAs($disabledUser)->get('/app')->assertForbidden();
     }
+
+    public function test_administrator_operational_pages_render_and_domain_users_cannot_open_them(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $user = User::factory()->create();
+
+        foreach (['/admin/users', '/admin/operations', '/admin/audit-logs', '/admin/system-dns-identity', '/admin/tokens', '/admin/profile'] as $path) {
+            $this->actingAs($admin)->get($path)->assertOk();
+            $this->actingAs($user)->get($path)->assertForbidden();
+        }
+
+        $this->actingAs($user)->get('/app/tokens')->assertOk();
+        $this->actingAs($user)->get('/app/profile')->assertOk();
+    }
+
+    public function test_horizon_is_available_only_to_active_administrators(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $user = User::factory()->create();
+        $disabledAdmin = User::factory()->admin()->disabled()->create();
+
+        $this->actingAs($admin)->get('/horizon')->assertOk();
+        $this->actingAs($user)->get('/horizon')->assertForbidden();
+        $this->actingAs($disabledAdmin)->get('/horizon')->assertForbidden();
+    }
 }

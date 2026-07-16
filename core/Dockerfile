@@ -9,7 +9,8 @@ WORKDIR /app
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-interaction --no-progress --prefer-dist --no-scripts --classmap-authoritative
+RUN --mount=type=cache,target=/tmp/composer-cache \
+    COMPOSER_CACHE_DIR=/tmp/composer-cache COMPOSER_MAX_PARALLEL_HTTP=4 COMPOSER_IPRESOLVE=4 composer install --no-dev --no-interaction --no-progress --prefer-dist --no-scripts --classmap-authoritative
 
 COPY . .
 RUN composer dump-autoload --no-dev --classmap-authoritative \
@@ -23,6 +24,8 @@ ENTRYPOINT ["cdnf-entrypoint"]
 CMD ["php-fpm", "-F"]
 
 FROM php-base AS development
-RUN composer install --no-interaction --no-progress --prefer-dist
+RUN --mount=type=cache,target=/tmp/composer-cache \
+    COMPOSER_CACHE_DIR=/tmp/composer-cache COMPOSER_MAX_PARALLEL_HTTP=4 COMPOSER_IPRESOLVE=4 composer install --no-interaction --no-progress --prefer-dist
+RUN mv /app/vendor /opt/cdnf-vendor
 
 FROM php-base AS production

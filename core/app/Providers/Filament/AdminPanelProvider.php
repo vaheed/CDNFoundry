@@ -2,11 +2,13 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Admin\Pages\AdminDashboard;
+use App\Filament\Shared\Pages\ApiTokens;
+use App\Filament\Shared\Pages\EditProfile;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
@@ -27,8 +29,11 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->login()
             ->brandName('CDNFoundry Administration')
+            ->profile(EditProfile::class)
             ->colors(['primary' => Color::Amber])
-            ->pages([Dashboard::class])
+            ->discoverResources(in: app_path('Filament/Admin/Resources'), for: 'App\\Filament\\Admin\\Resources')
+            ->discoverPages(in: app_path('Filament/Admin/Pages'), for: 'App\\Filament\\Admin\\Pages')
+            ->pages([AdminDashboard::class, ApiTokens::class])
             ->widgets([AccountWidget::class])
             ->middleware([
                 EncryptCookies::class,

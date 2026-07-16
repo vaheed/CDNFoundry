@@ -54,6 +54,11 @@ services:
       core: { condition: service_healthy }
     networks: [control, ingress]
     restart: unless-stopped
+    healthcheck:
+      test: [CMD, wget, -qO-, http://127.0.0.1:8080/api/health]
+      interval: 10s
+      timeout: 3s
+      retries: 10
 
   horizon:
     <<: *core

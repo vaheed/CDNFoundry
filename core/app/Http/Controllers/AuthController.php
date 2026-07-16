@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
@@ -63,7 +64,12 @@ class AuthController extends Controller
             'password' => ['required', 'confirmed', Password::defaults()],
         ]);
         $request->user()->forceFill(['password' => Hash::make($validated['password'])])->save();
-        $request->user()->tokens()->whereKeyNot($request->user()->currentAccessToken()?->getKey())->delete();
+        $currentToken = $request->user()->currentAccessToken();
+        $tokens = $request->user()->tokens();
+        if ($currentToken instanceof PersonalAccessToken) {
+            $tokens->whereKeyNot($currentToken->getKey());
+        }
+        $tokens->delete();
         AuditLog::record($request->user(), 'profile.password_changed', $request->user(), [], $request->ip());
 
         return response()->json(['data' => ['password_changed' => true]]);
