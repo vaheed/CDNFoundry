@@ -73,6 +73,7 @@ services:
   horizon:
     <<: *core
     command: [php, artisan, horizon]
+    networks: [control, dns]
 
   scheduler:
     <<: *core
@@ -132,6 +133,17 @@ services:
       pdns-db: { condition: service_healthy }
     networks: [dns]
     restart: unless-stopped
+
+  pdns-migrate:
+    image: postgres:18.4-alpine
+    command: [psql, -v, ON_ERROR_STOP=1, -h, pdns-db, -U, pdns, -d, pdns, -f, /migrations/2026_07_17_000001_add_powerdns_metadata_tables.sql]
+    environment: { PGPASSWORD: pdns-dev-only }
+    volumes: [./docker/postgres/pdns-migrations:/migrations:ro]
+    depends_on:
+      pdns-db: { condition: service_healthy }
+    networks: [dns]
+    restart: "no"
+    profiles: [tools]
 
   dnsdist:
     image: powerdns/dnsdist-21:2.1.0

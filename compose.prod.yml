@@ -135,6 +135,17 @@ services:
     networks: [dns-private]
     restart: unless-stopped
 
+  pdns-migrate:
+    image: postgres:18.4-alpine
+    profiles: [tools]
+    command: [psql, -v, ON_ERROR_STOP=1, -h, pdns-db, -U, pdns, -d, pdns, -f, /migrations/2026_07_17_000001_add_powerdns_metadata_tables.sql]
+    environment: { PGPASSWORD: "${PDNS_DB_PASSWORD}" }
+    volumes: [./docker/postgres/pdns-migrations:/migrations:ro]
+    depends_on:
+      pdns-db: { condition: service_healthy }
+    networks: [dns-private]
+    restart: "no"
+
   dnsdist:
     image: powerdns/dnsdist-21:2.1.0
     profiles: [dns]

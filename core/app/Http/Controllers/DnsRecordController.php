@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Http\Resources\DnsRecordResource;
+use App\Jobs\ReconcileDnsZone;
 use App\Models\AuditLog;
+use App\Models\DnsCluster;
 use App\Models\DnsRecord;
 use App\Models\Domain;
 use App\Support\DnsRecordData;
@@ -39,6 +41,7 @@ class DnsRecordController extends Controller
 
             return $record;
         });
+        $this->queueReconciliation($domain);
 
         return DnsRecordResource::make($record)->response()->setStatusCode(201);
     }
@@ -68,6 +71,7 @@ class DnsRecordController extends Controller
 
             return $current->refresh();
         });
+        $this->queueReconciliation($domain);
 
         return DnsRecordResource::make($updated);
     }
@@ -85,6 +89,7 @@ class DnsRecordController extends Controller
                 $this->incrementRevision($locked);
             }
         });
+        $this->queueReconciliation($domain);
 
         return response()->json(null, 204);
     }
@@ -148,6 +153,7 @@ class DnsRecordController extends Controller
 
             return ['revision' => $locked->revision, 'changed' => count($validated['actions'])];
         });
+        $this->queueReconciliation($domain);
 
         return response()->json(['data' => $result]);
     }
@@ -186,5 +192,12 @@ class DnsRecordController extends Controller
     private function assertRecordInDomain(Domain $domain, DnsRecord $record): void
     {
         abort_unless($record->domain_id === $domain->id, 404);
+    }
+
+    private function queueReconciliation(Domain $domain): void
+    {
+        if (DnsCluster::query()->where('enabled', true)->exists()) {
+            ReconcileDnsZone::dispatch($domain->id)->afterCommit();
+        }
     }
 }

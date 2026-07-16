@@ -1148,13 +1148,13 @@ No origin is requested.
 ##### DNS Correctness
 
 - [ ] All supported types pass validation and real `dig` tests.
-- [ ] A and AAAA behaviour is equivalent.
+- [x] A and AAAA behaviour is equivalent.
 - [x] Bulk updates are atomic.
 - [x] One bulk update creates one zone revision.
-- [ ] Duplicate jobs do not duplicate records or corrupt serials.
-- [ ] Invalid desired zones do not replace active zones.
-- [ ] DNSdist is the only public DNS service.
-- [ ] PowerDNS identity and management endpoints are private.
+- [x] Duplicate jobs do not duplicate records or corrupt serials.
+- [x] Invalid desired zones do not replace active zones.
+- [x] DNSdist is the only public DNS service.
+- [x] PowerDNS identity and management endpoints are private.
 - [ ] Standard BIND import and export round-trip correctly.
 
 ##### Scale and Failure
@@ -1182,8 +1182,8 @@ No origin is requested.
 - [ ] Registrar and glue-record guide
 - [ ] DNS record reference
 - [ ] Import/export guide
-- [ ] DNS cluster runbook
-- [ ] Runtime drift warning for PowerAdmin
+- [x] DNS cluster runbook
+- [x] Runtime drift warning for PowerAdmin
 
 ---
 

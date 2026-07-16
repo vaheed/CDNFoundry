@@ -1,10 +1,12 @@
 <?php
 
 use App\Http\Controllers\Admin\AuditLogController;
+use App\Http\Controllers\Admin\DnsClusterController;
 use App\Http\Controllers\Admin\DomainUserController;
 use App\Http\Controllers\Admin\PlatformDnsSettingsController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\DnsDeploymentController;
 use App\Http\Controllers\DnsRecordController;
 use App\Http\Controllers\DomainController;
 use App\Http\Controllers\HealthController;
@@ -36,6 +38,8 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function (): void {
     Route::get('/domains/{domain}/dns/records/{record}', [DnsRecordController::class, 'show']);
     Route::patch('/domains/{domain}/dns/records/{record}', [DnsRecordController::class, 'update'])->middleware('idempotent');
     Route::delete('/domains/{domain}/dns/records/{record}', [DnsRecordController::class, 'destroy'])->middleware('idempotent');
+    Route::get('/domains/{domain}/dns/deployment', [DnsDeploymentController::class, 'show']);
+    Route::post('/domains/{domain}/dns/reconcile', [DnsDeploymentController::class, 'reconcile'])->middleware('idempotent');
 
     Route::prefix('admin')->middleware('admin')->group(function (): void {
         Route::get('/users', [UserController::class, 'index']);
@@ -50,6 +54,12 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function (): void {
         Route::get('/domains/{domain}/users', [DomainUserController::class, 'index']);
         Route::post('/domains/{domain}/users', [DomainUserController::class, 'store'])->middleware('idempotent');
         Route::delete('/domains/{domain}/users/{user}', [DomainUserController::class, 'destroy'])->middleware('idempotent');
+        Route::get('/dns/clusters', [DnsClusterController::class, 'index']);
+        Route::post('/dns/clusters', [DnsClusterController::class, 'store'])->middleware('idempotent');
+        Route::get('/dns/clusters/{cluster}', [DnsClusterController::class, 'show']);
+        Route::patch('/dns/clusters/{cluster}', [DnsClusterController::class, 'update'])->middleware('idempotent');
+        Route::post('/dns/clusters/{cluster}/disable', [DnsClusterController::class, 'disable'])->middleware('idempotent');
+        Route::post('/dns/clusters/{cluster}/enable', [DnsClusterController::class, 'enable'])->middleware('idempotent');
         Route::get('/system/status', [HealthController::class, 'status']);
         Route::get('/operations', [OperationController::class, 'index']);
         Route::get('/operations/{operation}', [OperationController::class, 'show']);

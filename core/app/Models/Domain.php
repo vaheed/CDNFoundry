@@ -21,6 +21,11 @@ class Domain extends Model
         return $this->hasMany(DnsRecord::class);
     }
 
+    public function dnsDeployments(): HasMany
+    {
+        return $this->hasMany(DnsDeployment::class);
+    }
+
     protected function casts(): array
     {
         return [
