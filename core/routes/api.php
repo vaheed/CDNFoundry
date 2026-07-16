@@ -1,9 +1,11 @@
 <?php
 
 use App\Http\Controllers\Admin\AuditLogController;
+use App\Http\Controllers\Admin\DomainUserController;
 use App\Http\Controllers\Admin\PlatformDnsSettingsController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\DomainController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\OperationController;
 use App\Http\Controllers\TokenController;
@@ -22,6 +24,11 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function (): void {
     Route::post('/me/tokens', [TokenController::class, 'store'])->middleware('idempotent');
     Route::delete('/me/tokens/{token}', [TokenController::class, 'destroy'])->middleware('idempotent');
     Route::get('/operations/{operation}', [OperationController::class, 'show']);
+    Route::get('/domains', [DomainController::class, 'index']);
+    Route::post('/domains', [DomainController::class, 'store'])->middleware('idempotent');
+    Route::get('/domains/{domain}', [DomainController::class, 'show']);
+    Route::post('/domains/{domain}/disable', [DomainController::class, 'disable'])->middleware('idempotent');
+    Route::delete('/domains/{domain}', [DomainController::class, 'destroy'])->middleware('idempotent');
 
     Route::prefix('admin')->middleware('admin')->group(function (): void {
         Route::get('/users', [UserController::class, 'index']);
@@ -33,6 +40,9 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function (): void {
         Route::post('/users/{user}/enable', [UserController::class, 'enable'])->middleware('idempotent');
         Route::delete('/users/{user}', [UserController::class, 'destroy'])->middleware('idempotent');
         Route::get('/audit-logs', AuditLogController::class);
+        Route::get('/domains/{domain}/users', [DomainUserController::class, 'index']);
+        Route::post('/domains/{domain}/users', [DomainUserController::class, 'store'])->middleware('idempotent');
+        Route::delete('/domains/{domain}/users/{user}', [DomainUserController::class, 'destroy'])->middleware('idempotent');
         Route::get('/system/status', [HealthController::class, 'status']);
         Route::get('/operations', [OperationController::class, 'index']);
         Route::get('/operations/{operation}', [OperationController::class, 'show']);

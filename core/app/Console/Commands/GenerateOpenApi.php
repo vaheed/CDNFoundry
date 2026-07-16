@@ -10,7 +10,7 @@ class GenerateOpenApi extends Command
 {
     protected $signature = 'api:openapi {--check : Fail when the committed contract is stale}';
 
-    protected $description = 'Generate the Phase 1 OpenAPI route contract';
+    protected $description = 'Generate the control-plane OpenAPI route contract';
 
     public function handle(): int
     {

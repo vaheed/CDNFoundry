@@ -31,6 +31,67 @@
                 }
             }
         },
+        "/admin/domains/{domain}/users": {
+            "get": {
+                "operationId": "domain.user.controller.index",
+                "tags": [
+                    "Administrator"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "domain.user.controller.store",
+                "tags": [
+                    "Administrator"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
+        "/admin/domains/{domain}/users/{user}": {
+            "delete": {
+                "operationId": "domain.user.controller.destroy",
+                "tags": [
+                    "Administrator"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
         "/admin/operations": {
             "get": {
                 "operationId": "operation.controller.index",
@@ -357,6 +418,107 @@
         "/auth/logout": {
             "post": {
                 "operationId": "auth.controller.logout",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
+        "/domains": {
+            "get": {
+                "operationId": "domain.controller.index",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "domain.controller.store",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
+        "/domains/{domain}": {
+            "delete": {
+                "operationId": "domain.controller.destroy",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            },
+            "get": {
+                "operationId": "domain.controller.show",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
+        "/domains/{domain}/disable": {
+            "post": {
+                "operationId": "domain.controller.disable",
                 "tags": [
                     "Account"
                 ],

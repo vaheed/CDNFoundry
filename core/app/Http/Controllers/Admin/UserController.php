@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreUserRequest;
 use App\Http\Requests\Admin\UpdateUserRequest;
+use App\Http\Resources\DomainResource;
 use App\Http\Resources\UserResource;
 use App\Models\AuditLog;
 use App\Models\User;
@@ -32,9 +33,9 @@ class UserController extends Controller
         return UserResource::make($user);
     }
 
-    public function domains(): JsonResponse
+    public function domains(User $user): JsonResponse
     {
-        return response()->json(['data' => []]);
+        return response()->json(['data' => DomainResource::collection($user->domains()->orderBy('domains.id')->get())]);
     }
 
     public function update(UpdateUserRequest $request, User $user): UserResource
