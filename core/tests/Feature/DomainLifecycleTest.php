@@ -89,6 +89,23 @@ class DomainLifecycleTest extends TestCase
         $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/force-verify")->assertConflict();
     }
 
+    public function test_force_verification_bypasses_only_delegation_and_activation_still_reconciles_normally(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        [, $domain] = $this->ownedDomain();
+        DnsCluster::query()->create($this->clusterData());
+
+        $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/force-verify")->assertOk();
+        $this->assertSame(DomainLifecycleState::PendingVerification, $domain->refresh()->lifecycle_state);
+        Queue::assertNothingPushed();
+
+        $response = $this->actingAs($admin)->postJson("/api/domains/{$domain->id}/activate")->assertAccepted();
+        $this->assertSame('pending', $response->json('data.status'));
+        $this->assertSame(DomainLifecycleState::Active, $domain->refresh()->lifecycle_state);
+        Queue::assertPushed(ReconcileDnsZone::class, 1);
+    }
+
     public function test_activation_requires_verification_and_is_idempotent(): void
     {
         Queue::fake();

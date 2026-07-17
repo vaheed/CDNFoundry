@@ -21,7 +21,9 @@ use Illuminate\Validation\ValidationException;
 
 class DnsRecordController extends Controller
 {
-    private const BULK_LIMIT = 1000;
+    private const BULK_LIMIT = 5000;
+
+    private const RECORDS_PER_DOMAIN_LIMIT = 10000;
 
     public function index(Domain $domain): AnonymousResourceCollection
     {
@@ -36,6 +38,9 @@ class DnsRecordController extends Controller
         $record = DB::transaction(function () use ($request, $domain): DnsRecord {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $data = DnsRecordData::validate($request->all(), $locked->name);
+            if ($locked->dnsRecords()->count() >= self::RECORDS_PER_DOMAIN_LIMIT) {
+                throw ValidationException::withMessages(['record' => 'The domain has reached the 10,000 record limit.']);
+            }
             $this->assertValidFinalZone($locked, collect([$data]));
             $record = $locked->dnsRecords()->create($data);
             $this->incrementRevision($locked);
@@ -136,6 +141,10 @@ class DnsRecordController extends Controller
                 $data = DnsRecordData::validate(array_merge($final->get($record->id), $action['record']), $locked->name);
                 $final->put($record->id, $data);
                 $updates[] = [$record, $data];
+            }
+
+            if ($final->count() > self::RECORDS_PER_DOMAIN_LIMIT) {
+                throw ValidationException::withMessages(['actions' => 'The resulting zone exceeds the 10,000 record limit.']);
             }
 
             DnsZoneValidator::assertValid($final->values());

@@ -9,13 +9,13 @@ use App\Models\Domain;
 use App\Models\Operation;
 use App\Support\PowerDnsClient;
 use App\Support\PowerDnsZone;
-use Illuminate\Contracts\Queue\ShouldBeUnique;
+use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use RuntimeException;
 use Throwable;
 
-class ReconcileDnsZone implements ShouldBeUnique, ShouldQueue
+class ReconcileDnsZone implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
     use Queueable;
 

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Domain;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -41,13 +42,25 @@ class FilamentPanelAccessTest extends TestCase
         $admin = User::factory()->admin()->create();
         $user = User::factory()->create();
 
-        foreach (['/admin/users', '/admin/operations', '/admin/audit-logs', '/admin/system-dns-identity', '/admin/tokens', '/admin/profile'] as $path) {
+        foreach (['/admin/users', '/admin/domains', '/admin/dns-clusters', '/admin/operations', '/admin/audit-logs', '/admin/system-dns-identity', '/admin/tokens', '/admin/profile'] as $path) {
             $this->actingAs($admin)->get($path)->assertOk();
             $this->actingAs($user)->get($path)->assertForbidden();
         }
 
         $this->actingAs($user)->get('/app/tokens')->assertOk();
         $this->actingAs($user)->get('/app/profile')->assertOk();
+    }
+
+    public function test_domain_resource_is_scoped_to_assignments_in_the_user_panel(): void
+    {
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+        $domain = Domain::query()->create(['name' => 'example.test', 'display_name' => 'example.test']);
+        $domain->users()->attach($user);
+
+        $this->actingAs($user)->get('/app/domains')->assertOk();
+        $this->actingAs($user)->get("/app/domains/{$domain->id}")->assertOk();
+        $this->actingAs($other)->get("/app/domains/{$domain->id}")->assertNotFound();
     }
 
     public function test_horizon_is_available_only_to_active_administrators(): void

@@ -54,6 +54,22 @@ class DomainController extends Controller
         return DomainResource::make($domain);
     }
 
+    public function update(Request $request, Domain $domain): DomainResource
+    {
+        Gate::authorize('update', $domain);
+        $validated = $request->validate([
+            'display_name' => ['required', 'string', 'max:253'],
+        ]);
+        $displayName = trim($validated['display_name']);
+        abort_if($displayName === '', 422, 'The display name cannot be empty.');
+        if ($domain->display_name !== $displayName) {
+            $domain->update(['display_name' => $displayName]);
+            AuditLog::record($request->user(), 'domain.updated', $domain, ['fields' => ['display_name']], $request->ip());
+        }
+
+        return DomainResource::make($domain->refresh());
+    }
+
     public function disable(Request $request, Domain $domain): DomainResource
     {
         Gate::authorize('update', $domain);

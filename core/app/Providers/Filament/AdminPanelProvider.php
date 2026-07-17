@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Admin\Pages\AdminDashboard;
+use App\Filament\Domain\Resources\Domains\DomainResource;
 use App\Filament\Shared\Pages\ApiTokens;
 use App\Filament\Shared\Pages\EditProfile;
 use Filament\Http\Middleware\Authenticate;
@@ -32,6 +33,7 @@ class AdminPanelProvider extends PanelProvider
             ->profile(EditProfile::class)
             ->colors(['primary' => Color::Amber])
             ->discoverResources(in: app_path('Filament/Admin/Resources'), for: 'App\\Filament\\Admin\\Resources')
+            ->resources([DomainResource::class])
             ->discoverPages(in: app_path('Filament/Admin/Pages'), for: 'App\\Filament\\Admin\\Pages')
             ->pages([AdminDashboard::class, ApiTokens::class])
             ->widgets([AccountWidget::class])

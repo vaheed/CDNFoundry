@@ -100,8 +100,23 @@ class DnsRecordApiTest extends TestCase
         $this->actingAs($user)->deleteJson("/api/domains/{$domain->id}/dns/records/$id")->assertNoContent();
         $this->assertDatabaseMissing('dns_records', ['id' => $id]);
 
-        $tooMany = array_fill(0, 1001, ['action' => 'delete', 'id' => 1]);
+        $tooMany = array_fill(0, 5001, ['action' => 'delete', 'id' => 1]);
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records/bulk", ['actions' => $tooMany])->assertUnprocessable();
+    }
+
+    public function test_one_bounded_bulk_request_modifies_thousands_of_records_in_one_revision(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $actions = [];
+        for ($index = 0; $index < 2000; $index++) {
+            $actions[] = ['action' => 'create', 'record' => [
+                'type' => 'A', 'name' => "host-$index", 'content' => '192.0.2.'.(($index % 250) + 1), 'ttl' => 60,
+            ]];
+        }
+
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records/bulk", ['actions' => $actions])
+            ->assertOk()->assertJsonPath('data.changed', 2000)->assertJsonPath('data.revision', 2);
+        $this->assertSame(2000, $domain->dnsRecords()->count());
     }
 
     private function ownedDomain(string $name = 'example.com'): array

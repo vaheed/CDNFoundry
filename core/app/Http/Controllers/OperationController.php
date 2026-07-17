@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Jobs\ApplyPlatformDnsSettings;
 use App\Jobs\ImportDnsZone;
+use App\Jobs\ReconcileAllDnsZones;
 use App\Jobs\ReconcileDnsZone;
+use App\Jobs\TestDnsCluster;
 use App\Jobs\VerifyDomainNameservers;
 use App\Models\AuditLog;
 use App\Models\Operation;
@@ -30,7 +32,7 @@ class OperationController extends Controller
     public function retry(Request $request, Operation $operation): JsonResponse
     {
         abort_unless($operation->status === 'failed', 409, 'Only failed operations can be retried.');
-        abort_unless(in_array($operation->type, ['platform_dns_identity.update', 'domain.nameservers_verify', 'dns.zone_reconcile', 'dns.zone_import'], true), 422, 'Unsupported operation type.');
+        abort_unless(in_array($operation->type, ['platform_dns_identity.update', 'domain.nameservers_verify', 'dns.zone_reconcile', 'dns.zone_import', 'dns.cluster_test', 'dns.global_reconcile'], true), 422, 'Unsupported operation type.');
         $operation->update(['status' => 'pending', 'error' => null, 'finished_at' => null]);
         AuditLog::record($request->user(), 'operation.retry_requested', $operation, [], $request->ip());
         match ($operation->type) {
@@ -38,6 +40,8 @@ class OperationController extends Controller
             'domain.nameservers_verify' => VerifyDomainNameservers::dispatch((int) $operation->input['domain_id']),
             'dns.zone_reconcile' => ReconcileDnsZone::dispatch((int) $operation->input['domain_id']),
             'dns.zone_import' => ImportDnsZone::dispatch($operation->getKey()),
+            'dns.cluster_test' => TestDnsCluster::dispatch($operation->getKey()),
+            'dns.global_reconcile' => ReconcileAllDnsZones::dispatch($operation->getKey()),
         };
 
         return response()->json(['data' => $operation->refresh()], 202);

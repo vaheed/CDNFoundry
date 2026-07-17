@@ -58,6 +58,19 @@ class DomainApiTest extends TestCase
         $this->assertDatabaseCount('domain_user', 0);
     }
 
+    public function test_assigned_user_can_update_only_the_domain_display_label(): void
+    {
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+        $domain = Domain::query()->create(['name' => 'example.net', 'display_name' => 'example.net']);
+        $domain->users()->attach($user);
+
+        $this->actingAs($other)->patchJson("/api/domains/{$domain->id}", ['display_name' => 'Denied'])->assertForbidden();
+        $this->actingAs($user)->patchJson("/api/domains/{$domain->id}", ['name' => 'renamed.example', 'display_name' => 'Customer site'])->assertOk()
+            ->assertJsonPath('data.name', 'example.net')->assertJsonPath('data.display_name', 'Customer site');
+        $this->assertDatabaseHas('audit_logs', ['action' => 'domain.updated', 'subject_id' => (string) $domain->id]);
+    }
+
     public function test_disable_and_deprovision_are_idempotent_and_preserve_state(): void
     {
         $user = User::factory()->create();

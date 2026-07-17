@@ -1139,7 +1139,7 @@ No origin is requested.
 - [x] Pending nameserver verification is clear.
 - [ ] Automated verification works through real public DNS.
 - [x] Administrator force-verification is audited.
-- [ ] Force-verification still uses normal validation and reconciliation.
+- [x] Force-verification still uses normal validation and reconciliation.
 - [x] Activation and disable actions are idempotent.
 - [x] Disabled domains retain desired state.
 - [x] Deprovisioning domains cannot be force-activated.

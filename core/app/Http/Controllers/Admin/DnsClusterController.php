@@ -6,9 +6,11 @@ use App\Enums\DomainLifecycleState;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\DnsClusterResource;
 use App\Jobs\ReconcileDnsZone;
+use App\Jobs\TestDnsCluster;
 use App\Models\AuditLog;
 use App\Models\DnsCluster;
 use App\Models\Domain;
+use App\Models\Operation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -35,10 +37,29 @@ class DnsClusterController extends Controller
         return DnsClusterResource::make($cluster);
     }
 
+    public function test(Request $request, DnsCluster $cluster): JsonResponse
+    {
+        $operation = Operation::query()->where('type', 'dns.cluster_test')->whereIn('status', ['pending', 'running'])
+            ->where('input->cluster_id', $cluster->id)->first();
+        if ($operation === null) {
+            $operation = Operation::query()->create([
+                'actor_id' => $request->user()->getKey(), 'type' => 'dns.cluster_test', 'status' => 'pending',
+                'input' => ['cluster_id' => $cluster->id],
+            ]);
+            AuditLog::record($request->user(), 'dns.cluster_test_requested', $cluster, [], $request->ip());
+            TestDnsCluster::dispatch($operation->getKey())->afterCommit();
+        }
+
+        return response()->json(['data' => $operation], 202);
+    }
+
     public function update(Request $request, DnsCluster $cluster): DnsClusterResource
     {
         $cluster->update($this->validated($request, $cluster));
         AuditLog::record($request->user(), 'dns.cluster_updated', $cluster, ['fields' => array_keys($request->all())], $request->ip());
+        if ($cluster->wasChanged('enabled') && $cluster->enabled) {
+            Domain::query()->where('lifecycle_state', DomainLifecycleState::Active->value)->orderBy('id')->chunkById(100, fn ($domains) => $domains->each(fn (Domain $domain) => ReconcileDnsZone::dispatch($domain->id)->afterCommit()));
+        }
 
         return DnsClusterResource::make($cluster->refresh());
     }

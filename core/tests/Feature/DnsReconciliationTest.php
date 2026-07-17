@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Support\DnsRecordData;
 use App\Support\PowerDnsClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -101,6 +102,15 @@ class DnsReconciliationTest extends TestCase
         $this->assertSame($first->json('data.id'), $second->json('data.id'));
         $this->assertDatabaseCount('operations', 1);
         Queue::assertPushed(ReconcileDnsZone::class, 1);
+    }
+
+    public function test_reconciliation_unique_lock_releases_at_processing_for_one_follow_up_revision(): void
+    {
+        $job = new ReconcileDnsZone(123);
+
+        $this->assertInstanceOf(ShouldBeUniqueUntilProcessing::class, $job);
+        $this->assertSame('123', $job->uniqueId());
+        $this->assertSame(300, $job->uniqueFor);
     }
 
     private function domain(): Domain

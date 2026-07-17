@@ -18,4 +18,6 @@ Owners may be `@`, relative to the managed zone, or fully qualified inside it. N
 
 Logical duplicates are rejected. Bulk mutations and imports validate the complete resulting zone before committing, so an invalid change does not partially alter desired state. A successful bulk mutation or import increments the zone revision once.
 
+A domain is bounded to 10,000 desired records. One bulk request may contain at most 5,000 create, update, or delete actions.
+
 Runtime reconciliation is asynchronous. Mutating an active zone queues deployment of the latest desired revision; invalid runtime output never replaces the previous valid zone.
