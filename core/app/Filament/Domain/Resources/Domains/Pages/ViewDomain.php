@@ -18,6 +18,7 @@ use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ViewDomain extends ViewRecord
 {
@@ -91,7 +92,17 @@ class ViewDomain extends ViewRecord
                     ReconcileDnsZone::dispatch($this->record->id)->afterCommit();
                 }
             }),
-            Action::make('exportZone')->label('Export zone')->url(fn (): string => url("/api/domains/{$this->record->id}/dns/export"))->openUrlInNewTab(),
+            Action::make('exportZone')->label('Export zone')->action(function (): StreamedResponse {
+                $zone = BindZone::export($this->record);
+
+                return response()->streamDownload(
+                    static function () use ($zone): void {
+                        echo $zone;
+                    },
+                    $this->record->name.'.zone',
+                    ['Content-Type' => 'text/dns; charset=utf-8'],
+                );
+            }),
         ];
     }
 }

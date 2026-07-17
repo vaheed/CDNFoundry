@@ -4,6 +4,7 @@ use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureHorizonAdmin;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\IdempotentRequest;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -19,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->redirectGuestsTo(fn (Request $request): ?string => $request->is('api/*') ? null : '/');
         $middleware->alias([
             'account.active' => EnsureAccountIsActive::class,
             'admin' => EnsureUserIsAdmin::class,
@@ -40,6 +42,17 @@ return Application::configure(basePath: dirname(__DIR__))
                 'code' => 'validation_failed',
                 'errors' => $exception->errors(),
             ], 422);
+        });
+        $exceptions->render(function (AuthenticationException $exception, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            return response()->json([
+                'message' => 'Unauthenticated.',
+                'code' => 'unauthenticated',
+                'details' => (object) [],
+            ], 401);
         });
         $exceptions->render(function (HttpExceptionInterface $exception, Request $request) {
             if (! $request->is('api/*')) {
