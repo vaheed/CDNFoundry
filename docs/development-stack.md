@@ -24,12 +24,19 @@ make dev-e2e
 
 This job exercises HTTP APIs, authorization, idempotency, queues, and persisted operations. Browser/UI acceptance remains the project owner's manual checklist.
 
-The control panel is exposed at `http://localhost:8080`, DNSdist at TCP/UDP
-port `1053`, the two test edges at ports `8081` and `8082`, Prometheus at
-`9090`, and Alertmanager at `9093`. PowerAdmin is development-only and starts
-only with `docker compose -f compose.dev.yml --profile devtools up -d`.
+The control panel is exposed at `http://localhost:8080`, Horizon at
+`http://localhost:8080/horizon`, DNSdist at TCP/UDP port `1053`, the two test
+edges at ports `8081` and `8082`, Prometheus at `9090`, Alertmanager at `9093`,
+and development-only PowerAdmin at `http://localhost:9191`. `make dev-up`
+enables the `devtools` profile so PowerAdmin starts with the stack. Its default
+development login is `admin` / `poweradmin-dev-only`; override it with
+`POWERADMIN_ADMIN_USERNAME` and `POWERADMIN_ADMIN_PASSWORD` before first start.
 
 The administrator panel is `http://localhost:8080/admin`; the domain-user panel is `http://localhost:8080/app`. Both use the same users, sessions, policies, and desired-state models. Disabled accounts lose API tokens immediately and are denied on their next browser or API request.
+
+See `docs/manual-browser-qualification.md` for disposable application-account
+creation, example values for every UI field, and the complete manual acceptance
+sequence.
 
 Application containers never migrate at startup. `make dev-migrate` is the
 only normal schema deployment path.

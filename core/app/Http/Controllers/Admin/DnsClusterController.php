@@ -25,11 +25,17 @@ class DnsClusterController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $cluster = DnsCluster::query()->create($this->validated($request));
+        $cluster = DnsCluster::query()->create([...$this->validated($request), 'enabled' => false]);
         AuditLog::record($request->user(), 'dns.cluster_created', $cluster, ['name' => $cluster->name], $request->ip());
-        Domain::query()->where('lifecycle_state', DomainLifecycleState::Active->value)->orderBy('id')->chunkById(100, fn ($domains) => $domains->each(fn (Domain $domain) => ReconcileDnsZone::dispatch($domain->id)->afterCommit()));
 
-        return DnsClusterResource::make($cluster)->response()->setStatusCode(201);
+        $operation = Operation::query()->create([
+            'actor_id' => $request->user()->getKey(), 'type' => 'dns.cluster_test', 'status' => 'pending',
+            'input' => ['cluster_id' => $cluster->id],
+        ]);
+        AuditLog::record($request->user(), 'dns.cluster_test_requested', $cluster, [], $request->ip());
+        TestDnsCluster::dispatch($operation->getKey())->afterCommit();
+
+        return response()->json(['data' => DnsClusterResource::make($cluster), 'operation_id' => $operation->getKey()], 202);
     }
 
     public function show(DnsCluster $cluster): DnsClusterResource
@@ -55,7 +61,11 @@ class DnsClusterController extends Controller
 
     public function update(Request $request, DnsCluster $cluster): DnsClusterResource
     {
-        $cluster->update($this->validated($request, $cluster));
+        $data = $this->validated($request, $cluster);
+        if (($data['enabled'] ?? false) && $cluster->last_health_status !== 'healthy') {
+            abort(409, 'Test the cluster connection successfully before enabling it.');
+        }
+        $cluster->update($data);
         AuditLog::record($request->user(), 'dns.cluster_updated', $cluster, ['fields' => array_keys($request->all())], $request->ip());
         if ($cluster->wasChanged('enabled') && $cluster->enabled) {
             Domain::query()->where('lifecycle_state', DomainLifecycleState::Active->value)->orderBy('id')->chunkById(100, fn ($domains) => $domains->each(fn (Domain $domain) => ReconcileDnsZone::dispatch($domain->id)->afterCommit()));
@@ -76,6 +86,7 @@ class DnsClusterController extends Controller
 
     public function enable(Request $request, DnsCluster $cluster): DnsClusterResource
     {
+        abort_unless($cluster->last_health_status === 'healthy', 409, 'Test the cluster connection successfully before enabling it.');
         if (! $cluster->enabled) {
             $cluster->update(['enabled' => true]);
             AuditLog::record($request->user(), 'dns.cluster_enabled', $cluster, [], $request->ip());

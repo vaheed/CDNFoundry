@@ -926,6 +926,8 @@ Implementation and non-browser qualification evidence: [Phase 1 qualification](p
 
 ##### Browser and Real Runtime
 
+The manual browser qualification is a cumulative release contract through the final phase. Every phase that adds or changes a browser menu, form field, diagnostic surface, port, development credential, or operator workflow updates `docs/manual-browser-qualification.md` with ordered steps, safe example values, and expected results. Development PostgreSQL and named Compose volumes persist across phases; automated tests fail closed unless they use the isolated in-memory test database and never refresh or truncate development PostgreSQL.
+
 - [ ] Administrator login, user creation, disable, enable, profile, and token flows pass in a real browser.
 - [x] Domain-user navigation cannot expose administrator pages.
 - [x] Restarting web, Horizon, and Scheduler does not lose committed user changes.

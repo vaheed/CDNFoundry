@@ -8,6 +8,7 @@ use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
 use App\Filament\Domain\Resources\Domains\RelationManagers\DnsRecordsRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\UsersRelationManager;
 use App\Models\Domain;
+use App\Models\Operation;
 use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
@@ -48,6 +49,12 @@ class DomainResource extends Resource
             TextEntry::make('display_name')->label('Display label'),
             TextEntry::make('lifecycle_state')->badge(),
             TextEntry::make('nameservers_verified_at')->label('Nameservers verified')->dateTime()->placeholder('Pending'),
+            TextEntry::make('nameserver_verification_status')->label('Latest verification')
+                ->state(fn (Domain $record): ?string => self::latestNameserverVerification($record)?->status)
+                ->badge()->placeholder('Not requested'),
+            TextEntry::make('nameserver_verification_error')->label('Verification error')
+                ->state(fn (Domain $record): ?string => self::latestNameserverVerification($record)?->error)
+                ->placeholder('None'),
             TextEntry::make('revision'),
             TextEntry::make('dnsDeployments.status')->label('Deployment states')->badge(),
             TextEntry::make('dnsDeployments.last_error')->label('Deployment errors')->placeholder('None'),
@@ -74,5 +81,11 @@ class DomainResource extends Resource
             'create' => CreateDomain::route('/create'),
             'view' => ViewDomain::route('/{record}'),
         ];
+    }
+
+    private static function latestNameserverVerification(Domain $domain): ?Operation
+    {
+        return Operation::query()->where('type', 'domain.nameservers_verify')
+            ->where('input->domain_id', $domain->id)->latest()->first();
     }
 }

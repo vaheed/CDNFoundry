@@ -5,7 +5,7 @@
 - Docker Engine with the Compose plugin
 - GNU Make
 - At least 8 GiB RAM for the complete development topology
-- Available ports 8080, 8081, 8082, 1053 TCP/UDP, 9090, and 9093
+- Available development ports 8080, 8081, 8082, 9191, 1053 TCP/UDP, 9090, and 9093
 
 No host PHP, Composer, PostgreSQL, Valkey, PowerDNS, or ClickHouse installation is required.
 

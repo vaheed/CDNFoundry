@@ -234,7 +234,25 @@ services:
     image: poweradmin/poweradmin:4.3.3
     profiles: [devtools]
     ports: ["9191:80"]
+    environment:
+      DB_TYPE: pgsql
+      DB_HOST: pdns-db
+      DB_PORT: 5432
+      DB_NAME: pdns
+      DB_USER: pdns
+      DB_PASS: pdns-dev-only
+      PA_CREATE_ADMIN: "true"
+      PA_ADMIN_USERNAME: ${POWERADMIN_ADMIN_USERNAME:-admin}
+      PA_ADMIN_PASSWORD: ${POWERADMIN_ADMIN_PASSWORD:-poweradmin-dev-only}
+      PA_ADMIN_EMAIL: admin@example.test
+      PA_ADMIN_FULLNAME: CDNFoundry Developer
+      DNS_NS1: ns1.cdnf.test
+      DNS_NS2: ns2.cdnf.test
+      DNS_HOSTMASTER: hostmaster.cdnf.test
+    depends_on:
+      pdns-db: { condition: service_healthy }
     networks: [dns]
+    restart: unless-stopped
 
   mmdb-updater:
     build:

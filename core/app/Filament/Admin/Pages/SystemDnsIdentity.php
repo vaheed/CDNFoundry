@@ -12,6 +12,8 @@ use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Facades\Validator;
 
@@ -41,12 +43,36 @@ class SystemDnsIdentity extends Page
     public function form(Schema $schema): Schema
     {
         return $schema->statePath('data')->components([
-            TextInput::make('platform_domain')->required()->maxLength(253),
+            TextInput::make('platform_domain')->required()->maxLength(253)->live(onBlur: true)
+                ->helperText('Enter the public platform domain; standard DNS identity fields will be filled automatically.')
+                ->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
+                    $domain = mb_strtolower(rtrim(trim((string) $state), '.'));
+                    if ($domain === '') {
+                        return;
+                    }
+                    if (blank($get('proxy_hostname'))) {
+                        $set('proxy_hostname', "proxy.{$domain}");
+                    }
+                    $nameservers = $get('nameservers');
+                    if (! is_array($nameservers) || collect($nameservers)->every(fn (array $item): bool => blank($item['hostname'] ?? null))) {
+                        $set('nameservers', [
+                            ['hostname' => "ns1.{$domain}", 'ipv4' => null, 'ipv6' => null],
+                            ['hostname' => "ns2.{$domain}", 'ipv4' => null, 'ipv6' => null],
+                        ]);
+                    }
+                    if (blank($get('soa_primary'))) {
+                        $set('soa_primary', "ns1.{$domain}");
+                    }
+                    if (blank($get('soa_mailbox'))) {
+                        $set('soa_mailbox', "hostmaster.{$domain}");
+                    }
+                }),
             TextInput::make('proxy_hostname')->required()->maxLength(253),
             Repeater::make('nameservers')->minItems(2)->maxItems(8)->schema([
                 TextInput::make('hostname')->required()->maxLength(253),
                 TextInput::make('ipv4')->required()->ipv4(),
-                TextInput::make('ipv6')->required()->ipv6(),
+                TextInput::make('ipv6')->required()->ipv6()
+                    ->helperText('Required by the dual-stack platform contract. Use the public IPv6 glue address.'),
             ])->columns(3),
             TextInput::make('soa_primary')->required()->maxLength(253),
             TextInput::make('soa_mailbox')->required()->maxLength(253),

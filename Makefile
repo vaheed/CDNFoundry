@@ -4,7 +4,7 @@ COMPOSE_PROD := docker compose --env-file .env.prod -f compose.prod.yml
 .PHONY: dev-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-logs prod-build prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check
 
 dev-up:
-	$(COMPOSE_DEV) up -d --build
+	$(COMPOSE_DEV) --profile devtools up -d --build
 
 dev-down:
 	$(COMPOSE_DEV) down
@@ -16,7 +16,7 @@ dev-pdns-migrate:
 	$(COMPOSE_DEV) --profile tools run --rm pdns-migrate
 
 dev-test:
-	$(COMPOSE_DEV) run --rm -e CACHE_STORE=array -e QUEUE_CONNECTION=sync core php artisan test
+	$(COMPOSE_DEV) run --rm -e APP_ENV=testing -e APP_CONFIG_CACHE=/tmp/cdnfoundry-test-config.php -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: -e CACHE_STORE=array -e QUEUE_CONNECTION=sync core php artisan test
 
 dev-e2e:
 	python3 tests/e2e/e2e.py

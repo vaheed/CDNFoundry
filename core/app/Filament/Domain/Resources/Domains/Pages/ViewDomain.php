@@ -15,6 +15,7 @@ use App\Support\DnsZoneImporter;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Illuminate\Support\Facades\DB;
 
@@ -30,10 +31,12 @@ class ViewDomain extends ViewRecord
                 ->action(function (): void {
                     $operation = Operation::query()->where('type', 'domain.nameservers_verify')->whereIn('status', ['pending', 'running'])->where('input->domain_id', $this->record->id)->first();
                     if ($operation === null) {
-                        Operation::query()->create(['actor_id' => auth()->id(), 'type' => 'domain.nameservers_verify', 'status' => 'pending', 'input' => ['domain_id' => $this->record->id]]);
+                        $operation = Operation::query()->create(['actor_id' => auth()->id(), 'type' => 'domain.nameservers_verify', 'status' => 'pending', 'input' => ['domain_id' => $this->record->id]]);
                         AuditLog::record(auth()->user(), 'domain.nameserver_verification_requested', $this->record, [], request()->ip());
                         VerifyDomainNameservers::dispatch($this->record->id)->afterCommit();
                     }
+                    Notification::make()->info()->title('Nameserver verification queued')
+                        ->body("Operation {$operation->id} checks the public NS delegation. Refresh this page after the worker completes.")->send();
                 }),
             Action::make('activate')->color('success')->requiresConfirmation()
                 ->visible(fn (): bool => $this->record->nameservers_verified_at !== null && $this->record->lifecycle_state !== DomainLifecycleState::Active && $this->record->lifecycle_state !== DomainLifecycleState::Deprovisioning)

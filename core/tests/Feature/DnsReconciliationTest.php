@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Jobs\ReconcileDnsZone;
+use App\Jobs\TestDnsCluster;
 use App\Models\DnsCluster;
 use App\Models\DnsDeployment;
 use App\Models\Domain;
@@ -27,14 +28,18 @@ class DnsReconciliationTest extends TestCase
         $admin = User::factory()->admin()->create();
         $domain = $this->domain();
         $response = $this->actingAs($admin)->postJson('/api/admin/dns/clusters', $this->clusterData())
-            ->assertCreated()->assertJsonMissing(['api_key' => 'private-test-key']);
+            ->assertAccepted()->assertJsonMissing(['api_key' => 'private-test-key']);
 
         $cluster = DnsCluster::findOrFail($response->json('data.id'));
         $this->assertNotSame('private-test-key', $cluster->getRawOriginal('api_key'));
         $this->assertSame('private-test-key', $cluster->api_key);
-        Queue::assertPushed(ReconcileDnsZone::class, fn ($job): bool => $job->domainId === $domain->id);
-        $this->actingAs($admin)->postJson("/api/admin/dns/clusters/{$cluster->id}/disable")->assertOk()->assertJsonPath('data.enabled', false);
+        $this->assertFalse($cluster->enabled);
+        Queue::assertPushed(TestDnsCluster::class);
+        Queue::assertNotPushed(ReconcileDnsZone::class);
+        $this->actingAs($admin)->postJson("/api/admin/dns/clusters/{$cluster->id}/enable")->assertConflict();
+        $cluster->update(['last_health_status' => 'healthy']);
         $this->actingAs($admin)->postJson("/api/admin/dns/clusters/{$cluster->id}/enable")->assertOk()->assertJsonPath('data.enabled', true);
+        Queue::assertPushed(ReconcileDnsZone::class, fn ($job): bool => $job->domainId === $domain->id);
     }
 
     public function test_reconciliation_renders_and_activates_latest_zone_deterministically(): void

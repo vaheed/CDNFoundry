@@ -38,6 +38,26 @@ class AdminDnsOperationTest extends TestCase
         $this->assertSame('succeeded', Operation::findOrFail($first->json('data.id'))->status);
     }
 
+    public function test_new_cluster_is_disabled_tested_asynchronously_and_cannot_enable_before_success(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+
+        $response = $this->actingAs($admin)->postJson('/api/admin/dns/clusters', [
+            ...$this->clusterData(),
+            'enabled' => true,
+        ])->assertAccepted();
+
+        $cluster = DnsCluster::query()->findOrFail($response->json('data.id'));
+        $this->assertFalse($cluster->enabled);
+        Queue::assertPushed(TestDnsCluster::class, 1);
+        $this->actingAs($admin)->postJson("/api/admin/dns/clusters/{$cluster->id}/enable")->assertConflict();
+
+        $cluster->update(['last_health_status' => 'healthy']);
+        $this->actingAs($admin)->postJson("/api/admin/dns/clusters/{$cluster->id}/enable")
+            ->assertOk()->assertJsonPath('data.enabled', true);
+    }
+
     public function test_global_reconciliation_is_admin_only_coalesced_and_dispatches_active_domains(): void
     {
         Queue::fake();
