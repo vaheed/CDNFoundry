@@ -120,7 +120,12 @@ class DnsRecordController extends Controller
         $result = DB::transaction(function () use ($request, $domain, $validated): array {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $existing = $locked->dnsRecords()->lockForUpdate()->get()->keyBy('id');
-            $final = $existing->map(function (DnsRecord $record): array { $row = $record->only(['type', 'name', 'content', 'content_hash', 'ttl', 'priority', 'weight', 'port', 'mode', 'geo_config']); $row['geo'] = $record->geo_config; return $row; });
+            $final = $existing->map(function (DnsRecord $record): array {
+                $row = $record->only(['type', 'name', 'content', 'content_hash', 'ttl', 'priority', 'weight', 'port', 'mode', 'geo_config']);
+                $row['geo'] = $record->geo_config;
+
+                return $row;
+            });
             $creates = [];
             $updates = [];
             $deletes = [];

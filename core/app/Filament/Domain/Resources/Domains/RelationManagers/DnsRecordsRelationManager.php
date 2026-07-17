@@ -10,20 +10,26 @@ use App\Models\DnsRecord;
 use App\Models\Domain;
 use App\Support\DnsRecordData;
 use App\Support\DnsZoneValidator;
+use App\Support\GeoDnsConfig;
+use App\Support\GeoIpClassifier;
+use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
+use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class DnsRecordsRelationManager extends RelationManager
 {
@@ -47,19 +53,20 @@ class DnsRecordsRelationManager extends RelationManager
             TextInput::make('name')->required()->default('@')->maxLength(253),
             TextInput::make('content')->required(fn ($get): bool => $get('mode') !== 'geo_dns')->maxLength(4096)
                 ->visible(fn ($get): bool => $get('mode') !== 'geo_dns'),
-            Textarea::make('geo')->label('Geo-DNS configuration (JSON)')->rows(12)
+            TagsInput::make('geo_default')->label('Default answers')
                 ->visible(fn ($get): bool => $get('mode') === 'geo_dns')
                 ->required(fn ($get): bool => $get('mode') === 'geo_dns')
-                ->formatStateUsing(fn ($state, ?DnsRecord $record): string => json_encode($record?->geo_config ?? $state ?? [
-                    'default' => [], 'continents' => new \stdClass, 'countries' => new \stdClass,
-                ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES))
-                ->dehydrateStateUsing(function ($state): array {
-                    $decoded = json_decode((string) $state, true);
-                    if (! is_array($decoded)) {
-                        throw \Illuminate\Validation\ValidationException::withMessages(['geo' => 'Geo-DNS configuration must be valid JSON.']);
-                    }
-                    return $decoded;
-                })->helperText('Country overrides win over continent overrides. Limits: 64 countries, 7 continents, 8 targets per set.'),
+                ->nestedRecursiveRules(['string', 'max:45']),
+            Repeater::make('geo_countries')->label('Country overrides')->maxItems(GeoDnsConfig::MAX_COUNTRIES)
+                ->visible(fn ($get): bool => $get('mode') === 'geo_dns')->schema([
+                    Select::make('code')->options(array_combine(GeoDnsConfig::countryCodes(), GeoDnsConfig::countryCodes()))->searchable()->required(),
+                    TagsInput::make('targets')->required()->nestedRecursiveRules(['string', 'max:45']),
+                ])->columns(2),
+            Repeater::make('geo_continents')->label('Continent overrides')->maxItems(GeoDnsConfig::MAX_CONTINENTS)
+                ->visible(fn ($get): bool => $get('mode') === 'geo_dns')->schema([
+                    Select::make('code')->options(array_combine(GeoDnsConfig::CONTINENTS, GeoDnsConfig::CONTINENTS))->required(),
+                    TagsInput::make('targets')->required()->nestedRecursiveRules(['string', 'max:45']),
+                ])->columns(2)->helperText('Country overrides win over continent overrides. Each target set is limited to 8 addresses.'),
             TextInput::make('ttl')->numeric()->required()->default(300)->minValue(30)->maxValue(2147483647),
             TextInput::make('priority')->numeric()->default(0)->minValue(0)->maxValue(65535)->visible(fn ($get): bool => in_array($get('type'), ['MX', 'SRV'], true)),
             TextInput::make('weight')->numeric()->default(0)->minValue(0)->maxValue(65535)->visible(fn ($get): bool => $get('type') === 'SRV'),
@@ -80,9 +87,18 @@ class DnsRecordsRelationManager extends RelationManager
                 return $this->createRecord($data);
             }),
         ])->recordActions([
-            EditAction::make()->visible(fn (DnsRecord $record): bool => $record->type !== 'NS' || auth()->user()?->isAdmin() === true)->using(function (DnsRecord $record, array $data): DnsRecord {
-                return $this->updateRecord($record, $data);
-            }),
+            Action::make('previewGeo')->label('Preview')->visible(fn (DnsRecord $record): bool => $record->mode === 'geo_dns')
+                ->schema([TextInput::make('ip')->ip()->required()])
+                ->action(function (DnsRecord $record, array $data): void {
+                    $geo = app(GeoIpClassifier::class)->classify($data['ip']);
+                    $targets = GeoDnsConfig::select($record->geo_config, $geo['country'], $geo['continent']);
+                    Notification::make()->info()->title('Geo-DNS preview')
+                        ->body(sprintf('%s / %s → %s. Runtime uses trusted ECS, otherwise the recursive resolver.', $geo['country'] ?? 'unknown', $geo['continent'] ?? 'unknown', implode(', ', $targets)))->send();
+                }),
+            EditAction::make()->mutateRecordDataUsing(fn (array $data, DnsRecord $record): array => $this->hydrateGeoForm($data, $record))
+                ->visible(fn (DnsRecord $record): bool => $record->type !== 'NS' || auth()->user()?->isAdmin() === true)->using(function (DnsRecord $record, array $data): DnsRecord {
+                    return $this->updateRecord($record, $data);
+                }),
             DeleteAction::make()->visible(fn (DnsRecord $record): bool => $record->type !== 'NS' || auth()->user()?->isAdmin() === true)->using(function (DnsRecord $record): bool {
                 return $this->deleteRecord($record);
             }),
@@ -113,6 +129,7 @@ class DnsRecordsRelationManager extends RelationManager
 
     private function createRecord(array $input): DnsRecord
     {
+        $input = $this->normalizeGeoForm($input);
         $domain = $this->getOwnerRecord();
         $record = DB::transaction(function () use ($domain, $input): DnsRecord {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
@@ -132,6 +149,7 @@ class DnsRecordsRelationManager extends RelationManager
 
     private function updateRecord(DnsRecord $record, array $input): DnsRecord
     {
+        $input = $this->normalizeGeoForm($input);
         abort_if($record->type === 'NS' && auth()->user()?->isAdmin() !== true, 403, 'Only administrators can manage delegated NS records.');
         $domain = $this->getOwnerRecord();
         DB::transaction(function () use ($domain, $record, $input): void {
@@ -178,5 +196,36 @@ class DnsRecordsRelationManager extends RelationManager
     private function row(DnsRecord $record): array
     {
         return $record->only(['type', 'name', 'content', 'content_hash', 'ttl', 'priority', 'weight', 'port', 'mode']);
+    }
+
+    private function normalizeGeoForm(array $input): array
+    {
+        if (($input['mode'] ?? 'dns_only') !== 'geo_dns') {
+            unset($input['geo_default'], $input['geo_countries'], $input['geo_continents']);
+
+            return $input;
+        }
+        foreach (['geo_countries', 'geo_continents'] as $field) {
+            if (collect($input[$field] ?? [])->pluck('code')->duplicates()->isNotEmpty()) {
+                throw ValidationException::withMessages([$field => 'Geographic override codes cannot be duplicated.']);
+            }
+        }
+        $map = fn (string $field): array => collect($input[$field] ?? [])->mapWithKeys(fn (array $row): array => [$row['code'] => $row['targets']])->all();
+        $input['geo'] = ['default' => $input['geo_default'] ?? [], 'countries' => $map('geo_countries'), 'continents' => $map('geo_continents')];
+        unset($input['geo_default'], $input['geo_countries'], $input['geo_continents']);
+
+        return $input;
+    }
+
+    private function hydrateGeoForm(array $data, DnsRecord $record): array
+    {
+        if ($record->mode !== 'geo_dns') {
+            return $data;
+        }
+        $data['geo_default'] = $record->geo_config['default'];
+        $data['geo_countries'] = collect($record->geo_config['countries'])->map(fn (array $targets, string $code): array => compact('code', 'targets'))->values()->all();
+        $data['geo_continents'] = collect($record->geo_config['continents'])->map(fn (array $targets, string $code): array => compact('code', 'targets'))->values()->all();
+
+        return $data;
     }
 }

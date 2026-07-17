@@ -26,6 +26,7 @@ final class PowerDnsZone
         foreach ($domain->dnsRecords()->orderBy('id')->get() as $record) {
             if ($record->mode === 'geo_dns') {
                 $rows->push(['name' => $record->name.'.', 'type' => 'LUA', 'ttl' => $record->ttl, 'content' => GeoDnsCompiler::compile($record->type, $record->geo_config)]);
+
                 continue;
             }
             $content = match ($record->type) {

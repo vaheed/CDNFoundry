@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Domain;
 use App\Models\User;
-use App\Support\DnsRecordData;
 use App\Support\GeoDnsCompiler;
 use App\Support\GeoDnsConfig;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -55,6 +54,9 @@ class GeoDnsTest extends TestCase
         [$user, $domain] = $this->ownedDomain();
         $bad = $this->payload();
         $bad['geo']['default'] = ['2001:db8::1'];
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $bad)->assertUnprocessable();
+        $bad = $this->payload();
+        $bad['geo']['countries'] = ['QQ' => ['203.0.113.50']];
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $bad)->assertUnprocessable();
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", [
             'type' => 'A', 'name' => 'plain', 'content' => '192.0.2.1', 'ttl' => 300,

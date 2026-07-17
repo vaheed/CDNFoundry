@@ -6,7 +6,7 @@ final class GeoDnsCompiler
 {
     public static function compile(string $type, array $config): string
     {
-        $parts = [';local cc=string.upper(countryCode() or "--");local cn=string.upper(continentCode() or "--");'];
+        $parts = [";local cc=string.upper(countryCode() or '--');local cn=string.upper(continentCode() or '--');"];
         foreach ($config['countries'] as $code => $targets) {
             $parts[] = 'if cc=='.self::quote($code).' then return '.self::targets($targets).' end;';
         }
@@ -15,7 +15,9 @@ final class GeoDnsCompiler
         }
         $parts[] = 'return '.self::targets($config['default']);
 
-        return $type.' '.implode('', $parts);
+        $script = implode('', $parts);
+
+        return $type.' "'.$script.'"';
     }
 
     private static function targets(array $targets): string
@@ -25,6 +27,6 @@ final class GeoDnsCompiler
 
     private static function quote(string $value): string
     {
-        return '"'.addcslashes($value, "\\\"").'"';
+        return "'".$value."'";
     }
 }

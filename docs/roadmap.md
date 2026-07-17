@@ -1279,41 +1279,41 @@ The Geo-DNS editor includes:
 
 ##### Correctness
 
-- [ ] Country overrides win over continent overrides.
-- [ ] Continent overrides win over default.
-- [ ] Unknown geography returns default.
-- [ ] IPv4 and IPv6 targets validate correctly.
-- [ ] Invalid mappings never replace the active record.
-- [ ] DNS-only records remain unaffected.
+- [x] Country overrides win over continent overrides.
+- [x] Continent overrides win over default.
+- [x] Unknown geography returns default.
+- [x] IPv4 and IPv6 targets validate correctly.
+- [x] Invalid mappings never replace the active record.
+- [x] DNS-only records remain unaffected.
 
 ##### Runtime
 
-- [ ] DNS makes no call to Laravel or an external GeoIP service.
-- [ ] MMDB update failure keeps the previous valid file.
-- [ ] Geo record failure is isolated to its domain.
-- [ ] Geographic rules remain bounded under malicious input.
-- [ ] PowerDNS remains private.
+- [x] DNS makes no call to Laravel or an external GeoIP service.
+- [x] MMDB update failure keeps the previous valid file.
+- [x] Geo record failure is isolated to its domain.
+- [x] Geographic rules remain bounded under malicious input.
+- [x] PowerDNS remains private.
 
 ##### Real Validation
 
 - [ ] Queries from at least three geographic vantage points return expected targets.
-- [ ] Trusted ECS tests return expected targets.
-- [ ] Resolver-only tests document resolver-location limitations.
-- [ ] IPv6 unknown-classification tests return default instead of failing.
+- [x] Trusted ECS tests return expected targets.
+- [x] Resolver-only tests document resolver-location limitations.
+- [x] IPv6 unknown-classification tests return default instead of failing.
 - [ ] Geo-DNS analytics labels use the same country and continent vocabulary.
 
 ##### Browser and Real Runtime
 
 - [ ] User creates and previews a Geo-DNS record in the browser.
-- [ ] Real geographic DNS queries match the previewed fallback order.
-- [ ] A failed Geo-DNS revision remains visible without affecting normal records.
+- [x] Real geographic DNS queries match the previewed fallback order.
+- [x] A failed Geo-DNS revision remains visible without affecting normal records.
 
 ##### Documentation
 
-- [ ] Geo-DNS user guide
-- [ ] ECS and resolver-location limitation guide
-- [ ] Supported country and continent code reference
-- [ ] Troubleshooting guide
+- [x] Geo-DNS user guide
+- [x] ECS and resolver-location limitation guide
+- [x] Supported country and continent code reference
+- [x] Troubleshooting guide
 
 ---
 

@@ -12,7 +12,7 @@ fi
 
 chown -R www-data:www-data storage bootstrap/cache
 
-if [ "$(id -u)" = "0" ]; then
+if [ "$(id -u)" = "0" ] && [ "${1:-}" != "php-fpm" ]; then
     exec su-exec www-data "$@"
 fi
 

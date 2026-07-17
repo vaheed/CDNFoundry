@@ -218,7 +218,7 @@ Directly open `/admin/users`, `/admin/dns-clusters`, `/admin/audit-logs`, and `/
 ### Geo-DNS record workflow
 
 1. As the assigned domain user, create an A record in Geo-DNS mode with a default set, an `EU` override, and an `IR` override.
-2. Confirm invalid JSON, duplicate targets, invalid codes, and an IPv6 target in an A record are rejected without changing the revision.
+2. Confirm duplicate targets/codes, invalid codes, excessive rows, and an IPv6 target in an A record are rejected without changing the revision.
 3. Edit the record and confirm the mode and configuration persist.
 4. Call the authenticated preview endpoint for an MMDB-known address and `2001:db8::1`; confirm country wins over continent and unknown returns default.
 5. Query DNSdist with trusted ECS from at least three known locations and without ECS. Confirm answers match and record the resolver-location limitation.
