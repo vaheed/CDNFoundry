@@ -9,6 +9,7 @@ use App\Models\Edge;
 use App\Models\EdgeArtifact;
 use App\Models\EdgeTask;
 use App\Models\Operation;
+use App\Support\ArtifactSigner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -23,7 +24,7 @@ class EdgeAgentController extends Controller
         $identity = Str::random(96);
         $edge->update(['bootstrap_token_hash' => null, 'identity_hash' => hash('sha256', $identity), 'identity_revoked_at' => null, 'registered_at' => now(), 'agent_version' => $data['agent_version']]);
 
-        return response()->json(['data' => ['edge_id' => $edge->id, 'identity_token' => $identity]], 201);
+        return response()->json(['data' => ['edge_id' => $edge->id, 'identity_token' => $identity, 'signing_public_key' => ArtifactSigner::publicKey()]], 201);
     }
 
     public function heartbeat(Request $request): JsonResponse
@@ -49,7 +50,7 @@ class EdgeAgentController extends Controller
         $edge = $request->attributes->get('edge');
         $artifact = $edge->artifacts()->where('checksum', $checksum)->firstOrFail();
 
-        return response()->json(['data' => $artifact]);
+        return response()->json(['data' => $artifact, 'encoded_payload' => base64_encode(ArtifactSigner::encode($artifact->payload))]);
     }
 
     public function full(Request $request): JsonResponse
@@ -57,9 +58,10 @@ class EdgeAgentController extends Controller
         $edge = $request->attributes->get('edge');
         $latest = EdgeArtifact::query()->where('edge_id', $edge->id)->orderByDesc('sequence')->get()->unique('domain_id')->sortBy('domain_id')->values();
         $payload = ['schema_version' => 1, 'artifacts' => $latest];
-        $checksum = hash('sha256', json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        $encoded = ArtifactSigner::encode($payload);
+        $checksum = hash('sha256', $encoded);
 
-        return response()->json(['data' => $payload, 'checksum' => $checksum, 'signature' => hash_hmac('sha256', $checksum, (string) config('edge.artifact_signing_key'))]);
+        return response()->json(['data' => $payload, 'encoded_snapshot' => base64_encode($encoded), 'checksum' => $checksum, 'signature' => ArtifactSigner::sign($checksum), 'signing_public_key' => ArtifactSigner::publicKey()]);
     }
 
     public function applied(Request $request): JsonResponse

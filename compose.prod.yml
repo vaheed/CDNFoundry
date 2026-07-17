@@ -217,6 +217,29 @@ services:
           memory: 2g
           cpus: "2"
 
+  edge-agent:
+    image: ${CDNF_EDGE_AGENT_IMAGE:-cdnfoundry/edge-agent:local}
+    build:
+      context: ./edge-agent
+    profiles: [edge]
+    environment:
+      EDGE_CONTROL_URL: ${EDGE_CONTROL_URL:?EDGE_CONTROL_URL is required}
+      EDGE_ID: ${EDGE_ID:-}
+      EDGE_BOOTSTRAP_TOKEN: ${EDGE_BOOTSTRAP_TOKEN:-}
+      EDGE_STATE_DIR: /var/lib/cdnfoundry/agent
+    volumes:
+      - edge-agent-state:/var/lib/cdnfoundry/agent
+      - edge-state:/var/lib/cdnfoundry/runtime
+    networks: [edge]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          cpus: "0.25"
+
   mmdb-updater:
     image: ${CDNF_MMDB_UPDATER_IMAGE:-cdnfoundry/mmdb-updater:local}
     build:
@@ -257,4 +280,5 @@ volumes:
   prometheus: {}
   edge-cache: {}
   edge-state: {}
+  edge-agent-state: {}
   mmdb: {}

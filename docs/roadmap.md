@@ -1652,10 +1652,10 @@ When proxy is enabled:
 - [x] Edge identity revocation and replacement work safely.
 - [x] Heartbeats report version, capacity, listener health, active revision, and bounded per-cell summaries.
 - [ ] Incremental artifacts and full snapshots both work.
-- [ ] Signature, checksum, schema, or version incompatibility rejects the candidate.
-- [ ] Invalid state never replaces the last valid state.
-- [ ] Agent restart preserves active state.
-- [ ] Buffered acknowledgements retry after control-plane recovery.
+- [x] Signature, checksum, schema, or version incompatibility rejects the candidate.
+- [x] Invalid state never replaces the last valid state.
+- [x] Agent restart preserves active state.
+- [x] Buffered acknowledgements retry after control-plane recovery.
 - [ ] A fresh edge recovers from a full snapshot.
 
 ##### Runtime

@@ -9,6 +9,7 @@ use App\Models\EdgeArtifact;
 use App\Models\EdgePool;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
+use App\Support\ArtifactSigner;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -62,7 +63,7 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             'revision' => $revision, 'settings' => $domain->proxy_settings ?? self::defaults(),
             'hostnames' => $records->map(fn ($record) => ['hostname' => $record->name, 'type' => $record->type, 'ttl' => $record->ttl, 'origin' => $record->origin])->all(),
         ];
-        $canonical = json_encode($snapshot, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $canonical = ArtifactSigner::encode($snapshot);
         $checksum = hash('sha256', $canonical);
         EdgeRevision::query()->updateOrCreate(['domain_id' => $domain->id, 'revision' => $revision], [
             'snapshot' => $snapshot, 'checksum' => $checksum, 'status' => 'validated', 'created_by' => $operation?->actor_id,
@@ -70,10 +71,10 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
         $activeEdges = Edge::query()->where('enabled', true)->whereNull('identity_revoked_at')->get();
         foreach ($activeEdges as $edge) {
             $payload = $records->isEmpty() ? ['domain' => $domain->name, 'revision' => $revision] : $snapshot;
-            $artifactChecksum = hash('sha256', json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
-            EdgeArtifact::query()->firstOrCreate(
+            $artifactChecksum = hash('sha256', ArtifactSigner::encode($payload));
+            EdgeArtifact::query()->updateOrCreate(
                 ['edge_id' => $edge->id, 'domain_id' => $domain->id, 'revision' => $revision, 'kind' => $records->isEmpty() ? 'tombstone' : 'domain'],
-                ['payload' => $payload, 'checksum' => $artifactChecksum, 'signature' => hash_hmac('sha256', $artifactChecksum, (string) config('edge.artifact_signing_key'))],
+                ['payload' => $payload, 'checksum' => $artifactChecksum, 'signature' => ArtifactSigner::sign($artifactChecksum)],
             );
         }
         if (Domain::query()->whereKey($domain->id)->value('revision') !== $revision) {

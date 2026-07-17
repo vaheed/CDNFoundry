@@ -10,6 +10,7 @@ use App\Models\EdgeRevision;
 use App\Models\EdgeTask;
 use App\Models\Operation;
 use App\Models\User;
+use App\Support\ArtifactSigner;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -53,8 +54,12 @@ class EdgeProxyTest extends TestCase
         [$user, $domain] = $this->ownedDomain();
         $record = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $this->record('www', '8.8.8.8'))->assertCreated()->json('data.id');
         $artifact = EdgeArtifact::query()->where('edge_id', $id)->firstOrFail();
+        $this->assertTrue(sodium_crypto_sign_verify_detached(hex2bin($artifact->signature), $artifact->checksum, hex2bin($registered->json('data.signing_public_key'))));
+        $this->withToken($identity)->getJson("/edge/v1/config/artifacts/{$artifact->checksum}")->assertOk()
+            ->assertJsonPath('encoded_payload', base64_encode(ArtifactSigner::encode($artifact->payload)));
         $this->withToken($identity)->getJson('/edge/v1/config/manifest?cursor=0')->assertOk()->assertJsonPath('data.0.checksum', $artifact->checksum);
-        $this->withToken($identity)->getJson('/edge/v1/config/full')->assertOk()->assertJsonPath('data.artifacts.0.revision', $domain->refresh()->revision);
+        $full = $this->withToken($identity)->getJson('/edge/v1/config/full')->assertOk()->assertJsonPath('data.artifacts.0.revision', $domain->refresh()->revision);
+        $this->assertTrue(sodium_crypto_sign_verify_detached(hex2bin($full->json('signature')), $full->json('checksum'), hex2bin($full->json('signing_public_key'))));
         $this->withToken($identity)->postJson('/edge/v1/config/applied', ['sequence' => $artifact->sequence + 100])->assertUnprocessable();
         $this->withToken($identity)->postJson('/edge/v1/config/applied', ['sequence' => $artifact->sequence])->assertOk();
         $this->assertDatabaseHas('domain_edge_placements', ['domain_id' => $domain->id, 'state' => 'active', 'desired_revision' => $domain->revision]);

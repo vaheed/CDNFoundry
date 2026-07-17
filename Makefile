@@ -26,6 +26,7 @@ dev-logs:
 
 prod-build:
 	$(COMPOSE_PROD) build core
+	$(COMPOSE_PROD) build edge-agent
 
 prod-migrate:
 	$(COMPOSE_PROD) --profile tools run --rm migrate
