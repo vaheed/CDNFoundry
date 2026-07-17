@@ -94,6 +94,13 @@ func TestActivationPreservesPreviousAndRestartState(t *testing.T) {
 	if active.Sequence != 5 {
 		t.Fatal("invalid candidate replaced active state")
 	}
+	var poolRuntime struct {
+		Hosts map[string]any `json:"hosts"`
+	}
+	poolBytes, err := os.ReadFile(filepath.Join(dir, "runtime", "shared-default.json"))
+	if err != nil || json.Unmarshal(poolBytes, &poolRuntime) != nil || poolRuntime.Hosts["www.example.test"] == nil {
+		t.Fatal("placement-aware pool runtime was not published")
+	}
 }
 
 func TestFreshFullSnapshotThenIncrementalArtifact(t *testing.T) {
@@ -187,5 +194,5 @@ func signedJSON(t *testing.T, private ed25519.PrivateKey, value any) (string, st
 }
 
 func runtimeDomain(revision int) json.RawMessage {
-	return json.RawMessage(`{"domain":"example.test","revision":` + strconv.Itoa(revision) + `,"settings":{"enabled":true},"hostnames":[{"hostname":"www.example.test","origin":{"host":"origin.example"}}]}`)
+	return json.RawMessage(`{"domain":"example.test","revision":` + strconv.Itoa(revision) + `,"pools":["shared-default"],"settings":{"enabled":true},"hostnames":[{"hostname":"www.example.test","origin":{"host":"origin.example"}}]}`)
 }

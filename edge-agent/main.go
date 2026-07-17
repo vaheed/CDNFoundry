@@ -348,7 +348,7 @@ func (c *client) activate(s state) error {
 	if err := atomicJSON(filepath.Join(candidate, "state.json"), s); err != nil {
 		return err
 	}
-	runtime, err := compileRuntime(s)
+	runtime, pools, err := compileRuntime(s)
 	if err != nil {
 		return err
 	}
@@ -372,6 +372,23 @@ func (c *client) activate(s state) error {
 		if err := atomicPublicJSON(filepath.Join(c.runtimeDir, "active.json"), runtime); err != nil {
 			return c.rollbackActive(active, previous, err)
 		}
+		existing, _ := filepath.Glob(filepath.Join(c.runtimeDir, "*.json"))
+		for _, file := range existing {
+			name := strings.TrimSuffix(filepath.Base(file), ".json")
+			if name != "active" {
+				if _, present := pools[name]; !present {
+					pools[name] = map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": map[string]any{}}
+				}
+			}
+		}
+		for name, poolRuntime := range pools {
+			if !validPoolName(name) {
+				return c.rollbackActive(active, previous, errors.New("invalid runtime pool name"))
+			}
+			if err := atomicPublicJSON(filepath.Join(c.runtimeDir, name+".json"), poolRuntime); err != nil {
+				return c.rollbackActive(active, previous, err)
+			}
+		}
 	}
 	return nil
 }
@@ -384,33 +401,64 @@ func (c *client) rollbackActive(active, previous string, cause error) error {
 	return cause
 }
 
-func compileRuntime(s state) (map[string]any, error) {
+func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) {
 	hosts := map[string]any{}
+	poolHosts := map[string]map[string]any{}
 	for _, raw := range s.Domains {
 		var domain struct {
 			Domain    string         `json:"domain"`
 			Revision  uint64         `json:"revision"`
 			Settings  map[string]any `json:"settings"`
+			Pools     []string       `json:"pools"`
 			Hostnames []struct {
 				Hostname string         `json:"hostname"`
 				Origin   map[string]any `json:"origin"`
 			} `json:"hostnames"`
 		}
 		if err := json.Unmarshal(raw, &domain); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if domain.Domain == "" || len(domain.Hostnames) > 10000 {
-			return nil, errors.New("invalid runtime domain")
+			return nil, nil, errors.New("invalid runtime domain")
 		}
 		for _, host := range domain.Hostnames {
 			name := strings.ToLower(strings.TrimSuffix(host.Hostname, "."))
 			if name == "" || host.Origin["host"] == nil || hosts[name] != nil {
-				return nil, errors.New("invalid or duplicate runtime hostname")
+				return nil, nil, errors.New("invalid or duplicate runtime hostname")
 			}
-			hosts[name] = map[string]any{"domain": domain.Domain, "revision": domain.Revision, "settings": domain.Settings, "origin": host.Origin}
+			compiled := map[string]any{"domain": domain.Domain, "revision": domain.Revision, "settings": domain.Settings, "origin": host.Origin}
+			hosts[name] = compiled
+			for _, pool := range domain.Pools {
+				if !validPoolName(pool) {
+					return nil, nil, errors.New("invalid runtime pool name")
+				}
+				if poolHosts[pool] == nil {
+					poolHosts[pool] = map[string]any{}
+				}
+				if poolHosts[pool][name] != nil {
+					return nil, nil, errors.New("duplicate runtime pool hostname")
+				}
+				poolHosts[pool][name] = compiled
+			}
 		}
 	}
-	return map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": hosts}, nil
+	pools := map[string]map[string]any{}
+	for name, assigned := range poolHosts {
+		pools[name] = map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": assigned}
+	}
+	return map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": hosts}, pools, nil
+}
+
+func validPoolName(name string) bool {
+	if name == "" || len(name) > 100 {
+		return false
+	}
+	for _, character := range name {
+		if !(character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || character >= '0' && character <= '9' || character == '-' || character == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *client) heartbeat(sequence uint64) error {

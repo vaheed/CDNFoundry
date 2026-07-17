@@ -11,6 +11,7 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 NAME = "cdnf-phase4-runtime-e2e"
 TLS_NAME = "cdnf-phase4-tls-origin-e2e"
+QUARANTINE_NAME = "cdnf-phase4-quarantine-e2e"
 
 
 def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -43,21 +44,21 @@ def add_https_origin(runtime_state: dict, hostname: str, sni: str) -> None:
     }
 
 
-def request(host: str) -> subprocess.CompletedProcess[str]:
-    return run("docker", "exec", NAME, "wget", "-S", "-O-", f"--header=Host: {host}", "http://127.0.0.1:8080/", check=False)
+def request(host: str, container: str = NAME) -> subprocess.CompletedProcess[str]:
+    return run("docker", "exec", container, "wget", "-S", "-O-", f"--header=Host: {host}", "http://127.0.0.1:8080/", check=False)
 
 
 def raw_request(payload: str) -> str:
     return run("docker", "exec", NAME, "sh", "-c", "printf '%s' \"$1\" | nc 127.0.0.1 8080", "sh", payload, check=False).stdout
 
 
-def wait_for(host: str) -> subprocess.CompletedProcess[str]:
-    result = request(host)
+def wait_for(host: str, container: str = NAME) -> subprocess.CompletedProcess[str]:
+    result = request(host, container)
     for _ in range(9):
         if result.returncode == 0:
             return result
         time.sleep(0.5)
-        result = request(host)
+        result = request(host, container)
     return result
 
 
@@ -82,7 +83,7 @@ def main() -> None:
         run("docker", "run", "-d", "--rm", "--name", TLS_NAME, "--network", "cdnfoundry-dev_edge",
             "--network-alias", "tls-origin", "-v", f"{origin_config}:/etc/nginx/conf.d/default.conf:ro",
             "-v", f"{directory}:/run/tls:ro", "nginx:1.30.3-alpine")
-        runtime = pathlib.Path(directory) / "active.json"
+        runtime = pathlib.Path(directory) / "shared-default.json"
         initial = state({"runtime.example": "origin-one.example"}, 1)
         add_https_origin(initial, "tls.example", "tls-origin")
         add_https_origin(initial, "bad-tls.example", "wrong-origin")
@@ -91,7 +92,19 @@ def main() -> None:
         }
         runtime.write_text(json.dumps(initial, separators=(",", ":")))
         runtime.chmod(0o644)
+        quarantine_runtime = pathlib.Path(directory) / "quarantine-default.json"
+        quarantine_runtime.write_text(json.dumps(state({"quarantine.example": "quarantine-origin.example"}, 1), separators=(",", ":")))
+        quarantine_runtime.chmod(0o644)
         run("docker", "run", "-d", "--rm", "--name", NAME, "--network", "cdnfoundry-dev_edge",
+            "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/shared-default.json",
+            "-v", f"{ROOT / 'docker/nginx/openresty.conf'}:/usr/local/openresty/nginx/conf/nginx.conf:ro",
+            "-v", f"{ROOT / 'docker/nginx/edge-runtime.conf'}:/etc/nginx/conf.d/default.conf:ro",
+            "-v", f"{ROOT / 'docker/openresty/runtime.lua'}:/etc/cdnfoundry/runtime.lua:ro",
+            "-v", f"{temporary / 'ca.crt'}:/etc/ssl/certs/ca-certificates.crt:ro",
+            "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro", "openresty/openresty:1.31.1.1-0-alpine")
+        run("docker", "run", "-d", "--rm", "--name", QUARANTINE_NAME, "--network", "cdnfoundry-dev_edge",
+            "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/quarantine-default.json",
+            "-v", f"{ROOT / 'docker/nginx/openresty.conf'}:/usr/local/openresty/nginx/conf/nginx.conf:ro",
             "-v", f"{ROOT / 'docker/nginx/edge-runtime.conf'}:/etc/nginx/conf.d/default.conf:ro",
             "-v", f"{ROOT / 'docker/openresty/runtime.lua'}:/etc/cdnfoundry/runtime.lua:ro",
             "-v", f"{temporary / 'ca.crt'}:/etc/ssl/certs/ca-certificates.crt:ro",
@@ -100,6 +113,10 @@ def main() -> None:
             run("docker", "exec", NAME, "openresty", "-t")
             known = wait_for("runtime.example")
             assert known.returncode == 0 and '"host":"origin-one.example"' in known.stdout, known.stderr
+            quarantine = wait_for("quarantine.example", QUARANTINE_NAME)
+            assert quarantine.returncode == 0 and '"host":"quarantine-origin.example"' in quarantine.stdout, quarantine.stderr
+            assert "421 Misdirected Request" in request("runtime.example", QUARANTINE_NAME).stderr
+            assert "421 Misdirected Request" in request("quarantine.example").stderr
             secure = wait_for("tls.example")
             assert secure.returncode == 0 and '"tls":true' in secure.stdout and '"host":"tls-origin"' in secure.stdout, secure.stderr
             untrusted = run("docker", "exec", NAME, "wget", "-q", "-O-", "--header=Host: tls.example",
@@ -125,11 +142,14 @@ def main() -> None:
             assert "503 Service Temporarily Unavailable" in request("disabled.example").stderr
             assert "421 Misdirected Request" in request("tls.example").stderr
             assert run("docker", "exec", NAME, "cat", "/usr/local/openresty/nginx/logs/nginx.pid").stdout.strip() == pid
+            run("docker", "stop", QUARANTINE_NAME)
+            assert request("runtime.example").returncode == 0
             runtime.write_text('{"invalid"')
             time.sleep(1.5)
             assert request("runtime.example").returncode == 0
         finally:
             run("docker", "stop", NAME, check=False)
+            run("docker", "stop", QUARANTINE_NAME, check=False)
             run("docker", "stop", TLS_NAME, check=False)
     print("Phase 4 OpenResty runtime qualification passed.")
 

@@ -96,6 +96,9 @@ class EdgeProxyTest extends TestCase
         DomainEdgePlacement::query()->where('domain_id', $domain->id)->update(['drain_after' => now()->subSecond()]);
         $this->artisan('edge:complete-placement-drains')->assertSuccessful();
         $this->assertDatabaseHas('domain_edge_placements', ['domain_id' => $domain->id, 'active_pool_id' => $pool, 'target_pool_id' => null, 'state' => 'active']);
+        $drainedArtifact = EdgeArtifact::query()->where('edge_id', $id)->where('domain_id', $domain->id)->latest('sequence')->firstOrFail();
+        $this->assertGreaterThan($moveArtifact->sequence, $drainedArtifact->sequence);
+        $this->assertSame(['dedicated-test'], $drainedArtifact->payload['pools']);
 
         $this->actingAs($admin)->postJson("/api/admin/edges/$id/rotate-identity")->assertOk();
         $this->withToken($identity)->getJson('/edge/v1/config/manifest?cursor=0')->assertUnauthorized();

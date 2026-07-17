@@ -40,6 +40,7 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
         $operation = Operation::query()->where('type', 'edge.domain_reconcile')->whereIn('status', ['pending', 'running'])
             ->where('input->domain_id', $domain->id)->latest()->first();
         $operation?->update(['status' => 'running', 'started_at' => now()]);
+        $placement = null;
         if ($records->isEmpty()) {
             DomainEdgePlacement::query()->where('domain_id', $domain->id)->delete();
         } else {
@@ -50,7 +51,9 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             $placement = DomainEdgePlacement::query()->firstOrCreate(['domain_id' => $domain->id], ['desired_revision' => $revision]);
             $target = $placement->target_pool_id !== null
                 ? EdgePool::query()->whereKey($placement->target_pool_id)->where('enabled', true)->firstOrFail()
-                : $pools[abs(crc32($domain->name)) % $pools->count()];
+                : ($placement->active_pool_id !== null
+                    ? EdgePool::query()->whereKey($placement->active_pool_id)->where('enabled', true)->firstOrFail()
+                    : $pools[abs(crc32($domain->name)) % $pools->count()]);
             $alreadyActive = $placement->state === 'active' && $placement->active_pool_id === $target->id
                 && $placement->desired_revision === $revision && $domain->active_edge_revision === $revision;
             if (! $alreadyActive) {
@@ -58,9 +61,14 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             }
         }
 
+        $poolNames = $placement === null ? [] : EdgePool::query()
+            ->whereIn('id', array_values(array_filter([$placement->active_pool_id, $placement->target_pool_id])))
+            ->orderBy('name')->pluck('name')->all();
+
         $snapshot = [
             'schema_version' => 1, 'domain_id' => $domain->id, 'domain' => $domain->name,
             'revision' => $revision, 'settings' => $domain->proxy_settings ?? self::defaults(),
+            'pools' => $poolNames,
             'hostnames' => $records->map(function ($record): array {
                 $origin = $record->origin;
                 $origin['private_allowlist'] = config('edge.private_origin_allowlist', []);
@@ -77,10 +85,10 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
         foreach ($activeEdges as $edge) {
             $payload = $records->isEmpty() ? ['domain' => $domain->name, 'revision' => $revision] : $snapshot;
             $artifactChecksum = hash('sha256', ArtifactSigner::encode($payload));
-            EdgeArtifact::query()->updateOrCreate(
-                ['edge_id' => $edge->id, 'domain_id' => $domain->id, 'revision' => $revision, 'kind' => $records->isEmpty() ? 'tombstone' : 'domain'],
-                ['payload' => $payload, 'checksum' => $artifactChecksum, 'signature' => ArtifactSigner::sign($artifactChecksum)],
-            );
+            EdgeArtifact::query()->firstOrCreate([
+                'edge_id' => $edge->id, 'domain_id' => $domain->id, 'revision' => $revision,
+                'kind' => $records->isEmpty() ? 'tombstone' : 'domain', 'checksum' => $artifactChecksum,
+            ], ['payload' => $payload, 'signature' => ArtifactSigner::sign($artifactChecksum)]);
         }
         if (Domain::query()->whereKey($domain->id)->value('revision') !== $revision) {
             $operation?->update(['status' => 'pending']);
