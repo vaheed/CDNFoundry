@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['domain_id', 'dns_cluster_id', 'desired_revision', 'deployed_revision', 'status', 'active_checksum', 'active_rrsets', 'last_error', 'attempts', 'last_attempted_at', 'deployed_at'])]
+#[Fillable(['domain_id', 'dns_cluster_id', 'desired_revision', 'deployed_revision', 'status', 'active_checksum', 'active_rrsets', 'last_error', 'attempts', 'last_attempted_at', 'deployed_at', 'tombstone', 'deprovisioned_at'])]
 class DnsDeployment extends Model
 {
     public function domain(): BelongsTo
@@ -21,6 +21,6 @@ class DnsDeployment extends Model
 
     protected function casts(): array
     {
-        return ['active_rrsets' => 'array', 'last_attempted_at' => 'immutable_datetime', 'deployed_at' => 'immutable_datetime'];
+        return ['active_rrsets' => 'array', 'tombstone' => 'boolean', 'last_attempted_at' => 'immutable_datetime', 'deployed_at' => 'immutable_datetime', 'deprovisioned_at' => 'immutable_datetime'];
     }
 }

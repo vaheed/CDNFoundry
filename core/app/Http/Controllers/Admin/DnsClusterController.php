@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\DomainLifecycleState;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\DnsClusterResource;
 use App\Jobs\ReconcileDnsZone;
@@ -24,7 +25,7 @@ class DnsClusterController extends Controller
     {
         $cluster = DnsCluster::query()->create($this->validated($request));
         AuditLog::record($request->user(), 'dns.cluster_created', $cluster, ['name' => $cluster->name], $request->ip());
-        Domain::query()->orderBy('id')->chunkById(100, fn ($domains) => $domains->each(fn (Domain $domain) => ReconcileDnsZone::dispatch($domain->id)->afterCommit()));
+        Domain::query()->where('lifecycle_state', DomainLifecycleState::Active->value)->orderBy('id')->chunkById(100, fn ($domains) => $domains->each(fn (Domain $domain) => ReconcileDnsZone::dispatch($domain->id)->afterCommit()));
 
         return DnsClusterResource::make($cluster)->response()->setStatusCode(201);
     }
@@ -57,7 +58,7 @@ class DnsClusterController extends Controller
         if (! $cluster->enabled) {
             $cluster->update(['enabled' => true]);
             AuditLog::record($request->user(), 'dns.cluster_enabled', $cluster, [], $request->ip());
-            Domain::query()->orderBy('id')->chunkById(100, fn ($domains) => $domains->each(fn (Domain $domain) => ReconcileDnsZone::dispatch($domain->id)->afterCommit()));
+            Domain::query()->where('lifecycle_state', DomainLifecycleState::Active->value)->orderBy('id')->chunkById(100, fn ($domains) => $domains->each(fn (Domain $domain) => ReconcileDnsZone::dispatch($domain->id)->afterCommit()));
         }
 
         return DnsClusterResource::make($cluster->refresh());

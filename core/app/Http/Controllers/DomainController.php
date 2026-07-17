@@ -6,6 +6,8 @@ use App\Enums\DomainLifecycleState;
 use App\Http\Requests\StoreDomainRequest;
 use App\Http\Resources\DomainResource;
 use App\Models\AuditLog;
+use App\Models\DnsCluster;
+use App\Models\DnsDeployment;
 use App\Models\Domain;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -72,6 +74,12 @@ class DomainController extends Controller
                 'deprovision_after' => now()->addDays(7),
                 'revision' => $domain->revision + 1,
             ])->save();
+            foreach (DnsCluster::query()->orderBy('id')->get() as $cluster) {
+                DnsDeployment::query()->updateOrCreate(
+                    ['domain_id' => $domain->id, 'dns_cluster_id' => $cluster->id],
+                    ['desired_revision' => $domain->revision, 'status' => 'pending', 'tombstone' => true],
+                );
+            }
             AuditLog::record($request->user(), 'domain.deprovisioning_started', $domain, ['revision' => $domain->revision], $request->ip());
         }
 

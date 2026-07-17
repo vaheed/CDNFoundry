@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\DomainLifecycleState;
 use App\Jobs\ReconcileDnsZone;
 use App\Models\Domain;
 use App\Models\Operation;
@@ -22,6 +23,7 @@ class DnsDeploymentController extends Controller
     public function reconcile(Request $request, Domain $domain): JsonResponse
     {
         Gate::authorize('update', $domain);
+        abort_unless($domain->lifecycle_state === DomainLifecycleState::Active, 409, 'Only active domains can be reconciled.');
         $operation = Operation::query()->where('type', 'dns.zone_reconcile')->whereIn('status', ['pending', 'running'])
             ->where('input->domain_id', $domain->id)->first();
         if ($operation === null) {

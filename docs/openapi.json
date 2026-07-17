@@ -153,6 +153,27 @@
                 }
             }
         },
+        "/admin/domains/{domain}/force-verify": {
+            "post": {
+                "operationId": "domain.verification.controller",
+                "tags": [
+                    "Administrator"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
         "/admin/domains/{domain}/users": {
             "get": {
                 "operationId": "domain.user.controller.index",
@@ -638,6 +659,27 @@
                 }
             }
         },
+        "/domains/{domain}/activate": {
+            "post": {
+                "operationId": "domain.lifecycle.controller.activate",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
         "/domains/{domain}/disable": {
             "post": {
                 "operationId": "domain.controller.disable",
@@ -821,6 +863,48 @@
                 }
             }
         },
+        "/domains/{domain}/status": {
+            "get": {
+                "operationId": "domain.lifecycle.controller.status",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
+        "/domains/{domain}/verify-nameservers": {
+            "post": {
+                "operationId": "domain.lifecycle.controller.verify",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
         "/health": {
             "get": {
                 "operationId": "health.controller.health",
@@ -948,6 +1032,22 @@
                     {
                         "bearerAuth": []
                     }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
+        "/nameservers": {
+            "get": {
+                "operationId": "nameserver.controller",
+                "tags": [
+                    "Account"
                 ],
                 "responses": {
                     "200": {

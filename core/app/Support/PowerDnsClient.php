@@ -39,6 +39,14 @@ class PowerDnsClient
         ])->throw();
     }
 
+    public function deleteZone(DnsCluster $cluster, string $zone): void
+    {
+        $response = $this->request($cluster)->delete('/api/v1/servers/'.$cluster->server_id.'/zones/'.rawurlencode($zone.'.'));
+        if ($response->status() !== 404) {
+            $response->throw();
+        }
+    }
+
     private function request(DnsCluster $cluster): PendingRequest
     {
         return Http::baseUrl(rtrim($cluster->api_url, '/'))

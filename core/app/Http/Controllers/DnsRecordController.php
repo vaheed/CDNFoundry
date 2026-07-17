@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\DomainLifecycleState;
 use App\Http\Resources\DnsRecordResource;
 use App\Jobs\ReconcileDnsZone;
 use App\Models\AuditLog;
@@ -196,7 +197,7 @@ class DnsRecordController extends Controller
 
     private function queueReconciliation(Domain $domain): void
     {
-        if (DnsCluster::query()->where('enabled', true)->exists()) {
+        if ($domain->refresh()->lifecycle_state === DomainLifecycleState::Active && DnsCluster::query()->where('enabled', true)->exists()) {
             ReconcileDnsZone::dispatch($domain->id)->afterCommit();
         }
     }

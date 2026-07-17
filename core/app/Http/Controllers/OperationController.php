@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\ApplyPlatformDnsSettings;
+use App\Jobs\ReconcileDnsZone;
+use App\Jobs\VerifyDomainNameservers;
 use App\Models\AuditLog;
 use App\Models\Operation;
 use Illuminate\Http\JsonResponse;
@@ -27,10 +29,14 @@ class OperationController extends Controller
     public function retry(Request $request, Operation $operation): JsonResponse
     {
         abort_unless($operation->status === 'failed', 409, 'Only failed operations can be retried.');
-        abort_unless($operation->type === 'platform_dns_identity.update', 422, 'Unsupported operation type.');
+        abort_unless(in_array($operation->type, ['platform_dns_identity.update', 'domain.nameservers_verify', 'dns.zone_reconcile'], true), 422, 'Unsupported operation type.');
         $operation->update(['status' => 'pending', 'error' => null, 'finished_at' => null]);
         AuditLog::record($request->user(), 'operation.retry_requested', $operation, [], $request->ip());
-        ApplyPlatformDnsSettings::dispatch($operation->getKey());
+        match ($operation->type) {
+            'platform_dns_identity.update' => ApplyPlatformDnsSettings::dispatch($operation->getKey()),
+            'domain.nameservers_verify' => VerifyDomainNameservers::dispatch((int) $operation->input['domain_id']),
+            'dns.zone_reconcile' => ReconcileDnsZone::dispatch((int) $operation->input['domain_id']),
+        };
 
         return response()->json(['data' => $operation->refresh()], 202);
     }

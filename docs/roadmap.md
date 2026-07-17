@@ -1133,17 +1133,17 @@ No origin is requested.
 
 ##### Domain Workflow
 
-- [ ] A user adds a domain without an origin.
-- [ ] Duplicate canonical domains, public suffixes, and Punycode collisions are rejected.
-- [ ] Deleted domains cannot be reclaimed before deprovisioning and cooldown complete.
-- [ ] Pending nameserver verification is clear.
+- [x] A user adds a domain without an origin.
+- [x] Duplicate canonical domains, public suffixes, and Punycode collisions are rejected.
+- [x] Deleted domains cannot be reclaimed before deprovisioning and cooldown complete.
+- [x] Pending nameserver verification is clear.
 - [ ] Automated verification works through real public DNS.
-- [ ] Administrator force-verification is audited.
+- [x] Administrator force-verification is audited.
 - [ ] Force-verification still uses normal validation and reconciliation.
-- [ ] Activation and disable actions are idempotent.
-- [ ] Disabled domains retain desired state.
-- [ ] Deprovisioning domains cannot be force-activated.
-- [ ] Deletion produces tombstones for every runtime target.
+- [x] Activation and disable actions are idempotent.
+- [x] Disabled domains retain desired state.
+- [x] Deprovisioning domains cannot be force-activated.
+- [x] Deletion produces tombstones for every runtime target.
 
 ##### DNS Correctness
 
@@ -1178,8 +1178,8 @@ No origin is requested.
 
 ##### Documentation
 
-- [ ] Domain onboarding guide
-- [ ] Registrar and glue-record guide
+- [x] Domain onboarding guide
+- [x] Registrar and glue-record guide
 - [ ] DNS record reference
 - [ ] Import/export guide
 - [x] DNS cluster runbook

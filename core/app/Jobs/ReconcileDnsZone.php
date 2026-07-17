@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Enums\DomainLifecycleState;
 use App\Models\DnsCluster;
 use App\Models\DnsDeployment;
 use App\Models\Domain;
@@ -30,6 +31,11 @@ class ReconcileDnsZone implements ShouldBeUnique, ShouldQueue
     public function handle(PowerDnsClient $client): void
     {
         $domain = Domain::query()->findOrFail($this->domainId);
+        if ($domain->lifecycle_state !== DomainLifecycleState::Active) {
+            $this->operations()->update(['status' => 'failed', 'error' => 'Only active domains can be reconciled.', 'finished_at' => now()]);
+
+            return;
+        }
         $revision = $domain->revision;
         $rrsets = PowerDnsZone::render($domain);
         $checksum = hash('sha256', json_encode($rrsets, JSON_THROW_ON_ERROR));

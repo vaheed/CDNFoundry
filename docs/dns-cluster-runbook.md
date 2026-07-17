@@ -39,3 +39,5 @@ When a deployment fails:
 5. Query DNSdist, not PowerDNS directly, for final qualification.
 
 An invalid or unreachable replacement must never cause deletion of the deployment's recorded last-valid RRsets.
+
+Domain deletion first records per-cluster tombstones and a delayed deadline. The scheduler dispatches bounded `dns:deprovision-due` work after that deadline. A target is marked `deprovisioned` only after PowerDNS confirms deletion or reports that the zone is already absent; failed targets retain their tombstone and error for retry.
