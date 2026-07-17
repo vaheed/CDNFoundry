@@ -85,7 +85,7 @@ class EdgeController extends Controller
     public function rotate(Request $request, Edge $edge): JsonResponse
     {
         $token = Str::random(64);
-        $edge->update(['identity_hash' => null, 'identity_revoked_at' => now(), 'bootstrap_token_hash' => hash('sha256', $token), 'registered_at' => null]);
+        $edge->update(['identity_hash' => null, 'identity_certificate_serial' => null, 'identity_certificate_expires_at' => null, 'identity_revoked_at' => now(), 'bootstrap_token_hash' => hash('sha256', $token), 'registered_at' => null]);
         AuditLog::record($request->user(), 'edge.identity_rotated', $edge, [], $request->ip());
 
         return response()->json(['data' => ['bootstrap_token' => $token]]);

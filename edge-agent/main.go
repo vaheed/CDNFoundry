@@ -3,12 +3,18 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -24,7 +30,7 @@ import (
 
 const version = "1.0.0"
 
-type identity struct{ EdgeID, Token, PublicKey string }
+type identity struct{ EdgeID, Certificate, PrivateKey, PublicKey string }
 type state struct {
 	Sequence uint64                     `json:"sequence"`
 	Domains  map[string]json.RawMessage `json:"domains"`
@@ -57,6 +63,9 @@ func main() {
 		fatal(err)
 	}
 	if err := c.loadOrRegister(); err != nil {
+		fatal(err)
+	}
+	if err := c.configureMutualTLS(); err != nil {
 		fatal(err)
 	}
 	once := env("EDGE_ONCE", "false") == "true"
@@ -215,9 +224,20 @@ func blockedIP(address string, allowlist []string) bool {
 func (c *client) loadOrRegister() error {
 	p := filepath.Join(c.dir, "identity.json")
 	if b, err := os.ReadFile(p); err == nil {
-		return json.Unmarshal(b, &c.id)
+		if err := json.Unmarshal(b, &c.id); err != nil {
+			return err
+		}
+		if c.id.Certificate == "" || c.id.PrivateKey == "" {
+			return errors.New("legacy edge identity requires administrator rotation")
+		}
+		return nil
 	}
-	body := map[string]any{"edge_id": required("EDGE_ID"), "bootstrap_token": required("EDGE_BOOTSTRAP_TOKEN"), "agent_version": version}
+	edgeID := required("EDGE_ID")
+	csr, privateKey, err := certificateRequest(edgeID)
+	if err != nil {
+		return err
+	}
+	body := map[string]any{"edge_id": edgeID, "bootstrap_token": required("EDGE_BOOTSTRAP_TOKEN"), "agent_version": version, "certificate_request": csr}
 	// Explicit decode avoids relying on field-name matching for snake_case.
 	var raw struct {
 		Data map[string]string `json:"data"`
@@ -225,8 +245,35 @@ func (c *client) loadOrRegister() error {
 	if err := c.request("POST", "/edge/v1/register", body, &raw, false); err != nil {
 		return err
 	}
-	c.id = identity{EdgeID: raw.Data["edge_id"], Token: raw.Data["identity_token"], PublicKey: raw.Data["signing_public_key"]}
+	c.id = identity{EdgeID: raw.Data["edge_id"], Certificate: raw.Data["identity_certificate"], PrivateKey: privateKey, PublicKey: raw.Data["signing_public_key"]}
 	return atomicJSON(p, c.id)
+}
+
+func certificateRequest(edgeID string) (string, string, error) {
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return "", "", err
+	}
+	request, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{Subject: pkix.Name{CommonName: edgeID}}, privateKey)
+	if err != nil {
+		return "", "", err
+	}
+	encodedKey, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		return "", "", err
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: request})), string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: encodedKey})), nil
+}
+
+func (c *client) configureMutualTLS() error {
+	certificate, err := tls.X509KeyPair([]byte(c.id.Certificate), []byte(c.id.PrivateKey))
+	if err != nil {
+		return err
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12}
+	c.http.Transport = transport
+	return nil
 }
 
 func (c *client) sync() error {
@@ -553,9 +600,6 @@ func (c *client) request(method, path string, body any, out any, auth bool) erro
 		return e
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if auth {
-		req.Header.Set("Authorization", "Bearer "+c.id.Token)
-	}
 	res, e := c.http.Do(req)
 	if e != nil {
 		return e

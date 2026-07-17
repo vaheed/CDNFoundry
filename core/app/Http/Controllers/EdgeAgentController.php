@@ -10,21 +10,40 @@ use App\Models\EdgeArtifact;
 use App\Models\EdgeTask;
 use App\Models\Operation;
 use App\Support\ArtifactSigner;
+use App\Support\EdgeCertificateAuthority;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use RuntimeException;
 
 class EdgeAgentController extends Controller
 {
     public function register(Request $request): JsonResponse
     {
-        $data = $request->validate(['edge_id' => ['required', 'uuid'], 'bootstrap_token' => ['required', 'string', 'size:64'], 'agent_version' => ['required', 'string', 'max:40']]);
+        $data = $request->validate([
+            'edge_id' => ['required', 'uuid'], 'bootstrap_token' => ['required', 'string', 'size:64'],
+            'agent_version' => ['required', 'string', 'max:40'], 'certificate_request' => ['required', 'string', 'max:8192'],
+        ]);
         $edge = Edge::query()->findOrFail($data['edge_id']);
         abort_if($edge->bootstrap_token_hash === null || ! hash_equals($edge->bootstrap_token_hash, hash('sha256', $data['bootstrap_token'])), 401, 'The bootstrap token is invalid or already used.');
-        $identity = Str::random(96);
-        $edge->update(['bootstrap_token_hash' => null, 'identity_hash' => hash('sha256', $identity), 'identity_revoked_at' => null, 'registered_at' => now(), 'agent_version' => $data['agent_version']]);
+        try {
+            $identity = EdgeCertificateAuthority::sign($data['certificate_request'], $edge->id);
+        } catch (RuntimeException $exception) {
+            throw ValidationException::withMessages(['certificate_request' => $exception->getMessage()]);
+        }
+        $edge->update([
+            'bootstrap_token_hash' => null, 'identity_hash' => null,
+            'identity_certificate_serial' => $identity['serial'],
+            'identity_certificate_expires_at' => CarbonImmutable::parse($identity['expires_at']),
+            'identity_revoked_at' => null, 'registered_at' => now(), 'agent_version' => $data['agent_version'],
+        ]);
 
-        return response()->json(['data' => ['edge_id' => $edge->id, 'identity_token' => $identity, 'signing_public_key' => ArtifactSigner::publicKey()]], 201);
+        return response()->json(['data' => [
+            'edge_id' => $edge->id, 'identity_certificate' => $identity['certificate'],
+            'identity_certificate_serial' => $identity['serial'], 'identity_certificate_expires_at' => $identity['expires_at'],
+            'signing_public_key' => ArtifactSigner::publicKey(),
+        ]], 201);
     }
 
     public function heartbeat(Request $request): JsonResponse

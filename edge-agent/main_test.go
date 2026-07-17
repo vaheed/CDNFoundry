@@ -51,7 +51,7 @@ func TestAcknowledgementBufferRetriesAfterRecovery(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":{"accepted":true}}`))
 	}))
 	defer server.Close()
-	c := &client{base: server.URL, dir: t.TempDir(), http: server.Client(), id: identity{Token: "test"}}
+	c := &client{base: server.URL, dir: t.TempDir(), http: server.Client()}
 	c.queueAck(ack{Sequence: 7})
 	if err := c.flushAcks(); err == nil {
 		t.Fatal("offline acknowledgement unexpectedly succeeded")
@@ -136,7 +136,7 @@ func TestFreshFullSnapshotThenIncrementalArtifact(t *testing.T) {
 	}))
 	defer server.Close()
 	dir := t.TempDir()
-	c := &client{base: server.URL, dir: dir, runtimeDir: filepath.Join(dir, "runtime"), http: server.Client(), id: identity{Token: "edge", PublicKey: publicHex}}
+	c := &client{base: server.URL, dir: dir, runtimeDir: filepath.Join(dir, "runtime"), http: server.Client(), id: identity{PublicKey: publicHex}}
 	if err := c.full(); err != nil {
 		t.Fatal(err)
 	}

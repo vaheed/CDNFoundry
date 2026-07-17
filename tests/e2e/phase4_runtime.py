@@ -12,6 +12,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 NAME = "cdnf-phase4-runtime-e2e"
 TLS_NAME = "cdnf-phase4-tls-origin-e2e"
 QUARANTINE_NAME = "cdnf-phase4-quarantine-e2e"
+AGENT_NAME = "cdnf-phase4-agent-e2e"
+DEDICATED_NAME = "cdnf-phase4-dedicated-e2e"
 
 
 def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -80,6 +82,13 @@ def main() -> None:
         origin_config.write_text("server { listen 8443 ssl; ssl_certificate /run/tls/tls.crt; ssl_certificate_key /run/tls/tls.key; location / { default_type application/json; return 200 '{\"tls\":true,\"host\":\"$host\",\"forwarded\":\"$http_forwarded\",\"xff\":\"$http_x_forwarded_for\"}'; } }\n")
         for path in (temporary / "ca.crt", temporary / "tls.key", temporary / "tls.crt", origin_config):
             path.chmod(0o644)
+        agent_state = temporary / "agent-state"
+        agent_state.mkdir(mode=0o755)
+        (agent_state / "identity.json").write_text(json.dumps({
+            "EdgeID": "runtime-test", "Certificate": (temporary / "tls.crt").read_text(),
+            "PrivateKey": (temporary / "tls.key").read_text(), "PublicKey": "00",
+        }))
+        (agent_state / "identity.json").chmod(0o644)
         run("docker", "run", "-d", "--rm", "--name", TLS_NAME, "--network", "cdnfoundry-dev_edge",
             "--network-alias", "tls-origin", "-v", f"{origin_config}:/etc/nginx/conf.d/default.conf:ro",
             "-v", f"{directory}:/run/tls:ro", "nginx:1.30.3-alpine")
@@ -95,6 +104,9 @@ def main() -> None:
         quarantine_runtime = pathlib.Path(directory) / "quarantine-default.json"
         quarantine_runtime.write_text(json.dumps(state({"quarantine.example": "quarantine-origin.example"}, 1), separators=(",", ":")))
         quarantine_runtime.chmod(0o644)
+        dedicated_runtime = pathlib.Path(directory) / "dedicated-test.json"
+        dedicated_runtime.write_text(json.dumps(state({"dedicated.example": "dedicated-origin.example"}, 1), separators=(",", ":")))
+        dedicated_runtime.chmod(0o644)
         run("docker", "run", "-d", "--rm", "--name", NAME, "--network", "cdnfoundry-dev_edge",
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/shared-default.json",
             "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
@@ -102,6 +114,8 @@ def main() -> None:
             "-v", f"{ROOT / 'docker/nginx/edge-runtime.conf'}:/etc/nginx/conf.d/default.conf:ro",
             "-v", f"{ROOT / 'docker/openresty/runtime.lua'}:/etc/cdnfoundry/runtime.lua:ro",
             "-v", f"{temporary / 'ca.crt'}:/etc/ssl/certs/ca-certificates.crt:ro",
+            "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro",
+            "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
             "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro", "openresty/openresty:1.31.1.1-0-alpine")
         run("docker", "run", "-d", "--rm", "--name", QUARANTINE_NAME, "--network", "cdnfoundry-dev_edge",
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/quarantine-default.json",
@@ -110,11 +124,30 @@ def main() -> None:
             "-v", f"{ROOT / 'docker/nginx/edge-runtime.conf'}:/etc/nginx/conf.d/default.conf:ro",
             "-v", f"{ROOT / 'docker/openresty/runtime.lua'}:/etc/cdnfoundry/runtime.lua:ro",
             "-v", f"{temporary / 'ca.crt'}:/etc/ssl/certs/ca-certificates.crt:ro",
+            "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro",
+            "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
+            "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro", "openresty/openresty:1.31.1.1-0-alpine")
+        run("docker", "run", "-d", "--rm", "--name", AGENT_NAME, "--network", "cdnfoundry-dev_edge",
+            "-e", "EDGE_CONTROL_URL=http://127.0.0.1:1", "-e", "EDGE_STATE_DIR=/state",
+            "-v", f"{agent_state}:/state", "cdnfoundry/edge-agent:test")
+        run("docker", "run", "-d", "--rm", "--name", DEDICATED_NAME, "--network", "cdnfoundry-dev_edge",
+            "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/dedicated-test.json", "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
+            "-v", f"{ROOT / 'docker/nginx/openresty.conf'}:/usr/local/openresty/nginx/conf/nginx.conf:ro",
+            "-v", f"{ROOT / 'docker/nginx/edge-runtime.conf'}:/etc/nginx/conf.d/default.conf:ro",
+            "-v", f"{ROOT / 'docker/openresty/runtime.lua'}:/etc/cdnfoundry/runtime.lua:ro",
+            "-v", f"{temporary / 'ca.crt'}:/etc/ssl/certs/ca-certificates.crt:ro",
+            "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro", "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
             "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro", "openresty/openresty:1.31.1.1-0-alpine")
         try:
             run("docker", "exec", NAME, "openresty", "-t")
             known = wait_for("runtime.example")
             assert known.returncode == 0 and '"host":"origin-one.example"' in known.stdout, known.stderr
+            tls_client = ("docker", "run", "--rm", "--network", f"container:{NAME}", "curlimages/curl:8.16.0",
+                "-ksS", "--resolve", "runtime.example:8443:127.0.0.1")
+            inbound_tls = run(*tls_client, "--http2", "https://runtime.example:8443/")
+            assert '"host":"origin-one.example"' in inbound_tls.stdout, inbound_tls.stderr
+            unknown_sni = run(*tls_client, "--connect-timeout", "2", "https://unknown.example:8443/", check=False)
+            assert unknown_sni.returncode != 0, unknown_sni.stdout
             ipv6_client = run("docker", "run", "--rm", "--network", f"container:{NAME}", "alpine:3.22",
                 "wget", "-q", "-O-", "--header=Host: runtime.example", "http://[::1]:8080/")
             assert '"host":"origin-one.example"' in ipv6_client.stdout, ipv6_client.stderr
@@ -122,6 +155,14 @@ def main() -> None:
             assert quarantine.returncode == 0 and '"host":"quarantine-origin.example"' in quarantine.stdout, quarantine.stderr
             assert "421 Misdirected Request" in request("runtime.example", QUARANTINE_NAME).stderr
             assert "421 Misdirected Request" in request("quarantine.example").stderr
+            dedicated = wait_for("dedicated.example", DEDICATED_NAME)
+            assert dedicated.returncode == 0 and '"host":"dedicated-origin.example"' in dedicated.stdout, dedicated.stderr
+            dedicated_ipv6 = run("docker", "run", "--rm", "--network", f"container:{DEDICATED_NAME}", "alpine:3.22",
+                "wget", "-q", "-O-", "--header=Host: dedicated.example", "http://[::1]:8080/")
+            assert '"host":"dedicated-origin.example"' in dedicated_ipv6.stdout, dedicated_ipv6.stderr
+            quarantine_ipv6 = run("docker", "run", "--rm", "--network", f"container:{QUARANTINE_NAME}", "alpine:3.22",
+                "wget", "-q", "-O-", "--header=Host: quarantine.example", "http://[::1]:8080/")
+            assert '"host":"quarantine-origin.example"' in quarantine_ipv6.stdout, quarantine_ipv6.stderr
             secure = wait_for("tls.example")
             assert secure.returncode == 0 and '"tls":true' in secure.stdout and '"host":"tls-origin"' in secure.stdout, secure.stderr
             untrusted = run("docker", "exec", NAME, "wget", "-q", "-O-", "--header=Host: tls.example",
@@ -152,12 +193,15 @@ def main() -> None:
             assert run("docker", "exec", NAME, "cat", "/usr/local/openresty/nginx/logs/nginx.pid").stdout.strip() == pid
             run("docker", "stop", QUARANTINE_NAME)
             assert request("runtime.example").returncode == 0
+            assert run("docker", "inspect", "-f", "{{.State.Running}}", AGENT_NAME).stdout.strip() == "true"
             runtime.write_text('{"invalid"')
             time.sleep(1.5)
             assert request("runtime.example").returncode == 0
         finally:
             run("docker", "stop", NAME, check=False)
             run("docker", "stop", QUARANTINE_NAME, check=False)
+            run("docker", "stop", AGENT_NAME, check=False)
+            run("docker", "stop", DEDICATED_NAME, check=False)
             run("docker", "stop", TLS_NAME, check=False)
     print("Phase 4 OpenResty runtime qualification passed.")
 

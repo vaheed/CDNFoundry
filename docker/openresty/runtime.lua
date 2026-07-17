@@ -114,6 +114,15 @@ function M.start()
     if not ok then ngx.log(ngx.ERR, "runtime refresh timer failed: ", err) end
 end
 
+function M.select_certificate()
+    local ssl = require "ngx.ssl"
+    local name = ssl.server_name()
+    name = name and name:lower():gsub("%.$", "") or ""
+    if not state.hosts[name] then
+        error("unknown TLS SNI")
+    end
+end
+
 local function resolve(host, networks)
     if host:match("^%d+%.%d+%.%d+%.%d+$") or host:find(":", 1, true) then
         if blocked(host, networks) then return nil, "blocked_destination" end

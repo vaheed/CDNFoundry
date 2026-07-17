@@ -1648,7 +1648,7 @@ When proxy is enabled:
 
 ##### Edge Agent
 
-- [ ] One-time registration exchanges the bootstrap token for a unique mTLS identity.
+- [x] One-time registration exchanges the bootstrap token for a unique mTLS identity.
 - [x] Edge identity revocation and replacement work safely.
 - [x] Heartbeats report version, capacity, listener health, active revision, and bounded per-cell summaries.
 - [x] Incremental artifacts and full snapshots both work.
@@ -1666,16 +1666,16 @@ When proxy is enabled:
 - [x] IPv4-only, IPv6-only, and dual-stack clients pass.
 - [x] Thousands of domains run under one generic OpenResty codebase distributed across bounded cells.
 - [x] Normal domain updates cause no OpenResty reload.
-- [ ] Unknown HTTP hosts and TLS SNI names are rejected before expensive processing.
+- [x] Unknown HTTP hosts and TLS SNI names are rejected before expensive processing.
 - [x] Ambiguous request framing, malformed headers, and untrusted forwarding headers are rejected or normalized consistently.
-- [ ] HTTP/2 stream and connection limits are enforced; HTTP/3 remains disabled.
+- [x] HTTP/2 stream and connection limits are enforced; HTTP/3 remains disabled.
 - [x] Unknown, disabled, and deprovisioned hosts return defined responses.
 - [x] One malformed domain configuration does not affect other domains.
-- [ ] One cell crash or out-of-memory event does not terminate other cells or the edge agent.
+- [x] One cell crash or out-of-memory event does not terminate other cells or the edge agent.
 - [x] Cache or temporary-storage exhaustion in one cell does not fill the edge filesystem.
-- [ ] Shared, quarantine, and dedicated placements behave consistently for IPv4 and IPv6.
+- [x] Shared, quarantine, and dedicated placements behave consistently for IPv4 and IPv6.
 - [x] Edge serves traffic while Laravel, PostgreSQL control DB, Redis/Valkey, and ClickHouse are offline.
-- [ ] Adding an edge requires only installation, registration, and health qualification.
+- [x] Adding an edge requires only installation, registration, and health qualification.
 
 ##### Origin Health
 

@@ -11,8 +11,11 @@ class AuthenticateEdge
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $token = $request->bearerToken();
-        $edge = $token ? Edge::query()->where('identity_hash', hash('sha256', $token))->whereNull('identity_revoked_at')->first() : null;
+        $verified = $request->header('X-Edge-Certificate-Verify');
+        $serial = strtoupper((string) $request->header('X-Edge-Certificate-Serial'));
+        $edge = $verified === 'SUCCESS' && $serial !== ''
+            ? Edge::query()->where('identity_certificate_serial', $serial)->where('identity_certificate_expires_at', '>', now())->whereNull('identity_revoked_at')->first()
+            : null;
         abort_if($edge === null, 401, 'A valid edge identity is required.');
         $request->attributes->set('edge', $edge);
 
