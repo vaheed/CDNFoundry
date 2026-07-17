@@ -168,14 +168,22 @@ Use **Import zone** with a small disposable BIND zone, first in append mode and 
 
 ### Operations
 
-Open **Operations**. Check type, status, attempts, error, created time, and finished time for:
+Open **Operations**. The newest request must be at the top and the list must refresh every 10 seconds. Check the friendly type, underlying machine type, status, requester, attempts, error, requested time, and duration. Use **Columns** to expose started and finished timestamps when investigating timing.
+
+Exercise the filters independently and together:
+
+- Status: pending, running, succeeded, or failed
+- Type: platform identity, nameserver verification, zone reconciliation/import, cluster test, or global reconciliation
+- Requested by: select an administrator or domain user
+
+Search by the full operation ID, machine type, requester email, and a distinctive part of an error. Clear all filters and confirm the newest operation returns to the top. Check at least these operation types:
 
 - `platform_dns_identity.update`
 - `dns.cluster_test`
 - `domain.nameservers_verify`
 - `dns.zone_reconcile`
 
-Expected: long-running work is visible, failures retain their error, and supported failed operations show a guarded retry action. Operations should not stay pending while Horizon shows healthy workers.
+Expected: long-running work is visible, failures retain their error, and every supported failed operation shows a guarded retry action. Retrying returns the operation to pending and dispatches the correct queue job. Operations should not stay pending while Horizon shows healthy workers.
 
 ### Audit logs
 

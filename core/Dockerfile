@@ -1,6 +1,6 @@
 FROM php:8.5-fpm-alpine AS php-base
 
-RUN apk add --no-cache icu-libs libpq libzip nginx supervisor \
+RUN apk add --no-cache icu-libs libpq libzip nginx supervisor su-exec \
     && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS icu-dev postgresql-dev libzip-dev \
     && docker-php-ext-install intl pcntl pdo_pgsql zip \
     && apk del .build-deps
