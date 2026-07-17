@@ -35,9 +35,10 @@ type ack struct {
 	Reason, Details string
 }
 type client struct {
-	base, dir, runtimeDir string
-	http                  *http.Client
-	id                    identity
+	base, dir, runtimeDir, statusToken string
+	statusURLs                         []string
+	http                               *http.Client
+	id                                 identity
 }
 type manifest struct {
 	Sequence                              uint64  `json:"sequence"`
@@ -47,7 +48,11 @@ type manifest struct {
 }
 
 func main() {
-	c := &client{base: strings.TrimRight(required("EDGE_CONTROL_URL"), "/"), dir: env("EDGE_STATE_DIR", "/var/lib/cdnfoundry/agent"), runtimeDir: env("EDGE_RUNTIME_DIR", ""), http: &http.Client{Timeout: 15 * time.Second}}
+	c := &client{
+		base: strings.TrimRight(required("EDGE_CONTROL_URL"), "/"), dir: env("EDGE_STATE_DIR", "/var/lib/cdnfoundry/agent"),
+		runtimeDir: env("EDGE_RUNTIME_DIR", ""), statusToken: env("EDGE_STATUS_TOKEN", ""),
+		statusURLs: splitNonempty(env("EDGE_CELL_STATUS_URLS", "")), http: &http.Client{Timeout: 15 * time.Second},
+	}
 	if err := os.MkdirAll(c.dir, 0700); err != nil {
 		fatal(err)
 	}
@@ -462,7 +467,40 @@ func validPoolName(name string) bool {
 }
 
 func (c *client) heartbeat(sequence uint64) error {
-	return c.request("POST", "/edge/v1/heartbeat", map[string]any{"agent_version": version, "listener_ready": true, "active_sequence": sequence, "cells": []map[string]any{{"name": "shared-default", "status": "ready", "capacity": map[string]any{"active_connections": 0}}}}, &map[string]any{}, true)
+	return c.request("POST", "/edge/v1/heartbeat", map[string]any{
+		"agent_version": version, "listener_ready": true, "active_sequence": sequence,
+		"cells":           []map[string]any{{"name": "shared-default", "status": "ready", "capacity": map[string]any{"active_connections": 0}}},
+		"passive_origins": c.passiveFailures(),
+	}, &map[string]any{}, true)
+}
+
+func (c *client) passiveFailures() []map[string]any {
+	failures := []map[string]any{}
+	for _, endpoint := range c.statusURLs {
+		req, err := http.NewRequest("GET", endpoint, nil)
+		if err != nil {
+			continue
+		}
+		req.Header.Set("X-Edge-Status-Token", c.statusToken)
+		response, err := c.http.Do(req)
+		if err != nil {
+			continue
+		}
+		var decoded struct {
+			Data []map[string]any `json:"data"`
+		}
+		if response.StatusCode == http.StatusOK {
+			_ = json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&decoded)
+		}
+		_ = response.Body.Close()
+		for _, failure := range decoded.Data {
+			if len(failures) >= 100 {
+				return failures
+			}
+			failures = append(failures, failure)
+		}
+	}
+	return failures
 }
 func (c *client) queueAck(a ack) {
 	var q []ack
@@ -614,6 +652,15 @@ func env(k, d string) string {
 		return v
 	}
 	return d
+}
+func splitNonempty(value string) []string {
+	items := []string{}
+	for _, item := range strings.Split(value, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			items = append(items, item)
+		}
+	}
+	return items
 }
 func required(k string) string {
 	v := os.Getenv(k)

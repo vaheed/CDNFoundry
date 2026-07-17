@@ -65,9 +65,14 @@ class EdgeProxyTest extends TestCase
         $this->assertDatabaseHas('domain_edge_placements', ['domain_id' => $domain->id, 'state' => 'active', 'desired_revision' => $domain->revision]);
         $this->assertSame($domain->revision, $domain->refresh()->active_edge_revision);
         $artifactCount = EdgeArtifact::query()->where('domain_id', $domain->id)->count();
+        $hostname = $domain->dnsRecords()->findOrFail($record)->name;
         $this->withToken($identity)->postJson('/edge/v1/heartbeat', ['agent_version' => '1.0.0', 'listener_ready' => true, 'active_sequence' => $artifact->sequence, 'cells' => [
             ['name' => 'pool-1', 'status' => 'ready', 'capacity' => ['active_connections' => 1]],
-        ]])->assertOk();
+        ], 'passive_origins' => [[
+            'domain' => $domain->name, 'hostname' => $hostname, 'failure_count' => 2,
+            'last_status' => 502, 'last_failed_at' => now()->timestamp,
+        ]]])->assertOk();
+        $this->assertSame('passive', $domain->dnsRecords()->findOrFail($record)->origin_health['source']);
         $this->assertSame($artifactCount, EdgeArtifact::query()->where('domain_id', $domain->id)->count());
         $this->actingAs($admin)->getJson('/api/admin/edge-routing')->assertOk()->assertJsonPath('data.global.0.id', $id);
         $cell = Edge::query()->findOrFail($id)->cells()->firstOrFail();

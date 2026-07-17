@@ -164,4 +164,37 @@ function M.access()
     return ngx.exec("@proxy_unverified")
 end
 
+function M.record_passive_failure()
+    local status = tonumber((ngx.var.upstream_status or ""):match("%d+"))
+    if status and status < 500 then return end
+    local host = (ngx.var.host or ""):lower():gsub("%.$", "")
+    local config = state.hosts[host]
+    if not config then return end
+    local dictionary = ngx.shared.runtime_limits
+    dictionary:incr("passive:" .. host, 1, 0)
+    dictionary:set("passive-status:" .. host, status or 0)
+    dictionary:set("passive-time:" .. host, ngx.time())
+end
+
+function M.passive_failures()
+    local expected = os.getenv("EDGE_STATUS_TOKEN") or ""
+    local supplied = ngx.req.get_headers()["x-edge-status-token"] or ""
+    if expected == "" or supplied ~= expected then return ngx.exit(404) end
+    local failures = {}
+    for _, key in ipairs(ngx.shared.runtime_limits:get_keys(400)) do
+        local host = key:match("^passive:(.+)$")
+        local config = host and state.hosts[host]
+        if config and #failures < 100 then
+            failures[#failures + 1] = {
+                domain = config.domain, hostname = host,
+                failure_count = ngx.shared.runtime_limits:get(key) or 0,
+                last_status = ngx.shared.runtime_limits:get("passive-status:" .. host) or 0,
+                last_failed_at = ngx.shared.runtime_limits:get("passive-time:" .. host),
+            }
+        end
+    end
+    ngx.header["Content-Type"] = "application/json"
+    ngx.say(cjson.encode({data = failures}))
+end
+
 return M

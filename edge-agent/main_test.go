@@ -182,6 +182,25 @@ func TestOriginTaskUsesApprovedAddressAndCanonicalHost(t *testing.T) {
 	}
 }
 
+func TestPassiveFailuresAreBoundedAndAuthenticated(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Edge-Status-Token") != "status-secret" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{
+			"domain": "example.test", "hostname": "www.example.test", "failure_count": 2,
+			"last_status": 502, "last_failed_at": 123,
+		}}})
+	}))
+	defer server.Close()
+	c := &client{http: server.Client(), statusToken: "status-secret", statusURLs: []string{server.URL}}
+	failures := c.passiveFailures()
+	if len(failures) != 1 || failures[0]["hostname"] != "www.example.test" {
+		t.Fatalf("passive failures were not collected: %#v", failures)
+	}
+}
+
 func signedJSON(t *testing.T, private ed25519.PrivateKey, value any) (string, string, string) {
 	t.Helper()
 	payload, err := json.Marshal(value)

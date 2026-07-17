@@ -1663,7 +1663,7 @@ When proxy is enabled:
 - [x] Real HTTP traffic reaches the correct origin.
 - [x] Real HTTPS traffic reaches HTTPS origins with correct SNI and verification.
 - [x] Origin `Host` header works.
-- [ ] IPv4-only, IPv6-only, and dual-stack clients pass.
+- [x] IPv4-only, IPv6-only, and dual-stack clients pass.
 - [x] Thousands of domains run under one generic OpenResty codebase distributed across bounded cells.
 - [x] Normal domain updates cause no OpenResty reload.
 - [ ] Unknown HTTP hosts and TLS SNI names are rejected before expensive processing.
@@ -1679,7 +1679,7 @@ When proxy is enabled:
 
 ##### Origin Health
 
-- [ ] Passive failures are reported.
+- [x] Passive failures are reported.
 - [x] On-demand tests run from selected edges.
 - [x] Scheduled checks are opt-in, jittered, and bounded.
 - [x] Latency and stable failure codes reach the control plane.

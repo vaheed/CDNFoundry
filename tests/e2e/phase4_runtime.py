@@ -97,6 +97,7 @@ def main() -> None:
         quarantine_runtime.chmod(0o644)
         run("docker", "run", "-d", "--rm", "--name", NAME, "--network", "cdnfoundry-dev_edge",
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/shared-default.json",
+            "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
             "-v", f"{ROOT / 'docker/nginx/openresty.conf'}:/usr/local/openresty/nginx/conf/nginx.conf:ro",
             "-v", f"{ROOT / 'docker/nginx/edge-runtime.conf'}:/etc/nginx/conf.d/default.conf:ro",
             "-v", f"{ROOT / 'docker/openresty/runtime.lua'}:/etc/cdnfoundry/runtime.lua:ro",
@@ -104,6 +105,7 @@ def main() -> None:
             "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro", "openresty/openresty:1.31.1.1-0-alpine")
         run("docker", "run", "-d", "--rm", "--name", QUARANTINE_NAME, "--network", "cdnfoundry-dev_edge",
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/quarantine-default.json",
+            "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
             "-v", f"{ROOT / 'docker/nginx/openresty.conf'}:/usr/local/openresty/nginx/conf/nginx.conf:ro",
             "-v", f"{ROOT / 'docker/nginx/edge-runtime.conf'}:/etc/nginx/conf.d/default.conf:ro",
             "-v", f"{ROOT / 'docker/openresty/runtime.lua'}:/etc/cdnfoundry/runtime.lua:ro",
@@ -113,6 +115,9 @@ def main() -> None:
             run("docker", "exec", NAME, "openresty", "-t")
             known = wait_for("runtime.example")
             assert known.returncode == 0 and '"host":"origin-one.example"' in known.stdout, known.stderr
+            ipv6_client = run("docker", "run", "--rm", "--network", f"container:{NAME}", "alpine:3.22",
+                "wget", "-q", "-O-", "--header=Host: runtime.example", "http://[::1]:8080/")
+            assert '"host":"origin-one.example"' in ipv6_client.stdout, ipv6_client.stderr
             quarantine = wait_for("quarantine.example", QUARANTINE_NAME)
             assert quarantine.returncode == 0 and '"host":"quarantine-origin.example"' in quarantine.stdout, quarantine.stderr
             assert "421 Misdirected Request" in request("runtime.example", QUARANTINE_NAME).stderr
@@ -124,6 +129,9 @@ def main() -> None:
             assert "evil" not in untrusted.stdout and '"forwarded":"for=' in untrusted.stdout, untrusted.stdout
             bad_tls = request("bad-tls.example")
             assert "502 Bad Gateway" in bad_tls.stderr, bad_tls.stderr
+            passive = run("docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token",
+                "http://127.0.0.1:9080/passive-failures")
+            assert '"hostname":"bad-tls.example"' in passive.stdout and '"failure_count":1' in passive.stdout, passive.stdout
             blocked = request("blocked.example")
             assert "502 Bad Gateway" in blocked.stderr, blocked.stderr
             unknown = request("unknown.example")

@@ -30,8 +30,27 @@ class EdgeAgentController extends Controller
     public function heartbeat(Request $request): JsonResponse
     {
         $edge = $request->attributes->get('edge');
-        $data = $request->validate(['agent_version' => ['required', 'string', 'max:40'], 'listener_ready' => ['required', 'boolean'], 'active_sequence' => ['required', 'integer', 'min:0'], 'cells' => ['required', 'array', 'max:32'], 'cells.*.name' => ['required', 'string', 'max:100'], 'cells.*.status' => ['required', 'in:ready,degraded,failed,drained'], 'cells.*.capacity' => ['required', 'array', 'max:20'], 'noisy_domains' => ['sometimes', 'array', 'max:20']]);
+        $data = $request->validate([
+            'agent_version' => ['required', 'string', 'max:40'], 'listener_ready' => ['required', 'boolean'],
+            'active_sequence' => ['required', 'integer', 'min:0'], 'cells' => ['required', 'array', 'max:32'],
+            'cells.*.name' => ['required', 'string', 'max:100'], 'cells.*.status' => ['required', 'in:ready,degraded,failed,drained'],
+            'cells.*.capacity' => ['required', 'array', 'max:20'], 'noisy_domains' => ['sometimes', 'array', 'max:20'],
+            'passive_origins' => ['sometimes', 'array', 'max:100'],
+            'passive_origins.*.domain' => ['required', 'string', 'max:253'],
+            'passive_origins.*.hostname' => ['required', 'string', 'max:253'],
+            'passive_origins.*.failure_count' => ['required', 'integer', 'between:1,2147483647'],
+            'passive_origins.*.last_status' => ['required', 'integer', 'between:0,599'],
+            'passive_origins.*.last_failed_at' => ['required', 'integer', 'min:0'],
+        ]);
         $edge->update(['last_heartbeat_at' => now(), 'agent_version' => $data['agent_version'], 'active_sequence' => $data['active_sequence'], 'capacity' => ['listener_ready' => $data['listener_ready'], 'cells' => $data['cells'], 'noisy_domains' => $data['noisy_domains'] ?? []]]);
+        foreach ($data['passive_origins'] ?? [] as $failure) {
+            DnsRecord::query()->where('name', $failure['hostname'])->whereHas('domain', fn ($query) => $query->where('name', $failure['domain']))
+                ->where('mode', 'proxied')->limit(1)->update(['origin_health' => [
+                    'status' => 'unhealthy', 'source' => 'passive', 'edge_id' => $edge->id,
+                    'failure_count' => $failure['failure_count'], 'http_status' => $failure['last_status'] ?: null,
+                    'reported_at' => now()->toIso8601String(),
+                ]]);
+        }
 
         return response()->json(['data' => ['accepted' => true, 'server_time' => now()->toIso8601String()]]);
     }
