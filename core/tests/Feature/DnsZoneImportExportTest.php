@@ -31,12 +31,11 @@ www 60 IN CNAME target.example.net.
 child 300 IN NS ns1.example.net.
 @ 300 IN CAA 0 issue "letsencrypt.org"
 _sip._tcp 300 IN SRV 10 5 5060 sip
-pointer 300 IN PTR host
 ZONE;
 
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/import", ['zone' => $zone, 'replace_existing' => true])
-            ->assertOk()->assertJsonPath('data.imported', 9)->assertJsonPath('data.revision', 2);
-        $this->assertDatabaseCount('dns_records', 9);
+            ->assertOk()->assertJsonPath('data.imported', 8)->assertJsonPath('data.revision', 2);
+        $this->assertDatabaseCount('dns_records', 8);
 
         $export = $this->actingAs($user)->get("/api/domains/{$domain->id}/dns/export")
             ->assertOk()->assertHeader('content-type', 'text/dns; charset=utf-8')->getContent();
@@ -45,8 +44,16 @@ ZONE;
         $this->assertStringContainsString('"verification=valid"', $export);
 
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/import", ['zone' => $export, 'replace_existing' => true])
-            ->assertOk()->assertJsonPath('data.imported', 9)->assertJsonPath('data.revision', 3);
-        $this->assertDatabaseCount('dns_records', 9);
+            ->assertOk()->assertJsonPath('data.imported', 8)->assertJsonPath('data.revision', 3);
+        $this->assertDatabaseCount('dns_records', 8);
+    }
+
+    public function test_reverse_zone_ptr_import_export_round_trips(): void
+    {
+        [$user, $domain] = $this->ownedDomain('2.0.192.in-addr.arpa');
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/import", ['zone' => "20 300 IN PTR host.example.net.\n", 'replace_existing' => true])->assertOk();
+        $export = $this->actingAs($user)->get("/api/domains/{$domain->id}/dns/export")->assertOk()->getContent();
+        $this->assertStringContainsString("20\t300\tIN\tPTR\thost.example.net.", $export);
     }
 
     public function test_append_duplicate_and_invalid_cname_roll_back_the_entire_import(): void
@@ -123,10 +130,10 @@ ZONE;
         $this->actingAs($owner)->postJson("/api/domains/{$domain->id}/dns/import", ['zone' => str_repeat('é', 600000)])->assertUnprocessable();
     }
 
-    private function ownedDomain(): array
+    private function ownedDomain(string $name = 'example.com'): array
     {
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'example.com', 'display_name' => 'example.com', 'lifecycle_state' => 'pending_verification', 'revision' => 1]);
+        $domain = Domain::query()->create(['name' => $name, 'display_name' => $name, 'lifecycle_state' => 'pending_verification', 'revision' => 1]);
         $domain->users()->attach($user);
 
         return [$user, $domain];

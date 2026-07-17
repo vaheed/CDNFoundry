@@ -10,6 +10,8 @@ use App\Models\DnsRecord;
 use App\Models\Domain;
 use App\Support\DnsRecordData;
 use App\Support\DnsZoneValidator;
+use Filament\Actions\BulkAction;
+use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -19,6 +21,7 @@ use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class DnsRecordsRelationManager extends RelationManager
@@ -59,6 +62,23 @@ class DnsRecordsRelationManager extends RelationManager
             DeleteAction::make()->using(function (DnsRecord $record): bool {
                 return $this->deleteRecord($record);
             }),
+        ])->toolbarActions([
+            BulkActionGroup::make([
+                BulkAction::make('delete')->label('Delete selected')->color('danger')->requiresConfirmation()->deselectRecordsAfterCompletion()
+                    ->action(function (Collection $records): void {
+                        $domain = $this->getOwnerRecord();
+                        DB::transaction(function () use ($domain, $records): void {
+                            $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
+                            $ids = $records->pluck('id');
+                            $deleted = $locked->dnsRecords()->whereIn('id', $ids)->delete();
+                            if ($deleted > 0) {
+                                $locked->forceFill(['revision' => $locked->revision + 1])->save();
+                                AuditLog::record(auth()->user(), 'dns.records_bulk_deleted', $locked, ['revision' => $locked->revision, 'records' => $deleted], request()->ip());
+                            }
+                        });
+                        $this->reconcileIfActive($domain->refresh());
+                    }),
+            ]),
         ])->defaultSort('id');
     }
 

@@ -19,6 +19,7 @@ RUN = f"{int(time.time())}-{secrets.token_hex(3)}"
 EMAIL = f"phase2-{RUN}@example.test"
 PASSWORD = f"Phase2-{secrets.token_urlsafe(20)}"
 ZONE = f"phase2-{RUN}.test"
+REVERSE_ZONE = f"phase2-{RUN}.2.0.192.in-addr.arpa"
 
 
 def call(method: str, path: str, payload: object | None = None, token: str | None = None) -> tuple[int, object]:
@@ -127,7 +128,6 @@ def main() -> None:
         ("TXT", "txt", "phase2-real-runtime", {}), ("NS", "delegated", "ns.example.net.", {}),
         ("CAA", "@", '0 issue "letsencrypt.org"', {}),
         ("SRV", "_sip._tcp", "sip.example.net.", {"priority": 10, "weight": 20, "port": 5060}),
-        ("PTR", "ptr", "target.example.net.", {}),
     ]
     apex_a_id = None
     for record_type, name, content, extra in records:
@@ -139,11 +139,18 @@ def main() -> None:
         (ZONE, "A"): "192.0.2.20", (ZONE, "AAAA"): "2001:db8::20", (f"alias.{ZONE}", "CNAME"): ZONE + ".",
         (ZONE, "MX"): "10 mail.example.net.", (f"txt.{ZONE}", "TXT"): '"phase2-real-runtime"',
         (f"delegated.{ZONE}", "NS"): "ns.example.net.", (ZONE, "CAA"): '0 issue "letsencrypt.org"',
-        (f"_sip._tcp.{ZONE}", "SRV"): "10 20 5060 sip.example.net.", (f"ptr.{ZONE}", "PTR"): "target.example.net.",
+        (f"_sip._tcp.{ZONE}", "SRV"): "10 20 5060 sip.example.net.",
     }
     for query, value in expected.items():
         output = dig_authority(*query) if query[1] == "NS" else dig(*query)
         assert value in output, (query, output)
+    _, reverse_created = call("POST", "/api/domains", {"name": REVERSE_ZONE}, token)
+    reverse_id = reverse_created["data"]["id"]
+    call("POST", f"/api/admin/domains/{reverse_id}/force-verify", {}, token)
+    call("POST", f"/api/domains/{reverse_id}/activate", {}, token)
+    call("POST", f"/api/domains/{reverse_id}/dns/records", {"type": "PTR", "name": "20", "content": "target.example.net.", "ttl": 60}, token)
+    wait_deployment(token, reverse_id)
+    assert "target.example.net." in dig(f"20.{REVERSE_ZONE}", "PTR")
     assert "192.0.2.20" in dig(ZONE, "A", tcp=True)
     ipv6_transport = subprocess.run(["dig", "@::1", "-p", "1053", ZONE, "AAAA", "+short"], check=True, text=True, capture_output=True, timeout=10).stdout
     assert "2001:db8::20" in ipv6_transport
@@ -175,4 +182,4 @@ if __name__ == "__main__":
     finally:
         compose("start", "control-db", "redis", "core", "web", "horizon", "scheduler", "pdns-auth", "dnsdist")
         wait_http()
-        artisan("$d=App\\Models\\Domain::query()->where('name'," + quote(ZONE) + ")->first(); if($d){foreach(App\\Models\\DnsCluster::all() as $c){try{app(App\\Support\\PowerDnsClient::class)->deleteZone($c,$d->name);}catch(Throwable $e){}} $d->delete();} App\\Models\\User::query()->where('email'," + quote(EMAIL) + ")->delete();")
+        artisan("foreach(App\\Models\\Domain::query()->whereIn('name',[" + quote(ZONE) + "," + quote(REVERSE_ZONE) + "])->get() as $d){foreach(App\\Models\\DnsCluster::all() as $c){try{app(App\\Support\\PowerDnsClient::class)->deleteZone($c,$d->name);}catch(Throwable $e){}} $d->delete();} App\\Models\\User::query()->where('email'," + quote(EMAIL) + ")->delete();")

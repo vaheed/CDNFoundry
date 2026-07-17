@@ -16,7 +16,7 @@ dev-pdns-migrate:
 	$(COMPOSE_DEV) --profile tools run --rm pdns-migrate
 
 dev-test:
-	$(COMPOSE_DEV) run --rm core php artisan test
+	$(COMPOSE_DEV) run --rm -e CACHE_STORE=array -e QUEUE_CONNECTION=sync core php artisan test
 
 dev-e2e:
 	python3 tests/e2e/e2e.py

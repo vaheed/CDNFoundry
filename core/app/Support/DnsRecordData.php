@@ -42,6 +42,9 @@ final class DnsRecordData
                 if ($type !== 'SRV' && str_contains($name, '_')) {
                     $validator->errors()->add('name', 'Underscores are allowed only in SRV record owners.');
                 }
+                if ($type === 'PTR' && ! str_ends_with($zone, '.in-addr.arpa') && ! str_ends_with($zone, '.ip6.arpa')) {
+                    $validator->errors()->add('type', 'PTR records are allowed only in managed reverse zones.');
+                }
             } catch (\InvalidArgumentException $exception) {
                 $validator->errors()->add('content', $exception->getMessage());
             }

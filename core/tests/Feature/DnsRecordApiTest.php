@@ -24,7 +24,6 @@ class DnsRecordApiTest extends TestCase
             ['type' => 'NS', 'name' => 'child', 'content' => 'ns1.example.net.', 'ttl' => 300],
             ['type' => 'CAA', 'name' => '@', 'content' => '0 issue "letsencrypt.org"', 'ttl' => 300],
             ['type' => 'SRV', 'name' => '_sip._tcp', 'content' => 'sip', 'ttl' => 300, 'priority' => 10, 'weight' => 5, 'port' => 5060],
-            ['type' => 'PTR', 'name' => 'pointer', 'content' => 'host', 'ttl' => 300],
         ];
 
         foreach ($records as $record) {
@@ -34,6 +33,19 @@ class DnsRecordApiTest extends TestCase
         $this->assertDatabaseCount('dns_records', count($records));
         $this->assertSame(1 + count($records), $domain->refresh()->revision);
         $this->assertDatabaseHas('dns_records', ['type' => 'MX', 'name' => 'example.com', 'content' => 'mail.example.com.', 'priority' => 10]);
+    }
+
+    public function test_ptr_is_restricted_to_managed_ipv4_and_ipv6_reverse_zones(): void
+    {
+        [$user, $forward] = $this->ownedDomain();
+        $ptr = ['type' => 'PTR', 'name' => '20', 'content' => 'host.example.net.', 'ttl' => 300];
+        $this->actingAs($user)->postJson("/api/domains/{$forward->id}/dns/records", $ptr)->assertUnprocessable();
+
+        foreach (['2.0.192.in-addr.arpa', '8.b.d.0.1.0.0.2.ip6.arpa'] as $zone) {
+            [, $reverse] = $this->ownedDomain($zone);
+            $reverse->users()->syncWithoutDetaching([$user->id]);
+            $this->actingAs($user)->postJson("/api/domains/{$reverse->id}/dns/records", $ptr)->assertCreated();
+        }
     }
 
     public function test_record_routes_enforce_domain_assignment_and_record_boundary(): void

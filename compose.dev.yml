@@ -24,6 +24,7 @@ x-core: &core
   volumes:
     - ./core:/app
     - ./docs:/docs
+    - ./tests:/tests:ro
     - ./AGENTS.md:/AGENTS.md:ro
     - ./.agents:/.agents:ro
     - core-vendor:/app/vendor
