@@ -31,6 +31,7 @@ class AdminPanelProvider extends PanelProvider
             ->login()
             ->brandName('CDNFoundry Administration')
             ->profile(EditProfile::class)
+            ->readOnlyRelationManagersOnResourceViewPagesByDefault(false)
             ->colors(['primary' => Color::Amber])
             ->discoverResources(in: app_path('Filament/Admin/Resources'), for: 'App\\Filament\\Admin\\Resources')
             ->resources([DomainResource::class])

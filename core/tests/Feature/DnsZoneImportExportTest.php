@@ -17,6 +17,7 @@ class DnsZoneImportExportTest extends TestCase
     public function test_bind_import_export_round_trips_supported_records_atomically(): void
     {
         [$user, $domain] = $this->ownedDomain();
+        $admin = User::factory()->admin()->create();
         $zone = <<<'ZONE'
 $ORIGIN example.com.
 $TTL 5m
@@ -33,7 +34,7 @@ child 300 IN NS ns1.example.net.
 _sip._tcp 300 IN SRV 10 5 5060 sip
 ZONE;
 
-        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/import", ['zone' => $zone, 'replace_existing' => true])
+        $this->actingAs($admin)->postJson("/api/domains/{$domain->id}/dns/import", ['zone' => $zone, 'replace_existing' => true])
             ->assertOk()->assertJsonPath('data.imported', 8)->assertJsonPath('data.revision', 2);
         $this->assertDatabaseCount('dns_records', 8);
 
@@ -43,9 +44,21 @@ ZONE;
         $this->assertStringContainsString("www\t60\tIN\tCNAME\ttarget.example.net.", $export);
         $this->assertStringContainsString('"verification=valid"', $export);
 
-        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/import", ['zone' => $export, 'replace_existing' => true])
+        $this->actingAs($admin)->postJson("/api/domains/{$domain->id}/dns/import", ['zone' => $export, 'replace_existing' => true])
             ->assertOk()->assertJsonPath('data.imported', 8)->assertJsonPath('data.revision', 3);
         $this->assertDatabaseCount('dns_records', 8);
+    }
+
+    public function test_domain_users_cannot_import_delegated_ns_records(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/import", [
+            'zone' => "child 300 IN NS ns1.example.net\n",
+        ])->assertForbidden();
+
+        $this->assertDatabaseCount('dns_records', 0);
+        $this->assertSame(1, $domain->refresh()->revision);
     }
 
     public function test_reverse_zone_ptr_import_export_round_trips(): void

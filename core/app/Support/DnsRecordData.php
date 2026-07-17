@@ -100,7 +100,7 @@ final class DnsRecordData
             'AAAA' => filter_var($value, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false ? strtolower($value) : throw new \InvalidArgumentException('Content must be a valid IPv6 address.'),
             'CNAME', 'NS', 'MX', 'PTR' => self::normalizeTarget($value, $zone),
             'TXT' => strlen($value) <= 4096 && $value !== '' ? $value : throw new \InvalidArgumentException('TXT content is invalid.'),
-            'CAA' => preg_match('/^(?:0|[1-9][0-9]{0,2})\s+(?:issue|issuewild|iodef)\s+"[^"\r\n]+"$/', $value) === 1 ? $value : throw new \InvalidArgumentException('CAA content must contain flags, a supported tag, and a quoted value.'),
+            'CAA' => self::normalizeCaa($value),
             'SRV' => self::normalizeTarget($value, $zone),
             default => throw new \InvalidArgumentException('The record type is unsupported.'),
         };
@@ -111,7 +111,12 @@ final class DnsRecordData
         if ($value === '.') {
             return $value;
         }
-        $fqdn = str_ends_with($value, '.') ? rtrim($value, '.') : $value.'.'.$zone;
+        if ($value === '@') {
+            return rtrim($zone, '.').'.';
+        }
+        $fqdn = str_ends_with($value, '.') || str_contains($value, '.')
+            ? rtrim($value, '.')
+            : $value.'.'.$zone;
         $ascii = idn_to_ascii(mb_strtolower($fqdn), IDNA_NONTRANSITIONAL_TO_ASCII, INTL_IDNA_VARIANT_UTS46);
         if ($ascii === false || strlen($ascii) > 253) {
             throw new \InvalidArgumentException('Content must be a valid DNS name.');
@@ -123,5 +128,16 @@ final class DnsRecordData
         }
 
         return $ascii.'.';
+    }
+
+    private static function normalizeCaa(string $value): string
+    {
+        if (preg_match('/^(\d{1,3})\s+(issue|issuewild|iodef)\s+(?:"([^"\r\n]+)"|([^\s"\r\n]+))$/', $value, $matches) !== 1
+            || (int) $matches[1] > 255) {
+            throw new \InvalidArgumentException('CAA content must contain flags (0-255), a supported tag, and a value.');
+        }
+        $content = $matches[3] !== '' ? $matches[3] : $matches[4];
+
+        return ((int) $matches[1]).' '.strtolower($matches[2]).' "'.$content.'"';
     }
 }

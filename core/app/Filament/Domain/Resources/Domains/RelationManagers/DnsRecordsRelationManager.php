@@ -33,7 +33,13 @@ class DnsRecordsRelationManager extends RelationManager
     public function form(Schema $schema): Schema
     {
         return $schema->components([
-            Select::make('type')->options(array_combine(DnsRecordData::TYPES, DnsRecordData::TYPES))->required()->live(),
+            Select::make('type')->options(function (): array {
+                $types = collect(DnsRecordData::TYPES)
+                    ->reject(fn (string $type): bool => $type === 'NS' && auth()->user()?->isAdmin() !== true)
+                    ->reject(fn (string $type): bool => $type === 'PTR' && ! str_ends_with($this->getOwnerRecord()->name, '.in-addr.arpa') && ! str_ends_with($this->getOwnerRecord()->name, '.ip6.arpa'));
+
+                return $types->mapWithKeys(fn (string $type): array => [$type => $type])->all();
+            })->required()->live(),
             TextInput::make('name')->required()->default('@')->maxLength(253),
             TextInput::make('content')->required()->maxLength(4096),
             TextInput::make('ttl')->numeric()->required()->default(300)->minValue(30)->maxValue(2147483647),
@@ -56,16 +62,21 @@ class DnsRecordsRelationManager extends RelationManager
                 return $this->createRecord($data);
             }),
         ])->recordActions([
-            EditAction::make()->using(function (DnsRecord $record, array $data): DnsRecord {
+            EditAction::make()->visible(fn (DnsRecord $record): bool => $record->type !== 'NS' || auth()->user()?->isAdmin() === true)->using(function (DnsRecord $record, array $data): DnsRecord {
                 return $this->updateRecord($record, $data);
             }),
-            DeleteAction::make()->using(function (DnsRecord $record): bool {
+            DeleteAction::make()->visible(fn (DnsRecord $record): bool => $record->type !== 'NS' || auth()->user()?->isAdmin() === true)->using(function (DnsRecord $record): bool {
                 return $this->deleteRecord($record);
             }),
         ])->toolbarActions([
             BulkActionGroup::make([
                 BulkAction::make('delete')->label('Delete selected')->color('danger')->requiresConfirmation()->deselectRecordsAfterCompletion()
                     ->action(function (Collection $records): void {
+                        abort_if(
+                            auth()->user()?->isAdmin() !== true && $records->contains(fn (DnsRecord $record): bool => $record->type === 'NS'),
+                            403,
+                            'Only administrators can manage delegated NS records.',
+                        );
                         $domain = $this->getOwnerRecord();
                         DB::transaction(function () use ($domain, $records): void {
                             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
@@ -88,6 +99,7 @@ class DnsRecordsRelationManager extends RelationManager
         $record = DB::transaction(function () use ($domain, $input): DnsRecord {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $data = DnsRecordData::validate($input, $locked->name);
+            abort_if($data['type'] === 'NS' && auth()->user()?->isAdmin() !== true, 403, 'Only administrators can manage delegated NS records.');
             $rows = $locked->dnsRecords()->lockForUpdate()->get()->map(fn (DnsRecord $item): array => $this->row($item))->push($data);
             DnsZoneValidator::assertValid($rows);
             $record = $locked->dnsRecords()->create($data);
@@ -102,10 +114,12 @@ class DnsRecordsRelationManager extends RelationManager
 
     private function updateRecord(DnsRecord $record, array $input): DnsRecord
     {
+        abort_if($record->type === 'NS' && auth()->user()?->isAdmin() !== true, 403, 'Only administrators can manage delegated NS records.');
         $domain = $this->getOwnerRecord();
         DB::transaction(function () use ($domain, $record, $input): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $data = DnsRecordData::validate($input, $locked->name);
+            abort_if($data['type'] === 'NS' && auth()->user()?->isAdmin() !== true, 403, 'Only administrators can manage delegated NS records.');
             $rows = $locked->dnsRecords()->lockForUpdate()->whereKeyNot($record->id)->get()->map(fn (DnsRecord $item): array => $this->row($item))->push($data);
             DnsZoneValidator::assertValid($rows);
             $record->update($data);
@@ -118,6 +132,7 @@ class DnsRecordsRelationManager extends RelationManager
 
     private function deleteRecord(DnsRecord $record): bool
     {
+        abort_if($record->type === 'NS' && auth()->user()?->isAdmin() !== true, 403, 'Only administrators can manage delegated NS records.');
         $domain = $this->getOwnerRecord();
         DB::transaction(function () use ($domain, $record): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);

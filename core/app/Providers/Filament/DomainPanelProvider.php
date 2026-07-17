@@ -31,6 +31,7 @@ class DomainPanelProvider extends PanelProvider
             ->login()
             ->brandName('CDNFoundry')
             ->profile(EditProfile::class)
+            ->readOnlyRelationManagersOnResourceViewPagesByDefault(false)
             ->colors(['primary' => Color::Amber])
             ->discoverResources(in: app_path('Filament/Domain/Resources'), for: 'App\\Filament\\Domain\\Resources')
             ->discoverPages(in: app_path('Filament/Domain/Pages'), for: 'App\\Filament\\Domain\\Pages')

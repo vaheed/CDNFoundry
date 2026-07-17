@@ -154,13 +154,13 @@ On the domain view, use **DNS records**. Create these examples one at a time, ad
 |---|---|---|---|
 | A | `@` | `192.0.2.20` | TTL `300` |
 | AAAA | `@` | `2001:db8::20` | TTL `300` |
-| CNAME | `www` | `@` | TTL `300` |
+| CNAME | `www` | `@` | TTL `300`; `@` targets the zone apex |
 | MX | `@` | `mail.example.net` | Priority `10` |
 | TXT | `@` | `v=spf1 -all` | TTL `300` |
-| NS | `delegated` | `ns1.example.net` | TTL `300` |
-| CAA | `@` | `0 issue letsencrypt.org` | TTL `300` |
+| NS | `delegated` | `ns1.example.net` | TTL `300`; administrator-only |
+| CAA | `@` | `0 issue letsencrypt.org` | TTL `300`; quotes are optional and normalized |
 | SRV | `_sip._tcp` | `sip.example.net` | Priority `10`, weight `5`, port `5060` |
-| PTR | `20` | `host.example.net` | Use only in an appropriate reverse zone |
+| PTR | `20` | `host.example.net` | Available only in an appropriate managed reverse zone |
 
 Edit an A record and change its TTL to `600`, then delete it. Select multiple disposable records and use bulk delete. Confirm duplicate records and a CNAME coexisting with other data at the same owner are rejected without partial changes.
 

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Domain;
 use App\Models\User;
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -61,6 +62,19 @@ class FilamentPanelAccessTest extends TestCase
         $this->actingAs($user)->get('/app/domains')->assertOk();
         $this->actingAs($user)->get("/app/domains/{$domain->id}")->assertOk();
         $this->actingAs($other)->get("/app/domains/{$domain->id}")->assertNotFound();
+    }
+
+    public function test_domain_view_relation_managers_are_mutable_in_both_panels(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $user = User::factory()->create();
+        $domain = Domain::query()->create(['name' => 'mutable.example.test', 'display_name' => 'mutable.example.test']);
+        $domain->users()->attach($user);
+
+        $this->assertFalse(Filament::getPanel('admin')->hasReadOnlyRelationManagersOnResourceViewPagesByDefault());
+        $this->assertFalse(Filament::getPanel('app')->hasReadOnlyRelationManagersOnResourceViewPagesByDefault());
+        $this->actingAs($admin)->get("/admin/domains/{$domain->id}")->assertOk();
+        $this->actingAs($user)->get("/app/domains/{$domain->id}")->assertOk();
     }
 
     public function test_horizon_is_available_only_to_active_administrators(): void

@@ -38,6 +38,7 @@ class DnsRecordController extends Controller
         $record = DB::transaction(function () use ($request, $domain): DnsRecord {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $data = DnsRecordData::validate($request->all(), $locked->name);
+            $this->assertCanManageDelegation($request, $data['type']);
             if ($locked->dnsRecords()->count() >= self::RECORDS_PER_DOMAIN_LIMIT) {
                 throw ValidationException::withMessages(['record' => 'The domain has reached the 10,000 record limit.']);
             }
@@ -69,6 +70,8 @@ class DnsRecordController extends Controller
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $current = DnsRecord::query()->where('domain_id', $locked->id)->lockForUpdate()->findOrFail($record->id);
             $data = DnsRecordData::validate(array_merge($current->only(['type', 'name', 'content', 'ttl', 'priority', 'weight', 'port', 'mode']), $request->all()), $locked->name);
+            $this->assertCanManageDelegation($request, $current->type);
+            $this->assertCanManageDelegation($request, $data['type']);
             $this->assertValidFinalZone($locked, collect([$data]), collect([$current->id]));
             if ($current->only(array_keys($data)) !== $data) {
                 $current->update($data);
@@ -87,6 +90,7 @@ class DnsRecordController extends Controller
     {
         Gate::authorize('update', $domain);
         $this->assertRecordInDomain($domain, $record);
+        $this->assertCanManageDelegation($request, $record->type);
         DB::transaction(function () use ($request, $domain, $record): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $current = DnsRecord::query()->where('domain_id', $locked->id)->lockForUpdate()->find($record->id);
@@ -122,6 +126,7 @@ class DnsRecordController extends Controller
             foreach ($validated['actions'] as $offset => $action) {
                 if ($action['action'] === 'create') {
                     $data = DnsRecordData::validate($action['record'], $locked->name);
+                    $this->assertCanManageDelegation($request, $data['type']);
                     $key = 'new-'.$offset;
                     $final->put($key, $data);
                     $creates[$key] = $data;
@@ -132,6 +137,7 @@ class DnsRecordController extends Controller
                 if ($record === null) {
                     throw ValidationException::withMessages(["actions.$offset.id" => 'The record does not belong to this domain.']);
                 }
+                $this->assertCanManageDelegation($request, $record->type);
                 if ($action['action'] === 'delete') {
                     $final->forget($record->id);
                     $deletes[] = $record;
@@ -139,6 +145,7 @@ class DnsRecordController extends Controller
                     continue;
                 }
                 $data = DnsRecordData::validate(array_merge($final->get($record->id), $action['record']), $locked->name);
+                $this->assertCanManageDelegation($request, $data['type']);
                 $final->put($record->id, $data);
                 $updates[] = [$record, $data];
             }
@@ -192,5 +199,10 @@ class DnsRecordController extends Controller
         if ($domain->refresh()->lifecycle_state === DomainLifecycleState::Active && DnsCluster::query()->where('enabled', true)->exists()) {
             ReconcileDnsZone::dispatch($domain->id)->afterCommit();
         }
+    }
+
+    private function assertCanManageDelegation(Request $request, string $type): void
+    {
+        abort_if($type === 'NS' && ! $request->user()->isAdmin(), 403, 'Only administrators can manage delegated NS records.');
     }
 }

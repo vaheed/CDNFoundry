@@ -17,10 +17,16 @@ final class DnsZoneImporter
         if ($records === []) {
             throw ValidationException::withMessages(['zone' => 'The zone contains no supported records.']);
         }
+        if ($actor?->isAdmin() !== true && collect($records)->contains(fn (array $record): bool => $record['type'] === 'NS')) {
+            abort(403, 'Only administrators can manage delegated NS records.');
+        }
 
         return DB::transaction(function () use ($domainId, $records, $replaceExisting, $actor, $ipAddress): array {
             $domain = Domain::query()->lockForUpdate()->findOrFail($domainId);
             $existing = $domain->dnsRecords()->lockForUpdate()->get();
+            if ($replaceExisting && $actor?->isAdmin() !== true && $existing->contains(fn (DnsRecord $record): bool => $record->type === 'NS')) {
+                abort(403, 'Only administrators can manage delegated NS records.');
+            }
             $final = collect($records);
             if (! $replaceExisting) {
                 $final = $existing->map(fn (DnsRecord $record): array => $record->only(['type', 'name', 'content', 'content_hash', 'ttl', 'priority', 'weight', 'port', 'mode']))->concat($final);

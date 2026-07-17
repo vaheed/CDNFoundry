@@ -8,15 +8,17 @@ Owners may be `@`, relative to the managed zone, or fully qualified inside it. N
 | --- | --- | --- |
 | `A` | IPv4 address | None |
 | `AAAA` | IPv6 address | None |
-| `CNAME` | DNS target | Cannot coexist with another type at the same owner |
+| `CNAME` | DNS target; `@` targets the zone apex | Cannot coexist with another type at the same owner |
 | `MX` | DNS target | `priority`, 0–65535 |
 | `TXT` | Non-empty text, up to 4,096 bytes | None |
-| `NS` | DNS target | None |
-| `CAA` | Flags, `issue`, `issuewild`, or `iodef`, and a quoted value | None |
+| `NS` | DNS target; delegated NS changes are administrator-only | None |
+| `CAA` | Flags, `issue`, `issuewild`, or `iodef`, and a quoted or unquoted value | None |
 | `SRV` | DNS target | `priority`, `weight`, and `port`, each 0–65535; owner starts `_service._protocol` |
 | `PTR` | DNS target | Managed reverse zones only |
 
 Logical duplicates are rejected. Bulk mutations and imports validate the complete resulting zone before committing, so an invalid change does not partially alter desired state. A successful bulk mutation or import increments the zone revision once.
+
+Targets containing a dot, such as `mail.example.net`, are treated as absolute even when the final dot is omitted. A single-label target such as `mail` is relative to the managed zone. A final dot remains accepted for explicit FQDN input.
 
 A domain is bounded to 10,000 desired records. One bulk request may contain at most 5,000 create, update, or delete actions.
 

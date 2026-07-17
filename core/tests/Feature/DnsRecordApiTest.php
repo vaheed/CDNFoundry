@@ -15,24 +15,50 @@ class DnsRecordApiTest extends TestCase
     public function test_all_phase_two_types_normalize_and_validate_with_ipv4_ipv6_parity(): void
     {
         [$user, $domain] = $this->ownedDomain();
+        $admin = User::factory()->admin()->create();
         $records = [
             ['type' => 'A', 'name' => '@', 'content' => '192.0.2.1', 'ttl' => 300],
             ['type' => 'AAAA', 'name' => '@', 'content' => '2001:db8::1', 'ttl' => 300],
-            ['type' => 'CNAME', 'name' => 'www', 'content' => 'target.example.net.', 'ttl' => 300],
-            ['type' => 'MX', 'name' => '@', 'content' => 'mail', 'ttl' => 300, 'priority' => 10],
+            ['type' => 'CNAME', 'name' => 'www', 'content' => '@', 'ttl' => 300],
+            ['type' => 'MX', 'name' => '@', 'content' => 'mail.example.net', 'ttl' => 300, 'priority' => 10],
             ['type' => 'TXT', 'name' => '@', 'content' => 'verification=value', 'ttl' => 300],
             ['type' => 'NS', 'name' => 'child', 'content' => 'ns1.example.net.', 'ttl' => 300],
-            ['type' => 'CAA', 'name' => '@', 'content' => '0 issue "letsencrypt.org"', 'ttl' => 300],
+            ['type' => 'CAA', 'name' => '@', 'content' => '0 issue letsencrypt.org', 'ttl' => 300],
             ['type' => 'SRV', 'name' => '_sip._tcp', 'content' => 'sip', 'ttl' => 300, 'priority' => 10, 'weight' => 5, 'port' => 5060],
         ];
 
         foreach ($records as $record) {
-            $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $record)->assertCreated();
+            $actor = $record['type'] === 'NS' ? $admin : $user;
+            $this->actingAs($actor)->postJson("/api/domains/{$domain->id}/dns/records", $record)->assertCreated();
         }
 
         $this->assertDatabaseCount('dns_records', count($records));
         $this->assertSame(1 + count($records), $domain->refresh()->revision);
-        $this->assertDatabaseHas('dns_records', ['type' => 'MX', 'name' => 'example.com', 'content' => 'mail.example.com.', 'priority' => 10]);
+        $this->assertDatabaseHas('dns_records', ['type' => 'CNAME', 'name' => 'www.example.com', 'content' => 'example.com.']);
+        $this->assertDatabaseHas('dns_records', ['type' => 'MX', 'name' => 'example.com', 'content' => 'mail.example.net.', 'priority' => 10]);
+        $this->assertDatabaseHas('dns_records', ['type' => 'CAA', 'name' => 'example.com', 'content' => '0 issue "letsencrypt.org"']);
+        $this->assertDatabaseHas('dns_records', ['type' => 'NS', 'content' => 'ns1.example.net.']);
+    }
+
+    public function test_only_administrators_can_create_update_delete_or_bulk_manage_ns_records(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $admin = User::factory()->admin()->create();
+        $payload = ['type' => 'NS', 'name' => 'child', 'content' => 'ns1.example.net', 'ttl' => 300];
+
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $payload)->assertForbidden();
+        $created = $this->actingAs($admin)->postJson("/api/domains/{$domain->id}/dns/records", $payload)->assertCreated();
+        $id = $created->json('data.id');
+        $this->assertDatabaseHas('dns_records', ['id' => $id, 'content' => 'ns1.example.net.']);
+
+        $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/dns/records/{$id}", ['ttl' => 600])->assertForbidden();
+        $this->actingAs($user)->deleteJson("/api/domains/{$domain->id}/dns/records/{$id}")->assertForbidden();
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records/bulk", [
+            'actions' => [['action' => 'delete', 'id' => $id]],
+        ])->assertForbidden();
+        $this->assertDatabaseHas('dns_records', ['id' => $id, 'ttl' => 300]);
+
+        $this->actingAs($admin)->deleteJson("/api/domains/{$domain->id}/dns/records/{$id}")->assertNoContent();
     }
 
     public function test_ptr_is_restricted_to_managed_ipv4_and_ipv6_reverse_zones(): void
