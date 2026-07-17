@@ -2,14 +2,17 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -56,11 +59,152 @@ func main() {
 		if err := c.sync(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 		}
+		if err := c.processTasks(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
 		if once {
 			return
 		}
 		time.Sleep(5 * time.Second)
 	}
+}
+
+type edgeTask struct {
+	ID      string `json:"id"`
+	Type    string `json:"type"`
+	Payload struct {
+		Addresses []string `json:"addresses"`
+		Allowlist []string `json:"private_allowlist"`
+		Origin    struct {
+			Host              string `json:"host"`
+			Scheme            string `json:"scheme"`
+			HostHeader        string `json:"host_header"`
+			SNI               string `json:"sni"`
+			Port              int    `json:"port"`
+			VerifyTLS         bool   `json:"verify_tls"`
+			ConnectTimeoutMS  int    `json:"connect_timeout_ms"`
+			ResponseTimeoutMS int    `json:"response_timeout_ms"`
+			HealthCheck       *struct {
+				Path string `json:"path"`
+			} `json:"health_check"`
+		} `json:"origin"`
+	} `json:"payload"`
+}
+
+func (c *client) processTasks() error {
+	var response struct {
+		Data []edgeTask `json:"data"`
+	}
+	if err := c.request("GET", "/edge/v1/tasks", nil, &response, true); err != nil {
+		return err
+	}
+	for _, task := range response.Data {
+		result := map[string]any{"status": "unhealthy", "failure_reason": "task_cancelled"}
+		if task.Type == "origin_test" {
+			result = runOriginTest(task)
+		}
+		if err := c.request("POST", "/edge/v1/tasks/"+task.ID+"/result", map[string]any{"status": "succeeded", "result": result}, &map[string]any{}, true); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runOriginTest(task edgeTask) map[string]any {
+	started := time.Now()
+	result := map[string]any{"status": "unhealthy"}
+	if len(task.Payload.Addresses) == 0 {
+		result["failure_reason"] = "dns_resolution_failed"
+		return result
+	}
+	address := task.Payload.Addresses[0]
+	if blockedIP(address, task.Payload.Allowlist) {
+		result["failure_reason"] = "blocked_destination"
+		return result
+	}
+	origin := task.Payload.Origin
+	connectTimeout := boundedDuration(origin.ConnectTimeoutMS, 100, 10000)
+	responseTimeout := boundedDuration(origin.ResponseTimeoutMS, 500, 60000)
+	transport := &http.Transport{
+		DisableKeepAlives: true,
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{Timeout: connectTimeout}).DialContext(ctx, "tcp", net.JoinHostPort(address, strconv.Itoa(origin.Port)))
+		},
+		TLSClientConfig: &tls.Config{ServerName: first(origin.SNI, origin.HostHeader), InsecureSkipVerify: !origin.VerifyTLS, MinVersion: tls.VersionTLS12},
+	}
+	path := "/"
+	if origin.HealthCheck != nil && strings.HasPrefix(origin.HealthCheck.Path, "/") {
+		path = origin.HealthCheck.Path
+	}
+	req, err := http.NewRequest("GET", origin.Scheme+"://"+origin.Host+":"+strconv.Itoa(origin.Port)+path, nil)
+	if err == nil {
+		req.Host = origin.HostHeader
+		client := &http.Client{Transport: transport, Timeout: responseTimeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+		var response *http.Response
+		response, err = client.Do(req)
+		if response != nil {
+			result["http_status"] = response.StatusCode
+			_ = response.Body.Close()
+			if response.StatusCode >= 200 && response.StatusCode < 400 {
+				result["status"] = "healthy"
+				result["failure_reason"] = nil
+			} else {
+				result["failure_reason"] = "http_status_unhealthy"
+			}
+		}
+	}
+	result["latency_ms"] = time.Since(started).Milliseconds()
+	result["resolved_address"] = address
+	if origin.Scheme == "https" {
+		if err == nil {
+			result["tls_result"] = "verified"
+		} else {
+			result["tls_result"] = "failed"
+		}
+	}
+	if err != nil {
+		if timeout, ok := err.(net.Error); ok && timeout.Timeout() {
+			result["failure_reason"] = "connect_timeout"
+		} else if origin.Scheme == "https" {
+			result["failure_reason"] = "tls_handshake_failed"
+		} else {
+			result["failure_reason"] = "connect_failed"
+		}
+	}
+	return result
+}
+
+func boundedDuration(milliseconds, minimum, maximum int) time.Duration {
+	if milliseconds < minimum {
+		milliseconds = minimum
+	}
+	if milliseconds > maximum {
+		milliseconds = maximum
+	}
+	return time.Duration(milliseconds) * time.Millisecond
+}
+
+func first(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func blockedIP(address string, allowlist []string) bool {
+	ip := net.ParseIP(address)
+	if ip == nil {
+		return true
+	}
+	for _, cidr := range allowlist {
+		_, network, err := net.ParseCIDR(cidr)
+		if err == nil && network.Contains(ip) {
+			return false
+		}
+	}
+	return ip.IsUnspecified() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsPrivate()
 }
 
 func (c *client) loadOrRegister() error {
@@ -160,7 +304,10 @@ func (c *client) full() error {
 		return err
 	}
 	var snapshot struct {
-		Artifacts []struct {
+		SchemaVersion int    `json:"schema_version"`
+		Minimum       string `json:"minimum_agent_version"`
+		Maximum       string `json:"maximum_agent_version"`
+		Artifacts     []struct {
 			Sequence uint64          `json:"sequence"`
 			DomainID *uint64         `json:"domain_id"`
 			Kind     string          `json:"kind"`
@@ -169,6 +316,9 @@ func (c *client) full() error {
 	}
 	if err := json.Unmarshal(payload, &snapshot); err != nil {
 		return err
+	}
+	if snapshot.SchemaVersion != 1 || !compatible(snapshot.Minimum, snapshot.Maximum) {
+		return errors.New("full snapshot is incompatible")
 	}
 	next := state{Domains: map[string]json.RawMessage{}}
 	for _, a := range snapshot.Artifacts {

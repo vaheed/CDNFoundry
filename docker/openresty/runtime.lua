@@ -1,5 +1,6 @@
 local cjson = require "cjson.safe"
 local resolver = require "resty.dns.resolver"
+local bit = require "bit"
 local M = {}
 local state = { hosts = {}, sequence = 0 }
 local path = os.getenv("EDGE_RUNTIME_FILE") or "/var/lib/cdnfoundry/runtime/active.json"
@@ -12,14 +13,66 @@ end
 
 local function allowed(ip, networks)
     local value = ipv4_number(ip)
-    if not value then return false end
     for _, cidr in ipairs(networks or {}) do
         local network, bits = cidr:match("^([^/]+)/(%d+)$")
         local base = network and ipv4_number(network)
         bits = tonumber(bits)
-        if base and bits and bits >= 0 and bits <= 32 then
+        if value and base and bits and bits >= 0 and bits <= 32 then
             local size = 2 ^ (32 - bits)
             if math.floor(value / size) == math.floor(base / size) then return true end
+        end
+        if not value and network and bits and bits >= 0 and bits <= 128 then
+            local function ipv6_bytes(address)
+                address = address:lower():gsub("^%[", ""):gsub("%]$", "")
+                if address:find("%.") then return nil end
+                local left, right = address:match("^(.-)::(.-)$")
+                local groups = {}
+                local function append(part)
+                    if part == "" then return true end
+                    for group in part:gmatch("[^:]+") do
+                        local number = tonumber(group, 16)
+                        if not number or number > 65535 then return false end
+                        groups[#groups + 1] = number
+                    end
+                    return true
+                end
+                if left then
+                    if not append(left) then return nil end
+                    local left_count = #groups
+                    local tail = {}
+                    for group in right:gmatch("[^:]+") do
+                        local number = tonumber(group, 16)
+                        if not number or number > 65535 then return nil end
+                        tail[#tail + 1] = number
+                    end
+                    local missing = 8 - left_count - #tail
+                    if missing < 1 then return nil end
+                    for _ = 1, missing do groups[#groups + 1] = 0 end
+                    for _, number in ipairs(tail) do groups[#groups + 1] = number end
+                elseif not append(address) or #groups ~= 8 then
+                    return nil
+                end
+                if #groups ~= 8 then return nil end
+                local bytes = {}
+                for _, number in ipairs(groups) do
+                    bytes[#bytes + 1] = math.floor(number / 256)
+                    bytes[#bytes + 1] = number % 256
+                end
+                return bytes
+            end
+            local address_bytes, network_bytes = ipv6_bytes(ip), ipv6_bytes(network)
+            if address_bytes and network_bytes then
+                local whole, remainder = math.floor(bits / 8), bits % 8
+                local matches = true
+                for index = 1, whole do
+                    if address_bytes[index] ~= network_bytes[index] then matches = false; break end
+                end
+                if matches and remainder > 0 then
+                    local mask = bit.band(0xff, bit.lshift(0xff, 8 - remainder))
+                    matches = bit.band(address_bytes[whole + 1], mask) == bit.band(network_bytes[whole + 1], mask)
+                end
+                if matches then return true end
+            end
         end
     end
     return false
@@ -33,7 +86,9 @@ local function blocked(ip, networks)
     if a == 100 and b and b >= 64 and b <= 127 then return true end
     if a == 192 and b == 0 or a == 198 and b and (b == 18 or b == 19) then return true end
     local lower = ip:lower()
-    return lower == "::" or lower == "::1" or lower:match("^fe[89ab]") ~= nil or lower:match("^f[cd]") ~= nil or lower:match("^ff") ~= nil
+    local private_v6 = lower == "::" or lower == "::1" or lower:match("^fe[89ab]") ~= nil or lower:match("^f[cd]") ~= nil
+    if private_v6 and allowed(ip, networks) then return false end
+    return private_v6 or lower:match("^ff") ~= nil
 end
 
 local function load()
@@ -97,8 +152,16 @@ function M.access()
     ngx.var.origin_port = tostring(origin.port)
     ngx.var.origin_host_header = origin.host_header
     ngx.var.origin_sni = origin.sni or origin.host_header
+    ngx.var.origin_connection = ""
+    ngx.var.origin_upgrade = ""
+    if origin.websocket == true and (ngx.var.http_upgrade or ""):lower() == "websocket" then
+        ngx.var.origin_connection = "upgrade"
+        ngx.var.origin_upgrade = "websocket"
+    end
     ngx.req.clear_header("Forwarded"); ngx.req.clear_header("X-Forwarded-For"); ngx.req.clear_header("X-Forwarded-Host"); ngx.req.clear_header("X-Forwarded-Proto")
     ngx.req.clear_header("Proxy-Connection"); ngx.req.clear_header("Keep-Alive"); ngx.req.clear_header("TE"); ngx.req.clear_header("Trailer"); ngx.req.clear_header("Upgrade")
+    if origin.scheme == "https" and origin.verify_tls == true then return ngx.exec("@proxy_verified") end
+    return ngx.exec("@proxy_unverified")
 end
 
 return M

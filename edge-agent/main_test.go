@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
@@ -8,11 +9,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -91,6 +94,96 @@ func TestActivationPreservesPreviousAndRestartState(t *testing.T) {
 	if active.Sequence != 5 {
 		t.Fatal("invalid candidate replaced active state")
 	}
+}
+
+func TestFreshFullSnapshotThenIncrementalArtifact(t *testing.T) {
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicHex := hex.EncodeToString(public)
+	fullPayload, fullChecksum, fullSignature := signedJSON(t, private, map[string]any{
+		"schema_version": 1, "minimum_agent_version": "1.0.0", "maximum_agent_version": "1.99.0",
+		"artifacts": []map[string]any{{"sequence": 4, "domain_id": 1, "kind": "domain", "payload": json.RawMessage(runtimeDomain(4))}},
+	})
+	incrementalPayload := []byte(runtimeDomain(5))
+	incrementalChecksum := sha256.Sum256(incrementalPayload)
+	incrementalChecksumHex := hex.EncodeToString(incrementalChecksum[:])
+	incrementalSignature := hex.EncodeToString(ed25519.Sign(private, []byte(incrementalChecksumHex)))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/edge/v1/config/full":
+			_ = json.NewEncoder(w).Encode(map[string]any{"encoded_snapshot": fullPayload, "checksum": fullChecksum, "signature": fullSignature, "signing_public_key": publicHex})
+		case r.URL.Path == "/edge/v1/config/manifest":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{
+				"sequence": 5, "kind": "domain", "domain_id": 1, "checksum": incrementalChecksumHex,
+				"signature": incrementalSignature, "schema_version": 1,
+				"minimum_agent_version": "1.0.0", "maximum_agent_version": "1.99.0",
+			}}})
+		case strings.HasPrefix(r.URL.Path, "/edge/v1/config/artifacts/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"encoded_payload": base64.StdEncoding.EncodeToString(incrementalPayload)})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"accepted": true}})
+		}
+	}))
+	defer server.Close()
+	dir := t.TempDir()
+	c := &client{base: server.URL, dir: dir, runtimeDir: filepath.Join(dir, "runtime"), http: server.Client(), id: identity{Token: "edge", PublicKey: publicHex}}
+	if err := c.full(); err != nil {
+		t.Fatal(err)
+	}
+	active, err := loadState(filepath.Join(dir, "active", "state.json"))
+	if err != nil || active.Sequence != 4 || len(active.Domains) != 1 {
+		t.Fatalf("fresh full snapshot was not activated: %#v, %v", active, err)
+	}
+	if err := c.sync(); err != nil {
+		t.Fatal(err)
+	}
+	active, err = loadState(filepath.Join(dir, "active", "state.json"))
+	if err != nil || active.Sequence != 5 || !bytes.Contains(active.Domains["1"], []byte(`"revision":5`)) {
+		t.Fatalf("incremental artifact was not activated: %#v, %v", active, err)
+	}
+}
+
+func TestOriginTaskUsesApprovedAddressAndCanonicalHost(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != "origin.example" {
+			t.Errorf("unexpected origin host: %s", r.Host)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	address := strings.TrimPrefix(server.URL, "http://")
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	portNumber, _ := strconv.Atoi(port)
+	task := edgeTask{}
+	task.Payload.Addresses = []string{host}
+	task.Payload.Allowlist = []string{"127.0.0.0/8"}
+	task.Payload.Origin.Host = "ignored.example"
+	task.Payload.Origin.Scheme = "http"
+	task.Payload.Origin.HostHeader = "origin.example"
+	task.Payload.Origin.Port = portNumber
+	task.Payload.Origin.ConnectTimeoutMS = 1000
+	task.Payload.Origin.ResponseTimeoutMS = 1000
+	result := runOriginTest(task)
+	if result["status"] != "healthy" || result["resolved_address"] != host {
+		t.Fatalf("origin task failed: %#v", result)
+	}
+}
+
+func signedJSON(t *testing.T, private ed25519.PrivateKey, value any) (string, string, string) {
+	t.Helper()
+	payload, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(payload)
+	checksum := hex.EncodeToString(sum[:])
+	return base64.StdEncoding.EncodeToString(payload), checksum, hex.EncodeToString(ed25519.Sign(private, []byte(checksum)))
 }
 
 func runtimeDomain(revision int) json.RawMessage {

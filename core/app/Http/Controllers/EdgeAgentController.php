@@ -57,7 +57,12 @@ class EdgeAgentController extends Controller
     {
         $edge = $request->attributes->get('edge');
         $latest = EdgeArtifact::query()->where('edge_id', $edge->id)->orderByDesc('sequence')->get()->unique('domain_id')->sortBy('domain_id')->values();
-        $payload = ['schema_version' => 1, 'artifacts' => $latest];
+        $payload = [
+            'schema_version' => 1,
+            'minimum_agent_version' => '1.0.0',
+            'maximum_agent_version' => '1.99.0',
+            'artifacts' => $latest,
+        ];
         $encoded = ArtifactSigner::encode($payload);
         $checksum = hash('sha256', $encoded);
 

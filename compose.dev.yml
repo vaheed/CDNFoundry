@@ -45,7 +45,16 @@ services:
       context: ./core
       target: development
     entrypoint: [sh, -c]
-    command: ["find /target -mindepth 1 -delete && cp -a /opt/cdnf-vendor/. /target/"]
+    # Keep the live dependency tree usable while one-off Compose commands refresh it.
+    # Packages are overlaid first; authoritative Composer metadata is published last.
+    command:
+      - >-
+        find /opt/cdnf-vendor -mindepth 1 -maxdepth 1 -type d ! -name composer
+        -exec cp -a {} /target/ \; &&
+        find /opt/cdnf-vendor -mindepth 1 -maxdepth 1 -type f
+        -exec cp -a {} /target/ \; &&
+        mkdir -p /target/composer &&
+        cp -a /opt/cdnf-vendor/composer/. /target/composer/
     volumes: [core-vendor:/target]
     restart: "no"
 

@@ -1644,37 +1644,37 @@ When proxy is enabled:
 - [x] Placement migration keeps the previous pool active until target readiness and DNS drain complete.
 - [x] Origin tests are asynchronous or strictly bounded.
 - [x] Unsafe, internal, metadata, and loop-producing origin destinations are rejected.
-- [ ] DNS rebinding cannot change an approved public origin into a blocked destination.
+- [x] DNS rebinding cannot change an approved public origin into a blocked destination.
 
 ##### Edge Agent
 
 - [ ] One-time registration exchanges the bootstrap token for a unique mTLS identity.
 - [x] Edge identity revocation and replacement work safely.
 - [x] Heartbeats report version, capacity, listener health, active revision, and bounded per-cell summaries.
-- [ ] Incremental artifacts and full snapshots both work.
+- [x] Incremental artifacts and full snapshots both work.
 - [x] Signature, checksum, schema, or version incompatibility rejects the candidate.
 - [x] Invalid state never replaces the last valid state.
 - [x] Agent restart preserves active state.
 - [x] Buffered acknowledgements retry after control-plane recovery.
-- [ ] A fresh edge recovers from a full snapshot.
+- [x] A fresh edge recovers from a full snapshot.
 
 ##### Runtime
 
 - [x] Real HTTP traffic reaches the correct origin.
-- [ ] Real HTTPS traffic reaches HTTPS origins with correct SNI and verification.
+- [x] Real HTTPS traffic reaches HTTPS origins with correct SNI and verification.
 - [x] Origin `Host` header works.
 - [ ] IPv4-only, IPv6-only, and dual-stack clients pass.
 - [ ] Thousands of domains run under one generic OpenResty codebase distributed across bounded cells.
 - [x] Normal domain updates cause no OpenResty reload.
 - [ ] Unknown HTTP hosts and TLS SNI names are rejected before expensive processing.
-- [ ] Ambiguous request framing, malformed headers, and untrusted forwarding headers are rejected or normalized consistently.
+- [x] Ambiguous request framing, malformed headers, and untrusted forwarding headers are rejected or normalized consistently.
 - [ ] HTTP/2 stream and connection limits are enforced; HTTP/3 remains disabled.
-- [ ] Unknown, disabled, and deprovisioned hosts return defined responses.
-- [ ] One malformed domain configuration does not affect other domains.
+- [x] Unknown, disabled, and deprovisioned hosts return defined responses.
+- [x] One malformed domain configuration does not affect other domains.
 - [ ] One cell crash or out-of-memory event does not terminate other cells or the edge agent.
-- [ ] Cache or temporary-storage exhaustion in one cell does not fill the edge filesystem.
+- [x] Cache or temporary-storage exhaustion in one cell does not fill the edge filesystem.
 - [ ] Shared, quarantine, and dedicated placements behave consistently for IPv4 and IPv6.
-- [ ] Edge serves traffic while Laravel, PostgreSQL control DB, Redis/Valkey, and ClickHouse are offline.
+- [x] Edge serves traffic while Laravel, PostgreSQL control DB, Redis/Valkey, and ClickHouse are offline.
 - [ ] Adding an edge requires only installation, registration, and health qualification.
 
 ##### Origin Health

@@ -50,6 +50,7 @@ class DispatchOriginTest implements ShouldQueue
                 EdgeTask::query()->create(['id' => (string) Str::uuid(), 'edge_id' => $edge->id, 'type' => 'origin_test', 'status' => 'pending', 'payload' => [
                     'operation_id' => $operation->id, 'domain_id' => $record->domain_id, 'record_id' => $record->id,
                     'origin' => $record->origin, 'addresses' => $operation->input['addresses'],
+                    'private_allowlist' => config('edge.private_origin_allowlist', []),
                 ]]);
             }
         }
