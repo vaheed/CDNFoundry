@@ -10,6 +10,7 @@ use App\Models\DnsCluster;
 use App\Models\DnsRecord;
 use App\Models\Domain;
 use App\Support\DnsRecordData;
+use App\Support\DnsZoneValidator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -137,7 +138,7 @@ class DnsRecordController extends Controller
                 $updates[] = [$record, $data];
             }
 
-            $this->assertZoneRows($final->values());
+            DnsZoneValidator::assertValid($final->values());
             foreach ($deletes as $record) {
                 $record->delete();
             }
@@ -164,25 +165,7 @@ class DnsRecordController extends Controller
         $rows = $domain->dnsRecords()->when($excludedIds?->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $excludedIds))->get()
             ->map(fn (DnsRecord $record): array => $record->only(['type', 'name', 'content', 'content_hash', 'ttl', 'priority', 'weight', 'port', 'mode']))
             ->concat($additions);
-        $this->assertZoneRows($rows);
-    }
-
-    private function assertZoneRows(Collection $rows): void
-    {
-        $logical = [];
-        foreach ($rows as $row) {
-            $key = implode('|', [$row['name'], $row['type'], $row['content'], $row['priority'], $row['weight'], $row['port']]);
-            if (isset($logical[$key])) {
-                throw ValidationException::withMessages(['record' => 'This logical DNS record already exists.']);
-            }
-            $logical[$key] = true;
-        }
-        foreach ($rows->groupBy('name') as $name => $ownerRows) {
-            $types = $ownerRows->pluck('type')->unique();
-            if ($types->contains('CNAME') && ($types->count() > 1 || $ownerRows->count() > 1)) {
-                throw ValidationException::withMessages(['record' => "CNAME cannot coexist with other records at $name."]);
-            }
-        }
+        DnsZoneValidator::assertValid($rows);
     }
 
     private function incrementRevision(Domain $domain): void

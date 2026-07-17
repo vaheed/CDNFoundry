@@ -1155,7 +1155,7 @@ No origin is requested.
 - [x] Invalid desired zones do not replace active zones.
 - [x] DNSdist is the only public DNS service.
 - [x] PowerDNS identity and management endpoints are private.
-- [ ] Standard BIND import and export round-trip correctly.
+- [x] Standard BIND import and export round-trip correctly.
 
 ##### Scale and Failure
 
@@ -1180,8 +1180,8 @@ No origin is requested.
 
 - [x] Domain onboarding guide
 - [x] Registrar and glue-record guide
-- [ ] DNS record reference
-- [ ] Import/export guide
+- [x] DNS record reference
+- [x] Import/export guide
 - [x] DNS cluster runbook
 - [x] Runtime drift warning for PowerAdmin
 

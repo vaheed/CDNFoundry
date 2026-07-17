@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DnsDeploymentController;
 use App\Http\Controllers\DnsRecordController;
+use App\Http\Controllers\DnsZoneController;
 use App\Http\Controllers\DomainController;
 use App\Http\Controllers\DomainLifecycleController;
 use App\Http\Controllers\HealthController;
@@ -42,6 +43,8 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function (): void {
     Route::get('/domains/{domain}/dns/records', [DnsRecordController::class, 'index']);
     Route::post('/domains/{domain}/dns/records', [DnsRecordController::class, 'store'])->middleware('idempotent');
     Route::post('/domains/{domain}/dns/records/bulk', [DnsRecordController::class, 'bulk'])->middleware('idempotent');
+    Route::post('/domains/{domain}/dns/import', [DnsZoneController::class, 'import'])->middleware('idempotent');
+    Route::get('/domains/{domain}/dns/export', [DnsZoneController::class, 'export']);
     Route::get('/domains/{domain}/dns/records/{record}', [DnsRecordController::class, 'show']);
     Route::patch('/domains/{domain}/dns/records/{record}', [DnsRecordController::class, 'update'])->middleware('idempotent');
     Route::delete('/domains/{domain}/dns/records/{record}', [DnsRecordController::class, 'destroy'])->middleware('idempotent');
