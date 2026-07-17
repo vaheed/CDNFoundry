@@ -191,7 +191,7 @@ Open **Audit logs**. Confirm the earlier identity update, cluster creation/test,
 
 ### API tokens
 
-Open **API tokens**, enter token name `manual-browser`, and create it. Copy the token immediately; it must be displayed only once. Refresh the page and confirm only token metadata remains. Revoke it and verify an API request using that token returns unauthenticated.
+Open **API tokens**, enter token name `manual-browser`, and create it. Confirm the Create button has clear spacing from the name field. Copy the token immediately; it must be displayed only once. Refresh the page and confirm only token metadata, including the token's final six characters, remains. Revoke it and verify an API request using that token returns unauthenticated.
 
 ### Profile
 

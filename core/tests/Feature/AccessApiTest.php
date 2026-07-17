@@ -89,7 +89,10 @@ class AccessApiTest extends TestCase
         $created = $this->actingAs($user)->postJson('/api/me/tokens', ['name' => 'automation'])
             ->assertCreated()->assertJsonStructure(['data' => ['id', 'name', 'token']]);
         $tokenId = $created->json('data.id');
-        $this->actingAs($user)->getJson('/api/me/tokens')->assertOk()->assertJsonMissing(['token' => $created->json('data.token')]);
+        $this->actingAs($user)->getJson('/api/me/tokens')
+            ->assertOk()
+            ->assertJsonPath('data.0.token_last_six', substr($created->json('data.token'), -6))
+            ->assertJsonMissing(['token' => $created->json('data.token')]);
         $this->actingAs($user)->deleteJson("/api/me/tokens/$tokenId")->assertOk();
         $this->assertDatabaseMissing('personal_access_tokens', ['id' => $tokenId]);
     }

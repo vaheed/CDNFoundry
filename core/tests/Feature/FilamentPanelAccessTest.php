@@ -12,6 +12,17 @@ class FilamentPanelAccessTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_compiled_view_directory_exists_and_is_writable(): void
+    {
+        $compiledViewPath = config('view.compiled');
+
+        $this->assertDirectoryExists($compiledViewPath);
+        $this->assertDirectoryIsWritable($compiledViewPath);
+        if (function_exists('posix_geteuid')) {
+            $this->assertSame((string) posix_geteuid(), basename($compiledViewPath));
+        }
+    }
+
     public function test_guests_are_sent_to_the_correct_panel_login(): void
     {
         $this->get('/admin')->assertRedirect('/admin/login');

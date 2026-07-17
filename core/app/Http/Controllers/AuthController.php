@@ -25,7 +25,9 @@ class AuthController extends Controller
             return response()->json(['error' => ['code' => 'account_disabled', 'message' => 'This account is disabled.']], 403);
         }
 
-        $token = $user->createToken($request->string('device_name')->value() ?: 'api')->plainTextToken;
+        $createdToken = $user->createToken($request->string('device_name')->value() ?: 'api');
+        $createdToken->accessToken->forceFill(['token_last_six' => substr($createdToken->plainTextToken, -6)])->save();
+        $token = $createdToken->plainTextToken;
         AuditLog::record($user, 'auth.login', $user, [], $request->ip());
 
         return response()->json(['data' => ['user' => UserResource::make($user), 'token' => $token]]);

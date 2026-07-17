@@ -6,7 +6,7 @@
     @endif
 
     <x-filament::section heading="Create token">
-        <form wire:submit="createToken" class="flex gap-3">
+        <form wire:submit="createToken" class="flex flex-col gap-3 sm:flex-row sm:items-end">
             <x-filament::input.wrapper class="flex-1">
                 <x-filament::input wire:model="name" placeholder="Token name" maxlength="100" />
             </x-filament::input.wrapper>
@@ -19,7 +19,15 @@
         <div class="divide-y divide-gray-200 dark:divide-white/10">
             @forelse ($this->tokens as $token)
                 <div class="flex items-center justify-between py-3">
-                    <div><strong>{{ $token->name }}</strong><div class="text-sm text-gray-500">Created {{ $token->created_at?->diffForHumans() }}</div></div>
+                    <div>
+                        <strong>{{ $token->name }}</strong>
+                        <div class="text-sm text-gray-500">
+                            @if ($token->token_last_six)
+                                Ending in <span class="font-mono">{{ $token->token_last_six }}</span> ·
+                            @endif
+                            Created {{ $token->created_at?->diffForHumans() }}
+                        </div>
+                    </div>
                     <x-filament::button color="danger" size="sm" wire:click="revokeToken({{ $token->id }})" wire:confirm="Revoke this token?">Revoke</x-filament::button>
                 </div>
             @empty

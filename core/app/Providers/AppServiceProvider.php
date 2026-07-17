@@ -14,7 +14,19 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Keep console commands run as root from creating compiled views that
+        // the unprivileged PHP-FPM process cannot later refresh.
+        $effectiveUserId = function_exists('posix_geteuid') ? posix_geteuid() : getmyuid();
+        $compiledViewPath = storage_path('framework/views/'.$effectiveUserId);
+        if (! is_dir($compiledViewPath)
+            && ! mkdir($compiledViewPath, 0775, true)
+            && ! is_dir($compiledViewPath)) {
+            throw new \RuntimeException("Unable to create compiled view directory: {$compiledViewPath}");
+        }
+        $this->app['config']->set(
+            'view.compiled',
+            $compiledViewPath,
+        );
     }
 
     /**

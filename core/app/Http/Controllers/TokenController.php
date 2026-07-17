@@ -14,7 +14,7 @@ class TokenController extends Controller
         $tokens = $request->user()->tokens()->latest('id')->cursorPaginate(50);
 
         return response()->json($tokens->through(fn (PersonalAccessToken $token): array => [
-            'id' => $token->id, 'name' => $token->name, 'last_used_at' => $token->last_used_at?->toIso8601String(), 'created_at' => $token->created_at?->toIso8601String(),
+            'id' => $token->id, 'name' => $token->name, 'token_last_six' => $token->token_last_six, 'last_used_at' => $token->last_used_at?->toIso8601String(), 'created_at' => $token->created_at?->toIso8601String(),
         ]));
     }
 
@@ -22,6 +22,7 @@ class TokenController extends Controller
     {
         $validated = $request->validate(['name' => ['required', 'string', 'max:100']]);
         $created = $request->user()->createToken($validated['name']);
+        $created->accessToken->forceFill(['token_last_six' => substr($created->plainTextToken, -6)])->save();
         AuditLog::record($request->user(), 'token.created', $request->user(), ['token_id' => $created->accessToken->id], $request->ip());
 
         return response()->json(['data' => ['id' => $created->accessToken->id, 'name' => $validated['name'], 'token' => $created->plainTextToken]], 201);

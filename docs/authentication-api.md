@@ -15,7 +15,7 @@ Send API tokens as `Authorization: Bearer <token>`. Browser panels use session a
 
 ## Personal access tokens
 
-- `GET /api/me/tokens` returns cursor-paginated token metadata.
+- `GET /api/me/tokens` returns cursor-paginated token metadata, including the final six characters for identification. Tokens created before this metadata was introduced have no suffix.
 - `POST /api/me/tokens` creates a named token; plaintext appears only in this response.
 - `DELETE /api/me/tokens/{token}` revokes an owned token; foreign identifiers return 404.
 
