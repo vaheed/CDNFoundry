@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -66,9 +67,9 @@ func TestAcknowledgementBufferRetriesAfterRecovery(t *testing.T) {
 
 func TestActivationPreservesPreviousAndRestartState(t *testing.T) {
 	dir := t.TempDir()
-	c := &client{dir: dir}
-	first := state{Sequence: 4, Domains: map[string]json.RawMessage{"1": json.RawMessage(`{"revision":4}`)}}
-	second := state{Sequence: 5, Domains: map[string]json.RawMessage{"1": json.RawMessage(`{"revision":5}`)}}
+	c := &client{dir: dir, runtimeDir: filepath.Join(dir, "runtime")}
+	first := state{Sequence: 4, Domains: map[string]json.RawMessage{"1": runtimeDomain(4)}}
+	second := state{Sequence: 5, Domains: map[string]json.RawMessage{"1": runtimeDomain(5)}}
 	if err := c.activate(first); err != nil {
 		t.Fatal(err)
 	}
@@ -90,4 +91,8 @@ func TestActivationPreservesPreviousAndRestartState(t *testing.T) {
 	if active.Sequence != 5 {
 		t.Fatal("invalid candidate replaced active state")
 	}
+}
+
+func runtimeDomain(revision int) json.RawMessage {
+	return json.RawMessage(`{"domain":"example.test","revision":` + strconv.Itoa(revision) + `,"settings":{"enabled":true},"hostnames":[{"hostname":"www.example.test","origin":{"host":"origin.example"}}]}`)
 }

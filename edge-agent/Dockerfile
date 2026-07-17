@@ -6,6 +6,7 @@ RUN CGO_ENABLED=0 go test ./... && CGO_ENABLED=0 go build -trimpath -ldflags='-s
 
 FROM alpine:3.22
 RUN addgroup -S cdnf && adduser -S -G cdnf cdnf
+RUN mkdir -p /var/lib/cdnfoundry/agent /var/lib/cdnfoundry/runtime && chown -R cdnf:cdnf /var/lib/cdnfoundry
 COPY --from=build /edge-agent /usr/local/bin/edge-agent
 USER cdnf
 ENTRYPOINT ["/usr/local/bin/edge-agent"]

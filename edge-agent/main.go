@@ -32,9 +32,9 @@ type ack struct {
 	Reason, Details string
 }
 type client struct {
-	base, dir string
-	http      *http.Client
-	id        identity
+	base, dir, runtimeDir string
+	http                  *http.Client
+	id                    identity
 }
 type manifest struct {
 	Sequence                              uint64  `json:"sequence"`
@@ -44,7 +44,7 @@ type manifest struct {
 }
 
 func main() {
-	c := &client{base: strings.TrimRight(required("EDGE_CONTROL_URL"), "/"), dir: env("EDGE_STATE_DIR", "/var/lib/cdnfoundry/agent"), http: &http.Client{Timeout: 15 * time.Second}}
+	c := &client{base: strings.TrimRight(required("EDGE_CONTROL_URL"), "/"), dir: env("EDGE_STATE_DIR", "/var/lib/cdnfoundry/agent"), runtimeDir: env("EDGE_RUNTIME_DIR", ""), http: &http.Client{Timeout: 15 * time.Second}}
 	if err := os.MkdirAll(c.dir, 0700); err != nil {
 		fatal(err)
 	}
@@ -198,6 +198,10 @@ func (c *client) activate(s state) error {
 	if err := atomicJSON(filepath.Join(candidate, "state.json"), s); err != nil {
 		return err
 	}
+	runtime, err := compileRuntime(s)
+	if err != nil {
+		return err
+	}
 	active, previous := filepath.Join(c.dir, "active"), filepath.Join(c.dir, "previous")
 	os.RemoveAll(previous)
 	if _, err := os.Stat(active); err == nil {
@@ -211,7 +215,52 @@ func (c *client) activate(s state) error {
 		}
 		return err
 	}
+	if c.runtimeDir != "" {
+		if err := os.MkdirAll(c.runtimeDir, 0755); err != nil {
+			return c.rollbackActive(active, previous, err)
+		}
+		if err := atomicPublicJSON(filepath.Join(c.runtimeDir, "active.json"), runtime); err != nil {
+			return c.rollbackActive(active, previous, err)
+		}
+	}
 	return nil
+}
+
+func (c *client) rollbackActive(active, previous string, cause error) error {
+	os.RemoveAll(active)
+	if _, err := os.Stat(previous); err == nil {
+		_ = os.Rename(previous, active)
+	}
+	return cause
+}
+
+func compileRuntime(s state) (map[string]any, error) {
+	hosts := map[string]any{}
+	for _, raw := range s.Domains {
+		var domain struct {
+			Domain    string         `json:"domain"`
+			Revision  uint64         `json:"revision"`
+			Settings  map[string]any `json:"settings"`
+			Hostnames []struct {
+				Hostname string         `json:"hostname"`
+				Origin   map[string]any `json:"origin"`
+			} `json:"hostnames"`
+		}
+		if err := json.Unmarshal(raw, &domain); err != nil {
+			return nil, err
+		}
+		if domain.Domain == "" || len(domain.Hostnames) > 10000 {
+			return nil, errors.New("invalid runtime domain")
+		}
+		for _, host := range domain.Hostnames {
+			name := strings.ToLower(strings.TrimSuffix(host.Hostname, "."))
+			if name == "" || host.Origin["host"] == nil || hosts[name] != nil {
+				return nil, errors.New("invalid or duplicate runtime hostname")
+			}
+			hosts[name] = map[string]any{"domain": domain.Domain, "revision": domain.Revision, "settings": domain.Settings, "origin": host.Origin}
+		}
+	}
+	return map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": hosts}, nil
 }
 
 func (c *client) heartbeat(sequence uint64) error {
@@ -335,6 +384,17 @@ func atomicJSON(p string, v any) error {
 	}
 	tmp := p + ".tmp"
 	if e = os.WriteFile(tmp, b, 0600); e != nil {
+		return e
+	}
+	return os.Rename(tmp, p)
+}
+func atomicPublicJSON(p string, v any) error {
+	b, e := json.Marshal(v)
+	if e != nil {
+		return e
+	}
+	tmp := p + ".tmp"
+	if e = os.WriteFile(tmp, b, 0644); e != nil {
 		return e
 	}
 	return os.Rename(tmp, p)

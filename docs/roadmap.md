@@ -1660,12 +1660,12 @@ When proxy is enabled:
 
 ##### Runtime
 
-- [ ] Real HTTP traffic reaches the correct origin.
+- [x] Real HTTP traffic reaches the correct origin.
 - [ ] Real HTTPS traffic reaches HTTPS origins with correct SNI and verification.
-- [ ] Origin `Host` header works.
+- [x] Origin `Host` header works.
 - [ ] IPv4-only, IPv6-only, and dual-stack clients pass.
 - [ ] Thousands of domains run under one generic OpenResty codebase distributed across bounded cells.
-- [ ] Normal domain updates cause no OpenResty reload.
+- [x] Normal domain updates cause no OpenResty reload.
 - [ ] Unknown HTTP hosts and TLS SNI names are rejected before expensive processing.
 - [ ] Ambiguous request framing, malformed headers, and untrusted forwarding headers are rejected or normalized consistently.
 - [ ] HTTP/2 stream and connection limits are enforced; HTTP/3 remains disabled.

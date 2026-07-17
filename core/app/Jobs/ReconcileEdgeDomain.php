@@ -61,7 +61,12 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
         $snapshot = [
             'schema_version' => 1, 'domain_id' => $domain->id, 'domain' => $domain->name,
             'revision' => $revision, 'settings' => $domain->proxy_settings ?? self::defaults(),
-            'hostnames' => $records->map(fn ($record) => ['hostname' => $record->name, 'type' => $record->type, 'ttl' => $record->ttl, 'origin' => $record->origin])->all(),
+            'hostnames' => $records->map(function ($record): array {
+                $origin = $record->origin;
+                $origin['private_allowlist'] = config('edge.private_origin_allowlist', []);
+
+                return ['hostname' => $record->name, 'type' => $record->type, 'ttl' => $record->ttl, 'origin' => $origin];
+            })->all(),
         ];
         $canonical = ArtifactSigner::encode($snapshot);
         $checksum = hash('sha256', $canonical);

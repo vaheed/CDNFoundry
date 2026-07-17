@@ -206,7 +206,8 @@ services:
     ports:
       - "${EDGE_HTTP_BIND:-0.0.0.0:80}:8080"
     volumes:
-      - ./docker/nginx/edge.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/nginx/edge-runtime.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/openresty/runtime.lua:/etc/cdnfoundry/runtime.lua:ro
       - edge-cache:/var/cache/nginx
       - edge-state:/var/lib/cdnfoundry
     networks: [edge, telemetry]
@@ -227,6 +228,7 @@ services:
       EDGE_ID: ${EDGE_ID:-}
       EDGE_BOOTSTRAP_TOKEN: ${EDGE_BOOTSTRAP_TOKEN:-}
       EDGE_STATE_DIR: /var/lib/cdnfoundry/agent
+      EDGE_RUNTIME_DIR: /var/lib/cdnfoundry/runtime
     volumes:
       - edge-agent-state:/var/lib/cdnfoundry/agent
       - edge-state:/var/lib/cdnfoundry/runtime
