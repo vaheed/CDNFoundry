@@ -38,17 +38,36 @@ class ViewDomain extends ViewRecord
                     Notification::make()->info()->title('Nameserver verification queued')
                         ->body("Operation {$operation->id} checks the public NS delegation. Refresh this page after the worker completes.")->send();
                 }),
+            Action::make('forceVerifyNameservers')->label('Force verify (local test)')->icon('heroicon-o-wrench-screwdriver')
+                ->color('warning')->requiresConfirmation()
+                ->modalHeading('Bypass public nameserver verification?')
+                ->modalDescription('Use only for local browser qualification. This does not prove that public delegation is correct.')
+                ->visible(fn (): bool => auth()->user()?->isAdmin() === true
+                    && $this->record->nameservers_verified_at === null
+                    && $this->record->lifecycle_state !== DomainLifecycleState::Deprovisioning)
+                ->action(function (): void {
+                    $this->record->forceFill([
+                        'nameservers_verified_at' => now(),
+                        'nameservers_verified_by' => auth()->id(),
+                    ])->save();
+                    AuditLog::record(auth()->user(), 'domain.nameservers_force_verified', $this->record, ['name' => $this->record->name], request()->ip());
+                    Notification::make()->warning()->title('Nameservers force verified')
+                        ->body('Local-test bypass recorded. Public delegation was not checked.')->send();
+                }),
             Action::make('activate')->color('success')->requiresConfirmation()
                 ->visible(fn (): bool => $this->record->nameservers_verified_at !== null && $this->record->lifecycle_state !== DomainLifecycleState::Active && $this->record->lifecycle_state !== DomainLifecycleState::Deprovisioning)
                 ->action(function (): void {
+                    abort_unless(
+                        DnsCluster::query()->where('enabled', true)->where('last_health_status', 'healthy')->exists(),
+                        409,
+                        'Enable at least one healthy DNS cluster before activation.',
+                    );
                     DB::transaction(function (): void {
                         $domain = $this->record->newQuery()->lockForUpdate()->findOrFail($this->record->id);
                         $domain->forceFill(['lifecycle_state' => DomainLifecycleState::Active, 'disabled_at' => null, 'revision' => $domain->revision + 1])->save();
                         AuditLog::record(auth()->user(), 'domain.activated', $domain, ['revision' => $domain->revision], request()->ip());
                     });
-                    if (DnsCluster::query()->where('enabled', true)->exists()) {
-                        ReconcileDnsZone::dispatch($this->record->id)->afterCommit();
-                    }
+                    ReconcileDnsZone::dispatch($this->record->id)->afterCommit();
                 }),
             Action::make('disable')->color('danger')->requiresConfirmation()
                 ->visible(fn (): bool => $this->record->lifecycle_state === DomainLifecycleState::Active)

@@ -50,10 +50,14 @@ class DomainResource extends Resource
             TextEntry::make('lifecycle_state')->badge(),
             TextEntry::make('nameservers_verified_at')->label('Nameservers verified')->dateTime()->placeholder('Pending'),
             TextEntry::make('nameserver_verification_status')->label('Latest verification')
-                ->state(fn (Domain $record): ?string => self::latestNameserverVerification($record)?->status)
+                ->state(fn (Domain $record): ?string => $record->nameservers_verified_by !== null
+                    ? 'force_verified'
+                    : self::latestNameserverVerification($record)?->status)
                 ->badge()->placeholder('Not requested'),
             TextEntry::make('nameserver_verification_error')->label('Verification error')
-                ->state(fn (Domain $record): ?string => self::latestNameserverVerification($record)?->error)
+                ->state(fn (Domain $record): ?string => $record->nameservers_verified_by !== null
+                    ? null
+                    : self::latestNameserverVerification($record)?->error)
                 ->placeholder('None'),
             TextEntry::make('revision'),
             TextEntry::make('dnsDeployments.status')->label('Deployment states')->badge(),

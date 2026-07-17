@@ -91,7 +91,7 @@ Open **System DNS identity** and use this disposable example:
 
 Enter `cdnf.test` first and leave the field. Confirm proxy hostname, two nameserver hostnames, SOA primary, and SOA mailbox fill automatically. IPv4 and IPv6 glue must still be supplied. Click **Validate and queue update**.
 
-Expected: a success notification contains an operation ID. Open **Operations** and wait for `platform_dns_identity.update` to become `succeeded`.
+Expected: a success notification contains an operation ID. Open **Operations** and wait for `platform_dns_identity.update` to become `succeeded`. With a healthy enabled DNS cluster, PowerDNS must contain a `cdnf.test` platform zone with SOA, apex NS, and A/AAAA records for both nameserver hostnames. Updating System DNS Identity increments its revision and atomically replaces that derived zone; a failed deployment retains the previous active records.
 
 Negative checks: `127.0.0.1` is not valid glue for this example, malformed IPv6 is rejected, fewer than two nameservers is rejected, and an empty cluster-target list is rejected.
 
@@ -142,7 +142,9 @@ Open the domain. In **Users**, attach `user@example.test`. Confirm the user appe
 
 Click **Verify nameservers**. A queued-operation notification must appear. The domain view must show the latest verification status and error. For a real acceptance pass, configure the registrar with exactly the System DNS Identity NS set, wait for DNS propagation, then retry until verification succeeds. Verification intentionally queries public DNS and does not accept local `/etc/hosts`, PowerAdmin-only records, or an extra registrar nameserver.
 
-After successful verification, click **Activate**. Expected: lifecycle becomes active, the desired revision increases, and deployment reaches `succeeded` on every enabled cluster.
+For local UI qualification without a public resolver, sign in as an administrator and choose **Force verify (local test)**. Confirm the warning explicitly says public delegation is not checked. The action records the administrator identity and audit event, then unlocks activation. This bypass qualifies only the local browser workflow; it does not satisfy the real nameserver-verification release checkbox.
+
+After successful verification, confirm at least one DNS cluster is both `healthy` and enabled, then click **Activate**. Activation must be rejected if no healthy cluster is enabled. Expected: lifecycle becomes active, the desired revision increases, and deployment reaches `succeeded` on every enabled cluster; PowerDNS contains the generated SOA and platform NS records even when the user has not created records yet.
 
 ### DNS records inside a domain
 

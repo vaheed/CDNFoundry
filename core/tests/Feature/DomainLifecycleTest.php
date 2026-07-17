@@ -122,6 +122,19 @@ class DomainLifecycleTest extends TestCase
         Queue::assertPushed(ReconcileDnsZone::class);
     }
 
+    public function test_activation_requires_an_enabled_healthy_dns_cluster(): void
+    {
+        Queue::fake();
+        [$user, $domain] = $this->ownedDomain();
+        $domain->update(['nameservers_verified_at' => now()]);
+        DnsCluster::query()->create([...$this->clusterData(), 'enabled' => false]);
+
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/activate")
+            ->assertConflict()->assertJsonPath('message', 'Enable at least one healthy DNS cluster before activation.');
+        $this->assertSame(DomainLifecycleState::PendingVerification, $domain->refresh()->lifecycle_state);
+        Queue::assertNothingPushed();
+    }
+
     public function test_deletion_creates_every_target_tombstone_and_due_job_removes_runtime_zone(): void
     {
         Queue::fake();
@@ -157,7 +170,7 @@ class DomainLifecycleTest extends TestCase
     private function clusterData(): array
     {
         return [
-            'name' => 'dns-eu-1', 'location' => 'eu-test', 'enabled' => true,
+            'name' => 'dns-eu-1', 'location' => 'eu-test', 'enabled' => true, 'last_health_status' => 'healthy',
             'api_url' => 'http://pdns.test', 'api_key' => 'private-test-key', 'server_id' => 'localhost',
             'nameservers' => [['hostname' => 'ns1.cdnf.test'], ['hostname' => 'ns2.cdnf.test']], 'capacity_zones' => 1000,
         ];

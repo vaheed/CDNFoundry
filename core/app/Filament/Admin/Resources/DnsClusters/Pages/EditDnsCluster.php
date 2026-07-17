@@ -5,6 +5,7 @@ namespace App\Filament\Admin\Resources\DnsClusters\Pages;
 use App\Enums\DomainLifecycleState;
 use App\Filament\Admin\Resources\DnsClusters\DnsClusterResource;
 use App\Jobs\ReconcileDnsZone;
+use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Jobs\TestDnsCluster;
 use App\Models\AuditLog;
 use App\Models\Domain;
@@ -34,6 +35,7 @@ class EditDnsCluster extends EditRecord
     {
         AuditLog::record(auth()->user(), 'dns.cluster_updated', $this->record, [], request()->ip());
         if ($this->record->wasChanged('enabled') && $this->record->enabled) {
+            ReconcilePlatformDnsIdentity::dispatch();
             Domain::query()->where('lifecycle_state', DomainLifecycleState::Active->value)->orderBy('id')
                 ->chunkById(100, fn ($domains) => $domains->each(fn ($domain) => ReconcileDnsZone::dispatch($domain->id)));
         }

@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\Operation;
 use App\Models\PlatformDnsSetting;
 use App\Models\User;
+use App\Support\PowerDnsClient;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -24,16 +25,20 @@ class ApplyPlatformDnsSettings implements ShouldBeUnique, ShouldQueue
         $this->onQueue('runtime');
     }
 
-    public function handle(): void
+    public function handle(PowerDnsClient $client): void
     {
         $operation = Operation::query()->findOrFail($this->operationId);
         if ($operation->status === 'succeeded') {
             return;
         }
         $operation->update(['status' => 'running', 'started_at' => now(), 'attempts' => $operation->attempts + 1]);
-        PlatformDnsSetting::query()->updateOrCreate(['id' => 1], $operation->input);
-        $operation->update(['status' => 'succeeded', 'result' => ['settings_id' => 1], 'finished_at' => now(), 'error' => null]);
+        $current = PlatformDnsSetting::query()->find(1);
+        PlatformDnsSetting::query()->updateOrCreate(['id' => 1], [
+            ...$operation->input,
+            'revision' => ($current?->revision ?? 0) + 1,
+        ]);
         AuditLog::record($operation->actor_id ? User::find($operation->actor_id) : null, 'platform_dns_settings.applied', $operation);
+        (new ReconcilePlatformDnsIdentity($operation->getKey()))->handle($client);
     }
 
     public function uniqueId(): string

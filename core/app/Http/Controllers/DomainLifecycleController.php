@@ -54,6 +54,11 @@ class DomainLifecycleController extends Controller
         Gate::authorize('update', $domain);
         abort_if($domain->lifecycle_state === DomainLifecycleState::Deprovisioning, 409, 'A deprovisioning domain cannot be activated.');
         abort_if($domain->nameservers_verified_at === null, 409, 'Verify the required nameservers before activation.');
+        abort_unless(
+            DnsCluster::query()->where('enabled', true)->where('last_health_status', 'healthy')->exists(),
+            409,
+            'Enable at least one healthy DNS cluster before activation.',
+        );
 
         $operation = DB::transaction(function () use ($request, $domain): Operation {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
@@ -68,11 +73,7 @@ class DomainLifecycleController extends Controller
                     'input' => ['domain_id' => $locked->id, 'revision' => $locked->revision],
                 ]);
         });
-        if (DnsCluster::query()->where('enabled', true)->exists()) {
-            ReconcileDnsZone::dispatch($domain->id)->afterCommit();
-        } else {
-            $operation->update(['status' => 'succeeded', 'result' => ['domain_id' => $domain->id, 'targets' => 0], 'finished_at' => now()]);
-        }
+        ReconcileDnsZone::dispatch($domain->id)->afterCommit();
 
         return response()->json(['data' => $operation->refresh()], 202);
     }

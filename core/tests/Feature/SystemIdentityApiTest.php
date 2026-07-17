@@ -3,9 +3,13 @@
 namespace Tests\Feature;
 
 use App\Jobs\ApplyPlatformDnsSettings;
+use App\Models\DnsCluster;
 use App\Models\Operation;
+use App\Models\PlatformDnsDeployment;
 use App\Models\User;
+use App\Support\PowerDnsClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -34,12 +38,39 @@ class SystemIdentityApiTest extends TestCase
             ApplyPlatformDnsSettings::class,
             fn (ApplyPlatformDnsSettings $job): bool => $job->operationId === $operationId,
         );
-        (new ApplyPlatformDnsSettings($operationId))->handle();
+        (new ApplyPlatformDnsSettings($operationId))->handle(app(PowerDnsClient::class));
         $this->assertDatabaseHas('operations', ['id' => $operationId, 'type' => 'platform_dns_identity.update', 'status' => 'succeeded']);
         $this->assertDatabaseHas('platform_dns_settings', ['id' => 1, 'platform_domain' => 'cdnf.test']);
         $this->actingAs($admin)->getJson("/api/operations/$operationId")->assertOk();
         $this->assertDatabaseHas('audit_logs', ['action' => 'platform_dns_settings.update_requested']);
         $this->assertDatabaseHas('audit_logs', ['action' => 'platform_dns_settings.applied']);
+    }
+
+    public function test_platform_identity_deploys_soa_ns_and_nameserver_glue_to_healthy_clusters(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $cluster = DnsCluster::query()->create([
+            'name' => 'dns-local', 'location' => 'test', 'enabled' => true, 'last_health_status' => 'healthy',
+            'api_url' => 'http://pdns.test', 'api_key' => 'private-test-key', 'server_id' => 'localhost',
+            'nameservers' => [['hostname' => 'ns1.cdnf.test'], ['hostname' => 'ns2.cdnf.test']],
+        ]);
+        $operation = Operation::query()->create([
+            'actor_id' => $admin->id, 'type' => 'platform_dns_identity.update', 'status' => 'pending',
+            'input' => $this->validPayload(),
+        ]);
+        Http::fake([
+            '*/zones/cdnf.test.' => Http::sequence()->push([], 404)->push([], 204),
+            '*/zones' => Http::response([], 201),
+        ]);
+
+        (new ApplyPlatformDnsSettings($operation->id))->handle(app(PowerDnsClient::class));
+
+        $deployment = PlatformDnsDeployment::query()->where('dns_cluster_id', $cluster->id)->firstOrFail();
+        $this->assertSame('succeeded', $deployment->status);
+        $this->assertSame(1, $deployment->deployed_revision);
+        $this->assertSame(['A', 'AAAA', 'NS', 'SOA'], collect($deployment->active_rrsets)->pluck('type')->unique()->sort()->values()->all());
+        $this->assertSame('succeeded', $operation->refresh()->status);
+        $this->assertSame(1, $operation->result['targets']);
     }
 
     public function test_dns_identity_requires_both_ipv4_and_ipv6_glue(): void

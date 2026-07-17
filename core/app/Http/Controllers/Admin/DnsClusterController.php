@@ -6,6 +6,7 @@ use App\Enums\DomainLifecycleState;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\DnsClusterResource;
 use App\Jobs\ReconcileDnsZone;
+use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Jobs\TestDnsCluster;
 use App\Models\AuditLog;
 use App\Models\DnsCluster;
@@ -90,6 +91,7 @@ class DnsClusterController extends Controller
         if (! $cluster->enabled) {
             $cluster->update(['enabled' => true]);
             AuditLog::record($request->user(), 'dns.cluster_enabled', $cluster, [], $request->ip());
+            ReconcilePlatformDnsIdentity::dispatch()->afterCommit();
             Domain::query()->where('lifecycle_state', DomainLifecycleState::Active->value)->orderBy('id')->chunkById(100, fn ($domains) => $domains->each(fn (Domain $domain) => ReconcileDnsZone::dispatch($domain->id)->afterCommit()));
         }
 
