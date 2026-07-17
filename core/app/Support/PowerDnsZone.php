@@ -24,6 +24,10 @@ final class PowerDnsZone
             $rows->push(['name' => $domain->name.'.', 'type' => 'NS', 'ttl' => $settings->default_ttl, 'content' => rtrim($nameserver['hostname'], '.').'.']);
         }
         foreach ($domain->dnsRecords()->orderBy('id')->get() as $record) {
+            if ($record->mode === 'geo_dns') {
+                $rows->push(['name' => $record->name.'.', 'type' => 'LUA', 'ttl' => $record->ttl, 'content' => GeoDnsCompiler::compile($record->type, $record->geo_config)]);
+                continue;
+            }
             $content = match ($record->type) {
                 'MX' => $record->priority.' '.$record->content,
                 'SRV' => implode(' ', [$record->priority, $record->weight, $record->port, $record->content]),

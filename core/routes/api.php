@@ -14,6 +14,7 @@ use App\Http\Controllers\DnsZoneController;
 use App\Http\Controllers\DomainController;
 use App\Http\Controllers\DomainLifecycleController;
 use App\Http\Controllers\HealthController;
+use App\Http\Controllers\GeoDnsController;
 use App\Http\Controllers\NameserverController;
 use App\Http\Controllers\OperationController;
 use App\Http\Controllers\TokenController;
@@ -48,6 +49,9 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function (): void {
     Route::post('/domains/{domain}/dns/import', [DnsZoneController::class, 'import'])->middleware('idempotent');
     Route::get('/domains/{domain}/dns/export', [DnsZoneController::class, 'export']);
     Route::get('/domains/{domain}/dns/records/{record}', [DnsRecordController::class, 'show']);
+    Route::get('/domains/{domain}/dns/records/{record}/geo', [GeoDnsController::class, 'show']);
+    Route::put('/domains/{domain}/dns/records/{record}/geo', [GeoDnsController::class, 'update'])->middleware('idempotent');
+    Route::post('/domains/{domain}/dns/records/{record}/geo/preview', [GeoDnsController::class, 'preview']);
     Route::patch('/domains/{domain}/dns/records/{record}', [DnsRecordController::class, 'update'])->middleware('idempotent');
     Route::delete('/domains/{domain}/dns/records/{record}', [DnsRecordController::class, 'destroy'])->middleware('idempotent');
     Route::get('/domains/{domain}/dns/deployment', [DnsDeploymentController::class, 'show']);

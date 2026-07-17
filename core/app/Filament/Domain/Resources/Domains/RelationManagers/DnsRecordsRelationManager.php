@@ -17,6 +17,7 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Textarea;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
@@ -40,8 +41,25 @@ class DnsRecordsRelationManager extends RelationManager
 
                 return $types->mapWithKeys(fn (string $type): array => [$type => $type])->all();
             })->required()->live(),
+            Select::make('mode')->options(['dns_only' => 'DNS only', 'geo_dns' => 'Geo-DNS'])
+                ->default('dns_only')->required()->live()
+                ->helperText('Geo-DNS supports A/AAAA. Without trusted ECS, location represents the recursive resolver.'),
             TextInput::make('name')->required()->default('@')->maxLength(253),
-            TextInput::make('content')->required()->maxLength(4096),
+            TextInput::make('content')->required(fn ($get): bool => $get('mode') !== 'geo_dns')->maxLength(4096)
+                ->visible(fn ($get): bool => $get('mode') !== 'geo_dns'),
+            Textarea::make('geo')->label('Geo-DNS configuration (JSON)')->rows(12)
+                ->visible(fn ($get): bool => $get('mode') === 'geo_dns')
+                ->required(fn ($get): bool => $get('mode') === 'geo_dns')
+                ->formatStateUsing(fn ($state, ?DnsRecord $record): string => json_encode($record?->geo_config ?? $state ?? [
+                    'default' => [], 'continents' => new \stdClass, 'countries' => new \stdClass,
+                ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES))
+                ->dehydrateStateUsing(function ($state): array {
+                    $decoded = json_decode((string) $state, true);
+                    if (! is_array($decoded)) {
+                        throw \Illuminate\Validation\ValidationException::withMessages(['geo' => 'Geo-DNS configuration must be valid JSON.']);
+                    }
+                    return $decoded;
+                })->helperText('Country overrides win over continent overrides. Limits: 64 countries, 7 continents, 8 targets per set.'),
             TextInput::make('ttl')->numeric()->required()->default(300)->minValue(30)->maxValue(2147483647),
             TextInput::make('priority')->numeric()->default(0)->minValue(0)->maxValue(65535)->visible(fn ($get): bool => in_array($get('type'), ['MX', 'SRV'], true)),
             TextInput::make('weight')->numeric()->default(0)->minValue(0)->maxValue(65535)->visible(fn ($get): bool => $get('type') === 'SRV'),

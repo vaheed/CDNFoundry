@@ -69,7 +69,9 @@ class DnsRecordController extends Controller
         $updated = DB::transaction(function () use ($request, $domain, $record): DnsRecord {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $current = DnsRecord::query()->where('domain_id', $locked->id)->lockForUpdate()->findOrFail($record->id);
-            $data = DnsRecordData::validate(array_merge($current->only(['type', 'name', 'content', 'ttl', 'priority', 'weight', 'port', 'mode']), $request->all()), $locked->name);
+            $existing = $current->only(['type', 'name', 'content', 'ttl', 'priority', 'weight', 'port', 'mode']);
+            $existing['geo'] = $current->geo_config;
+            $data = DnsRecordData::validate(array_merge($existing, $request->all()), $locked->name);
             $this->assertCanManageDelegation($request, $current->type);
             $this->assertCanManageDelegation($request, $data['type']);
             $this->assertValidFinalZone($locked, collect([$data]), collect([$current->id]));
@@ -118,7 +120,7 @@ class DnsRecordController extends Controller
         $result = DB::transaction(function () use ($request, $domain, $validated): array {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $existing = $locked->dnsRecords()->lockForUpdate()->get()->keyBy('id');
-            $final = $existing->map(fn (DnsRecord $record): array => $record->only(['type', 'name', 'content', 'content_hash', 'ttl', 'priority', 'weight', 'port', 'mode']));
+            $final = $existing->map(function (DnsRecord $record): array { $row = $record->only(['type', 'name', 'content', 'content_hash', 'ttl', 'priority', 'weight', 'port', 'mode', 'geo_config']); $row['geo'] = $record->geo_config; return $row; });
             $creates = [];
             $updates = [];
             $deletes = [];
@@ -179,7 +181,7 @@ class DnsRecordController extends Controller
     private function assertValidFinalZone(Domain $domain, Collection $additions, ?Collection $excludedIds = null): void
     {
         $rows = $domain->dnsRecords()->when($excludedIds?->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $excludedIds))->get()
-            ->map(fn (DnsRecord $record): array => $record->only(['type', 'name', 'content', 'content_hash', 'ttl', 'priority', 'weight', 'port', 'mode']))
+            ->map(fn (DnsRecord $record): array => $record->only(['type', 'name', 'content', 'content_hash', 'ttl', 'priority', 'weight', 'port', 'mode', 'geo_config']))
             ->concat($additions);
         DnsZoneValidator::assertValid($rows);
     }

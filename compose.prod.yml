@@ -17,6 +17,7 @@ x-core-env: &core-env
   REDIS_HOST: redis
   REDIS_CLIENT: predis
   REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+  GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb
 
 x-core: &core
   image: ${CDNF_CORE_IMAGE:-cdnfoundry/core:local}
@@ -31,7 +32,7 @@ x-core: &core
   restart: unless-stopped
   read_only: true
   tmpfs: [/tmp]
-  volumes: [core-storage:/app/storage]
+  volumes: [core-storage:/app/storage, mmdb:/mmdb:ro]
 
 services:
   core:
@@ -129,7 +130,10 @@ services:
     environment:
       PDNS_gpgsql_password: ${PDNS_DB_PASSWORD}
       PDNS_api_key: ${PDNS_API_KEY:?PDNS_API_KEY is required}
-    volumes: [./docker/pdns/pdns.conf:/etc/powerdns/pdns.conf:ro]
+    volumes:
+      - ./docker/pdns/pdns.conf:/etc/powerdns/pdns.conf:ro
+      - ./docker/pdns/geoip-zones.yml:/etc/powerdns/geoip-zones.yml:ro
+      - mmdb:/mmdb:ro
     depends_on:
       pdns-db: { condition: service_healthy }
     networks: [dns-private]

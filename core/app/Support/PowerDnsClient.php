@@ -28,6 +28,10 @@ class PowerDnsClient
             $exists->throw();
         }
 
+        if (collect($rrsets)->contains(fn (array $rrset): bool => $rrset['type'] === 'LUA')) {
+            $request->put("/api/v1/servers/{$cluster->server_id}/zones/$zoneId/metadata/ENABLE-LUA-RECORDS", ['metadata' => ['1']])->throw();
+        }
+
         $nextKeys = collect($rrsets)->mapWithKeys(fn (array $rrset): array => [$rrset['name'].'|'.$rrset['type'] => true]);
         $deletes = collect($previousRrsets)
             ->reject(fn (array $rrset): bool => $nextKeys->has($rrset['name'].'|'.$rrset['type']))

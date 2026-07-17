@@ -9,7 +9,7 @@ final class DnsRecordData
 {
     public const TYPES = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'CAA', 'SRV', 'PTR'];
 
-    /** @return array{type:string,name:string,content:string,content_hash:string,ttl:int,priority:int,weight:int,port:int,mode:string} */
+    /** @return array<string,mixed> */
     public static function validate(array $input, string $zone): array
     {
         if (isset($input['type']) && is_string($input['type'])) {
@@ -18,18 +18,27 @@ final class DnsRecordData
         $validator = Validator::make($input, [
             'type' => ['required', 'string', 'in:'.implode(',', self::TYPES)],
             'name' => ['required', 'string', 'max:253'],
-            'content' => ['required', 'string', 'max:4096'],
+            'content' => ['required_unless:mode,geo_dns', 'string', 'max:4096'],
             'ttl' => ['required', 'integer', 'between:30,2147483647'],
             'priority' => ['nullable', 'integer', 'between:0,65535'],
             'weight' => ['nullable', 'integer', 'between:0,65535'],
             'port' => ['nullable', 'integer', 'between:0,65535'],
-            'mode' => ['nullable', 'in:dns_only'],
+            'mode' => ['nullable', 'in:dns_only,geo_dns'],
+            'geo' => ['required_if:mode,geo_dns', 'nullable', 'array'],
         ]);
         $validator->after(function ($validator) use ($input, $zone): void {
             try {
                 $type = strtoupper((string) ($input['type'] ?? ''));
                 $name = self::normalizeOwner((string) ($input['name'] ?? ''), $zone);
-                self::normalizeContent($type, (string) ($input['content'] ?? ''), $zone);
+                if (($input['mode'] ?? 'dns_only') === 'geo_dns') {
+                    if (! in_array($type, ['A', 'AAAA'], true)) {
+                        $validator->errors()->add('mode', 'Geo-DNS is supported only for A and AAAA records.');
+                    } elseif (is_array($input['geo'] ?? null)) {
+                        GeoDnsConfig::validate($input['geo'], $type);
+                    }
+                } else {
+                    self::normalizeContent($type, (string) ($input['content'] ?? ''), $zone);
+                }
                 if ($type === 'MX' && ! array_key_exists('priority', $input)) {
                     $validator->errors()->add('priority', 'MX records require a priority.');
                 }
@@ -55,18 +64,21 @@ final class DnsRecordData
         }
 
         $type = strtoupper((string) $input['type']);
-        $content = self::normalizeContent($type, (string) $input['content'], $zone);
+        $mode = ($input['mode'] ?? 'dns_only') === 'geo_dns' ? 'geo_dns' : 'dns_only';
+        $geo = $mode === 'geo_dns' ? GeoDnsConfig::validate($input['geo'], $type) : null;
+        $content = $mode === 'geo_dns' ? $geo['default'][0] : self::normalizeContent($type, (string) $input['content'], $zone);
 
         return [
             'type' => $type,
             'name' => self::normalizeOwner((string) $input['name'], $zone),
             'content' => $content,
-            'content_hash' => hash('sha256', $content),
+            'content_hash' => hash('sha256', $mode === 'geo_dns' ? json_encode($geo, JSON_THROW_ON_ERROR) : $content),
             'ttl' => (int) $input['ttl'],
             'priority' => (int) ($input['priority'] ?? 0),
             'weight' => (int) ($input['weight'] ?? 0),
             'port' => (int) ($input['port'] ?? 0),
-            'mode' => 'dns_only',
+            'mode' => $mode,
+            'geo_config' => $geo,
         ];
     }
 

@@ -11,7 +11,7 @@ final class DnsZoneValidator
     {
         $logical = [];
         foreach ($rows as $row) {
-            $key = implode('|', [$row['name'], $row['type'], $row['content'], $row['priority'], $row['weight'], $row['port']]);
+            $key = implode('|', [$row['name'], $row['type'], $row['content'], $row['priority'], $row['weight'], $row['port'], $row['mode'] ?? 'dns_only']);
             if (isset($logical[$key])) {
                 throw ValidationException::withMessages(['records' => 'The zone contains a duplicate logical DNS record.']);
             }
@@ -21,6 +21,11 @@ final class DnsZoneValidator
             $types = $ownerRows->pluck('type')->unique();
             if ($types->contains('CNAME') && ($types->count() > 1 || $ownerRows->count() > 1)) {
                 throw ValidationException::withMessages(['records' => "CNAME cannot coexist with other records at $name."]);
+            }
+            foreach ($ownerRows->groupBy('type') as $typeRows) {
+                if ($typeRows->where('mode', 'geo_dns')->count() > 1 || ($typeRows->where('mode', 'geo_dns')->isNotEmpty() && $typeRows->count() > 1)) {
+                    throw ValidationException::withMessages(['records' => "A Geo-DNS record must be the only record of its type at $name."]);
+                }
             }
         }
     }

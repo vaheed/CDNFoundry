@@ -1,5 +1,7 @@
 # DNS record reference
 
+For geographic A/AAAA answers, see [Geo-DNS records](geo-dns.md).
+
 CDNFoundry manages authoritative desired state for `A`, `AAAA`, `CNAME`, `MX`, `TXT`, `NS`, `CAA`, `SRV`, and reverse-zone `PTR` records. Every record is DNS-only in Phase 2.
 
 Owners may be `@`, relative to the managed zone, or fully qualified inside it. Names are normalized to lowercase ASCII/Punycode. TTL values must be between 30 and 2,147,483,647 seconds.

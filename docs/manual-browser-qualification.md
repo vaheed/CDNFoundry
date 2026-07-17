@@ -215,6 +215,17 @@ Repeat the token one-time-display/revocation check and profile update using the 
 
 Directly open `/admin/users`, `/admin/dns-clusters`, `/admin/audit-logs`, and `/horizon`. Expected: the domain user is forbidden from all four.
 
+### Geo-DNS record workflow
+
+1. As the assigned domain user, create an A record in Geo-DNS mode with a default set, an `EU` override, and an `IR` override.
+2. Confirm invalid JSON, duplicate targets, invalid codes, and an IPv6 target in an A record are rejected without changing the revision.
+3. Edit the record and confirm the mode and configuration persist.
+4. Call the authenticated preview endpoint for an MMDB-known address and `2001:db8::1`; confirm country wins over continent and unknown returns default.
+5. Query DNSdist with trusted ECS from at least three known locations and without ECS. Confirm answers match and record the resolver-location limitation.
+6. Force an invalid MMDB update and failed Geo-DNS deployment. Confirm the previous MMDB and active answer remain valid while failure is visible.
+
+Browser automation remains prohibited for coding agents; this workflow is manual and user-owned.
+
 ## 5. Runtime and diagnostic verification
 
 ### Horizon

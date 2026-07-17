@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'geoip' => ['database' => env('GEOIP_DATABASE', '/mmdb/GeoLite2-City.mmdb')],
 
     /*
     |--------------------------------------------------------------------------

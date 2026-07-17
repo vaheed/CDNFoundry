@@ -1008,6 +1008,67 @@
                 }
             }
         },
+        "/domains/{domain}/dns/records/{record}/geo": {
+            "get": {
+                "operationId": "geo.dns.controller.show",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            },
+            "put": {
+                "operationId": "geo.dns.controller.update",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
+        "/domains/{domain}/dns/records/{record}/geo/preview": {
+            "post": {
+                "operationId": "geo.dns.controller.preview",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
         "/domains/{domain}/status": {
             "get": {
                 "operationId": "domain.lifecycle.controller.status",
