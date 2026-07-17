@@ -12,3 +12,5 @@ Artisan::command('inspire', function () {
 Schedule::command('horizon:snapshot')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('model:prune', ['--model' => IdempotencyKey::class])->hourly()->withoutOverlapping();
 Schedule::command('dns:deprovision-due')->everyMinute()->withoutOverlapping();
+Schedule::command('edge:complete-placement-drains')->everyMinute()->withoutOverlapping();
+Schedule::command('edge:dispatch-origin-checks')->everyMinute()->withoutOverlapping();

@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Domain;
+use App\Models\Edge;
 use App\Models\PlatformDnsSetting;
 use RuntimeException;
 
@@ -24,6 +25,21 @@ final class PowerDnsZone
             $rows->push(['name' => $domain->name.'.', 'type' => 'NS', 'ttl' => $settings->default_ttl, 'content' => rtrim($nameserver['hostname'], '.').'.']);
         }
         foreach ($domain->dnsRecords()->orderBy('id')->get() as $record) {
+            if ($record->mode === 'proxied') {
+                if ($record->name !== $domain->name) {
+                    $rows->push(['name' => $record->name.'.', 'type' => 'CNAME', 'ttl' => $record->ttl, 'content' => rtrim($settings->proxy_hostname, '.').'.']);
+
+                    continue;
+                }
+                $addresses = Edge::query()->where('enabled', true)->where('drained', false)
+                    ->where('last_heartbeat_at', '>=', now()->subSeconds((int) config('edge.heartbeat_fresh_seconds')))
+                    ->pluck($record->type === 'AAAA' ? 'ipv6' : 'ipv4')->filter()->unique()->sort()->values();
+                foreach ($addresses as $address) {
+                    $rows->push(['name' => $record->name.'.', 'type' => $record->type === 'AAAA' ? 'AAAA' : 'A', 'ttl' => $record->ttl, 'content' => $address]);
+                }
+
+                continue;
+            }
             if ($record->mode === 'geo_dns') {
                 $rows->push(['name' => $record->name.'.', 'type' => 'LUA', 'ttl' => $record->ttl, 'content' => GeoDnsCompiler::compile($record->type, $record->geo_config)]);
 

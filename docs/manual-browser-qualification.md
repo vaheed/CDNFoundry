@@ -48,6 +48,14 @@ Application logins:
 
 PowerAdmin is diagnostic only. Never use it to configure desired state. Any direct edit changes disposable derived state and can be overwritten by reconciliation. PowerDNS API, PostgreSQL, Valkey, ClickHouse, and origins intentionally have no host port; inspect them through Compose commands, not public browser ports.
 
+## Phase 4 proxy and edge job
+
+This job is manual and was not run by coding agents. In the domain DNS relation, create proxied A hostnames for the apex and a subdomain with different origins. Confirm the content field is replaced by explicit scheme, destination, port, Host header, SNI, TLS verification, timeouts, retries, and WebSocket fields. Confirm Geo-DNS and proxy cannot both be selected and blocked/private destinations show validation errors.
+
+As administrator, create two dual-stack edges, save each one-time bootstrap token, register them, and confirm fresh listener/cell capacity heartbeats. Send real HTTP and HTTPS traffic through each edge and verify the configured origin Host and SNI. Drain one edge and confirm routing state changes without recompiling every domain. Submit a deliberately bad-checksum candidate and confirm the rejection is visible while the previous configuration continues serving. Rotate one identity and confirm its old credential cannot heartbeat or fetch configuration.
+
+Open **Administration → Operations** after changing a proxied hostname, requesting deployment, and starting an origin test. Confirm **Edge domain deployment** and **Edge origin test** rows appear, status updates on the 10-second poll, filters include both types, failures show a bounded reason, and retry creates work without duplicating an active deployment.
+
 To choose different PowerAdmin development credentials before startup:
 
 ```sh

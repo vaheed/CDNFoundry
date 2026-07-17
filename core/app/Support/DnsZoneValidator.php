@@ -26,6 +26,9 @@ final class DnsZoneValidator
                 if ($typeRows->where('mode', 'geo_dns')->count() > 1 || ($typeRows->where('mode', 'geo_dns')->isNotEmpty() && $typeRows->count() > 1)) {
                     throw ValidationException::withMessages(['records' => "A Geo-DNS record must be the only record of its type at $name."]);
                 }
+                if ($typeRows->where('mode', 'proxied')->count() > 1 || ($typeRows->where('mode', 'proxied')->isNotEmpty() && $typeRows->count() > 1)) {
+                    throw ValidationException::withMessages(['records' => "A proxied hostname must be the only record of its type at $name."]);
+                }
             }
         }
     }

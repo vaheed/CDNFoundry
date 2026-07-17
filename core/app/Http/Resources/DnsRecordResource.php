@@ -14,6 +14,8 @@ class DnsRecordResource extends JsonResource
             'content' => $this->content, 'ttl' => $this->ttl, 'priority' => $this->priority,
             'weight' => $this->weight, 'port' => $this->port, 'mode' => $this->mode,
             'geo' => $this->when($this->mode === 'geo_dns', $this->geo_config),
+            'origin' => $this->when($this->mode === 'proxied', $this->origin),
+            'origin_health' => $this->when($this->mode === 'proxied', $this->origin_health),
             'created_at' => $this->created_at?->toIso8601String(), 'updated_at' => $this->updated_at?->toIso8601String(),
         ];
     }

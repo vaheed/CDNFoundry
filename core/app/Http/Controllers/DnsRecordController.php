@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Enums\DomainLifecycleState;
 use App\Http\Resources\DnsRecordResource;
 use App\Jobs\ReconcileDnsZone;
+use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
 use App\Models\DnsCluster;
 use App\Models\DnsRecord;
 use App\Models\Domain;
+use App\Models\Operation;
 use App\Support\DnsRecordData;
 use App\Support\DnsZoneValidator;
 use Illuminate\Http\JsonResponse;
@@ -49,7 +51,7 @@ class DnsRecordController extends Controller
 
             return $record;
         });
-        $this->queueReconciliation($domain);
+        $this->queueReconciliation($domain, $request);
 
         return DnsRecordResource::make($record)->response()->setStatusCode(201);
     }
@@ -69,7 +71,7 @@ class DnsRecordController extends Controller
         $updated = DB::transaction(function () use ($request, $domain, $record): DnsRecord {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $current = DnsRecord::query()->where('domain_id', $locked->id)->lockForUpdate()->findOrFail($record->id);
-            $existing = $current->only(['type', 'name', 'content', 'ttl', 'priority', 'weight', 'port', 'mode']);
+            $existing = $current->only(['type', 'name', 'content', 'ttl', 'priority', 'weight', 'port', 'mode', 'origin']);
             $existing['geo'] = $current->geo_config;
             $data = DnsRecordData::validate(array_merge($existing, $request->all()), $locked->name);
             $this->assertCanManageDelegation($request, $current->type);
@@ -83,7 +85,7 @@ class DnsRecordController extends Controller
 
             return $current->refresh();
         });
-        $this->queueReconciliation($domain);
+        $this->queueReconciliation($domain, $request);
 
         return DnsRecordResource::make($updated);
     }
@@ -102,7 +104,7 @@ class DnsRecordController extends Controller
                 $this->incrementRevision($locked);
             }
         });
-        $this->queueReconciliation($domain);
+        $this->queueReconciliation($domain, $request);
 
         return response()->json(null, 204);
     }
@@ -121,7 +123,7 @@ class DnsRecordController extends Controller
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $existing = $locked->dnsRecords()->lockForUpdate()->get()->keyBy('id');
             $final = $existing->map(function (DnsRecord $record): array {
-                $row = $record->only(['type', 'name', 'content', 'content_hash', 'ttl', 'priority', 'weight', 'port', 'mode', 'geo_config']);
+                $row = $record->only(['type', 'name', 'content', 'content_hash', 'ttl', 'priority', 'weight', 'port', 'mode', 'geo_config', 'origin']);
                 $row['geo'] = $record->geo_config;
 
                 return $row;
@@ -178,7 +180,7 @@ class DnsRecordController extends Controller
 
             return ['revision' => $locked->revision, 'changed' => count($validated['actions'])];
         });
-        $this->queueReconciliation($domain);
+        $this->queueReconciliation($domain, $request);
 
         return response()->json(['data' => $result]);
     }
@@ -201,8 +203,10 @@ class DnsRecordController extends Controller
         abort_unless($record->domain_id === $domain->id, 404);
     }
 
-    private function queueReconciliation(Domain $domain): void
+    private function queueReconciliation(Domain $domain, Request $request): void
     {
+        Operation::coalesceDomain('edge.domain_reconcile', $domain->id, $request->user()?->getKey());
+        ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
         if ($domain->refresh()->lifecycle_state === DomainLifecycleState::Active && DnsCluster::query()->where('enabled', true)->exists()) {
             ReconcileDnsZone::dispatch($domain->id)->afterCommit();
         }

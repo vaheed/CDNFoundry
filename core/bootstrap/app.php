@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\AuthenticateEdge;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureHorizonAdmin;
 use App\Http\Middleware\EnsureUserIsAdmin;
@@ -26,14 +27,16 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin' => EnsureUserIsAdmin::class,
             'idempotent' => IdempotentRequest::class,
             'horizon.admin' => EnsureHorizonAdmin::class,
+            'edge.auth' => AuthenticateEdge::class,
         ]);
+        $middleware->validateCsrfTokens(except: ['edge/v1/*']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
-            fn (Request $request) => $request->is('api/*'),
+            fn (Request $request) => $request->is('api/*') || $request->is('edge/*'),
         );
         $exceptions->render(function (ValidationException $exception, Request $request) {
-            if (! $request->is('api/*')) {
+            if (! $request->is('api/*') && ! $request->is('edge/*')) {
                 return null;
             }
 
@@ -44,7 +47,7 @@ return Application::configure(basePath: dirname(__DIR__))
             ], 422);
         });
         $exceptions->render(function (AuthenticationException $exception, Request $request) {
-            if (! $request->is('api/*')) {
+            if (! $request->is('api/*') && ! $request->is('edge/*')) {
                 return null;
             }
 
@@ -55,7 +58,7 @@ return Application::configure(basePath: dirname(__DIR__))
             ], 401);
         });
         $exceptions->render(function (HttpExceptionInterface $exception, Request $request) {
-            if (! $request->is('api/*')) {
+            if (! $request->is('api/*') && ! $request->is('edge/*')) {
                 return null;
             }
 

@@ -4,9 +4,11 @@ namespace App\Filament\Admin\Resources\Operations;
 
 use App\Filament\Admin\Resources\Operations\Pages\ListOperations;
 use App\Jobs\ApplyPlatformDnsSettings;
+use App\Jobs\DispatchOriginTest;
 use App\Jobs\ImportDnsZone;
 use App\Jobs\ReconcileAllDnsZones;
 use App\Jobs\ReconcileDnsZone;
+use App\Jobs\ReconcileEdgeDomain;
 use App\Jobs\TestDnsCluster;
 use App\Jobs\VerifyDomainNameservers;
 use App\Models\AuditLog;
@@ -27,6 +29,9 @@ class OperationResource extends Resource
         'dns.zone_import' => 'DNS zone import',
         'dns.cluster_test' => 'DNS cluster test',
         'dns.global_reconcile' => 'Global DNS reconciliation',
+        'edge.domain_reconcile' => 'Edge domain deployment',
+        'edge.origin_test' => 'Edge origin test',
+        'edge.global_reconcile' => 'Global edge reconciliation',
     ];
 
     protected static ?string $model = Operation::class;
@@ -79,6 +84,8 @@ class OperationResource extends Resource
                             'dns.zone_import' => ImportDnsZone::dispatch($record->getKey()),
                             'dns.cluster_test' => TestDnsCluster::dispatch($record->getKey()),
                             'dns.global_reconcile' => ReconcileAllDnsZones::dispatch($record->getKey()),
+                            'edge.domain_reconcile' => ReconcileEdgeDomain::dispatch((int) $record->input['domain_id']),
+                            'edge.origin_test' => DispatchOriginTest::dispatch($record->getKey()),
                         };
                         Notification::make()->success()->title('Operation queued for retry')->send();
                     }),

@@ -1634,23 +1634,23 @@ When proxy is enabled:
 
 ##### Control Plane
 
-- [ ] A user enables proxy per supported hostname.
-- [ ] Every proxied hostname has exactly one valid origin.
-- [ ] Different hostnames can use different origins.
-- [ ] Repeated deploy requests do not duplicate active deployments.
-- [ ] Rollback creates a new auditable revision.
-- [ ] Edge-health updates do not rewrite all proxied domains.
-- [ ] Every proxied domain has exactly one active service-pool placement.
-- [ ] Placement migration keeps the previous pool active until target readiness and DNS drain complete.
-- [ ] Origin tests are asynchronous or strictly bounded.
-- [ ] Unsafe, internal, metadata, and loop-producing origin destinations are rejected.
+- [x] A user enables proxy per supported hostname.
+- [x] Every proxied hostname has exactly one valid origin.
+- [x] Different hostnames can use different origins.
+- [x] Repeated deploy requests do not duplicate active deployments.
+- [x] Rollback creates a new auditable revision.
+- [x] Edge-health updates do not rewrite all proxied domains.
+- [x] Every proxied domain has exactly one active service-pool placement.
+- [x] Placement migration keeps the previous pool active until target readiness and DNS drain complete.
+- [x] Origin tests are asynchronous or strictly bounded.
+- [x] Unsafe, internal, metadata, and loop-producing origin destinations are rejected.
 - [ ] DNS rebinding cannot change an approved public origin into a blocked destination.
 
 ##### Edge Agent
 
 - [ ] One-time registration exchanges the bootstrap token for a unique mTLS identity.
-- [ ] Edge identity revocation and replacement work safely.
-- [ ] Heartbeats report version, capacity, listener health, active revision, and bounded per-cell summaries.
+- [x] Edge identity revocation and replacement work safely.
+- [x] Heartbeats report version, capacity, listener health, active revision, and bounded per-cell summaries.
 - [ ] Incremental artifacts and full snapshots both work.
 - [ ] Signature, checksum, schema, or version incompatibility rejects the candidate.
 - [ ] Invalid state never replaces the last valid state.
@@ -1680,10 +1680,10 @@ When proxy is enabled:
 ##### Origin Health
 
 - [ ] Passive failures are reported.
-- [ ] On-demand tests run from selected edges.
-- [ ] Scheduled checks are opt-in, jittered, and bounded.
-- [ ] Latency and stable failure codes reach the control plane.
-- [ ] A large domain count cannot create an unbounded health-check storm.
+- [x] On-demand tests run from selected edges.
+- [x] Scheduled checks are opt-in, jittered, and bounded.
+- [x] Latency and stable failure codes reach the control plane.
+- [x] A large domain count cannot create an unbounded health-check storm.
 
 ##### Browser and Real Runtime
 
@@ -1694,15 +1694,15 @@ When proxy is enabled:
 
 ##### Documentation
 
-- [ ] Edge installation guide
-- [ ] Edge registration, identity revocation, and replacement guide
-- [ ] Origin configuration and unsafe-destination policy guide
-- [ ] Request normalization and forwarding-header contract
-- [ ] Proxy DNS behaviour guide
-- [ ] Edge drain and failure runbook
-- [ ] Full-snapshot recovery guide
-- [ ] Edge-cell sizing and service-pool placement guide
-- [ ] Cell crash, cache exhaustion, and quarantine runbook
+- [x] Edge installation guide
+- [x] Edge registration, identity revocation, and replacement guide
+- [x] Origin configuration and unsafe-destination policy guide
+- [x] Request normalization and forwarding-header contract
+- [x] Proxy DNS behaviour guide
+- [x] Edge drain and failure runbook
+- [x] Full-snapshot recovery guide
+- [x] Edge-cell sizing and service-pool placement guide
+- [x] Cell crash, cache exhaustion, and quarantine runbook
 
 ---
 

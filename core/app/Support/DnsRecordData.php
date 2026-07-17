@@ -23,8 +23,9 @@ final class DnsRecordData
             'priority' => ['nullable', 'integer', 'between:0,65535'],
             'weight' => ['nullable', 'integer', 'between:0,65535'],
             'port' => ['nullable', 'integer', 'between:0,65535'],
-            'mode' => ['nullable', 'in:dns_only,geo_dns'],
+            'mode' => ['nullable', 'in:dns_only,geo_dns,proxied'],
             'geo' => ['required_if:mode,geo_dns', 'nullable', 'array'],
+            'origin' => ['required_if:mode,proxied', 'nullable', 'array'],
         ]);
         $validator->after(function ($validator) use ($input, $zone): void {
             try {
@@ -35,6 +36,12 @@ final class DnsRecordData
                         $validator->errors()->add('mode', 'Geo-DNS is supported only for A and AAAA records.');
                     } elseif (is_array($input['geo'] ?? null)) {
                         GeoDnsConfig::validate($input['geo'], $type);
+                    }
+                } elseif (($input['mode'] ?? 'dns_only') === 'proxied') {
+                    if (! in_array($type, ['A', 'AAAA', 'CNAME'], true)) {
+                        $validator->errors()->add('mode', 'Proxy is supported only for A, AAAA, and CNAME records.');
+                    } elseif (is_array($input['origin'] ?? null)) {
+                        OriginData::validate($input['origin']);
                     }
                 } else {
                     self::normalizeContent($type, (string) ($input['content'] ?? ''), $zone);
@@ -64,9 +71,13 @@ final class DnsRecordData
         }
 
         $type = strtoupper((string) $input['type']);
-        $mode = ($input['mode'] ?? 'dns_only') === 'geo_dns' ? 'geo_dns' : 'dns_only';
+        $mode = in_array(($input['mode'] ?? 'dns_only'), ['geo_dns', 'proxied'], true) ? $input['mode'] : 'dns_only';
         $geo = $mode === 'geo_dns' ? GeoDnsConfig::validate($input['geo'], $type) : null;
-        $content = $mode === 'geo_dns' ? $geo['default'][0] : self::normalizeContent($type, (string) $input['content'], $zone);
+        $origin = $mode === 'proxied' ? OriginData::validate($input['origin']) : null;
+        if ($origin !== null) {
+            OriginData::resolveAndValidate($origin['host']);
+        }
+        $content = $mode === 'geo_dns' ? $geo['default'][0] : ($mode === 'proxied' ? $origin['host'] : self::normalizeContent($type, (string) $input['content'], $zone));
 
         return [
             'type' => $type,
@@ -79,6 +90,7 @@ final class DnsRecordData
             'port' => (int) ($input['port'] ?? 0),
             'mode' => $mode,
             'geo_config' => $geo,
+            'origin' => $origin,
         ];
     }
 

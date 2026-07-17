@@ -4,10 +4,12 @@ namespace App\Filament\Domain\Resources\Domains\RelationManagers;
 
 use App\Enums\DomainLifecycleState;
 use App\Jobs\ReconcileDnsZone;
+use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
 use App\Models\DnsCluster;
 use App\Models\DnsRecord;
 use App\Models\Domain;
+use App\Models\Operation;
 use App\Support\DnsRecordData;
 use App\Support\DnsZoneValidator;
 use App\Support\GeoDnsConfig;
@@ -22,6 +24,7 @@ use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
@@ -47,12 +50,22 @@ class DnsRecordsRelationManager extends RelationManager
 
                 return $types->mapWithKeys(fn (string $type): array => [$type => $type])->all();
             })->required()->live(),
-            Select::make('mode')->options(['dns_only' => 'DNS only', 'geo_dns' => 'Geo-DNS'])
+            Select::make('mode')->options(['dns_only' => 'DNS only', 'geo_dns' => 'Geo-DNS', 'proxied' => 'Proxied'])
                 ->default('dns_only')->required()->live()
-                ->helperText('Geo-DNS supports A/AAAA. Without trusted ECS, location represents the recursive resolver.'),
+                ->helperText('Proxy supports A/AAAA/CNAME and returns CDNFoundry edge addresses. Proxy and Geo-DNS are mutually exclusive.'),
             TextInput::make('name')->required()->default('@')->maxLength(253),
-            TextInput::make('content')->required(fn ($get): bool => $get('mode') !== 'geo_dns')->maxLength(4096)
-                ->visible(fn ($get): bool => $get('mode') !== 'geo_dns'),
+            TextInput::make('content')->required(fn ($get): bool => $get('mode') === 'dns_only')->maxLength(4096)
+                ->visible(fn ($get): bool => $get('mode') === 'dns_only'),
+            TextInput::make('origin.host')->label('Private origin hostname or IP')->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
+            Select::make('origin.scheme')->options(['http' => 'HTTP', 'https' => 'HTTPS'])->default('http')->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
+            TextInput::make('origin.port')->numeric()->default(80)->minValue(1)->maxValue(65535)->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
+            TextInput::make('origin.host_header')->label('Origin Host header')->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
+            TextInput::make('origin.sni')->label('TLS SNI')->visible(fn ($get): bool => $get('mode') === 'proxied'),
+            Toggle::make('origin.verify_tls')->label('Verify origin TLS')->default(true)->visible(fn ($get): bool => $get('mode') === 'proxied'),
+            TextInput::make('origin.connect_timeout_ms')->numeric()->default(1000)->minValue(100)->maxValue(10000)->visible(fn ($get): bool => $get('mode') === 'proxied'),
+            TextInput::make('origin.response_timeout_ms')->numeric()->default(5000)->minValue(500)->maxValue(60000)->visible(fn ($get): bool => $get('mode') === 'proxied'),
+            TextInput::make('origin.retry_count')->numeric()->default(0)->minValue(0)->maxValue(2)->visible(fn ($get): bool => $get('mode') === 'proxied'),
+            Toggle::make('origin.websocket')->label('Allow WebSocket upgrade')->default(false)->visible(fn ($get): bool => $get('mode') === 'proxied'),
             TagsInput::make('geo_default')->label('Default answers')
                 ->visible(fn ($get): bool => $get('mode') === 'geo_dns')
                 ->required(fn ($get): bool => $get('mode') === 'geo_dns')
@@ -82,6 +95,7 @@ class DnsRecordsRelationManager extends RelationManager
             TextColumn::make('content')->limit(64),
             TextColumn::make('ttl')->sortable(),
             TextColumn::make('mode')->badge(),
+            TextColumn::make('origin_health.status')->label('Origin')->placeholder('Not tested')->badge(),
         ])->headerActions([
             CreateAction::make()->createAnother(false)->using(function (array $data): DnsRecord {
                 return $this->createRecord($data);
@@ -188,6 +202,8 @@ class DnsRecordsRelationManager extends RelationManager
 
     private function reconcileIfActive(Domain $domain): void
     {
+        Operation::coalesceDomain('edge.domain_reconcile', $domain->id, auth()->id());
+        ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
         if ($domain->lifecycle_state === DomainLifecycleState::Active && DnsCluster::query()->where('enabled', true)->exists()) {
             ReconcileDnsZone::dispatch($domain->id)->afterCommit();
         }
@@ -195,7 +211,7 @@ class DnsRecordsRelationManager extends RelationManager
 
     private function row(DnsRecord $record): array
     {
-        return $record->only(['type', 'name', 'content', 'content_hash', 'ttl', 'priority', 'weight', 'port', 'mode']);
+        return $record->only(['type', 'name', 'content', 'content_hash', 'ttl', 'priority', 'weight', 'port', 'mode', 'origin']);
     }
 
     private function normalizeGeoForm(array $input): array
