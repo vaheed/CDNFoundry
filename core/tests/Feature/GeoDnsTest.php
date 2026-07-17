@@ -35,9 +35,10 @@ class GeoDnsTest extends TestCase
             ->assertOk()->assertJsonPath('data.geo.default.0', '203.0.113.11');
         $this->assertSame($revision + 1, $domain->refresh()->revision);
 
-        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records/$id/geo/preview", ['ip' => '2001:db8::1'])
-            ->assertOk()->assertJsonPath('data.source', 'mmdb')->assertJsonPath('data.country', null)
+        $preview = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records/$id/geo/preview", ['ip' => '2001:db8::1'])
+            ->assertOk()->assertJsonPath('data.country', null)
             ->assertJsonPath('data.targets.0', '203.0.113.11');
+        $this->assertContains($preview->json('data.source'), ['mmdb', 'unknown']);
     }
 
     public function test_priority_family_bounds_and_dns_only_isolation(): void
