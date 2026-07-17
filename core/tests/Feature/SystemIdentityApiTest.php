@@ -9,6 +9,7 @@ use App\Models\PlatformDnsDeployment;
 use App\Models\User;
 use App\Support\PowerDnsClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
@@ -58,10 +59,11 @@ class SystemIdentityApiTest extends TestCase
             'actor_id' => $admin->id, 'type' => 'platform_dns_identity.update', 'status' => 'pending',
             'input' => $this->validPayload(),
         ]);
-        Http::fake([
-            '*/zones/cdnf.test.' => Http::sequence()->push([], 404)->push([], 204),
-            '*/zones' => Http::response([], 201),
-        ]);
+        Http::fake(fn (Request $request) => match ($request->method()) {
+            'GET' => Http::response([], 404),
+            'POST' => Http::response([], 201),
+            'PATCH' => Http::response([], 204),
+        });
 
         (new ApplyPlatformDnsSettings($operation->id))->handle(app(PowerDnsClient::class));
 
