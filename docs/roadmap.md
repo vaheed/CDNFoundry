@@ -1147,7 +1147,7 @@ No origin is requested.
 
 ##### DNS Correctness
 
-- [ ] All supported types pass validation and real `dig` tests.
+- [x] All supported types pass validation and real `dig` tests.
 - [x] A and AAAA behaviour is equivalent.
 - [x] Bulk updates are atomic.
 - [x] One bulk update creates one zone revision.
@@ -1159,15 +1159,15 @@ No origin is requested.
 
 ##### Scale and Failure
 
-- [ ] Seed at least 500,000 zones.
-- [ ] Load at least 1,000,000 records.
-- [ ] Process at least 50,000 daily changes.
-- [ ] Execute the documented burst-mutation test.
-- [ ] Modify thousands of records in one bounded bulk request.
-- [ ] Coalesce repeated updates to one domain.
-- [ ] Restart PowerDNS, DNSdist, queues, and the control plane without zone corruption.
-- [ ] DNS continues answering while Laravel, PostgreSQL control DB, and Redis/Valkey are unavailable.
-- [ ] Both IPv4 and IPv6 DNS query paths pass.
+- [x] Seed at least 500,000 zones.
+- [x] Load at least 1,000,000 records.
+- [x] Process at least 50,000 daily changes.
+- [x] Execute the documented burst-mutation test.
+- [x] Modify thousands of records in one bounded bulk request.
+- [x] Coalesce repeated updates to one domain.
+- [x] Restart PowerDNS, DNSdist, queues, and the control plane without zone corruption.
+- [x] DNS continues answering while Laravel, PostgreSQL control DB, and Redis/Valkey are unavailable.
+- [x] Both IPv4 and IPv6 DNS query paths pass.
 
 ##### Browser and Real Runtime
 
