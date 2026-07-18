@@ -20,8 +20,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 RUN_ID = f"{int(time.time())}-{secrets.token_hex(4)}"
 ADMIN_EMAIL = f"phase1-e2e-admin-{RUN_ID}@example.test"
 USER_EMAIL = f"phase1-e2e-user-{RUN_ID}@example.test"
-ADMIN_PASSWORD = f"Admin-{secrets.token_urlsafe(18)}"
-USER_PASSWORD = f"User-{secrets.token_urlsafe(18)}"
+ADMIN_PASSWORD = f"Admin-1-{secrets.token_urlsafe(18)}"
+USER_PASSWORD = f"User-1-{secrets.token_urlsafe(18)}"
 
 
 class ApiError(RuntimeError):

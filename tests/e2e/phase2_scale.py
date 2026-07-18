@@ -17,7 +17,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 RUN = f"{int(time.time())}{secrets.token_hex(3)}"
 PREFIX = f"scale-{RUN}"
 EMAIL = f"{PREFIX}@example.test"
-PASSWORD = f"Scale-{secrets.token_urlsafe(20)}"
+PASSWORD = f"Scale-2-{secrets.token_urlsafe(20)}"
 
 
 def compose(*arguments: str, output: bool = False) -> str:
