@@ -228,12 +228,22 @@ function M.access()
 end
 
 function M.balance()
-    local ok, err = balancer.set_current_peer(ngx.var.origin_address, tonumber(ngx.var.origin_port))
+    local tls_name = ngx.var.origin_sni
+    if tls_name == "" then
+        tls_name = nil
+    end
+    local ok, err = balancer.set_current_peer(
+        ngx.var.origin_address,
+        tonumber(ngx.var.origin_port),
+        tls_name
+    )
     if not ok then error("unable to select origin: " .. (err or "unknown")) end
     local connect_timeout = tonumber(ngx.var.origin_connect_timeout) or 1000
     local response_timeout = tonumber(ngx.var.origin_response_timeout) or 5000
     local retry_count = tonumber(ngx.var.origin_retry_count) or 0
     balancer.set_timeouts(connect_timeout / 1000, response_timeout / 1000, response_timeout / 1000)
+    local keepalive_ok, keepalive_err = balancer.enable_keepalive(30, 1000)
+    if not keepalive_ok then error("unable to enable origin keepalive: " .. (keepalive_err or "unknown")) end
     if retry_count > 0 then balancer.set_more_tries(retry_count) end
 end
 

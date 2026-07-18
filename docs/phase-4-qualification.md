@@ -43,7 +43,7 @@ python3 tests/e2e/phase4_mtls.py
 python3 tests/e2e/phase4_runtime.py
 ```
 
-The first job verifies that the dedicated edge-control listener rejects a client without a trusted certificate and accepts a signed identity. The runtime job uses real shared, quarantine, and dedicated OpenResty process groups. It verifies HTTP/HTTPS origin routing, SNI and certificate verification, Host/forwarding normalization, IPv4/IPv6 clients, unknown Host/SNI rejection, blocked destinations, passive failures, malformed framing, 2,000 dynamic domains without reload, disabled/tombstoned behavior, cell isolation, and last-valid-state after an invalid candidate.
+The first job verifies that the dedicated edge-control listener rejects a client without a trusted certificate and accepts a signed identity. The runtime job uses real shared, quarantine, and dedicated OpenResty process groups. It verifies HTTP/HTTPS origin routing, repeated mismatched-SNI rejection across workers without cross-origin TLS session reuse, certificate verification, Host/forwarding normalization, IPv4/IPv6 clients, unknown Host/SNI rejection, blocked destinations, passive failures, malformed framing, 2,000 dynamic domains without reload, disabled/tombstoned behavior, cell isolation, and last-valid-state after an invalid candidate.
 
 The same job calls the private authenticated cell-control boundary, verifies drain and undrain, replaces only that cell's workers under a temporary drain, preserves the master process, records restart time, and confirms traffic recovery. Stopping a sibling cell leaves the shared cell and edge agent running.
 

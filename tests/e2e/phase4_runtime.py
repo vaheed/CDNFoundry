@@ -36,14 +36,14 @@ def state(hosts: dict[str, str], sequence: int) -> dict:
     }}
 
 
-def add_https_origin(runtime_state: dict, hostname: str, sni: str) -> None:
+def add_https_origin(runtime_state: dict, hostname: str, sni: str, host_header: str = "tls-origin") -> None:
     runtime_state["hosts"][hostname] = {
         "domain": hostname,
         "revision": runtime_state["sequence"],
         "settings": {"enabled": True},
         "origin": {
             "host": "tls-origin", "port": 8443, "scheme": "https",
-            "host_header": "tls-origin", "sni": sni, "verify_tls": True,
+            "host_header": host_header, "sni": sni, "verify_tls": True,
             "connect_timeout_ms": 1000, "response_timeout_ms": 5000,
             "retry_count": 0, "websocket": False, "health_check": None,
             "private_allowlist": ["172.16.0.0/12"],
@@ -100,7 +100,7 @@ def main() -> None:
             "-CAkey", str(temporary / "ca.key"), "-CAcreateserial", "-days", "1", "-copy_extensions", "copy",
             "-out", str(temporary / "tls.crt"))
         origin_config = temporary / "origin.conf"
-        origin_config.write_text("server { listen 8443 ssl; ssl_certificate /run/tls/tls.crt; ssl_certificate_key /run/tls/tls.key; location / { default_type application/json; return 200 '{\"tls\":true,\"host\":\"$host\",\"forwarded\":\"$http_forwarded\",\"xff\":\"$http_x_forwarded_for\"}'; } }\n")
+        origin_config.write_text("server { listen 8443 ssl; ssl_certificate /run/tls/tls.crt; ssl_certificate_key /run/tls/tls.key; location / { default_type application/json; return 200 '{\"tls\":true,\"sni\":\"$ssl_server_name\",\"host\":\"$host\",\"forwarded\":\"$http_forwarded\",\"xff\":\"$http_x_forwarded_for\"}'; } }\n")
         for path in (temporary / "ca.crt", temporary / "tls.key", temporary / "tls.crt", origin_config):
             path.chmod(0o644)
         agent_state = temporary / "agent-state"
@@ -116,7 +116,7 @@ def main() -> None:
         runtime = pathlib.Path(directory) / "shared-default.json"
         initial = state({"runtime.example": "origin-one.example"}, 1)
         add_https_origin(initial, "tls.example", "tls-origin")
-        add_https_origin(initial, "bad-tls.example", "wrong-origin")
+        add_https_origin(initial, "bad-tls.example", "wrong-origin", "wrong-host")
         initial["hosts"]["blocked.example"] = initial["hosts"]["runtime.example"] | {
             "origin": initial["hosts"]["runtime.example"]["origin"] | {"host": "127.0.0.1", "private_allowlist": []},
         }
@@ -210,15 +210,19 @@ def main() -> None:
                 "wget", "-q", "-O-", "--header=Host: quarantine.example", "http://[::1]:8080/")
             assert '"host":"quarantine-origin.example"' in quarantine_ipv6.stdout, quarantine_ipv6.stderr
             secure = wait_for("tls.example")
-            assert secure.returncode == 0 and '"tls":true' in secure.stdout and '"host":"tls-origin"' in secure.stdout, secure.stderr
+            assert secure.returncode == 0 and '"tls":true' in secure.stdout and '"sni":"tls-origin"' in secure.stdout and '"host":"tls-origin"' in secure.stdout, secure.stderr
             untrusted = run("docker", "exec", NAME, "wget", "-q", "-O-", "--header=Host: tls.example",
                 "--header=Forwarded: for=evil", "--header=X-Forwarded-For: evil", "http://127.0.0.1:8080/")
             assert "evil" not in untrusted.stdout and '"forwarded":"for=' in untrusted.stdout, untrusted.stdout
-            bad_tls = request("bad-tls.example")
-            assert "502 Bad Gateway" in bad_tls.stderr, bad_tls.stderr
+            bad_tls_attempts = 12
+            for _ in range(bad_tls_attempts):
+                bad_tls = request("bad-tls.example")
+                assert "502 Bad Gateway" in bad_tls.stderr, f"{bad_tls.stderr}\n{bad_tls.stdout}"
             passive = run("docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token",
                 "http://127.0.0.1:9080/passive-failures")
-            assert '"hostname":"bad-tls.example"' in passive.stdout and '"failure_count":1' in passive.stdout, passive.stdout
+            passive_failures = json.loads(passive.stdout)["data"]
+            bad_tls_failure = next(item for item in passive_failures if item["hostname"] == "bad-tls.example")
+            assert bad_tls_failure["failure_count"] == bad_tls_attempts, bad_tls_failure
             blocked = request("blocked.example")
             assert "502 Bad Gateway" in blocked.stderr, blocked.stderr
             policy_blocked = request("policy-blocked.example")

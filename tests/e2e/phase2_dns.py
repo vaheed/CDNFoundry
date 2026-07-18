@@ -187,7 +187,9 @@ def main() -> None:
     assert "2001:db8::20" in ipv6_transport
 
     compose("stop", "horizon")
-    assert runtime_queue_size() == 0
+    # A long-running topology may already contain an unrelated bounded
+    # scheduler job. This checkpoint owns only DNS reconciliation work.
+    assert runtime_queue_size("App\\Jobs\\ReconcileDnsZone") == 0
     for index in range(100):
         call("PATCH", f"/api/domains/{domain_id}/dns/records/{apex_a_id}", {"content": f"192.0.2.{(index % 200) + 21}"}, token)
     # The scheduler may independently queue its bounded platform-identity job
