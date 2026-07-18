@@ -224,13 +224,14 @@ Use preview with IPv4/IPv6 addresses whose classification is known in the instal
 
 2. Save each one-time bootstrap token. For the bundled two-agent development
    topology, copy `.env.dev.example` to the ignored `.env.dev`, set the exact
-   `DEV_EDGE_A_ID/TOKEN` and `DEV_EDGE_B_ID/TOKEN` values, run
+   `CDNF_DEV_EDGE_A_ID/CDNF_DEV_EDGE_A_BOOTSTRAP_TOKEN` and the matching B
+   values, run
    `chmod 600 .env.dev`, `make dev-edge-up`, and `make dev-edge-status`.
    Confirm fresh heartbeat, version, active revision, listener readiness, and
    bounded cell capacities, then immediately blank both token values in
    `.env.dev`. Restarts must use the persistent mTLS identities without tokens.
 3. Exercise drain/undrain and enable/disable. Rotate an identity, copy the replacement token once, and confirm the previous credential no longer works.
-4. Open **Service pools**. Confirm shared and quarantine pools and their revisions. Create one dedicated pool, confirm `edge.pool_provision` completes, and confirm one desired cell per registered edge. New pools remain disabled until provisioning and service-address configuration are complete.
+4. Open **Service pools**. Confirm the page explains that one pool is one bounded delivery class with an equivalent cell at each participating edge. Confirm shared and quarantine pools, their revisions, and copyable `pool-<id>.<proxy-hostname>` DNS routing targets. `shared` is the normal default, `quarantine` isolates risky/noisy domains, and `dedicated` is an explicit exception. Create one dedicated pool, confirm `edge.pool_provision` completes, and confirm one desired cell per registered edge. New pools remain disabled until provisioning and service-address configuration are complete.
 5. In each edge's **Cells** relation, verify that a cell before agent enrollment
    clearly says **Awaiting edge enrollment**, missing/stale heartbeat has its own
    explanation, and a connected cell shows runtime revision/version, workload,
@@ -260,7 +261,8 @@ In **DNS records**, select every type. The **Proxied** mode must appear only for
 
 ### Proxied apex form
 
-Create or edit the apex:
+Create or edit the apex. If an apex A/AAAA already exists in DNS-only or Geo-DNS
+mode, edit that record to Proxied; do not create a competing address record.
 
 | Field | Value / expected default |
 |---|---|
@@ -278,6 +280,12 @@ Create or edit the apex:
 
 The origin destination is the server reached by CDNFoundry; Host/SNI default to the public record hostname so name-based cPanel virtual hosting and certificates work. The browser UI intentionally exposes the standard scheme/port pairs only: HTTP locks port `80` and hides TLS verification/SNI, while HTTPS locks port `443` and exposes both. Advanced API clients may submit a validated custom port. The destination must not point back to CDNFoundry, a platform hostname, loopback, link-local, private metadata, multicast, or an edge address.
 
+Before saving, create DNS-only apex MX, TXT, and CAA records. The proxied apex
+must save with those records still present. Attempt a second apex A or AAAA and
+confirm the field error tells you to edit/remove the existing address/alias.
+After deployment, PowerAdmin must show apex Lua A and AAAA RRsets plus the
+unchanged MX/TXT/CAA records.
+
 ### Proxied subdomain and editable automatic values
 
 1. Create `www` as A, AAAA, or CNAME in Proxied mode with destination `server2.example.net`.
@@ -294,7 +302,8 @@ The origin destination is the server reached by CDNFoundry; Host/SNI default to 
    field. Correct it, save, and confirm a success notice. If no edge is ready,
    desired state must still persist and the notice must explicitly say delivery
    is waiting for an enrolled, healthy edge.
-9. Run **Test origin** and confirm status/latency or a bounded validation/connection error. Saving/testing remains asynchronous.
+9. Confirm the DNS record table's **Desired DNS route** says `CNAME → pool-<id>.<proxy-hostname>` and the domain **Edge delivery** section shows the same copyable service-pool DNS target. In diagnostic PowerAdmin, confirm the exact subdomain CNAME points to that pool target; it is intentionally not the generic proxy hostname.
+10. Run **Test origin** and confirm status/latency or a bounded validation/connection error. Saving/testing remains asynchronous.
 
 ### Deployment and operation visibility
 

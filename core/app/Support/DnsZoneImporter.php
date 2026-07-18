@@ -31,7 +31,7 @@ final class DnsZoneImporter
             if (! $replaceExisting) {
                 $final = $existing->map(fn (DnsRecord $record): array => $record->only(['type', 'name', 'content', 'content_hash', 'ttl', 'priority', 'weight', 'port', 'mode']))->concat($final);
             }
-            DnsZoneValidator::assertValid($final);
+            DnsZoneValidator::assertValid($final, $domain->name);
             if ($replaceExisting) {
                 $domain->dnsRecords()->delete();
             }

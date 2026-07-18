@@ -10,6 +10,8 @@ use App\Filament\Domain\Resources\Domains\RelationManagers\UsersRelationManager;
 use App\Models\Domain;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
+use App\Models\PlatformDnsSetting;
+use App\Support\EdgeRoutingCompiler;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
@@ -76,7 +78,7 @@ class DomainResource extends Resource
                         ->placeholder('None')->columnSpanFull(),
                 ])->columns(3),
             Section::make('Edge delivery')
-                ->description('Desired proxy policy and the last validated runtime placement.')
+                ->description('A service pool is the bounded set of equivalent OpenResty cells and public addresses serving this domain. Normal domains use the shared pool; quarantine and dedicated pools provide deliberate isolation.')
                 ->icon('heroicon-o-cloud')
                 ->schema([
                     TextEntry::make('proxy_hostnames')->label('Proxied hostnames')
@@ -85,6 +87,14 @@ class DomainResource extends Resource
                     TextEntry::make('edgePlacement.state')->label('Placement state')->badge()->placeholder('Not placed'),
                     TextEntry::make('edgePlacement.activePool.name')->label('Active service pool')->placeholder('None'),
                     TextEntry::make('edgePlacement.targetPool.name')->label('Target service pool')->placeholder('None'),
+                    TextEntry::make('service_pool_dns_target')->label('Service-pool DNS target')
+                        ->state(function (Domain $record): ?string {
+                            $placement = $record->edgePlacement()->with(['activePool', 'targetPool'])->first();
+                            $pool = $placement?->state === 'draining' ? $placement->targetPool : $placement?->activePool;
+                            $settings = PlatformDnsSetting::query()->find(1);
+
+                            return $pool !== null && $settings !== null ? EdgeRoutingCompiler::poolHostname($settings, $pool) : null;
+                        })->copyable()->placeholder('Waiting for placement'),
                     TextEntry::make('validated_edge_revisions')->label('Validated revisions')
                         ->state(fn (Domain $record): string => EdgeRevision::query()->where('domain_id', $record->id)->where('status', 'validated')->latest('revision')->limit(10)->pluck('revision')->implode(', '))
                         ->placeholder('None'),

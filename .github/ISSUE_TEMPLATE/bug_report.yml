@@ -1,0 +1,51 @@
+name: Bug report
+description: Report a reproducible CDNFoundry defect
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not report security vulnerabilities here; follow SECURITY.md.
+  - type: input
+    id: revision
+    attributes:
+      label: Version or commit
+      description: Use the exact immutable commit SHA when possible.
+    validations:
+      required: true
+  - type: textarea
+    id: topology
+    attributes:
+      label: Deployment topology
+      description: Relevant Compose profiles, host roles, and component versions. Remove secrets.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest repeatable sequence and sanitized inputs.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour and logs
+      description: Include stable error codes and relevant sanitized logs; never include credentials or customer data.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed secrets, tokens, private keys, and customer data.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true

@@ -1644,6 +1644,8 @@ Implementation and non-browser qualification evidence: [Phase 4 qualification](p
 
 > **Implementation audit (2026-07-18):** Agent-owned Phase 4 implementation and non-browser runtime qualification are complete. Service addresses are durable per cell; authoritative routing selects the assigned pool; migration waits for target-cell readiness and acknowledgement, target DNS deployment, a bounded drain, source-removal delivery, and final acknowledgement. Authenticated drain, undrain, and bounded worker replacement execute without a Docker socket. Owner-run browser/two-physical-edge release acceptance remains open below.
 
+> **Apex routing clarification (2026-07-18):** A proxied apex owns the sole A/AAAA/CNAME routing decision but may coexist with apex MX, TXT, CAA, NS, and other non-routing data. Non-apex proxy records publish a pool-specific CNAME. Application and real PowerDNS tests enforce both behaviours.
+
 - [x] A user enables proxy per supported hostname.
 - [x] Every proxied hostname has exactly one valid origin.
 - [x] Different hostnames can use different origins.

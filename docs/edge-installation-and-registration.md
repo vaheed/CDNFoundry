@@ -18,7 +18,7 @@ and a private development PKI. Create two edges in the UI, then:
 
 ```sh
 cp .env.dev.example .env.dev
-# Set DEV_EDGE_A_ID/TOKEN and DEV_EDGE_B_ID/TOKEN to the one-time UI values.
+# Set CDNF_DEV_EDGE_A_ID/CDNF_DEV_EDGE_A_BOOTSTRAP_TOKEN and the matching B values.
 chmod 600 .env.dev
 make dev-edge-up
 make dev-edge-status

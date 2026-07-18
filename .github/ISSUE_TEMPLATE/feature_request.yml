@@ -1,0 +1,34 @@
+name: Feature request
+description: Propose a bounded product or operational improvement
+title: "proposal: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Operator or user problem
+      description: Describe the concrete workflow or production failure this solves.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+      description: Include permissions, limits, failure behaviour, rollback, and observable result.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Simpler alternatives considered
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: I checked the roadmap and explained any requested contract change.
+          required: true
+        - label: This does not require a default per-domain process, container, worker, timer, cache directory, or reload.
+          required: true

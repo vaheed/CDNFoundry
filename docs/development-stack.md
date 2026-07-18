@@ -55,7 +55,7 @@ one-time token:
 
 ```sh
 cp .env.dev.example .env.dev
-# Edit DEV_EDGE_A_ID/TOKEN and DEV_EDGE_B_ID/TOKEN.
+# Edit CDNF_DEV_EDGE_A_ID/CDNF_DEV_EDGE_A_BOOTSTRAP_TOKEN and the matching B values.
 chmod 600 .env.dev
 make dev-edge-up
 make dev-edge-status
@@ -64,7 +64,8 @@ make dev-edge-status
 Wait until both agents show a fresh heartbeat, `listener_ready=true`, and ready
 `shared-default` and `quarantine-default` cells. Enrollment identities and
 runtime snapshots live in named volumes, so restarts do not require new tokens.
-Immediately clear `DEV_EDGE_A_TOKEN` and `DEV_EDGE_B_TOKEN` from `.env.dev`
+Immediately clear `CDNF_DEV_EDGE_A_BOOTSTRAP_TOKEN` and
+`CDNF_DEV_EDGE_B_BOOTSTRAP_TOKEN` from `.env.dev`
 after the first successful enrollment; the control plane stores only their
 hashes and will not reveal them again. A lost or consumed token requires the
 administrator **Rotate identity** action and replacement of that edge agent's
@@ -83,6 +84,6 @@ sequence.
 Application containers never migrate at startup. `make dev-migrate` is the
 only normal schema deployment path.
 
-PowerAdmin is diagnostic only. Direct changes modify disposable PowerDNS runtime state, are unsupported product state, and will be detected and overwritten by reconciliation once DNS reconciliation is implemented.
+PowerAdmin is diagnostic only. Direct changes modify disposable PowerDNS runtime state, are unsupported product state, and can be overwritten by the next reconciliation from PostgreSQL desired state.
 
 The queue lanes are `interactive`, `runtime`, `certificate_purge`, and `bulk_maintenance`. Horizon gives each a separate worker budget. Scheduler records Horizon metrics every five minutes and prunes expired idempotency responses hourly.

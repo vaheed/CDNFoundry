@@ -13,7 +13,7 @@ Frontend production assets are also compiled through Docker; a host Node.js inst
 ## Development installation
 
 ```sh
-git clone <repository> cdnfoundry
+git clone https://github.com/vaheed/CDNFoundry.git cdnfoundry
 cd cdnfoundry
 make dev-up
 make dev-migrate

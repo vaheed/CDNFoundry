@@ -164,7 +164,7 @@ class DnsRecordController extends Controller
                 throw ValidationException::withMessages(['actions' => 'The resulting zone exceeds the 10,000 record limit.']);
             }
 
-            DnsZoneValidator::assertValid($final->values());
+            DnsZoneValidator::assertValid($final->values(), $locked->name);
             foreach ($deletes as $record) {
                 $record->delete();
             }
@@ -191,7 +191,7 @@ class DnsRecordController extends Controller
         $rows = $domain->dnsRecords()->when($excludedIds?->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $excludedIds))->get()
             ->map(fn (DnsRecord $record): array => $record->only(['type', 'name', 'content', 'content_hash', 'ttl', 'priority', 'weight', 'port', 'mode', 'geo_config', 'origin']))
             ->concat($additions);
-        DnsZoneValidator::assertValid($rows);
+        DnsZoneValidator::assertValid($rows, $domain->name);
     }
 
     private function incrementRevision(Domain $domain): void

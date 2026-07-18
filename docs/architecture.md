@@ -1,319 +1,412 @@
 # CDNFoundry architecture
 
-This document explains the complete CDNFoundry design in operational language. It is intended for system administrators, network administrators, developers, and incident responders. The diagrams are deliberately small and top-to-bottom so they remain readable on narrow screens as well as desktops.
+This is the architecture that exists in the repository today. It describes the
+current control plane, authoritative DNS path, Phase 4 proxy path, service-pool
+placement, and failure behaviour. Later roadmap features are called out
+separately so operators do not mistake planned work for a deployed capability.
 
-## The short version
+The diagrams run top to bottom and avoid wide component maps so they remain
+readable on phones, terminals, and normal documentation panes.
 
-CDNFoundry has two separate paths:
+## Mental model
 
-- The **data plane** answers DNS and serves customer HTTP/HTTPS traffic. It stays available without Laravel.
-- The **control plane** stores desired state in PostgreSQL, validates changes, and asynchronously publishes immutable runtime state.
+CDNFoundry has two independent planes:
 
-PostgreSQL is the source of truth. PowerDNS tables, edge JSON files, signed artifacts, and ClickHouse aggregates are derived and can be rebuilt. A failed update never replaces the last valid DNS zone or edge runtime.
+- The **control plane** accepts administrator and domain-user changes, validates
+  them, and stores desired state in control PostgreSQL.
+- The **data plane** answers DNS and carries end-user HTTP/HTTPS traffic. It does
+  not call Laravel while serving a request.
 
 ```mermaid
-%%{init: {"flowchart": {"useMaxWidth": true, "htmlLabels": true}, "theme": "neutral"}}%%
 flowchart TB
-    U[End user]
-    C[Customer administrator]
-    A[Platform administrator]
+    ADMIN[Platform or domain administrator]
+    CP[Laravel control plane]
+    STATE[(Control PostgreSQL<br/>desired state)]
+    DNS[DNSdist and PowerDNS<br/>authoritative DNS]
+    EDGE[OpenResty edge cell<br/>HTTP and HTTPS]
+    ORIGIN[Customer origin]
+    USER[End user]
 
-    subgraph DATA[Data plane - traffic never enters Laravel]
-        DD[DNSdist<br/>public authoritative DNS]
-        PD[PowerDNS<br/>private authoritative backend]
-        E[OpenResty edge cells<br/>HTTP and HTTPS]
-        O[Customer origin<br/>web server or hosting panel]
-    end
-
-    subgraph CONTROL[Control plane]
-        UI[Filament admin and domain panels]
-        API[Laravel REST API and CLI commands]
-        PG[(PostgreSQL<br/>desired state)]
-        Q[Valkey and Horizon<br/>bounded queue lanes]
-        EC[Edge-control<br/>mTLS agent endpoint]
-    end
-
-    subgraph OBSERVE[Telemetry]
-        V[Vector]
-        CH[(ClickHouse)]
-        P[Prometheus and Alertmanager]
-    end
-
-    U -->|DNS query| DD --> PD
-    U -->|HTTP or HTTPS| E -->|bounded origin request| O
-    C --> UI
-    A --> UI
-    UI --> PG
-    API --> PG
-    PG --> Q
-    Q -->|reconcile DNS| PD
-    Q -->|signed desired artifacts| EC
-    EC <-->|mutual TLS| E
-    E -->|access and security events| V --> CH
-    E --> P
+    ADMIN -->|UI, API, or CLI| CP
+    CP --> STATE
+    STATE -->|asynchronous reconciliation| DNS
+    STATE -->|signed artifacts via edge agent| EDGE
+    USER -->|DNS query| DNS
+    USER -->|web request| EDGE
+    EDGE -->|bounded origin request| ORIGIN
 ```
 
-## Who owns what
+If Laravel, Horizon, Valkey, or control PostgreSQL is temporarily unavailable,
+the last activated PowerDNS zone and edge runtime continue serving. New changes
+wait until the control plane recovers.
 
-| State | Authority | Notes |
+## State ownership
+
+| State | Owner | Recovery meaning |
 |---|---|---|
-| Users, domain assignments, tokens, domains, DNS records, origins, pools, placements, settings, operations and audit logs | PostgreSQL | Durable source of truth |
-| Platform-setting values and defaults | PostgreSQL | Changed through API, CLI, or UI; not runtime environment variables |
-| PowerDNS records and metadata | Derived PowerDNS PostgreSQL | Reconciled from desired state; direct PowerAdmin edits are drift |
-| Edge manifests and domain artifacts | Derived PostgreSQL rows | Deterministic, revisioned, checksummed, and signed |
-| Active edge runtime JSON | Derived file on each edge | Atomically activated only after validation |
-| Raw and aggregated traffic analytics | ClickHouse | Never used to decide whether a request may be served |
-| Sessions, queues, locks and rate limits | Valkey | Operational state, not product truth |
-| Application keys, signing keys, identity CAs and TLS private keys | External secret storage/files | Required for recovery; never stored in normal settings rows |
+| Users, tokens, domain assignments, domains, desired DNS, origins, settings, pools, placements, operations, audits | Control PostgreSQL | Authoritative product state |
+| PowerDNS records and Lua programs | Separate PowerDNS PostgreSQL | Derived; rebuild from control PostgreSQL |
+| Edge revisions and signed artifacts | Control PostgreSQL | Derived from current desired revisions |
+| Agent identity and active runtime JSON | Persistent storage on each edge | Derived; agent can fetch a full snapshot |
+| Queues, locks, sessions, and rate-limit counters | Valkey | Operational state, not product truth |
+| GeoIP database | Validated MMDB volume | Replaceable runtime input |
+| Application key, artifact signing key, edge identity CA, listener keys | Secret files/environment at deployment | External recovery material; never normal platform settings |
 
-## End-user DNS traffic
+Operator-tunable platform values live in the typed `system_settings` rows in
+control PostgreSQL and are exposed through the UI, API, and CLI. Environment
+variables are limited to deployment wiring, bootstrap credentials, bind
+addresses, and secrets.
 
-DNSdist is the only public authoritative DNS endpoint. PowerDNS remains private and never calls Laravel during a query.
+PowerAdmin is diagnostic only. Editing its PowerDNS database changes derived
+runtime state, not CDNFoundry desired state, and a later reconciliation can
+replace that drift.
+
+## Authoritative DNS request path
+
+DNSdist is the only public authoritative DNS listener. PowerDNS and its
+PostgreSQL backend remain private.
 
 ```mermaid
-%%{init: {"sequence": {"useMaxWidth": true}, "theme": "neutral"}}%%
 sequenceDiagram
-    autonumber
-    participant User as End-user resolver
+    participant R as Recursive resolver
     participant D as DNSdist
     participant P as PowerDNS
-    participant DB as PowerDNS database
+    participant DB as PowerDNS PostgreSQL
 
-    User->>D: A, AAAA, CNAME, MX, TXT, SRV, NS or PTR query
-    D->>D: Apply bounded DNS policy and trusted-ECS rules
+    R->>D: UDP/TCP query
+    D->>D: Apply bounded policy and ECS trust rules
     D->>P: Forward authoritative query
-    P->>DB: Read last activated zone and Lua records
-    DB-->>P: Derived runtime data
+    P->>DB: Read active RRset or Lua data
+    DB-->>P: Derived runtime state
     P-->>D: Authoritative answer
-    D-->>User: Response over UDP or TCP
+    D-->>R: DNS response
 ```
 
-Geo-DNS chooses a country override first, then a continent override, then the mandatory default. If trusted ECS is absent, classification uses the recursive resolver address. Both IPv4 and IPv6 answer paths are supported. A CNAME must be the only record at its owner name, regardless of whether it is DNS-only or geographic.
+Normal records return their stored DNS-only answer. Geo-DNS Lua selects a
+country override, then a continent override, then the required default. Trusted
+ECS is used when configured; otherwise location is based on the recursive
+resolver address. No DNS query calls Laravel or an external GeoIP service.
 
-## End-user web traffic to the customer origin
+## What a service pool is
 
-One proxied hostname has exactly one validated origin. The edge resolves the origin again before connection and blocks loopback, link-local, metadata, multicast, platform, edge, proxy-loop, and disallowed private destinations.
+A service pool is not an origin pool and is not a container per customer. It is
+a stable delivery class made of equivalent OpenResty cells and their public
+service addresses.
 
 ```mermaid
-%%{init: {"sequence": {"useMaxWidth": true}, "theme": "neutral"}}%%
+flowchart TB
+    POOL[shared-default service pool]
+    A[Edge A<br/>shared-default cell<br/>public service IP A]
+    B[Edge B<br/>shared-default cell<br/>public service IP B]
+    D1[Domain 1]
+    D2[Domain 2]
+
+    D1 --> POOL
+    D2 --> POOL
+    POOL --> A
+    POOL --> B
+```
+
+The pool kinds have deliberately narrow meanings:
+
+| Kind | Use |
+|---|---|
+| `shared` | Normal domains; stable placement chooses one enabled shared pool |
+| `quarantine` | Explicit isolation for noisy, attacked, or risky domains |
+| `dedicated` | Administrator-created exceptional capacity; never automatic per domain |
+
+One pool maps to at most one cell on each participating edge. A cell is a
+resource-bounded OpenResty container or process group using the same generic
+runtime image as every other cell. Many domains share a cell. Adding a domain
+does not create a process, container, server block, cache directory, worker, or
+reload.
+
+Pools exist for two reasons: stable public routing and bounded blast radius. A
+domain can move from shared to quarantine without changing its origin model or
+mixing quarantine traffic into the shared cell.
+
+## How proxied DNS is published
+
+Every proxied hostname has exactly one origin. That rule applies to the routing
+record, not to unrelated apex mail or verification records.
+
+### Proxied subdomain
+
+`www.example.com` publishes a CNAME to its assigned pool, for example:
+
+```text
+www.example.com.  CNAME  pool-1.proxy.cdnf.example.
+```
+
+The pool hostname returns healthy service addresses using country, then
+continent, then global fallback. It is intentionally pool-specific. The generic
+`proxy.cdnf.example` name aliases only the default shared pool and cannot
+represent a domain moved to quarantine or dedicated capacity.
+
+Because the generated subdomain record is a CNAME, it must be the only record at
+that owner name.
+
+### Proxied apex
+
+The zone apex cannot normally be a CNAME because it must also contain SOA and NS
+and often contains MX/TXT/CAA. CDNFoundry therefore publishes PowerDNS Lua A and
+AAAA answers that look up the same pool routing data.
+
+```text
+example.com.  LUA  A     <bounded lookup of pool-1 routing data>
+example.com.  LUA  AAAA  <bounded lookup of pool-1 routing data>
+example.com.  MX   10 mail.example.net.
+example.com.  TXT  "verification=value"
+```
+
+An apex proxy may coexist with MX, TXT, CAA, NS, and other non-address records.
+It cannot coexist with another A, AAAA, or CNAME because those would compete
+with the managed pool answer. If an apex Geo-DNS or DNS-only A/AAAA already
+exists, edit that record to Proxied or remove it before adding the proxy.
+
+## End-user HTTP/HTTPS path
+
+```mermaid
 sequenceDiagram
-    autonumber
-    participant B as End-user browser
+    participant B as Browser or client
     participant DNS as DNSdist and PowerDNS
-    participant E as Assigned OpenResty cell
+    participant C as Assigned OpenResty cell
     participant O as Customer origin
-    participant V as Vector
 
     B->>DNS: Resolve customer hostname
-    DNS-->>B: Ready edge service address
-    B->>E: HTTP or HTTPS request
-    E->>E: Select hostname policy, limits and certificate
-    E->>E: Resolve and revalidate origin destination
-    E->>O: Bounded HTTP or HTTPS request with normalized headers
-    O-->>E: Customer response
-    E-->>B: Response
-    E-->>V: Bounded, redacted telemetry buffer
+    DNS-->>B: Pool service IPv4/IPv6
+    B->>C: HTTP or HTTPS request
+    C->>C: Validate Host and load active policy
+    C->>C: Resolve and re-check origin destination
+    C->>O: Bounded request with normalized headers
+    O-->>C: Origin response
+    C-->>B: Response
 ```
 
-For plain HTTP origins the standard UI uses port `80` and has no TLS verification or SNI fields. For HTTPS it uses port `443`; certificate verification and SNI are explicit. The API retains deliberate custom-port support for advanced integrations. Connect timeouts, response timeouts, retries, request bodies, response buffering, headers, connections, and temporary storage are bounded.
+OpenResty loads a per-pool runtime JSON file. It selects the hostname policy,
+sets the configured origin Host header and SNI, strips/replaces forwarding and
+hop-by-hop headers, and uses bounded connections, request sizes, buffers,
+timeouts, and retries. The dynamic balancer revalidates resolved origin
+addresses before connecting and rejects loopback, link-local, metadata,
+multicast, platform, edge-service, proxy-loop, and other blocked destinations.
 
-## A customer or administrator changes configuration
+The standard UI maps HTTP to port 80 and HTTPS to port 443. The typed API allows
+a deliberately configured custom port. TLS verification is meaningful only for
+HTTPS origins.
 
-An HTTP request never waits for PowerDNS, an edge, certificate issuance, or a deployment. It validates and stores desired state, increments a revision, commits, and queues one coalesced job.
+## Administrator change to active runtime
+
+An interactive request stores intent; it does not wait for PowerDNS or edges.
 
 ```mermaid
-%%{init: {"sequence": {"useMaxWidth": true}, "theme": "neutral"}}%%
 sequenceDiagram
-    autonumber
-    participant UI as UI, API or CLI
+    participant U as UI, API, or CLI
     participant L as Laravel
-    participant PG as PostgreSQL
-    participant H as Horizon worker
-    participant R as DNS or edge runtime
+    participant PG as Control PostgreSQL
+    participant Q as Valkey and Horizon
+    participant RT as PowerDNS or edge agents
 
-    UI->>L: Authenticated mutation
-    L->>L: Policy, type, bounds and idempotency validation
-    L->>PG: Transaction: desired state, revision, audit, operation
+    U->>L: Authenticated mutation
+    L->>L: Policy, binding, type, bounds, idempotency
+    L->>PG: Transaction: desired state + revision + audit/operation
     PG-->>L: Commit
-    L-->>UI: Saved or 202 with operation ID
-    L->>H: Dispatch unique/coalesced job after commit
-    H->>PG: Re-read current revision; skip obsolete work
-    H->>H: Render, checksum and validate candidate
-    H->>R: Activate candidate asynchronously
-    R-->>H: Verify and acknowledge
-    H->>PG: Record success, failure and active revision
+    L-->>U: Saved or 202 + operation ID
+    L->>Q: Dispatch unique/coalesced job after commit
+    Q->>PG: Re-read the current revision
+    Q->>Q: Render and validate candidate
+    Q->>RT: Activate asynchronously
+    RT-->>Q: Result or acknowledgement
+    Q->>PG: Record deployment state and error/result
 ```
 
-If no ready edge exists, a proxied record is still valid desired state. The UI says that it is saved but not ready to serve. Once an agent enrolls and reports a ready listener, reconciliation publishes the pending revision. This avoids losing user intent while never pretending the platform is ready.
+If no edge is ready, a valid proxied record remains saved desired state. It is
+not advertised as ready. Enrolling a ready edge triggers reconciliation of the
+waiting proxy state.
 
-## Edge enrollment and ongoing control
+## DNS reconciliation
 
-Each edge has one Go agent and one or more data-driven OpenResty cells. Cells represent shared, quarantine, or exceptional dedicated pools; CDNFoundry does not create a process or container per customer domain.
+The runtime queue worker renders deterministic RRsets from the current domain,
+platform DNS identity, and active/target placement. For each enabled DNS
+cluster it:
+
+1. records the desired revision and attempt;
+2. skips an obsolete revision;
+3. creates the zone if absent through the private PowerDNS HTTP API;
+4. sends one bounded RRset patch containing replacements and removals;
+5. records the checksum and deployed revision only after success.
+
+PowerDNS itself writes its private PostgreSQL backend. Laravel does not write
+that database directly. Failed rendering or API activation leaves the recorded
+previous RRsets/deployed revision as the last valid state and exposes the error
+through the operation and DNS deployment status.
+
+## Edge enrollment and artifact flow
+
+Each physical edge node has one Go edge agent and one or more OpenResty cells.
+The agent—not OpenResty—talks to the control plane.
 
 ```mermaid
-%%{init: {"sequence": {"useMaxWidth": true}, "theme": "neutral"}}%%
 sequenceDiagram
-    autonumber
-    participant Admin as Platform administrator
-    participant PG as PostgreSQL
-    participant Agent as Edge agent
-    participant EC as Edge-control
-    participant Cells as OpenResty cells
+    participant A as Platform administrator
+    participant L as Laravel
+    participant G as Go edge agent
+    participant E as Edge-control Nginx
+    participant C as OpenResty cells
 
-    Admin->>PG: Create edge
-    PG-->>Admin: Show one-time bootstrap token once
-    Agent->>Agent: Generate private key and CSR locally
-    Agent->>EC: Exchange edge ID, token and CSR
-    EC->>PG: Validate token and sign short-lived identity
-    EC-->>Agent: Client certificate and artifact-signing public key
-    Agent->>Agent: Persist identity with restrictive permissions
-    Agent->>EC: Poll manifest over mutual TLS
-    EC-->>Agent: Signed, revisioned artifacts and tasks
-    Agent->>Agent: Verify, compile and atomically activate candidate
-    Agent->>Cells: Publish per-pool runtime files
-    Agent->>EC: Acknowledge revision and heartbeat cell capacity
-    EC->>PG: Record active revision, readiness and task results
+    A->>L: Create edge
+    L-->>A: Edge ID + one-time token
+    G->>G: Generate private key and CSR
+    G->>E: Register with ID, token, and CSR
+    E->>L: Forward bootstrap request
+    L-->>G: Signed client identity + artifact public key
+    G->>E: Poll manifest using mTLS
+    E->>L: Forward verified certificate identity
+    L-->>G: Signed revisioned artifacts/tasks
+    G->>G: Verify version, checksum, signature, and schema
+    G->>G: Compile per-pool JSON and atomically activate
+    G-->>C: Per-pool JSON appears in read-only shared mount
+    C->>C: Refresh active data without Nginx reload
+    G->>C: Private status/control calls
+    G->>E: Heartbeat, cells, failures, acknowledgement
+    E->>L: Forward verified agent report
 ```
 
-The bootstrap token is removed after successful enrollment. Normal traffic uses the persisted client identity. Rotating an identity revokes the previous certificate and issues a new one-time token. A stale or revoked edge is automatically excluded from published routing.
+`edge-control` is a dedicated Nginx TLS/mTLS boundary. It does not own desired
+state or compile artifacts; it exposes only `/edge/v1` to the same Laravel
+monolith and passes the verified client-certificate result/serial to Laravel.
 
-## DNS and edge deployment failure behavior
+The agent keeps its issued identity and the last valid state in persistent
+storage. It writes a separate JSON file per pool into storage mounted read-only
+by each cell. OpenResty refreshes the data without a normal configuration reload.
+Cell drain, undrain, restart, capacity, and passive-origin status use a private
+token-protected status listener between the local agent and cells.
+
+## Pool placement and safe movement
+
+Initial shared placement uses a stable hash of the domain name across enabled
+shared pools. A move keeps source and target explicit:
 
 ```mermaid
-%%{init: {"flowchart": {"useMaxWidth": true, "htmlLabels": true}, "theme": "neutral"}}%%
 flowchart TB
-    N[New desired revision]
-    V{Candidate validates?}
-    T[Activate target]
-    A{Runtime acknowledges?}
-    K[Keep previous valid state]
-    P[Publish new active revision]
-    F[Record bounded failure and operation details]
+    S[Source pool active]
+    T[Store target and build artifacts]
+    ACK{All participating target cells acknowledge?}
+    DNS[Publish target pool in authoritative DNS]
+    WAIT[Wait bounded DNS drain interval]
+    REMOVE[Publish source-removal artifacts]
+    DONE[Target becomes active]
+    KEEP[Keep source active and record failure]
 
-    N --> V
-    V -->|No| K --> F
-    V -->|Yes| T --> A
-    A -->|No or timeout| K --> F
-    A -->|Yes| P
+    S --> T --> ACK
+    ACK -->|No| KEEP
+    ACK -->|Yes| DNS --> WAIT --> REMOVE --> DONE
 ```
 
-Important guarantees:
+An unaddressed cell is not a routing participant. A participating cell must have
+the required public service addresses and report a fresh, ready listener. A
+failed target never causes early source removal.
 
-- An invalid PowerDNS replacement never removes the active zone.
-- An invalid edge bundle never replaces the active JSON runtime.
-- Pool movement activates and publishes the target before draining the source.
-- Duplicate jobs are coalesced and obsolete revisions are skipped.
-- Agent, telemetry, ClickHouse, and Laravel failures do not stop already-active edge traffic.
-- Telemetry buffers are bounded; dropping telemetry is safer than stopping delivery.
+## Network and process boundaries
 
-## Control-plane components
-
-| Component | Responsibility | Does not do |
+| Listener/service | Exposure | Purpose |
 |---|---|---|
-| Laravel modular monolith | UI, API, policies, validation, desired state, audit and operation creation | Serve DNS or proxy user traffic |
-| Filament admin panel | Platform users, DNS clusters, settings, operations, audit, edges and pools | Maintain a separate backend |
-| Filament domain panel | Assigned domains, DNS, origins, proxy policy and user-visible operations | Bypass Laravel policies |
-| PostgreSQL | Durable desired state and revision history | Act as an edge request dependency |
-| Valkey and Horizon | Four bounded queue lanes, cache, sessions, locks and limits | Own product state |
-| Scheduler | Periodic checks, renewal spreading, pruning and bounded maintenance | Create per-domain timers |
-| Edge-control Nginx | Dedicated TLS/mTLS boundary for agent routes | Expose normal control-panel routes |
+| Web Nginx | Public/reverse-proxied | Filament, REST API, health, Horizon access policy |
+| Edge-control Nginx | Public to edge nodes | Agent bootstrap and mTLS `/edge/v1` only |
+| DNSdist UDP/TCP 53 | Public | Only authoritative DNS entry point |
+| OpenResty cell HTTP/HTTPS | Public service addresses | Customer traffic |
+| Laravel PHP-FPM, Horizon, scheduler | Private control network | Control-plane execution |
+| Control PostgreSQL and Valkey | Private control network | Desired/operational state |
+| PowerDNS and PowerDNS PostgreSQL | Private DNS network | Derived authoritative runtime |
+| OpenResty status port | Private edge network | Agent-only cell status/control |
 
-Queue lanes are separated so a bulk job cannot starve interactive or runtime work:
+Production Compose uses separate `control`, `ingress`, `dns-private`,
+`telemetry`, and `edge` networks. Internal databases are not published. Profiles
+allow control, DNS, telemetry, and edge roles to run on separate hosts with
+site-specific routing/firewall overrides.
 
-1. `interactive`
-2. `runtime`
-3. `certificate_purge`
-4. `bulk_maintenance`
+## Permissions and secret boundaries
 
-## Data-plane components
+- `users.type = admin` grants platform administration. Domain users are limited
+  to assigned domains by the same policies and route bindings for sessions and
+  API tokens.
+- Mutations support `Idempotency-Key`; a reused key with different input is a
+  conflict. Bulk inputs and list sizes are bounded.
+- Personal tokens and edge bootstrap tokens are displayed only at creation.
+- Edge artifacts are signed. Agent private keys are generated and retained on
+  the edge; post-registration control requests use mTLS.
+- The artifact signing key, Laravel application key, edge identity CA private
+  key, control endpoint key, and runtime listener keys are deployment secrets,
+  not database platform settings.
+- Origin destinations are validated both when desired state is accepted and
+  again immediately before an edge connects.
 
-| Component | Exposure | Responsibility |
-|---|---|---|
-| DNSdist | Public UDP/TCP 53 | Authoritative DNS entry point, rate controls and ECS trust boundary |
-| PowerDNS | Private | Authoritative records, Lua Geo-DNS and monotonic zone serials |
-| OpenResty shared cells | Public HTTP/HTTPS | Normal customer delivery from one data-driven runtime |
-| OpenResty quarantine cells | Usually separately addressed | Isolated noisy or risky workloads |
-| OpenResty dedicated cells | Exceptional and explicitly provisioned | A bounded pool for a justified customer, never the default |
-| Go edge agent | Outbound control connectivity | Identity, artifact verification, atomic activation, heartbeat and cell tasks |
-| Vector | Private/local | Direct bounded telemetry shipping to ClickHouse |
+## Failure behaviour
 
-## Network boundaries
+| Failure | Expected result |
+|---|---|
+| Invalid domain DNS candidate | No PowerDNS activation; operation records error |
+| PowerDNS API unavailable | Existing authoritative zone keeps serving; queued work retries |
+| Invalid/tampered edge artifact | Agent rejects it and retains active JSON |
+| Edge misses heartbeat or listener is unready | Its cell addresses disappear from shared pool routing data |
+| Target pool does not acknowledge | Source pool remains active |
+| Laravel/Valkey/control PostgreSQL outage | Existing DNS and edge traffic continue; changes pause |
+| Agent/control link outage | OpenResty continues with last valid local runtime |
+| One cell fails | Other cells/edges and unrelated pools continue within available capacity |
 
-```mermaid
-%%{init: {"flowchart": {"useMaxWidth": true, "htmlLabels": true}, "theme": "neutral"}}%%
-flowchart TB
-    INTERNET[Internet]
-
-    subgraph PUBLIC[Public listeners]
-        WEB[Control web ingress]
-        DNS[DNSdist UDP and TCP 53]
-        EDGE[Edge HTTP and HTTPS]
-        ECTL[Edge-control TLS]
-    end
-
-    subgraph PRIVATE[Private service networks]
-        CORE[Laravel and workers]
-        PG[(Control PostgreSQL)]
-        REDIS[(Valkey)]
-        PDNS[PowerDNS and its PostgreSQL]
-        OBS[Vector, ClickHouse, Prometheus, Alertmanager]
-    end
-
-    INTERNET --> WEB --> CORE
-    INTERNET --> DNS --> PDNS
-    INTERNET --> EDGE
-    ECTL --> CORE
-    CORE --> PG
-    CORE --> REDIS
-    CORE --> PDNS
-    EDGE --> OBS
-```
-
-Only web ingress, DNSdist, edge listeners, and the dedicated agent control endpoint need public reachability. Control PostgreSQL, PowerDNS, Valkey, ClickHouse, and PHP-FPM remain private.
-
-## Permissions and security boundaries
-
-- Administrators have `users.type = admin`; domain users are restricted to assigned domains by the same policies in sessions and token requests.
-- Mutations support `Idempotency-Key`; reuse with different input is a conflict.
-- Lists use cursor pagination and bulk payloads have explicit limits.
-- Secrets are shown only at their one-time boundary and are redacted from logs and idempotency records.
-- Edge configuration is signed; edge agent communication after enrollment uses mutual TLS.
-- The identity-CA private key is readable only by the unprivileged control-plane signing worker and its owning secret group.
-- Customer TLS keys are validated, encrypted, and never sent to unassigned cells.
-- Origin Host, forwarding, upgrade, and hop-by-hop headers are normalized at the edge.
+The system reduces blast radius and bounds local resource use. It does not claim
+to scrub volumetric attacks after an edge uplink is saturated.
 
 ## Scaling model
 
-CDNFoundry scales by adding capacity to existing roles:
+Capacity grows by adding more workers within bounded queue lanes, more
+DNSdist/PowerDNS capacity, more edge nodes, and a bounded number of cells/pools.
+Normal domain placement does not reshuffle unrelated domains. Bulk maintenance
+uses a separate lane so it cannot consume every interactive/runtime worker.
 
-- more Horizon workers per bounded queue lane;
-- more DNSdist/PowerDNS capacity;
-- more ClickHouse/Vector capacity;
-- more edge nodes and bounded OpenResty cells.
+The four queue lanes are `interactive`, `runtime`, `certificate_purge`, and
+`bulk_maintenance`.
 
-It does not require Kubernetes, Kafka, microservices, a container per domain, a worker per domain, an Nginx server block per domain, or an Nginx reload for normal domain changes.
+## Current implementation boundary
 
-## Development topology
+Do not infer later roadmap features from containers or schema that already
+exist:
 
-`compose.dev.yml` starts real PowerDNS/DNSdist, the mTLS edge-control endpoint,
-and OpenResty runtimes. `make dev-edge-up` additionally starts two real agents
-configured from the gitignored `.env.dev` file. Each agent owns a persistent
-identity volume and a separate runtime-state volume shared by its own shared and
-quarantine cells.
+- The current edge Compose listener uses mounted TLS certificate/key files.
+  Full per-host managed certificate issuance/distribution belongs to the later
+  TLS roadmap phase.
+- The current OpenResty path is a bounded proxy runtime; customer content cache,
+  purge, advanced security profiles, and analytics dashboards are later phases.
+- ClickHouse is provisioned and Vector currently exports its own internal
+  Prometheus metrics. The repository does not yet claim that raw edge request
+  telemetry is flowing into ClickHouse.
+- Prometheus/Alertmanager services exist, but complete product monitoring and
+  alert coverage must follow their roadmap qualification rather than being
+  assumed from container presence.
 
-Local ports are documented in [development-stack.md](development-stack.md). Production host roles, immutable GHCR images, networks, volumes, resource limits, and secret paths are documented in [production-layout.md](production-layout.md).
+Verified completion status remains in [roadmap.md](roadmap.md). This distinction
+is important: architecture documentation must describe real runtime behaviour,
+not turn future acceptance criteria into present-tense claims.
 
-## Operator troubleshooting map
+## Development and production maps
 
-| Symptom | First checks |
+The supported local workflow is [development-stack.md](development-stack.md).
+It includes real PowerDNS/DNSdist, two shared and two quarantine OpenResty cells,
+an mTLS edge-control endpoint, and optional real agents enrolled with UI-created
+one-time tokens.
+
+Production host profiles, immutable commit-SHA GHCR images, resource limits,
+secret mounts, and recovery material are in
+[production-layout.md](production-layout.md). `compose.prod.yml` contains no
+`latest` tag and no production build instruction.
+
+## First troubleshooting checks
+
+| Symptom | Check |
 |---|---|
-| Proxy defaults save but traffic does not change | Confirm at least one DNS record is in Proxied mode, then check placement, operation, ready edge heartbeat and active revision |
-| Edge Cells shows awaiting enrollment | Start the agent with the exact edge ID and one-time token; inspect edge-control and agent logs |
-| Edge enrolled but Cells awaits heartbeat | Check runtime status URLs/token, cell names, agent network reachability and heartbeat validation errors |
-| Geo-DNS CNAME will not save | Use a unique owner name; CNAME cannot coexist with A, AAAA, NS or another CNAME at that owner |
-| DNS desired state saved but query is old | Inspect DNS deployment per cluster, PowerDNS API health, operation error and active serial |
-| Candidate deployment failed | Fix the bounded validation error; the previous valid zone/runtime should still serve |
-
-## Recovery essentials
-
-A recoverable control plane requires backups of PostgreSQL plus external copies of the Laravel encryption key, artifact-signing key, edge identity CA, and managed TLS material. PowerDNS data, edge snapshots, and analytics aggregates alone are not sufficient backups; they are derived. Restore keys and PostgreSQL first, then rebuild and reconcile runtime state.
+| Apex proxy will not save | Edit/remove an existing apex A/AAAA/CNAME; MX/TXT/CAA may remain |
+| Proxied subdomain seems absent in PowerAdmin | Look for `CNAME pool-<id>.<proxy-hostname>`, then check the domain DNS deployment status |
+| Pool CNAME exists but has no addresses | Check pool enabled state, cell service IPs, edge heartbeat, listener readiness, and drain state |
+| Desired proxy saved but not live | Check active placement, edge acknowledgements, active edge revision, and enabled DNS cluster deployment |
+| Edge row exists but is not ready | Enroll the real agent with that row's ID/token and inspect shared/quarantine cell heartbeat details |
+| DNS query returns old data | Check operation/deployment error and revision; PowerAdmin direct edits are not desired state |
+| Pool move is stuck | Inspect target-cell addresses/acknowledgements and the placement's last error; do not remove the source manually |

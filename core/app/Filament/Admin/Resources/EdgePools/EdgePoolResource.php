@@ -9,6 +9,8 @@ use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
 use App\Models\DomainEdgePlacement;
 use App\Models\EdgePool;
+use App\Models\PlatformDnsSetting;
+use App\Support\EdgeRoutingCompiler;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -32,17 +34,24 @@ class EdgePoolResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            TextInput::make('name')->required()->maxLength(100)->unique(ignoreRecord: true),
-            Select::make('kind')->options(['shared' => 'Shared', 'quarantine' => 'Quarantine', 'dedicated' => 'Dedicated'])->required(),
+            TextInput::make('name')->required()->maxLength(100)->unique(ignoreRecord: true)
+                ->helperText('Stable runtime name shared by one equivalent OpenResty cell at each participating edge.'),
+            Select::make('kind')->options(['shared' => 'Shared', 'quarantine' => 'Quarantine', 'dedicated' => 'Dedicated'])->required()
+                ->helperText('Shared is the normal default. Quarantine isolates risky/noisy domains. Dedicated is an explicit exceptional allocation, never one per domain.'),
         ]);
     }
 
     public static function table(Table $table): Table
     {
+        $settings = PlatformDnsSetting::query()->find(1);
+
         return $table->columns([
             TextColumn::make('name')->searchable()->sortable(),
             TextColumn::make('kind')->badge(),
             IconColumn::make('enabled')->boolean(),
+            TextColumn::make('routing_target')->label('DNS routing target')
+                ->state(fn (EdgePool $record): ?string => $settings === null ? null : EdgeRoutingCompiler::poolHostname($settings, $record))
+                ->copyable()->placeholder('Configure System DNS identity')->wrap(),
             TextColumn::make('revision')->sortable(),
             TextColumn::make('cells_count')->counts('cells')->label('Edge cells'),
             TextColumn::make('updated_at')->since()->sortable(),

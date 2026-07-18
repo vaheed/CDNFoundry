@@ -408,6 +408,15 @@ def main() -> None:
             "type": "A", "name": "www", "ttl": 60, "mode": "proxied",
             "origin": {**origin, "host": "1.1.1.1", "host_header": f"www.{ZONE}"},
         }, token)
+        call("POST", f"/api/domains/{domain_id}/dns/records", {
+            "type": "MX", "name": "@", "content": "mail.example.net.", "priority": 10, "ttl": 60,
+        }, token)
+        call("POST", f"/api/domains/{domain_id}/dns/records", {
+            "type": "TXT", "name": "@", "content": "proxy-apex=qualified", "ttl": 60,
+        }, token)
+        call("POST", f"/api/domains/{domain_id}/dns/records", {
+            "type": "CAA", "name": "@", "content": "0 issue letsencrypt.org", "ttl": 60,
+        }, token)
 
         sequences: dict[str, int] = {}
         for edge in edges:
@@ -422,6 +431,9 @@ def main() -> None:
         apex_ipv6 = set(dig(ZONE, "AAAA"))
         assert apex_ipv4 and apex_ipv4 <= set(dig(shared_global, "A")), apex_ipv4
         assert apex_ipv6 and apex_ipv6 <= set(dig(shared_global, "AAAA")), apex_ipv6
+        assert dig(ZONE, "MX") == ["10 mail.example.net."]
+        assert dig(ZONE, "TXT") == ['"proxy-apex=qualified"']
+        assert dig(ZONE, "CAA") == ['0 issue "letsencrypt.org"']
 
         for index, edge in enumerate(edges):
             _, detail = call("GET", f"/api/admin/edges/{edge['id']}", token=token)

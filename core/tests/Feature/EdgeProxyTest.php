@@ -10,8 +10,10 @@ use App\Models\EdgePool;
 use App\Models\EdgeRevision;
 use App\Models\EdgeTask;
 use App\Models\Operation;
+use App\Models\PlatformDnsSetting;
 use App\Models\User;
 use App\Support\ArtifactSigner;
+use App\Support\PowerDnsZone;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -94,6 +96,57 @@ class EdgeProxyTest extends TestCase
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $duplicateFamily)
             ->assertUnprocessable()->assertJsonValidationErrors('records');
         $this->assertSame(1, $domain->dnsRecords()->where('name', 'www.'.$domain->name)->count());
+    }
+
+    public function test_apex_proxy_coexists_with_mail_and_text_records_and_renders_pool_routing(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        foreach ([
+            ['type' => 'MX', 'name' => '@', 'ttl' => 300, 'priority' => 10, 'mode' => 'geo_dns', 'geo' => [
+                'default' => ['mail.example.net.'], 'countries' => ['IR' => ['mail-ir.example.net.']],
+            ]],
+            ['type' => 'TXT', 'name' => '@', 'ttl' => 300, 'mode' => 'geo_dns', 'geo' => [
+                'default' => ['verification=present'], 'countries' => ['IR' => ['verification=ir']],
+            ]],
+            ['type' => 'CAA', 'name' => '@', 'content' => '0 issue letsencrypt.org', 'ttl' => 300],
+        ] as $record) {
+            $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $record)->assertCreated();
+        }
+
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $this->record('@', '8.8.8.8'))->assertCreated();
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $this->record('www', '1.1.1.1'))->assertCreated();
+
+        $competingAddress = ['type' => 'AAAA', 'name' => '@', 'content' => '2001:db8::99', 'ttl' => 300];
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $competingAddress)
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.records.0', "A proxied hostname cannot coexist with another A, AAAA, or CNAME at {$domain->name}. Edit or remove the existing address/alias record.");
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", [
+            'type' => 'TXT', 'name' => 'www', 'content' => 'cannot-coexist', 'ttl' => 300,
+        ])->assertUnprocessable()
+            ->assertJsonPath('errors.records.0', "A non-apex proxied hostname publishes as a CNAME and must be the only record at www.{$domain->name}.");
+
+        $settings = PlatformDnsSetting::query()->create([
+            'id' => 1, 'platform_domain' => 'cdnf.test', 'proxy_hostname' => 'proxy.cdnf.test',
+            'nameservers' => [
+                ['hostname' => 'ns1.cdnf.test', 'ipv4' => '192.0.2.1', 'ipv6' => '2001:db8::1'],
+                ['hostname' => 'ns2.cdnf.test', 'ipv4' => '192.0.2.2', 'ipv6' => '2001:db8::2'],
+            ],
+            'soa_primary' => 'ns1.cdnf.test', 'soa_mailbox' => 'hostmaster.cdnf.test',
+            'soa_refresh' => 3600, 'soa_retry' => 600, 'soa_expire' => 1209600,
+            'soa_minimum_ttl' => 300, 'default_ttl' => 300, 'cluster_targets' => ['pdns.test'],
+        ]);
+        $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
+        DomainEdgePlacement::query()->updateOrCreate(['domain_id' => $domain->id], [
+            'active_pool_id' => $pool->id, 'target_pool_id' => null, 'state' => 'active',
+            'desired_revision' => $domain->refresh()->revision,
+        ]);
+
+        $rows = collect(PowerDnsZone::render($domain->refresh()));
+        $apexRows = $rows->where('name', $domain->name.'.');
+        $this->assertSame(['A', 'AAAA', 'MX', 'TXT'], $apexRows->where('type', 'LUA')->flatMap(fn (array $row): array => $row['records'])
+            ->pluck('content')->map(fn (string $content): string => strtok($content, ' '))->sort()->values()->all());
+        $this->assertSame(['CAA', 'NS', 'SOA'], $apexRows->where('type', '!=', 'LUA')->pluck('type')->sort()->unique()->values()->all());
+        $this->assertSame('pool-'.$pool->id.'.'.$settings->proxy_hostname.'.', $rows->firstWhere('name', 'www.'.$domain->name.'.')['records'][0]['content']);
     }
 
     public function test_edge_bootstrap_is_one_time_and_artifacts_require_active_identity(): void

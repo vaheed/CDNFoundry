@@ -12,8 +12,10 @@ use App\Models\DnsRecord;
 use App\Models\Domain;
 use App\Models\Edge;
 use App\Models\Operation;
+use App\Models\PlatformDnsSetting;
 use App\Support\DnsRecordData;
 use App\Support\DnsZoneValidator;
+use App\Support\EdgeRoutingCompiler;
 use App\Support\GeoDnsConfig;
 use App\Support\GeoIpClassifier;
 use App\Support\OriginData;
@@ -45,6 +47,10 @@ class DnsRecordsRelationManager extends RelationManager
     protected static string $relationship = 'dnsRecords';
 
     protected static ?string $title = 'DNS records';
+
+    private bool $desiredRoutingTargetResolved = false;
+
+    private ?string $desiredRoutingTarget = null;
 
     public function form(Schema $schema): Schema
     {
@@ -84,7 +90,7 @@ class DnsRecordsRelationManager extends RelationManager
                         $set('origin.sni', $hostname);
                     }
                 })
-                ->helperText('Geo-DNS is shown for supported record types. Proxy is available for A, AAAA, and CNAME records.'),
+                ->helperText('Geo-DNS answers directly. Proxied records send traffic through the domain\'s assigned service pool: the apex publishes managed A/AAAA answers, while subdomains publish a pool-specific CNAME.'),
             TextInput::make('name')->required()->default('@')->maxLength(253)->live(onBlur: true)
                 ->afterStateUpdated(function (?string $state, ?string $old, Get $get, Set $set): void {
                     $hostname = $this->ownerHostname((string) $state);
@@ -96,9 +102,17 @@ class DnsRecordsRelationManager extends RelationManager
                         $set('origin.sni', $hostname);
                     }
                 })
-                ->helperText(fn (Get $get): ?string => $get('type') === 'CNAME'
-                    ? 'A CNAME must be the only DNS record at this hostname. Use a new hostname if A, AAAA, NS, or another record already exists there.'
-                    : null),
+                ->helperText(function (Get $get): ?string {
+                    if ($get('mode') === 'proxied') {
+                        return $this->ownerHostname((string) $get('name')) === $this->getOwnerRecord()->name
+                            ? 'Apex proxy: edit or remove any existing apex A, AAAA, or CNAME first. MX, TXT, CAA, and other non-routing apex records may remain.'
+                            : 'Subdomain proxy: this becomes a pool-specific CNAME and must be the only record at this hostname.';
+                    }
+
+                    return $get('type') === 'CNAME'
+                        ? 'A CNAME must be the only DNS record at this hostname. Use a new hostname if another record already exists there.'
+                        : null;
+                }),
             TextInput::make('content')->required(fn ($get): bool => $get('mode') === 'dns_only')->maxLength(4096)
                 ->visible(fn ($get): bool => $get('mode') === 'dns_only'),
             TextInput::make('origin.host')->label('Origin server hostname or IP')->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied')
@@ -161,6 +175,9 @@ class DnsRecordsRelationManager extends RelationManager
             TextColumn::make('content')->limit(64),
             TextColumn::make('ttl')->sortable(),
             TextColumn::make('mode')->badge(),
+            TextColumn::make('desired_route')->label('Desired DNS route')
+                ->state(fn (DnsRecord $record): ?string => $this->desiredRoute($record))
+                ->placeholder('Direct DNS answer')->wrap(),
             TextColumn::make('origin_health.status')->label('Origin')->placeholder('Not tested')->badge(),
         ])->headerActions([
             CreateAction::make()->createAnother(false)->using(function (array $data): DnsRecord {
@@ -227,7 +244,7 @@ class DnsRecordsRelationManager extends RelationManager
             $data = $this->validateRecordForForm($input, $locked->name);
             abort_if($data['type'] === 'NS' && auth()->user()?->isAdmin() !== true, 403, 'Only administrators can manage delegated NS records.');
             $rows = $locked->dnsRecords()->lockForUpdate()->get()->map(fn (DnsRecord $item): array => $this->row($item))->push($data);
-            $this->assertZoneValidForForm($rows);
+            $this->assertZoneValidForForm($rows, $locked->name);
             $record = $locked->dnsRecords()->create($data);
             $this->changed($locked, 'dns.record_created', $record);
 
@@ -250,7 +267,7 @@ class DnsRecordsRelationManager extends RelationManager
             $data = $this->validateRecordForForm($input, $locked->name);
             abort_if($data['type'] === 'NS' && auth()->user()?->isAdmin() !== true, 403, 'Only administrators can manage delegated NS records.');
             $rows = $locked->dnsRecords()->lockForUpdate()->whereKeyNot($record->id)->get()->map(fn (DnsRecord $item): array => $this->row($item))->push($data);
-            $this->assertZoneValidForForm($rows);
+            $this->assertZoneValidForForm($rows, $locked->name);
             $record->update($data);
             $this->changed($locked, 'dns.record_updated', $record);
         });
@@ -354,10 +371,10 @@ class DnsRecordsRelationManager extends RelationManager
         return $input;
     }
 
-    private function assertZoneValidForForm(Collection $rows): void
+    private function assertZoneValidForForm(Collection $rows, string $zone): void
     {
         try {
-            DnsZoneValidator::assertValid($rows);
+            DnsZoneValidator::assertValid($rows, $zone);
         } catch (ValidationException $exception) {
             $zoneErrors = $exception->errors()['records'] ?? null;
             if ($zoneErrors !== null) {
@@ -385,6 +402,37 @@ class DnsRecordsRelationManager extends RelationManager
                 : 'No ready edge is connected yet. The origin and proxy policy are safely stored in PostgreSQL and will deploy after an edge enrolls and reports a ready listener.')
             ->color($readyEdgeExists ? 'success' : 'warning')
             ->send();
+    }
+
+    private function desiredRoute(DnsRecord $record): ?string
+    {
+        if ($record->mode !== 'proxied') {
+            return null;
+        }
+        $domain = $this->getOwnerRecord();
+        $target = $this->desiredRoutingTarget();
+        if ($target === null) {
+            return 'Waiting for service-pool placement';
+        }
+
+        return $record->name === $domain->name ? "Managed A + AAAA via {$target}" : "CNAME → {$target}";
+    }
+
+    private function desiredRoutingTarget(): ?string
+    {
+        if ($this->desiredRoutingTargetResolved) {
+            return $this->desiredRoutingTarget;
+        }
+        $this->desiredRoutingTargetResolved = true;
+        $domain = $this->getOwnerRecord();
+        $placement = $domain->edgePlacement()->with(['activePool', 'targetPool'])->first();
+        $pool = $placement?->state === 'draining' ? $placement->targetPool : $placement?->activePool;
+        $settings = PlatformDnsSetting::query()->find(1);
+        if ($pool !== null && $settings !== null) {
+            $this->desiredRoutingTarget = EdgeRoutingCompiler::poolHostname($settings, $pool);
+        }
+
+        return $this->desiredRoutingTarget;
     }
 
     private function validateRecordForForm(array $input, string $zone): array

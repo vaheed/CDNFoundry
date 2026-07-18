@@ -2,7 +2,7 @@
 
 For geographic A/AAAA answers, see [Geo-DNS records](geo-dns.md).
 
-CDNFoundry manages authoritative desired state for `A`, `AAAA`, `CNAME`, `MX`, `TXT`, `NS`, `CAA`, `SRV`, and reverse-zone `PTR` records. Every record is DNS-only in Phase 2.
+CDNFoundry manages authoritative desired state for `A`, `AAAA`, `CNAME`, `MX`, `TXT`, `NS`, `CAA`, `SRV`, and reverse-zone `PTR` records. Records support DNS-only mode, qualified types support Geo-DNS, and A/AAAA/CNAME hostnames support Proxied mode.
 
 Owners may be `@`, relative to the managed zone, or fully qualified inside it. Names are normalized to lowercase ASCII/Punycode. TTL values must be between 30 and 2,147,483,647 seconds.
 
@@ -19,6 +19,13 @@ Owners may be `@`, relative to the managed zone, or fully qualified inside it. N
 | `PTR` | DNS target | Managed reverse zones only |
 
 Logical duplicates are rejected. Bulk mutations and imports validate the complete resulting zone before committing, so an invalid change does not partially alter desired state. A successful bulk mutation or import increments the zone revision once.
+
+A proxied hostname has one routing record and one origin. At the apex, managed
+A/AAAA pool answers may coexist with MX, TXT, CAA, NS, and other non-routing
+records; another A, AAAA, or CNAME is rejected. A proxied subdomain becomes a
+pool-specific CNAME and must be the only record at that owner. If an apex
+DNS-only or Geo-DNS address already exists, edit it to Proxied or remove it
+before creating a new proxy record.
 
 Targets containing a dot, such as `mail.example.net`, are treated as absolute even when the final dot is omitted. A single-label target such as `mail` is relative to the managed zone. A final dot remains accepted for explicit FQDN input.
 
