@@ -60,6 +60,9 @@ func main() {
 		runtimeDir: env("EDGE_RUNTIME_DIR", ""), statusToken: env("EDGE_STATUS_TOKEN", ""),
 		statusURLs: splitNonempty(env("EDGE_CELL_STATUS_URLS", "")), http: &http.Client{Timeout: 15 * time.Second},
 	}
+	if err := c.configureServerTrust(env("EDGE_CONTROL_CA_CERTIFICATE", "")); err != nil {
+		fatal(err)
+	}
 	if err := os.MkdirAll(c.dir, 0700); err != nil {
 		fatal(err)
 	}
@@ -82,6 +85,27 @@ func main() {
 		}
 		time.Sleep(5 * time.Second)
 	}
+}
+
+func (c *client) configureServerTrust(path string) error {
+	if path == "" {
+		return nil
+	}
+	pemBytes, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	roots, err := x509.SystemCertPool()
+	if err != nil || roots == nil {
+		roots = x509.NewCertPool()
+	}
+	if !roots.AppendCertsFromPEM(pemBytes) {
+		return errors.New("EDGE_CONTROL_CA_CERTIFICATE contains no certificates")
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}
+	c.http.Transport = transport
+	return nil
 }
 
 type edgeTask struct {
@@ -274,7 +298,15 @@ func (c *client) configureMutualTLS() error {
 		return err
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.TLSClientConfig = &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12}
+	if existing, ok := c.http.Transport.(*http.Transport); ok {
+		transport = existing.Clone()
+	}
+	if transport.TLSClientConfig == nil {
+		transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	} else {
+		transport.TLSClientConfig = transport.TLSClientConfig.Clone()
+	}
+	transport.TLSClientConfig.Certificates = []tls.Certificate{certificate}
 	c.http.Transport = transport
 	return nil
 }

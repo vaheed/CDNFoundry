@@ -74,7 +74,6 @@ class GeoDnsTest extends TestCase
             'CNAME' => ['default.example.net', 'ir.example.net'],
             'MX' => ['mail-default.example.net', 'mail-ir.example.net'],
             'TXT' => ['default text', "Iran's regional text"],
-            'CAA' => ['0 issue letsencrypt.org', '0 issue pki.goog'],
             'SRV' => ['sip-default.example.net', 'sip-ir.example.net'],
         ];
 
@@ -105,6 +104,10 @@ class GeoDnsTest extends TestCase
 
         $this->assertSame(['ns.example.net.'], GeoDnsConfig::validate(['default' => ['ns.example.net']], 'NS', $domain->name)['default']);
         $this->assertSame(['host.example.net.'], GeoDnsConfig::validate(['default' => ['host.example.net']], 'PTR', '2.0.192.in-addr.arpa')['default']);
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", [
+            'type' => 'CAA', 'name' => 'caa-geo', 'ttl' => 60, 'mode' => 'geo_dns',
+            'geo' => ['default' => ['0 issue letsencrypt.org']],
+        ])->assertUnprocessable()->assertJsonValidationErrors('type');
     }
 
     private function payload(): array

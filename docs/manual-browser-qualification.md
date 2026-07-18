@@ -173,18 +173,17 @@ Repeat Geo-DNS with each type exposed by the current user/zone:
 | CNAME | `default.example.net` | `ir.example.net` | None |
 | MX | `mail-default.example.net` | `mail-ir.example.net` | Priority `10` |
 | TXT | `region=default` | `region=ir` | None |
-| CAA | `0 issue letsencrypt.org` | `0 issue pki.goog` | None |
 | SRV | `sip-default.example.net` | `sip-ir.example.net` | Owner `_sip._tcp.geo`, priority `10`, weight `5`, port `5060` |
 | NS (administrator only) | `ns-default.example.net` | `ns-ir.example.net` | Use only on a disposable delegated owner |
 | PTR (reverse zone only) | `default.example.net` | `ir.example.net` | Use only in a managed reverse zone |
 
-Confirm invalid RDATA is rejected according to its type. MX priority and SRV priority/weight/port remain fixed while geography selects their target. NS remains administrator-only and PTR remains reverse-zone-only.
+Confirm invalid RDATA is rejected according to its type. MX priority and SRV priority/weight/port remain fixed while geography selects their target. NS remains administrator-only and PTR remains reverse-zone-only. CAA must offer DNS-only mode but not Geo-DNS: the qualified PowerDNS Lua runtime returns NODATA for synthesized CAA, so exposing it would be a false feature.
 
 Use preview with IPv4/IPv6 addresses whose classification is known in the installed MMDB and record the displayed country/continent. Query DNSdist with and without trusted ECS and confirm the answer matches that classification. Force a bad MMDB update and invalid deployment; the prior MMDB and last valid answers must continue serving while failure is visible.
 
 ### Phase 3 completion gate
 
-- Implementation: present for every supported DNS record type with normal NS/PTR policy restrictions.
+- Implementation: present for every PowerDNS-Lua-compatible DNS record type with normal NS/PTR policy restrictions; CAA is explicitly DNS-only.
 - Documentation: present above.
 - Automated/runtime qualification: agent-owned API/compiler and real DNS tests must pass and be recorded.
 - Manual browser/geographic-vantage qualification: owner-run; **failed/not complete until every Phase 3 checkpoint and required vantage-point query passes**.

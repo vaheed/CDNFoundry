@@ -1197,13 +1197,14 @@ Allow a user to create DNS records that return different user-provided targets b
 
 #### Implementation
 
-A `geo_dns` record supports every normally supported DNS record type, subject to the same authorization and zone rules as its DNS-only equivalent:
+A `geo_dns` record supports every record type that the qualified PowerDNS Lua runtime can synthesize, subject to the same authorization and zone rules as its DNS-only equivalent:
 
 - One required default target set
 - Country overrides
 - Continent overrides
 - A deterministic priority order
-- Type-aware answer validation for A, AAAA, CNAME, MX, TXT, NS, CAA, SRV, and PTR
+- Type-aware answer validation for A, AAAA, CNAME, MX, TXT, NS, SRV, and PTR
+- CAA remains DNS-only because the qualified PowerDNS 5.1 Lua runtime returns no synthesized CAA answer
 - Bounded target and rule counts
 - Preview using a supplied test IP
 - Compilation to PowerDNS-supported runtime data or Lua records
@@ -1284,7 +1285,8 @@ The Geo-DNS editor includes:
 - [x] Continent overrides win over default.
 - [x] Unknown geography returns default.
 - [x] IPv4 and IPv6 targets validate correctly.
-- [x] CNAME, MX, TXT, NS, CAA, SRV, and PTR geographic answers use type-aware validation and deterministic Lua compilation.
+- [x] CNAME, MX, TXT, NS, SRV, and PTR geographic answers use type-aware validation and deterministic Lua compilation.
+- [x] Unsupported Lua answer types such as CAA remain DNS-only rather than deploying a record that returns NODATA.
 - [x] Invalid mappings never replace the active record.
 - [x] DNS-only records remain unaffected.
 

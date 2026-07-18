@@ -61,7 +61,7 @@ class DnsRecordsRelationManager extends RelationManager
             }),
             Select::make('mode')->options(function (Get $get): array {
                 $options = ['dns_only' => 'DNS only'];
-                if (in_array($get('type'), DnsRecordData::TYPES, true)) {
+                if (in_array($get('type'), GeoDnsConfig::SUPPORTED_TYPES, true)) {
                     $options['geo_dns'] = 'Geo-DNS';
                 }
                 if (in_array($get('type'), ['A', 'AAAA', 'CNAME'], true)) {
@@ -83,7 +83,7 @@ class DnsRecordsRelationManager extends RelationManager
                         $set('origin.sni', $hostname);
                     }
                 })
-                ->helperText('Geo-DNS supports every listed DNS type. Proxy supports only A/AAAA/CNAME. Proxy and Geo-DNS are mutually exclusive.'),
+                ->helperText('Geo-DNS is shown for supported record types. Proxy is available for A, AAAA, and CNAME records.'),
             TextInput::make('name')->required()->default('@')->maxLength(253)->live(onBlur: true)
                 ->afterStateUpdated(function (?string $state, ?string $old, Get $get, Set $set): void {
                     $hostname = $this->ownerHostname((string) $state);
@@ -121,17 +121,17 @@ class DnsRecordsRelationManager extends RelationManager
             TagsInput::make('geo_default')->label('Default answers')
                 ->visible(fn ($get): bool => $get('mode') === 'geo_dns')
                 ->required(fn ($get): bool => $get('mode') === 'geo_dns')
-                ->nestedRecursiveRules(['string', 'max:45']),
+                ->nestedRecursiveRules(['string', 'max:4096']),
             Repeater::make('geo_countries')->label('Country overrides')->maxItems(GeoDnsConfig::MAX_COUNTRIES)
                 ->visible(fn ($get): bool => $get('mode') === 'geo_dns')->schema([
                     Select::make('code')->options(array_combine(GeoDnsConfig::countryCodes(), GeoDnsConfig::countryCodes()))->searchable()->required(),
-                    TagsInput::make('targets')->required()->nestedRecursiveRules(['string', 'max:45']),
+                    TagsInput::make('targets')->required()->nestedRecursiveRules(['string', 'max:4096']),
                 ])->columns(2),
             Repeater::make('geo_continents')->label('Continent overrides')->maxItems(GeoDnsConfig::MAX_CONTINENTS)
                 ->visible(fn ($get): bool => $get('mode') === 'geo_dns')->schema([
                     Select::make('code')->options(array_combine(GeoDnsConfig::CONTINENTS, GeoDnsConfig::CONTINENTS))->required(),
-                    TagsInput::make('targets')->required()->nestedRecursiveRules(['string', 'max:45']),
-                ])->columns(2)->helperText('Country overrides win over continent overrides. Each target set is limited to 8 addresses.'),
+                    TagsInput::make('targets')->required()->nestedRecursiveRules(['string', 'max:4096']),
+                ])->columns(2)->helperText('Country overrides win over continent overrides. Each answer set is limited to 8 type-valid values.'),
             TextInput::make('ttl')->numeric()->required()->default(300)->minValue(30)->maxValue(2147483647),
             TextInput::make('priority')->numeric()->default(0)->minValue(0)->maxValue(65535)->visible(fn ($get): bool => in_array($get('type'), ['MX', 'SRV'], true)),
             TextInput::make('weight')->numeric()->default(0)->minValue(0)->maxValue(65535)->visible(fn ($get): bool => $get('type') === 'SRV'),

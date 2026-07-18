@@ -3,6 +3,7 @@
 CDNFoundry uses three distinct certificate roles:
 
 - `edge-identity-ca`: signs short-lived edge-agent client identities. Its private key belongs only on the control plane.
+- `edge-server-ca`: signs the edge-control and bootstrap runtime server certificates. Only its public certificate is copied to edge-agent hosts.
 - `edge-control-server`: secures the agent-facing control endpoint such as `edge-control.example.com:8443`.
 - `edge-runtime`: bootstrap/default certificate for the public OpenResty listener. Phase 5 managed per-domain TLS will replace it through dynamic certificate selection.
 
@@ -28,6 +29,7 @@ Set `.env.prod` paths:
 ```dotenv
 EDGE_CONTROL_SERVER_CERTIFICATE=/etc/cdnfoundry/pki/edge-control-server.crt
 EDGE_CONTROL_SERVER_PRIVATE_KEY=/etc/cdnfoundry/pki/edge-control-server.key
+EDGE_CONTROL_CA_CERTIFICATE=/etc/cdnfoundry/pki/edge-server-ca.crt
 EDGE_IDENTITY_CA_CERTIFICATE=/etc/cdnfoundry/pki/edge-identity-ca.crt
 EDGE_IDENTITY_CA_PRIVATE_KEY=/etc/cdnfoundry/pki/edge-identity-ca.key
 EDGE_RUNTIME_TLS_CERTIFICATE=/etc/cdnfoundry/pki/edge-runtime.crt
@@ -38,7 +40,7 @@ Validate before starting services:
 
 ```sh
 openssl x509 -in /etc/cdnfoundry/pki/edge-control-server.crt -noout -subject -issuer -dates -ext subjectAltName
-openssl verify -CAfile /etc/cdnfoundry/pki/edge-identity-ca.crt /etc/cdnfoundry/pki/edge-control-server.crt
+openssl verify -CAfile /etc/cdnfoundry/pki/edge-server-ca.crt /etc/cdnfoundry/pki/edge-control-server.crt
 docker compose --env-file .env.prod -f compose.prod.yml config --quiet
 ```
 
@@ -53,4 +55,4 @@ docker compose --env-file .env.prod -f compose.prod.yml up -d --force-recreate e
 
 Test agent registration/heartbeat and HTTPS on both edge cells before removing old material. Keep the previous directory until rollback is no longer needed.
 
-Rotating only a server certificate while retaining the identity CA does not invalidate edge client identities. Rotating the identity CA is a coordinated trust migration: install the new trust anchor, re-register/rotate every edge identity, verify the fleet, and only then remove the old CA. Preserve the CA private key, application key, artifact-signing key, and TLS material in encrypted off-host recovery storage.
+Rotating only a server certificate while retaining the server and identity CAs does not invalidate edge client identities. Rotating the server CA requires distributing its new public certificate to edge agents before switching the server certificate. Rotating the identity CA is a coordinated client-trust migration: install the new trust anchor, re-register/rotate every edge identity, verify the fleet, and only then remove the old CA. Preserve both CA private keys, application key, artifact-signing key, and TLS material in encrypted off-host recovery storage.

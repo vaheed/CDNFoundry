@@ -300,6 +300,7 @@ services:
     profiles: [edge]
     environment:
       EDGE_CONTROL_URL: ${EDGE_CONTROL_URL:?EDGE_CONTROL_URL is required}
+      EDGE_CONTROL_CA_CERTIFICATE: /run/secrets/edge-control-ca.crt
       EDGE_ID: ${EDGE_ID:-}
       EDGE_BOOTSTRAP_TOKEN: ${EDGE_BOOTSTRAP_TOKEN:-}
       EDGE_STATE_DIR: /var/lib/cdnfoundry/agent
@@ -309,6 +310,7 @@ services:
     volumes:
       - edge-agent-state:/var/lib/cdnfoundry/agent
       - edge-state:/var/lib/cdnfoundry/runtime
+      - ${EDGE_CONTROL_CA_CERTIFICATE:?EDGE_CONTROL_CA_CERTIFICATE is required}:/run/secrets/edge-control-ca.crt:ro
     networks: [edge]
     restart: unless-stopped
     read_only: true
