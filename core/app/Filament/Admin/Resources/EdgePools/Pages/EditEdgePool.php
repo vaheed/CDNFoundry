@@ -19,6 +19,7 @@ class EditEdgePool extends EditRecord
 
     protected function afterSave(): void
     {
+        $this->record->cells()->update(['name' => $this->record->name]);
         AuditLog::record(auth()->user(), 'edge_pool.updated', $this->record, [], request()->ip());
     }
 }

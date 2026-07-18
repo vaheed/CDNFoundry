@@ -3,6 +3,7 @@
 namespace App\Filament\Domain\Resources\Domains\RelationManagers;
 
 use App\Enums\DomainLifecycleState;
+use App\Jobs\DispatchOriginTest;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
@@ -14,6 +15,7 @@ use App\Support\DnsRecordData;
 use App\Support\DnsZoneValidator;
 use App\Support\GeoDnsConfig;
 use App\Support\GeoIpClassifier;
+use App\Support\OriginData;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -27,11 +29,14 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class DnsRecordsRelationManager extends RelationManager
@@ -49,23 +54,70 @@ class DnsRecordsRelationManager extends RelationManager
                     ->reject(fn (string $type): bool => $type === 'PTR' && ! str_ends_with($this->getOwnerRecord()->name, '.in-addr.arpa') && ! str_ends_with($this->getOwnerRecord()->name, '.ip6.arpa'));
 
                 return $types->mapWithKeys(fn (string $type): array => [$type => $type])->all();
-            })->required()->live(),
-            Select::make('mode')->options(['dns_only' => 'DNS only', 'geo_dns' => 'Geo-DNS', 'proxied' => 'Proxied'])
+            })->required()->live()->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
+                if (! in_array($state, ['A', 'AAAA', 'CNAME'], true) && $get('mode') === 'proxied') {
+                    $set('mode', 'dns_only');
+                }
+            }),
+            Select::make('mode')->options(function (Get $get): array {
+                $options = ['dns_only' => 'DNS only'];
+                if (in_array($get('type'), DnsRecordData::TYPES, true)) {
+                    $options['geo_dns'] = 'Geo-DNS';
+                }
+                if (in_array($get('type'), ['A', 'AAAA', 'CNAME'], true)) {
+                    $options['proxied'] = 'Proxied';
+                }
+
+                return $options;
+            })
                 ->default('dns_only')->required()->live()
-                ->helperText('Proxy supports A/AAAA/CNAME and returns CDNFoundry edge addresses. Proxy and Geo-DNS are mutually exclusive.'),
-            TextInput::make('name')->required()->default('@')->maxLength(253),
+                ->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
+                    if ($state !== 'proxied') {
+                        return;
+                    }
+                    $hostname = $this->ownerHostname((string) $get('name'));
+                    if (blank($get('origin.host_header'))) {
+                        $set('origin.host_header', $hostname);
+                    }
+                    if (blank($get('origin.sni'))) {
+                        $set('origin.sni', $hostname);
+                    }
+                })
+                ->helperText('Geo-DNS supports every listed DNS type. Proxy supports only A/AAAA/CNAME. Proxy and Geo-DNS are mutually exclusive.'),
+            TextInput::make('name')->required()->default('@')->maxLength(253)->live(onBlur: true)
+                ->afterStateUpdated(function (?string $state, ?string $old, Get $get, Set $set): void {
+                    $hostname = $this->ownerHostname((string) $state);
+                    $oldHostname = $this->ownerHostname((string) $old);
+                    if (blank($get('origin.host_header')) || $get('origin.host_header') === $oldHostname) {
+                        $set('origin.host_header', $hostname);
+                    }
+                    if (blank($get('origin.sni')) || $get('origin.sni') === $oldHostname) {
+                        $set('origin.sni', $hostname);
+                    }
+                }),
             TextInput::make('content')->required(fn ($get): bool => $get('mode') === 'dns_only')->maxLength(4096)
                 ->visible(fn ($get): bool => $get('mode') === 'dns_only'),
-            TextInput::make('origin.host')->label('Private origin hostname or IP')->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
-            Select::make('origin.scheme')->options(['http' => 'HTTP', 'https' => 'HTTPS'])->default('http')->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
-            TextInput::make('origin.port')->numeric()->default(80)->minValue(1)->maxValue(65535)->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
+            TextInput::make('origin.host')->label('Origin server hostname or IP')->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied')
+                ->helperText('For cPanel/shared hosting, enter the server hostname or dedicated origin IP. Do not enter an address that routes back to this CDN.'),
+            Select::make('origin.scheme')->options(['https' => 'HTTPS', 'http' => 'HTTP'])->default('https')->live()->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied')
+                ->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
+                    if ($state === 'https' && in_array((int) $get('origin.port'), [0, 80], true)) {
+                        $set('origin.port', 443);
+                    } elseif ($state === 'http' && (int) $get('origin.port') === 443) {
+                        $set('origin.port', 80);
+                    }
+                }),
+            TextInput::make('origin.port')->numeric()->default(443)->minValue(1)->maxValue(65535)->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
             TextInput::make('origin.host_header')->label('Origin Host header')->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
-            TextInput::make('origin.sni')->label('TLS SNI')->visible(fn ($get): bool => $get('mode') === 'proxied'),
+            TextInput::make('origin.sni')->label('TLS SNI')->required(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.scheme') === 'https' && (bool) $get('origin.verify_tls'))->visible(fn ($get): bool => $get('mode') === 'proxied'),
             Toggle::make('origin.verify_tls')->label('Verify origin TLS')->default(true)->visible(fn ($get): bool => $get('mode') === 'proxied'),
-            TextInput::make('origin.connect_timeout_ms')->numeric()->default(1000)->minValue(100)->maxValue(10000)->visible(fn ($get): bool => $get('mode') === 'proxied'),
-            TextInput::make('origin.response_timeout_ms')->numeric()->default(5000)->minValue(500)->maxValue(60000)->visible(fn ($get): bool => $get('mode') === 'proxied'),
-            TextInput::make('origin.retry_count')->numeric()->default(0)->minValue(0)->maxValue(2)->visible(fn ($get): bool => $get('mode') === 'proxied'),
+            TextInput::make('origin.connect_timeout_ms')->numeric()->default(2000)->minValue(100)->maxValue(10000)->visible(fn ($get): bool => $get('mode') === 'proxied'),
+            TextInput::make('origin.response_timeout_ms')->numeric()->default(30000)->minValue(500)->maxValue(60000)->visible(fn ($get): bool => $get('mode') === 'proxied'),
+            TextInput::make('origin.retry_count')->numeric()->default(1)->minValue(0)->maxValue(2)->visible(fn ($get): bool => $get('mode') === 'proxied'),
             Toggle::make('origin.websocket')->label('Allow WebSocket upgrade')->default(false)->visible(fn ($get): bool => $get('mode') === 'proxied'),
+            Toggle::make('origin.health_check.enabled')->label('Enable scheduled origin health check')->default(false)->visible(fn ($get): bool => $get('mode') === 'proxied'),
+            TextInput::make('origin.health_check.path')->label('Health-check path')->default('/')->maxLength(1024)->visible(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.health_check.enabled')),
+            TextInput::make('origin.health_check.interval_seconds')->label('Health-check interval (seconds)')->numeric()->default(300)->minValue(60)->maxValue(86400)->visible(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.health_check.enabled')),
             TagsInput::make('geo_default')->label('Default answers')
                 ->visible(fn ($get): bool => $get('mode') === 'geo_dns')
                 ->required(fn ($get): bool => $get('mode') === 'geo_dns')
@@ -101,6 +153,16 @@ class DnsRecordsRelationManager extends RelationManager
                 return $this->createRecord($data);
             }),
         ])->recordActions([
+            Action::make('testOrigin')->label('Test origin')->icon('heroicon-o-signal')
+                ->visible(fn (DnsRecord $record): bool => $record->mode === 'proxied')
+                ->action(function (DnsRecord $record): void {
+                    $operation = Operation::query()->create([
+                        'id' => (string) Str::uuid(), 'type' => 'edge.origin_test', 'status' => 'pending', 'actor_id' => auth()->id(),
+                        'input' => ['domain_id' => $record->domain_id, 'record_id' => $record->id, 'addresses' => OriginData::resolveAndValidate($record->origin['host']), 'edge_ids' => []],
+                    ]);
+                    DispatchOriginTest::dispatch($operation->id)->afterCommit();
+                    Notification::make()->info()->title('Origin test queued')->body("Operation {$operation->id} will run on qualified edges.")->send();
+                }),
             Action::make('previewGeo')->label('Preview')->visible(fn (DnsRecord $record): bool => $record->mode === 'geo_dns')
                 ->schema([TextInput::make('ip')->ip()->required()])
                 ->action(function (DnsRecord $record, array $data): void {
@@ -231,6 +293,15 @@ class DnsRecordsRelationManager extends RelationManager
         unset($input['geo_default'], $input['geo_countries'], $input['geo_continents']);
 
         return $input;
+    }
+
+    private function ownerHostname(string $owner): string
+    {
+        try {
+            return DnsRecordData::normalizeOwner($owner === '' ? '@' : $owner, $this->getOwnerRecord()->name);
+        } catch (\InvalidArgumentException) {
+            return $this->getOwnerRecord()->name;
+        }
     }
 
     private function hydrateGeoForm(array $data, DnsRecord $record): array

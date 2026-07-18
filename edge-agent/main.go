@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
@@ -113,11 +114,13 @@ func (c *client) processTasks() error {
 		return err
 	}
 	for _, task := range response.Data {
-		result := map[string]any{"status": "unhealthy", "failure_reason": "task_cancelled"}
+		result := map[string]any{"status": "failed", "failure_reason": "cell_supervisor_unavailable"}
+		status := "failed"
 		if task.Type == "origin_test" {
 			result = runOriginTest(task)
+			status = "succeeded"
 		}
-		if err := c.request("POST", "/edge/v1/tasks/"+task.ID+"/result", map[string]any{"status": "succeeded", "result": result}, &map[string]any{}, true); err != nil {
+		if err := c.request("POST", "/edge/v1/tasks/"+task.ID+"/result", map[string]any{"status": status, "result": result}, &map[string]any{}, true); err != nil {
 			return err
 		}
 	}
@@ -355,6 +358,18 @@ func (c *client) full() error {
 	if err != nil {
 		return err
 	}
+	reader, err := gzip.NewReader(bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	payload, err = io.ReadAll(io.LimitReader(reader, 64<<20))
+	closeErr := reader.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
 	var snapshot struct {
 		SchemaVersion int    `json:"schema_version"`
 		Minimum       string `json:"minimum_agent_version"`
@@ -514,14 +529,21 @@ func validPoolName(name string) bool {
 }
 
 func (c *client) heartbeat(sequence uint64) error {
+	cells, failures := c.runtimeStatus()
+	listenerReady := false
+	for _, cell := range cells {
+		if cell["name"] == "shared-default" && cell["status"] == "ready" {
+			listenerReady = true
+		}
+	}
 	return c.request("POST", "/edge/v1/heartbeat", map[string]any{
-		"agent_version": version, "listener_ready": true, "active_sequence": sequence,
-		"cells":           []map[string]any{{"name": "shared-default", "status": "ready", "capacity": map[string]any{"active_connections": 0}}},
-		"passive_origins": c.passiveFailures(),
+		"agent_version": version, "listener_ready": listenerReady, "active_sequence": sequence,
+		"cells": cells, "passive_origins": failures,
 	}, &map[string]any{}, true)
 }
 
-func (c *client) passiveFailures() []map[string]any {
+func (c *client) runtimeStatus() ([]map[string]any, []map[string]any) {
+	cells := []map[string]any{}
 	failures := []map[string]any{}
 	for _, endpoint := range c.statusURLs {
 		req, err := http.NewRequest("GET", endpoint, nil)
@@ -535,19 +557,26 @@ func (c *client) passiveFailures() []map[string]any {
 		}
 		var decoded struct {
 			Data []map[string]any `json:"data"`
+			Cell map[string]any   `json:"cell"`
 		}
 		if response.StatusCode == http.StatusOK {
 			_ = json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&decoded)
 		}
 		_ = response.Body.Close()
+		if decoded.Cell != nil && len(cells) < 32 {
+			cells = append(cells, decoded.Cell)
+		}
 		for _, failure := range decoded.Data {
 			if len(failures) >= 100 {
-				return failures
+				return cells, failures
 			}
 			failures = append(failures, failure)
 		}
 	}
-	return failures
+	if len(cells) == 0 {
+		cells = append(cells, map[string]any{"name": "runtime", "status": "degraded", "capacity": map[string]any{}})
+	}
+	return cells, failures
 }
 func (c *client) queueAck(a ack) {
 	var q []ack

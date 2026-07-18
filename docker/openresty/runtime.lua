@@ -1,5 +1,6 @@
 local cjson = require "cjson.safe"
 local resolver = require "resty.dns.resolver"
+local balancer = require "ngx.balancer"
 local bit = require "bit"
 local M = {}
 local state = { hosts = {}, sequence = 0 }
@@ -78,7 +79,10 @@ local function allowed(ip, networks)
     return false
 end
 
-local function blocked(ip, networks)
+local function blocked(ip, networks, denied)
+    for _, address in ipairs(denied or {}) do
+        if ip == address then return true end
+    end
     if ip == "0.0.0.0" or ip:match("^127%.") or ip:match("^169%.254%.") or ip:match("^224%.") then return true end
     local a, b = ip:match("^(%d+)%.(%d+)%.")
     a, b = tonumber(a), tonumber(b)
@@ -123,9 +127,9 @@ function M.select_certificate()
     end
 end
 
-local function resolve(host, networks)
+local function resolve(host, networks, denied)
     if host:match("^%d+%.%d+%.%d+%.%d+$") or host:find(":", 1, true) then
-        if blocked(host, networks) then return nil, "blocked_destination" end
+        if blocked(host, networks, denied) then return nil, "blocked_destination" end
         return host
     end
     local r, err = resolver:new{nameservers={"127.0.0.11"}, retrans=2, timeout=1000}
@@ -135,7 +139,7 @@ local function resolve(host, networks)
         if answers then
             for _, answer in ipairs(answers) do
                 if answer.address then
-                    if blocked(answer.address, networks) then return nil, "blocked_destination" end
+                    if blocked(answer.address, networks, denied) then return nil, "blocked_destination" end
                     return answer.address
                 end
             end
@@ -149,11 +153,22 @@ function M.access()
     local config = state.hosts[host]
     if not config then return ngx.exit(421) end
     if config.settings and config.settings.enabled == false then return ngx.exit(503) end
+    if config.settings and config.settings.redirect_https == true and ngx.var.scheme == "http" then
+        return ngx.redirect("https://" .. host .. ngx.var.request_uri, 308)
+    end
+    if config.settings and type(config.settings.http_versions) == "table" then
+        local current = tostring(ngx.req.http_version())
+        local accepted = false
+        for _, version in ipairs(config.settings.http_versions) do
+            if tostring(version) == current or tostring(version) .. ".0" == current then accepted = true; break end
+        end
+        if not accepted then return ngx.exit(505) end
+    end
     if config.settings and config.settings.maintenance then
         ngx.status = 503; ngx.header["Content-Type"] = "text/plain"; ngx.say(config.settings.maintenance.body or "Service unavailable"); return ngx.exit(503)
     end
     local origin = config.origin
-    local address, err = resolve(origin.host, origin.private_allowlist)
+    local address, err = resolve(origin.host, origin.private_allowlist, origin.blocked_addresses)
     if not address then ngx.log(ngx.WARN, "origin rejected: ", err); ngx.header["X-CDNFoundry-Error"] = err; return ngx.exit(502) end
     if address:find(":", 1, true) then address = "[" .. address .. "]" end
     ngx.var.origin_scheme = origin.scheme
@@ -163,6 +178,10 @@ function M.access()
     ngx.var.origin_sni = origin.sni or origin.host_header
     ngx.var.origin_connection = ""
     ngx.var.origin_upgrade = ""
+    ngx.var.origin_address = address:gsub("^%[", ""):gsub("%]$", "")
+    ngx.var.origin_connect_timeout = tostring(math.max(100, math.min(10000, tonumber(origin.connect_timeout_ms) or 1000)))
+    ngx.var.origin_response_timeout = tostring(math.max(500, math.min(60000, tonumber(origin.response_timeout_ms) or 5000)))
+    ngx.var.origin_retry_count = tostring(math.max(0, math.min(2, tonumber(origin.retry_count) or tonumber(config.settings and config.settings.retry_count) or 0)))
     if origin.websocket == true and (ngx.var.http_upgrade or ""):lower() == "websocket" then
         ngx.var.origin_connection = "upgrade"
         ngx.var.origin_upgrade = "websocket"
@@ -170,7 +189,18 @@ function M.access()
     ngx.req.clear_header("Forwarded"); ngx.req.clear_header("X-Forwarded-For"); ngx.req.clear_header("X-Forwarded-Host"); ngx.req.clear_header("X-Forwarded-Proto")
     ngx.req.clear_header("Proxy-Connection"); ngx.req.clear_header("Keep-Alive"); ngx.req.clear_header("TE"); ngx.req.clear_header("Trailer"); ngx.req.clear_header("Upgrade")
     if origin.scheme == "https" and origin.verify_tls == true then return ngx.exec("@proxy_verified") end
-    return ngx.exec("@proxy_unverified")
+    if origin.scheme == "https" then return ngx.exec("@proxy_unverified_https") end
+    return ngx.exec("@proxy_http")
+end
+
+function M.balance()
+    local ok, err = balancer.set_current_peer(ngx.var.origin_address, tonumber(ngx.var.origin_port))
+    if not ok then error("unable to select origin: " .. (err or "unknown")) end
+    local connect_timeout = tonumber(ngx.var.origin_connect_timeout) or 1000
+    local response_timeout = tonumber(ngx.var.origin_response_timeout) or 5000
+    local retry_count = tonumber(ngx.var.origin_retry_count) or 0
+    balancer.set_timeouts(connect_timeout / 1000, response_timeout / 1000, response_timeout / 1000)
+    if retry_count > 0 then balancer.set_more_tries(retry_count) end
 end
 
 function M.record_passive_failure()
@@ -202,8 +232,46 @@ function M.passive_failures()
             }
         end
     end
+    local assigned = 0
+    for _ in pairs(state.hosts) do assigned = assigned + 1 end
+    local memory_usage = 0
+    local memory_file = io.open("/sys/fs/cgroup/memory.current", "r")
+    if memory_file then
+        memory_usage = tonumber(memory_file:read("*l")) or 0
+        memory_file:close()
+    end
+    local cpu_usage = 0
+    local cpu_file = io.open("/sys/fs/cgroup/cpu.stat", "r")
+    if cpu_file then
+        for line in cpu_file:lines() do
+            local usage = line:match("^usage_usec%s+(%d+)$")
+            if usage then cpu_usage = tonumber(usage) or 0; break end
+        end
+        cpu_file:close()
+    end
+    local cache_free = ngx.shared.runtime_limits:free_space()
     ngx.header["Content-Type"] = "application/json"
-    ngx.say(cjson.encode({data = failures}))
+    ngx.say(cjson.encode({
+        data = failures,
+        cell = {
+            name = os.getenv("EDGE_CELL_NAME") or "unknown",
+            status = "ready",
+            capacity = {
+                assigned_domain_count = assigned,
+                active_revision = state.sequence,
+                openresty_version = ngx.config.nginx_version,
+                active_connections = tonumber(ngx.var.connections_active) or 0,
+                origin_connections = 0,
+                cpu_usage_usec = cpu_usage,
+                memory_usage = memory_usage,
+                cache_usage = 10 * 1024 * 1024 - cache_free,
+                cache_free_bytes = cache_free,
+                temporary_storage_usage = 0,
+                telemetry_buffer_usage = 0,
+                rejected_requests = 0,
+            },
+        },
+    }))
 end
 
 return M

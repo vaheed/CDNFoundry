@@ -7,3 +7,5 @@ The control plane rejects unspecified, loopback, carrier NAT, link-local, privat
 The edge removes hop-by-hop and client-supplied forwarding headers, sets the configured origin Host, and creates trusted forwarding metadata. It rejects conflicting Content-Length/Transfer-Encoding framing, malformed names or values, oversized headers/bodies, unknown Host/SNI, and unapproved upgrades before origin work. HTTP/3 stays disabled. HTTP/2 stream, reset, header-list, and connection request counts must remain explicitly bounded.
 
 Non-apex proxied names reference the shared platform proxy hostname. Apex records use healthy service addresses from the same placement model. Edge health changes update shared routing state; they are not a reason to compile every domain artifact.
+
+The shared platform proxy hostname is rendered as one bounded PowerDNS Lua routing artifact with country, continent, then global fallback and only registered, enabled, non-drained, listener-ready, heartbeat-fresh edges. The Phase 4 audit still requires pool-specific service addresses and DNS selection before quarantine or dedicated moves can be considered traffic-effective.

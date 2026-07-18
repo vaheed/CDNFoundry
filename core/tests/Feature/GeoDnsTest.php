@@ -43,7 +43,7 @@ class GeoDnsTest extends TestCase
 
     public function test_priority_family_bounds_and_dns_only_isolation(): void
     {
-        $config = GeoDnsConfig::validate($this->payload()['geo'], 'A');
+        $config = GeoDnsConfig::validate($this->payload()['geo'], 'A', 'example.com');
         $this->assertSame(['203.0.113.30'], GeoDnsConfig::select($config, 'IR', 'AS'));
         $this->assertSame(['203.0.113.20'], GeoDnsConfig::select($config, 'FR', 'EU'));
         $this->assertSame(['203.0.113.10'], GeoDnsConfig::select($config, null, null));
@@ -63,6 +63,48 @@ class GeoDnsTest extends TestCase
             'type' => 'A', 'name' => 'plain', 'content' => '192.0.2.1', 'ttl' => 300,
         ])->assertCreated()->assertJsonPath('data.mode', 'dns_only');
         $this->assertDatabaseCount('dns_records', 1);
+    }
+
+    public function test_every_supported_dns_type_accepts_type_safe_geographic_answers(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $cases = [
+            'A' => ['192.0.2.1', '192.0.2.2'],
+            'AAAA' => ['2001:db8::1', '2001:db8::2'],
+            'CNAME' => ['default.example.net', 'ir.example.net'],
+            'MX' => ['mail-default.example.net', 'mail-ir.example.net'],
+            'TXT' => ['default text', "Iran's regional text"],
+            'CAA' => ['0 issue letsencrypt.org', '0 issue pki.goog'],
+            'SRV' => ['sip-default.example.net', 'sip-ir.example.net'],
+        ];
+
+        foreach ($cases as $type => [$default, $iran]) {
+            $payload = [
+                'type' => $type,
+                'name' => $type === 'SRV' ? '_sip._tcp.geo' : strtolower($type).'-geo',
+                'ttl' => 60,
+                'mode' => 'geo_dns',
+                'geo' => ['default' => [$default], 'countries' => ['IR' => [$iran]]],
+            ];
+            if ($type === 'MX') {
+                $payload['priority'] = 10;
+            }
+            if ($type === 'SRV') {
+                $payload += ['priority' => 10, 'weight' => 5, 'port' => 5060];
+            }
+
+            $response = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $payload)->assertCreated();
+            $this->assertSame($type, $response->json('data.type'));
+        }
+
+        $txt = $domain->dnsRecords()->where('type', 'TXT')->firstOrFail();
+        $compiled = GeoDnsCompiler::compile('TXT', $txt->geo_config);
+        $this->assertStringContainsString("Iran\\\\'s regional text", $compiled);
+        $mx = $domain->dnsRecords()->where('type', 'MX')->firstOrFail();
+        $this->assertStringContainsString('10 mail-ir.example.net.', GeoDnsCompiler::compile('MX', $mx->geo_config, $mx->priority));
+
+        $this->assertSame(['ns.example.net.'], GeoDnsConfig::validate(['default' => ['ns.example.net']], 'NS', $domain->name)['default']);
+        $this->assertSame(['host.example.net.'], GeoDnsConfig::validate(['default' => ['host.example.net']], 'PTR', '2.0.192.in-addr.arpa')['default']);
     }
 
     private function payload(): array

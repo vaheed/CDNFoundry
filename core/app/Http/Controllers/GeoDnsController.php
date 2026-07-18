@@ -29,7 +29,7 @@ class GeoDnsController extends Controller
     {
         $this->authorizeRecord($domain, $record, 'update');
         abort_unless($record->mode === 'geo_dns', 404);
-        $config = GeoDnsConfig::validate($request->all(), $record->type);
+        $config = GeoDnsConfig::validate($request->all(), $record->type, $domain->name);
         DB::transaction(function () use ($request, $domain, $record, $config): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $current = DnsRecord::query()->where('domain_id', $locked->id)->lockForUpdate()->findOrFail($record->id);

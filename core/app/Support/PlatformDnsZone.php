@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\Edge;
 use App\Models\PlatformDnsSetting;
 
 final class PlatformDnsZone
@@ -30,6 +31,18 @@ final class PlatformDnsZone
             $rows->push(['name' => $zone, 'type' => 'NS', 'ttl' => $settings->default_ttl, 'content' => $hostname]);
             $rows->push(['name' => $hostname, 'type' => 'A', 'ttl' => $settings->default_ttl, 'content' => $nameserver['ipv4']]);
             $rows->push(['name' => $hostname, 'type' => 'AAAA', 'ttl' => $settings->default_ttl, 'content' => $nameserver['ipv6']]);
+        }
+
+        $proxy = rtrim($settings->proxy_hostname, '.').'.';
+        $edges = Edge::query()->where('enabled', true)->where('drained', false)
+            ->whereNull('identity_revoked_at')->whereNotNull('registered_at')
+            ->where('last_heartbeat_at', '>=', now()->subSeconds((int) config('edge.heartbeat_fresh_seconds')))
+            ->where('capacity->listener_ready', true)->orderBy('id')->get();
+        foreach (['A', 'AAAA'] as $family) {
+            $content = EdgeRoutingCompiler::compile($edges, $family);
+            if ($content !== null) {
+                $rows->push(['name' => $proxy, 'type' => 'LUA', 'ttl' => $settings->default_ttl, 'content' => $content]);
+            }
         }
 
         return $rows->groupBy(fn (array $row): string => $row['name'].'|'.$row['type'])

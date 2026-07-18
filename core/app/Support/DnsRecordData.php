@@ -18,7 +18,7 @@ final class DnsRecordData
         $validator = Validator::make($input, [
             'type' => ['required', 'string', 'in:'.implode(',', self::TYPES)],
             'name' => ['required', 'string', 'max:253'],
-            'content' => ['required_unless:mode,geo_dns', 'string', 'max:4096'],
+            'content' => ['required_unless:mode,geo_dns,proxied', 'nullable', 'string', 'max:4096'],
             'ttl' => ['required', 'integer', 'between:30,2147483647'],
             'priority' => ['nullable', 'integer', 'between:0,65535'],
             'weight' => ['nullable', 'integer', 'between:0,65535'],
@@ -32,10 +32,8 @@ final class DnsRecordData
                 $type = strtoupper((string) ($input['type'] ?? ''));
                 $name = self::normalizeOwner((string) ($input['name'] ?? ''), $zone);
                 if (($input['mode'] ?? 'dns_only') === 'geo_dns') {
-                    if (! in_array($type, ['A', 'AAAA'], true)) {
-                        $validator->errors()->add('mode', 'Geo-DNS is supported only for A and AAAA records.');
-                    } elseif (is_array($input['geo'] ?? null)) {
-                        GeoDnsConfig::validate($input['geo'], $type);
+                    if (is_array($input['geo'] ?? null)) {
+                        GeoDnsConfig::validate($input['geo'], $type, $zone);
                     }
                 } elseif (($input['mode'] ?? 'dns_only') === 'proxied') {
                     if (! in_array($type, ['A', 'AAAA', 'CNAME'], true)) {
@@ -72,7 +70,7 @@ final class DnsRecordData
 
         $type = strtoupper((string) $input['type']);
         $mode = in_array(($input['mode'] ?? 'dns_only'), ['geo_dns', 'proxied'], true) ? $input['mode'] : 'dns_only';
-        $geo = $mode === 'geo_dns' ? GeoDnsConfig::validate($input['geo'], $type) : null;
+        $geo = $mode === 'geo_dns' ? GeoDnsConfig::validate($input['geo'], $type, $zone) : null;
         $origin = $mode === 'proxied' ? OriginData::validate($input['origin']) : null;
         if ($origin !== null) {
             OriginData::resolveAndValidate($origin['host']);
@@ -115,7 +113,7 @@ final class DnsRecordData
         return $ascii;
     }
 
-    private static function normalizeContent(string $type, string $value, string $zone): string
+    public static function normalizeContent(string $type, string $value, string $zone): string
     {
         $value = trim($value);
 

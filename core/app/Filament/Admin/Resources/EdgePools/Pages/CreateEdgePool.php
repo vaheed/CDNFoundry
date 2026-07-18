@@ -14,7 +14,7 @@ class CreateEdgePool extends CreateRecord
     protected function afterCreate(): void
     {
         foreach (Edge::query()->get() as $edge) {
-            $edge->cells()->firstOrCreate(['edge_pool_id' => $this->record->id], ['name' => 'pool-'.$this->record->id]);
+            $edge->cells()->firstOrCreate(['edge_pool_id' => $this->record->id], ['name' => $this->record->name]);
         }
         AuditLog::record(auth()->user(), 'edge_pool.created', $this->record, [], request()->ip());
     }

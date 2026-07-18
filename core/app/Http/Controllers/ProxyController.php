@@ -10,6 +10,7 @@ use App\Models\Domain;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
 use App\Support\OriginData;
+use App\Support\ProxyRevisionRollback;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -119,18 +120,7 @@ class ProxyController extends Controller
         Gate::authorize('update', $domain);
         $data = $request->validate(['revision' => ['required', 'integer', 'min:1']]);
         $prior = EdgeRevision::query()->where('domain_id', $domain->id)->where('revision', $data['revision'])->where('status', 'validated')->firstOrFail();
-        DB::transaction(function () use ($domain, $prior, $request): void {
-            $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
-            $snapshot = $prior->snapshot;
-            $locked->update(['proxy_settings' => $snapshot['settings'], 'revision' => $locked->revision + 1]);
-            foreach ($snapshot['hostnames'] as $hostname) {
-                DnsRecord::query()->where('domain_id', $locked->id)->where('name', $hostname['hostname'])->where('mode', 'proxied')->update([
-                    'origin' => $hostname['origin'], 'content' => $hostname['origin']['host'],
-                    'content_hash' => hash('sha256', json_encode($hostname['origin'], JSON_THROW_ON_ERROR)),
-                ]);
-            }
-            AuditLog::record($request->user(), 'proxy.revision_rolled_back', $locked, ['from' => $prior->revision, 'revision' => $locked->revision], $request->ip());
-        });
+        ProxyRevisionRollback::apply($domain, $prior, $request->user(), $request->ip());
 
         return $this->queue($request, $domain, 'edge.domain_reconcile');
     }

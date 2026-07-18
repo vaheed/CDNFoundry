@@ -1197,13 +1197,13 @@ Allow a user to create DNS records that return different user-provided targets b
 
 #### Implementation
 
-A `geo_dns` record supports:
+A `geo_dns` record supports every normally supported DNS record type, subject to the same authorization and zone rules as its DNS-only equivalent:
 
 - One required default target set
 - Country overrides
 - Continent overrides
 - A deterministic priority order
-- A and AAAA parity
+- Type-aware answer validation for A, AAAA, CNAME, MX, TXT, NS, CAA, SRV, and PTR
 - Bounded target and rule counts
 - Preview using a supplied test IP
 - Compilation to PowerDNS-supported runtime data or Lua records
@@ -1251,7 +1251,8 @@ Evaluation order:
 The record compiler:
 
 - Uses one shared country and continent vocabulary
-- Validates target family against record type
+- Validates and normalizes every geographic answer using the selected DNS record type
+- Keeps MX priority and SRV priority/weight/port fixed on the record while geography selects their target names
 - Rejects duplicate or contradictory mappings
 - Produces bounded deterministic runtime code or data
 - Never makes a runtime network call to Laravel or an external GeoIP API
@@ -1261,7 +1262,7 @@ The record compiler:
 
 #### Filament UX
 
-The DNS record editor exposes a third mode only for supported record types:
+The DNS record editor exposes Geo-DNS for every record type available to the current user and zone. Existing NS administrator-only and PTR reverse-zone restrictions still apply:
 
 - DNS only
 - Geo-DNS
@@ -1283,6 +1284,7 @@ The Geo-DNS editor includes:
 - [x] Continent overrides win over default.
 - [x] Unknown geography returns default.
 - [x] IPv4 and IPv6 targets validate correctly.
+- [x] CNAME, MX, TXT, NS, CAA, SRV, and PTR geographic answers use type-aware validation and deterministic Lua compilation.
 - [x] Invalid mappings never replace the active record.
 - [x] DNS-only records remain unaffected.
 
@@ -1634,6 +1636,8 @@ When proxy is enabled:
 
 ##### Control Plane
 
+> **Implementation audit (2026-07-18):** Phase 4 remains open. Shared-cell proxying, mTLS distribution, bounded origin handling, and the administrator/domain UI are implemented and agent-qualified. Production service-pool addresses are not yet represented in durable state or authoritative DNS, so moving a domain to quarantine or dedicated placement does not yet move public traffic to that cell. Cell drain/restart tasks are queued and visible, but the unprivileged edge agent intentionally reports `cell_supervisor_unavailable` until a bounded edge-local supervisor boundary is implemented. The browser and two-edge job below also remains user-owned and unrun.
+
 - [x] A user enables proxy per supported hostname.
 - [x] Every proxied hostname has exactly one valid origin.
 - [x] Different hostnames can use different origins.
@@ -1641,7 +1645,7 @@ When proxy is enabled:
 - [x] Rollback creates a new auditable revision.
 - [x] Edge-health updates do not rewrite all proxied domains.
 - [x] Every proxied domain has exactly one active service-pool placement.
-- [x] Placement migration keeps the previous pool active until target readiness and DNS drain complete.
+- [ ] Placement migration keeps the previous pool active until target readiness and DNS drain complete.
 - [x] Origin tests are asynchronous or strictly bounded.
 - [x] Unsafe, internal, metadata, and loop-producing origin destinations are rejected.
 - [x] DNS rebinding cannot change an approved public origin into a blocked destination.
@@ -1673,7 +1677,7 @@ When proxy is enabled:
 - [x] One malformed domain configuration does not affect other domains.
 - [x] One cell crash or out-of-memory event does not terminate other cells or the edge agent.
 - [x] Cache or temporary-storage exhaustion in one cell does not fill the edge filesystem.
-- [x] Shared, quarantine, and dedicated placements behave consistently for IPv4 and IPv6.
+- [ ] Shared, quarantine, and dedicated placements behave consistently for IPv4 and IPv6.
 - [x] Edge serves traffic while Laravel, PostgreSQL control DB, Redis/Valkey, and ClickHouse are offline.
 - [x] Adding an edge requires only installation, registration, and health qualification.
 

@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\IdempotencyKey;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -14,3 +15,4 @@ Schedule::command('model:prune', ['--model' => IdempotencyKey::class])->hourly()
 Schedule::command('dns:deprovision-due')->everyMinute()->withoutOverlapping();
 Schedule::command('edge:complete-placement-drains')->everyMinute()->withoutOverlapping();
 Schedule::command('edge:dispatch-origin-checks')->everyMinute()->withoutOverlapping();
+Schedule::job(new ReconcilePlatformDnsIdentity)->everyMinute()->withoutOverlapping();

@@ -1,10 +1,10 @@
 # Manual browser qualification
 
-This is the release-acceptance walkthrough for every browser surface currently implemented. Browser qualification is intentionally performed by the project owner. Coding agents do not run browser automation.
+This is the owner-run browser acceptance job for every roadmap phase. Coding agents do not launch or automate browsers. Run each applicable checkpoint manually and record the result. A missing menu, form, action, operation, or runtime result is **not ready/failed**—never mark it passed from API or automated-test coverage alone.
 
-Use only disposable development domains and the development credentials below. Never reuse these passwords in production.
+Use disposable data and replace documentation addresses such as `192.0.2.0/24`, `2001:db8::/32`, and `example.test` before real-traffic qualification. Never reuse these development passwords in production.
 
-## 1. Start and prepare the development stack
+## Common preparation
 
 From the repository root:
 
@@ -15,297 +15,260 @@ make dev-pdns-migrate
 docker compose -f compose.dev.yml ps
 ```
 
-Wait until `core`, `web`, `control-db`, `pdns-db`, `redis`, and `clickhouse` are healthy. `make dev-up` also starts the development-only PowerAdmin profile.
+Wait for `core`, `web`, `control-db`, `pdns-db`, `redis`, and `clickhouse` to become healthy. Development volumes persist. Never run `down -v`, remove volumes, use `migrate:fresh`, or run Laravel tests against the development database.
 
-Named development volumes persist across roadmap phases. Normal `make dev-up`, container rebuilds, and restarts do not delete PostgreSQL data. Never use `docker compose down -v`, `docker volume rm`, `migrate:fresh`, or direct `php artisan test` inside the running development container. Run Laravel tests only with `make dev-test`; it forces isolated in-memory SQLite and the test harness refuses any other database.
-
-Create or reset two disposable application accounts. These examples are local-development credentials only:
+Create/reset the local accounts if needed:
 
 ```sh
 docker compose -f compose.dev.yml exec -T core php artisan tinker --execute="App\\Models\\User::query()->updateOrCreate(['email'=>'admin@example.test'], ['name'=>'Local Administrator','password'=>Illuminate\\Support\\Facades\\Hash::make('cdnfoundry-admin-test'),'type'=>'admin','disabled_at'=>null]); App\\Models\\User::query()->updateOrCreate(['email'=>'user@example.test'], ['name'=>'Local Domain User','password'=>Illuminate\\Support\\Facades\\Hash::make('cdnfoundry-user-test'),'type'=>'user','disabled_at'=>null]);"
 ```
 
-Application logins:
+| Surface | Address | Login |
+|---|---|---|
+| Administrator | `http://localhost:8080/admin` | `admin@example.test` / `cdnfoundry-admin-test` |
+| Domain user | `http://localhost:8080/app` | `user@example.test` / `cdnfoundry-user-test` |
+| Horizon | `http://localhost:8080/horizon` | Existing administrator session |
+| PowerAdmin (diagnostic only) | `http://localhost:9191` | `admin` / `poweradmin-dev-only` |
+| Prometheus | `http://localhost:9090` | Development only, no login |
+| Alertmanager | `http://localhost:9093` | Development only, no login |
+| Edge A/B health | `http://localhost:8081/healthz`, `http://localhost:8082/healthz` | None |
+| DNSdist | UDP/TCP `127.0.0.1:1053` | Use `dig` |
 
-| Role | URL | Username | Password |
-|---|---|---|---|
-| Administrator | `http://localhost:8080/admin` | `admin@example.test` | `cdnfoundry-admin-test` |
-| Domain user | `http://localhost:8080/app` | `user@example.test` | `cdnfoundry-user-test` |
+For every phase, check desktop and narrow mobile widths, browser-console errors, authorization, validation messages, audit events, operation visibility, retry/failure behavior, and persistence after refresh/sign-out/sign-in.
 
-## 2. Browser and diagnostic addresses
+## Phase 1 — Foundation, access, and control-plane shell
 
-| Surface | Address | Authentication | What to verify |
-|---|---|---|---|
-| Administrator panel | `http://localhost:8080/admin` | Application administrator above | Control-plane administration |
-| Domain-user panel | `http://localhost:8080/app` | Domain user above | Assigned-domain workflow |
-| Horizon | `http://localhost:8080/horizon` | Sign in to `/admin` first; it uses the same administrator session | Queue workers, workload, failures, and metrics |
-| PowerAdmin | `http://localhost:9191` | Username `admin`, password `poweradmin-dev-only` | Diagnostic view of derived PowerDNS state |
-| Prometheus | `http://localhost:9090` | None in development | Targets and metrics queries |
-| Alertmanager | `http://localhost:9093` | None in development | Alert routing/status |
-| Edge A | `http://localhost:8081/healthz` | None | Returns `ok` |
-| Edge B | `http://localhost:8082/healthz` | None | Returns `ok` |
-| DNSdist | TCP and UDP `localhost:1053` | DNS client such as `dig` | The only public authoritative DNS endpoint |
+### Administrator checkpoints
 
-PowerAdmin is diagnostic only. Never use it to configure desired state. Any direct edit changes disposable derived state and can be overwritten by reconciliation. PowerDNS API, PostgreSQL, Valkey, ClickHouse, and origins intentionally have no host port; inspect them through Compose commands, not public browser ports.
+1. Sign in at `/admin`. Confirm styled navigation, `Local Administrator`, and no asset errors.
+2. Open **Users** and create:
 
-## Phase 4 proxy and edge job
+   | Field | Value |
+   |---|---|
+   | Name | `Browser Tester` |
+   | Email | `browser.user@example.test` |
+   | Type | `Domain user` |
+   | Password | `browser-user-test1` |
 
-This job is manual and was not run by coding agents. In the domain DNS relation, create proxied A hostnames for the apex and a subdomain with different origins. Confirm the content field is replaced by explicit scheme, destination, port, Host header, SNI, TLS verification, timeouts, retries, and WebSocket fields. Confirm Geo-DNS and proxy cannot both be selected and blocked/private destinations show validation errors.
+3. Confirm a password shorter than 12 characters is rejected. Disable the account and verify `/app` login fails; re-enable it and verify login succeeds.
+4. Open **API tokens**, enter name `manual-browser`, create it, and copy it from the one-time display. Refresh and confirm only metadata/final characters remain. Revoke it and verify it no longer authenticates.
+5. Open **Profile**, change the display name to `Local Administrator Updated`, save, refresh, and confirm the change. If changing the password, use at least 12 characters and confirm other tokens are revoked.
+6. Open **Audit logs** and confirm the preceding actions show actor, action, subject, IP, and time and cannot be edited.
+7. Open **Operations**. Confirm newest-first ordering, 10-second polling, status/type/requester filters, ID/type/email/error search, optional timestamps, duration, attempts, bounded errors, and guarded retry for supported failures.
+8. Open Horizon. Confirm workers exist; trigger an asynchronous action and confirm it leaves `pending`, then succeeds or exposes a useful failure.
 
-The non-browser runtime qualification in `tests/e2e/phase4_runtime.py` covers IPv4 and IPv6 clients, inbound HTTP/2 and TLS SNI, HTTP routing, the configured origin Host header, verified HTTPS with correct SNI, rejection of invalid or unknown SNI and blocked destinations, ambiguous-framing rejection, trusted forwarding-header replacement, unknown/disabled/deprovisioned host responses, 2,000 generic hostnames, malformed-state preservation, hot configuration activation without an OpenResty reload, disjoint shared/quarantine/dedicated cell state, and continued shared/agent operation after the quarantine cell stops. `tests/e2e/phase4_mtls.py` qualifies the real client-certificate boundary. The Go agent tests cover fresh full-snapshot recovery followed by incremental activation, placement-aware per-pool publication, and bounded origin-test execution. These checks do not replace the dual-edge or rendered-panel checks below.
+### Domain-user authorization checkpoints
 
-OpenResty also records only failed upstream attempts in bounded cell-local shared memory. The edge agent reads at most 100 summaries through a token-protected, non-published status listener and reports them with its heartbeat; failure of this reporting path never blocks request serving.
+1. Sign in at `/app` as `user@example.test` / `cdnfoundry-user-test`.
+2. Confirm administrator navigation is absent.
+3. Repeat the personal token and profile checks; changes must affect only this user.
+4. Directly request `/admin/users`, `/admin/dns-clusters`, `/admin/audit-logs`, and `/horizon`; all must be forbidden.
 
-As administrator, open **Edge network → Edges** and create two dual-stack edges. Save each one-time bootstrap token from the persistent notification, register them, and confirm the list shows fresh heartbeats, agent version, active revision, enabled/drained state, and cell count. Edit an edge to inspect its cells and bounded capacity values. Exercise drain/undrain and enable/disable, then rotate one identity and copy the replacement one-time token. Confirm the old credential cannot heartbeat or fetch configuration.
+### Phase 1 completion gate
 
-Open **Edge network → Service pools**. Confirm the default shared and quarantine pools exist, their enabled state and revisions are visible, and creating a dedicated pool creates one corresponding cell on every registered edge.
+- Implementation: present.
+- Documentation: present above.
+- Automated/runtime qualification: agent-owned tests must pass and be recorded for the release.
+- Manual browser qualification: owner-run; **failed/not complete until every Phase 1 checkpoint above is recorded as passed**.
 
-Open **Domains**, select the test domain, and confirm the view shows proxied-host count, proxy defaults, active edge revision, placement state, active/target service pools, deployment failure, and recent validated revisions. Use **Deploy proxy configuration** to retry the latest desired revision.
-
-Send real HTTP and HTTPS traffic through each edge and verify the configured origin Host and SNI. Drain one edge and confirm routing state changes without recompiling every domain. Submit a deliberately bad-checksum candidate and confirm the rejection is visible while the previous configuration continues serving.
-
-Open **Administration → Operations** after changing a proxied hostname, requesting deployment, and starting an origin test. Confirm **Edge domain deployment** and **Edge origin test** rows appear, status updates on the 10-second poll, filters include both types, failures show a bounded reason, and retry creates work without duplicating an active deployment.
-
-To choose different PowerAdmin development credentials before startup:
-
-```sh
-POWERADMIN_ADMIN_USERNAME=operator POWERADMIN_ADMIN_PASSWORD='choose-a-local-password' make dev-up
-```
-
-## 3. Administrator panel: every menu item
-
-Sign in at `/admin`, then work through the navigation in this order.
-
-### Dashboard
-
-1. Confirm the page loads with normal styling and no oversized icons or unstyled HTML.
-2. Confirm the account widget shows `Local Administrator`.
-3. Check desktop width and a narrow mobile width.
-
-Expected: administrator navigation is visible and there are no browser-console asset 404 errors.
+## Phase 2 — Domains and authoritative DNS
 
 ### System DNS identity
 
-Open **System DNS identity** and use this disposable example:
+As administrator, open **System DNS identity** and fill:
 
-| Field | Example | Meaning |
-|---|---|---|
-| Platform domain | `cdnf.test` | Base identity owned by the platform |
-| Proxy hostname | `proxy.cdnf.test` | Shared proxy/service hostname |
-| Nameserver 1 hostname | `ns1.cdnf.test` | First authoritative nameserver |
-| Nameserver 1 IPv4 | `192.0.2.10` | Documentation-only public IPv4 glue example |
-| Nameserver 1 IPv6 | `2001:db8::10` | Documentation-only public IPv6 glue example |
-| Nameserver 2 hostname | `ns2.cdnf.test` | Second authoritative nameserver |
-| Nameserver 2 IPv4 | `192.0.2.11` | Documentation-only public IPv4 glue example |
-| Nameserver 2 IPv6 | `2001:db8::11` | Documentation-only public IPv6 glue example |
-| SOA primary | `ns1.cdnf.test` | Primary name in the SOA record |
-| SOA mailbox | `hostmaster.cdnf.test` | Responsible mailbox, with the first dot representing `@` in DNS wire format |
-| SOA refresh | `3600` | Secondary refresh interval, seconds |
-| SOA retry | `600` | Retry interval after failure, seconds |
-| SOA expire | `1209600` | Secondary expiry, seconds |
-| SOA minimum TTL | `300` | Negative-cache TTL, seconds |
-| Default TTL | `300` | Default record TTL, seconds |
-| Cluster targets | `pdns-auth:8081` | Private PowerDNS API target inside Compose |
-
-Enter `cdnf.test` first and leave the field. Confirm proxy hostname, two nameserver hostnames, SOA primary, and SOA mailbox fill automatically. IPv4 and IPv6 glue must still be supplied. Click **Validate and queue update**.
-
-Expected: a success notification contains an operation ID. Open **Operations** and wait for `platform_dns_identity.update` to become `succeeded`. With a healthy enabled DNS cluster, PowerDNS must contain a `cdnf.test` platform zone with SOA, apex NS, and A/AAAA records for both nameserver hostnames. Updating System DNS Identity increments its revision and atomically replaces that derived zone; a failed deployment retains the previous active records.
-
-Negative checks: `127.0.0.1` is not valid glue for this example, malformed IPv6 is rejected, fewer than two nameservers is rejected, and an empty cluster-target list is rejected.
-
-### DNS clusters
-
-Open **DNS clusters**, choose **New DNS cluster**, and enter:
-
-| Field | Example | Meaning |
-|---|---|---|
-| Name | `local-pdns` | Unique operator-facing cluster name |
-| Location | `local-compose` | Deployment location label |
-| Enabled | Off while creating | Activation is blocked until health succeeds |
-| API URL | `http://pdns-auth:8081` | Private PowerDNS API URL inside Compose |
-| API key | `pdns-dev-api-key` | Development key from `docker/pdns/pdns.conf` |
-| Server ID | `localhost` | PowerDNS API server identifier |
-| Nameservers | `ns1.cdnf.test`, `ns2.cdnf.test` | Defaults from System DNS identity |
-| Capacity zones | `100000` | Explicit cluster zone bound |
-| Operational notes | `Local Compose qualification cluster` | Optional operator note |
-
-Save the cluster. It must be saved disabled and automatically queue `dns.cluster_test`. Open **Operations** or refresh the cluster list until health becomes `healthy`. Edit the cluster and enable it only after health succeeds.
-
-Negative checks: a wrong API key or URL produces `unhealthy` with a useful error; an untested/unhealthy cluster cannot be enabled; the saved API key is never displayed again; fewer than two nameservers is rejected.
-
-### Users
-
-Open **Users** and inspect the two prepared accounts. Then create another disposable domain user:
-
-| Field | Example |
+| Field | Value |
 |---|---|
-| Name | `Browser Tester` |
-| Email | `browser.user@example.test` |
-| Type | `Domain user` |
-| Password | `browser-user-test1` |
+| Platform domain | `cdnf.test` |
+| Proxy hostname | `proxy.cdnf.test` |
+| Nameserver 1 hostname / IPv4 / IPv6 | `ns1.cdnf.test` / `192.0.2.10` / `2001:db8::10` |
+| Nameserver 2 hostname / IPv4 / IPv6 | `ns2.cdnf.test` / `192.0.2.11` / `2001:db8::11` |
+| SOA primary | `ns1.cdnf.test` |
+| SOA mailbox | `hostmaster.cdnf.test` |
+| Refresh / retry / expire | `3600` / `600` / `1209600` |
+| SOA minimum TTL / default TTL | `300` / `300` |
+| Cluster targets | `pdns-auth:8081` |
 
-Edit that user, choose **Disable access**, and verify login at `/app` is rejected. Re-enable access and verify login succeeds. Confirm a password shorter than 12 characters is rejected. Do not demote or delete the administrator currently in use.
+Enter the platform domain first and blur the field. Confirm proxy, nameserver, and SOA names auto-fill but remain editable. Choose **Validate and queue update**, copy the operation ID, and confirm `platform_dns_identity.update` succeeds. Reject loopback/malformed glue, fewer than two nameservers, and an empty target list.
 
-### Domains
+### DNS cluster
 
-Open **Domains**, choose **New domain**, and enter:
+Open **DNS clusters → New DNS cluster**:
 
-| Field | Example |
+| Field | Value |
 |---|---|
-| Domain | A real disposable delegated domain such as `dns-test.example.net` |
+| Name / location | `local-pdns` / `local-compose` |
+| Enabled | Off initially |
+| API URL / key | `http://pdns-auth:8081` / `pdns-dev-api-key` |
+| Server ID | `localhost` |
+| Nameservers | `ns1.cdnf.test`, `ns2.cdnf.test` |
+| Capacity zones | `100000` |
+| Notes | `Local Compose qualification cluster` |
 
-For UI-only checks, a reserved name such as `browser-test.example.test` is acceptable, but public nameserver verification cannot succeed for it.
+Save, confirm `dns.cluster_test` appears in Operations, wait for healthy, then enable it. A wrong URL/key must become unhealthy; an unhealthy/untested cluster cannot be enabled; the saved key must never reappear.
 
-Open the domain. In **Users**, attach `user@example.test`. Confirm the user appears in the assignment table and can later be detached.
+### Domain lifecycle and assignments
 
-Click **Verify nameservers**. A queued-operation notification must appear. The domain view must show the latest verification status and error. For a real acceptance pass, configure the registrar with exactly the System DNS Identity NS set, wait for DNS propagation, then retry until verification succeeds. Verification intentionally queries public DNS and does not accept local `/etc/hosts`, PowerAdmin-only records, or an extra registrar nameserver.
+1. Open **Domains → New domain**. Use a real delegated disposable domain for release acceptance; use `browser-test.example.test` only for local UI checks.
+2. Attach `user@example.test` in the domain **Users** relation.
+3. Choose **Verify nameservers** and confirm a queued operation and visible result. For local UI-only qualification use **Force verify (local test)** and confirm its warning/audit record; it does not qualify public delegation.
+4. With a real domain, set the registrar to exactly the platform nameservers and retry until public verification succeeds.
+5. Choose **Activate**. Confirm lifecycle, desired revision, per-cluster deployment, SOA, and NS state. Activation without a healthy enabled cluster must fail safely.
+6. Sign in as the domain user. Confirm only the assigned domain is listed and an unassigned domain ID returns not found.
 
-For local UI qualification without a public resolver, sign in as an administrator and choose **Force verify (local test)**. Confirm the warning explicitly says public delegation is not checked. The action records the administrator identity and audit event, then unlocks activation. This bypass qualifies only the local browser workflow; it does not satisfy the real nameserver-verification release checkbox.
+### DNS record forms
 
-After successful verification, confirm at least one DNS cluster is both `healthy` and enabled, then click **Activate**. Activation must be rejected if no healthy cluster is enabled. Expected: lifecycle becomes active, the desired revision increases, and deployment reaches `succeeded` on every enabled cluster; PowerDNS contains the generated SOA and platform NS records even when the user has not created records yet.
+Create each row and fill every shown field:
 
-### DNS records inside a domain
+| Type | Name | Content and additional fields |
+|---|---|---|
+| A | `@` | `192.0.2.20`, TTL `300` |
+| AAAA | `@` | `2001:db8::20`, TTL `300` |
+| CNAME | `www` | `@`, TTL `300` |
+| MX | `@` | `mail.example.net`, priority `10`, TTL `300` |
+| TXT | `@` | `v=spf1 -all`, TTL `300` |
+| NS (administrator) | `delegated` | `ns1.example.net`, TTL `300` |
+| CAA | `@` | `0 issue letsencrypt.org`, TTL `300` |
+| SRV | `_sip._tcp` | target `sip.example.net`, priority `10`, weight `5`, port `5060`, TTL `300` |
+| PTR (reverse zone only) | `20` | `host.example.net`, TTL `300` |
 
-On the domain view, use **DNS records**. Create these examples one at a time, adapting the domain name where required:
+Edit TTL to `600`, delete a disposable record, and bulk-delete several disposable records. Duplicates, invalid values, out-of-zone names, and CNAME coexistence must fail without partial mutation. Import a small BIND zone in append mode, preview replace mode before committing, export it, and verify it can be imported again.
 
-| Type | Name | Content | Extra fields |
+Query DNSdist—not private PowerDNS—over UDP and TCP:
+
+```sh
+dig @127.0.0.1 -p 1053 browser-test.example.test SOA +tcp
+dig @127.0.0.1 -p 1053 browser-test.example.test A
+dig @127.0.0.1 -p 1053 browser-test.example.test AAAA
+dig @127.0.0.1 -p 1053 browser-test.example.test TXT
+```
+
+Use PowerAdmin only to inspect derived state. Never edit desired state there.
+
+### Phase 2 completion gate
+
+- Implementation: present.
+- Documentation: present above.
+- Automated/runtime qualification: agent-owned DNS/API tests must pass and be recorded.
+- Manual browser and public delegation qualification: owner-run; **failed/not complete until every Phase 2 checkpoint above passes with a real delegated domain**.
+
+## Phase 3 — Geo-DNS
+
+On an assigned active domain, create an A record:
+
+| Field | Value |
+|---|---|
+| Type / name / mode | `A` / `geo` / `Geo-DNS` |
+| Default target | `192.0.2.30` |
+| Country overrides | `IR` → `192.0.2.31`; `US` → `192.0.2.32` |
+| Continent overrides | `AS` → `192.0.2.33`; `EU` → `192.0.2.34` |
+| TTL | `300` |
+
+Create an AAAA equivalent using `2001:db8::30` through `2001:db8::34`. Confirm country wins over continent and unknown geography uses default. Duplicate/invalid codes, mixed address families, and excessive overrides must be rejected without revision change. Edit and refresh to confirm the structured configuration persists.
+
+Repeat Geo-DNS with each type exposed by the current user/zone:
+
+| Type | Default answer | IR answer | Additional fixed fields |
 |---|---|---|---|
-| A | `@` | `192.0.2.20` | TTL `300` |
-| AAAA | `@` | `2001:db8::20` | TTL `300` |
-| CNAME | `www` | `@` | TTL `300`; `@` targets the zone apex |
-| MX | `@` | `mail.example.net` | Priority `10` |
-| TXT | `@` | `v=spf1 -all` | TTL `300` |
-| NS | `delegated` | `ns1.example.net` | TTL `300`; administrator-only |
-| CAA | `@` | `0 issue letsencrypt.org` | TTL `300`; quotes are optional and normalized |
-| SRV | `_sip._tcp` | `sip.example.net` | Priority `10`, weight `5`, port `5060` |
-| PTR | `20` | `host.example.net` | Available only in an appropriate managed reverse zone |
+| CNAME | `default.example.net` | `ir.example.net` | None |
+| MX | `mail-default.example.net` | `mail-ir.example.net` | Priority `10` |
+| TXT | `region=default` | `region=ir` | None |
+| CAA | `0 issue letsencrypt.org` | `0 issue pki.goog` | None |
+| SRV | `sip-default.example.net` | `sip-ir.example.net` | Owner `_sip._tcp.geo`, priority `10`, weight `5`, port `5060` |
+| NS (administrator only) | `ns-default.example.net` | `ns-ir.example.net` | Use only on a disposable delegated owner |
+| PTR (reverse zone only) | `default.example.net` | `ir.example.net` | Use only in a managed reverse zone |
 
-Edit an A record and change its TTL to `600`, then delete it. Select multiple disposable records and use bulk delete. Confirm duplicate records and a CNAME coexisting with other data at the same owner are rejected without partial changes.
+Confirm invalid RDATA is rejected according to its type. MX priority and SRV priority/weight/port remain fixed while geography selects their target. NS remains administrator-only and PTR remains reverse-zone-only.
 
-Use **Import zone** with a small disposable BIND zone, first in append mode and then with **Replace existing records**. Use **Export zone** and verify the result can be imported again. Never replace records on a production zone during qualification.
+Use preview with IPv4/IPv6 addresses whose classification is known in the installed MMDB and record the displayed country/continent. Query DNSdist with and without trusted ECS and confirm the answer matches that classification. Force a bad MMDB update and invalid deployment; the prior MMDB and last valid answers must continue serving while failure is visible.
 
-### Operations
+### Phase 3 completion gate
 
-Open **Operations**. The newest request must be at the top and the list must refresh every 10 seconds. Check the friendly type, underlying machine type, status, requester, attempts, error, requested time, and duration. Use **Columns** to expose started and finished timestamps when investigating timing.
+- Implementation: present for every supported DNS record type with normal NS/PTR policy restrictions.
+- Documentation: present above.
+- Automated/runtime qualification: agent-owned API/compiler and real DNS tests must pass and be recorded.
+- Manual browser/geographic-vantage qualification: owner-run; **failed/not complete until every Phase 3 checkpoint and required vantage-point query passes**.
 
-Exercise the filters independently and together:
+## Phase 4 — Edge proxy and origin routing
 
-- Status: pending, running, succeeded, or failed
-- Type: platform identity, nameserver verification, zone reconciliation/import, cluster test, or global reconciliation
-- Requested by: select an administrator or domain user
+### Edges and pools (administrator)
 
-Search by the full operation ID, machine type, requester email, and a distinctive part of an error. Clear all filters and confirm the newest operation returns to the top. Check at least these operation types:
+1. Open **Edge network → Edges** and create two entries. Replace documentation addresses with reachable addresses for real traffic:
 
-- `platform_dns_identity.update`
-- `dns.cluster_test`
-- `domain.nameservers_verify`
-- `dns.zone_reconcile`
+   | Field | Edge A | Edge B |
+   |---|---|---|
+   | Name | `edge-browser-a` | `edge-browser-b` |
+   | Country / continent | `IR` / `AS` | `DE` / `EU` |
+   | IPv4 | `192.0.2.101` | `192.0.2.102` |
+   | IPv6 | `2001:db8::101` | `2001:db8::102` |
 
-Expected: long-running work is visible, failures retain their error, and every supported failed operation shows a guarded retry action. Retrying returns the operation to pending and dispatches the correct queue job. Operations should not stay pending while Horizon shows healthy workers.
+2. Save each one-time bootstrap token, register the agents, and confirm fresh heartbeat, version, active revision, state, and bounded cell capacities.
+3. Exercise drain/undrain and enable/disable. Rotate an identity, copy the replacement token once, and confirm the previous credential no longer works.
+4. Open **Service pools**. Confirm shared and quarantine pools and their revisions. Create one dedicated pool and confirm one desired cell per registered edge.
 
-### Audit logs
+### Proxy defaults and record eligibility
 
-Open **Audit logs**. Confirm the earlier identity update, cluster creation/test, user mutation, domain assignment, verification request, and DNS-record changes appear with actor, action, subject, IP address, and time. Audit logs are read-only.
+Open the domain proxy settings. Start with these compatibility-oriented defaults:
 
-### API tokens
+| Field | Value |
+|---|---|
+| Proxy enabled | On |
+| Redirect HTTP to HTTPS | Off initially |
+| HTTP versions | HTTP/1.1 and HTTP/2 |
+| Default origin retry count | `1` |
+| Maintenance mode | Off |
 
-Open **API tokens**, enter token name `manual-browser`, and create it. Confirm the Create button has clear spacing from the name field. Copy the token immediately; it must be displayed only once. Refresh the page and confirm only token metadata, including the token's final six characters, remains. Revoke it and verify an API request using that token returns unauthenticated.
+In **DNS records**, select every type. The **Proxied** mode must appear only for A, AAAA, and CNAME. **Geo-DNS** must appear only for A/AAAA. TXT, MX, NS, CAA, SRV, and PTR must be DNS-only; changing a proxied row to one of these types must reset mode to DNS-only and hide origin fields.
 
-### Profile
+### Proxied apex form
 
-Open the account menu and select **Profile**. Change the display name to `Local Administrator Updated`. Optionally change the password to another disposable value of at least 12 characters. Expected: profile changes are audited; changing the password revokes other API tokens.
+Create or edit the apex:
 
-## 4. Domain-user panel: every menu item
+| Field | Value / expected default |
+|---|---|
+| Type / name / mode | `A` / `@` / `Proxied` |
+| Origin server hostname or IP | A public cPanel/shared-hosting origin, e.g. `server1.example.net` |
+| Scheme / port | `HTTPS` / `443` |
+| Origin Host header | Auto-fills to the domain name |
+| TLS SNI | Auto-fills to the domain name |
+| Verify origin TLS | On |
+| Connect / response timeout | `2000` ms / `30000` ms |
+| Retry count | `1` |
+| WebSocket | Off |
+| Health check | Off; when on, path `/`, interval `300` seconds |
+| TTL | `300` |
 
-Sign out of `/admin`, then sign in at `/app` as `user@example.test` / `cdnfoundry-user-test`.
+The origin destination is the server reached by CDNFoundry; Host/SNI default to the public record hostname so name-based cPanel virtual hosting and certificates work. The destination must not point back to CDNFoundry, a platform hostname, loopback, link-local, private metadata, multicast, or an edge address.
 
-### Dashboard
+### Proxied subdomain and editable automatic values
 
-Confirm the onboarding text is visible and no administrator navigation appears.
+1. Create `www` as A, AAAA, or CNAME in Proxied mode with destination `server2.example.net`.
+2. Confirm Host and SNI automatically become `www.<domain>`.
+3. Change name to `shop`; untouched automatic fields must become `shop.<domain>`.
+4. Manually change Host to `backend-vhost.example.net` and SNI to `backend-cert.example.net`; change the record name again and confirm both overrides are preserved.
+5. Switch scheme HTTPS → HTTP and confirm conventional port `443` changes to `80`; switch back and confirm `80` changes to `443`. A deliberately custom port must remain editable.
+6. With HTTPS verification on, blank SNI must be rejected. Origin Host must always be present for a proxied record.
+7. Run **Test origin** and confirm status/latency or a bounded validation/connection error. Saving/testing remains asynchronous.
 
-### Domains
+### Deployment and operation visibility
 
-Confirm only assigned domains are listed. Open the assigned domain and verify DNS records and lifecycle state are visible. Directly opening an unassigned domain ID must return not found. The domain user must not see the administrator-only user-assignment relation.
+1. Save both proxied records and choose **Deploy proxy configuration**.
+2. Open **Administration → Operations**. Confirm new `edge.domain_deploy` and `edge.origin_test` rows appear without refreshing manually, with requester, attempt, status, duration, and bounded error.
+3. Retry a supported failure. It must not duplicate an already-active deployment.
+4. Confirm the domain view exposes proxied-host count, desired/active revision, placement/pools, failure, and recent validated revisions.
+5. Send HTTP and HTTPS through both real edges. Confirm correct origin selection, Host, SNI, IPv4/IPv6 behavior, unknown-host/SNI rejection, and continued serving of the last valid revision after a deliberately invalid candidate.
 
-### API tokens and Profile
+Current Phase 4 limitations that must remain recorded as **not passed** until implemented: service-pool-specific public addresses/DNS selection are required before quarantine/dedicated moves affect traffic, and an edge-local cell supervisor is required before drain/restart tasks can execute (current behavior fails closed with `cell_supervisor_unavailable`). The manual dual-edge traffic/migration checks remain owner-run.
 
-Repeat the token one-time-display/revocation check and profile update using the domain-user account. Confirm these actions affect only the signed-in user.
+### Phase 4 completion gate
 
-Directly open `/admin/users`, `/admin/dns-clusters`, `/admin/audit-logs`, and `/horizon`. Expected: the domain user is forbidden from all four.
+- Implementation: partially complete; the two runtime limitations above are open.
+- Documentation: present above and in the edge/origin runbooks.
+- Automated/runtime qualification: agent-owned tests must pass and be recorded, but cannot waive the open runtime limitations.
+- Manual browser/dual-edge qualification: owner-run; **failed/not complete until all Phase 4 checkpoints pass and both limitations are implemented**.
 
-### Geo-DNS record workflow
+## Record the result
 
-1. As the assigned domain user, create an A record in Geo-DNS mode with a default set, an `EU` override, and an `IR` override.
-2. Confirm duplicate targets/codes, invalid codes, excessive rows, and an IPv6 target in an A record are rejected without changing the revision.
-3. Edit the record and confirm the mode and configuration persist.
-4. Call the authenticated preview endpoint for an MMDB-known address and `2001:db8::1`; confirm country wins over continent and unknown returns default.
-5. Query DNSdist with trusted ECS from at least three known locations and without ECS. Confirm answers match and record the resolver-location limitation.
-6. Force an invalid MMDB update and failed Geo-DNS deployment. Confirm the previous MMDB and active answer remain valid while failure is visible.
+For each phase record: date/operator, commit SHA, browser/version, desktop/mobile viewports, exact domain and edge addresses, every checkpoint as pass/fail/not-ready, operation IDs, revisions, screenshots, relevant logs, and any deviations from the example values. Also record Horizon, PowerAdmin, DNSdist UDP/TCP, Prometheus, Alertmanager, and edge results where applicable.
 
-Browser automation remains prohibited for coding agents; this workflow is manual and user-owned.
-
-## 5. Runtime and diagnostic verification
-
-### Horizon
-
-Sign back in as the administrator, then open `http://localhost:8080/horizon`.
-
-1. Confirm Horizon status is active.
-2. Confirm supervisors/workers exist for the configured queue lanes.
-3. Trigger a cluster test and nameserver verification from the UI.
-4. Confirm jobs appear and finish; inspect failures without exposing API keys.
-
-If jobs remain pending, inspect:
-
-```sh
-docker compose -f compose.dev.yml ps horizon
-docker compose -f compose.dev.yml logs --tail=200 horizon
-```
-
-### PowerAdmin
-
-Open `http://localhost:9191` and sign in with `admin` / `poweradmin-dev-only`. After an active domain reconciles successfully, confirm its zone and records appear. Do not edit them. Compare PowerAdmin with CDNFoundry desired state and treat a mismatch as drift or failed reconciliation.
-
-### Authoritative DNS through DNSdist
-
-Query DNSdist, never the private PowerDNS container directly:
-
-```sh
-dig @127.0.0.1 -p 1053 dns-test.example.net SOA +tcp
-dig @127.0.0.1 -p 1053 dns-test.example.net A
-dig @127.0.0.1 -p 1053 dns-test.example.net AAAA
-dig @127.0.0.1 -p 1053 dns-test.example.net TXT
-```
-
-Expected: UDP and TCP answers match the active revision shown in CDNFoundry. Repeat using a host with IPv6 connectivity where available.
-
-### Prometheus and Alertmanager
-
-Open Prometheus `/targets` at `http://localhost:9090/targets`; configured targets should be up. Run a basic `up` query. Open `http://localhost:9093` and confirm Alertmanager loads and displays its current alert state.
-
-### Edge cells
-
-Open both `/healthz` URLs and confirm `ok`. Then run:
-
-```sh
-curl -i http://localhost:8081/healthz
-curl -i http://localhost:8082/healthz
-```
-
-These endpoints qualify cell availability only; later roadmap phases add full proxied-domain browser behavior.
-
-## 6. Record the qualification result
-
-Record all of the following in the release notes or acceptance ticket:
-
-- Date and operator
-- Commit SHA (`git rev-parse HEAD`)
-- Browser name and exact version
-- Desktop and mobile viewport results
-- Administrator-panel result
-- Domain-user-panel result
-- Horizon, PowerAdmin, Prometheus, Alertmanager, DNSdist, and edge results
-- Real delegated test domain used
-- Failed steps, operation IDs, screenshots, and relevant container logs
-
-Any broken flow, unexpected access, missing state, asset failure, unexplained pending operation, or runtime mismatch is a failed qualification. Do not mark browser qualification complete until every applicable step above passes.
+Any broken flow, missing operation, unexpected access, asset error, unexplained pending state, last-valid-state regression, or runtime mismatch fails that checkpoint. Automated API/runtime tests support this job but never replace rendered UI and real-traffic qualification.

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
@@ -109,7 +110,7 @@ func TestFreshFullSnapshotThenIncrementalArtifact(t *testing.T) {
 		t.Fatal(err)
 	}
 	publicHex := hex.EncodeToString(public)
-	fullPayload, fullChecksum, fullSignature := signedJSON(t, private, map[string]any{
+	fullPayload, fullChecksum, fullSignature := signedGzipJSON(t, private, map[string]any{
 		"schema_version": 1, "minimum_agent_version": "1.0.0", "maximum_agent_version": "1.99.0",
 		"artifacts": []map[string]any{{"sequence": 4, "domain_id": 1, "kind": "domain", "payload": json.RawMessage(runtimeDomain(4))}},
 	})
@@ -191,14 +192,36 @@ func TestPassiveFailuresAreBoundedAndAuthenticated(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{
 			"domain": "example.test", "hostname": "www.example.test", "failure_count": 2,
 			"last_status": 502, "last_failed_at": 123,
-		}}})
+		}}, "cell": map[string]any{"name": "shared-default", "status": "ready", "capacity": map[string]any{}}})
 	}))
 	defer server.Close()
 	c := &client{http: server.Client(), statusToken: "status-secret", statusURLs: []string{server.URL}}
-	failures := c.passiveFailures()
+	cells, failures := c.runtimeStatus()
 	if len(failures) != 1 || failures[0]["hostname"] != "www.example.test" {
 		t.Fatalf("passive failures were not collected: %#v", failures)
 	}
+	if len(cells) != 1 || cells[0]["name"] != "shared-default" {
+		t.Fatalf("cell status was not collected: %#v", cells)
+	}
+}
+
+func signedGzipJSON(t *testing.T, private ed25519.PrivateKey, value any) (string, string, string) {
+	t.Helper()
+	payload, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	if _, err = writer.Write(payload); err != nil {
+		t.Fatal(err)
+	}
+	if err = writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(compressed.Bytes())
+	checksum := hex.EncodeToString(sum[:])
+	return base64.StdEncoding.EncodeToString(compressed.Bytes()), checksum, hex.EncodeToString(ed25519.Sign(private, []byte(checksum)))
 }
 
 func signedJSON(t *testing.T, private ed25519.PrivateKey, value any) (string, string, string) {

@@ -10,11 +10,17 @@ use App\Jobs\ReconcileEdgeDomain;
 use App\Jobs\VerifyDomainNameservers;
 use App\Models\AuditLog;
 use App\Models\DnsCluster;
+use App\Models\DomainEdgePlacement;
+use App\Models\EdgePool;
+use App\Models\EdgeRevision;
 use App\Models\Operation;
 use App\Support\BindZone;
 use App\Support\DnsZoneImporter;
+use App\Support\ProxyRevisionRollback;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
@@ -28,12 +34,59 @@ class ViewDomain extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('proxyDefaults')->label('Proxy defaults')->icon('heroicon-o-adjustments-horizontal')->schema([
+                Toggle::make('enabled')->default(true)->required(),
+                Toggle::make('redirect_https')->label('Redirect HTTP to HTTPS')->default(false)->required(),
+                Select::make('http_versions')->label('Allowed HTTP versions')->multiple()->options(['1.1' => 'HTTP/1.1', '2' => 'HTTP/2'])->required()->maxItems(2),
+                TextInput::make('retry_count')->label('Origin retry count')->numeric()->default(0)->minValue(0)->maxValue(2)->required(),
+                Toggle::make('maintenance_enabled')->label('Maintenance mode')->live(),
+                TextInput::make('maintenance_body')->label('Maintenance response')->maxLength(4096)->visible(fn ($get): bool => (bool) $get('maintenance_enabled')),
+            ])->fillForm(function (): array {
+                $settings = $this->record->proxy_settings ?? ReconcileEdgeDomain::defaults();
+
+                return [...$settings, 'maintenance_enabled' => $settings['maintenance'] !== null, 'maintenance_body' => $settings['maintenance']['body'] ?? 'Service temporarily unavailable'];
+            })->action(function (array $data): void {
+                $settings = [
+                    'enabled' => (bool) $data['enabled'], 'redirect_https' => (bool) $data['redirect_https'],
+                    'http_versions' => array_values($data['http_versions']), 'retry_count' => (int) $data['retry_count'],
+                    'maintenance' => $data['maintenance_enabled'] ? ['status' => 503, 'body' => $data['maintenance_body']] : null,
+                ];
+                DB::transaction(function () use ($settings): void {
+                    $domain = $this->record->newQuery()->lockForUpdate()->findOrFail($this->record->id);
+                    $domain->update(['proxy_settings' => $settings, 'revision' => $domain->revision + 1]);
+                    AuditLog::record(auth()->user(), 'proxy.defaults_updated', $domain, ['revision' => $domain->revision], request()->ip());
+                });
+                Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
+                ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
+            }),
             Action::make('deployProxy')->label('Deploy proxy configuration')->icon('heroicon-o-cloud-arrow-up')
                 ->visible(fn (): bool => $this->record->dnsRecords()->where('mode', 'proxied')->exists())
                 ->action(function (): void {
                     $operation = Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
                     ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
                     Notification::make()->info()->title('Edge deployment queued')->body("Operation {$operation->id} will deploy the latest desired revision.")->send();
+                }),
+            Action::make('rollbackProxy')->label('Rollback proxy revision')->color('warning')->requiresConfirmation()->schema([
+                Select::make('revision')->options(fn (): array => EdgeRevision::query()->where('domain_id', $this->record->id)->where('status', 'validated')->where('revision', '<', $this->record->revision)->latest('revision')->limit(50)->pluck('revision', 'revision')->all())->required(),
+            ])->visible(fn (): bool => EdgeRevision::query()->where('domain_id', $this->record->id)->where('status', 'validated')->where('revision', '<', $this->record->revision)->exists())
+                ->action(function (array $data): void {
+                    $prior = EdgeRevision::query()->where('domain_id', $this->record->id)->where('revision', $data['revision'])->where('status', 'validated')->firstOrFail();
+                    ProxyRevisionRollback::apply($this->record, $prior, auth()->user(), request()->ip());
+                    Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
+                    ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
+                }),
+            Action::make('moveEdgePool')->label('Move service pool')->icon('heroicon-o-arrows-right-left')->schema([
+                Select::make('pool_id')->label('Target pool')->options(fn (): array => EdgePool::query()->where('enabled', true)->orderBy('name')->pluck('name', 'id')->all())->required(),
+            ])->visible(fn (): bool => auth()->user()?->isAdmin() === true && $this->record->dnsRecords()->where('mode', 'proxied')->exists())
+                ->action(function (array $data): void {
+                    DB::transaction(function () use ($data): void {
+                        $domain = $this->record->newQuery()->lockForUpdate()->findOrFail($this->record->id);
+                        $domain->update(['revision' => $domain->revision + 1]);
+                        DomainEdgePlacement::query()->updateOrCreate(['domain_id' => $domain->id], ['target_pool_id' => $data['pool_id'], 'desired_revision' => $domain->revision, 'state' => 'deploying', 'last_error' => null]);
+                        AuditLog::record(auth()->user(), 'edge.domain_move_requested', $domain, ['target_pool_id' => $data['pool_id'], 'revision' => $domain->revision], request()->ip());
+                    });
+                    Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
+                    ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
                 }),
             Action::make('verifyNameservers')->label('Verify nameservers')->icon('heroicon-o-shield-check')
                 ->visible(fn (): bool => $this->record->nameservers_verified_at === null && $this->record->lifecycle_state !== DomainLifecycleState::Deprovisioning)

@@ -25,7 +25,7 @@ class CreateEdge extends CreateRecord
         $data['bootstrap_token_hash'] = hash('sha256', $this->bootstrapToken);
         $edge = Edge::query()->create($data);
         foreach (EdgePool::query()->where('enabled', true)->get() as $pool) {
-            $edge->cells()->create(['edge_pool_id' => $pool->id, 'name' => 'pool-'.$pool->id]);
+            $edge->cells()->create(['edge_pool_id' => $pool->id, 'name' => $pool->name]);
         }
         AuditLog::record(auth()->user(), 'edge.created', $edge, [], request()->ip());
 

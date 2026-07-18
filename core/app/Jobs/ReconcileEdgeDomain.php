@@ -72,6 +72,8 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             'hostnames' => $records->map(function ($record): array {
                 $origin = $record->origin;
                 $origin['private_allowlist'] = config('edge.private_origin_allowlist', []);
+                $origin['blocked_addresses'] = Edge::query()->pluck('ipv4')->merge(Edge::query()->pluck('ipv6'))->filter()
+                    ->merge(config('edge.blocked_origin_addresses', []))->unique()->values()->all();
 
                 return ['hostname' => $record->name, 'type' => $record->type, 'ttl' => $record->ttl, 'origin' => $origin];
             })->all(),

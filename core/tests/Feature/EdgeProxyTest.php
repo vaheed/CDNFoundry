@@ -18,6 +18,21 @@ class EdgeProxyTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_only_address_and_cname_records_can_be_proxied_without_dns_content(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $origin = $this->origin('8.8.8.8');
+        $origin['host_header'] = $domain->name;
+
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", [
+            'type' => 'TXT', 'name' => '@', 'ttl' => 300, 'mode' => 'proxied', 'origin' => $origin,
+        ])->assertUnprocessable()->assertJsonValidationErrors('mode');
+
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", [
+            'type' => 'A', 'name' => '@', 'ttl' => 300, 'mode' => 'proxied', 'origin' => $origin,
+        ])->assertCreated()->assertJsonPath('data.content', '8.8.8.8');
+    }
+
     public function test_proxied_hosts_have_distinct_safe_origins_and_revisioned_artifacts(): void
     {
         [$user, $domain] = $this->ownedDomain();
@@ -49,10 +64,12 @@ class EdgeProxyTest extends TestCase
         $identity = $this->edgeIdentityHeaders($registered->json('data.identity_certificate_serial'));
         $this->postJson('/edge/v1/register', $registration)->assertUnauthorized();
         $this->withHeaders($identity)->postJson('/edge/v1/heartbeat', ['agent_version' => '1.0.0', 'listener_ready' => true, 'active_sequence' => 0, 'cells' => [
-            ['name' => 'pool-1', 'status' => 'ready', 'capacity' => ['active_connections' => 0, 'memory_usage' => 0]],
+            ['name' => 'shared-default', 'status' => 'ready', 'capacity' => ['active_connections' => 0, 'memory_usage' => 0]],
         ]])->assertOk();
+        $this->assertDatabaseHas('edge_cells', ['edge_id' => $id, 'name' => 'shared-default', 'status' => 'ready']);
 
         [$user, $domain] = $this->ownedDomain();
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $this->record('edge-loop', '203.0.113.10'))->assertUnprocessable();
         $record = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $this->record('www', '8.8.8.8'))->assertCreated()->json('data.id');
         $artifact = EdgeArtifact::query()->where('edge_id', $id)->firstOrFail();
         $this->assertTrue(sodium_crypto_sign_verify_detached(hex2bin($artifact->signature), $artifact->checksum, hex2bin($registered->json('data.signing_public_key'))));
@@ -68,7 +85,7 @@ class EdgeProxyTest extends TestCase
         $artifactCount = EdgeArtifact::query()->where('domain_id', $domain->id)->count();
         $hostname = $domain->dnsRecords()->findOrFail($record)->name;
         $this->withHeaders($identity)->postJson('/edge/v1/heartbeat', ['agent_version' => '1.0.0', 'listener_ready' => true, 'active_sequence' => $artifact->sequence, 'cells' => [
-            ['name' => 'pool-1', 'status' => 'ready', 'capacity' => ['active_connections' => 1]],
+            ['name' => 'shared-default', 'status' => 'ready', 'capacity' => ['active_connections' => 1]],
         ], 'passive_origins' => [[
             'domain' => $domain->name, 'hostname' => $hostname, 'failure_count' => 2,
             'last_status' => 502, 'last_failed_at' => now()->timestamp,
@@ -87,11 +104,13 @@ class EdgeProxyTest extends TestCase
         $this->assertDatabaseHas('domain_edge_placements', ['domain_id' => $domain->id, 'state' => 'active']);
 
         $validatedRevision = $domain->revision;
+        $extraRecord = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $this->record('rollback-extra', '1.1.1.1'))->assertCreated()->json('data.id');
         $this->actingAs($user)->putJson("/api/domains/{$domain->id}/dns/records/$record/origin", $this->origin('9.9.9.9'))->assertAccepted();
         $beforeRollback = $domain->refresh()->revision;
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/rollback", ['revision' => $validatedRevision])->assertAccepted();
         $this->assertSame($beforeRollback + 1, $domain->refresh()->revision);
         $this->assertSame('8.8.8.8', $domain->dnsRecords()->findOrFail($record)->origin['host']);
+        $this->assertNull($domain->dnsRecords()->find($extraRecord));
         $this->assertDatabaseHas('audit_logs', ['action' => 'proxy.revision_rolled_back', 'subject_id' => (string) $domain->id]);
 
         $pool = $this->actingAs($admin)->postJson('/api/admin/edge-pools', ['name' => 'dedicated-test', 'kind' => 'dedicated'])->assertCreated()->json('data.id');
@@ -120,7 +139,7 @@ class EdgeProxyTest extends TestCase
         $registered = $this->postJson('/edge/v1/register', ['edge_id' => $edgeId, 'bootstrap_token' => $created->json('data.bootstrap_token'), 'agent_version' => '1.0.0', 'certificate_request' => $this->certificateRequest($edgeId)])->assertCreated();
         $identity = $this->edgeIdentityHeaders($registered->json('data.identity_certificate_serial'));
         $this->withHeaders($identity)->postJson('/edge/v1/heartbeat', ['agent_version' => '1.0.0', 'listener_ready' => true, 'active_sequence' => 0, 'cells' => [
-            ['name' => 'pool-1', 'status' => 'ready', 'capacity' => ['active_connections' => 0]],
+            ['name' => 'shared-default', 'status' => 'ready', 'capacity' => ['active_connections' => 0]],
         ]])->assertOk();
 
         [$user, $domain] = $this->ownedDomain();

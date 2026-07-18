@@ -24,19 +24,19 @@ final class GeoDnsConfig
     }
 
     /** @return array{default:list<string>,countries:array<string,list<string>>,continents:array<string,list<string>>} */
-    public static function validate(array $input, string $type): array
+    public static function validate(array $input, string $type, string $zone): array
     {
         $validator = Validator::make($input, [
             'default' => ['required', 'array', 'min:1', 'max:'.self::MAX_TARGETS_PER_SET],
-            'default.*' => ['required', 'string', 'max:45'],
+            'default.*' => ['required', 'string', 'max:4096'],
             'countries' => ['sometimes', 'array', 'max:'.self::MAX_COUNTRIES],
             'countries.*' => ['required', 'array', 'min:1', 'max:'.self::MAX_TARGETS_PER_SET],
-            'countries.*.*' => ['required', 'string', 'max:45'],
+            'countries.*.*' => ['required', 'string', 'max:4096'],
             'continents' => ['sometimes', 'array', 'max:'.self::MAX_CONTINENTS],
             'continents.*' => ['required', 'array', 'min:1', 'max:'.self::MAX_TARGETS_PER_SET],
-            'continents.*.*' => ['required', 'string', 'max:45'],
+            'continents.*.*' => ['required', 'string', 'max:4096'],
         ]);
-        $validator->after(function ($validator) use ($input, $type): void {
+        $validator->after(function ($validator) use ($input, $type, $zone): void {
             foreach (array_keys((array) ($input['countries'] ?? [])) as $code) {
                 if (! in_array($code, explode(',', self::COUNTRY_CODES), true)) {
                     $validator->errors()->add("countries.$code", 'Country keys must be uppercase ISO 3166-1 alpha-2 codes.');
@@ -54,9 +54,10 @@ final class GeoDnsConfig
                         $validator->errors()->add("$group.$code", 'A target set cannot contain duplicates.');
                     }
                     foreach ($targets as $target) {
-                        $flag = $type === 'A' ? FILTER_FLAG_IPV4 : FILTER_FLAG_IPV6;
-                        if (filter_var($target, FILTER_VALIDATE_IP, $flag) === false) {
-                            $validator->errors()->add("$group.$code", "Targets must match the $type record family.");
+                        try {
+                            DnsRecordData::normalizeContent($type, $target, $zone);
+                        } catch (\InvalidArgumentException $exception) {
+                            $validator->errors()->add("$group.$code", $exception->getMessage());
                         }
                     }
                 }
@@ -67,7 +68,7 @@ final class GeoDnsConfig
         }
 
         $normalize = fn (array $targets): array => array_values(array_map(
-            fn (string $target): string => $type === 'AAAA' ? strtolower($target) : $target,
+            fn (string $target): string => DnsRecordData::normalizeContent($type, $target, $zone),
             $targets,
         ));
         $countries = collect($input['countries'] ?? [])->map($normalize)->sortKeys()->all();

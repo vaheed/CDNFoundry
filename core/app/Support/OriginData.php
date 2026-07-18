@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\Edge;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
@@ -88,6 +89,10 @@ final class OriginData
     private static function blockedAddress(string $address): bool
     {
         if (! filter_var($address, FILTER_VALIDATE_IP)) {
+            return true;
+        }
+        if (Edge::query()->where('ipv4', $address)->orWhere('ipv6', $address)->exists()
+            || in_array($address, config('edge.blocked_origin_addresses', []), true)) {
             return true;
         }
         $allow = config('edge.private_origin_allowlist', []);

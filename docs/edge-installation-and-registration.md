@@ -10,6 +10,8 @@ Provision a separate edge identity CA certificate/private key and edge-control s
 
 An edge is routable only while enabled, not drained, listener-ready, and heartbeat-fresh. Give every cell its own memory/process limits, cache volume, and temporary-storage quota. Keep the agent state outside cell volumes so a cell replacement cannot erase the last active snapshot.
 
+Full recovery snapshots are gzip-compressed, checksummed, and signed before transfer. The agent bounds decompression, validates the signature and compatibility envelope, and activates only after compiling valid per-pool runtime state. Cell status endpoints report bounded revision, assigned-host, connection, CPU, memory, cache, temporary-storage, and rejection summaries; an unavailable shared-cell status endpoint makes listener readiness fail closed.
+
 To replace an identity, call `POST /api/admin/edges/{edge}/rotate-identity`, remove the agent's persisted legacy identity, install the newly returned one-time token, and register again. The old certificate serial stops authenticating immediately and cannot heartbeat or download artifacts even if its certificate has not expired. Do not reuse an identity on another host.
 
 Fresh recovery starts with `GET /edge/v1/config/full`. Verify the pinned Ed25519 signature, SHA-256 checksum, schema and compatible version range, build and locally validate a candidate, then atomically rename it into the active directory. Preserve the previous directory. Post `config/applied` only after validation; post `config/rejected` otherwise. Acknowledgements are retained in a bounded 1,000-entry persistent queue while the control plane is unavailable.

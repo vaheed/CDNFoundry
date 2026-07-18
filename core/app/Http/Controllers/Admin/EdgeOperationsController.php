@@ -27,7 +27,9 @@ class EdgeOperationsController extends Controller
     public function routing(): JsonResponse
     {
         $edges = Edge::query()->where('enabled', true)->where('drained', false)
+            ->whereNull('identity_revoked_at')->whereNotNull('registered_at')
             ->where('last_heartbeat_at', '>=', now()->subSeconds((int) config('edge.heartbeat_fresh_seconds')))
+            ->where('capacity->listener_ready', true)
             ->orderBy('country_code')->orderBy('continent_code')->orderBy('id')->get(['id', 'name', 'country_code', 'continent_code', 'ipv4', 'ipv6', 'last_heartbeat_at']);
 
         return response()->json(['data' => [

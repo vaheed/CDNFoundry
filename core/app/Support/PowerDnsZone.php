@@ -32,7 +32,9 @@ final class PowerDnsZone
                     continue;
                 }
                 $addresses = Edge::query()->where('enabled', true)->where('drained', false)
+                    ->whereNull('identity_revoked_at')->whereNotNull('registered_at')
                     ->where('last_heartbeat_at', '>=', now()->subSeconds((int) config('edge.heartbeat_fresh_seconds')))
+                    ->where('capacity->listener_ready', true)
                     ->pluck($record->type === 'AAAA' ? 'ipv6' : 'ipv4')->filter()->unique()->sort()->values();
                 foreach ($addresses as $address) {
                     $rows->push(['name' => $record->name.'.', 'type' => $record->type === 'AAAA' ? 'AAAA' : 'A', 'ttl' => $record->ttl, 'content' => $address]);
@@ -41,7 +43,10 @@ final class PowerDnsZone
                 continue;
             }
             if ($record->mode === 'geo_dns') {
-                $rows->push(['name' => $record->name.'.', 'type' => 'LUA', 'ttl' => $record->ttl, 'content' => GeoDnsCompiler::compile($record->type, $record->geo_config)]);
+                $rows->push([
+                    'name' => $record->name.'.', 'type' => 'LUA', 'ttl' => $record->ttl,
+                    'content' => GeoDnsCompiler::compile($record->type, $record->geo_config, $record->priority, $record->weight, $record->port),
+                ]);
 
                 continue;
             }

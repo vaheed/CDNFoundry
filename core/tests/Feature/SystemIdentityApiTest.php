@@ -4,9 +4,12 @@ namespace Tests\Feature;
 
 use App\Jobs\ApplyPlatformDnsSettings;
 use App\Models\DnsCluster;
+use App\Models\Edge;
 use App\Models\Operation;
 use App\Models\PlatformDnsDeployment;
+use App\Models\PlatformDnsSetting;
 use App\Models\User;
+use App\Support\PlatformDnsZone;
 use App\Support\PowerDnsClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -85,6 +88,30 @@ class SystemIdentityApiTest extends TestCase
         $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['nameservers.0.ipv4', 'nameservers.0.ipv6']);
+    }
+
+    public function test_platform_proxy_hostname_contains_only_registered_listener_ready_edges(): void
+    {
+        $settings = PlatformDnsSetting::query()->create(['id' => 1, ...$this->validPayload(), 'revision' => 1]);
+        Edge::query()->create([
+            'name' => 'ready-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
+            'ipv4' => '203.0.113.40', 'ipv6' => '2001:db8::40', 'registered_at' => now(),
+            'last_heartbeat_at' => now(), 'capacity' => ['listener_ready' => true],
+        ]);
+        Edge::query()->create([
+            'name' => 'unready-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
+            'ipv4' => '203.0.113.41', 'ipv6' => '2001:db8::41', 'registered_at' => now(),
+            'last_heartbeat_at' => now(), 'capacity' => ['listener_ready' => false],
+        ]);
+
+        $proxyRows = collect(PlatformDnsZone::render($settings))->where('name', 'proxy.cdnf.test.');
+        $this->assertSame(['LUA'], $proxyRows->pluck('type')->unique()->values()->all());
+        $content = collect($proxyRows->first()['records'])->pluck('content')->implode(' ');
+        $this->assertStringContainsString('countryCode()', $content);
+        $this->assertStringContainsString('continentCode()', $content);
+        $this->assertStringContainsString('203.0.113.40', $content);
+        $this->assertStringContainsString('2001:db8::40', $content);
+        $this->assertStringNotContainsString('203.0.113.41', $content);
     }
 
     public function test_domain_user_cannot_read_dns_identity_or_other_users_operation(): void

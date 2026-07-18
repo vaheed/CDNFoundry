@@ -25,7 +25,7 @@ class EdgePoolController extends Controller
         $data = $request->validate(['name' => ['required', 'string', 'max:100', 'unique:edge_pools'], 'kind' => ['required', 'in:shared,quarantine,dedicated']]);
         $pool = EdgePool::query()->create($data);
         foreach (Edge::query()->get() as $edge) {
-            $edge->cells()->create(['edge_pool_id' => $pool->id, 'name' => 'pool-'.$pool->id]);
+            $edge->cells()->create(['edge_pool_id' => $pool->id, 'name' => $pool->name]);
         }
 
         return response()->json(['data' => $pool], 201);
@@ -34,6 +34,7 @@ class EdgePoolController extends Controller
     public function update(Request $request, EdgePool $pool): JsonResponse
     {
         $pool->update($request->validate(['name' => ['sometimes', 'string', 'max:100'], 'enabled' => ['sometimes', 'boolean']]));
+        $pool->cells()->update(['name' => $pool->name]);
 
         return response()->json(['data' => $pool->refresh()]);
     }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\DnsRecord;
 use App\Models\Domain;
 use App\Models\DomainEdgePlacement;
@@ -61,7 +62,16 @@ class EdgeAgentController extends Controller
             'passive_origins.*.last_status' => ['required', 'integer', 'between:0,599'],
             'passive_origins.*.last_failed_at' => ['required', 'integer', 'min:0'],
         ]);
+        $wasRoutable = $edge->enabled && ! $edge->drained && $edge->last_heartbeat_at?->gte(now()->subSeconds((int) config('edge.heartbeat_fresh_seconds')))
+            && ($edge->capacity['listener_ready'] ?? false);
         $edge->update(['last_heartbeat_at' => now(), 'agent_version' => $data['agent_version'], 'active_sequence' => $data['active_sequence'], 'capacity' => ['listener_ready' => $data['listener_ready'], 'cells' => $data['cells'], 'noisy_domains' => $data['noisy_domains'] ?? []]]);
+        foreach ($data['cells'] as $cell) {
+            $edge->cells()->where('name', $cell['name'])->limit(1)->update(['status' => $cell['status'], 'capacity' => $cell['capacity']]);
+        }
+        $isRoutable = $edge->enabled && ! $edge->drained && $data['listener_ready'];
+        if ($wasRoutable !== $isRoutable) {
+            ReconcilePlatformDnsIdentity::dispatch()->afterResponse();
+        }
         foreach ($data['passive_origins'] ?? [] as $failure) {
             DnsRecord::query()->where('name', $failure['hostname'])->whereHas('domain', fn ($query) => $query->where('name', $failure['domain']))
                 ->where('mode', 'proxied')->limit(1)->update(['origin_health' => [
@@ -102,9 +112,11 @@ class EdgeAgentController extends Controller
             'artifacts' => $latest,
         ];
         $encoded = ArtifactSigner::encode($payload);
-        $checksum = hash('sha256', $encoded);
+        $compressed = gzencode($encoded, 6, ZLIB_ENCODING_GZIP);
+        throw_if($compressed === false, RuntimeException::class, 'Unable to compress the edge snapshot.');
+        $checksum = hash('sha256', $compressed);
 
-        return response()->json(['data' => $payload, 'encoded_snapshot' => base64_encode($encoded), 'checksum' => $checksum, 'signature' => ArtifactSigner::sign($checksum), 'signing_public_key' => ArtifactSigner::publicKey()]);
+        return response()->json(['data' => $payload, 'encoding' => 'gzip', 'encoded_snapshot' => base64_encode($compressed), 'checksum' => $checksum, 'signature' => ArtifactSigner::sign($checksum), 'signing_public_key' => ArtifactSigner::publicKey()]);
     }
 
     public function applied(Request $request): JsonResponse
@@ -138,13 +150,17 @@ class EdgeAgentController extends Controller
     {
         $edge = $request->attributes->get('edge');
         $row = $edge->tasks()->findOrFail($task);
-        $data = $request->validate([
-            'status' => ['required', 'in:succeeded,failed'], 'result' => ['required', 'array', 'max:30'],
+        $rules = ['status' => ['required', 'in:succeeded,failed'], 'result' => ['required', 'array', 'max:30']];
+        $rules += $row->type === 'origin_test' ? [
             'result.status' => ['required', 'in:healthy,unhealthy'], 'result.latency_ms' => ['nullable', 'integer', 'between:0,60000'],
             'result.resolved_address' => ['nullable', 'ip'], 'result.tls_result' => ['nullable'],
             'result.http_status' => ['nullable', 'integer', 'between:100,599'],
             'result.failure_reason' => ['nullable', 'in:dns_resolution_failed,blocked_destination,connect_timeout,connect_failed,tls_verification_failed,tls_handshake_failed,response_timeout,invalid_response,http_status_unhealthy,task_cancelled'],
-        ]);
+        ] : [
+            'result.status' => ['required', 'in:completed,failed'],
+            'result.failure_reason' => ['nullable', 'string', 'max:100'],
+        ];
+        $data = $request->validate($rules);
         $result = array_merge($data['result'], ['edge_id' => $edge->id, 'reported_at' => now()->toIso8601String()]);
         $row->update(['status' => $data['status'], 'result' => $result, 'finished_at' => now()]);
         if ($row->type === 'origin_test' && isset($row->payload['record_id'])) {

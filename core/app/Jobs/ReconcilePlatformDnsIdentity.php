@@ -29,7 +29,10 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
 
     public function handle(PowerDnsClient $client): void
     {
-        $settings = PlatformDnsSetting::query()->findOrFail(1);
+        $settings = PlatformDnsSetting::query()->find(1);
+        if ($settings === null) {
+            return;
+        }
         $revision = $settings->revision;
         $rrsets = PlatformDnsZone::render($settings);
         $checksum = hash('sha256', json_encode($rrsets, JSON_THROW_ON_ERROR));
@@ -45,6 +48,9 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
         foreach (DnsCluster::query()->where('enabled', true)->where('last_health_status', 'healthy')->orderBy('id')->get() as $cluster) {
             $targets++;
             $deployment = PlatformDnsDeployment::query()->firstOrCreate(['dns_cluster_id' => $cluster->id]);
+            if ($deployment->status === 'succeeded' && hash_equals((string) $deployment->active_checksum, $checksum)) {
+                continue;
+            }
             $deployment->update([
                 'desired_revision' => $revision,
                 'status' => 'deploying',

@@ -6,6 +6,7 @@ use App\Filament\Admin\Resources\Edges\Pages\CreateEdge;
 use App\Filament\Admin\Resources\Edges\Pages\EditEdge;
 use App\Filament\Admin\Resources\Edges\Pages\ListEdges;
 use App\Filament\Admin\Resources\Edges\RelationManagers\CellsRelationManager;
+use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
 use App\Models\Edge;
 use Filament\Actions\Action;
@@ -65,6 +66,7 @@ class EdgeResource extends Resource
             TextColumn::make('agent_version')->label('Agent')->placeholder('Not registered'),
             TextColumn::make('active_sequence')->label('Active revision')->sortable(),
             TextColumn::make('cells_count')->counts('cells')->label('Cells'),
+            TextColumn::make('capacity.last_rejection.reason')->label('Deployment failure')->placeholder('None'),
         ])->recordActions([
             Action::make('enable')->visible(fn (Edge $record): bool => ! $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => true], 'edge.enable')),
             Action::make('disable')->color('danger')->requiresConfirmation()->visible(fn (Edge $record): bool => $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => false], 'edge.disable')),
@@ -74,6 +76,7 @@ class EdgeResource extends Resource
                 $token = Str::random(64);
                 $record->update(['identity_hash' => null, 'identity_certificate_serial' => null, 'identity_certificate_expires_at' => null, 'identity_revoked_at' => now(), 'bootstrap_token_hash' => hash('sha256', $token), 'registered_at' => null]);
                 AuditLog::record(auth()->user(), 'edge.identity_rotated', $record, [], request()->ip());
+                ReconcilePlatformDnsIdentity::dispatch()->afterCommit();
                 Notification::make()->warning()->persistent()->title('New one-time bootstrap token')->body($token)->send();
             }),
             EditAction::make(),
@@ -94,5 +97,6 @@ class EdgeResource extends Resource
     {
         $edge->update($changes);
         AuditLog::record(auth()->user(), $action, $edge, [], request()->ip());
+        ReconcilePlatformDnsIdentity::dispatch()->afterCommit();
     }
 }

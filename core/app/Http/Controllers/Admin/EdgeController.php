@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
 use App\Models\Edge;
 use App\Models\EdgePool;
@@ -28,7 +29,7 @@ class EdgeController extends Controller
         $token = Str::random(64);
         $edge = Edge::query()->create(array_merge($data, ['country_code' => strtoupper($data['country_code']), 'continent_code' => strtoupper($data['continent_code']), 'bootstrap_token_hash' => hash('sha256', $token)]));
         foreach (EdgePool::query()->where('enabled', true)->get() as $pool) {
-            $edge->cells()->create(['edge_pool_id' => $pool->id, 'name' => 'pool-'.$pool->id]);
+            $edge->cells()->create(['edge_pool_id' => $pool->id, 'name' => $pool->name]);
         }
         AuditLog::record($request->user(), 'edge.created', $edge, [], $request->ip());
 
@@ -38,6 +39,7 @@ class EdgeController extends Controller
     public function update(Request $request, Edge $edge): JsonResponse
     {
         $edge->update($request->validate(['name' => ['sometimes', 'string', 'max:100'], 'country_code' => ['sometimes', 'alpha:ascii', 'size:2'], 'continent_code' => ['sometimes', 'alpha:ascii', 'size:2'], 'ipv4' => ['sometimes', 'ipv4'], 'ipv6' => ['sometimes', 'nullable', 'ipv6']]));
+        ReconcilePlatformDnsIdentity::dispatch()->afterCommit();
 
         return response()->json(['data' => $edge->refresh()]);
     }
@@ -47,6 +49,7 @@ class EdgeController extends Controller
         abort_if($edge->enabled || ! $edge->drained, 409, 'Drain and disable the edge before deletion.');
         $edge->delete();
         AuditLog::record($request->user(), 'edge.deleted', $edge, [], $request->ip());
+        ReconcilePlatformDnsIdentity::dispatch()->afterCommit();
 
         return response()->json(null, 204);
     }
@@ -58,6 +61,7 @@ class EdgeController extends Controller
         };
         $edge->update($changes);
         AuditLog::record($request->user(), 'edge.'.$state, $edge, [], $request->ip());
+        ReconcilePlatformDnsIdentity::dispatch()->afterCommit();
 
         return response()->json(['data' => $edge->refresh()]);
     }
@@ -87,6 +91,7 @@ class EdgeController extends Controller
         $token = Str::random(64);
         $edge->update(['identity_hash' => null, 'identity_certificate_serial' => null, 'identity_certificate_expires_at' => null, 'identity_revoked_at' => now(), 'bootstrap_token_hash' => hash('sha256', $token), 'registered_at' => null]);
         AuditLog::record($request->user(), 'edge.identity_rotated', $edge, [], $request->ip());
+        ReconcilePlatformDnsIdentity::dispatch()->afterCommit();
 
         return response()->json(['data' => ['bootstrap_token' => $token]]);
     }
