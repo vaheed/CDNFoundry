@@ -2,6 +2,9 @@
 
 The supported development runtime is Docker Compose. Host PHP, Composer,
 PostgreSQL, Valkey, and web servers are not part of the workflow.
+Compose supplies a fixed development-only `APP_KEY` so encrypted model fields
+work in a clean checkout. It is intentionally public test material and must
+never be copied to production, where `APP_KEY` is a required host secret.
 
 Start the full stack and run the explicit database deployment:
 

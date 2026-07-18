@@ -3,6 +3,7 @@ name: cdnfoundry-dev
 x-core-env: &core-env
   APP_ENV: local
   APP_DEBUG: "true"
+  APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
   APP_URL: http://localhost:8080
   DB_CONNECTION: pgsql
   DB_HOST: control-db
