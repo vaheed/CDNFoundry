@@ -2,10 +2,13 @@ COMPOSE_DEV := docker compose -f compose.dev.yml
 COMPOSE_PROD := docker compose --env-file .env.prod -f compose.prod.yml
 COMPOSE_PROD_EXAMPLE := docker compose --env-file .env.prod.example -f compose.prod.yml
 
-.PHONY: dev-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-scale-e2e dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check
+.PHONY: dev-up dev-scale-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-scale-e2e dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check
 
 dev-up:
 	$(COMPOSE_DEV) --profile devtools up -d --build
+
+dev-scale-up:
+	$(COMPOSE_DEV) up -d --build control-db redis core web
 
 dev-down:
 	$(COMPOSE_DEV) down

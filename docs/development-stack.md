@@ -27,6 +27,8 @@ make dev-e2e
 
 This cumulative job exercises Phases 1–4 through HTTP APIs, authorization, idempotency, queues, persisted operations, real PowerDNS/DNSdist answers, Geo-DNS, mTLS edge control, pool migration, and the generic OpenResty runtime. Run the heavier 500,000-zone/1,000,000-record qualification separately with `make dev-scale-e2e`. Browser/UI acceptance remains the project owner's manual checklist.
 
+Hosted scale qualification starts only the bounded control-plane dependencies with `make dev-scale-up`; it does not make an unrelated MMDB download or start DNS, telemetry, origin, and edge services. The full developer stack remains `make dev-up`.
+
 The control panel is exposed at `http://localhost:8080`, Horizon at
 `http://localhost:8080/horizon`, DNSdist at TCP/UDP port `1053`, the two test
 edges at ports `8081` and `8082`, Prometheus at `9090`, Alertmanager at `9093`,

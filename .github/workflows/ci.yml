@@ -100,7 +100,7 @@ jobs:
         run: docker compose -f compose.dev.yml logs --tail=300
       - name: Stop qualification topology
         if: always()
-        run: docker compose -f compose.dev.yml down -v
+        run: docker compose -f compose.dev.yml down
 
   scale-e2e:
     name: Bounded DNS dataset and mutation scale
@@ -108,12 +108,28 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
-      - name: Start real development topology
-        run: make dev-up
+      - name: Start bounded control-plane topology
+        run: make dev-scale-up
       - name: Apply migrations explicitly
         run: make dev-migrate
       - name: Run bounded scale qualification
-        run: make dev-scale-e2e
+        shell: bash
+        run: |
+          set +e
+          make dev-scale-e2e 2>&1 | tee /tmp/cdnfoundry-scale.log
+          status=${PIPESTATUS[0]}
+          if (( status != 0 )); then
+            tail -n 25 /tmp/cdnfoundry-scale.log > /tmp/cdnfoundry-scale-tail.log
+            {
+              echo '### Scale qualification failure tail'
+              echo '```text'
+              cat /tmp/cdnfoundry-scale-tail.log
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+            annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-scale-tail.log)"
+            echo "::error title=Scale qualification failed::${annotation}"
+          fi
+          exit "${status}"
       - name: Capture service state
         if: always()
         run: docker compose -f compose.dev.yml ps
@@ -122,7 +138,7 @@ jobs:
         run: docker compose -f compose.dev.yml logs --tail=300
       - name: Stop qualification topology
         if: always()
-        run: docker compose -f compose.dev.yml down -v
+        run: docker compose -f compose.dev.yml down
 
   go:
     name: Go test and build
