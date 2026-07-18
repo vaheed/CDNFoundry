@@ -73,7 +73,7 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
         $blockedAddresses = Edge::query()->pluck('ipv4')->merge(Edge::query()->pluck('ipv6'))
             ->merge(EdgeCell::query()->pluck('service_ipv4'))->merge(EdgeCell::query()->pluck('service_ipv6'))
             ->filter()->merge(app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_addresses'))->unique()->values()->all();
-        $proxySettings = $domain->proxy_settings ?? self::defaults();
+        $proxySettings = is_array($domain->proxy_settings) ? $domain->proxy_settings : self::defaults();
         $proxySettings['enabled'] = $domain->lifecycle_state === DomainLifecycleState::Active
             && ($proxySettings['enabled'] ?? true);
         $snapshot = [

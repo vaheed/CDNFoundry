@@ -20,10 +20,16 @@ COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 
 COPY resources ./resources
+COPY app/Filament ./app/Filament
 COPY vite.config.js ./
 COPY --from=php-dependencies /app/vendor/laravel/framework/src/Illuminate/Pagination/resources/views ./vendor/laravel/framework/src/Illuminate/Pagination/resources/views
+COPY --from=php-dependencies /app/vendor/filament ./vendor/filament
 RUN mkdir -p storage/framework/views \
     && npm run build
+
+FROM scratch AS frontend-assets-export
+
+COPY --from=frontend-assets /app/public/build /
 
 FROM php-dependencies AS php-base
 

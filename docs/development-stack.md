@@ -13,6 +13,8 @@ make dev-up
 make dev-migrate
 ```
 
+`make dev-up` first builds the shared production Filament theme into the ignored `core/public/build` directory through Docker, so a clean checkout never depends on a host Node installation or a Vite development server. Run `make dev-assets` by itself after a UI-only edit when the existing containers do not need rebuilding.
+
 Run tests inside the same application image:
 
 ```sh

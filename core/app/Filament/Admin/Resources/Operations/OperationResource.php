@@ -38,6 +38,10 @@ class OperationResource extends Resource
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-arrow-path';
 
+    protected static string|\UnitEnum|null $navigationGroup = 'Operations';
+
+    protected static ?int $navigationSort = 10;
+
     public static function table(Table $table): Table
     {
         return $table

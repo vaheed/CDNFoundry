@@ -18,6 +18,10 @@ class PlatformSettings extends Page
 
     protected static ?string $navigationLabel = 'Platform settings';
 
+    protected static string|\UnitEnum|null $navigationGroup = 'Control plane';
+
+    protected static ?int $navigationSort = 10;
+
     protected string $view = 'filament.admin.pages.platform-settings';
 
     public ?array $data = [];

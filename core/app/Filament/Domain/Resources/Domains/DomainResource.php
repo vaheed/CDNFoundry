@@ -10,9 +10,11 @@ use App\Filament\Domain\Resources\Domains\RelationManagers\UsersRelationManager;
 use App\Models\Domain;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -23,6 +25,13 @@ class DomainResource extends Resource
     protected static ?string $model = Domain::class;
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-globe-alt';
+
+    protected static ?int $navigationSort = 20;
+
+    public static function getNavigationGroup(): string|\UnitEnum|null
+    {
+        return Filament::getCurrentPanel()?->getId() === 'admin' ? 'Customers' : null;
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -46,36 +55,51 @@ class DomainResource extends Resource
     public static function infolist(Schema $schema): Schema
     {
         return $schema->components([
-            TextEntry::make('name')->label('Canonical domain'),
-            TextEntry::make('display_name')->label('Display label'),
-            TextEntry::make('lifecycle_state')->badge(),
-            TextEntry::make('nameservers_verified_at')->label('Nameservers verified')->dateTime()->placeholder('Pending'),
-            TextEntry::make('nameserver_verification_status')->label('Latest verification')
-                ->state(fn (Domain $record): ?string => $record->nameservers_verified_by !== null
-                    ? 'force_verified'
-                    : self::latestNameserverVerification($record)?->status)
-                ->badge()->placeholder('Not requested'),
-            TextEntry::make('nameserver_verification_error')->label('Verification error')
-                ->state(fn (Domain $record): ?string => $record->nameservers_verified_by !== null
-                    ? null
-                    : self::latestNameserverVerification($record)?->error)
-                ->placeholder('None'),
-            TextEntry::make('revision'),
-            TextEntry::make('active_edge_revision')->label('Active edge revision')->placeholder('Not deployed'),
-            TextEntry::make('proxy_hostnames')->label('Proxied hostnames')
-                ->state(fn (Domain $record): int => $record->dnsRecords()->where('mode', 'proxied')->count()),
-            TextEntry::make('edgePlacement.state')->label('Edge placement')->badge()->placeholder('Not placed'),
-            TextEntry::make('edgePlacement.activePool.name')->label('Active service pool')->placeholder('None'),
-            TextEntry::make('edgePlacement.targetPool.name')->label('Target service pool')->placeholder('None'),
-            TextEntry::make('edgePlacement.last_error')->label('Edge deployment failure')->placeholder('None'),
-            TextEntry::make('validated_edge_revisions')->label('Validated edge revisions')
-                ->state(fn (Domain $record): string => EdgeRevision::query()->where('domain_id', $record->id)->where('status', 'validated')->latest('revision')->limit(10)->pluck('revision')->implode(', '))
-                ->placeholder('None'),
-            TextEntry::make('proxy_settings')->label('Proxy defaults')
-                ->formatStateUsing(fn (?array $state): string => json_encode($state, JSON_UNESCAPED_SLASHES) ?: 'Defaults not customized')
-                ->placeholder('Defaults not customized'),
-            TextEntry::make('dnsDeployments.status')->label('Deployment states')->badge(),
-            TextEntry::make('dnsDeployments.last_error')->label('Deployment errors')->placeholder('None'),
+            Section::make('Domain status')
+                ->description('Identity, lifecycle, and authoritative delegation state.')
+                ->icon('heroicon-o-globe-alt')
+                ->schema([
+                    TextEntry::make('name')->label('Canonical domain')->copyable(),
+                    TextEntry::make('display_name')->label('Display label')->placeholder('Same as canonical domain'),
+                    TextEntry::make('lifecycle_state')->label('Lifecycle')->badge(),
+                    TextEntry::make('revision')->label('Desired revision'),
+                    TextEntry::make('nameservers_verified_at')->label('Nameservers verified')->dateTime()->placeholder('Pending'),
+                    TextEntry::make('nameserver_verification_status')->label('Latest verification')
+                        ->state(fn (Domain $record): ?string => $record->nameservers_verified_by !== null
+                            ? 'force_verified'
+                            : self::latestNameserverVerification($record)?->status)
+                        ->badge()->placeholder('Not requested'),
+                    TextEntry::make('nameserver_verification_error')->label('Verification error')
+                        ->state(fn (Domain $record): ?string => $record->nameservers_verified_by !== null
+                            ? null
+                            : self::latestNameserverVerification($record)?->error)
+                        ->placeholder('None')->columnSpanFull(),
+                ])->columns(3),
+            Section::make('Edge delivery')
+                ->description('Desired proxy policy and the last validated runtime placement.')
+                ->icon('heroicon-o-cloud')
+                ->schema([
+                    TextEntry::make('proxy_hostnames')->label('Proxied hostnames')
+                        ->state(fn (Domain $record): int => $record->dnsRecords()->where('mode', 'proxied')->count()),
+                    TextEntry::make('active_edge_revision')->label('Active edge revision')->placeholder('Not deployed'),
+                    TextEntry::make('edgePlacement.state')->label('Placement state')->badge()->placeholder('Not placed'),
+                    TextEntry::make('edgePlacement.activePool.name')->label('Active service pool')->placeholder('None'),
+                    TextEntry::make('edgePlacement.targetPool.name')->label('Target service pool')->placeholder('None'),
+                    TextEntry::make('validated_edge_revisions')->label('Validated revisions')
+                        ->state(fn (Domain $record): string => EdgeRevision::query()->where('domain_id', $record->id)->where('status', 'validated')->latest('revision')->limit(10)->pluck('revision')->implode(', '))
+                        ->placeholder('None'),
+                    TextEntry::make('proxy_settings_summary')->label('Proxy defaults')
+                        ->state(fn (Domain $record): string => self::proxySettingsSummary($record->proxy_settings))
+                        ->columnSpanFull(),
+                    TextEntry::make('edgePlacement.last_error')->label('Last deployment failure')->placeholder('None')->columnSpanFull(),
+                ])->columns(3),
+            Section::make('Authoritative DNS deployment')
+                ->description('Per-cluster deployment acknowledgements and failures.')
+                ->icon('heroicon-o-server-stack')
+                ->schema([
+                    TextEntry::make('dnsDeployments.status')->label('Deployment states')->badge()->placeholder('Not deployed'),
+                    TextEntry::make('dnsDeployments.last_error')->label('Deployment errors')->placeholder('None'),
+                ])->columns(2)->collapsible(),
         ]);
     }
 
@@ -105,5 +129,24 @@ class DomainResource extends Resource
     {
         return Operation::query()->where('type', 'domain.nameservers_verify')
             ->where('input->domain_id', $domain->id)->latest()->first();
+    }
+
+    private static function proxySettingsSummary(mixed $settings): string
+    {
+        if (! is_array($settings)) {
+            return 'Platform defaults';
+        }
+
+        $versions = collect($settings['http_versions'] ?? [])
+            ->map(fn (mixed $version): string => 'HTTP/'.(string) $version)
+            ->implode(' + ');
+
+        return implode(' · ', [
+            ($settings['enabled'] ?? true) ? 'Enabled' : 'Disabled',
+            $versions !== '' ? $versions : 'No HTTP versions selected',
+            ($settings['redirect_https'] ?? false) ? 'HTTPS redirect on' : 'HTTPS redirect off',
+            (int) ($settings['retry_count'] ?? 0).' origin retries',
+            is_array($settings['maintenance'] ?? null) ? 'Maintenance on' : 'Maintenance off',
+        ]);
     }
 }

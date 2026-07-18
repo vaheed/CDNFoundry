@@ -24,6 +24,10 @@ class DnsClusterResource extends Resource
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-server-stack';
 
+    protected static string|\UnitEnum|null $navigationGroup = 'Control plane';
+
+    protected static ?int $navigationSort = 30;
+
     public static function form(Schema $schema): Schema
     {
         return $schema->components([

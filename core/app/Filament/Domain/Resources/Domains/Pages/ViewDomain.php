@@ -42,7 +42,7 @@ class ViewDomain extends ViewRecord
                 Toggle::make('maintenance_enabled')->label('Maintenance mode')->live(),
                 TextInput::make('maintenance_body')->label('Maintenance response')->maxLength(4096)->visible(fn ($get): bool => (bool) $get('maintenance_enabled')),
             ])->fillForm(function (): array {
-                $settings = $this->record->proxy_settings ?? ReconcileEdgeDomain::defaults();
+                $settings = is_array($this->record->proxy_settings) ? $this->record->proxy_settings : ReconcileEdgeDomain::defaults();
 
                 return [...$settings, 'maintenance_enabled' => $settings['maintenance'] !== null, 'maintenance_body' => $settings['maintenance']['body'] ?? 'Service temporarily unavailable'];
             })->action(function (array $data): void {

@@ -2,12 +2,15 @@ COMPOSE_DEV := docker compose -f compose.dev.yml
 COMPOSE_PROD := docker compose --env-file .env.prod -f compose.prod.yml
 COMPOSE_PROD_EXAMPLE := docker compose --env-file .env.prod.example -f compose.prod.yml
 
-.PHONY: dev-up dev-scale-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-scale-e2e dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check
+.PHONY: dev-assets dev-up dev-scale-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-scale-e2e dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check
 
-dev-up:
+dev-assets:
+	docker build --target frontend-assets-export --output type=local,dest=./core/public/build ./core
+
+dev-up: dev-assets
 	$(COMPOSE_DEV) --profile devtools up -d --build
 
-dev-scale-up:
+dev-scale-up: dev-assets
 	$(COMPOSE_DEV) up -d --build control-db redis core web
 
 dev-down:
@@ -19,7 +22,7 @@ dev-migrate:
 dev-pdns-migrate:
 	$(COMPOSE_DEV) --profile tools run --rm pdns-migrate
 
-dev-test:
+dev-test: dev-assets
 	$(COMPOSE_DEV) run --rm -e APP_ENV=testing -e APP_CONFIG_CACHE=/tmp/cdnfoundry-test-config.php -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: -e CACHE_STORE=array -e QUEUE_CONNECTION=sync core php artisan test
 
 dev-e2e:

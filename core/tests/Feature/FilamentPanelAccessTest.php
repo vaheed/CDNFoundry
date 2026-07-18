@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\DnsCluster;
 use App\Models\Domain;
 use App\Models\User;
 use Filament\Facades\Filament;
@@ -33,11 +34,33 @@ class FilamentPanelAccessTest extends TestCase
     {
         $admin = User::factory()->admin()->create();
         $user = User::factory()->create();
+        foreach ([1, 2] as $index) {
+            DnsCluster::query()->create([
+                'name' => "dashboard-dns-{$index}",
+                'location' => "test-{$index}",
+                'enabled' => true,
+                'api_url' => "http://dashboard-dns-{$index}.test",
+                'api_key' => "dashboard-secret-{$index}",
+                'nameservers' => ["ns1.dashboard-{$index}.test", "ns2.dashboard-{$index}.test"],
+                'last_health_status' => 'healthy',
+            ]);
+        }
 
-        $this->actingAs($admin)->get('/admin')->assertOk();
+        $this->actingAs($admin)->get('/admin')->assertOk()->assertSee('Control-plane health')->assertSee('Queue lanes')->assertSee('2 healthy and enabled');
         $this->actingAs($admin)->get('/app')->assertForbidden();
-        $this->actingAs($user)->get('/app')->assertOk();
+        $this->actingAs($user)->get('/app')->assertOk()->assertSee('Assigned domains')->assertSee('Start serving a domain');
         $this->actingAs($user)->get('/admin')->assertForbidden();
+    }
+
+    public function test_both_panels_register_the_compiled_shared_theme(): void
+    {
+        $theme = 'resources/css/filament/shared/theme.css';
+
+        $this->assertSame($theme, Filament::getPanel('admin')->getViteTheme());
+        $this->assertSame($theme, Filament::getPanel('app')->getViteTheme());
+        $this->assertFileExists(public_path('build/manifest.json'));
+        $manifest = json_decode((string) file_get_contents(public_path('build/manifest.json')), true, flags: JSON_THROW_ON_ERROR);
+        $this->assertArrayHasKey($theme, $manifest);
     }
 
     public function test_disabled_users_cannot_access_either_panel(): void
@@ -75,6 +98,20 @@ class FilamentPanelAccessTest extends TestCase
         $this->actingAs($other)->get("/app/domains/{$domain->id}")->assertNotFound();
     }
 
+    public function test_domain_dashboard_lists_only_assigned_recent_domains(): void
+    {
+        $user = User::factory()->create();
+        $assigned = Domain::query()->create(['name' => 'assigned-dashboard.example.test', 'display_name' => 'Assigned dashboard domain']);
+        $unassigned = Domain::query()->create(['name' => 'private-dashboard.example.test', 'display_name' => 'Private dashboard domain']);
+        $assigned->users()->attach($user);
+
+        $this->actingAs($user)
+            ->get('/app')
+            ->assertOk()
+            ->assertSee($assigned->display_name)
+            ->assertDontSee($unassigned->display_name);
+    }
+
     public function test_domain_view_relation_managers_are_mutable_in_both_panels(): void
     {
         $admin = User::factory()->admin()->create();
@@ -86,6 +123,28 @@ class FilamentPanelAccessTest extends TestCase
         $this->assertFalse(Filament::getPanel('app')->hasReadOnlyRelationManagersOnResourceViewPagesByDefault());
         $this->actingAs($admin)->get("/admin/domains/{$domain->id}")->assertOk();
         $this->actingAs($user)->get("/app/domains/{$domain->id}")->assertOk();
+    }
+
+    public function test_domain_view_renders_structured_proxy_settings_without_treating_each_value_as_an_entry(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $domain = Domain::query()->create([
+            'name' => 'proxy-settings.example.test',
+            'display_name' => 'Proxy settings example',
+            'proxy_settings' => [
+                'enabled' => true,
+                'redirect_https' => false,
+                'http_versions' => ['1.1', '2'],
+                'retry_count' => 0,
+                'maintenance' => null,
+            ],
+        ]);
+
+        $this->actingAs($admin)
+            ->get("/admin/domains/{$domain->id}")
+            ->assertOk()
+            ->assertSee('HTTP/1.1 + HTTP/2')
+            ->assertSee('HTTPS redirect off');
     }
 
     public function test_horizon_is_available_only_to_active_administrators(): void

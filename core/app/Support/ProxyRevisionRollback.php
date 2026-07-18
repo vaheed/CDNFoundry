@@ -31,7 +31,8 @@ final class ProxyRevisionRollback
                     ],
                 );
             }
-            $locked->update(['proxy_settings' => $snapshot['settings'], 'revision' => $locked->revision + 1]);
+            $settings = is_array($snapshot['settings'] ?? null) ? $snapshot['settings'] : null;
+            $locked->update(['proxy_settings' => $settings, 'revision' => $locked->revision + 1]);
             AuditLog::record($actor, 'proxy.revision_rolled_back', $locked, ['from' => $prior->revision, 'revision' => $locked->revision], $ipAddress);
 
             return $locked;

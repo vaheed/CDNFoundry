@@ -15,6 +15,8 @@ make dev-pdns-migrate
 docker compose -f compose.dev.yml ps
 ```
 
+`make dev-up` exports the compiled shared Filament theme before starting the containers. On an existing stack after a UI-only change, run `make dev-assets` and refresh the page. The admin and domain panels must never depend on an uncompiled development asset server.
+
 Wait for `core`, `web`, `control-db`, `pdns-db`, `redis`, and `clickhouse` to become healthy. Development volumes persist. Never run `down -v`, remove volumes, use `migrate:fresh`, or run Laravel tests against the development database.
 
 Create/reset the local accounts if needed:
@@ -40,7 +42,7 @@ For every phase, check desktop and narrow mobile widths, browser-console errors,
 
 ### Administrator checkpoints
 
-1. Sign in at `/admin`. Confirm styled navigation, `Local Administrator`, and no asset errors.
+1. Sign in at `/admin`. Confirm the blue active-navigation treatment, collapsible desktop sidebar, readable responsive stat cards, **Control plane**, **Customers**, **Edge network**, and **Operations** groups, `Local Administrator`, and no missing-theme or console asset errors. The dashboard must show Domains, Users, DNS clusters, Serving edges, Work in progress, Failed operations, Queue lanes, Recent audit activity, and Common tasks without raw unstyled lists.
 2. Open **Users** and create:
 
    | Field | Value |
@@ -60,7 +62,7 @@ For every phase, check desktop and narrow mobile widths, browser-console errors,
 ### Domain-user authorization checkpoints
 
 1. Sign in at `/app` as `user@example.test` / `cdnfoundry-user-test`.
-2. Confirm administrator navigation is absent.
+2. Confirm administrator navigation is absent. Confirm the dashboard shows only assigned-domain totals and recent domains, plus the three-step **Start serving a domain** guide; an unassigned domain name must not appear.
 3. Repeat the personal token and profile checks; changes must affect only this user.
 4. Directly request `/admin/users`, `/admin/dns-clusters`, `/admin/audit-logs`, and `/horizon`; all must be forbidden.
 
@@ -266,7 +268,7 @@ The origin destination is the server reached by CDNFoundry; Host/SNI default to 
 1. Save both proxied records and choose **Deploy proxy configuration**.
 2. Open **Administration → Operations**. Confirm new `edge.domain_deploy` and `edge.origin_test` rows appear without refreshing manually, with requester, attempt, status, duration, and bounded error.
 3. Retry a supported failure. It must not duplicate an already-active deployment.
-4. Confirm the domain view exposes proxied-host count, desired/active revision, placement/pools, failure, and recent validated revisions.
+4. Confirm the domain view renders the **Domain status**, **Edge delivery**, and **Authoritative DNS deployment** sections. Proxy defaults must appear as one readable summary (for example, `Enabled · HTTP/1.1 + HTTP/2 · HTTPS redirect off · 0 origin retries · Maintenance off`) rather than raw JSON or separate boolean/list fragments. Confirm proxied-host count, desired/active revision, placement/pools, failure, and recent validated revisions.
 5. Send HTTP and HTTPS through both real edges. Confirm correct origin selection, Host, SNI, IPv4/IPv6 behavior, unknown-host/SNI rejection, and continued serving of the last valid revision after a deliberately invalid candidate.
 6. Move the domain shared → quarantine → dedicated. For each move record the target-ready acknowledgement, target DNS answer, non-null drain deadline, source-removal artifact, final acknowledgement, and active pool. A failed/rejected target must leave source DNS and traffic active.
 

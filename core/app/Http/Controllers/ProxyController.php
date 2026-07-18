@@ -26,7 +26,7 @@ class ProxyController extends Controller
     {
         Gate::authorize('view', $domain);
 
-        return response()->json(['data' => $domain->proxy_settings ?? ReconcileEdgeDomain::defaults()]);
+        return response()->json(['data' => is_array($domain->proxy_settings) ? $domain->proxy_settings : ReconcileEdgeDomain::defaults()]);
     }
 
     public function update(Request $request, Domain $domain): JsonResponse

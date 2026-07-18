@@ -8,6 +8,7 @@
 - Available development ports 8080, 8081, 8082, 9191, 1053 TCP/UDP, 9090, and 9093
 
 No host PHP, Composer, PostgreSQL, Valkey, PowerDNS, or ClickHouse installation is required.
+Frontend production assets are also compiled through Docker; a host Node.js installation is not required.
 
 ## Development installation
 

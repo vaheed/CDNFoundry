@@ -39,12 +39,12 @@ jobs:
         run: npm ci
       - name: Check PHP formatting
         run: vendor/bin/pint --test
+      - name: Build frontend assets
+        run: npm run build
       - name: Run application tests
         run: php artisan test
       - name: Check OpenAPI contract
         run: php artisan api:openapi --check
-      - name: Build frontend assets
-        run: npm run build
 
   compose:
     name: Compose contracts and production images
