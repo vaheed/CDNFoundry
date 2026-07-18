@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\ReconcileAllDnsZones;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\TestDnsCluster;
 use App\Models\DnsCluster;
@@ -38,7 +39,9 @@ class DnsReconciliationTest extends TestCase
         Queue::assertNotPushed(ReconcileDnsZone::class);
         $this->actingAs($admin)->postJson("/api/admin/dns/clusters/{$cluster->id}/enable")->assertConflict();
         $cluster->update(['last_health_status' => 'healthy']);
-        $this->actingAs($admin)->postJson("/api/admin/dns/clusters/{$cluster->id}/enable")->assertOk()->assertJsonPath('data.enabled', true);
+        $response = $this->actingAs($admin)->postJson("/api/admin/dns/clusters/{$cluster->id}/enable")->assertAccepted()->assertJsonPath('data.enabled', true);
+        Queue::assertPushed(ReconcileAllDnsZones::class);
+        (new ReconcileAllDnsZones($response->json('operation_id')))->handle();
         Queue::assertPushed(ReconcileDnsZone::class, fn ($job): bool => $job->domainId === $domain->id);
     }
 

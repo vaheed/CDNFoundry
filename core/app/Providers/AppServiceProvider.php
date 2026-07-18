@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Support\PlatformSettings;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -14,6 +15,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->scoped(PlatformSettings::class, fn (): PlatformSettings => new PlatformSettings);
         // Keep console commands run as root from creating compiled views that
         // the unprivileged PHP-FPM process cannot later refresh.
         $effectiveUserId = function_exists('posix_geteuid') ? posix_geteuid() : getmyuid();
@@ -34,6 +36,19 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        RateLimiter::for('login', fn (Request $request): Limit => Limit::perMinute(10)->by($request->ip().'|'.$request->string('email')));
+        RateLimiter::for('login', fn (Request $request): Limit => Limit::perMinute(app(PlatformSettings::class)->integer('rate_limits', 'login_per_minute'))->by($request->ip().'|'.strtolower((string) $request->string('email'))));
+        RateLimiter::for('account', function (Request $request): Limit {
+            $identity = (string) ($request->user()?->getAuthIdentifier() ?? $request->ip());
+
+            $limit = $request->isMethod('GET')
+                ? app(PlatformSettings::class)->integer('rate_limits', 'account_reads_per_minute')
+                : app(PlatformSettings::class)->integer('rate_limits', 'account_mutations_per_minute');
+
+            return Limit::perMinute(max(1, $limit))->by($identity);
+        });
+        RateLimiter::for('bulk', fn (Request $request): Limit => Limit::perMinute(app(PlatformSettings::class)->integer('rate_limits', 'bulk_per_minute'))->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip())));
+        RateLimiter::for('origin-test', fn (Request $request): Limit => Limit::perMinute(app(PlatformSettings::class)->integer('rate_limits', 'origin_tests_per_minute'))->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip())));
+        RateLimiter::for('edge-register', fn (Request $request): Limit => Limit::perHour(app(PlatformSettings::class)->integer('rate_limits', 'edge_registrations_per_hour'))->by($request->ip()));
+        RateLimiter::for('edge-agent', fn (Request $request): Limit => Limit::perMinute(app(PlatformSettings::class)->integer('rate_limits', 'edge_agent_per_minute'))->by((string) ($request->header('X-Edge-Certificate-Serial') ?: $request->ip())));
     }
 }

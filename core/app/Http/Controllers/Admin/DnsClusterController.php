@@ -2,15 +2,13 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Enums\DomainLifecycleState;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\DnsClusterResource;
-use App\Jobs\ReconcileDnsZone;
+use App\Jobs\ReconcileAllDnsZones;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Jobs\TestDnsCluster;
 use App\Models\AuditLog;
 use App\Models\DnsCluster;
-use App\Models\Domain;
 use App\Models\Operation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -63,14 +61,8 @@ class DnsClusterController extends Controller
     public function update(Request $request, DnsCluster $cluster): DnsClusterResource
     {
         $data = $this->validated($request, $cluster);
-        if (($data['enabled'] ?? false) && $cluster->last_health_status !== 'healthy') {
-            abort(409, 'Test the cluster connection successfully before enabling it.');
-        }
         $cluster->update($data);
         AuditLog::record($request->user(), 'dns.cluster_updated', $cluster, ['fields' => array_keys($request->all())], $request->ip());
-        if ($cluster->wasChanged('enabled') && $cluster->enabled) {
-            Domain::query()->where('lifecycle_state', DomainLifecycleState::Active->value)->orderBy('id')->chunkById(100, fn ($domains) => $domains->each(fn (Domain $domain) => ReconcileDnsZone::dispatch($domain->id)->afterCommit()));
-        }
 
         return DnsClusterResource::make($cluster->refresh());
     }
@@ -85,17 +77,19 @@ class DnsClusterController extends Controller
         return DnsClusterResource::make($cluster->refresh());
     }
 
-    public function enable(Request $request, DnsCluster $cluster): DnsClusterResource
+    public function enable(Request $request, DnsCluster $cluster): JsonResponse
     {
         abort_unless($cluster->last_health_status === 'healthy', 409, 'Test the cluster connection successfully before enabling it.');
         if (! $cluster->enabled) {
             $cluster->update(['enabled' => true]);
             AuditLog::record($request->user(), 'dns.cluster_enabled', $cluster, [], $request->ip());
             ReconcilePlatformDnsIdentity::dispatch()->afterCommit();
-            Domain::query()->where('lifecycle_state', DomainLifecycleState::Active->value)->orderBy('id')->chunkById(100, fn ($domains) => $domains->each(fn (Domain $domain) => ReconcileDnsZone::dispatch($domain->id)->afterCommit()));
         }
+        $operation = Operation::query()->where('type', 'dns.global_reconcile')->whereIn('status', ['pending', 'running'])->first()
+            ?? Operation::query()->create(['actor_id' => $request->user()->id, 'type' => 'dns.global_reconcile', 'status' => 'pending', 'input' => ['cluster_id' => $cluster->id]]);
+        ReconcileAllDnsZones::dispatch($operation->id)->afterCommit();
 
-        return DnsClusterResource::make($cluster->refresh());
+        return response()->json(['data' => DnsClusterResource::make($cluster->refresh()), 'operation_id' => $operation->id], 202);
     }
 
     private function validated(Request $request, ?DnsCluster $cluster = null): array
@@ -103,7 +97,6 @@ class DnsClusterController extends Controller
         return $request->validate([
             'name' => [$cluster ? 'sometimes' : 'required', 'string', 'max:100', Rule::unique('dns_clusters')->ignore($cluster)],
             'location' => [$cluster ? 'sometimes' : 'required', 'string', 'max:100'],
-            'enabled' => ['sometimes', 'boolean'],
             'api_url' => [$cluster ? 'sometimes' : 'required', 'url:http,https', 'max:500'],
             'api_key' => [$cluster ? 'sometimes' : 'required', 'string', 'min:8', 'max:500'],
             'server_id' => ['sometimes', 'string', 'max:100'],

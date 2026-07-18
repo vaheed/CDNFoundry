@@ -2,17 +2,21 @@
 
 namespace App\Jobs;
 
+use App\Enums\DomainLifecycleState;
 use App\Models\Domain;
 use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
 use App\Models\EdgeArtifact;
+use App\Models\EdgeCell;
 use App\Models\EdgePool;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
 use App\Support\ArtifactSigner;
+use App\Support\PlatformSettings;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Throwable;
 
 class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
@@ -36,7 +40,8 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
     {
         $domain = Domain::query()->with('dnsRecords')->findOrFail($this->domainId);
         $revision = $domain->revision;
-        $records = $domain->dnsRecords->where('mode', 'proxied')->sortBy('name')->values();
+        $retiring = $domain->lifecycle_state === DomainLifecycleState::Deprovisioning && $domain->deprovision_after?->isPast();
+        $records = $retiring ? collect() : $domain->dnsRecords->where('mode', 'proxied')->sortBy('name')->values();
         $operation = Operation::query()->where('type', 'edge.domain_reconcile')->whereIn('status', ['pending', 'running'])
             ->where('input->domain_id', $domain->id)->latest()->first();
         $operation?->update(['status' => 'running', 'started_at' => now()]);
@@ -65,20 +70,29 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             ->whereIn('id', array_values(array_filter([$placement->active_pool_id, $placement->target_pool_id])))
             ->orderBy('name')->pluck('name')->all();
 
+        $blockedAddresses = Edge::query()->pluck('ipv4')->merge(Edge::query()->pluck('ipv6'))
+            ->merge(EdgeCell::query()->pluck('service_ipv4'))->merge(EdgeCell::query()->pluck('service_ipv6'))
+            ->filter()->merge(app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_addresses'))->unique()->values()->all();
+        $proxySettings = $domain->proxy_settings ?? self::defaults();
+        $proxySettings['enabled'] = $domain->lifecycle_state === DomainLifecycleState::Active
+            && ($proxySettings['enabled'] ?? true);
         $snapshot = [
             'schema_version' => 1, 'domain_id' => $domain->id, 'domain' => $domain->name,
-            'revision' => $revision, 'settings' => $domain->proxy_settings ?? self::defaults(),
+            'revision' => $revision, 'settings' => $proxySettings,
             'pools' => $poolNames,
-            'hostnames' => $records->map(function ($record): array {
+            'hostnames' => $records->map(function ($record) use ($blockedAddresses): array {
                 $origin = $record->origin;
-                $origin['private_allowlist'] = config('edge.private_origin_allowlist', []);
-                $origin['blocked_addresses'] = Edge::query()->pluck('ipv4')->merge(Edge::query()->pluck('ipv6'))->filter()
-                    ->merge(config('edge.blocked_origin_addresses', []))->unique()->values()->all();
+                $origin['private_allowlist'] = app(PlatformSettings::class)->get('origin_safety', 'private_origin_allowlist');
+                $origin['blocked_networks'] = app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_networks');
+                $origin['blocked_addresses'] = $blockedAddresses;
 
                 return ['hostname' => $record->name, 'type' => $record->type, 'ttl' => $record->ttl, 'origin' => $origin];
             })->all(),
         ];
         $canonical = ArtifactSigner::encode($snapshot);
+        if (strlen($canonical) > app(PlatformSettings::class)->integer('edge_runtime', 'max_domain_artifact_bytes')) {
+            throw new \RuntimeException('The domain edge artifact exceeds the configured per-domain byte limit.');
+        }
         $checksum = hash('sha256', $canonical);
         EdgeRevision::query()->updateOrCreate(['domain_id' => $domain->id, 'revision' => $revision], [
             'snapshot' => $snapshot, 'checksum' => $checksum, 'status' => 'validated', 'created_by' => $operation?->actor_id,
@@ -98,11 +112,23 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
 
             return;
         }
-        $operation?->update(['status' => 'succeeded', 'result' => ['revision' => $revision, 'edges' => $activeEdges->count()], 'finished_at' => now()]);
+        $operation?->update([
+            'status' => $records->isEmpty() && $activeEdges->isEmpty() ? 'succeeded' : 'running',
+            'result' => ['revision' => $revision, 'edges' => $activeEdges->count(), 'awaiting_acknowledgements' => true],
+            'finished_at' => $records->isEmpty() && $activeEdges->isEmpty() ? now() : null,
+        ]);
     }
 
     public static function defaults(): array
     {
-        return ['enabled' => true, 'redirect_https' => false, 'http_versions' => ['1.1', '2'], 'retry_count' => 0, 'maintenance' => null];
+        return [...app(PlatformSettings::class)->values('proxy_defaults'), 'maintenance' => null];
+    }
+
+    public function failed(Throwable $exception): void
+    {
+        Operation::query()->where('type', 'edge.domain_reconcile')->whereIn('status', ['pending', 'running'])
+            ->where('input->domain_id', $this->domainId)->update([
+                'status' => 'failed', 'error' => mb_substr($exception->getMessage(), 0, 4000), 'finished_at' => now(),
+            ]);
     }
 }

@@ -22,12 +22,13 @@ final class DnsZoneValidator
             if ($types->contains('CNAME') && ($types->count() > 1 || $ownerRows->count() > 1)) {
                 throw ValidationException::withMessages(['records' => "CNAME cannot coexist with other records at $name."]);
             }
+            $proxiedRows = $ownerRows->where('mode', 'proxied');
+            if ($proxiedRows->count() > 1 || ($proxiedRows->isNotEmpty() && $proxiedRows->count() !== $ownerRows->count())) {
+                throw ValidationException::withMessages(['records' => "A proxied hostname must have exactly one record and one origin at $name."]);
+            }
             foreach ($ownerRows->groupBy('type') as $typeRows) {
                 if ($typeRows->where('mode', 'geo_dns')->count() > 1 || ($typeRows->where('mode', 'geo_dns')->isNotEmpty() && $typeRows->count() > 1)) {
                     throw ValidationException::withMessages(['records' => "A Geo-DNS record must be the only record of its type at $name."]);
-                }
-                if ($typeRows->where('mode', 'proxied')->count() > 1 || ($typeRows->where('mode', 'proxied')->isNotEmpty() && $typeRows->count() > 1)) {
-                    throw ValidationException::withMessages(['records' => "A proxied hostname must be the only record of its type at $name."]);
                 }
             }
         }

@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Edge;
+use App\Models\EdgeCell;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
@@ -81,7 +82,20 @@ final class OriginData
 
     private static function resolve(string $host): array
     {
-        $records = @dns_get_record($host, DNS_A | DNS_AAAA) ?: [];
+        if (! function_exists('pcntl_alarm')) {
+            throw ValidationException::withMessages(['host' => 'Bounded origin DNS resolution is unavailable.']);
+        }
+        $previousAsync = pcntl_async_signals(true);
+        $previousHandler = pcntl_signal_get_handler(SIGALRM);
+        pcntl_signal(SIGALRM, fn () => throw ValidationException::withMessages(['host' => 'Origin DNS resolution timed out.']));
+        pcntl_alarm(5);
+        try {
+            $records = @dns_get_record($host, DNS_A | DNS_AAAA) ?: [];
+        } finally {
+            pcntl_alarm(0);
+            pcntl_signal(SIGALRM, $previousHandler);
+            pcntl_async_signals($previousAsync);
+        }
 
         return array_values(array_filter(array_map(fn (array $row) => $row['ip'] ?? $row['ipv6'] ?? null, $records)));
     }
@@ -92,45 +106,28 @@ final class OriginData
             return true;
         }
         if (Edge::query()->where('ipv4', $address)->orWhere('ipv6', $address)->exists()
-            || in_array($address, config('edge.blocked_origin_addresses', []), true)) {
+            || EdgeCell::query()->where('service_ipv4', $address)->orWhere('service_ipv6', $address)->exists()
+            || in_array($address, app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_addresses'), true)) {
             return true;
         }
-        $allow = config('edge.private_origin_allowlist', []);
-        foreach ($allow as $cidr) {
-            if (self::inCidr($address, $cidr)) {
-                return false;
+        if (NetworkAddress::isUnsafe($address)) {
+            if (NetworkAddress::isPrivate($address)) {
+                foreach (app(PlatformSettings::class)->get('origin_safety', 'private_origin_allowlist') as $cidr) {
+                    if (NetworkAddress::inCidr($address, $cidr)) {
+                        return false;
+                    }
+                }
             }
+
+            return true;
         }
-        $blocked = [
-            '0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12',
-            '192.0.0.0/24', '192.168.0.0/16', '198.18.0.0/15', '224.0.0.0/4', '240.0.0.0/4',
-            '::/128', '::1/128', 'fc00::/7', 'fe80::/10', 'ff00::/8',
-        ];
-        foreach (array_merge($blocked, config('edge.blocked_origin_networks', [])) as $cidr) {
-            if (self::inCidr($address, $cidr)) {
+        foreach (app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_networks') as $cidr) {
+            if (NetworkAddress::inCidr($address, $cidr)) {
                 return true;
             }
         }
 
         return false;
-    }
-
-    private static function inCidr(string $address, string $cidr): bool
-    {
-        [$network, $bits] = array_pad(explode('/', $cidr, 2), 2, null);
-        $ip = @inet_pton($address);
-        $net = @inet_pton($network);
-        if ($ip === false || $net === false || strlen($ip) !== strlen($net)) {
-            return false;
-        }
-        $bits = $bits === null ? strlen($ip) * 8 : (int) $bits;
-        $bytes = intdiv($bits, 8);
-        $remainder = $bits % 8;
-        if (substr($ip, 0, $bytes) !== substr($net, 0, $bytes)) {
-            return false;
-        }
-
-        return $remainder === 0 || ((ord($ip[$bytes]) & (0xFF << (8 - $remainder))) === (ord($net[$bytes]) & (0xFF << (8 - $remainder))));
     }
 
     private static function validHost(string $host): bool

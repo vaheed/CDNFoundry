@@ -11,6 +11,7 @@ use App\Support\PowerDnsClient;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Throwable;
 
@@ -36,6 +37,7 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
         $revision = $settings->revision;
         $rrsets = PlatformDnsZone::render($settings);
         $checksum = hash('sha256', json_encode($rrsets, JSON_THROW_ON_ERROR));
+        $zone = rtrim($settings->platform_domain, '.');
         $operation = $this->operationId ? Operation::query()->find($this->operationId) : null;
         $operation?->update([
             'status' => 'running',
@@ -45,10 +47,13 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
         $failures = [];
         $targets = 0;
 
-        foreach (DnsCluster::query()->where('enabled', true)->where('last_health_status', 'healthy')->orderBy('id')->get() as $cluster) {
+        $configuredTargets = collect($settings->cluster_targets)->map(fn (string $target): string => strtolower($target))->flip();
+        $clusters = DnsCluster::query()->where('enabled', true)->where('last_health_status', 'healthy')->orderBy('id')->get()
+            ->filter(fn (DnsCluster $cluster): bool => $configuredTargets->has(self::clusterTarget($cluster)));
+        foreach ($clusters as $cluster) {
             $targets++;
             $deployment = PlatformDnsDeployment::query()->firstOrCreate(['dns_cluster_id' => $cluster->id]);
-            if ($deployment->status === 'succeeded' && hash_equals((string) $deployment->active_checksum, $checksum)) {
+            if ($deployment->status === 'succeeded' && $deployment->active_zone === $zone && hash_equals((string) $deployment->active_checksum, $checksum)) {
                 continue;
             }
             $deployment->update([
@@ -60,11 +65,16 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
             ]);
 
             try {
-                $client->activate($cluster, $settings->platform_domain, $rrsets, $deployment->active_rrsets ?? []);
+                $previousZone = $deployment->active_zone;
+                $client->activate($cluster, $zone, $rrsets, $previousZone === null || $previousZone === $zone ? ($deployment->active_rrsets ?? []) : []);
+                if ($previousZone !== null && $previousZone !== $zone) {
+                    $client->deleteZone($cluster, $previousZone);
+                }
                 $deployment->update([
                     'deployed_revision' => $revision,
                     'status' => 'succeeded',
                     'active_checksum' => $checksum,
+                    'active_zone' => $zone,
                     'active_rrsets' => $rrsets,
                     'deployed_at' => now(),
                 ]);
@@ -92,5 +102,28 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
     public function uniqueId(): string
     {
         return 'platform-dns-identity';
+    }
+
+    public static function dispatchForRoutingChange(): void
+    {
+        DB::transaction(function (): void {
+            $settings = PlatformDnsSetting::query()->lockForUpdate()->find(1);
+            if ($settings === null) {
+                return;
+            }
+            $settings->update(['revision' => $settings->revision + 1]);
+            self::dispatch()->afterCommit();
+        });
+    }
+
+    private static function clusterTarget(DnsCluster $cluster): string
+    {
+        $parts = parse_url($cluster->api_url);
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        if (str_contains($host, ':')) {
+            $host = '['.$host.']';
+        }
+
+        return $host.(isset($parts['port']) ? ':'.$parts['port'] : '');
     }
 }

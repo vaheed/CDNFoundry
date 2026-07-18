@@ -494,6 +494,8 @@ Allowed groups include:
 - Safe platform limits
 - Feature availability flags for completed capabilities only
 
+Implemented current groups are DNS lifecycle retention, API rate limits, edge heartbeat/drain/artifact bounds, origin destination safety, and proxy defaults. They are revisioned PostgreSQL rows exposed consistently through the administrator API, CLI, and Filament page; each surface includes typed validation, descriptions, and shipped defaults. Deployment environment variables are not a runtime fallback for these values.
+
 High-risk DNS identity changes require validation, preview, explicit confirmation, audit, and an asynchronous operation.
 
 #### 7.5 Edge Cells and Domain Placement
@@ -952,7 +954,7 @@ Automated end-to-end qualification is Python-based and intentionally limited to 
 
 Rendered UI and browser usability remain project-owner acceptance responsibilities. The owner follows `docs/manual-browser-qualification.md`; coding agents do not install or launch browser automation. This manual responsibility does not block Phase 2 development, but its roadmap checkbox remains open until the owner records a successful release acceptance run.
 
-GitHub Actions runs PHP tests and formatting, OpenAPI contract checks, frontend asset compilation, development and production Compose validation, the Python real-stack E2E, and test/build commands for every Go module present in the repository. The Go job reports a clean no-op until Phase 2 introduces the first module.
+GitHub Actions runs PHP tests and formatting, OpenAPI contract checks, frontend asset compilation, development and production Compose validation, self-contained builds for every production image, the cumulative Python real-stack E2E, the bounded Phase 2 scale job, and pinned Go 1.24 tests/builds for the edge agent. After every successful `main` run it publishes only commit-SHA-tagged application images to this repository's GHCR packages; production Compose requires that immutable release SHA and has no local build or `latest` fallback.
 
 Qualification evidence is maintained in `docs/phase-1-qualification.md`.
 
@@ -1636,9 +1638,11 @@ When proxy is enabled:
 
 #### Completion Checklist
 
+Implementation and non-browser qualification evidence: [Phase 4 qualification](phase-4-qualification.md). Browser automation is a manual user-owned release job.
+
 ##### Control Plane
 
-> **Implementation audit (2026-07-18):** Phase 4 remains open. Shared-cell proxying, mTLS distribution, bounded origin handling, and the administrator/domain UI are implemented and agent-qualified. Production service-pool addresses are not yet represented in durable state or authoritative DNS, so moving a domain to quarantine or dedicated placement does not yet move public traffic to that cell. Cell drain/restart tasks are queued and visible, but the unprivileged edge agent intentionally reports `cell_supervisor_unavailable` until a bounded edge-local supervisor boundary is implemented. The browser and two-edge job below also remains user-owned and unrun.
+> **Implementation audit (2026-07-18):** Agent-owned Phase 4 implementation and non-browser runtime qualification are complete. Service addresses are durable per cell; authoritative routing selects the assigned pool; migration waits for target-cell readiness and acknowledgement, target DNS deployment, a bounded drain, source-removal delivery, and final acknowledgement. Authenticated drain, undrain, and bounded worker replacement execute without a Docker socket. Owner-run browser/two-physical-edge release acceptance remains open below.
 
 - [x] A user enables proxy per supported hostname.
 - [x] Every proxied hostname has exactly one valid origin.
@@ -1647,7 +1651,7 @@ When proxy is enabled:
 - [x] Rollback creates a new auditable revision.
 - [x] Edge-health updates do not rewrite all proxied domains.
 - [x] Every proxied domain has exactly one active service-pool placement.
-- [ ] Placement migration keeps the previous pool active until target readiness and DNS drain complete.
+- [x] Placement migration keeps the previous pool active until target readiness and DNS drain complete.
 - [x] Origin tests are asynchronous or strictly bounded.
 - [x] Unsafe, internal, metadata, and loop-producing origin destinations are rejected.
 - [x] DNS rebinding cannot change an approved public origin into a blocked destination.
@@ -1679,7 +1683,7 @@ When proxy is enabled:
 - [x] One malformed domain configuration does not affect other domains.
 - [x] One cell crash or out-of-memory event does not terminate other cells or the edge agent.
 - [x] Cache or temporary-storage exhaustion in one cell does not fill the edge filesystem.
-- [ ] Shared, quarantine, and dedicated placements behave consistently for IPv4 and IPv6.
+- [x] Shared, quarantine, and dedicated placements behave consistently for IPv4 and IPv6.
 - [x] Edge serves traffic while Laravel, PostgreSQL control DB, Redis/Valkey, and ClickHouse are offline.
 - [x] Adding an edge requires only installation, registration, and health qualification.
 

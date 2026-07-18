@@ -9,8 +9,11 @@ use App\Filament\Admin\Resources\Edges\RelationManagers\CellsRelationManager;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
 use App\Models\Edge;
+use App\Support\GeoVocabulary;
+use App\Support\NetworkAddress;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
@@ -33,10 +36,20 @@ class EdgeResource extends Resource
     {
         return $schema->components([
             TextInput::make('name')->required()->maxLength(100)->unique(ignoreRecord: true),
-            TextInput::make('country_code')->label('Country')->required()->length(2),
-            TextInput::make('continent_code')->label('Continent')->required()->length(2),
-            TextInput::make('ipv4')->label('IPv4')->ip()->required()->unique(ignoreRecord: true),
-            TextInput::make('ipv6')->label('IPv6')->ipv6()->unique(ignoreRecord: true),
+            Select::make('country_code')->label('Country')->options(array_combine(GeoVocabulary::countries(), GeoVocabulary::countries()))->searchable()->required(),
+            Select::make('continent_code')->label('Continent')->options(array_combine(GeoVocabulary::CONTINENTS, GeoVocabulary::CONTINENTS))->required(),
+            TextInput::make('ipv4')->label('IPv4')->ipv4()->required()->unique(ignoreRecord: true)
+                ->rule(fn () => function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (NetworkAddress::isUnsafe((string) $value)) {
+                        $fail('The edge address must be public unicast.');
+                    }
+                }),
+            TextInput::make('ipv6')->label('IPv6')->ipv6()->unique(ignoreRecord: true)
+                ->rule(fn () => function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (filled($value) && NetworkAddress::isUnsafe((string) $value)) {
+                        $fail('The edge address must be public unicast.');
+                    }
+                }),
         ]);
     }
 
@@ -74,7 +87,12 @@ class EdgeResource extends Resource
             Action::make('undrain')->visible(fn (Edge $record): bool => $record->drained)->action(fn (Edge $record) => self::changeState($record, ['drained' => false], 'edge.undrain')),
             Action::make('rotateIdentity')->label('Rotate identity')->color('danger')->requiresConfirmation()->action(function (Edge $record): void {
                 $token = Str::random(64);
-                $record->update(['identity_hash' => null, 'identity_certificate_serial' => null, 'identity_certificate_expires_at' => null, 'identity_revoked_at' => now(), 'bootstrap_token_hash' => hash('sha256', $token), 'registered_at' => null]);
+                $record->update([
+                    'identity_hash' => null, 'identity_csr_hash' => null, 'identity_certificate' => null,
+                    'identity_certificate_serial' => null, 'identity_certificate_expires_at' => null,
+                    'identity_revoked_at' => now(), 'bootstrap_token_hash' => hash('sha256', $token),
+                    'bootstrap_consumed_at' => null, 'registered_at' => null,
+                ]);
                 AuditLog::record(auth()->user(), 'edge.identity_rotated', $record, [], request()->ip());
                 ReconcilePlatformDnsIdentity::dispatch()->afterCommit();
                 Notification::make()->warning()->persistent()->title('New one-time bootstrap token')->body($token)->send();

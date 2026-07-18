@@ -5,10 +5,14 @@ namespace App\Http\Controllers;
 use App\Enums\DomainLifecycleState;
 use App\Http\Requests\StoreDomainRequest;
 use App\Http\Resources\DomainResource;
+use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
 use App\Models\DnsCluster;
 use App\Models\DnsDeployment;
 use App\Models\Domain;
+use App\Models\EdgeArtifact;
+use App\Models\Operation;
+use App\Support\PlatformSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -76,6 +80,7 @@ class DomainController extends Controller
         if ($domain->lifecycle_state !== DomainLifecycleState::Deprovisioning && $domain->lifecycle_state !== DomainLifecycleState::Disabled) {
             $domain->forceFill(['lifecycle_state' => DomainLifecycleState::Disabled, 'disabled_at' => now(), 'revision' => $domain->revision + 1])->save();
             AuditLog::record($request->user(), 'domain.disabled', $domain, ['revision' => $domain->revision], $request->ip());
+            $this->queueEdgeState($domain, $request);
         }
 
         return DomainResource::make($domain->refresh());
@@ -84,21 +89,40 @@ class DomainController extends Controller
     public function destroy(Request $request, Domain $domain): JsonResponse
     {
         Gate::authorize('delete', $domain);
-        if ($domain->lifecycle_state !== DomainLifecycleState::Deprovisioning) {
-            $domain->forceFill([
-                'lifecycle_state' => DomainLifecycleState::Deprovisioning,
-                'deprovision_after' => now()->addDays(7),
-                'revision' => $domain->revision + 1,
-            ])->save();
-            foreach (DnsCluster::query()->orderBy('id')->get() as $cluster) {
-                DnsDeployment::query()->updateOrCreate(
-                    ['domain_id' => $domain->id, 'dns_cluster_id' => $cluster->id],
-                    ['desired_revision' => $domain->revision, 'status' => 'pending', 'tombstone' => true],
-                );
+        $operation = DB::transaction(function () use ($request, $domain): Operation {
+            $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
+            if ($locked->lifecycle_state !== DomainLifecycleState::Deprovisioning) {
+                $locked->forceFill([
+                    'lifecycle_state' => DomainLifecycleState::Deprovisioning,
+                    'deprovision_after' => now()->addDays(app(PlatformSettings::class)->integer('dns_lifecycle', 'deprovision_delay_days')),
+                    'revision' => $locked->revision + 1,
+                ])->save();
+                foreach (DnsCluster::query()->orderBy('id')->get() as $cluster) {
+                    DnsDeployment::query()->updateOrCreate(
+                        ['domain_id' => $locked->id, 'dns_cluster_id' => $cluster->id],
+                        ['desired_revision' => $locked->revision, 'status' => 'pending', 'tombstone' => true],
+                    );
+                }
+                AuditLog::record($request->user(), 'domain.deprovisioning_started', $locked, ['revision' => $locked->revision], $request->ip());
             }
-            AuditLog::record($request->user(), 'domain.deprovisioning_started', $domain, ['revision' => $domain->revision], $request->ip());
-        }
 
-        return response()->json(['data' => DomainResource::make($domain->refresh())], 202);
+            return Operation::query()->where('type', 'domain.deprovision')->whereIn('status', ['pending', 'running'])
+                ->where('input->domain_id', $locked->id)->first() ?? Operation::query()->create([
+                    'actor_id' => $request->user()->id, 'type' => 'domain.deprovision', 'status' => 'pending',
+                    'input' => ['domain_id' => $locked->id, 'revision' => $locked->revision],
+                ]);
+        });
+        $this->queueEdgeState($domain->refresh(), $request);
+
+        return response()->json(['data' => ['operation_id' => $operation->id, 'status' => $operation->status, 'domain' => DomainResource::make($domain->refresh())]], 202);
+    }
+
+    private function queueEdgeState(Domain $domain, Request $request): void
+    {
+        if (! $domain->dnsRecords()->where('mode', 'proxied')->exists() && ! EdgeArtifact::query()->where('domain_id', $domain->id)->exists()) {
+            return;
+        }
+        Operation::coalesceDomain('edge.domain_reconcile', $domain->id, $request->user()->id);
+        ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
     }
 }

@@ -45,11 +45,25 @@ class EdgeProxyTest extends TestCase
         $this->assertSame('1.1.1.1', $domain->dnsRecords()->find($second)->origin['host']);
         $this->assertDatabaseHas('domain_edge_placements', ['domain_id' => $domain->id, 'state' => 'deploying']);
         $this->assertSame(2, EdgeRevision::query()->where('domain_id', $domain->id)->count());
-        $this->assertDatabaseHas('operations', ['type' => 'edge.domain_reconcile', 'actor_id' => $user->id, 'status' => 'succeeded']);
+        $this->assertDatabaseHas('operations', ['type' => 'edge.domain_reconcile', 'actor_id' => $user->id, 'status' => 'running']);
 
         $this->actingAs($user)->putJson("/api/domains/{$domain->id}/dns/records/$first/origin", array_merge($this->origin('9.9.9.9'), ['host' => '127.0.0.1']))->assertUnprocessable();
+        config()->set('edge.private_origin_allowlist', ['0.0.0.0/0', '::/0']);
+        $this->actingAs($user)->putJson("/api/domains/{$domain->id}/dns/records/$first/origin", array_merge($this->origin('9.9.9.9'), ['host' => '169.254.169.254']))->assertUnprocessable();
+        $this->actingAs($user)->putJson("/api/domains/{$domain->id}/dns/records/$first/origin", array_merge($this->origin('9.9.9.9'), ['host' => '::ffff:127.0.0.1']))->assertUnprocessable();
         $this->actingAs($user)->putJson("/api/domains/{$domain->id}/dns/records/$first/origin", $this->origin('9.9.9.9'))->assertAccepted();
         $this->assertSame('9.9.9.9', $domain->dnsRecords()->find($first)->origin['host']);
+    }
+
+    public function test_one_hostname_cannot_have_multiple_proxy_records_or_origins(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $this->record('www', '8.8.8.8'))->assertCreated();
+        $duplicateFamily = $this->record('www', '1.1.1.1');
+        $duplicateFamily['type'] = 'AAAA';
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $duplicateFamily)
+            ->assertUnprocessable()->assertJsonValidationErrors('records');
+        $this->assertSame(1, $domain->dnsRecords()->where('name', 'www.'.$domain->name)->count());
     }
 
     public function test_edge_bootstrap_is_one_time_and_artifacts_require_active_identity(): void
@@ -62,10 +76,14 @@ class EdgeProxyTest extends TestCase
         $registration = ['edge_id' => $id, 'bootstrap_token' => $bootstrap, 'agent_version' => '1.0.0', 'certificate_request' => $this->certificateRequest($id)];
         $registered = $this->postJson('/edge/v1/register', $registration)->assertCreated();
         $identity = $this->edgeIdentityHeaders($registered->json('data.identity_certificate_serial'));
-        $this->postJson('/edge/v1/register', $registration)->assertUnauthorized();
+        $this->postJson('/edge/v1/register', $registration)->assertCreated()
+            ->assertJsonPath('data.identity_certificate_serial', $registered->json('data.identity_certificate_serial'));
+        $differentRegistration = [...$registration, 'certificate_request' => $this->certificateRequest($id)];
+        $this->postJson('/edge/v1/register', $differentRegistration)->assertUnauthorized();
         $this->withHeaders($identity)->postJson('/edge/v1/heartbeat', ['agent_version' => '1.0.0', 'listener_ready' => true, 'active_sequence' => 0, 'cells' => [
             ['name' => 'shared-default', 'status' => 'ready', 'capacity' => ['active_connections' => 0, 'memory_usage' => 0]],
         ]])->assertOk();
+        $this->postJson('/edge/v1/register', $registration)->assertUnauthorized();
         $this->assertDatabaseHas('edge_cells', ['edge_id' => $id, 'name' => 'shared-default', 'status' => 'ready']);
 
         [$user, $domain] = $this->ownedDomain();
@@ -76,7 +94,10 @@ class EdgeProxyTest extends TestCase
         $this->withHeaders($identity)->getJson("/edge/v1/config/artifacts/{$artifact->checksum}")->assertOk()
             ->assertJsonPath('encoded_payload', base64_encode(ArtifactSigner::encode($artifact->payload)));
         $this->withHeaders($identity)->getJson('/edge/v1/config/manifest?cursor=0')->assertOk()->assertJsonPath('data.0.checksum', $artifact->checksum);
-        $full = $this->withHeaders($identity)->getJson('/edge/v1/config/full')->assertOk()->assertJsonPath('data.artifacts.0.revision', $domain->refresh()->revision);
+        $full = $this->withHeaders($identity)->getJson('/edge/v1/config/full')->assertOk()
+            ->assertJsonPath('data.artifact_count', 1)->assertJsonPath('encoding', 'gzip');
+        $snapshot = json_decode(gzdecode(base64_decode($full->json('encoded_snapshot'), true)), true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame($domain->refresh()->revision, $snapshot['artifacts'][0]['revision']);
         $this->assertTrue(sodium_crypto_sign_verify_detached(hex2bin($full->json('signature')), $full->json('checksum'), hex2bin($full->json('signing_public_key'))));
         $this->withHeaders($identity)->postJson('/edge/v1/config/applied', ['sequence' => $artifact->sequence + 100])->assertUnprocessable();
         $this->withHeaders($identity)->postJson('/edge/v1/config/applied', ['sequence' => $artifact->sequence])->assertOk();
@@ -113,16 +134,31 @@ class EdgeProxyTest extends TestCase
         $this->assertNull($domain->dnsRecords()->find($extraRecord));
         $this->assertDatabaseHas('audit_logs', ['action' => 'proxy.revision_rolled_back', 'subject_id' => (string) $domain->id]);
 
-        $pool = $this->actingAs($admin)->postJson('/api/admin/edge-pools', ['name' => 'dedicated-test', 'kind' => 'dedicated'])->assertCreated()->json('data.id');
-        $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/move", ['pool_id' => $pool])->assertAccepted();
+        $poolResponse = $this->actingAs($admin)->postJson('/api/admin/edge-pools', ['name' => 'dedicated-test', 'kind' => 'dedicated'])->assertAccepted();
+        $pool = $poolResponse->json('data.pool.id');
+        $dedicatedCell = Edge::query()->findOrFail($id)->cells()->where('edge_pool_id', $pool)->firstOrFail();
+        $this->actingAs($admin)->patchJson("/api/admin/edge-cells/{$dedicatedCell->id}", [
+            'service_ipv4' => '203.0.113.20', 'service_ipv6' => '2001:db8::20',
+        ])->assertOk();
+        $this->actingAs($admin)->postJson("/api/admin/edge-pools/{$pool}/enable")->assertOk();
+        $move = $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/move", ['pool_id' => $pool])->assertAccepted();
+        $operation = Operation::query()->findOrFail($move->json('data.operation_id'));
         $moveArtifact = EdgeArtifact::query()->where('edge_id', $id)->where('domain_id', $domain->id)->latest('sequence')->firstOrFail();
+        $this->withHeaders($identity)->postJson('/edge/v1/heartbeat', ['agent_version' => '1.0.0', 'listener_ready' => true, 'active_sequence' => $artifact->sequence, 'cells' => [
+            ['name' => 'shared-default', 'status' => 'ready', 'capacity' => ['active_connections' => 1]],
+            ['name' => 'dedicated-test', 'status' => 'ready', 'capacity' => ['active_connections' => 0]],
+        ]])->assertOk();
         $this->withHeaders($identity)->postJson('/edge/v1/config/applied', ['sequence' => $moveArtifact->sequence])->assertOk();
         $this->assertDatabaseHas('domain_edge_placements', ['domain_id' => $domain->id, 'active_pool_id' => 1, 'target_pool_id' => $pool, 'state' => 'draining']);
+        $this->assertNull($domain->edgePlacement->refresh()->drain_after, 'The source drain must not begin before target DNS deployment succeeds.');
+        $this->assertSame('running', $operation->refresh()->status);
         DomainEdgePlacement::query()->where('domain_id', $domain->id)->update(['drain_after' => now()->subSecond()]);
         $this->artisan('edge:complete-placement-drains')->assertSuccessful();
-        $this->assertDatabaseHas('domain_edge_placements', ['domain_id' => $domain->id, 'active_pool_id' => $pool, 'target_pool_id' => null, 'state' => 'active']);
+        $this->assertDatabaseHas('domain_edge_placements', ['domain_id' => $domain->id, 'active_pool_id' => $pool, 'target_pool_id' => $pool, 'state' => 'deploying']);
         $drainedArtifact = EdgeArtifact::query()->where('edge_id', $id)->where('domain_id', $domain->id)->latest('sequence')->firstOrFail();
         $this->assertGreaterThan($moveArtifact->sequence, $drainedArtifact->sequence);
+        $this->withHeaders($identity)->postJson('/edge/v1/config/applied', ['sequence' => $drainedArtifact->sequence])->assertOk();
+        $this->assertDatabaseHas('domain_edge_placements', ['domain_id' => $domain->id, 'active_pool_id' => $pool, 'target_pool_id' => null, 'state' => 'active']);
         $this->assertSame(['dedicated-test'], $drainedArtifact->payload['pools']);
 
         $this->actingAs($admin)->postJson("/api/admin/edges/$id/rotate-identity")->assertOk();

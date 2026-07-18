@@ -1,0 +1,12 @@
+ARG CORE_IMAGE=cdnfoundry/core:ci
+FROM ${CORE_IMAGE} AS core
+
+FROM nginx:1.30.3-alpine AS base
+LABEL org.opencontainers.image.source="https://github.com/vaheed/CDNFoundry"
+COPY --from=core /app/public /app/public
+
+FROM base AS web
+COPY docker/nginx/default.conf /etc/nginx/conf.d/default.conf
+
+FROM base AS edge-control
+COPY docker/nginx/edge-control.conf /etc/nginx/conf.d/default.conf

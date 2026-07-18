@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\EdgeController;
 use App\Http\Controllers\Admin\EdgeOperationsController;
 use App\Http\Controllers\Admin\EdgePoolController;
 use App\Http\Controllers\Admin\PlatformDnsSettingsController;
+use App\Http\Controllers\Admin\SystemSettingsController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DnsDeploymentController;
@@ -29,7 +30,7 @@ Route::get('/ready', [HealthController::class, 'ready']);
 Route::get('/nameservers', NameserverController::class);
 Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:login');
 
-Route::middleware(['auth:sanctum', 'account.active'])->group(function (): void {
+Route::middleware(['auth:sanctum', 'account.active', 'throttle:account'])->group(function (): void {
     Route::post('/auth/logout', [AuthController::class, 'logout'])->middleware('idempotent');
     Route::get('/me', [AuthController::class, 'me']);
     Route::patch('/me', [AuthController::class, 'update'])->middleware('idempotent');
@@ -49,8 +50,8 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function (): void {
     Route::post('/domains/{domain}/activate', [DomainLifecycleController::class, 'activate'])->middleware('idempotent');
     Route::get('/domains/{domain}/dns/records', [DnsRecordController::class, 'index']);
     Route::post('/domains/{domain}/dns/records', [DnsRecordController::class, 'store'])->middleware('idempotent');
-    Route::post('/domains/{domain}/dns/records/bulk', [DnsRecordController::class, 'bulk'])->middleware('idempotent');
-    Route::post('/domains/{domain}/dns/import', [DnsZoneController::class, 'import'])->middleware('idempotent');
+    Route::post('/domains/{domain}/dns/records/bulk', [DnsRecordController::class, 'bulk'])->middleware(['idempotent', 'throttle:bulk']);
+    Route::post('/domains/{domain}/dns/import', [DnsZoneController::class, 'import'])->middleware(['idempotent', 'throttle:bulk']);
     Route::get('/domains/{domain}/dns/export', [DnsZoneController::class, 'export']);
     Route::get('/domains/{domain}/dns/records/{record}', [DnsRecordController::class, 'show']);
     Route::get('/domains/{domain}/dns/records/{record}/geo', [GeoDnsController::class, 'show']);
@@ -64,7 +65,7 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function (): void {
     Route::patch('/domains/{domain}/proxy', [ProxyController::class, 'update'])->middleware('idempotent');
     Route::get('/domains/{domain}/dns/records/{record}/origin', [ProxyController::class, 'origin']);
     Route::put('/domains/{domain}/dns/records/{record}/origin', [ProxyController::class, 'updateOrigin'])->middleware('idempotent');
-    Route::post('/domains/{domain}/dns/records/{record}/origin/test', [ProxyController::class, 'testOrigin'])->middleware('idempotent');
+    Route::post('/domains/{domain}/dns/records/{record}/origin/test', [ProxyController::class, 'testOrigin'])->middleware(['idempotent', 'throttle:origin-test']);
     Route::get('/domains/{domain}/dns/records/{record}/origin/health', [ProxyController::class, 'health']);
     Route::get('/domains/{domain}/deployment', [ProxyController::class, 'deployment']);
     Route::post('/domains/{domain}/deploy', [ProxyController::class, 'deploy'])->middleware('idempotent');
@@ -102,6 +103,10 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function (): void {
         Route::get('/system/settings/dns', [PlatformDnsSettingsController::class, 'show']);
         Route::patch('/system/settings/dns', [PlatformDnsSettingsController::class, 'update'])->middleware('idempotent');
         Route::post('/system/settings/dns/validate', [PlatformDnsSettingsController::class, 'validateSettings'])->middleware('idempotent');
+        Route::get('/system/settings', [SystemSettingsController::class, 'index']);
+        Route::patch('/system/settings', [SystemSettingsController::class, 'updateSelected'])->middleware('idempotent');
+        Route::get('/system/settings/{group}', [SystemSettingsController::class, 'show']);
+        Route::patch('/system/settings/{group}', [SystemSettingsController::class, 'update'])->middleware('idempotent');
         Route::get('/edges', [EdgeController::class, 'index']);
         Route::post('/edges', [EdgeController::class, 'store'])->middleware('idempotent');
         Route::get('/edges/{edge}', [EdgeController::class, 'show']);
@@ -123,6 +128,7 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function (): void {
         Route::post('/edge-deployments/reconcile', [EdgeOperationsController::class, 'reconcile'])->middleware('idempotent');
         Route::get('/edge-cells', [EdgeOperationsController::class, 'cells']);
         Route::get('/edge-cells/{cell}', [EdgeOperationsController::class, 'cell']);
+        Route::patch('/edge-cells/{cell}', [EdgeOperationsController::class, 'updateCell'])->middleware('idempotent');
         Route::post('/edge-cells/{cell}/drain', [EdgeOperationsController::class, 'drainCell'])->middleware('idempotent');
         Route::post('/edge-cells/{cell}/undrain', [EdgeOperationsController::class, 'undrainCell'])->middleware('idempotent');
         Route::post('/edge-cells/{cell}/restart', [EdgeOperationsController::class, 'restartCell'])->middleware('idempotent');

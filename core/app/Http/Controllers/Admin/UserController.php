@@ -33,9 +33,9 @@ class UserController extends Controller
         return UserResource::make($user);
     }
 
-    public function domains(User $user): JsonResponse
+    public function domains(User $user): AnonymousResourceCollection
     {
-        return response()->json(['data' => DomainResource::collection($user->domains()->orderBy('domains.id')->get())]);
+        return DomainResource::collection($user->domains()->orderBy('domains.id')->cursorPaginate(50));
     }
 
     public function update(UpdateUserRequest $request, User $user): UserResource

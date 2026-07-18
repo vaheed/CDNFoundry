@@ -3,7 +3,7 @@
 namespace App\Support;
 
 use App\Models\Domain;
-use App\Models\Edge;
+use App\Models\DomainEdgePlacement;
 use App\Models\PlatformDnsSetting;
 use RuntimeException;
 
@@ -24,20 +24,24 @@ final class PowerDnsZone
         foreach ($settings->nameservers as $nameserver) {
             $rows->push(['name' => $domain->name.'.', 'type' => 'NS', 'ttl' => $settings->default_ttl, 'content' => rtrim($nameserver['hostname'], '.').'.']);
         }
+        $placement = DomainEdgePlacement::query()->with(['activePool', 'targetPool'])->where('domain_id', $domain->id)->first();
         foreach ($domain->dnsRecords()->orderBy('id')->get() as $record) {
             if ($record->mode === 'proxied') {
+                $pool = $placement?->state === 'draining' ? $placement->targetPool : $placement?->activePool;
+                if ($pool === null || ! $pool->enabled) {
+                    throw new RuntimeException('The proxied domain has no ready published edge placement.');
+                }
+                $routingHostname = EdgeRoutingCompiler::poolHostname($settings, $pool);
                 if ($record->name !== $domain->name) {
-                    $rows->push(['name' => $record->name.'.', 'type' => 'CNAME', 'ttl' => $record->ttl, 'content' => rtrim($settings->proxy_hostname, '.').'.']);
+                    $rows->push(['name' => $record->name.'.', 'type' => 'CNAME', 'ttl' => $record->ttl, 'content' => $routingHostname.'.']);
 
                     continue;
                 }
-                $addresses = Edge::query()->where('enabled', true)->where('drained', false)
-                    ->whereNull('identity_revoked_at')->whereNotNull('registered_at')
-                    ->where('last_heartbeat_at', '>=', now()->subSeconds((int) config('edge.heartbeat_fresh_seconds')))
-                    ->where('capacity->listener_ready', true)
-                    ->pluck($record->type === 'AAAA' ? 'ipv6' : 'ipv4')->filter()->unique()->sort()->values();
-                foreach ($addresses as $address) {
-                    $rows->push(['name' => $record->name.'.', 'type' => $record->type === 'AAAA' ? 'AAAA' : 'A', 'ttl' => $record->ttl, 'content' => $address]);
+                foreach (['A', 'AAAA'] as $family) {
+                    $rows->push([
+                        'name' => $record->name.'.', 'type' => 'LUA', 'ttl' => $record->ttl,
+                        'content' => EdgeRoutingCompiler::compileDatabaseLookup($settings, $pool, $family),
+                    ]);
                 }
 
                 continue;

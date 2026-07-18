@@ -10,6 +10,7 @@ use App\Models\AuditLog;
 use App\Models\DnsCluster;
 use App\Models\DnsRecord;
 use App\Models\Domain;
+use App\Models\EdgeArtifact;
 use App\Models\Operation;
 use App\Support\DnsRecordData;
 use App\Support\DnsZoneValidator;
@@ -188,7 +189,7 @@ class DnsRecordController extends Controller
     private function assertValidFinalZone(Domain $domain, Collection $additions, ?Collection $excludedIds = null): void
     {
         $rows = $domain->dnsRecords()->when($excludedIds?->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $excludedIds))->get()
-            ->map(fn (DnsRecord $record): array => $record->only(['type', 'name', 'content', 'content_hash', 'ttl', 'priority', 'weight', 'port', 'mode', 'geo_config']))
+            ->map(fn (DnsRecord $record): array => $record->only(['type', 'name', 'content', 'content_hash', 'ttl', 'priority', 'weight', 'port', 'mode', 'geo_config', 'origin']))
             ->concat($additions);
         DnsZoneValidator::assertValid($rows);
     }
@@ -205,8 +206,13 @@ class DnsRecordController extends Controller
 
     private function queueReconciliation(Domain $domain, Request $request): void
     {
-        Operation::coalesceDomain('edge.domain_reconcile', $domain->id, $request->user()?->getKey());
-        ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
+        $needsEdgeReconciliation = $domain->dnsRecords()->where('mode', 'proxied')->exists()
+            || $domain->edgePlacement()->exists()
+            || EdgeArtifact::query()->where('domain_id', $domain->id)->exists();
+        if ($needsEdgeReconciliation) {
+            Operation::coalesceDomain('edge.domain_reconcile', $domain->id, $request->user()?->getKey());
+            ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
+        }
         if ($domain->refresh()->lifecycle_state === DomainLifecycleState::Active && DnsCluster::query()->where('enabled', true)->exists()) {
             ReconcileDnsZone::dispatch($domain->id)->afterCommit();
         }

@@ -12,7 +12,7 @@ class Edge extends Model
 
     protected $guarded = [];
 
-    protected $hidden = ['bootstrap_token_hash', 'identity_hash'];
+    protected $hidden = ['bootstrap_token_hash', 'identity_hash', 'identity_csr_hash', 'identity_certificate'];
 
     public function cells(): HasMany
     {
@@ -31,6 +31,6 @@ class Edge extends Model
 
     protected function casts(): array
     {
-        return ['enabled' => 'boolean', 'drained' => 'boolean', 'capacity' => 'array', 'identity_revoked_at' => 'immutable_datetime', 'identity_certificate_expires_at' => 'immutable_datetime', 'registered_at' => 'immutable_datetime', 'last_heartbeat_at' => 'immutable_datetime'];
+        return ['enabled' => 'boolean', 'drained' => 'boolean', 'capacity' => 'array', 'bootstrap_consumed_at' => 'immutable_datetime', 'identity_revoked_at' => 'immutable_datetime', 'identity_certificate_expires_at' => 'immutable_datetime', 'registered_at' => 'immutable_datetime', 'last_heartbeat_at' => 'immutable_datetime'];
     }
 }

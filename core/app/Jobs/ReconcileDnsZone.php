@@ -6,7 +6,9 @@ use App\Enums\DomainLifecycleState;
 use App\Models\DnsCluster;
 use App\Models\DnsDeployment;
 use App\Models\Domain;
+use App\Models\DomainEdgePlacement;
 use App\Models\Operation;
+use App\Support\PlatformSettings;
 use App\Support\PowerDnsClient;
 use App\Support\PowerDnsZone;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
@@ -37,12 +39,20 @@ class ReconcileDnsZone implements ShouldBeUniqueUntilProcessing, ShouldQueue
             return;
         }
         $revision = $domain->revision;
-        $rrsets = PowerDnsZone::render($domain);
+        try {
+            $rrsets = PowerDnsZone::render($domain);
+        } catch (Throwable $exception) {
+            $message = mb_substr($exception->getMessage(), 0, 4000);
+            $this->operations()->update(['status' => 'failed', 'error' => $message, 'finished_at' => now()]);
+            throw new RuntimeException($message, previous: $exception);
+        }
         $checksum = hash('sha256', json_encode($rrsets, JSON_THROW_ON_ERROR));
         $this->operations()->update(['status' => 'running', 'started_at' => now()]);
         $failures = [];
+        $targets = 0;
 
         foreach (DnsCluster::query()->where('enabled', true)->orderBy('id')->get() as $cluster) {
+            $targets++;
             $deployment = DnsDeployment::query()->firstOrCreate(
                 ['domain_id' => $domain->id, 'dns_cluster_id' => $cluster->id],
                 ['active_rrsets' => []],
@@ -72,6 +82,10 @@ class ReconcileDnsZone implements ShouldBeUniqueUntilProcessing, ShouldQueue
             }
         }
 
+        if ($targets === 0) {
+            $failures[] = 'No enabled DNS cluster is available.';
+        }
+
         if ($failures !== []) {
             $message = implode('; ', $failures);
             $this->operations()->update(['status' => 'failed', 'error' => mb_substr($message, 0, 4000), 'finished_at' => now()]);
@@ -80,6 +94,11 @@ class ReconcileDnsZone implements ShouldBeUniqueUntilProcessing, ShouldQueue
 
         $latest = Domain::query()->whereKey($domain->id)->value('revision');
         $status = $latest === $revision ? 'succeeded' : 'pending';
+        if ($status === 'succeeded') {
+            DomainEdgePlacement::query()->where('domain_id', $domain->id)->where('state', 'draining')
+                ->whereNotNull('target_pool_id')->whereNull('drain_after')
+                ->update(['drain_after' => now()->addSeconds(app(PlatformSettings::class)->integer('edge_runtime', 'placement_drain_seconds'))]);
+        }
         $this->operations()->update(['status' => $status, 'result' => ['domain_id' => $domain->id, 'revision' => $revision], 'finished_at' => $status === 'succeeded' ? now() : null]);
         if ($latest !== $revision) {
             self::dispatch($domain->id)->afterCommit();

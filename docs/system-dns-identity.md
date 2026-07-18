@@ -2,9 +2,9 @@
 
 Administrators manage the platform DNS identity through `/api/admin/system/settings/dns`. It contains the platform domain, proxy hostname, two to eight nameservers, IPv4 and IPv6 glue for every nameserver, SOA fields, default TTL, and bounded internal cluster targets.
 
-`POST /api/admin/system/settings/dns/validate` validates without changing desired state. `PATCH /api/admin/system/settings/dns` creates an audited asynchronous operation and returns `202`. The `runtime` queue applies the typed document. Poll `/api/operations/{id}` or inspect administrator operations.
+`POST /api/admin/system/settings/dns/validate` validates without changing desired state and returns a short-lived confirmation token bound to the exact normalized preview. Send that token as `confirmation_token` with `PATCH /api/admin/system/settings/dns`. A missing, expired, or payload-mismatched token returns conflict. The patch transactionally stores desired state, increments its revision, creates an audited operation, and returns `202`; the `runtime` queue then activates the candidate in only the configured healthy DNS clusters. Poll `/api/operations/{id}` or inspect administrator operations.
 
-The request never connects to PowerDNS. Failed operations retain their error and can be retried by an administrator. Existing settings remain until queued work succeeds. IPv4 and IPv6 glue are mandatory from the first configuration.
+The request never connects to PowerDNS. A failed deployment retains its error and the previous active zone/RRsets; desired state remains visible for a safe retry. When the platform zone name changes, the replacement is activated and recorded before the prior zone is removed. IPv4 and IPv6 glue are mandatory from the first configuration.
 
 ```json
 {
@@ -21,7 +21,8 @@ The request never connects to PowerDNS. Failed operations retain their error and
   "soa_expire": 1209600,
   "soa_minimum_ttl": 300,
   "default_ttl": 300,
-  "cluster_targets": ["pdns-auth:8081"]
+  "cluster_targets": ["pdns-auth:8081"],
+  "confirmation_token": "token returned by the exact validation preview"
 }
 ```
 

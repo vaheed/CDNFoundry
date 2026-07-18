@@ -4,7 +4,6 @@ namespace App\Jobs;
 
 use App\Models\AuditLog;
 use App\Models\Operation;
-use App\Models\PlatformDnsSetting;
 use App\Models\User;
 use App\Support\PowerDnsClient;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -31,14 +30,11 @@ class ApplyPlatformDnsSettings implements ShouldBeUnique, ShouldQueue
         if ($operation->status === 'succeeded') {
             return;
         }
-        $operation->update(['status' => 'running', 'started_at' => now(), 'attempts' => $operation->attempts + 1]);
-        $current = PlatformDnsSetting::query()->find(1);
-        PlatformDnsSetting::query()->updateOrCreate(['id' => 1], [
-            ...$operation->input,
-            'revision' => ($current?->revision ?? 0) + 1,
-        ]);
-        AuditLog::record($operation->actor_id ? User::find($operation->actor_id) : null, 'platform_dns_settings.applied', $operation);
         (new ReconcilePlatformDnsIdentity($operation->getKey()))->handle($client);
+        $operation->refresh();
+        if ($operation->status === 'succeeded') {
+            AuditLog::record($operation->actor_id ? User::find($operation->actor_id) : null, 'platform_dns_settings.applied', $operation);
+        }
     }
 
     public function uniqueId(): string

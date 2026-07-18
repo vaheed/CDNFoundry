@@ -10,13 +10,14 @@ use App\Models\Domain;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Validation\Rule;
 
 class DomainUserController extends Controller
 {
-    public function index(Domain $domain): JsonResponse
+    public function index(Domain $domain): AnonymousResourceCollection
     {
-        return response()->json(['data' => UserResource::collection($domain->users()->orderBy('users.id')->get())]);
+        return UserResource::collection($domain->users()->orderBy('users.id')->cursorPaginate(50));
     }
 
     public function store(Request $request, Domain $domain): JsonResponse

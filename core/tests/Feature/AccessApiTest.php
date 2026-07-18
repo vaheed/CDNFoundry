@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\UserType;
 use App\Models\AuditLog;
+use App\Models\IdempotencyKey;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -95,6 +96,24 @@ class AccessApiTest extends TestCase
             ->assertJsonMissing(['token' => $created->json('data.token')]);
         $this->actingAs($user)->deleteJson("/api/me/tokens/$tokenId")->assertOk();
         $this->assertDatabaseMissing('personal_access_tokens', ['id' => $tokenId]);
+    }
+
+    public function test_idempotency_storage_never_persists_or_replays_one_time_tokens(): void
+    {
+        $user = User::factory()->create();
+        $key = (string) Str::uuid();
+        $first = $this->actingAs($user)->withHeader('Idempotency-Key', $key)
+            ->postJson('/api/me/tokens', ['name' => 'one-time'])->assertCreated();
+        $token = $first->json('data.token');
+
+        $stored = IdempotencyKey::query()->where('key', $key)->firstOrFail();
+        $this->assertStringNotContainsString($token, json_encode($stored->response_body, JSON_THROW_ON_ERROR));
+        $this->actingAs($user)->withHeader('Idempotency-Key', $key)
+            ->postJson('/api/me/tokens', ['name' => 'one-time'])->assertCreated()
+            ->assertHeader('Idempotency-Replayed', 'true')
+            ->assertJsonMissingPath('data.token')
+            ->assertJsonPath('data.secret_replay_omitted', true);
+        $this->assertDatabaseCount('personal_access_tokens', 1);
     }
 
     public function test_profile_and_password_mutations_are_audited_and_revoke_other_tokens(): void

@@ -4,11 +4,13 @@ namespace Tests\Feature;
 
 use App\Enums\DomainLifecycleState;
 use App\Jobs\DeprovisionDnsZone;
+use App\Jobs\FinalizeDomainDeprovisioning;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\VerifyDomainNameservers;
 use App\Models\DnsCluster;
 use App\Models\DnsDeployment;
 use App\Models\Domain;
+use App\Models\DomainNameTombstone;
 use App\Models\Operation;
 use App\Models\PlatformDnsSetting;
 use App\Models\User;
@@ -156,6 +158,25 @@ class DomainLifecycleTest extends TestCase
         $this->assertSame(2, DnsDeployment::query()->where('status', 'deprovisioned')->whereNotNull('deprovisioned_at')->count());
         $this->assertSame([], DnsDeployment::query()->where('dns_cluster_id', $first->id)->firstOrFail()->active_rrsets);
         Http::assertSentCount(2);
+    }
+
+    public function test_deprovisioned_domain_is_soft_deleted_and_reclaim_waits_for_cooldown(): void
+    {
+        Queue::fake();
+        [$user, $domain] = $this->ownedDomain();
+        DnsCluster::query()->create($this->clusterData());
+        $this->actingAs($user)->deleteJson("/api/domains/{$domain->id}")->assertAccepted();
+        $domain->update(['deprovision_after' => now()->subSecond()]);
+        Http::fake(['*' => Http::response([], 204)]);
+        (new DeprovisionDnsZone($domain->id))->handle(app(PowerDnsClient::class));
+        (new FinalizeDomainDeprovisioning($domain->id))->handle();
+
+        $this->assertNull(Domain::query()->find($domain->id));
+        $this->assertNotNull(Domain::withTrashed()->find($domain->id));
+        $this->actingAs($user)->postJson('/api/domains', ['name' => $domain->name])->assertUnprocessable();
+        DomainNameTombstone::query()->where('name', $domain->name)->update(['reclaim_after' => now()->subSecond()]);
+        $this->actingAs($user)->postJson('/api/domains', ['name' => $domain->name])->assertCreated();
+        $this->assertSame(1, Domain::query()->where('name', $domain->name)->count());
     }
 
     private function ownedDomain(): array

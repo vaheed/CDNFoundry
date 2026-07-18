@@ -22,13 +22,9 @@ x-core-env: &core-env
   EDGE_IDENTITY_CA_CERTIFICATE: /run/secrets/edge-identity-ca.crt
   EDGE_IDENTITY_CA_PRIVATE_KEY: /run/secrets/edge-identity-ca.key
   EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE: ${EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE:-}
-  EDGE_BLOCKED_ORIGIN_ADDRESSES: ${EDGE_BLOCKED_ORIGIN_ADDRESSES:-}
 
 x-core: &core
-  image: ${CDNF_CORE_IMAGE:-cdnfoundry/core:local}
-  build:
-    context: ./core
-    target: production
+  image: ghcr.io/vaheed/cdnfoundry-core:${CDNF_RELEASE:?CDNF_RELEASE must be an immutable commit SHA}
   environment: *core-env
   depends_on:
     control-db: { condition: service_healthy }
@@ -54,12 +50,9 @@ services:
       retries: 10
 
   web:
-    image: nginx:1.30.3-alpine
+    image: ghcr.io/vaheed/cdnfoundry-web:${CDNF_RELEASE:?CDNF_RELEASE must be an immutable commit SHA}
     profiles: [control]
     ports: ["${CONTROL_BIND:-127.0.0.1:8080}:8080"]
-    volumes:
-      - ./core/public:/app/public:ro
-      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       core: { condition: service_healthy }
     networks: [control, ingress]
@@ -71,12 +64,10 @@ services:
       retries: 10
 
   edge-control:
-    image: nginx:1.30.3-alpine
+    image: ghcr.io/vaheed/cdnfoundry-edge-control:${CDNF_RELEASE:?CDNF_RELEASE must be an immutable commit SHA}
     profiles: [control]
     ports: ["${EDGE_CONTROL_BIND:-0.0.0.0:8443}:8443"]
     volumes:
-      - ./core/public:/app/public:ro
-      - ./docker/nginx/edge-control.conf:/etc/nginx/conf.d/default.conf:ro
       - ${EDGE_CONTROL_SERVER_CERTIFICATE:?EDGE_CONTROL_SERVER_CERTIFICATE is required}:/run/secrets/edge-control-server.crt:ro
       - ${EDGE_CONTROL_SERVER_PRIVATE_KEY:?EDGE_CONTROL_SERVER_PRIVATE_KEY is required}:/run/secrets/edge-control-server.key:ro
       - ${EDGE_IDENTITY_CA_CERTIFICATE:?EDGE_IDENTITY_CA_CERTIFICATE is required}:/run/secrets/edge-identity-ca.crt:ro
@@ -227,7 +218,7 @@ services:
     restart: unless-stopped
 
   edge:
-    image: openresty/openresty:1.31.1.1-0-alpine
+    image: ghcr.io/vaheed/cdnfoundry-edge-runtime:${CDNF_RELEASE:?CDNF_RELEASE must be an immutable commit SHA}
     profiles: [edge]
     ports:
       - "${EDGE_HTTP_BIND:-0.0.0.0:80}:8080"
@@ -237,9 +228,6 @@ services:
       EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/shared-default.json
       EDGE_STATUS_TOKEN: ${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}
     volumes:
-      - ./docker/nginx/openresty.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
-      - ./docker/nginx/edge-runtime.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./docker/openresty/runtime.lua:/etc/cdnfoundry/runtime.lua:ro
       - ${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro
       - ${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro
       - edge-state:/var/lib/cdnfoundry/runtime:ro
@@ -262,16 +250,16 @@ services:
           cpus: "2"
 
   edge-quarantine:
-    image: openresty/openresty:1.31.1.1-0-alpine
+    image: ghcr.io/vaheed/cdnfoundry-edge-runtime:${CDNF_RELEASE:?CDNF_RELEASE must be an immutable commit SHA}
     profiles: [edge]
+    ports:
+      - "${EDGE_QUARANTINE_HTTP_BIND:-127.0.0.1:18080}:8080"
+      - "${EDGE_QUARANTINE_HTTPS_BIND:-127.0.0.1:18443}:8443"
     environment:
       EDGE_CELL_NAME: quarantine-default
       EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/quarantine-default.json
       EDGE_STATUS_TOKEN: ${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}
     volumes:
-      - ./docker/nginx/openresty.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
-      - ./docker/nginx/edge-runtime.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./docker/openresty/runtime.lua:/etc/cdnfoundry/runtime.lua:ro
       - ${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro
       - ${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro
       - edge-state:/var/lib/cdnfoundry/runtime:ro
@@ -294,9 +282,7 @@ services:
           cpus: "0.5"
 
   edge-agent:
-    image: ${CDNF_EDGE_AGENT_IMAGE:-cdnfoundry/edge-agent:local}
-    build:
-      context: ./edge-agent
+    image: ghcr.io/vaheed/cdnfoundry-edge-agent:${CDNF_RELEASE:?CDNF_RELEASE must be an immutable commit SHA}
     profiles: [edge]
     environment:
       EDGE_CONTROL_URL: ${EDGE_CONTROL_URL:?EDGE_CONTROL_URL is required}
@@ -325,9 +311,7 @@ services:
           cpus: "0.25"
 
   mmdb-updater:
-    image: ${CDNF_MMDB_UPDATER_IMAGE:-cdnfoundry/mmdb-updater:local}
-    build:
-      context: ./docker/mmdb-updater
+    image: ghcr.io/vaheed/cdnfoundry-mmdb-updater:${CDNF_RELEASE:?CDNF_RELEASE must be an immutable commit SHA}
     profiles: [edge]
     environment:
       MMDB_PROVIDER: ${MMDB_PROVIDER:-dbip-jsdelivr}

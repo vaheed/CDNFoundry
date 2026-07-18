@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Enums\DomainLifecycleState;
 use App\Http\Resources\DomainResource;
 use App\Jobs\ReconcileDnsZone;
+use App\Jobs\ReconcileEdgeDomain;
 use App\Jobs\VerifyDomainNameservers;
 use App\Models\AuditLog;
 use App\Models\DnsCluster;
 use App\Models\Domain;
+use App\Models\EdgeArtifact;
 use App\Models\Operation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -74,6 +76,10 @@ class DomainLifecycleController extends Controller
                 ]);
         });
         ReconcileDnsZone::dispatch($domain->id)->afterCommit();
+        if ($domain->dnsRecords()->where('mode', 'proxied')->exists() || EdgeArtifact::query()->where('domain_id', $domain->id)->exists()) {
+            Operation::coalesceDomain('edge.domain_reconcile', $domain->id, $request->user()->id);
+            ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
+        }
 
         return response()->json(['data' => $operation->refresh()], 202);
     }

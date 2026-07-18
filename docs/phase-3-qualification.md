@@ -1,16 +1,20 @@
 # Phase 3 qualification
 
-Phase 3 implements bounded DNS-only geographic A and AAAA answers. Desired state is stored in PostgreSQL, compiled deterministically to server-generated PowerDNS Lua, deployed asynchronously, and protected by the existing last-valid deployment snapshot.
+Phase 3 implements bounded DNS-only geographic answers for every qualified runtime type: A, AAAA, CNAME, MX, TXT, NS, SRV, and reverse-zone PTR. CAA remains DNS-only because the qualified PowerDNS Lua runtime cannot synthesize it safely. Desired state is stored in PostgreSQL, compiled deterministically to server-generated PowerDNS Lua, deployed asynchronously, and protected by the existing last-valid deployment snapshot.
 
 ## Automated qualification
 
-`make dev-test` passed 76 tests with 508 assertions using the required isolated in-memory SQLite configuration. Coverage includes authorization, idempotency, ISO country and continent vocabulary, country/continent/default priority, A/AAAA family validation, malicious-input bounds, duplicate rejection, unknown fallback, ordinary DNS isolation, deterministic compilation, deployment failure retention, and the OpenAPI contract.
+`make dev-test` passed the cumulative 93-test suite with 712 assertions using the required isolated in-memory SQLite configuration. Coverage includes authorization, idempotency, the shared ISO country/continent vocabulary, country/continent/default priority, type-aware answer validation, malicious-input bounds, duplicate rejection, unknown fallback, ordinary DNS isolation, deterministic compilation, deployment failure retention, and the OpenAPI contract.
 
-Laravel Pint completed successfully. Development Compose validation passed. The production Compose check requires the operator-owned `.env.prod`, which was not available.
+Laravel Pint, Python syntax compilation, development Compose validation, and production Compose validation with `.env.prod.example` completed successfully.
 
 ## Real runtime qualification
 
-The persistent development migration was applied without refreshing data. PowerDNS 5.1.3 loaded `gpgsql` and `geoip`, opened the shared DB-IP MMDB, and accepted the generated Lua RRsets. Queries went through DNSdist, not directly to PowerDNS.
+The persistent development migration was applied without refreshing data. PowerDNS 5.1.3 loaded `gpgsql` and `geoip`, opened the shared DB-IP MMDB, and accepted the generated Lua RRsets. Queries went through DNSdist, not directly to PowerDNS. The cumulative runtime job reported:
+
+```text
+phase3_geo_dns_e2e=passed types=A,AAAA,CNAME,MX,TXT,SRV default_runtime=passed
+```
 
 Observed answers for the disposable `browser-test.example.test` zone:
 
@@ -26,4 +30,4 @@ The local preview classifier reported `FR`/`EU` for `80.67.169.12` and selected 
 
 ## Remaining release acceptance
 
-The manual browser workflow remains user-owned and was not run. Actual queries from three external geographic vantage points remain unchecked; local trusted-ECS tests cover equivalent classification paths but are not represented as external vantage points. Geo-DNS analytics label verification remains pending until that telemetry surface is present.
+The manual browser workflow remains user-owned and was not run. Actual queries from three external geographic vantage points remain unchecked; local trusted-ECS tests cover equivalent classification paths but are not represented as external vantage points. Geo-DNS analytics label verification remains pending until the Phase 7 telemetry surface is implemented, so that roadmap checkbox is intentionally still open.

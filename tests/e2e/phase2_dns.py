@@ -60,9 +60,15 @@ def compose(*arguments: str) -> None:
     subprocess.run(["docker", "compose", "-f", COMPOSE, *arguments], cwd=ROOT, check=True, timeout=90, stdout=subprocess.DEVNULL)
 
 
-def runtime_queue_size() -> int:
-    result = subprocess.run(["docker", "compose", "-f", COMPOSE, "exec", "-T", "redis", "valkey-cli", "LLEN", "laravel-database-queues:runtime"], cwd=ROOT, check=True, text=True, capture_output=True, timeout=10)
-    return int(result.stdout.strip())
+def runtime_queue_size(job_class: str | None = None) -> int:
+    if job_class is None:
+        command = ["LLEN", "laravel-database-queues:runtime"]
+        result = subprocess.run(["docker", "compose", "-f", COMPOSE, "exec", "-T", "redis", "valkey-cli", *command], cwd=ROOT, check=True, text=True, capture_output=True, timeout=10)
+        return int(result.stdout.strip())
+
+    command = ["--raw", "LRANGE", "laravel-database-queues:runtime", "0", "-1"]
+    result = subprocess.run(["docker", "compose", "-f", COMPOSE, "exec", "-T", "redis", "valkey-cli", *command], cwd=ROOT, check=True, text=True, capture_output=True, timeout=10)
+    return sum(1 for line in result.stdout.splitlines() if line and json.loads(line).get("displayName") == job_class)
 
 
 def wait_http() -> None:
@@ -112,7 +118,8 @@ def main() -> None:
         "nameservers": [{"hostname": "ns1.cdnf.test", "ipv4": "192.0.2.10", "ipv6": "2001:db8::10"}, {"hostname": "ns2.cdnf.test", "ipv4": "192.0.2.11", "ipv6": "2001:db8::11"}],
         "soa_primary": "ns1.cdnf.test", "soa_mailbox": "hostmaster.cdnf.test", "soa_refresh": 3600, "soa_retry": 600, "soa_expire": 1209600, "soa_minimum_ttl": 300, "default_ttl": 300, "cluster_targets": ["pdns-auth:8081"],
     }
-    call("PATCH", "/api/admin/system/settings/dns", settings, token)
+    _, validated_settings = call("POST", "/api/admin/system/settings/dns/validate", settings, token)
+    call("PATCH", "/api/admin/system/settings/dns", settings | {"confirmation_token": validated_settings["data"]["confirmation_token"]}, token)
     _, clusters = call("GET", "/api/admin/dns/clusters", token=token)
     cluster = next((item for item in clusters["data"] if item["api_url"] == "http://pdns-auth:8081"), None)
     if cluster is None:
@@ -159,7 +166,9 @@ def main() -> None:
     assert runtime_queue_size() == 0
     for index in range(100):
         call("PATCH", f"/api/domains/{domain_id}/dns/records/{apex_a_id}", {"content": f"192.0.2.{(index % 200) + 21}"}, token)
-    queued_updates = runtime_queue_size()
+    # The scheduler may independently queue its bounded platform-identity job
+    # while Horizon is stopped; count only this domain-reconciliation class.
+    queued_updates = runtime_queue_size("App\\Jobs\\ReconcileDnsZone")
     assert queued_updates == 1, f"expected one coalesced runtime job, found {queued_updates}"
     compose("start", "horizon")
     wait_deployment(token, domain_id)

@@ -1,4 +1,4 @@
-FROM php:8.5-fpm-alpine AS php-base
+FROM php:8.5-fpm-alpine AS php-dependencies
 
 RUN apk add --no-cache icu-libs libpq libzip libmaxminddb nginx supervisor su-exec \
     && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS icu-dev postgresql-dev libzip-dev \
@@ -12,7 +12,23 @@ COPY composer.json composer.lock ./
 RUN --mount=type=cache,target=/tmp/composer-cache \
     COMPOSER_CACHE_DIR=/tmp/composer-cache COMPOSER_MAX_PARALLEL_HTTP=4 COMPOSER_IPRESOLVE=4 composer install --no-dev --no-interaction --no-progress --prefer-dist --no-scripts --classmap-authoritative
 
+FROM node:24-alpine AS frontend-assets
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+
+COPY resources ./resources
+COPY vite.config.js ./
+COPY --from=php-dependencies /app/vendor/laravel/framework/src/Illuminate/Pagination/resources/views ./vendor/laravel/framework/src/Illuminate/Pagination/resources/views
+RUN mkdir -p storage/framework/views \
+    && npm run build
+
+FROM php-dependencies AS php-base
+
 COPY . .
+COPY --from=frontend-assets /app/public/build ./public/build
 RUN composer dump-autoload --no-dev --classmap-authoritative \
     && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
@@ -29,3 +45,4 @@ RUN --mount=type=cache,target=/tmp/composer-cache \
 RUN mv /app/vendor /opt/cdnf-vendor
 
 FROM php-base AS production
+LABEL org.opencontainers.image.source="https://github.com/vaheed/CDNFoundry"

@@ -6,6 +6,7 @@ use App\Models\DnsRecord;
 use App\Models\Edge;
 use App\Models\EdgeTask;
 use App\Models\Operation;
+use App\Support\PlatformSettings;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Str;
@@ -35,7 +36,7 @@ class DispatchOriginTest implements ShouldQueue
         }
         $selected = collect($operation->input['edge_ids'] ?? []);
         $edges = Edge::query()->where('enabled', true)->where('drained', false)->whereNull('identity_revoked_at')
-            ->whereNotNull('registered_at')->where('last_heartbeat_at', '>=', now()->subSeconds((int) config('edge.heartbeat_fresh_seconds')))
+            ->whereNotNull('registered_at')->where('last_heartbeat_at', '>=', now()->subSeconds(app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds')))
             ->when($selected->isNotEmpty(), fn ($query) => $query->whereIn('id', $selected))
             ->orderBy('id')->limit(20)->get();
         if ($edges->isEmpty()) {
@@ -50,7 +51,8 @@ class DispatchOriginTest implements ShouldQueue
                 EdgeTask::query()->create(['id' => (string) Str::uuid(), 'edge_id' => $edge->id, 'type' => 'origin_test', 'status' => 'pending', 'payload' => [
                     'operation_id' => $operation->id, 'domain_id' => $record->domain_id, 'record_id' => $record->id,
                     'origin' => $record->origin, 'addresses' => $operation->input['addresses'],
-                    'private_allowlist' => config('edge.private_origin_allowlist', []),
+                    'private_allowlist' => app(PlatformSettings::class)->get('origin_safety', 'private_origin_allowlist'),
+                    'blocked_networks' => app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_networks'),
                 ]]);
             }
         }

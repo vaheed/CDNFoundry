@@ -1,4 +1,5 @@
 FROM alpine:3.23
+LABEL org.opencontainers.image.source="https://github.com/vaheed/CDNFoundry"
 
 RUN apk add --no-cache bash coreutils curl file gzip libmaxminddb tar unzip
 

@@ -6,6 +6,7 @@ use App\Enums\DomainLifecycleState;
 use App\Models\DnsCluster;
 use App\Models\DnsDeployment;
 use App\Models\Domain;
+use App\Models\Operation;
 use App\Support\PowerDnsClient;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -32,6 +33,8 @@ class DeprovisionDnsZone implements ShouldBeUnique, ShouldQueue
         if ($domain->lifecycle_state !== DomainLifecycleState::Deprovisioning || $domain->deprovision_after?->isFuture()) {
             return;
         }
+        Operation::query()->where('type', 'domain.deprovision')->whereIn('status', ['pending', 'running'])
+            ->where('input->domain_id', $domain->id)->update(['status' => 'running', 'started_at' => now()]);
         $failures = [];
         foreach (DnsCluster::query()->orderBy('id')->get() as $cluster) {
             $deployment = DnsDeployment::query()->firstOrCreate(
@@ -51,6 +54,7 @@ class DeprovisionDnsZone implements ShouldBeUnique, ShouldQueue
         if ($failures !== []) {
             throw new RuntimeException(implode('; ', $failures));
         }
+        ReconcileEdgeDomain::dispatch($domain->id);
     }
 
     public function uniqueId(): string

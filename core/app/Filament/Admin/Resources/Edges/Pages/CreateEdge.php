@@ -9,6 +9,7 @@ use App\Models\EdgePool;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class CreateEdge extends CreateRecord
@@ -23,11 +24,20 @@ class CreateEdge extends CreateRecord
         $data['country_code'] = strtoupper($data['country_code']);
         $data['continent_code'] = strtoupper($data['continent_code']);
         $data['bootstrap_token_hash'] = hash('sha256', $this->bootstrapToken);
-        $edge = Edge::query()->create($data);
-        foreach (EdgePool::query()->where('enabled', true)->get() as $pool) {
-            $edge->cells()->create(['edge_pool_id' => $pool->id, 'name' => $pool->name]);
-        }
-        AuditLog::record(auth()->user(), 'edge.created', $edge, [], request()->ip());
+        $edge = DB::transaction(function () use ($data): Edge {
+            $edge = Edge::query()->create($data);
+            $defaultSharedId = EdgePool::query()->where('enabled', true)->where('kind', 'shared')->orderBy('id')->value('id');
+            foreach (EdgePool::query()->orderBy('id')->limit(32)->get() as $pool) {
+                $edge->cells()->create([
+                    'edge_pool_id' => $pool->id, 'name' => $pool->name,
+                    'service_ipv4' => $pool->id === $defaultSharedId ? $edge->ipv4 : null,
+                    'service_ipv6' => $pool->id === $defaultSharedId ? $edge->ipv6 : null,
+                ]);
+            }
+            AuditLog::record(auth()->user(), 'edge.created', $edge, [], request()->ip());
+
+            return $edge;
+        });
 
         return $edge;
     }

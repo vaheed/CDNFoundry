@@ -22,7 +22,7 @@ Run the Python non-UI end-to-end qualification against the real stack:
 make dev-e2e
 ```
 
-This job exercises HTTP APIs, authorization, idempotency, queues, and persisted operations. Browser/UI acceptance remains the project owner's manual checklist.
+This cumulative job exercises Phases 1–4 through HTTP APIs, authorization, idempotency, queues, persisted operations, real PowerDNS/DNSdist answers, Geo-DNS, mTLS edge control, pool migration, and the generic OpenResty runtime. Run the heavier 500,000-zone/1,000,000-record qualification separately with `make dev-scale-e2e`. Browser/UI acceptance remains the project owner's manual checklist.
 
 The control panel is exposed at `http://localhost:8080`, Horizon at
 `http://localhost:8080/horizon`, DNSdist at TCP/UDP port `1053`, the two test

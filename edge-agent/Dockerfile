@@ -5,6 +5,7 @@ COPY . ./
 RUN CGO_ENABLED=0 go test ./... && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /edge-agent ./
 
 FROM alpine:3.22
+LABEL org.opencontainers.image.source="https://github.com/vaheed/CDNFoundry"
 RUN addgroup -S cdnf && adduser -S -G cdnf cdnf
 RUN mkdir -p /var/lib/cdnfoundry/agent /var/lib/cdnfoundry/runtime && chown -R cdnf:cdnf /var/lib/cdnfoundry
 COPY --from=build /edge-agent /usr/local/bin/edge-agent

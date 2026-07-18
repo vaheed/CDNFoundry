@@ -89,7 +89,7 @@ As administrator, open **System DNS identity** and fill:
 | SOA minimum TTL / default TTL | `300` / `300` |
 | Cluster targets | `pdns-auth:8081` |
 
-Enter the platform domain first and blur the field. Confirm proxy, nameserver, and SOA names auto-fill but remain editable. Choose **Validate and queue update**, copy the operation ID, and confirm `platform_dns_identity.update` succeeds. Reject loopback/malformed glue, fewer than two nameservers, and an empty target list.
+Enter the platform domain first and blur the field. Confirm proxy, nameserver, and SOA names auto-fill but remain editable. Choose **Validate and preview** and review the normalized payload without any desired-state or operation change. Then choose the red **Confirm and queue update** action within 15 minutes, copy the operation ID, and confirm `platform_dns_identity.update` succeeds. Changing any field after preview must require a new preview. Reject loopback/malformed glue, fewer than two nameservers, and an empty target list.
 
 ### DNS cluster
 
@@ -190,6 +190,16 @@ Use preview with IPv4/IPv6 addresses whose classification is known in the instal
 
 ## Phase 4 — Edge proxy and origin routing
 
+### Platform settings (administrator)
+
+1. Open **Platform settings**. Confirm all five sections render with the current PostgreSQL value, a full explanation, and the shipped default beside every field.
+2. Under **DNS lifecycle**, set **Deprovision delay** to `14` and **Domain reclaim cooldown** to `7`; save, refresh, and confirm both persist. Restore `7` / `7` after the check.
+3. Under **API rate limits**, confirm defaults `10`, `600`, `240`, `12`, `20`, `10`, and `600` in displayed order. Enter `0` in one field and confirm validation rejects the entire save without changing its revision; restore the valid default.
+4. Under **Edge runtime**, confirm heartbeat `45`, drain `300`, and artifact limit `2097152`. Change heartbeat to `60`, save, and confirm a `system_settings.update` operation is created and succeeds; restore `45` and confirm a second reconciliation operation.
+5. Under **Origin destination safety**, add blocked CIDR `203.0.113.0/24` and address `198.51.100.20`. Confirm malformed CIDRs/IPs and duplicate entries are rejected. Save, deploy a disposable proxied hostname targeting the blocked range, and confirm validation/runtime both reject it. Remove the documentation-only entries afterward.
+6. Under **Proxy defaults**, confirm enabled On, HTTPS redirect Off, HTTP/1.1 and HTTP/2 selected, and retry count `0`. Change retry count to `1`, save, and confirm bounded edge reconciliation; restore `0`.
+7. Open **Audit logs** and confirm each effective change records `system_settings.updated`, its group, revision, actor, and operation ID when applicable. Sign in as a domain user and directly request `/admin/platform-settings`; it must be forbidden.
+
 ### Edges and pools (administrator)
 
 1. Open **Edge network → Edges** and create two entries. Replace documentation addresses with reachable addresses for real traffic:
@@ -203,7 +213,9 @@ Use preview with IPv4/IPv6 addresses whose classification is known in the instal
 
 2. Save each one-time bootstrap token, register the agents, and confirm fresh heartbeat, version, active revision, state, and bounded cell capacities.
 3. Exercise drain/undrain and enable/disable. Rotate an identity, copy the replacement token once, and confirm the previous credential no longer works.
-4. Open **Service pools**. Confirm shared and quarantine pools and their revisions. Create one dedicated pool and confirm one desired cell per registered edge.
+4. Open **Service pools**. Confirm shared and quarantine pools and their revisions. Create one dedicated pool, confirm `edge.pool_provision` completes, and confirm one desired cell per registered edge. New pools remain disabled until provisioning and service-address configuration are complete.
+5. In each edge's **Cells** relation, set a unique public service IPv4 and IPv6 for every quarantine/dedicated cell. Editing must reject private, loopback, duplicate, or missing dual-stack addresses. Enable the pool only after every enabled edge is fully addressed.
+6. Drain and undrain one cell and confirm its task completes through the agent. Restart it and confirm `last_restart_at` changes, traffic resumes after the bounded window, and sibling cells/agent stay running.
 
 ### Proxy defaults and record eligibility
 
@@ -217,7 +229,7 @@ Open the domain proxy settings. Start with these compatibility-oriented defaults
 | Default origin retry count | `1` |
 | Maintenance mode | Off |
 
-In **DNS records**, select every type. The **Proxied** mode must appear only for A, AAAA, and CNAME. **Geo-DNS** must appear only for A/AAAA. TXT, MX, NS, CAA, SRV, and PTR must be DNS-only; changing a proxied row to one of these types must reset mode to DNS-only and hide origin fields.
+In **DNS records**, select every type. The **Proxied** mode must appear only for A, AAAA, and CNAME. **Geo-DNS** is available for A, AAAA, CNAME, MX, TXT, SRV, administrator-managed NS, and reverse-zone PTR; CAA remains DNS-only. Changing a proxied row to an ineligible type must reset mode to DNS-only and hide origin fields.
 
 ### Proxied apex form
 
@@ -256,15 +268,14 @@ The origin destination is the server reached by CDNFoundry; Host/SNI default to 
 3. Retry a supported failure. It must not duplicate an already-active deployment.
 4. Confirm the domain view exposes proxied-host count, desired/active revision, placement/pools, failure, and recent validated revisions.
 5. Send HTTP and HTTPS through both real edges. Confirm correct origin selection, Host, SNI, IPv4/IPv6 behavior, unknown-host/SNI rejection, and continued serving of the last valid revision after a deliberately invalid candidate.
-
-Current Phase 4 limitations that must remain recorded as **not passed** until implemented: service-pool-specific public addresses/DNS selection are required before quarantine/dedicated moves affect traffic, and an edge-local cell supervisor is required before drain/restart tasks can execute (current behavior fails closed with `cell_supervisor_unavailable`). The manual dual-edge traffic/migration checks remain owner-run.
+6. Move the domain shared → quarantine → dedicated. For each move record the target-ready acknowledgement, target DNS answer, non-null drain deadline, source-removal artifact, final acknowledgement, and active pool. A failed/rejected target must leave source DNS and traffic active.
 
 ### Phase 4 completion gate
 
-- Implementation: partially complete; the two runtime limitations above are open.
+- Implementation: present for service-pool DNS routing, target-first migration, acknowledged source removal, and authenticated cell control.
 - Documentation: present above and in the edge/origin runbooks.
-- Automated/runtime qualification: agent-owned tests must pass and be recorded, but cannot waive the open runtime limitations.
-- Manual browser/dual-edge qualification: owner-run; **failed/not complete until all Phase 4 checkpoints pass and both limitations are implemented**.
+- Automated/runtime qualification: agent-owned tests must pass and be recorded in `docs/phase-4-qualification.md`.
+- Manual browser/dual-edge qualification: owner-run; **failed/not complete until all Phase 4 checkpoints pass on two reachable edge hosts**.
 
 ## Record the result
 

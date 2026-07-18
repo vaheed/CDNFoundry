@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\DomainNameTombstone;
 use App\Support\DomainName;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -31,7 +32,12 @@ class StoreDomainRequest extends FormRequest
                 } catch (\InvalidArgumentException $exception) {
                     $fail($exception->getMessage());
                 }
-            }, Rule::unique('domains', 'name')],
+            }, Rule::unique('domains', 'name')->withoutTrashed(), function (string $attribute, mixed $value, \Closure $fail): void {
+                $tombstone = DomainNameTombstone::query()->where('name', $value)->first();
+                if ($tombstone?->reclaim_after?->isFuture()) {
+                    $fail('The domain is still in its post-deprovisioning reclaim cooldown.');
+                }
+            }],
         ];
     }
 }

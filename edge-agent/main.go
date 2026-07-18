@@ -112,9 +112,11 @@ type edgeTask struct {
 	ID      string `json:"id"`
 	Type    string `json:"type"`
 	Payload struct {
-		Addresses []string `json:"addresses"`
-		Allowlist []string `json:"private_allowlist"`
-		Origin    struct {
+		CellName        string   `json:"cell_name"`
+		Addresses       []string `json:"addresses"`
+		Allowlist       []string `json:"private_allowlist"`
+		BlockedNetworks []string `json:"blocked_networks"`
+		Origin          struct {
 			Host              string `json:"host"`
 			Scheme            string `json:"scheme"`
 			HostHeader        string `json:"host_header"`
@@ -143,12 +145,85 @@ func (c *client) processTasks() error {
 		if task.Type == "origin_test" {
 			result = runOriginTest(task)
 			status = "succeeded"
+		} else if strings.HasPrefix(task.Type, "cell_") {
+			result, status = c.runCellTask(task)
 		}
 		if err := c.request("POST", "/edge/v1/tasks/"+task.ID+"/result", map[string]any{"status": status, "result": result}, &map[string]any{}, true); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (c *client) runCellTask(task edgeTask) (map[string]any, string) {
+	action := strings.TrimPrefix(task.Type, "cell_")
+	if task.Payload.CellName == "" || (action != "drain" && action != "undrain" && action != "restart") {
+		return map[string]any{"status": "failed", "failure_reason": "invalid_cell_task"}, "failed"
+	}
+	for _, endpoint := range c.statusURLs {
+		cell, ok := c.cellStatus(endpoint)
+		if !ok || cell["name"] != task.Payload.CellName {
+			continue
+		}
+		if err := c.controlCell(endpoint, task.ID, action); err != nil {
+			return map[string]any{"status": "failed", "failure_reason": "control_request_failed"}, "failed"
+		}
+		if action == "drain" || action == "undrain" {
+			if err := c.saveCellControl(task.Payload.CellName, action == "drain"); err != nil {
+				return map[string]any{"status": "failed", "failure_reason": "control_state_persist_failed"}, "failed"
+			}
+		}
+		return map[string]any{"status": "completed", "cell_name": task.Payload.CellName, "action": action}, "succeeded"
+	}
+	return map[string]any{"status": "failed", "failure_reason": "cell_not_found"}, "failed"
+}
+
+func (c *client) controlCell(endpoint, taskID, action string) error {
+	controlURL := strings.TrimSuffix(endpoint, "/passive-failures") + "/control"
+	body, err := json.Marshal(map[string]any{"task_id": taskID, "action": action})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest("POST", controlURL, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Edge-Status-Token", c.statusToken)
+	response, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("cell control returned %s", response.Status)
+	}
+	return nil
+}
+
+func (c *client) saveCellControl(cellName string, drained bool) error {
+	controls, err := c.loadCellControls()
+	if err != nil {
+		return err
+	}
+	controls[cellName] = drained
+	return atomicJSON(filepath.Join(c.dir, "cell-controls.json"), controls)
+}
+
+func (c *client) loadCellControls() (map[string]bool, error) {
+	controls := map[string]bool{}
+	body, err := os.ReadFile(filepath.Join(c.dir, "cell-controls.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		return controls, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(body, &controls); err != nil {
+		return nil, err
+	}
+	return controls, nil
 }
 
 func runOriginTest(task edgeTask) map[string]any {
@@ -159,7 +234,7 @@ func runOriginTest(task edgeTask) map[string]any {
 		return result
 	}
 	address := task.Payload.Addresses[0]
-	if blockedIP(address, task.Payload.Allowlist) {
+	if blockedIP(address, task.Payload.Allowlist, task.Payload.BlockedNetworks) {
 		result["failure_reason"] = "blocked_destination"
 		return result
 	}
@@ -234,10 +309,20 @@ func first(values ...string) string {
 	return ""
 }
 
-func blockedIP(address string, allowlist []string) bool {
+func blockedIP(address string, allowlist, blockedNetworks []string) bool {
 	ip := net.ParseIP(address)
 	if ip == nil {
 		return true
+	}
+	if strings.HasPrefix(strings.ToLower(address), "::ffff:") || ip.IsUnspecified() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() {
+		return true
+	}
+	if inNetworks(ip, blockedNetworks) {
+		return true
+	}
+	private := ip.IsPrivate() || inNetworks(ip, []string{"100.64.0.0/10", "fec0::/10"})
+	if !private {
+		return inNetworks(ip, []string{"192.0.0.0/24", "198.18.0.0/15", "224.0.0.0/4", "240.0.0.0/4", "64:ff9b::/96", "64:ff9b:1::/48"})
 	}
 	for _, cidr := range allowlist {
 		_, network, err := net.ParseCIDR(cidr)
@@ -245,7 +330,17 @@ func blockedIP(address string, allowlist []string) bool {
 			return false
 		}
 	}
-	return ip.IsUnspecified() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsPrivate()
+	return true
+}
+
+func inNetworks(ip net.IP, cidrs []string) bool {
+	for _, cidr := range cidrs {
+		_, network, err := net.ParseCIDR(cidr)
+		if err == nil && network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *client) loadOrRegister() error {
@@ -260,11 +355,27 @@ func (c *client) loadOrRegister() error {
 		return nil
 	}
 	edgeID := required("EDGE_ID")
-	csr, privateKey, err := certificateRequest(edgeID)
-	if err != nil {
+	pendingPath := filepath.Join(c.dir, "pending-registration.json")
+	var pending struct {
+		EdgeID, CSR, PrivateKey string
+	}
+	if b, err := os.ReadFile(pendingPath); err == nil {
+		if err := json.Unmarshal(b, &pending); err != nil || pending.EdgeID != edgeID || pending.CSR == "" || pending.PrivateKey == "" {
+			return errors.New("invalid pending edge registration; rotate the bootstrap identity")
+		}
+	} else if errors.Is(err, os.ErrNotExist) {
+		csr, privateKey, err := certificateRequest(edgeID)
+		if err != nil {
+			return err
+		}
+		pending.EdgeID, pending.CSR, pending.PrivateKey = edgeID, csr, privateKey
+		if err := atomicJSON(pendingPath, pending); err != nil {
+			return err
+		}
+	} else {
 		return err
 	}
-	body := map[string]any{"edge_id": edgeID, "bootstrap_token": required("EDGE_BOOTSTRAP_TOKEN"), "agent_version": version, "certificate_request": csr}
+	body := map[string]any{"edge_id": edgeID, "bootstrap_token": required("EDGE_BOOTSTRAP_TOKEN"), "agent_version": version, "certificate_request": pending.CSR}
 	// Explicit decode avoids relying on field-name matching for snake_case.
 	var raw struct {
 		Data map[string]string `json:"data"`
@@ -272,8 +383,14 @@ func (c *client) loadOrRegister() error {
 	if err := c.request("POST", "/edge/v1/register", body, &raw, false); err != nil {
 		return err
 	}
-	c.id = identity{EdgeID: raw.Data["edge_id"], Certificate: raw.Data["identity_certificate"], PrivateKey: privateKey, PublicKey: raw.Data["signing_public_key"]}
-	return atomicJSON(p, c.id)
+	c.id = identity{EdgeID: raw.Data["edge_id"], Certificate: raw.Data["identity_certificate"], PrivateKey: pending.PrivateKey, PublicKey: raw.Data["signing_public_key"]}
+	if err := atomicJSON(p, c.id); err != nil {
+		return err
+	}
+	if err := os.Remove(pendingPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 func certificateRequest(edgeID string) (string, string, error) {
@@ -376,7 +493,7 @@ func (c *client) sync() error {
 func (c *client) full() error {
 	var response struct{ Encoded, Checksum, Signature, Public string }
 	var raw map[string]json.RawMessage
-	if err := c.request("GET", "/edge/v1/config/full", nil, &raw, true); err != nil {
+	if err := c.requestLimit("GET", "/edge/v1/config/full", nil, &raw, true, 96<<20); err != nil {
 		return err
 	}
 	json.Unmarshal(raw["encoded_snapshot"], &response.Encoded)
@@ -394,13 +511,16 @@ func (c *client) full() error {
 	if err != nil {
 		return err
 	}
-	payload, err = io.ReadAll(io.LimitReader(reader, 64<<20))
+	payload, err = io.ReadAll(io.LimitReader(reader, (64<<20)+1))
 	closeErr := reader.Close()
 	if err != nil {
 		return err
 	}
 	if closeErr != nil {
 		return closeErr
+	}
+	if len(payload) > 64<<20 {
+		return errors.New("full snapshot exceeds the 64 MiB activation bound")
 	}
 	var snapshot struct {
 		SchemaVersion int    `json:"schema_version"`
@@ -577,25 +697,25 @@ func (c *client) heartbeat(sequence uint64) error {
 func (c *client) runtimeStatus() ([]map[string]any, []map[string]any) {
 	cells := []map[string]any{}
 	failures := []map[string]any{}
+	controls, _ := c.loadCellControls()
 	for _, endpoint := range c.statusURLs {
-		req, err := http.NewRequest("GET", endpoint, nil)
-		if err != nil {
+		decoded, ok := c.runtimeEndpointStatus(endpoint)
+		if !ok {
 			continue
 		}
-		req.Header.Set("X-Edge-Status-Token", c.statusToken)
-		response, err := c.http.Do(req)
-		if err != nil {
-			continue
-		}
-		var decoded struct {
-			Data []map[string]any `json:"data"`
-			Cell map[string]any   `json:"cell"`
-		}
-		if response.StatusCode == http.StatusOK {
-			_ = json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&decoded)
-		}
-		_ = response.Body.Close()
 		if decoded.Cell != nil && len(cells) < 32 {
+			name, _ := decoded.Cell["name"].(string)
+			if desiredDrained, configured := controls[name]; configured {
+				status, _ := decoded.Cell["status"].(string)
+				if (desiredDrained && status != "drained") || (!desiredDrained && status == "drained") {
+					action := "undrain"
+					if desiredDrained {
+						action = "drain"
+					}
+					restoreKey := sha256.Sum256([]byte(name + "|" + action))
+					_ = c.controlCell(endpoint, "restore-"+hex.EncodeToString(restoreKey[:16]), action)
+				}
+			}
 			cells = append(cells, decoded.Cell)
 		}
 		for _, failure := range decoded.Data {
@@ -605,10 +725,35 @@ func (c *client) runtimeStatus() ([]map[string]any, []map[string]any) {
 			failures = append(failures, failure)
 		}
 	}
-	if len(cells) == 0 {
-		cells = append(cells, map[string]any{"name": "runtime", "status": "degraded", "capacity": map[string]any{}})
-	}
 	return cells, failures
+}
+
+func (c *client) cellStatus(endpoint string) (map[string]any, bool) {
+	decoded, ok := c.runtimeEndpointStatus(endpoint)
+	return decoded.Cell, ok && decoded.Cell != nil
+}
+
+type runtimeEndpointResponse struct {
+	Data []map[string]any `json:"data"`
+	Cell map[string]any   `json:"cell"`
+}
+
+func (c *client) runtimeEndpointStatus(endpoint string) (runtimeEndpointResponse, bool) {
+	var decoded runtimeEndpointResponse
+	req, err := http.NewRequest("GET", endpoint, nil)
+	if err != nil {
+		return decoded, false
+	}
+	req.Header.Set("X-Edge-Status-Token", c.statusToken)
+	response, err := c.http.Do(req)
+	if err != nil {
+		return decoded, false
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&decoded) != nil {
+		return decoded, false
+	}
+	return decoded, true
 }
 func (c *client) queueAck(a ack) {
 	var q []ack
@@ -651,6 +796,10 @@ func (c *client) flushAcks() error {
 }
 
 func (c *client) request(method, path string, body any, out any, auth bool) error {
+	return c.requestLimit(method, path, body, out, auth, 16<<20)
+}
+
+func (c *client) requestLimit(method, path string, body any, out any, auth bool, responseLimit int64) error {
 	var r io.Reader
 	if body != nil {
 		b, _ := json.Marshal(body)
@@ -670,7 +819,7 @@ func (c *client) request(method, path string, body any, out any, auth bool) erro
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
 		return fmt.Errorf("%s: %s", res.Status, string(b))
 	}
-	return json.NewDecoder(io.LimitReader(res.Body, 16<<20)).Decode(out)
+	return json.NewDecoder(io.LimitReader(res.Body, responseLimit)).Decode(out)
 }
 func verify(encoded, checksum, signature, public string) (json.RawMessage, error) {
 	b, e := base64.StdEncoding.DecodeString(encoded)

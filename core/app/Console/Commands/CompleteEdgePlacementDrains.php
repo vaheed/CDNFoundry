@@ -26,8 +26,17 @@ class CompleteEdgePlacementDrains extends Command
                     return null;
                 }
                 $source = $placement->active_pool_id;
-                $placement->update(['active_pool_id' => $placement->target_pool_id, 'target_pool_id' => null, 'state' => 'active', 'drain_after' => null]);
-                AuditLog::record(null, 'edge.placement_drain_completed', $placement, ['source_pool_id' => $source, 'active_pool_id' => $placement->active_pool_id]);
+                $target = $placement->target_pool_id;
+                $placement->update([
+                    'active_pool_id' => $target,
+                    'target_pool_id' => $target,
+                    'state' => 'deploying',
+                    'drain_after' => null,
+                ]);
+                AuditLog::record(null, 'edge.placement_source_retirement_started', $placement, [
+                    'source_pool_id' => $source,
+                    'target_pool_id' => $target,
+                ]);
 
                 return $placement->domain_id;
             });

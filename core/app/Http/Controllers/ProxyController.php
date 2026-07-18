@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\DomainLifecycleState;
 use App\Jobs\DispatchOriginTest;
+use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
+use App\Models\DnsCluster;
 use App\Models\DnsRecord;
 use App\Models\Domain;
 use App\Models\EdgeRevision;
@@ -121,6 +124,10 @@ class ProxyController extends Controller
         $data = $request->validate(['revision' => ['required', 'integer', 'min:1']]);
         $prior = EdgeRevision::query()->where('domain_id', $domain->id)->where('revision', $data['revision'])->where('status', 'validated')->firstOrFail();
         ProxyRevisionRollback::apply($domain, $prior, $request->user(), $request->ip());
+        if ($domain->refresh()->lifecycle_state === DomainLifecycleState::Active && DnsCluster::query()->where('enabled', true)->exists()) {
+            Operation::coalesceDomain('dns.zone_reconcile', $domain->id, $request->user()->id);
+            ReconcileDnsZone::dispatch($domain->id)->afterCommit();
+        }
 
         return $this->queue($request, $domain, 'edge.domain_reconcile');
     }

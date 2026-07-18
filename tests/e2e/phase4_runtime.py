@@ -27,6 +27,7 @@ def state(hosts: dict[str, str], sequence: int) -> dict:
             "sni": None, "verify_tls": False, "connect_timeout_ms": 1000,
             "response_timeout_ms": 5000, "retry_count": 0, "websocket": False,
             "health_check": None, "private_allowlist": ["172.16.0.0/12"],
+            "blocked_networks": [], "blocked_addresses": [],
         }} for hostname, origin_host in hosts.items()
     }}
 
@@ -64,8 +65,24 @@ def wait_for(host: str, container: str = NAME) -> subprocess.CompletedProcess[st
     return result
 
 
+def control(action: str, task_id: str, container: str = NAME) -> dict:
+    response = run(
+        "docker", "exec", container, "wget", "-q", "-O-",
+        "--header=X-Edge-Status-Token: runtime-test-token",
+        "--header=Content-Type: application/json",
+        f"--post-data={json.dumps({'task_id': task_id, 'action': action}, separators=(',', ':'))}",
+        "http://127.0.0.1:9080/control",
+    )
+    return json.loads(response.stdout)["data"]
+
+
+def worker_children(container: str, master: str) -> str:
+    return run("docker", "exec", container, "cat", f"/proc/{master}/task/{master}/children").stdout.strip()
+
+
 def main() -> None:
     run("docker", "compose", "-f", "compose.dev.yml", "up", "-d", "origin-http")
+    run("docker", "build", "-t", "cdnfoundry/edge-agent:test", "edge-agent")
     with tempfile.TemporaryDirectory(prefix="cdnf-phase4-") as directory:
         os.chmod(directory, 0o755)
         temporary = pathlib.Path(directory)
@@ -98,6 +115,9 @@ def main() -> None:
         add_https_origin(initial, "bad-tls.example", "wrong-origin")
         initial["hosts"]["blocked.example"] = initial["hosts"]["runtime.example"] | {
             "origin": initial["hosts"]["runtime.example"]["origin"] | {"host": "127.0.0.1", "private_allowlist": []},
+        }
+        initial["hosts"]["policy-blocked.example"] = initial["hosts"]["runtime.example"] | {
+            "origin": initial["hosts"]["runtime.example"]["origin"] | {"blocked_networks": ["172.16.0.0/12"]},
         }
         runtime.write_text(json.dumps(initial, separators=(",", ":")))
         runtime.chmod(0o644)
@@ -142,6 +162,28 @@ def main() -> None:
             run("docker", "exec", NAME, "openresty", "-t")
             known = wait_for("runtime.example")
             assert known.returncode == 0 and '"host":"origin-one.example"' in known.stdout, known.stderr
+            master = run("docker", "exec", NAME, "cat", "/usr/local/openresty/nginx/logs/nginx.pid").stdout.strip()
+            children = worker_children(NAME, master)
+            assert children, "OpenResty did not start worker processes"
+            drained = control("drain", "runtime-drain-1")
+            assert drained["accepted"] is True and drained["replayed"] is False, drained
+            assert "503 Service Temporarily Unavailable" in request("runtime.example").stderr
+            status = run("docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token", "http://127.0.0.1:9080/passive-failures")
+            assert '"status":"drained"' in status.stdout, status.stdout
+            assert control("drain", "runtime-drain-1")["replayed"] is True
+            control("undrain", "runtime-undrain-1")
+            assert wait_for("runtime.example").returncode == 0
+            control("restart", "runtime-restart-1")
+            for _ in range(20):
+                time.sleep(0.25)
+                if worker_children(NAME, master) != children:
+                    break
+            else:
+                raise AssertionError("bounded cell restart did not replace OpenResty workers")
+            assert run("docker", "exec", NAME, "cat", "/usr/local/openresty/nginx/logs/nginx.pid").stdout.strip() == master
+            restarted_status = run("docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token", "http://127.0.0.1:9080/passive-failures")
+            assert '"last_restart_at":' in restarted_status.stdout, restarted_status.stdout
+            assert wait_for("runtime.example").returncode == 0
             tls_client = ("docker", "run", "--rm", "--network", f"container:{NAME}", "curlimages/curl:8.16.0",
                 "-ksS", "--resolve", "runtime.example:8443:127.0.0.1")
             inbound_tls = run(*tls_client, "--http2", "https://runtime.example:8443/")
@@ -175,6 +217,8 @@ def main() -> None:
             assert '"hostname":"bad-tls.example"' in passive.stdout and '"failure_count":1' in passive.stdout, passive.stdout
             blocked = request("blocked.example")
             assert "502 Bad Gateway" in blocked.stderr, blocked.stderr
+            policy_blocked = request("policy-blocked.example")
+            assert "502 Bad Gateway" in policy_blocked.stderr, policy_blocked.stderr
             unknown = request("unknown.example")
             assert "421 Misdirected Request" in unknown.stderr, unknown.stderr
             ambiguous = raw_request("POST / HTTP/1.1\r\nHost: runtime.example\r\nContent-Length: 4\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n")

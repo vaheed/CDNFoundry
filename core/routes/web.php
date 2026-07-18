@@ -4,8 +4,8 @@ use App\Http\Controllers\EdgeAgentController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('edge/v1')->middleware('api')->group(function (): void {
-    Route::post('/register', [EdgeAgentController::class, 'register']);
-    Route::middleware('edge.auth')->group(function (): void {
+    Route::post('/register', [EdgeAgentController::class, 'register'])->middleware('throttle:edge-register');
+    Route::middleware(['edge.auth', 'throttle:edge-agent'])->group(function (): void {
         Route::post('/heartbeat', [EdgeAgentController::class, 'heartbeat']);
         Route::get('/config/manifest', [EdgeAgentController::class, 'manifest']);
         Route::get('/config/artifacts/{checksum}', [EdgeAgentController::class, 'artifact']);

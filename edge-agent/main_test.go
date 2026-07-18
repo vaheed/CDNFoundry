@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -155,22 +156,27 @@ func TestFreshFullSnapshotThenIncrementalArtifact(t *testing.T) {
 }
 
 func TestOriginTaskUsesApprovedAddressAndCanonicalHost(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	listener, err := net.Listen("tcp4", "0.0.0.0:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &httptest.Server{Listener: listener, Config: &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Host != "origin.example" {
 			t.Errorf("unexpected origin host: %s", r.Host)
 		}
 		w.WriteHeader(http.StatusNoContent)
-	}))
+	})}}
+	server.Start()
 	defer server.Close()
-	address := strings.TrimPrefix(server.URL, "http://")
-	host, port, err := net.SplitHostPort(address)
+	_, port, err := net.SplitHostPort(listener.Addr().String())
 	if err != nil {
 		t.Fatal(err)
 	}
+	host := privateInterfaceAddress(t)
 	portNumber, _ := strconv.Atoi(port)
 	task := edgeTask{}
 	task.Payload.Addresses = []string{host}
-	task.Payload.Allowlist = []string{"127.0.0.0/8"}
+	task.Payload.Allowlist = []string{host + "/32"}
 	task.Payload.Origin.Host = "ignored.example"
 	task.Payload.Origin.Scheme = "http"
 	task.Payload.Origin.HostHeader = "origin.example"
@@ -181,6 +187,48 @@ func TestOriginTaskUsesApprovedAddressAndCanonicalHost(t *testing.T) {
 	if result["status"] != "healthy" || result["resolved_address"] != host {
 		t.Fatalf("origin task failed: %#v", result)
 	}
+}
+
+func TestOriginTaskNeverAllowsLoopbackThroughPrivateAllowlist(t *testing.T) {
+	task := edgeTask{}
+	task.Payload.Addresses = []string{"127.0.0.1", "::ffff:127.0.0.1"}
+	task.Payload.Allowlist = []string{"127.0.0.0/8", "::/0"}
+	task.Payload.Origin.Scheme = "http"
+	task.Payload.Origin.HostHeader = "origin.example"
+	task.Payload.Origin.Port = 80
+	result := runOriginTest(task)
+	if result["failure_reason"] != "blocked_destination" {
+		t.Fatalf("loopback allowlist bypassed destination safety: %#v", result)
+	}
+}
+
+func TestOriginTaskAppliesPostgresqlBackedBlockedNetworks(t *testing.T) {
+	task := edgeTask{}
+	task.Payload.Addresses = []string{"203.0.113.10"}
+	task.Payload.BlockedNetworks = []string{"203.0.113.0/24"}
+	task.Payload.Origin.Scheme = "http"
+	task.Payload.Origin.HostHeader = "origin.example"
+	task.Payload.Origin.Port = 80
+	result := runOriginTest(task)
+	if result["failure_reason"] != "blocked_destination" {
+		t.Fatalf("configured blocked network was ignored: %#v", result)
+	}
+}
+
+func privateInterfaceAddress(t *testing.T) string {
+	t.Helper()
+	addresses, err := net.InterfaceAddrs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, address := range addresses {
+		ip, _, err := net.ParseCIDR(address.String())
+		if err == nil && ip.To4() != nil && !ip.IsLoopback() && ip.IsPrivate() {
+			return ip.String()
+		}
+	}
+	t.Fatal("no private non-loopback IPv4 interface is available")
+	return ""
 }
 
 func TestPassiveFailuresAreBoundedAndAuthenticated(t *testing.T) {
@@ -202,6 +250,47 @@ func TestPassiveFailuresAreBoundedAndAuthenticated(t *testing.T) {
 	}
 	if len(cells) != 1 || cells[0]["name"] != "shared-default" {
 		t.Fatalf("cell status was not collected: %#v", cells)
+	}
+}
+
+func TestCellControlTaskUsesAuthenticatedBoundedSupervisorEndpoint(t *testing.T) {
+	controlCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Edge-Status-Token") != "status-secret" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/passive-failures" {
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{}, "cell": map[string]any{"name": "quarantine-default", "status": "ready", "capacity": map[string]any{}}})
+			return
+		}
+		if r.URL.Path != "/control" || r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		controlCalls++
+		var command map[string]string
+		_ = json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&command)
+		if command["action"] != "drain" || command["task_id"] != "task-1" {
+			http.Error(w, "invalid command", http.StatusBadRequest)
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":{"accepted":true}}`))
+	}))
+	defer server.Close()
+	c := &client{dir: t.TempDir(), http: server.Client(), statusToken: "status-secret", statusURLs: []string{server.URL + "/passive-failures"}}
+	var task edgeTask
+	task.ID = "task-1"
+	task.Type = "cell_drain"
+	task.Payload.CellName = "quarantine-default"
+	result, status := c.runCellTask(task)
+	if status != "succeeded" || result["status"] != "completed" || controlCalls != 1 {
+		t.Fatalf("cell control task failed: status=%s result=%#v calls=%d", status, result, controlCalls)
+	}
+	controls, err := c.loadCellControls()
+	if err != nil || !controls["quarantine-default"] {
+		t.Fatalf("desired drain state was not persisted: controls=%#v error=%v", controls, err)
 	}
 }
 

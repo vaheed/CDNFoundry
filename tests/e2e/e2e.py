@@ -154,6 +154,27 @@ def main() -> None:
 
     user_token = login(USER_EMAIL, USER_PASSWORD)
     expect_error(403, "GET", "/api/admin/users", token=user_token)
+    expect_error(403, "GET", "/api/admin/system/settings", token=user_token)
+
+    _, settings = request("GET", "/api/admin/system/settings/dns_lifecycle", token=admin_token)
+    fields = {field["key"]: field["value"] for field in settings["data"]["fields"]}
+    original_delay = fields["deprovision_delay_days"]
+    alternate_delay = 8 if original_delay == 7 else 7
+    try:
+        status, changed = request(
+            "PATCH", "/api/admin/system/settings",
+            {"group": "dns_lifecycle", "values": {"deprovision_delay_days": alternate_delay}},
+            admin_token, str(uuid.uuid4()),
+        )
+        assert status == 200 and changed["data"]["operation"] is None
+        changed_fields = {field["key"]: field["value"] for field in changed["data"]["setting"]["fields"]}
+        assert changed_fields["deprovision_delay_days"] == alternate_delay
+    finally:
+        request(
+            "PATCH", "/api/admin/system/settings",
+            {"group": "dns_lifecycle", "values": {"deprovision_delay_days": original_delay}},
+            admin_token, str(uuid.uuid4()),
+        )
 
     _, created_token = request(
         "POST", "/api/me/tokens", {"name": "phase1-e2e"}, user_token, str(uuid.uuid4())
@@ -198,7 +219,7 @@ def main() -> None:
     )
     assert validated["data"]["valid"] is True
     status, operation = request(
-        "PATCH", "/api/admin/system/settings/dns", dns_payload,
+        "PATCH", "/api/admin/system/settings/dns", dns_payload | {"confirmation_token": validated["data"]["confirmation_token"]},
         admin_token, str(uuid.uuid4()),
     )
     assert status == 202

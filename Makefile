@@ -1,7 +1,8 @@
 COMPOSE_DEV := docker compose -f compose.dev.yml
 COMPOSE_PROD := docker compose --env-file .env.prod -f compose.prod.yml
+COMPOSE_PROD_EXAMPLE := docker compose --env-file .env.prod.example -f compose.prod.yml
 
-.PHONY: dev-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-logs prod-build prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check
+.PHONY: dev-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-scale-e2e dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check
 
 dev-up:
 	$(COMPOSE_DEV) --profile devtools up -d --build
@@ -20,13 +21,20 @@ dev-test:
 
 dev-e2e:
 	python3 tests/e2e/e2e.py
+	python3 tests/e2e/phase2_dns.py
+	python3 tests/e2e/phase3_geo_dns.py
+	python3 tests/e2e/phase4_control_plane.py
+	python3 tests/e2e/phase4_mtls.py
+	python3 tests/e2e/phase4_runtime.py
+
+dev-scale-e2e:
+	python3 tests/e2e/phase2_scale.py
 
 dev-logs:
 	$(COMPOSE_DEV) logs -f --tail=200
 
-prod-build:
-	$(COMPOSE_PROD) build core
-	$(COMPOSE_PROD) build edge-agent
+prod-pull:
+	$(COMPOSE_PROD) pull
 
 prod-migrate:
 	$(COMPOSE_PROD) --profile tools run --rm migrate
@@ -48,7 +56,7 @@ prod-edge:
 
 config-check:
 	$(COMPOSE_DEV) config --quiet
-	$(COMPOSE_PROD) config --quiet
+	$(COMPOSE_PROD_EXAMPLE) config --quiet
 
 openapi-check:
 	$(COMPOSE_DEV) run --rm core php artisan api:openapi --check

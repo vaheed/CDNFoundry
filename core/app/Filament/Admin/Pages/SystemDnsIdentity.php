@@ -7,6 +7,7 @@ use App\Jobs\ApplyPlatformDnsSettings;
 use App\Models\AuditLog;
 use App\Models\Operation;
 use App\Models\PlatformDnsSetting;
+use App\Support\PlatformDnsConfirmation;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
@@ -15,7 +16,7 @@ use Filament\Pages\Page;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 class SystemDnsIdentity extends Page
 {
@@ -26,6 +27,10 @@ class SystemDnsIdentity extends Page
     protected string $view = 'filament.admin.pages.system-dns-identity';
 
     public ?array $data = [];
+
+    public ?array $preview = null;
+
+    public ?string $confirmationToken = null;
 
     public function mount(): void
     {
@@ -67,7 +72,7 @@ class SystemDnsIdentity extends Page
                         $set('soa_mailbox', "hostmaster.{$domain}");
                     }
                 }),
-            TextInput::make('proxy_hostname')->required()->maxLength(253),
+            TextInput::make('proxy_hostname')->required()->maxLength(220),
             Repeater::make('nameservers')->minItems(2)->maxItems(8)->schema([
                 TextInput::make('hostname')->required()->maxLength(253),
                 TextInput::make('ipv4')->required()->ipv4(),
@@ -85,20 +90,38 @@ class SystemDnsIdentity extends Page
         ])->columns(2);
     }
 
+    public function previewChanges(): void
+    {
+        $data = PlatformDnsSettingsRequest::validateInput($this->form->getState());
+        $this->form->fill($data);
+        $this->preview = $data;
+        $this->confirmationToken = PlatformDnsConfirmation::issue($data);
+        Notification::make()->success()->title('DNS identity validated')->body('Review the normalized preview, then explicitly confirm within 15 minutes.')->send();
+    }
+
     public function save(): void
     {
-        $data = Validator::make(
-            $this->form->getState(),
-            (new PlatformDnsSettingsRequest)->rules(),
-        )->validate();
-        $operation = Operation::query()->create([
-            'actor_id' => auth()->id(),
-            'type' => 'platform_dns_identity.update',
-            'status' => 'pending',
-            'input' => $data,
-        ]);
-        AuditLog::record(auth()->user(), 'platform_dns_settings.update_requested', $operation, [], request()->ip());
-        ApplyPlatformDnsSettings::dispatch($operation->getKey());
+        $data = PlatformDnsSettingsRequest::validateInput($this->form->getState());
+        abort_unless(PlatformDnsConfirmation::valid($this->confirmationToken, $data), 409, 'Preview and confirm this exact DNS identity payload before applying it.');
+        $operation = DB::transaction(function () use ($data): Operation {
+            $current = PlatformDnsSetting::query()->lockForUpdate()->find(1);
+            $settings = PlatformDnsSetting::query()->updateOrCreate(['id' => 1], [
+                ...$data,
+                'revision' => ($current?->revision ?? 0) + 1,
+            ]);
+            $operation = Operation::query()->create([
+                'actor_id' => auth()->id(),
+                'type' => 'platform_dns_identity.update',
+                'status' => 'pending',
+                'input' => ['settings_id' => 1, 'revision' => $settings->revision],
+            ]);
+            AuditLog::record(auth()->user(), 'platform_dns_settings.update_requested', $settings, ['operation_id' => $operation->id, 'revision' => $settings->revision], request()->ip());
+
+            return $operation;
+        });
+        ApplyPlatformDnsSettings::dispatch($operation->getKey())->afterCommit();
+        $this->preview = null;
+        $this->confirmationToken = null;
         Notification::make()->success()->title('DNS identity update queued')->body("Operation {$operation->getKey()}")->send();
     }
 }

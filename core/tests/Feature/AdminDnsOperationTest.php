@@ -55,7 +55,7 @@ class AdminDnsOperationTest extends TestCase
 
         $cluster->update(['last_health_status' => 'healthy']);
         $this->actingAs($admin)->postJson("/api/admin/dns/clusters/{$cluster->id}/enable")
-            ->assertOk()->assertJsonPath('data.enabled', true);
+            ->assertAccepted()->assertJsonPath('data.enabled', true);
     }
 
     public function test_global_reconciliation_is_admin_only_coalesced_and_dispatches_active_domains(): void

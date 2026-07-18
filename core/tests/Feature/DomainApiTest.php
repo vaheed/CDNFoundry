@@ -79,8 +79,8 @@ class DomainApiTest extends TestCase
 
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/disable")->assertOk()->assertJsonPath('data.revision', 2);
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/disable")->assertOk()->assertJsonPath('data.revision', 2);
-        $this->actingAs($user)->deleteJson("/api/domains/{$domain->id}")->assertAccepted()->assertJsonPath('data.lifecycle_state', 'deprovisioning');
-        $this->actingAs($user)->deleteJson("/api/domains/{$domain->id}")->assertAccepted()->assertJsonPath('data.revision', 3);
+        $this->actingAs($user)->deleteJson("/api/domains/{$domain->id}")->assertAccepted()->assertJsonPath('data.domain.lifecycle_state', 'deprovisioning');
+        $this->actingAs($user)->deleteJson("/api/domains/{$domain->id}")->assertAccepted()->assertJsonPath('data.domain.revision', 3);
         $this->assertDatabaseHas('domains', ['id' => $domain->id, 'name' => 'example.org', 'revision' => 3]);
         $this->actingAs($user)->postJson('/api/domains', ['name' => 'example.org'])->assertUnprocessable();
     }

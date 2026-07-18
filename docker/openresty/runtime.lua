@@ -2,9 +2,12 @@ local cjson = require "cjson.safe"
 local resolver = require "resty.dns.resolver"
 local balancer = require "ngx.balancer"
 local bit = require "bit"
+local ffi = require "ffi"
+ffi.cdef[[int kill(int pid, int sig);]]
 local M = {}
 local state = { hosts = {}, sequence = 0 }
 local path = os.getenv("EDGE_RUNTIME_FILE") or "/var/lib/cdnfoundry/runtime/active.json"
+local restart_generation = 0
 
 local function ipv4_number(ip)
     local a,b,c,d = ip:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
@@ -79,10 +82,12 @@ local function allowed(ip, networks)
     return false
 end
 
-local function blocked(ip, networks, denied)
+local function blocked(ip, networks, blocked_networks, denied)
     for _, address in ipairs(denied or {}) do
         if ip == address then return true end
     end
+    if allowed(ip, blocked_networks) then return true end
+    if ip:lower():match("^::ffff:") then return true end
     if ip == "0.0.0.0" or ip:match("^127%.") or ip:match("^169%.254%.") or ip:match("^224%.") then return true end
     local a, b = ip:match("^(%d+)%.(%d+)%.")
     a, b = tonumber(a), tonumber(b)
@@ -90,9 +95,13 @@ local function blocked(ip, networks, denied)
     if a == 100 and b and b >= 64 and b <= 127 then return true end
     if a == 192 and b == 0 or a == 198 and b and (b == 18 or b == 19) then return true end
     local lower = ip:lower()
-    local private_v6 = lower == "::" or lower == "::1" or lower:match("^fe[89ab]") ~= nil or lower:match("^f[cd]") ~= nil
+    local hard_v6 = lower == "::" or lower == "::1" or lower:match("^fe[89ab]") ~= nil
+        or lower:match("^fe[c-f]") ~= nil or lower:match("^ff") ~= nil
+        or lower:match("^64:ff9b:") ~= nil
+    if hard_v6 then return true end
+    local private_v6 = lower:match("^f[cd]") ~= nil
     if private_v6 and allowed(ip, networks) then return false end
-    return private_v6 or lower:match("^ff") ~= nil
+    return private_v6
 end
 
 local function load()
@@ -116,6 +125,22 @@ function M.start()
     refresh(false)
     local ok, err = ngx.timer.every(1, refresh)
     if not ok then ngx.log(ngx.ERR, "runtime refresh timer failed: ", err) end
+    restart_generation = ngx.shared.runtime_limits:get("control:restart_generation") or 0
+    ok, err = ngx.timer.every(0.5, function(premature)
+        if premature then return end
+        local dictionary = ngx.shared.runtime_limits
+        local resume_at = dictionary:get("control:restart_resume_at")
+        if resume_at and ngx.now() >= resume_at then
+            dictionary:delete("control:restart_resume_at")
+            dictionary:delete("control:drained")
+        end
+        local current = dictionary:get("control:restart_generation") or 0
+        if current > restart_generation then
+            restart_generation = current
+            ffi.C.kill(ngx.worker.pid(), 15)
+        end
+    end)
+    if not ok then ngx.log(ngx.ERR, "runtime restart timer failed: ", err) end
 end
 
 function M.select_certificate()
@@ -127,9 +152,9 @@ function M.select_certificate()
     end
 end
 
-local function resolve(host, networks, denied)
+local function resolve(host, networks, blocked_networks, denied)
     if host:match("^%d+%.%d+%.%d+%.%d+$") or host:find(":", 1, true) then
-        if blocked(host, networks, denied) then return nil, "blocked_destination" end
+        if blocked(host, networks, blocked_networks, denied) then return nil, "blocked_destination" end
         return host
     end
     local r, err = resolver:new{nameservers={"127.0.0.11"}, retrans=2, timeout=1000}
@@ -139,7 +164,7 @@ local function resolve(host, networks, denied)
         if answers then
             for _, answer in ipairs(answers) do
                 if answer.address then
-                    if blocked(answer.address, networks, denied) then return nil, "blocked_destination" end
+                    if blocked(answer.address, networks, blocked_networks, denied) then return nil, "blocked_destination" end
                     return answer.address
                 end
             end
@@ -148,11 +173,19 @@ local function resolve(host, networks, denied)
     return nil, "dns_resolution_failed"
 end
 
+local function reject(status)
+    ngx.shared.runtime_limits:incr("capacity:rejected_requests", 1, 0)
+    return ngx.exit(status)
+end
+
 function M.access()
+    local dictionary = ngx.shared.runtime_limits
+    dictionary:incr("capacity:requests:" .. ngx.time(), 1, 0, 2)
+    if dictionary:get("control:drained") == true then return reject(503) end
     local host = (ngx.var.host or ""):lower():gsub("%.$", "")
     local config = state.hosts[host]
-    if not config then return ngx.exit(421) end
-    if config.settings and config.settings.enabled == false then return ngx.exit(503) end
+    if not config then return reject(421) end
+    if config.settings and config.settings.enabled == false then return reject(503) end
     if config.settings and config.settings.redirect_https == true and ngx.var.scheme == "http" then
         return ngx.redirect("https://" .. host .. ngx.var.request_uri, 308)
     end
@@ -162,14 +195,14 @@ function M.access()
         for _, version in ipairs(config.settings.http_versions) do
             if tostring(version) == current or tostring(version) .. ".0" == current then accepted = true; break end
         end
-        if not accepted then return ngx.exit(505) end
+        if not accepted then return reject(505) end
     end
     if config.settings and config.settings.maintenance then
         ngx.status = 503; ngx.header["Content-Type"] = "text/plain"; ngx.say(config.settings.maintenance.body or "Service unavailable"); return ngx.exit(503)
     end
     local origin = config.origin
-    local address, err = resolve(origin.host, origin.private_allowlist, origin.blocked_addresses)
-    if not address then ngx.log(ngx.WARN, "origin rejected: ", err); ngx.header["X-CDNFoundry-Error"] = err; return ngx.exit(502) end
+    local address, err = resolve(origin.host, origin.private_allowlist, origin.blocked_networks, origin.blocked_addresses)
+    if not address then ngx.log(ngx.WARN, "origin rejected: ", err); ngx.header["X-CDNFoundry-Error"] = err; return reject(502) end
     if address:find(":", 1, true) then address = "[" .. address .. "]" end
     ngx.var.origin_scheme = origin.scheme
     ngx.var.origin_address = address
@@ -188,6 +221,7 @@ function M.access()
     end
     ngx.req.clear_header("Forwarded"); ngx.req.clear_header("X-Forwarded-For"); ngx.req.clear_header("X-Forwarded-Host"); ngx.req.clear_header("X-Forwarded-Proto")
     ngx.req.clear_header("Proxy-Connection"); ngx.req.clear_header("Keep-Alive"); ngx.req.clear_header("TE"); ngx.req.clear_header("Trailer"); ngx.req.clear_header("Upgrade")
+    dictionary:incr("capacity:origin_connections", 1, 0)
     if origin.scheme == "https" and origin.verify_tls == true then return ngx.exec("@proxy_verified") end
     if origin.scheme == "https" then return ngx.exec("@proxy_unverified_https") end
     return ngx.exec("@proxy_http")
@@ -204,6 +238,7 @@ function M.balance()
 end
 
 function M.record_passive_failure()
+    ngx.shared.runtime_limits:incr("capacity:origin_connections", -1, 0)
     local status = tonumber((ngx.var.upstream_status or ""):match("%d+"))
     if status and status < 500 then return end
     local host = (ngx.var.host or ""):lower():gsub("%.$", "")
@@ -250,28 +285,68 @@ function M.passive_failures()
         cpu_file:close()
     end
     local cache_free = ngx.shared.runtime_limits:free_space()
+    local now = ngx.time()
+    local requests_per_second = (ngx.shared.runtime_limits:get("capacity:requests:" .. now) or 0)
+        + (ngx.shared.runtime_limits:get("capacity:requests:" .. (now - 1)) or 0)
     ngx.header["Content-Type"] = "application/json"
+    local drained = ngx.shared.runtime_limits:get("control:drained") == true
     ngx.say(cjson.encode({
         data = failures,
         cell = {
             name = os.getenv("EDGE_CELL_NAME") or "unknown",
-            status = "ready",
+            status = drained and "drained" or "ready",
             capacity = {
                 assigned_domain_count = assigned,
                 active_revision = state.sequence,
                 openresty_version = ngx.config.nginx_version,
                 active_connections = tonumber(ngx.var.connections_active) or 0,
-                origin_connections = 0,
-                cpu_usage_usec = cpu_usage,
+                requests_per_second = requests_per_second,
+                origin_connections = ngx.shared.runtime_limits:get("capacity:origin_connections") or 0,
+                cpu_usage = cpu_usage,
                 memory_usage = memory_usage,
                 cache_usage = 10 * 1024 * 1024 - cache_free,
                 cache_free_bytes = cache_free,
-                temporary_storage_usage = 0,
-                telemetry_buffer_usage = 0,
-                rejected_requests = 0,
+                temporary_storage_usage = cjson.null,
+                telemetry_buffer_usage = cjson.null,
+                rejected_requests = ngx.shared.runtime_limits:get("capacity:rejected_requests") or 0,
+                last_restart_at = ngx.shared.runtime_limits:get("control:last_restart_at"),
             },
         },
     }))
+end
+
+function M.control()
+    local expected = os.getenv("EDGE_STATUS_TOKEN") or ""
+    local supplied = ngx.req.get_headers()["x-edge-status-token"] or ""
+    if expected == "" or supplied ~= expected then return ngx.exit(404) end
+    if ngx.req.get_method() ~= "POST" then return ngx.exit(405) end
+    ngx.req.read_body()
+    local raw = ngx.req.get_body_data() or ""
+    if #raw == 0 or #raw > 4096 then return ngx.exit(400) end
+    local command = cjson.decode(raw)
+    if type(command) ~= "table" or type(command.task_id) ~= "string" or #command.task_id > 64
+        or (command.action ~= "drain" and command.action ~= "undrain" and command.action ~= "restart") then
+        return ngx.exit(400)
+    end
+    local dictionary = ngx.shared.runtime_limits
+    local replayed = dictionary:get("control:last_task_id") == command.task_id
+    if not replayed then
+        if command.action == "drain" then
+            dictionary:set("control:drained", true)
+        elseif command.action == "undrain" then
+            dictionary:delete("control:drained")
+            dictionary:delete("control:restart_resume_at")
+        else
+            local already_drained = dictionary:get("control:drained") == true
+            dictionary:set("control:drained", true)
+            if not already_drained then dictionary:set("control:restart_resume_at", ngx.now() + 2) end
+            dictionary:set("control:last_restart_at", ngx.time())
+            dictionary:incr("control:restart_generation", 1, 0)
+        end
+        dictionary:set("control:last_task_id", command.task_id)
+    end
+    ngx.header["Content-Type"] = "application/json"
+    ngx.say(cjson.encode({data = {accepted = true, replayed = replayed, action = command.action}}))
 end
 
 return M
