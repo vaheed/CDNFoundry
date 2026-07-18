@@ -2,13 +2,20 @@ COMPOSE_DEV := docker compose -f compose.dev.yml
 COMPOSE_PROD := docker compose --env-file .env.prod -f compose.prod.yml
 COMPOSE_PROD_EXAMPLE := docker compose --env-file .env.prod.example -f compose.prod.yml
 
-.PHONY: dev-assets dev-up dev-scale-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-scale-e2e dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check
+.PHONY: dev-assets dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-scale-e2e dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check
 
 dev-assets:
 	docker build --target frontend-assets-export --output type=local,dest=./core/public/build ./core
 
 dev-up: dev-assets
 	$(COMPOSE_DEV) --profile devtools up -d --build
+
+dev-edge-up: dev-assets
+	@test -f .env.dev || { echo 'Copy .env.dev.example to .env.dev and add the two UI edge IDs and one-time bootstrap tokens.' >&2; exit 1; }
+	docker compose --env-file .env.dev -f compose.dev.yml --profile dev-edge up -d --build edge-control edge-a edge-a-quarantine edge-agent-a edge-b edge-b-quarantine edge-agent-b
+
+dev-edge-status:
+	docker compose --env-file .env.dev -f compose.dev.yml --profile dev-edge ps edge-control edge-a edge-a-quarantine edge-agent-a edge-b edge-b-quarantine edge-agent-b
 
 dev-scale-up: dev-assets
 	$(COMPOSE_DEV) up -d --build control-db redis core web

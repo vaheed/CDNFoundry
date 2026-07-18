@@ -44,6 +44,20 @@ openssl verify -CAfile /etc/cdnfoundry/pki/edge-server-ca.crt /etc/cdnfoundry/pk
 docker compose --env-file .env.prod -f compose.prod.yml config --quiet
 ```
 
+The control-plane PHP-FPM worker (UID/GID `82` in the shipped image) signs edge
+CSRs, so it must be able to read the identity CA key without making that key
+world-readable. On a single-host installation using the shipped image:
+
+```sh
+chown root:82 /etc/cdnfoundry/pki/edge-identity-ca.key
+chmod 0640 /etc/cdnfoundry/pki/edge-identity-ca.key
+```
+
+Keep every other generated private key at `0600`. With a different container
+UID/GID or a secrets manager, grant read access only to the effective PHP-FPM
+identity. A root-only identity CA key makes enrollment fail closed as
+`edge_identity_ca_unavailable`; do not weaken it to `0644`.
+
 ## Replacement and renewal
 
 Never overwrite mounted key files in place. Generate into a new versioned directory, validate hostname/SAN, chain, key match, and dates, update the six `.env.prod` paths, then recreate only the affected services:

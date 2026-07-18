@@ -301,7 +301,7 @@ function M.passive_failures()
     ngx.header["Content-Type"] = "application/json"
     local drained = ngx.shared.runtime_limits:get("control:drained") == true
     ngx.say(cjson.encode({
-        data = failures,
+        data = #failures == 0 and cjson.empty_array or failures,
         cell = {
             name = os.getenv("EDGE_CELL_NAME") or "unknown",
             status = drained and "drained" or "ready",

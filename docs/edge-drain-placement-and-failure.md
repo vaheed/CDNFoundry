@@ -4,7 +4,14 @@ Shared placement uses a stable hash of the canonical domain across enabled share
 
 For a move, persist the target, deliver and acknowledge the target candidate on every participating fresh edge, publish target routing while retaining the source, and start the configured drain only after every enabled DNS target reports successful deployment. After the drain, deliver a second signed artifact that removes the source. The placement and operation become active/succeeded only after every target edge acknowledges that source-removal artifact. A rejected candidate leaves source routing and the previous snapshot active. Never shorten the drain below the maximum relevant DNS TTL plus routing convergence allowance.
 
-Every cell has unique durable IPv4 and optional IPv6 service addresses. Configure all addresses before enabling a pool. PowerDNS publishes country, continent, and global address RRsets per enabled pool; proxied domain zones reference their active/target pool rather than embedding the complete edge list. Shared, quarantine, and dedicated transitions use the same state machine.
+Every participating cell has unique durable IPv4 and optional IPv6 service
+addresses. Configure all addresses before enabling a new pool. When an edge is
+added after a pool is already enabled, its unaddressed cell is not a participant
+and cannot delay or receive that pool's traffic; it joins only after its complete
+service-address pair is saved and a ready heartbeat arrives. PowerDNS publishes
+country, continent, and global address RRsets per enabled pool; proxied domain
+zones reference their active/target pool rather than embedding the complete edge
+list. Shared, quarantine, and dedicated transitions use the same state machine.
 
 Cell drain, undrain, and restart tasks travel through the authenticated private OpenResty control listener. Drain state is persisted by the agent and restored after agent/runtime restart. Restart temporarily drains the cell, replaces only that cell's workers, records `last_restart_at`, and resumes traffic after the bounded window unless it was already administratively drained. The agent has no Docker socket and cannot affect sibling cells.
 

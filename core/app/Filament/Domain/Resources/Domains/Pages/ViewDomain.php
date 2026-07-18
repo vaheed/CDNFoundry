@@ -11,6 +11,7 @@ use App\Jobs\VerifyDomainNameservers;
 use App\Models\AuditLog;
 use App\Models\DnsCluster;
 use App\Models\DomainEdgePlacement;
+use App\Models\Edge;
 use App\Models\EdgePool;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
@@ -56,8 +57,19 @@ class ViewDomain extends ViewRecord
                     $domain->update(['proxy_settings' => $settings, 'revision' => $domain->revision + 1]);
                     AuditLog::record(auth()->user(), 'proxy.defaults_updated', $domain, ['revision' => $domain->revision], request()->ip());
                 });
-                Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
+                $operation = Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
                 ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
+                $proxiedCount = $this->record->dnsRecords()->where('mode', 'proxied')->count();
+                $readyEdgeExists = Edge::query()->readyForTraffic()->exists();
+                Notification::make()
+                    ->title('Proxy defaults saved')
+                    ->body(match (true) {
+                        $proxiedCount === 0 => 'Only domain-wide defaults changed. Create or edit an A, AAAA, or CNAME record and select Proxied before traffic can use them.',
+                        ! $readyEdgeExists => "Desired revision saved as operation {$operation->id}. No ready edge is connected, so deployment will wait for agent enrollment and a healthy listener.",
+                        default => "Operation {$operation->id} is deploying the saved defaults to ready edges.",
+                    })
+                    ->color($proxiedCount > 0 && $readyEdgeExists ? 'success' : 'warning')
+                    ->send();
             }),
             Action::make('deployProxy')->label('Deploy proxy configuration')->icon('heroicon-o-cloud-arrow-up')
                 ->visible(fn (): bool => $this->record->dnsRecords()->where('mode', 'proxied')->exists())

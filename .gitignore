@@ -1,0 +1,4 @@
+/.env.dev
+/.env.prod
+/.dev/
+/edge-agent/edge-agent

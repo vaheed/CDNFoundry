@@ -329,12 +329,12 @@ def heartbeat(edge: dict, active_sequence: int, quarantine_ready: bool = False) 
     }, context=edge["context"])
 
 
-def latest_artifact(edge: dict, after: int = 0) -> tuple[int, dict]:
+def latest_artifact(edge: dict, domain_id: int, after: int = 0) -> tuple[int, dict]:
     deadline = time.monotonic() + 60
     rows: list[dict] = []
     while time.monotonic() < deadline:
         _, manifest = call("GET", f"/edge/v1/config/manifest?cursor={after}", context=edge["context"])
-        rows = manifest["data"]
+        rows = [row for row in manifest["data"] if int(row.get("domain_id") or 0) == domain_id]
         if rows:
             row = rows[-1]
             _, artifact = call("GET", f"/edge/v1/config/artifacts/{row['checksum']}", context=edge["context"])
@@ -382,9 +382,13 @@ def main() -> None:
 
         call("POST", f"/api/admin/edges/{edges[0]['id']}/drain", {}, token)
         deadline = time.monotonic() + 60
-        while time.monotonic() < deadline and set(dig(shared_global, "A")) != {"203.0.113.102"}:
+        drained_answers: set[str] = set()
+        while time.monotonic() < deadline:
+            drained_answers = set(dig(shared_global, "A"))
+            if "203.0.113.101" not in drained_answers and "203.0.113.102" in drained_answers:
+                break
             time.sleep(0.5)
-        assert set(dig(shared_global, "A")) == {"203.0.113.102"}
+        assert "203.0.113.101" not in drained_answers and "203.0.113.102" in drained_answers, drained_answers
         call("POST", f"/api/admin/edges/{edges[0]['id']}/undrain", {}, token)
         wait_answers(shared_global, "A", {"203.0.113.101", "203.0.113.102"})
 
@@ -407,15 +411,17 @@ def main() -> None:
 
         sequences: dict[str, int] = {}
         for edge in edges:
-            sequence, payload = latest_artifact(edge)
+            sequence, payload = latest_artifact(edge, domain_id)
             assert payload["pools"] == ["shared-default"], payload
             sequences[edge["id"]] = sequence
             acknowledge(edge, sequence)
         wait_isolation(token, domain_id, "active")
         wait_deployment(token, domain_id)
         assert dig(f"www.{ZONE}", "CNAME") == [f"pool-{shared['id']}.proxy.cdnf.test."]
-        assert set(dig(ZONE, "A")) <= {"203.0.113.101", "203.0.113.102"}
-        assert set(dig(ZONE, "AAAA")) <= {"2001:db8:4::101", "2001:db8:4::102"}
+        apex_ipv4 = set(dig(ZONE, "A"))
+        apex_ipv6 = set(dig(ZONE, "AAAA"))
+        assert apex_ipv4 and apex_ipv4 <= set(dig(shared_global, "A")), apex_ipv4
+        assert apex_ipv6 and apex_ipv6 <= set(dig(shared_global, "AAAA")), apex_ipv6
 
         for index, edge in enumerate(edges):
             _, detail = call("GET", f"/api/admin/edges/{edge['id']}", token=token)
@@ -429,7 +435,7 @@ def main() -> None:
         _, moved = call("POST", f"/api/admin/domains/{domain_id}/move", {"pool_id": quarantine["id"]}, token)
         move_operation = moved["data"]["operation_id"]
         for edge in edges:
-            sequence, payload = latest_artifact(edge, sequences[edge["id"]])
+            sequence, payload = latest_artifact(edge, domain_id, sequences[edge["id"]])
             assert set(payload["pools"]) == {"shared-default", "quarantine-default"}, payload
             sequences[edge["id"]] = sequence
             acknowledge(edge, sequence)
@@ -449,7 +455,7 @@ def main() -> None:
         )
         wait_isolation(token, domain_id, "deploying", drain_scheduled=False)
         for edge in edges:
-            sequence, payload = latest_artifact(edge, sequences[edge["id"]])
+            sequence, payload = latest_artifact(edge, domain_id, sequences[edge["id"]])
             assert payload["pools"] == ["quarantine-default"], payload
             sequences[edge["id"]] = sequence
             acknowledge(edge, sequence)

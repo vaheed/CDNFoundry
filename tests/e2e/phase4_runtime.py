@@ -174,6 +174,7 @@ def main() -> None:
             assert "503 Service Temporarily Unavailable" in request("runtime.example").stderr
             status = run("docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token", "http://127.0.0.1:9080/passive-failures")
             assert '"status":"drained"' in status.stdout, status.stdout
+            assert isinstance(json.loads(status.stdout)["data"], list), status.stdout
             assert control("drain", "runtime-drain-1")["replayed"] is True
             control("undrain", "runtime-undrain-1")
             assert wait_for("runtime.example").returncode == 0

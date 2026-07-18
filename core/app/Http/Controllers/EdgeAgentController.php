@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DomainLifecycleState;
+use App\Jobs\ReconcileAllEdgeDomains;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
@@ -32,7 +33,8 @@ class EdgeAgentController extends Controller
             'edge_id' => ['required', 'uuid'], 'bootstrap_token' => ['required', 'string', 'size:64'],
             'agent_version' => ['required', 'string', 'max:40'], 'certificate_request' => ['required', 'string', 'max:8192'],
         ]);
-        $identity = DB::transaction(function () use ($data): array {
+        $newlyRegistered = false;
+        $identity = DB::transaction(function () use ($data, &$newlyRegistered): array {
             $edge = Edge::query()->lockForUpdate()->findOrFail($data['edge_id']);
             $tokenMatches = $edge->bootstrap_token_hash !== null
                 && hash_equals($edge->bootstrap_token_hash, hash('sha256', $data['bootstrap_token']));
@@ -65,6 +67,7 @@ class EdgeAgentController extends Controller
                 'identity_certificate_expires_at' => CarbonImmutable::parse($signed['expires_at']),
                 'identity_revoked_at' => null, 'registered_at' => now(), 'agent_version' => $data['agent_version'],
             ]);
+            $newlyRegistered = true;
 
             return [
                 'edge_id' => $edge->id, 'identity_certificate' => $signed['certificate'],
@@ -72,6 +75,12 @@ class EdgeAgentController extends Controller
                 'signing_public_key' => ArtifactSigner::publicKey(),
             ];
         });
+
+        if ($newlyRegistered) {
+            $operation = Operation::query()->where('type', 'edge.global_reconcile')->whereIn('status', ['pending', 'running'])->first()
+                ?? Operation::query()->create(['actor_id' => null, 'type' => 'edge.global_reconcile', 'status' => 'pending', 'input' => ['reason' => 'edge_registered']]);
+            ReconcileAllEdgeDomains::dispatch($operation->id)->afterCommit();
+        }
 
         return response()->json(['data' => $identity], 201);
     }
@@ -274,17 +283,24 @@ class EdgeAgentController extends Controller
 
     private function promoteReadyPlacements(): void
     {
-        $edges = Edge::query()->where('enabled', true)->where('drained', false)->whereNull('identity_revoked_at')
-            ->whereNotNull('registered_at')->where('last_heartbeat_at', '>=', now()->subSeconds(app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds')))->get();
+        $edges = Edge::query()->readyForTraffic()->get();
         if ($edges->isEmpty()) {
             return;
         }
         $published = [];
         DomainEdgePlacement::query()->where('state', 'deploying')->whereNotNull('target_pool_id')->orderBy('id')->limit(100)->get()->each(function (DomainEdgePlacement $placement) use ($edges, &$published): void {
-            $ready = $edges->every(function (Edge $edge) use ($placement): bool {
+            $participants = $edges->filter(function (Edge $edge) use ($placement): bool {
                 $cell = $edge->cells()->where('edge_pool_id', $placement->target_pool_id)->first();
-                if ($cell === null || $cell->drained || $cell->status !== 'ready' || $cell->service_ipv4 === null
-                    || ($edge->ipv6 !== null && $cell->service_ipv6 === null)) {
+
+                return $cell !== null && ! $cell->drained && $cell->service_ipv4 !== null
+                    && ($edge->ipv6 === null || $cell->service_ipv6 !== null);
+            });
+            if ($participants->isEmpty()) {
+                return;
+            }
+            $ready = $participants->every(function (Edge $edge) use ($placement): bool {
+                $cell = $edge->cells()->where('edge_pool_id', $placement->target_pool_id)->firstOrFail();
+                if ($cell->status !== 'ready') {
                     return false;
                 }
                 $artifact = EdgeArtifact::query()->where('edge_id', $edge->id)->where('domain_id', $placement->domain_id)

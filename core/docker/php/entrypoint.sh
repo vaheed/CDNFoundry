@@ -7,6 +7,11 @@ mkdir -p storage/framework/cache storage/framework/sessions storage/framework/vi
 chown -R www-data:www-data storage bootstrap/cache
 
 if [ "${1:-}" = "php-fpm" ]; then
+    if [ -n "${EDGE_IDENTITY_CA_PRIVATE_KEY:-}" ] && ! su-exec www-data test -r "${EDGE_IDENTITY_CA_PRIVATE_KEY}"; then
+        echo "The edge identity CA private key is not readable by the PHP-FPM worker; expected a restricted worker-readable secret." >&2
+        exit 1
+    fi
+
     php artisan filament:assets
 fi
 

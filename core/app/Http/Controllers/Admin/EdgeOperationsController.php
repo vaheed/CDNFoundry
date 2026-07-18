@@ -14,13 +14,12 @@ use App\Models\EdgeCell;
 use App\Models\EdgePool;
 use App\Models\EdgeTask;
 use App\Models\Operation;
-use App\Support\NetworkAddress;
+use App\Support\EdgeCellAddressData;
 use App\Support\PlatformSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 
 class EdgeOperationsController extends Controller
 {
@@ -31,10 +30,7 @@ class EdgeOperationsController extends Controller
 
     public function routing(Request $request): JsonResponse
     {
-        $page = Edge::query()->where('enabled', true)->where('drained', false)
-            ->whereNull('identity_revoked_at')->whereNotNull('registered_at')
-            ->where('last_heartbeat_at', '>=', now()->subSeconds(app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds')))
-            ->where('capacity->listener_ready', true)
+        $page = Edge::query()->readyForTraffic()
             ->orderBy('country_code')->orderBy('continent_code')->orderBy('id')
             ->cursorPaginate(250, ['id', 'name', 'country_code', 'continent_code', 'ipv4', 'ipv6', 'last_heartbeat_at']);
         $edges = $page->getCollection();
@@ -69,17 +65,7 @@ class EdgeOperationsController extends Controller
 
     public function updateCell(Request $request, EdgeCell $cell): JsonResponse
     {
-        $edge = $cell->edge;
-        $data = $request->validate([
-            'service_ipv4' => ['required', 'ipv4', Rule::unique('edge_cells', 'service_ipv4')->ignore($cell)],
-            'service_ipv6' => [$edge->ipv6 === null ? 'nullable' : 'required', 'nullable', 'ipv6', Rule::unique('edge_cells', 'service_ipv6')->ignore($cell)],
-        ]);
-        foreach (array_filter($data) as $address) {
-            abort_if(NetworkAddress::isUnsafe($address), 422, 'Cell service addresses must be public unicast addresses.');
-        }
-        if ($cell->pool->kind !== 'shared' || $cell->pool->id !== EdgePool::query()->where('kind', 'shared')->orderBy('id')->value('id')) {
-            abort_if(Edge::query()->whereIn('ipv4', array_filter($data))->orWhereIn('ipv6', array_filter($data))->exists(), 422, 'A non-default cell must use service addresses distinct from edge management/default addresses.');
-        }
+        $data = EdgeCellAddressData::validate($cell, $request->all());
         DB::transaction(function () use ($request, $cell, $data): void {
             $cell->update($data);
             AuditLog::record($request->user(), 'edge.cell_addresses_updated', $cell, ['fields' => array_keys($data)], $request->ip());

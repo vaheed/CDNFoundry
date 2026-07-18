@@ -56,13 +56,23 @@ class EdgeResource extends Resource
     public static function infolist(Schema $schema): Schema
     {
         return $schema->components([
-            TextEntry::make('registered_at')->dateTime()->placeholder('Awaiting registration'),
-            TextEntry::make('last_heartbeat_at')->since()->placeholder('Never'),
-            TextEntry::make('agent_version')->placeholder('Unknown'),
+            TextEntry::make('registered_at')->label('Enrolled at')->dateTime()->placeholder('Awaiting agent enrollment'),
+            TextEntry::make('last_heartbeat_at')->label('Last heartbeat')->since()->placeholder('No heartbeat received'),
+            TextEntry::make('agent_version')->label('Agent version')->placeholder('Available after enrollment'),
+            TextEntry::make('capacity.listener_ready')->label('Traffic listener')->badge()
+                ->formatStateUsing(fn (mixed $state): string => match ($state) {
+                    true => 'Ready',
+                    false => 'Not ready',
+                    default => 'Awaiting heartbeat',
+                })
+                ->color(fn (mixed $state): string => match ($state) {
+                    true => 'success',
+                    false => 'danger',
+                    default => 'gray',
+                }),
             TextEntry::make('active_sequence')->label('Active configuration sequence'),
             TextEntry::make('identity_certificate_expires_at')->label('Identity expires')->dateTime()->placeholder('Not enrolled'),
-            TextEntry::make('capacity')->formatStateUsing(fn (?array $state): string => json_encode($state, JSON_UNESCAPED_SLASHES) ?: 'No heartbeat capacity reported')
-                ->placeholder('No heartbeat capacity reported'),
+            TextEntry::make('capacity.last_rejection.reason')->label('Latest deployment rejection')->placeholder('None reported'),
         ]);
     }
 

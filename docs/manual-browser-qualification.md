@@ -34,6 +34,7 @@ docker compose -f compose.dev.yml exec -T core php artisan tinker --execute="App
 | Prometheus | `http://localhost:9090` | Development only, no login |
 | Alertmanager | `http://localhost:9093` | Development only, no login |
 | Edge A/B health | `http://localhost:8081/healthz`, `http://localhost:8082/healthz` | None |
+| Edge control health | `https://localhost:9443/healthz` | Development private CA; use `curl -k` for this local health-only check |
 | DNSdist | UDP/TCP `127.0.0.1:1053` | Use `dig` |
 
 For every phase, check desktop and narrow mobile widths, browser-console errors, authorization, validation messages, audit events, operation visibility, retry/failure behavior, and persistence after refresh/sign-out/sign-in.
@@ -179,7 +180,15 @@ Repeat Geo-DNS with each type exposed by the current user/zone:
 | NS (administrator only) | `ns-default.example.net` | `ns-ir.example.net` | Use only on a disposable delegated owner |
 | PTR (reverse zone only) | `default.example.net` | `ir.example.net` | Use only in a managed reverse zone |
 
-Confirm invalid RDATA is rejected according to its type. MX priority and SRV priority/weight/port remain fixed while geography selects their target. NS remains administrator-only and PTR remains reverse-zone-only. CAA must offer DNS-only mode but not Geo-DNS: the qualified PowerDNS Lua runtime returns NODATA for synthesized CAA, so exposing it would be a false feature.
+For the CNAME row, enter the default target and one country override, leave the
+continent list completely empty, and save. It must persist. A CNAME must be the
+only record at its owner: if another row already uses `geo`, the form must show
+the conflict beside the record name rather than silently doing nothing. Confirm
+invalid RDATA is rejected according to its type. MX priority and SRV
+priority/weight/port remain fixed while geography selects their target. NS
+remains administrator-only and PTR remains reverse-zone-only. CAA must offer
+DNS-only mode but not Geo-DNS: the qualified PowerDNS Lua runtime returns NODATA
+for synthesized CAA, so exposing it would be a false feature.
 
 Use preview with IPv4/IPv6 addresses whose classification is known in the installed MMDB and record the displayed country/continent. Query DNSdist with and without trusted ECS and confirm the answer matches that classification. Force a bad MMDB update and invalid deployment; the prior MMDB and last valid answers must continue serving while failure is visible.
 
@@ -213,10 +222,26 @@ Use preview with IPv4/IPv6 addresses whose classification is known in the instal
    | IPv4 | `192.0.2.101` | `192.0.2.102` |
    | IPv6 | `2001:db8::101` | `2001:db8::102` |
 
-2. Save each one-time bootstrap token, register the agents, and confirm fresh heartbeat, version, active revision, state, and bounded cell capacities.
+2. Save each one-time bootstrap token. For the bundled two-agent development
+   topology, copy `.env.dev.example` to the ignored `.env.dev`, set the exact
+   `DEV_EDGE_A_ID/TOKEN` and `DEV_EDGE_B_ID/TOKEN` values, run
+   `chmod 600 .env.dev`, `make dev-edge-up`, and `make dev-edge-status`.
+   Confirm fresh heartbeat, version, active revision, listener readiness, and
+   bounded cell capacities, then immediately blank both token values in
+   `.env.dev`. Restarts must use the persistent mTLS identities without tokens.
 3. Exercise drain/undrain and enable/disable. Rotate an identity, copy the replacement token once, and confirm the previous credential no longer works.
 4. Open **Service pools**. Confirm shared and quarantine pools and their revisions. Create one dedicated pool, confirm `edge.pool_provision` completes, and confirm one desired cell per registered edge. New pools remain disabled until provisioning and service-address configuration are complete.
-5. In each edge's **Cells** relation, set a unique public service IPv4 and IPv6 for every quarantine/dedicated cell. Editing must reject private, loopback, duplicate, or missing dual-stack addresses. Enable the pool only after every enabled edge is fully addressed.
+5. In each edge's **Cells** relation, verify that a cell before agent enrollment
+   clearly says **Awaiting edge enrollment**, missing/stale heartbeat has its own
+   explanation, and a connected cell shows runtime revision/version, workload,
+   connections, memory, CPU, cache, and temporary-storage values. Set a unique
+   public service IPv4 and IPv6 for every quarantine/dedicated cell. Editing must
+   reject private, loopback, duplicate, or missing dual-stack addresses beside
+   the affected field. A valid edit is durable even while its edge is offline;
+   the success notice must say it is waiting for the agent. Enable a new pool
+   only after every intended participant is fully addressed. A later unaddressed
+   edge cell must remain excluded from that pool and must not block its existing
+   participants.
 6. Drain and undrain one cell and confirm its task completes through the agent. Restart it and confirm `last_restart_at` changes, traffic resumes after the bounded window, and sibling cells/agent stay running.
 
 ### Proxy defaults and record eligibility
@@ -241,7 +266,7 @@ Create or edit the apex:
 |---|---|
 | Type / name / mode | `A` / `@` / `Proxied` |
 | Origin server hostname or IP | A public cPanel/shared-hosting origin, e.g. `server1.example.net` |
-| Scheme / port | `HTTPS` / `443` |
+| Scheme / port | `HTTPS` / locked `443` |
 | Origin Host header | Auto-fills to the domain name |
 | TLS SNI | Auto-fills to the domain name |
 | Verify origin TLS | On |
@@ -251,7 +276,7 @@ Create or edit the apex:
 | Health check | Off; when on, path `/`, interval `300` seconds |
 | TTL | `300` |
 
-The origin destination is the server reached by CDNFoundry; Host/SNI default to the public record hostname so name-based cPanel virtual hosting and certificates work. The destination must not point back to CDNFoundry, a platform hostname, loopback, link-local, private metadata, multicast, or an edge address.
+The origin destination is the server reached by CDNFoundry; Host/SNI default to the public record hostname so name-based cPanel virtual hosting and certificates work. The browser UI intentionally exposes the standard scheme/port pairs only: HTTP locks port `80` and hides TLS verification/SNI, while HTTPS locks port `443` and exposes both. Advanced API clients may submit a validated custom port. The destination must not point back to CDNFoundry, a platform hostname, loopback, link-local, private metadata, multicast, or an edge address.
 
 ### Proxied subdomain and editable automatic values
 
@@ -259,9 +284,17 @@ The origin destination is the server reached by CDNFoundry; Host/SNI default to 
 2. Confirm Host and SNI automatically become `www.<domain>`.
 3. Change name to `shop`; untouched automatic fields must become `shop.<domain>`.
 4. Manually change Host to `backend-vhost.example.net` and SNI to `backend-cert.example.net`; change the record name again and confirm both overrides are preserved.
-5. Switch scheme HTTPS → HTTP and confirm conventional port `443` changes to `80`; switch back and confirm `80` changes to `443`. A deliberately custom port must remain editable.
+5. Switch scheme HTTPS → HTTP and confirm port `443` changes to a disabled `80`
+   field and TLS/SNI fields disappear; switch back and confirm locked `443` and
+   TLS/SNI return. Custom ports are an API-only advanced option.
 6. With HTTPS verification on, blank SNI must be rejected. Origin Host must always be present for a proxied record.
-7. Run **Test origin** and confirm status/latency or a bounded validation/connection error. Saving/testing remains asynchronous.
+7. Turn the health check off and save without entering hidden path/interval
+   values; it must succeed. Turn it on and confirm path/interval become required.
+8. Enter a blocked/private origin and confirm a visible error beside the origin
+   field. Correct it, save, and confirm a success notice. If no edge is ready,
+   desired state must still persist and the notice must explicitly say delivery
+   is waiting for an enrolled, healthy edge.
+9. Run **Test origin** and confirm status/latency or a bounded validation/connection error. Saving/testing remains asynchronous.
 
 ### Deployment and operation visibility
 
@@ -271,6 +304,12 @@ The origin destination is the server reached by CDNFoundry; Host/SNI default to 
 4. Confirm the domain view renders the **Domain status**, **Edge delivery**, and **Authoritative DNS deployment** sections. Proxy defaults must appear as one readable summary (for example, `Enabled · HTTP/1.1 + HTTP/2 · HTTPS redirect off · 0 origin retries · Maintenance off`) rather than raw JSON or separate boolean/list fragments. Confirm proxied-host count, desired/active revision, placement/pools, failure, and recent validated revisions.
 5. Send HTTP and HTTPS through both real edges. Confirm correct origin selection, Host, SNI, IPv4/IPv6 behavior, unknown-host/SNI rejection, and continued serving of the last valid revision after a deliberately invalid candidate.
 6. Move the domain shared → quarantine → dedicated. For each move record the target-ready acknowledgement, target DNS answer, non-null drain deadline, source-removal artifact, final acknowledgement, and active pool. A failed/rejected target must leave source DNS and traffic active.
+
+Saving **Proxy defaults** alone does not turn a DNS-only record into a proxied
+hostname. Confirm its notice says that no hostname will be deployed until an A,
+AAAA, or CNAME row is saved in **Proxied** mode. With a proxied row but no ready
+edge, confirm the desired revision and operation remain visible with a clear
+waiting/not-ready message; the control plane must not discard the user's intent.
 
 ### Phase 4 completion gate
 

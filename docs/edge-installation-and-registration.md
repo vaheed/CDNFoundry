@@ -10,6 +10,29 @@ Provision a separate edge identity CA certificate/private key and edge-control s
 
 An edge is routable only while enabled, not drained, listener-ready, and heartbeat-fresh. Give every cell its own memory/process limits, cache volume, and temporary-storage quota. Keep the agent state outside cell volumes so a cell replacement cannot erase the last active snapshot.
 
+## Local two-edge workflow
+
+Development Compose contains two real agents behind the optional `dev-edge`
+profile, two shared cells, two quarantine cells, persistent agent/runtime state,
+and a private development PKI. Create two edges in the UI, then:
+
+```sh
+cp .env.dev.example .env.dev
+# Set DEV_EDGE_A_ID/TOKEN and DEV_EDGE_B_ID/TOKEN to the one-time UI values.
+chmod 600 .env.dev
+make dev-edge-up
+make dev-edge-status
+```
+
+The local edge-control server is `https://edge-control:8443` inside Compose and
+`https://localhost:9443` for host diagnostics. Shared listeners are
+`http://localhost:8081` and `:8082`; their bootstrap HTTPS listeners are `8444`
+and `8445`. Readiness requires a fresh heartbeat, listener-ready state, and a
+ready shared cell. The Cells table explains pre-enrollment, missing heartbeat,
+stale heartbeat, and connected state rather than treating absent telemetry as a
+runtime value. Clear the two token values after enrollment. Never commit
+`.env.dev`; it and agent identity directories are ignored.
+
 Full recovery snapshots are gzip-compressed, checksummed, and signed before transfer. The agent bounds decompression, validates the signature and compatibility envelope, and activates only after compiling valid per-pool runtime state. Cell status endpoints report bounded revision, assigned-host, connection, CPU, memory, cache, temporary-storage, and rejection summaries; an unavailable shared-cell status endpoint makes listener readiness fail closed.
 
 The agent reaches each cell only through its private status/control URL and `EDGE_STATUS_TOKEN`. It persists desired drain state outside cell volumes and reapplies it after runtime replacement. Restart replaces cell workers under a short automatic drain and never requires a Docker socket or host-wide process authority.

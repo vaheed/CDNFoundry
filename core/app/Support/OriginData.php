@@ -24,8 +24,8 @@ final class OriginData
             'websocket' => ['sometimes', 'boolean'],
             'health_check' => ['sometimes', 'nullable', 'array'],
             'health_check.enabled' => ['required_with:health_check', 'boolean'],
-            'health_check.path' => ['required_with:health_check', 'string', 'starts_with:/', 'max:1024'],
-            'health_check.interval_seconds' => ['required_with:health_check', 'integer', 'between:60,86400'],
+            'health_check.path' => ['required_if:health_check.enabled,true', 'nullable', 'string', 'starts_with:/', 'max:1024'],
+            'health_check.interval_seconds' => ['required_if:health_check.enabled,true', 'nullable', 'integer', 'between:60,86400'],
         ]);
         $validator->after(function ($validator) use ($input): void {
             $host = trim((string) ($input['host'] ?? ''), '[]');
@@ -57,7 +57,7 @@ final class OriginData
             'connect_timeout_ms' => (int) $input['connect_timeout_ms'],
             'response_timeout_ms' => (int) $input['response_timeout_ms'],
             'retry_count' => (int) $input['retry_count'], 'websocket' => (bool) ($input['websocket'] ?? false),
-            'health_check' => isset($input['health_check']) ? [
+            'health_check' => (bool) ($input['health_check']['enabled'] ?? false) ? [
                 'enabled' => (bool) $input['health_check']['enabled'], 'path' => $input['health_check']['path'],
                 'interval_seconds' => (int) $input['health_check']['interval_seconds'],
             ] : null,

@@ -6,6 +6,7 @@ use App\Models\Domain;
 use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
 use App\Models\EdgeArtifact;
+use App\Models\EdgePool;
 use App\Models\EdgeRevision;
 use App\Models\EdgeTask;
 use App\Models\Operation;
@@ -23,6 +24,7 @@ class EdgeProxyTest extends TestCase
         [$user, $domain] = $this->ownedDomain();
         $origin = $this->origin('8.8.8.8');
         $origin['host_header'] = $domain->name;
+        $origin['health_check'] = ['enabled' => false];
 
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", [
             'type' => 'TXT', 'name' => '@', 'ttl' => 300, 'mode' => 'proxied', 'origin' => $origin,
@@ -30,7 +32,35 @@ class EdgeProxyTest extends TestCase
 
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", [
             'type' => 'A', 'name' => '@', 'ttl' => 300, 'mode' => 'proxied', 'origin' => $origin,
-        ])->assertCreated()->assertJsonPath('data.content', '8.8.8.8');
+        ])->assertCreated()->assertJsonPath('data.content', '8.8.8.8')->assertJsonPath('data.origin.health_check', null);
+    }
+
+    public function test_first_edge_registration_backfills_proxy_state_saved_before_the_edge_existed(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $this->record('waiting', '8.8.8.8'))
+            ->assertCreated();
+        $this->assertSame(0, EdgeArtifact::query()->where('domain_id', $domain->id)->count());
+
+        $admin = User::factory()->admin()->create();
+        $created = $this->actingAs($admin)->postJson('/api/admin/edges', [
+            'name' => 'first-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
+            'ipv4' => '203.0.113.40', 'ipv6' => '2001:db8::40',
+        ])->assertCreated();
+        $edgeId = $created->json('data.id');
+        $this->postJson('/edge/v1/register', [
+            'edge_id' => $edgeId,
+            'bootstrap_token' => $created->json('data.bootstrap_token'),
+            'agent_version' => '1.0.0',
+            'certificate_request' => $this->certificateRequest($edgeId),
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('edge_artifacts', [
+            'edge_id' => $edgeId,
+            'domain_id' => $domain->id,
+            'revision' => $domain->refresh()->revision,
+            'kind' => 'domain',
+        ]);
     }
 
     public function test_proxied_hosts_have_distinct_safe_origins_and_revisioned_artifacts(): void
@@ -141,6 +171,32 @@ class EdgeProxyTest extends TestCase
             'service_ipv4' => '203.0.113.20', 'service_ipv6' => '2001:db8::20',
         ])->assertOk();
         $this->actingAs($admin)->postJson("/api/admin/edge-pools/{$pool}/enable")->assertOk();
+        $spectator = Edge::query()->create([
+            'name' => 'edge-without-dedicated-addresses',
+            'country_code' => 'DE',
+            'continent_code' => 'EU',
+            'ipv4' => '203.0.113.30',
+            'ipv6' => '2001:db8::30',
+            'registered_at' => now(),
+            'last_heartbeat_at' => now(),
+            'agent_version' => '1.0.0',
+            'capacity' => ['listener_ready' => true],
+        ]);
+        $sharedPool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
+        $spectator->cells()->create([
+            'edge_pool_id' => $sharedPool->id,
+            'name' => $sharedPool->name,
+            'status' => 'ready',
+            'service_ipv4' => $spectator->ipv4,
+            'service_ipv6' => $spectator->ipv6,
+        ]);
+        $spectator->cells()->create([
+            'edge_pool_id' => $pool,
+            'name' => 'dedicated-test',
+            'status' => 'ready',
+            'service_ipv4' => null,
+            'service_ipv6' => null,
+        ]);
         $move = $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/move", ['pool_id' => $pool])->assertAccepted();
         $operation = Operation::query()->findOrFail($move->json('data.operation_id'));
         $moveArtifact = EdgeArtifact::query()->where('edge_id', $id)->where('domain_id', $domain->id)->latest('sequence')->firstOrFail();

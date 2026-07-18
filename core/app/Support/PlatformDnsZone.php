@@ -39,10 +39,7 @@ final class PlatformDnsZone
         foreach (EdgePool::query()->where('enabled', true)->orderBy('id')->get() as $pool) {
             $cells = EdgeCell::query()->with('edge')->where('edge_pool_id', $pool->id)
                 ->where('drained', false)->where('status', 'ready')
-                ->whereHas('edge', fn ($query) => $query->where('enabled', true)->where('drained', false)
-                    ->whereNull('identity_revoked_at')->whereNotNull('registered_at')
-                    ->where('last_heartbeat_at', '>=', now()->subSeconds(app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds')))
-                    ->where('capacity->listener_ready', true))
+                ->whereHas('edge', fn ($query) => $query->readyForTraffic())
                 ->orderBy('edge_id')->get();
             foreach (['A' => 'service_ipv4', 'AAAA' => 'service_ipv6'] as $family => $field) {
                 $familyCells = $cells->filter(fn (EdgeCell $cell): bool => filled($cell->{$field}))->values();

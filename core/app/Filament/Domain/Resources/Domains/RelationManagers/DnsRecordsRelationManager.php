@@ -10,6 +10,7 @@ use App\Models\AuditLog;
 use App\Models\DnsCluster;
 use App\Models\DnsRecord;
 use App\Models\Domain;
+use App\Models\Edge;
 use App\Models\Operation;
 use App\Support\DnsRecordData;
 use App\Support\DnsZoneValidator;
@@ -94,23 +95,36 @@ class DnsRecordsRelationManager extends RelationManager
                     if (blank($get('origin.sni')) || $get('origin.sni') === $oldHostname) {
                         $set('origin.sni', $hostname);
                     }
-                }),
+                })
+                ->helperText(fn (Get $get): ?string => $get('type') === 'CNAME'
+                    ? 'A CNAME must be the only DNS record at this hostname. Use a new hostname if A, AAAA, NS, or another record already exists there.'
+                    : null),
             TextInput::make('content')->required(fn ($get): bool => $get('mode') === 'dns_only')->maxLength(4096)
                 ->visible(fn ($get): bool => $get('mode') === 'dns_only'),
             TextInput::make('origin.host')->label('Origin server hostname or IP')->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied')
                 ->helperText('For cPanel/shared hosting, enter the server hostname or dedicated origin IP. Do not enter an address that routes back to this CDN.'),
             Select::make('origin.scheme')->options(['https' => 'HTTPS', 'http' => 'HTTP'])->default('https')->live()->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied')
                 ->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
-                    if ($state === 'https' && in_array((int) $get('origin.port'), [0, 80], true)) {
+                    if ($state === 'https') {
                         $set('origin.port', 443);
-                    } elseif ($state === 'http' && (int) $get('origin.port') === 443) {
+                        $set('origin.verify_tls', true);
+                        if (blank($get('origin.sni'))) {
+                            $set('origin.sni', $this->ownerHostname((string) $get('name')));
+                        }
+                    } elseif ($state === 'http') {
                         $set('origin.port', 80);
+                        $set('origin.verify_tls', false);
+                        $set('origin.sni', null);
                     }
                 }),
-            TextInput::make('origin.port')->numeric()->default(443)->minValue(1)->maxValue(65535)->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
+            TextInput::make('origin.port')->numeric()->default(443)->disabled()->dehydrated()
+                ->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied')
+                ->helperText('Managed by the scheme: HTTP uses 80 and HTTPS uses 443. Advanced custom ports remain available through the API.'),
             TextInput::make('origin.host_header')->label('Origin Host header')->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
-            TextInput::make('origin.sni')->label('TLS SNI')->required(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.scheme') === 'https' && (bool) $get('origin.verify_tls'))->visible(fn ($get): bool => $get('mode') === 'proxied'),
-            Toggle::make('origin.verify_tls')->label('Verify origin TLS')->default(true)->visible(fn ($get): bool => $get('mode') === 'proxied'),
+            TextInput::make('origin.sni')->label('TLS SNI')->required(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.scheme') === 'https' && (bool) $get('origin.verify_tls'))
+                ->visible(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.scheme') === 'https'),
+            Toggle::make('origin.verify_tls')->label('Verify origin TLS')->default(true)
+                ->visible(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.scheme') === 'https'),
             TextInput::make('origin.connect_timeout_ms')->numeric()->default(2000)->minValue(100)->maxValue(10000)->visible(fn ($get): bool => $get('mode') === 'proxied'),
             TextInput::make('origin.response_timeout_ms')->numeric()->default(30000)->minValue(500)->maxValue(60000)->visible(fn ($get): bool => $get('mode') === 'proxied'),
             TextInput::make('origin.retry_count')->numeric()->default(1)->minValue(0)->maxValue(2)->visible(fn ($get): bool => $get('mode') === 'proxied'),
@@ -206,19 +220,21 @@ class DnsRecordsRelationManager extends RelationManager
     private function createRecord(array $input): DnsRecord
     {
         $input = $this->normalizeGeoForm($input);
+        $input = $this->normalizeOriginForm($input);
         $domain = $this->getOwnerRecord();
         $record = DB::transaction(function () use ($domain, $input): DnsRecord {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
-            $data = DnsRecordData::validate($input, $locked->name);
+            $data = $this->validateRecordForForm($input, $locked->name);
             abort_if($data['type'] === 'NS' && auth()->user()?->isAdmin() !== true, 403, 'Only administrators can manage delegated NS records.');
             $rows = $locked->dnsRecords()->lockForUpdate()->get()->map(fn (DnsRecord $item): array => $this->row($item))->push($data);
-            DnsZoneValidator::assertValid($rows);
+            $this->assertZoneValidForForm($rows);
             $record = $locked->dnsRecords()->create($data);
             $this->changed($locked, 'dns.record_created', $record);
 
             return $record;
         });
         $this->reconcileIfActive($domain->refresh());
+        $this->notifyRecordSaved($record, 'created');
 
         return $record;
     }
@@ -226,18 +242,20 @@ class DnsRecordsRelationManager extends RelationManager
     private function updateRecord(DnsRecord $record, array $input): DnsRecord
     {
         $input = $this->normalizeGeoForm($input);
+        $input = $this->normalizeOriginForm($input);
         abort_if($record->type === 'NS' && auth()->user()?->isAdmin() !== true, 403, 'Only administrators can manage delegated NS records.');
         $domain = $this->getOwnerRecord();
         DB::transaction(function () use ($domain, $record, $input): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
-            $data = DnsRecordData::validate($input, $locked->name);
+            $data = $this->validateRecordForForm($input, $locked->name);
             abort_if($data['type'] === 'NS' && auth()->user()?->isAdmin() !== true, 403, 'Only administrators can manage delegated NS records.');
             $rows = $locked->dnsRecords()->lockForUpdate()->whereKeyNot($record->id)->get()->map(fn (DnsRecord $item): array => $this->row($item))->push($data);
-            DnsZoneValidator::assertValid($rows);
+            $this->assertZoneValidForForm($rows);
             $record->update($data);
             $this->changed($locked, 'dns.record_updated', $record);
         });
         $this->reconcileIfActive($domain->refresh());
+        $this->notifyRecordSaved($record->refresh(), 'updated');
 
         return $record->refresh();
     }
@@ -285,7 +303,7 @@ class DnsRecordsRelationManager extends RelationManager
         }
         foreach (['geo_countries', 'geo_continents'] as $field) {
             if (collect($input[$field] ?? [])->pluck('code')->duplicates()->isNotEmpty()) {
-                throw ValidationException::withMessages([$field => 'Geographic override codes cannot be duplicated.']);
+                throw $this->formValidationException([$field => 'Geographic override codes cannot be duplicated.']);
             }
         }
         $map = fn (string $field): array => collect($input[$field] ?? [])->mapWithKeys(fn (array $row): array => [$row['code'] => $row['targets']])->all();
@@ -314,5 +332,93 @@ class DnsRecordsRelationManager extends RelationManager
         $data['geo_continents'] = collect($record->geo_config['continents'])->map(fn (array $targets, string $code): array => compact('code', 'targets'))->values()->all();
 
         return $data;
+    }
+
+    private function normalizeOriginForm(array $input): array
+    {
+        if (($input['mode'] ?? 'dns_only') !== 'proxied' || ! is_array($input['origin'] ?? null)) {
+            return $input;
+        }
+
+        if (($input['origin']['scheme'] ?? 'https') === 'http') {
+            $input['origin']['port'] = 80;
+            $input['origin']['verify_tls'] = false;
+            $input['origin']['sni'] = null;
+        } else {
+            $input['origin']['port'] = 443;
+        }
+        if (! (bool) data_get($input, 'origin.health_check.enabled', false)) {
+            $input['origin']['health_check'] = null;
+        }
+
+        return $input;
+    }
+
+    private function assertZoneValidForForm(Collection $rows): void
+    {
+        try {
+            DnsZoneValidator::assertValid($rows);
+        } catch (ValidationException $exception) {
+            $zoneErrors = $exception->errors()['records'] ?? null;
+            if ($zoneErrors !== null) {
+                throw $this->formValidationException(['name' => $zoneErrors]);
+            }
+
+            throw $exception;
+        }
+    }
+
+    private function notifyRecordSaved(DnsRecord $record, string $verb): void
+    {
+        if ($record->mode !== 'proxied') {
+            Notification::make()->success()->title("DNS record {$verb}")
+                ->body('Desired state was saved and DNS reconciliation was queued when the domain is active.')->send();
+
+            return;
+        }
+
+        $readyEdgeExists = Edge::query()->readyForTraffic()->exists();
+        Notification::make()
+            ->title($readyEdgeExists ? "Proxied record {$verb}" : 'Proxied desired state saved')
+            ->body($readyEdgeExists
+                ? 'The latest desired revision is queued for edge deployment.'
+                : 'No ready edge is connected yet. The origin and proxy policy are safely stored in PostgreSQL and will deploy after an edge enrolls and reports a ready listener.')
+            ->color($readyEdgeExists ? 'success' : 'warning')
+            ->send();
+    }
+
+    private function validateRecordForForm(array $input, string $zone): array
+    {
+        try {
+            return DnsRecordData::validate($input, $zone);
+        } catch (ValidationException $exception) {
+            $originFields = ['host', 'port', 'scheme', 'host_header', 'sni', 'verify_tls', 'connect_timeout_ms', 'response_timeout_ms', 'retry_count', 'websocket', 'health_check'];
+            $messages = [];
+            foreach ($exception->errors() as $field => $errors) {
+                $root = explode('.', $field, 2)[0];
+                $visibleField = match (true) {
+                    in_array($root, $originFields, true) => 'origin.'.$field,
+                    $root === 'default' => 'geo_default',
+                    $root === 'countries' => 'geo_countries',
+                    $root === 'continents' => 'geo_continents',
+                    default => $field,
+                };
+                $messages[$visibleField] = $errors;
+            }
+
+            throw $this->formValidationException($messages);
+        }
+    }
+
+    private function formValidationException(array $messages): ValidationException
+    {
+        $statePath = $this->getMountedActionSchema()?->getStatePath();
+        if (blank($statePath)) {
+            return ValidationException::withMessages($messages);
+        }
+
+        return ValidationException::withMessages(collect($messages)
+            ->mapWithKeys(fn (mixed $errors, string $field): array => ["{$statePath}.{$field}" => $errors])
+            ->all());
     }
 }
