@@ -146,8 +146,14 @@ services:
       - mmdb:/mmdb:ro
     depends_on:
       pdns-db: { condition: service_healthy }
+      mmdb-updater: { condition: service_healthy }
     networks: [dns]
     restart: unless-stopped
+    healthcheck:
+      test: [CMD, pdns_control, rping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   pdns-migrate:
     image: postgres:18.4-alpine
@@ -164,7 +170,8 @@ services:
     image: powerdns/dnsdist-21:2.1.0
     ports: ["1053:53/udp", "1053:53/tcp"]
     volumes: [./docker/dnsdist/dnsdist.conf:/etc/dnsdist/dnsdist.conf:ro]
-    depends_on: [pdns-auth]
+    depends_on:
+      pdns-auth: { condition: service_healthy }
     networks: [dns]
     restart: unless-stopped
 

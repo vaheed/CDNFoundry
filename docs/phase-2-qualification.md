@@ -28,6 +28,8 @@ python3 tests/e2e/phase2_dns.py
 
 The script creates desired state through authenticated APIs, deploys through Horizon to the private PowerDNS API, and queries only the public DNSdist port. It verifies A, AAAA, CNAME, MX, TXT, NS delegation, CAA, SRV, PTR, SOA-backed deployment revision convergence, UDP, TCP, IPv4 client transport, and IPv6 client transport.
 
+On an empty control database it also waits for the asynchronous DNS-cluster health operation and explicitly enables the verified cluster before domain activation. Fresh-volume Compose qualification verifies MMDB activation precedes PowerDNS readiness and that DNSdist does not start without a healthy authoritative backend.
+
 It pauses Horizon, performs 100 rapid updates to one active domain, and proves the Redis runtime queue contains one `ReconcileDnsZone` job for those updates. The assertion filters by job class because the independent platform-identity scheduler may legitimately share the runtime lane. It then confirms that the latest revision is served.
 
 It stops Laravel, the control PostgreSQL database, Valkey, Horizon, the scheduler, and the web frontend while continuing to query the active zone successfully. It restores them, restarts PowerDNS, DNSdist, Horizon, and Laravel, and verifies the same latest A and TXT answers. Cleanup removes the temporary runtime zone and control-plane rows.

@@ -14,6 +14,8 @@ make prod-edge
 
 Set `CDNF_RELEASE` to the exact 40-character Git commit SHA from a successful `main` CI run. Production Compose references `ghcr.io/vaheed/cdnfoundry-{core,web,edge-control,edge-runtime,edge-agent,mmdb-updater}:$CDNF_RELEASE`; it contains no application build definitions, source-mounted web/runtime code, `latest` tag, branch tag, or local-image fallback. Authenticate the host with a least-privilege GHCR token if the packages are not public, run `make prod-pull`, and verify the pulled image digests before starting a profile. The GitHub Actions image job publishes these immutable SHA tags only after PHP, Go, Compose, image-build, backend E2E, and scale jobs pass.
 
+The DNS profile starts the shared MMDB updater and does not start PowerDNS until a valid database is present. DNSdist then waits for PowerDNS's native readiness check before resolving its private backend. This ordering is required on a new host and after loss of the rebuildable MMDB volume.
+
 Run `make prod-migrate` explicitly before starting application code that needs
 a new schema. No service performs implicit migrations.
 

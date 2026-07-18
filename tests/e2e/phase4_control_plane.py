@@ -24,11 +24,15 @@ PASSWORD = f"Phase4-{secrets.token_urlsafe(20)}"
 ZONE = f"phase4-{RUN}.test"
 EDGE_NAMES = [f"phase4-edge-a-{RUN}", f"phase4-edge-b-{RUN}"]
 EDGE_CONTROL_NAME = f"cdnf-phase4-control-{RUN}"
+CONTROL_NETWORK = os.environ.get(
+    "CDNF_CONTROL_NETWORK",
+    f"{os.environ.get('COMPOSE_PROJECT_NAME', 'cdnfoundry-dev')}_control",
+)
 
 
 def edge_call(method: str, path: str, payload: object | None, identity: dict[str, str]) -> tuple[int, object]:
     arguments = [
-        "docker", "run", "--rm", "--network", "cdnfoundry-dev_control",
+        "docker", "run", "--rm", "--network", CONTROL_NETWORK,
         "-v", f"{identity['directory']}:/tls:ro", "curlimages/curl:8.16.0",
         "-sS", "--cacert", "/tls/ca.crt", "--cert", f"/tls/{identity['certificate']}",
         "--key", f"/tls/{identity['key']}", "-X", method,
@@ -243,7 +247,7 @@ def start_edge_control(directory: pathlib.Path) -> pathlib.Path:
         path.chmod(0o644)
     subprocess.run([
         "docker", "run", "-d", "--name", EDGE_CONTROL_NAME,
-        "--network", "cdnfoundry-dev_control",
+        "--network", CONTROL_NETWORK,
         "-v", f"{ROOT / 'core/public'}:/app/public:ro",
         "-v", f"{ROOT / 'docker/nginx/edge-control.conf'}:/etc/nginx/conf.d/default.conf:ro",
         "-v", f"{directory / 'server.crt'}:/run/secrets/edge-control-server.crt:ro",
@@ -260,7 +264,7 @@ def start_edge_control(directory: pathlib.Path) -> pathlib.Path:
         logs = subprocess.run(["docker", "logs", EDGE_CONTROL_NAME], cwd=ROOT, capture_output=True, text=True, timeout=10)
         raise AssertionError(f"edge-control failed to start: {logs.stdout}{logs.stderr}")
     health = subprocess.run([
-        "docker", "run", "--rm", "--network", "cdnfoundry-dev_control", "-v", f"{directory}:/tls:ro",
+        "docker", "run", "--rm", "--network", CONTROL_NETWORK, "-v", f"{directory}:/tls:ro",
         "curlimages/curl:8.16.0", "-sS", "--cacert", "/tls/ca.crt", "-o", "/dev/null", "-w", "%{http_code}",
         f"https://{EDGE_CONTROL_NAME}:8443/mtls-health",
     ], cwd=ROOT, check=True, capture_output=True, text=True, timeout=30)

@@ -109,6 +109,19 @@ def wait_deployment(token: str, domain_id: int) -> None:
     raise AssertionError("DNS deployment did not converge")
 
 
+def wait_operation(token: str, operation_id: str, timeout: int = 30) -> dict[str, object]:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        _, result = call("GET", f"/api/operations/{operation_id}", token=token)
+        operation = result["data"]
+        if operation["status"] == "succeeded":
+            return operation
+        if operation["status"] == "failed":
+            raise AssertionError(operation)
+        time.sleep(0.25)
+    raise AssertionError(f"operation {operation_id} did not finish")
+
+
 def main() -> None:
     artisan("App\\Models\\User::query()->create(['name'=>'Phase 2 E2E','email'=>" + quote(EMAIL) + ",'password'=>Illuminate\\Support\\Facades\\Hash::make(" + quote(PASSWORD) + "),'type'=>'admin']);")
     _, login = call("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD, "device_name": "phase2-e2e"})
@@ -125,6 +138,17 @@ def main() -> None:
     if cluster is None:
         _, created = call("POST", "/api/admin/dns/clusters", {"name": f"phase2-{RUN}", "location": "e2e", "api_url": "http://pdns-auth:8081", "api_key": "pdns-dev-api-key", "server_id": "localhost", "nameservers": [{"hostname": "ns1.cdnf.test"}, {"hostname": "ns2.cdnf.test"}]}, token)
         cluster = created["data"]
+        wait_operation(token, created["operation_id"])
+        _, refreshed = call("GET", f"/api/admin/dns/clusters/{cluster['id']}", token=token)
+        cluster = refreshed["data"]
+    elif cluster["last_health_status"] != "healthy":
+        _, testing = call("POST", f"/api/admin/dns/clusters/{cluster['id']}/test", {}, token)
+        wait_operation(token, testing["data"]["id"])
+        _, refreshed = call("GET", f"/api/admin/dns/clusters/{cluster['id']}", token=token)
+        cluster = refreshed["data"]
+    if not cluster["enabled"]:
+        _, enabled = call("POST", f"/api/admin/dns/clusters/{cluster['id']}/enable", {}, token)
+        wait_operation(token, enabled["operation_id"])
     _, created_domain = call("POST", "/api/domains", {"name": ZONE}, token)
     domain_id = created_domain["data"]["id"]
     call("POST", f"/api/admin/domains/{domain_id}/force-verify", {}, token)

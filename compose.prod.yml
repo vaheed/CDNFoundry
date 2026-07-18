@@ -153,8 +153,14 @@ services:
       - mmdb:/mmdb:ro
     depends_on:
       pdns-db: { condition: service_healthy }
+      mmdb-updater: { condition: service_healthy }
     networks: [dns-private]
     restart: unless-stopped
+    healthcheck:
+      test: [CMD, pdns_control, rping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   pdns-migrate:
     image: postgres:18.4-alpine
@@ -174,7 +180,8 @@ services:
       - "${DNS_BIND_V4:-0.0.0.0}:53:53/udp"
       - "${DNS_BIND_V4:-0.0.0.0}:53:53/tcp"
     volumes: [./docker/dnsdist/dnsdist.conf:/etc/dnsdist/dnsdist.conf:ro]
-    depends_on: [pdns-auth]
+    depends_on:
+      pdns-auth: { condition: service_healthy }
     networks: [dns-private]
     restart: unless-stopped
 
@@ -312,7 +319,7 @@ services:
 
   mmdb-updater:
     image: ghcr.io/vaheed/cdnfoundry-mmdb-updater:${CDNF_RELEASE:?CDNF_RELEASE must be an immutable commit SHA}
-    profiles: [edge]
+    profiles: [dns, edge]
     environment:
       MMDB_PROVIDER: ${MMDB_PROVIDER:-dbip-jsdelivr}
       MMDB_TARGET_FILE: ${MMDB_TARGET_FILE:-GeoLite2-City.mmdb}

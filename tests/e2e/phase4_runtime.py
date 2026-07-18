@@ -14,6 +14,10 @@ TLS_NAME = "cdnf-phase4-tls-origin-e2e"
 QUARANTINE_NAME = "cdnf-phase4-quarantine-e2e"
 AGENT_NAME = "cdnf-phase4-agent-e2e"
 DEDICATED_NAME = "cdnf-phase4-dedicated-e2e"
+EDGE_NETWORK = os.environ.get(
+    "CDNF_EDGE_NETWORK",
+    f"{os.environ.get('COMPOSE_PROJECT_NAME', 'cdnfoundry-dev')}_edge",
+)
 
 
 def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -106,7 +110,7 @@ def main() -> None:
             "PrivateKey": (temporary / "tls.key").read_text(), "PublicKey": "00",
         }))
         (agent_state / "identity.json").chmod(0o644)
-        run("docker", "run", "-d", "--rm", "--name", TLS_NAME, "--network", "cdnfoundry-dev_edge",
+        run("docker", "run", "-d", "--rm", "--name", TLS_NAME, "--network", EDGE_NETWORK,
             "--network-alias", "tls-origin", "-v", f"{origin_config}:/etc/nginx/conf.d/default.conf:ro",
             "-v", f"{directory}:/run/tls:ro", "nginx:1.30.3-alpine")
         runtime = pathlib.Path(directory) / "shared-default.json"
@@ -127,7 +131,7 @@ def main() -> None:
         dedicated_runtime = pathlib.Path(directory) / "dedicated-test.json"
         dedicated_runtime.write_text(json.dumps(state({"dedicated.example": "dedicated-origin.example"}, 1), separators=(",", ":")))
         dedicated_runtime.chmod(0o644)
-        run("docker", "run", "-d", "--rm", "--name", NAME, "--network", "cdnfoundry-dev_edge",
+        run("docker", "run", "-d", "--rm", "--name", NAME, "--network", EDGE_NETWORK,
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/shared-default.json",
             "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
             "-v", f"{ROOT / 'docker/nginx/openresty.conf'}:/usr/local/openresty/nginx/conf/nginx.conf:ro",
@@ -137,7 +141,7 @@ def main() -> None:
             "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro",
             "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
             "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro", "openresty/openresty:1.31.1.1-0-alpine")
-        run("docker", "run", "-d", "--rm", "--name", QUARANTINE_NAME, "--network", "cdnfoundry-dev_edge",
+        run("docker", "run", "-d", "--rm", "--name", QUARANTINE_NAME, "--network", EDGE_NETWORK,
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/quarantine-default.json",
             "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
             "-v", f"{ROOT / 'docker/nginx/openresty.conf'}:/usr/local/openresty/nginx/conf/nginx.conf:ro",
@@ -147,10 +151,10 @@ def main() -> None:
             "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro",
             "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
             "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro", "openresty/openresty:1.31.1.1-0-alpine")
-        run("docker", "run", "-d", "--rm", "--name", AGENT_NAME, "--network", "cdnfoundry-dev_edge",
+        run("docker", "run", "-d", "--rm", "--name", AGENT_NAME, "--network", EDGE_NETWORK,
             "-e", "EDGE_CONTROL_URL=http://127.0.0.1:1", "-e", "EDGE_STATE_DIR=/state",
             "-v", f"{agent_state}:/state", "cdnfoundry/edge-agent:test")
-        run("docker", "run", "-d", "--rm", "--name", DEDICATED_NAME, "--network", "cdnfoundry-dev_edge",
+        run("docker", "run", "-d", "--rm", "--name", DEDICATED_NAME, "--network", EDGE_NETWORK,
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/dedicated-test.json", "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
             "-v", f"{ROOT / 'docker/nginx/openresty.conf'}:/usr/local/openresty/nginx/conf/nginx.conf:ro",
             "-v", f"{ROOT / 'docker/nginx/edge-runtime.conf'}:/etc/nginx/conf.d/default.conf:ro",

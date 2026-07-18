@@ -31,6 +31,8 @@ and development-only PowerAdmin at `http://localhost:9191`. `make dev-up`
 enables the `devtools` profile so PowerAdmin starts with the stack. Its default
 development login is `admin` / `poweradmin-dev-only`; override it with
 `POWERADMIN_ADMIN_USERNAME` and `POWERADMIN_ADMIN_PASSWORD` before first start.
+On a fresh MMDB volume, Compose waits for the updater to activate a validated
+GeoIP database, then for PowerDNS's native readiness check, before DNSdist starts.
 
 The administrator panel is `http://localhost:8080/admin`; the domain-user panel is `http://localhost:8080/app`. Both use the same users, sessions, policies, and desired-state models. Disabled accounts lose API tokens immediately and are denied on their next browser or API request.
 
