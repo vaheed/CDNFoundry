@@ -6,6 +6,7 @@ use App\Enums\DomainLifecycleState;
 use App\Filament\Domain\Resources\Domains\DomainResource;
 use App\Jobs\ImportDnsZone;
 use App\Jobs\ReconcileDnsZone;
+use App\Jobs\ReconcileEdgeDomain;
 use App\Jobs\VerifyDomainNameservers;
 use App\Models\AuditLog;
 use App\Models\DnsCluster;
@@ -27,6 +28,13 @@ class ViewDomain extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('deployProxy')->label('Deploy proxy configuration')->icon('heroicon-o-cloud-arrow-up')
+                ->visible(fn (): bool => $this->record->dnsRecords()->where('mode', 'proxied')->exists())
+                ->action(function (): void {
+                    $operation = Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
+                    ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
+                    Notification::make()->info()->title('Edge deployment queued')->body("Operation {$operation->id} will deploy the latest desired revision.")->send();
+                }),
             Action::make('verifyNameservers')->label('Verify nameservers')->icon('heroicon-o-shield-check')
                 ->visible(fn (): bool => $this->record->nameservers_verified_at === null && $this->record->lifecycle_state !== DomainLifecycleState::Deprovisioning)
                 ->action(function (): void {

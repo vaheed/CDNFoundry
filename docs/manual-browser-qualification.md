@@ -56,7 +56,13 @@ The non-browser runtime qualification in `tests/e2e/phase4_runtime.py` covers IP
 
 OpenResty also records only failed upstream attempts in bounded cell-local shared memory. The edge agent reads at most 100 summaries through a token-protected, non-published status listener and reports them with its heartbeat; failure of this reporting path never blocks request serving.
 
-As administrator, create two dual-stack edges, save each one-time bootstrap token, register them, and confirm fresh listener/cell capacity heartbeats. Send real HTTP and HTTPS traffic through each edge and verify the configured origin Host and SNI. Drain one edge and confirm routing state changes without recompiling every domain. Submit a deliberately bad-checksum candidate and confirm the rejection is visible while the previous configuration continues serving. Rotate one identity and confirm its old credential cannot heartbeat or fetch configuration.
+As administrator, open **Edge network → Edges** and create two dual-stack edges. Save each one-time bootstrap token from the persistent notification, register them, and confirm the list shows fresh heartbeats, agent version, active revision, enabled/drained state, and cell count. Edit an edge to inspect its cells and bounded capacity values. Exercise drain/undrain and enable/disable, then rotate one identity and copy the replacement one-time token. Confirm the old credential cannot heartbeat or fetch configuration.
+
+Open **Edge network → Service pools**. Confirm the default shared and quarantine pools exist, their enabled state and revisions are visible, and creating a dedicated pool creates one corresponding cell on every registered edge.
+
+Open **Domains**, select the test domain, and confirm the view shows proxied-host count, proxy defaults, active edge revision, placement state, active/target service pools, deployment failure, and recent validated revisions. Use **Deploy proxy configuration** to retry the latest desired revision.
+
+Send real HTTP and HTTPS traffic through each edge and verify the configured origin Host and SNI. Drain one edge and confirm routing state changes without recompiling every domain. Submit a deliberately bad-checksum candidate and confirm the rejection is visible while the previous configuration continues serving.
 
 Open **Administration → Operations** after changing a proxied hostname, requesting deployment, and starting an origin test. Confirm **Edge domain deployment** and **Edge origin test** rows appear, status updates on the 10-second poll, filters include both types, failures show a bounded reason, and retry creates work without duplicating an active deployment.
 
