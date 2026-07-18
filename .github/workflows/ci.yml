@@ -22,7 +22,7 @@ jobs:
       run:
         working-directory: core
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
@@ -50,7 +50,7 @@ jobs:
     name: Compose contracts and production images
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Validate development topology
         run: docker compose -f compose.dev.yml config --quiet
       - name: Validate production topology
@@ -69,13 +69,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Start real development topology
         run: make dev-up
       - name: Apply migrations explicitly
         run: make dev-migrate
       - name: Run Python non-UI E2E
-        run: make dev-e2e
+        shell: bash
+        run: |
+          set +e
+          make dev-e2e 2>&1 | tee /tmp/cdnfoundry-e2e.log
+          status=${PIPESTATUS[0]}
+          if (( status != 0 )); then
+            tail -n 25 /tmp/cdnfoundry-e2e.log > /tmp/cdnfoundry-e2e-tail.log
+            {
+              echo '### Non-UI E2E failure tail'
+              echo '```text'
+              cat /tmp/cdnfoundry-e2e-tail.log
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+            annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-e2e-tail.log)"
+            echo "::error title=Non-UI E2E failed::${annotation}"
+          fi
+          exit "${status}"
       - name: Capture service state
         if: always()
         run: docker compose -f compose.dev.yml ps
@@ -91,7 +107,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Start real development topology
         run: make dev-up
       - name: Apply migrations explicitly
@@ -112,7 +128,7 @@ jobs:
     name: Go test and build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with:
           go-version: '1.24.x'
@@ -139,7 +155,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
