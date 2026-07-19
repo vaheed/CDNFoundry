@@ -2,6 +2,7 @@
 
 namespace App\Filament\Admin\Resources\EdgePools;
 
+use App\Actions\DispatchEmergencyMode;
 use App\Filament\Admin\Resources\EdgePools\Pages\CreateEdgePool;
 use App\Filament\Admin\Resources\EdgePools\Pages\EditEdgePool;
 use App\Filament\Admin\Resources\EdgePools\Pages\ListEdgePools;
@@ -9,9 +10,11 @@ use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
 use App\Models\DomainEdgePlacement;
 use App\Models\EdgePool;
+use App\Models\EmergencyMode;
 use App\Models\PlatformDnsSetting;
 use App\Support\EdgeRoutingCompiler;
 use Filament\Actions\Action;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
@@ -49,6 +52,7 @@ class EdgePoolResource extends Resource
             TextColumn::make('name')->searchable()->sortable(),
             TextColumn::make('kind')->badge(),
             IconColumn::make('enabled')->boolean(),
+            IconColumn::make('withdrawn')->boolean(),
             TextColumn::make('routing_target')->label('DNS routing target')
                 ->state(fn (EdgePool $record): ?string => $settings === null ? null : EdgeRoutingCompiler::poolHostname($settings, $record))
                 ->copyable()->placeholder('Configure System DNS identity')->wrap(),
@@ -78,6 +82,29 @@ class EdgePoolResource extends Resource
                 AuditLog::record(auth()->user(), 'edge.pool_disabled', $record, ['revision' => $record->revision], request()->ip());
                 ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
             }),
+            Action::make('withdraw')->color('danger')->requiresConfirmation()->visible(fn (EdgePool $record): bool => ! $record->withdrawn)->action(function (EdgePool $record): void {
+                $record->update(['withdrawn' => true, 'revision' => $record->revision + 1]);
+                AuditLog::record(auth()->user(), 'edge.pool_withdrawn', $record, ['revision' => $record->revision], request()->ip());
+                ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
+            }),
+            Action::make('restore')->color('success')->visible(fn (EdgePool $record): bool => $record->withdrawn)->action(function (EdgePool $record): void {
+                $record->update(['withdrawn' => false, 'revision' => $record->revision + 1]);
+                AuditLog::record(auth()->user(), 'edge.pool_restored', $record, ['revision' => $record->revision], request()->ip());
+                ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
+            }),
+            Action::make('emergencyMode')->label('Emergency')->color('danger')->requiresConfirmation()
+                ->visible(fn (EdgePool $record): bool => ! EmergencyMode::query()->where('target_type', 'pool')->where('target_id', (string) $record->id)->where('active', true)->exists())
+                ->schema([
+                    CheckboxList::make('actions')->options(array_combine(config('security.emergency_actions'), config('security.emergency_actions')))->required()->minItems(1),
+                    TextInput::make('duration_minutes')->numeric()->minValue(1)->maxValue(config('security.emergency_duration_minutes_maximum')),
+                ])->action(function (EdgePool $record, array $data): void {
+                    [$mode, $operation] = DispatchEmergencyMode::activate('pool', (string) $record->id, $data['actions'], filled($data['duration_minutes'] ?? null) ? (int) $data['duration_minutes'] : null, auth()->user());
+                    AuditLog::record(auth()->user(), 'security.emergency_activated', $record, ['mode_id' => $mode->id], request()->ip());
+                    Notification::make()->warning()->title('Pool emergency mode queued')->body("Operation {$operation->id} targets the equivalent cell on each edge.")->send();
+                }),
+            Action::make('clearEmergency')->label('Clear emergency')->color('success')->requiresConfirmation()
+                ->visible(fn (EdgePool $record): bool => EmergencyMode::query()->where('target_type', 'pool')->where('target_id', (string) $record->id)->where('active', true)->exists())
+                ->action(fn (EdgePool $record) => DispatchEmergencyMode::deactivateTarget('pool', (string) $record->id, auth()->user())),
         ])->defaultSort('name');
     }
 

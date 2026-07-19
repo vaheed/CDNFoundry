@@ -342,7 +342,7 @@ def main() -> None:
             tls_client = ("docker", "run", "--rm", "--network", f"container:{NAME}", "curlimages/curl:8.16.0",
                 "-ksS", "--resolve", "runtime.example:8443:127.0.0.1")
             inbound_tls = run(*tls_client, "--http2", "https://runtime.example:8443/")
-            assert '"host":"origin-one.example"' in inbound_tls.stdout, inbound_tls.stderr
+            assert '"host":"origin-one.example"' in inbound_tls.stdout, f"{inbound_tls.stderr}\n{inbound_tls.stdout}"
             unknown_sni = run(*tls_client, "--connect-timeout", "2", "https://unknown.example:8443/", check=False)
             assert unknown_sni.returncode != 0, unknown_sni.stdout
             ipv6_client = run("docker", "run", "--rm", "--network", f"container:{NAME}", "alpine:3.22",
@@ -403,11 +403,12 @@ def main() -> None:
             time.sleep(1.5)
             assert request("runtime.example").returncode == 0
         finally:
-            run("docker", "rm", "-f", NAME, check=False)
-            run("docker", "stop", QUARANTINE_NAME, check=False)
-            run("docker", "stop", AGENT_NAME, check=False)
-            run("docker", "stop", DEDICATED_NAME, check=False)
-            run("docker", "stop", TLS_NAME, check=False)
+            if os.environ.get("CDNF_KEEP_FAILED_RUNTIME") != "1":
+                run("docker", "rm", "-f", NAME, check=False)
+                run("docker", "stop", QUARANTINE_NAME, check=False)
+                run("docker", "stop", AGENT_NAME, check=False)
+                run("docker", "stop", DEDICATED_NAME, check=False)
+                run("docker", "stop", TLS_NAME, check=False)
     print("Phase 4 OpenResty runtime qualification passed.")
 
 

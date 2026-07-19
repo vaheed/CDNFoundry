@@ -112,15 +112,19 @@ type edgeTask struct {
 	ID      string `json:"id"`
 	Type    string `json:"type"`
 	Payload struct {
-		CellName        string   `json:"cell_name"`
-		Addresses       []string `json:"addresses"`
-		Allowlist       []string `json:"private_allowlist"`
-		BlockedNetworks []string `json:"blocked_networks"`
-		Domain          string   `json:"domain"`
-		PurgeType       string   `json:"type"`
-		CacheEpoch      uint64   `json:"cache_epoch"`
-		CacheKeys       []string `json:"cache_keys"`
-		Origin          struct {
+		CellName           string   `json:"cell_name"`
+		Addresses          []string `json:"addresses"`
+		Allowlist          []string `json:"private_allowlist"`
+		BlockedNetworks    []string `json:"blocked_networks"`
+		Domain             string   `json:"domain"`
+		PurgeType          string   `json:"type"`
+		CacheEpoch         uint64   `json:"cache_epoch"`
+		CacheKeys          []string `json:"cache_keys"`
+		CellNames          []string `json:"cell_names"`
+		EmergencyActive    bool     `json:"active"`
+		EmergencyActions   []string `json:"actions"`
+		EmergencyExpiresAt *int64   `json:"expires_at"`
+		Origin             struct {
 			Host              string `json:"host"`
 			Scheme            string `json:"scheme"`
 			HostHeader        string `json:"host_header"`
@@ -153,12 +157,55 @@ func (c *client) processTasks() error {
 			result, status = c.runCellTask(task)
 		} else if task.Type == "cache_purge" {
 			result, status = c.runCachePurge(task)
+		} else if task.Type == "emergency_mode" {
+			result, status = c.runEmergencyMode(task)
 		}
 		if err := c.request("POST", "/edge/v1/tasks/"+task.ID+"/result", map[string]any{"status": status, "result": result}, &map[string]any{}, true); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (c *client) runEmergencyMode(task edgeTask) (map[string]any, string) {
+	if len(task.Payload.EmergencyActions) > 11 || len(task.Payload.CellNames) > 32 {
+		return map[string]any{"status": "failed", "failure_reason": "invalid_emergency_task"}, "failed"
+	}
+	command := map[string]any{
+		"task_id": task.ID, "action": "emergency_mode", "active": task.Payload.EmergencyActive,
+		"actions": task.Payload.EmergencyActions, "expires_at": task.Payload.EmergencyExpiresAt,
+	}
+	applied := 0
+	for _, endpoint := range c.statusURLs {
+		cell, ok := c.cellStatus(endpoint)
+		if !ok {
+			continue
+		}
+		cellName, _ := cell["name"].(string)
+		if cellName == "" || len(task.Payload.CellNames) > 0 && !containsString(task.Payload.CellNames, cellName) {
+			continue
+		}
+		if err := c.control(endpoint, command); err != nil {
+			return map[string]any{"status": "failed", "failure_reason": "emergency_control_failed", "applied_cells": applied}, "failed"
+		}
+		if err := c.saveEmergencyControl(cellName, emergencyControl{Active: task.Payload.EmergencyActive, Actions: task.Payload.EmergencyActions, ExpiresAt: task.Payload.EmergencyExpiresAt}); err != nil {
+			return map[string]any{"status": "failed", "failure_reason": "control_state_persist_failed", "applied_cells": applied}, "failed"
+		}
+		applied++
+	}
+	if applied == 0 {
+		return map[string]any{"status": "failed", "failure_reason": "cell_not_found"}, "failed"
+	}
+	return map[string]any{"status": "completed", "applied_cells": applied, "active": task.Payload.EmergencyActive}, "succeeded"
+}
+
+func containsString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *client) runCachePurge(task edgeTask) (map[string]any, string) {
@@ -251,6 +298,40 @@ func (c *client) saveCellControl(cellName string, drained bool) error {
 func (c *client) loadCellControls() (map[string]bool, error) {
 	controls := map[string]bool{}
 	body, err := os.ReadFile(filepath.Join(c.dir, "cell-controls.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		return controls, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(body, &controls); err != nil {
+		return nil, err
+	}
+	return controls, nil
+}
+
+type emergencyControl struct {
+	Active    bool     `json:"active"`
+	Actions   []string `json:"actions"`
+	ExpiresAt *int64   `json:"expires_at"`
+}
+
+func (c *client) saveEmergencyControl(cellName string, control emergencyControl) error {
+	controls, err := c.loadEmergencyControls()
+	if err != nil {
+		return err
+	}
+	if control.Active {
+		controls[cellName] = control
+	} else {
+		delete(controls, cellName)
+	}
+	return atomicJSON(filepath.Join(c.dir, "emergency-controls.json"), controls)
+}
+
+func (c *client) loadEmergencyControls() (map[string]emergencyControl, error) {
+	controls := map[string]emergencyControl{}
+	body, err := os.ReadFile(filepath.Join(c.dir, "emergency-controls.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return controls, nil
 	}
@@ -665,9 +746,11 @@ func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) 
 	for _, raw := range s.Domains {
 		var domain struct {
 			Domain    string         `json:"domain"`
+			DomainID  uint64         `json:"domain_id"`
 			Revision  uint64         `json:"revision"`
 			Settings  map[string]any `json:"settings"`
 			Cache     map[string]any `json:"cache"`
+			Security  map[string]any `json:"security"`
 			TLS       map[string]any `json:"tls"`
 			Pools     []string       `json:"pools"`
 			Hostnames []struct {
@@ -724,7 +807,7 @@ func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) 
 				}
 				hostTLS["certificate_id"] = hostCertificateID
 			}
-			compiled := map[string]any{"domain": domain.Domain, "revision": domain.Revision, "settings": domain.Settings, "cache": domain.Cache, "tls": hostTLS, "origin": host.Origin}
+			compiled := map[string]any{"domain": domain.Domain, "domain_id": domain.DomainID, "revision": domain.Revision, "settings": domain.Settings, "cache": domain.Cache, "security": domain.Security, "tls": hostTLS, "origin": host.Origin}
 			hosts[name] = compiled
 			for _, pool := range domain.Pools {
 				if !validPoolName(pool) {
@@ -764,7 +847,7 @@ func validPoolName(name string) bool {
 }
 
 func (c *client) heartbeat(sequence uint64) error {
-	cells, failures := c.runtimeStatus()
+	cells, failures, security := c.runtimeStatus()
 	listenerReady := false
 	for _, cell := range cells {
 		if cell["name"] == "shared-default" && cell["status"] == "ready" {
@@ -773,14 +856,16 @@ func (c *client) heartbeat(sequence uint64) error {
 	}
 	return c.request("POST", "/edge/v1/heartbeat", map[string]any{
 		"agent_version": version, "listener_ready": listenerReady, "active_sequence": sequence,
-		"cells": cells, "passive_origins": failures,
+		"cells": cells, "passive_origins": failures, "noisy_domains": security,
 	}, &map[string]any{}, true)
 }
 
-func (c *client) runtimeStatus() ([]map[string]any, []map[string]any) {
+func (c *client) runtimeStatus() ([]map[string]any, []map[string]any, []map[string]any) {
 	cells := []map[string]any{}
 	failures := []map[string]any{}
+	security := []map[string]any{}
 	controls, _ := c.loadCellControls()
+	emergencyControls, _ := c.loadEmergencyControls()
 	for _, endpoint := range c.statusURLs {
 		decoded, ok := c.runtimeEndpointStatus(endpoint)
 		if !ok {
@@ -799,16 +884,36 @@ func (c *client) runtimeStatus() ([]map[string]any, []map[string]any) {
 					_ = c.controlCell(endpoint, "restore-"+hex.EncodeToString(restoreKey[:16]), action)
 				}
 			}
+			if emergency, configured := emergencyControls[name]; configured {
+				active := emergency.Active
+				if emergency.ExpiresAt != nil && *emergency.ExpiresAt <= time.Now().Unix() {
+					active = false
+				}
+				restoreKey := sha256.Sum256([]byte(name + "|emergency|" + strconv.FormatBool(active) + "|" + strings.Join(emergency.Actions, ",")))
+				_ = c.control(endpoint, map[string]any{
+					"task_id": "restore-" + hex.EncodeToString(restoreKey[:16]), "action": "emergency_mode",
+					"active": active, "actions": emergency.Actions, "expires_at": emergency.ExpiresAt,
+				})
+				if !active {
+					_ = c.saveEmergencyControl(name, emergencyControl{})
+				}
+			}
 			cells = append(cells, decoded.Cell)
 		}
 		for _, failure := range decoded.Data {
 			if len(failures) >= 100 {
-				return cells, failures
+				return cells, failures, security
 			}
 			failures = append(failures, failure)
 		}
+		for _, event := range decoded.Security {
+			if len(security) >= 20 {
+				break
+			}
+			security = append(security, event)
+		}
 	}
-	return cells, failures
+	return cells, failures, security
 }
 
 func (c *client) cellStatus(endpoint string) (map[string]any, bool) {
@@ -817,8 +922,9 @@ func (c *client) cellStatus(endpoint string) (map[string]any, bool) {
 }
 
 type runtimeEndpointResponse struct {
-	Data []map[string]any `json:"data"`
-	Cell map[string]any   `json:"cell"`
+	Data     []map[string]any `json:"data"`
+	Security []map[string]any `json:"security"`
+	Cell     map[string]any   `json:"cell"`
 }
 
 func (c *client) runtimeEndpointStatus(endpoint string) (runtimeEndpointResponse, bool) {

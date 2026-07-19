@@ -295,15 +295,24 @@ services:
       EDGE_CELL_NAME: shared-default
       EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/shared-default.json
       EDGE_STATUS_TOKEN: ${CDNF_DEV_EDGE_STATUS_TOKEN:-cdnf-dev-edge-status-only}
+      GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb
     volumes:
       - dev-pki:/run/edge:ro
       - edge-a-state:/var/lib/cdnfoundry/runtime:ro
+      - mmdb:/mmdb:ro
     tmpfs:
       - /var/cache/nginx:rw,noexec,nosuid,size=256m
+      - /var/lib/nginx/tmp:rw,noexec,nosuid,size=64m
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 128
+    ulimits: { nofile: { soft: 65536, hard: 65536 } }
+    sysctls: { net.ipv4.tcp_syncookies: "1" }
     networks: [edge]
     depends_on:
       dev-pki: { condition: service_completed_successfully }
       origin-http: { condition: service_started }
+      mmdb-updater: { condition: service_healthy }
     restart: unless-stopped
     healthcheck:
       test: [CMD, wget, -qO-, http://127.0.0.1:8080/healthz]
@@ -319,15 +328,24 @@ services:
       EDGE_CELL_NAME: quarantine-default
       EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/quarantine-default.json
       EDGE_STATUS_TOKEN: ${CDNF_DEV_EDGE_STATUS_TOKEN:-cdnf-dev-edge-status-only}
+      GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb
     volumes:
       - dev-pki:/run/edge:ro
       - edge-a-state:/var/lib/cdnfoundry/runtime:ro
+      - mmdb:/mmdb:ro
     tmpfs:
       - /var/cache/nginx:rw,noexec,nosuid,size=256m
+      - /var/lib/nginx/tmp:rw,noexec,nosuid,size=64m
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 96
+    ulimits: { nofile: { soft: 65536, hard: 65536 } }
+    sysctls: { net.ipv4.tcp_syncookies: "1" }
     networks: [edge]
     depends_on:
       dev-pki: { condition: service_completed_successfully }
       origin-http: { condition: service_started }
+      mmdb-updater: { condition: service_healthy }
     restart: unless-stopped
 
   edge-agent-a:
@@ -367,15 +385,24 @@ services:
       EDGE_CELL_NAME: shared-default
       EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/shared-default.json
       EDGE_STATUS_TOKEN: ${CDNF_DEV_EDGE_STATUS_TOKEN:-cdnf-dev-edge-status-only}
+      GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb
     volumes:
       - dev-pki:/run/edge:ro
       - edge-b-state:/var/lib/cdnfoundry/runtime:ro
+      - mmdb:/mmdb:ro
     tmpfs:
       - /var/cache/nginx:rw,noexec,nosuid,size=256m
+      - /var/lib/nginx/tmp:rw,noexec,nosuid,size=64m
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 128
+    ulimits: { nofile: { soft: 65536, hard: 65536 } }
+    sysctls: { net.ipv4.tcp_syncookies: "1" }
     networks: [edge]
     depends_on:
       dev-pki: { condition: service_completed_successfully }
       origin-http: { condition: service_started }
+      mmdb-updater: { condition: service_healthy }
     restart: unless-stopped
     healthcheck:
       test: [CMD, wget, -qO-, http://127.0.0.1:8080/healthz]
@@ -391,15 +418,24 @@ services:
       EDGE_CELL_NAME: quarantine-default
       EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/quarantine-default.json
       EDGE_STATUS_TOKEN: ${CDNF_DEV_EDGE_STATUS_TOKEN:-cdnf-dev-edge-status-only}
+      GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb
     volumes:
       - dev-pki:/run/edge:ro
       - edge-b-state:/var/lib/cdnfoundry/runtime:ro
+      - mmdb:/mmdb:ro
     tmpfs:
       - /var/cache/nginx:rw,noexec,nosuid,size=256m
+      - /var/lib/nginx/tmp:rw,noexec,nosuid,size=64m
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 96
+    ulimits: { nofile: { soft: 65536, hard: 65536 } }
+    sysctls: { net.ipv4.tcp_syncookies: "1" }
     networks: [edge]
     depends_on:
       dev-pki: { condition: service_completed_successfully }
       origin-http: { condition: service_started }
+      mmdb-updater: { condition: service_healthy }
     restart: unless-stopped
 
   edge-agent-b:

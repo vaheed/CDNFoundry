@@ -16,6 +16,7 @@ use App\Models\Operation;
 use App\Support\ArtifactSigner;
 use App\Support\ManagedCertificateNames;
 use App\Support\PlatformSettings;
+use App\Support\SecurityConfig;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -121,6 +122,7 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
                 'epoch' => $domain->cache_epoch,
                 'development_mode_until' => $domain->cache_development_mode_until?->isFuture() ? $domain->cache_development_mode_until->timestamp : null,
             ],
+            'security' => SecurityConfig::compile($domain),
             'tls' => [
                 'mode' => $domain->tls_mode,
                 'certificate' => $domain->activeTlsCertificate !== null && $domain->activeTlsCertificate->expires_at->isFuture()

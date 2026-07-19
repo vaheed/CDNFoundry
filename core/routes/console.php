@@ -19,3 +19,4 @@ Schedule::command('edge:dispatch-origin-checks')->everyMinute()->withoutOverlapp
 Schedule::command('edge:prune-revisions')->dailyAt('02:30')->withoutOverlapping();
 Schedule::job(new ReconcilePlatformDnsIdentity)->everyMinute()->withoutOverlapping();
 Schedule::command('tls:dispatch-maintenance')->hourly()->withoutOverlapping();
+Schedule::command('security:reconcile-readiness')->everyMinute()->withoutOverlapping();

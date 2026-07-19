@@ -385,6 +385,121 @@ Use an active, nameserver-verified disposable domain assigned to the domain user
 - Automated/runtime qualification: agent-owned results are recorded in `docs/phase-5-qualification.md`.
 - Manual browser/public HTTPS qualification: owner-run; **not executed and Phase 5 is not release-qualified until every checkpoint above is recorded as passed**.
 
+## Phase 6 — Basic security and DDoS readiness
+
+Use two disposable proxied domains: one assigned to the domain user and one
+healthy comparison domain placed in another ready cell. Keep IPv4 and IPv6
+service paths active. Sign in at `http://localhost:8080/domain/login` with the
+documented local domain-user account, and at `/admin/login` with
+`admin@example.test` / `cdnlite-local-admin`. Replace documentation addresses
+with controlled test clients/origins; never block the operator's only access
+path.
+
+### Domain security rules and profiles
+
+1. Open the assigned domain. Confirm the Security section shows selected and
+   effective profile, operational state, allowed methods, trusted proxy CIDRs,
+   platform ceilings, and request/origin/cache limits. Open **Security →
+   Security profile and limits**.
+2. Select `protected`, policy `manual`, and methods `GET`, `HEAD`, `POST`.
+   Enter each displayed protected ceiling and save. Record the new domain
+   revision and edge operation, refresh, and confirm persistence. Enter one
+   value above its displayed ceiling; save must fail without a revision.
+3. Set `requests_per_second` and `request_burst` below the ceiling, save, and
+   confirm the stricter values deploy. Return to `standard`; confirm values must
+   be explicitly valid for that profile rather than silently raised.
+4. In **Security allow/block rules**, create these enabled rows and record IDs:
+
+   | Priority | Type | Value | Action | Note |
+   |---:|---|---|---|---|
+   | 10 | IP address | controlled IPv4 client | Allow | browser IPv4 exception |
+   | 20 | CIDR network | controlled IPv4 `/24` | Block | browser IPv4 range |
+   | 30 | IP address | controlled IPv6 client | Allow | browser IPv6 exception |
+   | 40 | CIDR network | controlled IPv6 `/64` | Block | browser IPv6 range |
+   | 50 | Country | a known MMDB country code | Block | browser country |
+   | 60 | Continent | a known MMDB continent code | Block | browser continent |
+
+5. Confirm malformed IP/CIDR, IPv4 prefix above 32, IPv6 prefix above 128,
+   unsupported geography, priority outside `-1000000..1000000`, and a note
+   above 250 characters each remain in the form with errors and create no
+   revision. Send controlled requests and confirm first-match priority and ID
+   tie-break behavior, including unknown IPv6 geography continuing through
+   IP/CIDR evaluation.
+6. Choose **Import rules**. Add multiple preview rows, leave **Replace existing
+   rules** off, confirm every normalized row before the confirmation, and save.
+   All rows must appear under one new desired revision. Repeat with replacement
+   after saving evidence; cancel once and confirm cancellation changes nothing.
+7. Configure one **Trusted L4 proxy CIDR** only for a controlled balancer that
+   overwrites `X-Forwarded-For`. A direct spoofed header must not change the
+   client identity; traffic from the trusted peer must use its overwritten
+   first address. Remove the test CIDR afterward.
+
+### Real traffic, protection, and isolation
+
+1. Against the active revision, record response status, security reason, event,
+   edge cell, and resource behavior for unknown Host, unknown SNI, TRACE,
+   malformed path, oversized header/body, slow header/body, keep-alive ceiling,
+   request duration, IPv4/IPv6 allow/block, country/continent, client and domain
+   request rate, client and domain connection concurrency, and TLS handshake
+   rate. HTTP/2 streams/headers/requests must remain bounded; HTTP/3 and
+   WebSocket must remain unavailable.
+2. Use a deliberately slow disposable origin. Exceed origin concurrency and
+   failure threshold; record `origin_capacity_exceeded` and
+   `origin_circuit_open`, bounded retries, and cached/stale or controlled error
+   behavior. A single incoming request must never create more than the selected
+   retry limit.
+3. Send random paths and query strings beyond cache-key/admission ceilings.
+   Record `cache_abuse_detected`, cell cache/temp usage, and memory before/after.
+   The cell must remain within its quota and the comparison domain must continue
+   serving normally.
+4. Stop Laravel, Horizon, scheduler, Valkey, control PostgreSQL, and telemetry
+   input after the active artifact is present. Existing rules and traffic must
+   continue locally. Restore services without deleting volumes. Submit an
+   invalid candidate after recovery and confirm the prior rules and placement
+   remain active.
+
+### Administrator readiness and emergency controls
+
+1. As administrator open the affected domain. Choose **Security → Restrict
+   domain**. Record state, effective protected profile, operation, revision,
+   events, and prove the comparison domain's limits did not change.
+2. Choose **Quarantine domain**. Confirm the target quarantine cell activates
+   and acknowledges before source drain/removal. Deliberately make a disposable
+   target fail once; the active source placement and last-valid rules must stay
+   live. Restore readiness and complete the move without restarting unrelated
+   cells.
+3. Choose **Release domain**. Confirm target-first movement to shared capacity,
+   state `recovering`, then `normal` after a quiet scheduler interval. Record
+   IPv4/IPv6 behavior throughout.
+4. Open **Edge network → Edges** and apply **Emergency mode** to one disposable
+   edge with actions `allow_get_head_only` and `disable_origin_retries`, expiry
+   `2` minutes. Record the operation/tasks and confirm only its cells change.
+   Restart one cell and confirm the agent reapplies the active control. Choose
+   **Clear emergency** and verify normal traffic returns.
+5. In the edge's **Cells** table apply **Emergency** to one cell with
+   `return_maintenance_response` for `1` minute. Confirm another cell stays
+   ready, then confirm automatic expiry sends the clear operation. Repeat the
+   smallest applicable check on a service pool and verify only its cells.
+6. Open **Service pools**, choose **Withdraw** on a disposable pool, and query
+   DNSdist over UDP/TCP for IPv4 and IPv6. Only that pool's addresses must leave
+   new answers. Choose **Restore** after every cell/address is ready and confirm
+   answers return. Do not withdraw the operator's only reachable pool.
+7. Inspect domain Security events, edge capacities, Audit logs, Operations, and
+   active emergency controls. Confirm reason codes are stable, metrics are a
+   bounded top 20 rather than one heartbeat row per attacker, expiry is visible,
+   and a domain user cannot invoke any administrator action or view another
+   domain.
+
+### Phase 6 completion gate
+
+- Implementation: present for local ordered rules, bounded profiles and limits,
+  origin/cache protection, isolation, emergency controls, and pool withdrawal.
+- Documentation: present in the Phase 6 guides and runbooks.
+- Automated/runtime qualification: agent-owned evidence is recorded in
+  `docs/phase-6-qualification.md`.
+- Manual browser/real-host qualification: owner-run; **not executed and Phase 6
+  is not release-qualified until every checkpoint above is recorded as passed**.
+
 ## Record the result
 
 For each phase record: date/operator, commit SHA, browser/version, desktop/mobile viewports, exact domain and edge addresses, every checkpoint as pass/fail/not-ready, operation IDs, revisions, screenshots, relevant logs, and any deviations from the example values. Also record Horizon, PowerAdmin, DNSdist UDP/TCP, Prometheus, Alertmanager, and edge results where applicable.

@@ -12,6 +12,23 @@ local certificate_cache = {}
 local certificate_cache_order = {}
 local certificate_cache_limit = 512
 local cache_control_directives
+local geo_database
+
+local function security_reject(status, reason)
+    local dictionary = ngx.shared.runtime_limits
+    dictionary:incr("capacity:rejected_requests", 1, 0)
+    dictionary:incr("security:reason:" .. reason, 1, 0)
+    if ngx.ctx.security_domain then
+        local events = ngx.shared.security_limits
+        local key = "event:" .. tostring(ngx.ctx.security_domain) .. ":" .. reason
+        events:incr(key, 1, 0)
+        events:set("host:" .. tostring(ngx.ctx.security_domain), ngx.ctx.security_hostname or "", 3600)
+        events:set("time:" .. tostring(ngx.ctx.security_domain) .. ":" .. reason, ngx.time(), 3600)
+    end
+    ngx.header["X-CDNFoundry-Security-Reason"] = reason
+    ngx.var.cdn_security_reason = reason
+    return ngx.exit(status)
+end
 
 local function ipv4_number(ip)
     local a,b,c,d = ip:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
@@ -133,6 +150,16 @@ end
 
 function M.start()
     refresh(false)
+    local geo_path = os.getenv("GEOIP_DATABASE") or ""
+    if geo_path ~= "" then
+        local ok_module, maxminddb = pcall(require, "maxminddb")
+        if ok_module then
+            local ok_open, database = pcall(maxminddb.open, geo_path)
+            if ok_open then geo_database = database else ngx.log(ngx.WARN, "GeoIP database unavailable: ", database) end
+        else
+            ngx.log(ngx.WARN, "GeoIP module unavailable: ", maxminddb)
+        end
+    end
     local ok, err = ngx.timer.every(1, refresh)
     if not ok then ngx.log(ngx.ERR, "runtime refresh timer failed: ", err) end
     restart_generation = ngx.shared.runtime_limits:get("control:restart_generation") or 0
@@ -159,7 +186,15 @@ function M.select_certificate()
     name = name and name:lower():gsub("%.$", "") or ""
     local config = state.hosts[name]
     if not config then
+        ngx.shared.runtime_limits:incr("security:reason:unknown_sni", 1, 0)
         error("unknown TLS SNI")
+    end
+    local security = config.security or {}
+    local limits = security.limits or {}
+    local second = ngx.time()
+    local handshakes = ngx.shared.runtime_limits:incr("security:tls:" .. tostring(config.domain) .. ":" .. second, 1, 0, 2)
+    if handshakes and handshakes > (tonumber(limits.tls_handshakes_per_second) or 50) then
+        error("tls_handshake_rate_exceeded")
     end
     if not config.tls or config.tls.mode == "disabled" or not config.tls.certificate_id then error("TLS disabled or certificate unavailable") end
     local certificate = state.certificates[config.tls.certificate_id]
@@ -208,8 +243,81 @@ local function resolve(host, networks, blocked_networks, denied)
 end
 
 local function reject(status)
-    ngx.shared.runtime_limits:incr("capacity:rejected_requests", 1, 0)
-    return ngx.exit(status)
+    return security_reject(status, "malformed_request")
+end
+
+local function client_address(security)
+    local remote = ngx.var.remote_addr or ""
+    if allowed(remote, security.trusted_proxy_cidrs) then
+        local forwarded = (ngx.var.http_x_forwarded_for or ""):match("^%s*([^,%s]+)")
+        if forwarded and (#forwarded <= 45) and (ipv4_number(forwarded) or forwarded:find(":", 1, true)) then
+            return forwarded
+        end
+    end
+    return remote
+end
+
+local function geography(ip)
+    if not geo_database then return "unknown", "unknown" end
+    local ok, result = pcall(geo_database.lookup, geo_database, ip)
+    if not ok or not result then return "unknown", "unknown" end
+    local ok_country, country = pcall(result.get, result, "country", "iso_code")
+    local ok_continent, continent = pcall(result.get, result, "continent", "code")
+    return ok_country and country or "unknown", ok_continent and continent or "unknown"
+end
+
+local function rule_matches(rule, ip, country, continent)
+    if rule.match_type == "ip" then return ip:lower() == tostring(rule.value):lower() end
+    if rule.match_type == "cidr" then return allowed(ip, {rule.value}) end
+    if rule.match_type == "country" then return country ~= "unknown" and country == rule.value end
+    if rule.match_type == "continent" then return continent ~= "unknown" and continent == rule.value end
+    return false
+end
+
+local function emergency_actions(dictionary)
+    local raw = dictionary:get("emergency:active")
+    local expires = tonumber(dictionary:get("emergency:expires_at")) or 0
+    if not raw or (expires > 0 and expires <= ngx.time()) then
+        if raw then dictionary:delete("emergency:active"); dictionary:delete("emergency:expires_at") end
+        return {}
+    end
+    local decoded = cjson.decode(raw)
+    if type(decoded) ~= "table" then return {} end
+    local actions = {}
+    for _, action in ipairs(decoded) do actions[action] = true end
+    return actions
+end
+
+local function body_size()
+    local length = tonumber(ngx.var.http_content_length)
+    if length then return length end
+    if not ngx.var.http_transfer_encoding then return 0 end
+    ngx.req.read_body()
+    local data = ngx.req.get_body_data()
+    if data then return #data end
+    local file_path = ngx.req.get_body_file()
+    if not file_path then return 0 end
+    local file = io.open(file_path, "rb")
+    if not file then return 0 end
+    local size = file:seek("end") or 0
+    file:close()
+    return size
+end
+
+local function request_header_size()
+    local ok, raw = pcall(ngx.req.raw_header)
+    if ok and raw then return #raw end
+    local headers, err = ngx.req.get_headers(100, true)
+    if err == "truncated" then return math.huge end
+    local size = #(ngx.req.get_method() or "") + #(ngx.var.request_uri or "") + 16
+    for name, value in pairs(headers or {}) do
+        if type(value) == "table" then
+            for _, item in ipairs(value) do size = size + #tostring(name) + #tostring(item) + 4 end
+        else
+            size = size + #tostring(name) + #tostring(value) + 4
+        end
+    end
+    return size
 end
 
 local function request_cache_key(domain, host, cache)
@@ -243,11 +351,60 @@ end
 function M.access()
     local dictionary = ngx.shared.runtime_limits
     dictionary:incr("capacity:requests:" .. ngx.time(), 1, 0, 2)
-    if dictionary:get("control:drained") == true then return reject(503) end
+    if dictionary:get("control:drained") == true then return security_reject(503, "edge_emergency_mode") end
     local host = (ngx.var.host or ""):lower():gsub("%.$", "")
     local config = state.hosts[host]
-    if not config then return reject(421) end
+    if not config then return security_reject(421, "unknown_host") end
+    ngx.var.cdn_original_host = host
+    ngx.ctx.security_domain = config.domain_id or config.domain
+    ngx.ctx.security_hostname = host
     if config.settings and config.settings.enabled == false then return reject(503) end
+    local security = config.security or {}
+    local limits = security.limits or {}
+    local emergency = emergency_actions(dictionary)
+    if emergency.return_maintenance_response then return security_reject(503, "edge_emergency_mode") end
+    if security.state == "quarantined" then return security_reject(429, "domain_quarantined") end
+    local method = ngx.req.get_method()
+    if emergency.allow_get_head_only and method ~= "GET" and method ~= "HEAD" then return security_reject(405, "edge_emergency_mode") end
+    local method_allowed = false
+    for _, allowed_method in ipairs(security.allowed_methods or {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}) do
+        if method == allowed_method then method_allowed = true; break end
+    end
+    if not method_allowed then return security_reject(405, "invalid_method") end
+    if request_header_size() > (tonumber(limits.maximum_header_size) or 32768) then return security_reject(431, "header_too_large") end
+    local size = body_size()
+    if emergency.disable_request_bodies and size > 0 then return security_reject(413, "edge_emergency_mode") end
+    if size > (tonumber(limits.maximum_request_body_size) or 16777216) then return security_reject(413, "body_too_large") end
+    local client = client_address(security)
+    local country, continent = geography(client)
+    for _, rule in ipairs(security.rules or {}) do
+        if rule_matches(rule, client, country, continent) then
+            if rule.action == "block" then return security_reject(403, "domain_restricted") end
+            break
+        end
+    end
+    local second = ngx.time()
+    local client_key = "security:req:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client) .. ":" .. second
+    local domain_key = "security:req:domain:" .. tostring(config.domain) .. ":" .. second
+    local client_requests = dictionary:incr(client_key, 1, 0, 2)
+    local domain_requests = dictionary:incr(domain_key, 1, 0, 2)
+    local rps = tonumber(limits.requests_per_second) or 100
+    local burst = tonumber(limits.request_burst) or 200
+    if client_requests and client_requests > rps + burst then return security_reject(429, "client_rate_exceeded") end
+    if domain_requests and domain_requests > rps * 8 + burst then return security_reject(429, "domain_rate_exceeded") end
+    local client_connections = dictionary:incr("security:conn:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client), 1, 0)
+    local domain_connections = dictionary:incr("security:conn:domain:" .. tostring(config.domain), 1, 0)
+    if client_connections and client_connections > (tonumber(limits.connections_per_client) or 64) then
+        dictionary:incr("security:conn:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client), -1, 0)
+        dictionary:incr("security:conn:domain:" .. tostring(config.domain), -1, 0)
+        return security_reject(429, "client_connections_exceeded")
+    end
+    if domain_connections and domain_connections > (tonumber(limits.connections_per_domain) or 512) then
+        dictionary:incr("security:conn:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client), -1, 0)
+        dictionary:incr("security:conn:domain:" .. tostring(config.domain), -1, 0)
+        return security_reject(429, "domain_connections_exceeded")
+    end
+    ngx.ctx.security_connection_keys = {"security:conn:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client), "security:conn:domain:" .. tostring(config.domain)}
     if config.settings and config.settings.redirect_https == true and ngx.var.scheme == "http" then
         return ngx.redirect("https://" .. host .. ngx.var.request_uri, 308)
     end
@@ -270,7 +427,10 @@ function M.access()
         and not ngx.var.http_authorization and not ngx.var.http_range
         and not cookie_bypassed(cache.bypass_cookie_names)
         and development_until <= ngx.time()
-        and #cache_key <= 8192
+        and #cache_key <= (tonumber(limits.maximum_cache_key_length) or 4096)
+    local admissions = dictionary:incr("security:cache:" .. tostring(config.domain) .. ":" .. second, 1, 0, 2)
+    if admissions and admissions > (tonumber(limits.cache_admissions_per_second) or 50) then cacheable = false end
+    if #cache_key > (tonumber(limits.maximum_cache_key_length) or 4096) then ngx.var.cdn_security_reason = "cache_abuse_detected" end
     ngx.var.cdn_cache_key = cache_key
     ngx.var.cdn_cache_bypass = cacheable and "0" or "1"
     ngx.var.cdn_cache_no_store = "0"
@@ -287,14 +447,45 @@ function M.access()
     return ngx.exec("@cache_100m")
 end
 
+function M.invalid_method()
+    return security_reject(405, ngx.var.cdn_security_reason ~= "" and ngx.var.cdn_security_reason or "invalid_method")
+end
+
 function M.origin_access()
     local dictionary = ngx.shared.runtime_limits
-    local host = (ngx.var.host or ""):lower():gsub("%.$", "")
+    local host = (ngx.var.cdn_original_host ~= "" and ngx.var.cdn_original_host or ngx.var.host or ""):lower():gsub("%.$", "")
     local config = state.hosts[host]
-    if not config then return reject(421) end
+    if not config then return security_reject(421, "unknown_host") end
+    ngx.ctx.security_domain = config.domain_id or config.domain
+    ngx.ctx.security_hostname = host
+    local security = config.security or {}
+    local limits = security.limits or {}
+    local emergency = emergency_actions(dictionary)
+    if emergency.serve_cache_only or emergency.serve_stale_only then return security_reject(503, "edge_emergency_mode") end
+    local circuit_key = "security:origin:open:" .. tostring(config.domain)
+    local open_until = tonumber(dictionary:get(circuit_key)) or 0
+    if open_until > ngx.now() then return security_reject(503, "origin_circuit_open") end
+    local origin_key = "security:origin:connections:" .. tostring(config.domain)
+    local active = dictionary:incr(origin_key, 1, 0)
+    if active and active > (tonumber(limits.origin_max_connections) or 128) then
+        dictionary:incr(origin_key, -1, 0)
+        return security_reject(503, "origin_capacity_exceeded")
+    end
+    ngx.ctx.origin_connection_key = origin_key
+    ngx.ctx.origin_domain = tostring(config.domain)
+    ngx.ctx.origin_failure_threshold = tonumber(limits.origin_failure_threshold) or 10
+    ngx.ctx.origin_recovery_timeout = tonumber(limits.origin_recovery_timeout) or 30
+    dictionary:incr("capacity:origin_connections", 1, 0)
     local origin = config.origin
     local address, err = resolve(origin.host, origin.private_allowlist, origin.blocked_networks, origin.blocked_addresses)
-    if not address then ngx.log(ngx.WARN, "origin rejected: ", err); ngx.header["X-CDNFoundry-Error"] = err; return reject(502) end
+    if not address then
+        ngx.log(ngx.WARN, "origin rejected: ", err)
+        ngx.header["X-CDNFoundry-Error"] = err
+        -- Leave this as an ordinary upstream failure. The outer cache can then
+        -- apply its bounded stale-if-error policy; security-controlled 503s
+        -- retain their explicit reason and are never disguised as origin loss.
+        return ngx.exit(502)
+    end
     if address:find(":", 1, true) then address = "[" .. address .. "]" end
     ngx.var.origin_scheme = origin.scheme
     ngx.var.origin_address = address
@@ -304,16 +495,16 @@ function M.origin_access()
     ngx.var.origin_connection = ""
     ngx.var.origin_upgrade = ""
     ngx.var.origin_address = address:gsub("^%[", ""):gsub("%]$", "")
-    ngx.var.origin_connect_timeout = tostring(math.max(100, math.min(10000, tonumber(origin.connect_timeout_ms) or 1000)))
-    ngx.var.origin_response_timeout = tostring(math.max(500, math.min(60000, tonumber(origin.response_timeout_ms) or 5000)))
-    ngx.var.origin_retry_count = tostring(math.max(0, math.min(2, tonumber(origin.retry_count) or tonumber(config.settings and config.settings.retry_count) or 0)))
+    ngx.var.origin_connect_timeout = tostring(math.min((tonumber(limits.origin_connect_timeout) or 3) * 1000, math.max(100, math.min(10000, tonumber(origin.connect_timeout_ms) or 1000))))
+    ngx.var.origin_response_timeout = tostring(math.min((tonumber(limits.origin_read_timeout) or 30) * 1000, math.max(500, math.min(60000, tonumber(origin.response_timeout_ms) or 5000))))
+    local retry_limit = emergency.disable_origin_retries and 0 or (tonumber(limits.origin_retry_limit) or 0)
+    ngx.var.origin_retry_count = tostring(math.max(0, math.min(retry_limit, tonumber(origin.retry_count) or tonumber(config.settings and config.settings.retry_count) or 0)))
     if origin.websocket == true and (ngx.var.http_upgrade or ""):lower() == "websocket" then
         ngx.var.origin_connection = "upgrade"
         ngx.var.origin_upgrade = "websocket"
     end
     ngx.req.clear_header("Forwarded"); ngx.req.clear_header("X-Forwarded-For"); ngx.req.clear_header("X-Forwarded-Host"); ngx.req.clear_header("X-Forwarded-Proto")
     ngx.req.clear_header("Proxy-Connection"); ngx.req.clear_header("Keep-Alive"); ngx.req.clear_header("TE"); ngx.req.clear_header("Trailer"); ngx.req.clear_header("Upgrade")
-    dictionary:incr("capacity:origin_connections", 1, 0)
     if origin.scheme == "https" and origin.verify_tls == true then return ngx.exec("@proxy_verified") end
     if origin.scheme == "https" then return ngx.exec("@proxy_unverified_https") end
     return ngx.exec("@proxy_http")
@@ -398,7 +589,6 @@ function M.balance()
 end
 
 function M.record_passive_failure()
-    ngx.shared.runtime_limits:incr("capacity:origin_connections", -1, 0)
     local status = tonumber((ngx.var.upstream_status or ""):match("%d+"))
     if status and status < 500 then return end
     local host = (ngx.var.host or ""):lower():gsub("%.$", "")
@@ -408,6 +598,45 @@ function M.record_passive_failure()
     dictionary:incr("passive:" .. host, 1, 0)
     dictionary:set("passive-status:" .. host, status or 0)
     dictionary:set("passive-time:" .. host, ngx.time())
+end
+
+function M.finish()
+    local keys = ngx.ctx.security_connection_keys
+    if not keys then return end
+    for _, key in ipairs(keys) do
+        local current = ngx.shared.runtime_limits:incr(key, -1, 0)
+        if current and current <= 0 then ngx.shared.runtime_limits:delete(key) end
+    end
+end
+
+function M.origin_done()
+    local dictionary = ngx.shared.runtime_limits
+    if ngx.ctx.origin_connection_key then
+        local current = dictionary:incr(ngx.ctx.origin_connection_key, -1, 0)
+        if current and current <= 0 then dictionary:delete(ngx.ctx.origin_connection_key) end
+        dictionary:incr("capacity:origin_connections", -1, 0)
+    end
+    local domain = ngx.ctx.origin_domain
+    if not domain then return end
+    local status = tonumber((ngx.var.upstream_status or ""):match("%d+")) or tonumber(ngx.status) or 0
+    local failure_key = "security:origin:failures:" .. domain
+    if status >= 500 or status == 0 then
+        local failures = dictionary:incr(failure_key, 1, 0, math.max(2, ngx.ctx.origin_recovery_timeout or 30))
+        if failures and failures >= (ngx.ctx.origin_failure_threshold or 10) then
+            dictionary:set("security:origin:open:" .. domain, ngx.now() + (ngx.ctx.origin_recovery_timeout or 30), ngx.ctx.origin_recovery_timeout or 30)
+        end
+    else
+        dictionary:delete(failure_key)
+        dictionary:delete("security:origin:open:" .. domain)
+    end
+end
+
+function M.origin_failure()
+    if ngx.var.cdn_security_reason ~= "" then
+        ngx.header["X-CDNFoundry-Security-Reason"] = ngx.var.cdn_security_reason
+        return ngx.exit(503)
+    end
+    return ngx.exit(444)
 end
 
 function M.passive_failures()
@@ -427,6 +656,19 @@ function M.passive_failures()
             }
         end
     end
+    local security_events = {}
+    local event_dictionary = ngx.shared.security_limits
+    for _, key in ipairs(event_dictionary:get_keys(200)) do
+        local domain, reason = key:match("^event:([^:]+):([%w_]+)$")
+        if domain and reason and #security_events < 20 then
+            security_events[#security_events + 1] = {
+                domain_id = tonumber(domain), hostname = event_dictionary:get("host:" .. domain),
+                reason_code = reason, count = event_dictionary:get(key) or 0,
+                occurred_at = event_dictionary:get("time:" .. domain .. ":" .. reason) or ngx.time(),
+            }
+        end
+    end
+    table.sort(security_events, function(a, b) return a.count > b.count end)
     local assigned = 0
     for _ in pairs(state.hosts) do assigned = assigned + 1 end
     local memory_usage = 0
@@ -452,6 +694,7 @@ function M.passive_failures()
     local drained = ngx.shared.runtime_limits:get("control:drained") == true
     ngx.say(cjson.encode({
         data = #failures == 0 and cjson.empty_array or failures,
+        security = #security_events == 0 and cjson.empty_array or security_events,
         cell = {
             name = os.getenv("EDGE_CELL_NAME") or "unknown",
             status = drained and "drained" or "ready",
@@ -485,8 +728,16 @@ function M.control()
     if #raw == 0 or #raw > 128 * 1024 then return ngx.exit(400) end
     local command = cjson.decode(raw)
     if type(command) ~= "table" or type(command.task_id) ~= "string" or #command.task_id > 64
-        or (command.action ~= "drain" and command.action ~= "undrain" and command.action ~= "restart" and command.action ~= "cache_purge") then
+        or (command.action ~= "drain" and command.action ~= "undrain" and command.action ~= "restart" and command.action ~= "cache_purge" and command.action ~= "emergency_mode") then
         return ngx.exit(400)
+    end
+    if command.action == "emergency_mode" then
+        if type(command.active) ~= "boolean" or type(command.actions) ~= "table" or #command.actions > 11
+            or (command.expires_at ~= nil and (type(command.expires_at) ~= "number" or command.expires_at <= ngx.time())) then return ngx.exit(400) end
+        local supported = {reject_unknown_hosts=true,disable_request_bodies=true,allow_get_head_only=true,reduce_keepalive=true,
+            reduce_origin_concurrency=true,disable_origin_retries=true,serve_cache_only=true,serve_stale_only=true,
+            return_maintenance_response=true,quarantine_domain=true,withdraw_service_ip_from_dns=true}
+        for _, action in ipairs(command.actions) do if not supported[action] then return ngx.exit(400) end end
     end
     if command.action == "cache_purge" then
         if type(command.domain) ~= "string" or #command.domain == 0 or #command.domain > 253
@@ -515,6 +766,14 @@ function M.control()
             if not already_drained then dictionary:set("control:restart_resume_at", ngx.now() + 2) end
             dictionary:set("control:last_restart_at", ngx.time())
             dictionary:incr("control:restart_generation", 1, 0)
+        elseif command.action == "emergency_mode" then
+            if command.active then
+                dictionary:set("emergency:active", cjson.encode(command.actions))
+                if command.expires_at then dictionary:set("emergency:expires_at", command.expires_at) else dictionary:delete("emergency:expires_at") end
+            else
+                dictionary:delete("emergency:active")
+                dictionary:delete("emergency:expires_at")
+            end
         elseif command.type == "all" then
             local epoch_key = "cache:epoch:" .. command.domain
             local current = dictionary:get(epoch_key) or 0

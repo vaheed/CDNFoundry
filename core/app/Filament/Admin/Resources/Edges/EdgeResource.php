@@ -2,6 +2,7 @@
 
 namespace App\Filament\Admin\Resources\Edges;
 
+use App\Actions\DispatchEmergencyMode;
 use App\Filament\Admin\Resources\Edges\Pages\CreateEdge;
 use App\Filament\Admin\Resources\Edges\Pages\EditEdge;
 use App\Filament\Admin\Resources\Edges\Pages\ListEdges;
@@ -9,10 +10,12 @@ use App\Filament\Admin\Resources\Edges\RelationManagers\CellsRelationManager;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
 use App\Models\Edge;
+use App\Models\EmergencyMode;
 use App\Support\GeoVocabulary;
 use App\Support\NetworkAddress;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
@@ -107,6 +110,22 @@ class EdgeResource extends Resource
                 ReconcilePlatformDnsIdentity::dispatch()->afterCommit();
                 Notification::make()->warning()->persistent()->title('New one-time bootstrap token')->body($token)->send();
             }),
+            Action::make('emergencyMode')->label('Emergency mode')->color('danger')->requiresConfirmation()
+                ->visible(fn (Edge $record): bool => ! EmergencyMode::query()->where('target_type', 'edge')->where('target_id', $record->id)->where('active', true)->exists())
+                ->schema([
+                    CheckboxList::make('actions')->options(array_combine(config('security.emergency_actions'), config('security.emergency_actions')))->required()->minItems(1),
+                    TextInput::make('duration_minutes')->label('Automatic expiry (minutes)')->numeric()->minValue(1)->maxValue(config('security.emergency_duration_minutes_maximum'))->helperText('Leave empty only for an explicitly permanent emergency.'),
+                ])->action(function (Edge $record, array $data): void {
+                    [$mode, $operation] = DispatchEmergencyMode::activate('edge', $record->id, $data['actions'], filled($data['duration_minutes'] ?? null) ? (int) $data['duration_minutes'] : null, auth()->user());
+                    AuditLog::record(auth()->user(), 'security.emergency_activated', $record, ['mode_id' => $mode->id, 'actions' => $mode->actions], request()->ip());
+                    Notification::make()->warning()->title('Edge emergency mode queued')->body("Operation {$operation->id} is delivering the bounded actions to every cell.")->send();
+                }),
+            Action::make('clearEmergencyMode')->label('Clear emergency')->color('success')->requiresConfirmation()
+                ->visible(fn (Edge $record): bool => EmergencyMode::query()->where('target_type', 'edge')->where('target_id', $record->id)->where('active', true)->exists())
+                ->action(function (Edge $record): void {
+                    $operation = DispatchEmergencyMode::deactivateTarget('edge', $record->id, auth()->user());
+                    AuditLog::record(auth()->user(), 'security.emergency_deactivated', $record, ['operation_id' => $operation->id], request()->ip());
+                }),
             EditAction::make(),
         ])->defaultSort('name');
     }
