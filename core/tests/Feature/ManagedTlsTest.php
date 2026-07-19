@@ -38,6 +38,22 @@ class ManagedTlsTest extends TestCase
         $this->assertDatabaseCount('tls_orders', 0);
     }
 
+    public function test_latest_tls_order_is_selected_by_creation_time_instead_of_uuid(): void
+    {
+        $domain = Domain::query()->create(['name' => 'latest-order.example.test', 'display_name' => 'Latest order', 'revision' => 1]);
+        $older = TlsOrder::query()->create([
+            'domain_id' => $domain->id, 'status' => 'failed', 'names' => ['latest-order.example.test'],
+            'names_hash' => hash('sha256', 'older'), 'created_at' => now()->subMinute(), 'updated_at' => now()->subMinute(),
+        ]);
+        $newer = TlsOrder::query()->create([
+            'domain_id' => $domain->id, 'status' => 'pending', 'names' => ['latest-order.example.test'],
+            'names_hash' => hash('sha256', 'newer'), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->assertNotSame($older->id, $newer->id);
+        $this->assertSame($newer->id, $domain->latestTlsOrder()->firstOrFail()->id);
+    }
+
     public function test_managed_dns01_order_activates_only_after_dns_ack_and_cleans_challenges(): void
     {
         Queue::fake();

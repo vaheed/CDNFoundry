@@ -4,7 +4,7 @@ Phase 5 implementation and agent-owned qualification completed on 2026-07-19. Ow
 
 ## Automated control-plane qualification
 
-- `make dev-test`: **117 tests, 922 assertions passed** using the required `APP_ENV=testing`, SQLite `:memory:`, array cache, and synchronous queue isolation. Coverage includes authorization, typed bounds, idempotency, cache rollback, purge retries/backlog, custom TLS validation and secret-safe responses, DNS-only/unverified managed-TLS exclusion, valid-certificate reuse, deep-host supplemental orders, DNS acknowledgement before ACME validation, encrypted keys, failed-order cleanup, last-valid-certificate preservation, and deduplicated administrator alerts.
+- `make dev-test`: **118 tests, 924 assertions passed** using the required `APP_ENV=testing`, SQLite `:memory:`, array cache, and synchronous queue isolation. Coverage includes authorization, typed bounds, idempotency, cache rollback, purge retries/backlog, custom TLS validation and secret-safe responses, DNS-only/unverified managed-TLS exclusion, valid-certificate reuse, deep-host supplemental orders, portable latest-order selection, DNS acknowledgement before ACME validation, encrypted keys, failed-order cleanup, last-valid-certificate preservation, and deduplicated administrator alerts.
 - Focused `ManagedTlsTest`: **5 tests, 29 assertions passed** after the final retry-lifetime and failure-preservation changes.
 - `make openapi-check`: the committed route contract is current.
 - Laravel Pint check: **232 files passed**.
@@ -34,7 +34,7 @@ The test proves the order waits for the derived challenge revision, public DNSdi
 ## Platform and migration qualification
 
 - Development and production Compose configurations passed `make config-check`.
-- Persistent development PostgreSQL was preserved. `migrate:status` reports all three additive Phase 5 TLS migrations (`010000`, `010100`, and `010200`) and the cache purge migration as applied in batch 15; no volume removal, refresh, or destructive migration ran.
+- Persistent development PostgreSQL was preserved. The TLS state/workflow/notification migrations and the additive `010300` notification-data `jsonb` conversion are applied, along with the cache purge migration; no volume removal, refresh, or destructive migration ran.
 - The Pebble development service is pinned by immutable image digest. Production uses explicit ACME directory/email/budget configuration and does not include Pebble.
 - `git diff --check` passed after the final documentation edit.
 

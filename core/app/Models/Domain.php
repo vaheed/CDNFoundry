@@ -48,7 +48,7 @@ class Domain extends Model
 
     public function latestTlsOrder(): HasOne
     {
-        return $this->hasOne(TlsOrder::class)->latestOfMany();
+        return $this->hasOne(TlsOrder::class)->orderByDesc('created_at')->orderByDesc('id');
     }
 
     public function activeTlsCertificate(): BelongsTo
