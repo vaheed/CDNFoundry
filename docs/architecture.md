@@ -374,8 +374,10 @@ exist:
 - The current edge Compose listener uses mounted TLS certificate/key files.
   Full per-host managed certificate issuance/distribution belongs to the later
   TLS roadmap phase.
-- The current OpenResty path is a bounded proxy runtime; customer content cache,
-  purge, advanced security profiles, and analytics dashboards are later phases.
+- The cache control plane stores bounded desired settings, an epoch, and durable
+  per-edge purge tasks. The current OpenResty path remains a bounded proxy
+  runtime without customer-content caching or purge execution; advanced
+  security profiles and analytics dashboards are also later work.
 - ClickHouse is provisioned and Vector currently exports its own internal
   Prometheus metrics. The repository does not yet claim that raw edge request
   telemetry is flowing into ClickHouse.

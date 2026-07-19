@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Enums\DomainLifecycleState;
+use App\Http\Controllers\CacheController;
 use App\Models\Domain;
 use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
@@ -79,6 +80,11 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
         $snapshot = [
             'schema_version' => 1, 'domain_id' => $domain->id, 'domain' => $domain->name,
             'revision' => $revision, 'settings' => $proxySettings,
+            'cache' => [
+                ...($domain->cache_settings ?? CacheController::defaults()),
+                'epoch' => $domain->cache_epoch,
+                'development_mode_until' => $domain->cache_development_mode_until?->isFuture() ? $domain->cache_development_mode_until->timestamp : null,
+            ],
             'pools' => $poolNames,
             'hostnames' => $records->map(function ($record) use ($blockedAddresses): array {
                 $origin = $record->origin;

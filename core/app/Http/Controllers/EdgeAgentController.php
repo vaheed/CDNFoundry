@@ -7,6 +7,7 @@ use App\Jobs\ReconcileAllEdgeDomains;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
+use App\Models\CachePurge;
 use App\Models\DnsCluster;
 use App\Models\DnsRecord;
 use App\Models\Domain;
@@ -275,6 +276,14 @@ class EdgeAgentController extends Controller
                     'error' => $terminal && $tasks->contains('status', 'failed') ? 'One or more edge origin tests failed.' : null,
                     'finished_at' => $terminal ? now() : null,
                 ]);
+            }
+        }
+        if ($row->type === 'cache_purge' && $row->cache_purge_id !== null) {
+            $purge = CachePurge::query()->find($row->cache_purge_id);
+            if ($purge !== null) {
+                $tasks = $purge->tasks()->get();
+                $terminal = $tasks->isNotEmpty() && $tasks->every(fn (EdgeTask $task): bool => in_array($task->status, ['succeeded', 'failed'], true));
+                $purge->update(['status' => $terminal ? ($tasks->contains('status', 'failed') ? 'failed' : 'succeeded') : 'running']);
             }
         }
 

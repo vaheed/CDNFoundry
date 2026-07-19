@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\PlatformDnsSettingsController;
 use App\Http\Controllers\Admin\SystemSettingsController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CacheController;
 use App\Http\Controllers\DnsDeploymentController;
 use App\Http\Controllers\DnsRecordController;
 use App\Http\Controllers\DnsZoneController;
@@ -71,6 +72,13 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:account'])->group
     Route::post('/domains/{domain}/deploy', [ProxyController::class, 'deploy'])->middleware('idempotent');
     Route::post('/domains/{domain}/rollback', [ProxyController::class, 'rollback'])->middleware('idempotent');
     Route::get('/domains/{domain}/revisions', [ProxyController::class, 'revisions']);
+    Route::get('/domains/{domain}/cache', [CacheController::class, 'show']);
+    Route::patch('/domains/{domain}/cache', [CacheController::class, 'update'])->middleware('idempotent');
+    Route::post('/domains/{domain}/cache/development-mode', [CacheController::class, 'enableDevelopmentMode'])->middleware('idempotent');
+    Route::delete('/domains/{domain}/cache/development-mode', [CacheController::class, 'disableDevelopmentMode'])->middleware('idempotent');
+    Route::post('/domains/{domain}/cache/purge', [CacheController::class, 'purge'])->middleware(['idempotent', 'throttle:bulk']);
+    Route::get('/domains/{domain}/cache/purges', [CacheController::class, 'purges']);
+    Route::get('/domains/{domain}/cache/purges/{purge}', [CacheController::class, 'purgeStatus']);
 
     Route::prefix('admin')->middleware('admin')->group(function (): void {
         Route::get('/users', [UserController::class, 'index']);

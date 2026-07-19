@@ -165,7 +165,7 @@ class GenerateOpenApi extends Command
 
         return collect($matches[1])->map(function (string $name): array {
             $schema = match ($name) {
-                'operation', 'edge' => ['type' => 'string', 'format' => 'uuid'],
+                'operation', 'edge', 'purge' => ['type' => 'string', 'format' => 'uuid'],
                 'checksum' => ['type' => 'string', 'pattern' => '^[a-f0-9]{64}$'],
                 'group' => ['type' => 'string', 'enum' => array_keys(config('platform.groups', []))],
                 default => ['type' => 'integer', 'minimum' => 1],
@@ -181,7 +181,7 @@ class GenerateOpenApi extends Command
             return ! in_array($path, ['/nameservers'], true);
         }
 
-        return collect(['deployments', 'failures', 'cells', 'revisions', 'tokens', 'domains'])
+        return collect(['deployments', 'failures', 'cells', 'revisions', 'tokens', 'domains', 'purges'])
             ->contains(fn (string $method): bool => str_ends_with($action, '@'.$method));
     }
 }

@@ -1720,6 +1720,8 @@ Implementation and non-browser qualification evidence: [Phase 4 qualification](p
 
 ### Phase 5 — TLS, Cache, and Purge
 
+> **Implementation progress (2026-07-19):** The first cache control-plane slice is present: bounded typed settings, expiring development mode, cache-epoch full purge, exact URL-key normalization, durable per-edge delivery state, revisioned artifact inclusion, authorization, idempotent routes, and OpenAPI coverage. Edge-agent/OpenResty cache execution, Filament workflows, real-traffic qualification, and all TLS work remain incomplete. Evidence: [Phase 5 qualification](phase-5-qualification.md).
+
 #### Goal
 
 Provide automatic HTTPS and predictable cache behaviour with a small, understandable settings surface.

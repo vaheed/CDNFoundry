@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['name', 'display_name', 'lifecycle_state', 'revision', 'nameservers_verified_at', 'nameservers_verified_by', 'disabled_at', 'deprovision_after', 'proxy_settings', 'active_edge_revision'])]
+#[Fillable(['name', 'display_name', 'lifecycle_state', 'revision', 'nameservers_verified_at', 'nameservers_verified_by', 'disabled_at', 'deprovision_after', 'proxy_settings', 'active_edge_revision', 'cache_settings', 'cache_epoch', 'cache_development_mode_until'])]
 class Domain extends Model
 {
     use SoftDeletes;
@@ -43,6 +43,8 @@ class Domain extends Model
             'disabled_at' => 'immutable_datetime',
             'deprovision_after' => 'immutable_datetime',
             'proxy_settings' => 'array',
+            'cache_settings' => 'array',
+            'cache_development_mode_until' => 'immutable_datetime',
             'active_edge_revision' => 'integer',
         ];
     }
