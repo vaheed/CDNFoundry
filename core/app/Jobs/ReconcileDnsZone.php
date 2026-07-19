@@ -25,7 +25,7 @@ class ReconcileDnsZone implements ShouldBeUniqueUntilProcessing, ShouldQueue
 
     public int $uniqueFor = 300;
 
-    public function __construct(public int $domainId)
+    public function __construct(public int $domainId, public bool $recovery = false)
     {
         $this->onQueue('runtime');
     }
@@ -107,7 +107,7 @@ class ReconcileDnsZone implements ShouldBeUniqueUntilProcessing, ShouldQueue
 
     public function uniqueId(): string
     {
-        return (string) $this->domainId;
+        return $this->domainId.($this->recovery ? ':recovery' : '');
     }
 
     private function operations()

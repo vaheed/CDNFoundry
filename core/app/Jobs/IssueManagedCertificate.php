@@ -155,7 +155,7 @@ class IssueManagedCertificate implements ShouldQueue
         if ($clusters === 0 || $deployed !== $clusters) {
             if ($clusters > 0 && $order->domain_id !== null) {
                 Operation::coalesceDomain('dns.zone_reconcile', $order->domain_id);
-                ReconcileDnsZone::dispatch($order->domain_id)->afterCommit();
+                ReconcileDnsZone::dispatch($order->domain_id, recovery: true)->afterCommit();
             }
             $order->update(['next_poll_at' => now()->addSeconds(10)]);
             $this->release(10);
