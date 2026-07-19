@@ -20,6 +20,12 @@
     box-shadow: none;
 }
 
+.fi-header-actions-ctn,
+.fi-header-actions-ctn > .fi-ac {
+    min-width: 0;
+    flex-wrap: wrap;
+}
+
 .fi-sidebar {
     border-inline-end: 1px solid rgb(226 232 240);
 }

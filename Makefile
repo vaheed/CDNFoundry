@@ -2,7 +2,7 @@ COMPOSE_DEV := docker compose -f compose.dev.yml
 COMPOSE_PROD := docker compose --env-file .env.prod -f compose.prod.yml
 COMPOSE_PROD_EXAMPLE := docker compose --env-file .env.prod.example -f compose.prod.yml
 
-.PHONY: dev-assets dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-scale-e2e dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check
+.PHONY: dev-assets dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-scale-e2e dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check docs-check
 
 dev-assets:
 	docker build --target frontend-assets-export --output type=local,dest=./core/public/build ./core
@@ -38,6 +38,7 @@ dev-e2e:
 	python3 tests/e2e/phase3_geo_dns.py
 	python3 tests/e2e/phase4_control_plane.py
 	python3 tests/e2e/phase4_mtls.py
+	python3 tests/e2e/phase5_tls.py
 	python3 tests/e2e/phase4_runtime.py
 
 dev-scale-e2e:
@@ -73,3 +74,6 @@ config-check:
 
 openapi-check:
 	$(COMPOSE_DEV) run --rm core php artisan api:openapi --check
+
+docs-check:
+	python3 tests/docs/check_links.py

@@ -307,10 +307,10 @@ unchanged MX/TXT/CAA records.
 
 ### Deployment and operation visibility
 
-1. Save both proxied records and choose **Deploy proxy configuration**.
-2. Open **Administration → Operations**. Confirm new `edge.domain_deploy` and `edge.origin_test` rows appear without refreshing manually, with requester, attempt, status, duration, and bounded error.
+1. Save both proxied records. Confirm an edge reconciliation operation is queued automatically and that neither administrator nor domain-user **Delivery** menus contain a manual **Deploy proxy configuration** action.
+2. Open **Administration → Operations**. Confirm new `edge.domain_reconcile` and `edge.origin_test` rows appear without refreshing manually, with requester, attempt, status, duration, and bounded error.
 3. Retry a supported failure. It must not duplicate an already-active deployment.
-4. Confirm the domain view renders the **Domain status**, **Edge delivery**, and **Authoritative DNS deployment** sections. Proxy defaults must appear as one readable summary (for example, `Enabled · HTTP/1.1 + HTTP/2 · HTTPS redirect off · 0 origin retries · Maintenance off`) rather than raw JSON or separate boolean/list fragments. Confirm proxied-host count, desired/active revision, placement/pools, failure, and recent validated revisions.
+4. Confirm the domain view header shows four compact action menus—**Domain actions**, **Delivery**, **Cache**, and **TLS**—without horizontal overflow at desktop or mobile widths. Confirm the page renders **Domain status**, **Edge delivery**, **Authoritative DNS deployment**, **Cache**, and **TLS** as one ordered stack of cards, with fields reducing to one column on a narrow viewport. Proxy defaults must appear as one readable summary (for example, `Enabled · HTTP/1.1 + HTTP/2 · HTTPS redirect off · 0 origin retries · Maintenance off`) rather than raw JSON or separate boolean/list fragments. Confirm proxied-host count, desired/active revision, placement/pools, failure, and recent validated revisions. The desired revision, active edge revision, retained rollback revisions, and each DNS cluster acknowledgement must show dates rather than bare revision numbers.
 5. Send HTTP and HTTPS through both real edges. Confirm correct origin selection, Host, SNI, IPv4/IPv6 behavior, unknown-host/SNI rejection, and continued serving of the last valid revision after a deliberately invalid candidate.
 6. Move the domain shared → quarantine → dedicated. For each move record the target-ready acknowledgement, target DNS answer, non-null drain deadline, source-removal artifact, final acknowledgement, and active pool. A failed/rejected target must leave source DNS and traffic active.
 
@@ -326,6 +326,64 @@ waiting/not-ready message; the control plane must not discard the user's intent.
 - Documentation: present above and in the edge/origin runbooks.
 - Automated/runtime qualification: agent-owned tests must pass and be recorded in `docs/phase-4-qualification.md`.
 - Manual browser/dual-edge qualification: owner-run; **failed/not complete until all Phase 4 checkpoints pass on two reachable edge hosts**.
+
+## Phase 5 — TLS, cache, and purge
+
+Use an active, nameserver-verified disposable domain assigned to the domain user, with the shared pool acknowledged on at least one reachable edge. Use a CA-approved real delegated name for public acceptance. The local Pebble CA qualifies the bundled development workflow only.
+
+### Managed TLS
+
+1. Start with DNS-only records and open the domain **TLS** section. Confirm Mode is `managed`, Certificate status says **Pending managed issuance**, Latest managed order says **Not queued**, and no certificate action has created an order.
+2. Create the first eligible A, AAAA, or CNAME record in **Proxied** mode. Confirm DNS remains available, a `tls.managed_certificate` operation appears, and the TLS section progresses through a queued/publishing/validating/finalizing state to an active managed certificate after refresh.
+3. Record the active certificate's Covered names, Expires value, SHA-256 fingerprint, latest order state, requested names, and operation ID. Confirm neither the page nor browser network responses contain a private key, CSR, ACME token, or account key.
+4. Query `_acme-challenge.<domain>` through DNSdist while publishing and confirm the temporary TXT exists without a user-created DNS-record row. After success, confirm it disappears through a later acknowledged DNS revision. Confirm no fake apex A/AAAA row appeared.
+5. Create a proxied `deep.one.<domain>` hostname. Confirm a supplemental managed order is shown and the resulting certificate covers that deeper name. Saving the same proxied set or choosing **Renew managed certificate** while coverage is sufficiently valid must reuse it rather than create a duplicate certificate order.
+6. Choose **Reissue managed certificate**, accept the confirmation, record the operation ID, and confirm a replacement activates only after validation. During a deliberately failed CA/delivery attempt, refresh and confirm the previous fingerprint remains active, DNS continues answering, and the bounded error is visible on the latest order/operation.
+7. As administrator, open the notification bell after creating one expiring-certificate or failed-order fixture through the supported maintenance workflow. Confirm one deduplicated alert names the domain and failure/expiry. A domain user must not see administrator notifications or another domain's TLS state.
+8. Send HTTPS to each assigned edge using the proxied SNI. Confirm the dynamically selected certificate and hostname coverage without an OpenResty reload. Unknown SNI and a disabled/unavailable certificate must fail before origin traffic.
+
+### Custom TLS and modes
+
+1. Choose **Upload custom certificate** and fill every field:
+
+   | Field | Value |
+   |---|---|
+   | Leaf certificate PEM | A currently valid leaf covering every proxied hostname |
+   | Issuing chain PEM | Ordered issuer chain through its self-signed root |
+   | Private key PEM | The matching RSA 2048–4096 or EC P-256/P-384 key |
+
+2. Confirm a mismatched key, expired/not-yet-valid leaf, missing SAN, unsupported/small key, malformed PEM, oversized input, incomplete chain, and wrong chain order each fail without changing mode, revision, or active certificate.
+3. Upload the valid bundle. Confirm Mode becomes `custom`, Covered names/expiry/fingerprint render, the key never renders again, edge reconciliation succeeds, and HTTPS selects the custom fingerprint by SNI.
+4. Choose **TLS mode** and verify Managed, Custom, and Disabled are the only choices. Custom without a valid uploaded certificate must be rejected. Disabled must not delete the prepared managed certificate.
+5. Choose **Remove custom certificate** and confirm. A valid managed fallback must become active; if none is available, managed mode must visibly remain pending while the previous last-valid edge revision is preserved until replacement activation.
+
+### Cache settings and runtime
+
+1. Confirm the **Cache** section shows the complete policy summary, Full-purge epoch, and Development mode until.
+2. Choose **Cache settings** and verify these exact fields: Cache enabled; Edge TTL (seconds); Browser TTL (seconds); Maximum object size with only 1 MiB, 10 MiB, and 100 MiB; Respect origin cache headers; Include query string in cache key; Bypass cookie names; Stale-if-error (seconds).
+3. Enter an edge/browser TTL below `0` or above `31536000`, more than 32 cookie names, or stale duration above `86400`. Each invalid value must remain in the modal with a field error and no revision change. Save each object-size tier and confirm a new desired revision and edge operation.
+4. With development mode off, send the same eligible GET twice and record `MISS` then `HIT`. Confirm the response and structured edge log use the same cache state and the emitted browser `max-age` matches the configured Browser TTL.
+5. Verify Authorization, Range, POST, configured bypass cookie, `Set-Cookie`, `private`, `no-store`, `Vary: *`, an unallowed Vary name, redirects, and negative responses return `BYPASS`. Verify normalized `Vary: Accept-Encoding` can return `MISS` then `HIT` without creating unbounded variants.
+6. With query strings included, request `?a=1&b=2` and `?b=2&a=1`; each exact byte ordering must have its own `MISS` then `HIT`. Disable query participation and confirm only the intended shared key is used after the new revision activates.
+7. Enable Respect origin cache headers and use a response with a short origin `max-age`; record `MISS`, `HIT`, then `EXPIRED`. Disable it and confirm the configured Edge TTL overrides that header. Request an object larger than the selected tier twice and confirm both are `BYPASS` while the cell stays healthy.
+8. Configure an Edge TTL of `1` and a nonzero Stale-if-error window. Warm the object, stop its disposable origin, and record `STALE` inside the window. After the exact grace expires it must return a controlled origin error. Set grace to `0` and confirm stale is never served.
+9. Choose **Enable development mode**, enter Duration (minutes) `30`, and save. Confirm an absolute future expiry and the **Disable development mode** action. Two real requests must be `BYPASS`; disable it and record `MISS` then `HIT`. Also allow a short mode to expire naturally and confirm bypass stops without a manual cleanup action.
+10. Deliberately reject an invalid candidate revision and use the normal rollback action/path. Confirm the last validated cache policy and serving traffic remain active.
+
+### Purge
+
+1. Choose **Purge cache → Everything**. Record the purge ID, confirm Full-purge epoch increments, every healthy edge reports success, and the next identical request is `MISS` without a cache-directory scan.
+2. Warm two URLs, including exact queries in different orders. Choose **Purge cache → Exact URLs**, enter one absolute URL per line, and save. The selected key must return `MISS` then `HIT`; the unpurged key must remain `HIT`.
+3. Confirm a URL for another domain, credentials, fragment, non-HTTP scheme, non-default port, more than 100 URLs, or payload over 128 KiB is rejected without partial state.
+4. Replay one purge with the same `Idempotency-Key` and input; confirm the original result. Reuse that key with different input and confirm conflict.
+5. Use the purge status API to record every edge result. Make one disposable cell unreachable; the same durable task must retry up to five total attempts and become visibly failed without creating another purge or blocking traffic.
+
+### Phase 5 completion gate
+
+- Implementation: present for managed/custom TLS, bounded cache semantics, and asynchronous full/exact purge.
+- Documentation: present here and in the managed TLS, ACME failure, custom certificate, cache, development-mode, and purge guides.
+- Automated/runtime qualification: agent-owned results are recorded in `docs/phase-5-qualification.md`.
+- Manual browser/public HTTPS qualification: owner-run; **not executed and Phase 5 is not release-qualified until every checkpoint above is recorded as passed**.
 
 ## Record the result
 

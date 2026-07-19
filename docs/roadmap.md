@@ -954,7 +954,7 @@ Automated end-to-end qualification is Python-based and intentionally limited to 
 
 Rendered UI and browser usability remain project-owner acceptance responsibilities. The owner follows `docs/manual-browser-qualification.md`; coding agents do not install or launch browser automation. This manual responsibility does not block Phase 2 development, but its roadmap checkbox remains open until the owner records a successful release acceptance run.
 
-GitHub Actions runs PHP tests and formatting, OpenAPI contract checks, frontend asset compilation, development and production Compose validation, self-contained builds for every production image, the cumulative Python real-stack E2E, the bounded Phase 2 scale job, and pinned Go 1.24 tests/builds for the edge agent. After every successful `main` run it publishes only commit-SHA-tagged application images to this repository's GHCR packages; production Compose requires that immutable release SHA and has no local build or `latest` fallback.
+GitHub Actions runs PHP tests and formatting, production dependency advisory checks, OpenAPI and documentation-link checks, frontend asset compilation, development and production Compose validation, self-contained builds for every production image, the cumulative Phase 1–5 Python real-stack E2E (including real DNS-01 and cache/purge propagation), the bounded Phase 2 scale job, and pinned Go 1.24 formatting, vetting, tests, and builds for the edge agent. After every successful `main` run it publishes only commit-SHA-tagged application images to this repository's GHCR packages; production Compose requires that immutable release SHA and has no local build or `latest` fallback.
 
 Qualification evidence is maintained in `docs/phase-1-qualification.md`.
 
@@ -1642,7 +1642,7 @@ Implementation and non-browser qualification evidence: [Phase 4 qualification](p
 
 ##### Control Plane
 
-> **Implementation audit (2026-07-18):** Agent-owned Phase 4 implementation and non-browser runtime qualification are complete. Service addresses are durable per cell; authoritative routing selects the assigned pool; migration waits for target-cell readiness and acknowledgement, target DNS deployment, a bounded drain, source-removal delivery, and final acknowledgement. Authenticated drain, undrain, and bounded worker replacement execute without a Docker socket. Owner-run browser/two-physical-edge release acceptance remains open below.
+> **Implementation audit (2026-07-19):** Agent-owned Phase 4 implementation and non-browser runtime qualification are complete. Service addresses are durable per cell; authoritative routing selects the assigned pool; migration waits for target-cell readiness and acknowledgement, target DNS deployment, a bounded drain, a newly revisioned source-removal artifact, and final acknowledgement. The distinct retirement revision prevents a concurrent heartbeat from treating the earlier two-pool candidate as source-removal acknowledgement. Authenticated drain, undrain, and bounded worker replacement execute without a Docker socket. Owner-run browser/two-physical-edge release acceptance remains open below.
 
 > **Apex routing clarification (2026-07-18):** A proxied apex owns the sole A/AAAA/CNAME routing decision but may coexist with apex MX, TXT, CAA, NS, and other non-routing data. Non-apex proxy records publish a pool-specific CNAME. Application and real PowerDNS tests enforce both behaviours.
 
@@ -1719,6 +1719,8 @@ Implementation and non-browser qualification evidence: [Phase 4 qualification](p
 ---
 
 ### Phase 5 — TLS, Cache, and Purge
+
+> **Implementation progress (2026-07-19):** Phase 5 implementation and agent-owned qualification are complete. Managed DNS-01 issuance, supplemental coverage, renewal/reissue, alerts, custom certificates, protected edge keys, dynamic SNI, bounded cache admission/TTL/stale behavior, and asynchronous epoch/exact-key purges passed isolated and real-runtime qualification. The exact owner-run browser/public-HTTPS checklist is current but has not been executed, so Phase 5 is not owner release-qualified. Evidence: [Phase 5 qualification](phase-5-qualification.md).
 
 #### Goal
 
@@ -1868,54 +1870,54 @@ Certificate bundles are part of normal edge revision delivery and atomic activat
 
 ##### TLS
 
-- [ ] Managed apex and wildcard issuance starts when the first hostname becomes proxied after nameserver verification and activation.
-- [ ] DNS-only domains do not consume ACME orders or edge certificate storage.
-- [ ] Duplicate valid certificates are reused instead of reissued.
-- [ ] No fake hidden apex record is created.
-- [ ] DNS-01 works without sending user traffic to the origin.
-- [ ] Renewal jobs are jittered and safely retry.
-- [ ] CA rate-limit and validation errors are visible.
-- [ ] Deep proxied hostnames receive supplemental coverage when needed.
-- [ ] Custom upload validates key, chain, names, algorithm, size, and expiry.
-- [ ] Private keys are encrypted at rest.
-- [ ] Existing certificates continue serving during control-plane outage.
-- [ ] Expiring and failed certificates generate administrator alerts.
+- [x] Managed apex and wildcard issuance starts when the first hostname becomes proxied after nameserver verification and activation.
+- [x] DNS-only domains do not consume ACME orders or edge certificate storage.
+- [x] Duplicate valid certificates are reused instead of reissued.
+- [x] No fake hidden apex record is created.
+- [x] DNS-01 works without sending user traffic to the origin.
+- [x] Renewal jobs are jittered and safely retry.
+- [x] CA rate-limit and validation errors are visible.
+- [x] Deep proxied hostnames receive supplemental coverage when needed.
+- [x] Custom upload validates key, chain, names, algorithm, size, and expiry.
+- [x] Private keys are encrypted at rest.
+- [x] Existing certificates continue serving during control-plane outage.
+- [x] Expiring and failed certificates generate administrator alerts.
 
 ##### Cache
 
-- [ ] HIT, MISS, BYPASS, EXPIRED, and STALE are correct and logged.
-- [ ] Origin cache headers are respected when enabled.
-- [ ] Query-string and cookie behaviour match configured policy.
-- [ ] Authorization, Set-Cookie, private/no-store, Vary, Range, redirect, and negative-response defaults match the documented cache contract.
-- [ ] Maximum object size is enforced safely.
-- [ ] Stale content is served during configured origin failure.
-- [ ] Development mode bypasses the entire domain and expires automatically.
-- [ ] Cache settings roll back through normal revisions.
+- [x] HIT, MISS, BYPASS, EXPIRED, and STALE are correct and logged.
+- [x] Origin cache headers are respected when enabled.
+- [x] Query-string and cookie behaviour match configured policy.
+- [x] Authorization, Set-Cookie, private/no-store, Vary, Range, redirect, and negative-response defaults match the documented cache contract.
+- [x] Maximum object size is enforced safely.
+- [x] Stale content is served during configured origin failure.
+- [x] Development mode bypasses the entire domain and expires automatically.
+- [x] Cache settings roll back through normal revisions.
 
 ##### Purge
 
-- [ ] Full purge increments the cache epoch without scanning files.
-- [ ] URL purge uses the exact runtime cache-key implementation.
-- [ ] Every healthy edge receives the purge.
-- [ ] Per-edge state is visible.
-- [ ] Repeating the same request is safe.
-- [ ] Failed edge delivery retries without a second user-visible purge.
-- [ ] Purge backlog cannot grow without bounds.
+- [x] Full purge increments the cache epoch without scanning files.
+- [x] URL purge uses the exact runtime cache-key implementation.
+- [x] Every healthy edge receives the purge.
+- [x] Per-edge state is visible.
+- [x] Repeating the same request is safe.
+- [x] Failed edge delivery retries without a second user-visible purge.
+- [x] Purge backlog cannot grow without bounds.
 
 ##### Browser and Real Runtime
 
 - [ ] Managed TLS status progresses from queued to active in the browser.
-- [ ] HTTPS works with the dynamically selected certificate.
-- [ ] Cache MISS, HIT, development-mode BYPASS, full purge, and URL purge are visible and verified with real requests.
+- [x] HTTPS works with the dynamically selected certificate.
+- [x] Cache MISS, HIT, development-mode BYPASS, full purge, and URL purge are visible and verified with real requests.
 
 ##### Documentation
 
-- [ ] Managed TLS lifecycle guide
-- [ ] Custom certificate guide
-- [ ] ACME failure guide
-- [ ] Cache semantics guide
-- [ ] Development-mode guide
-- [ ] Purge troubleshooting guide
+- [x] Managed TLS lifecycle guide
+- [x] Custom certificate guide
+- [x] ACME failure guide
+- [x] Cache semantics guide
+- [x] Development-mode guide
+- [x] Purge troubleshooting guide
 
 ---
 

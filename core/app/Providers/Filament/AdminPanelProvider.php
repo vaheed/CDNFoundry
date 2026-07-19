@@ -35,6 +35,7 @@ class AdminPanelProvider extends PanelProvider
             ->readOnlyRelationManagersOnResourceViewPagesByDefault(false)
             ->colors(['primary' => Color::Blue])
             ->sidebarCollapsibleOnDesktop()
+            ->databaseNotifications()
             ->navigationGroups(['Control plane', 'Customers', 'Edge network', 'Operations'])
             ->discoverResources(in: app_path('Filament/Admin/Resources'), for: 'App\\Filament\\Admin\\Resources')
             ->resources([DomainResource::class])

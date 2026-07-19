@@ -2,7 +2,9 @@
 
 namespace App\Jobs;
 
+use App\Actions\PromoteReadyEdgePlacements;
 use App\Enums\DomainLifecycleState;
+use App\Http\Controllers\CacheController;
 use App\Models\Domain;
 use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
@@ -12,10 +14,12 @@ use App\Models\EdgePool;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
 use App\Support\ArtifactSigner;
+use App\Support\ManagedCertificateNames;
 use App\Support\PlatformSettings;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
@@ -38,7 +42,7 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
 
     public function handle(): void
     {
-        $domain = Domain::query()->with('dnsRecords')->findOrFail($this->domainId);
+        $domain = Domain::query()->with(['dnsRecords', 'activeTlsCertificate', 'tlsCertificates'])->findOrFail($this->domainId);
         $revision = $domain->revision;
         $retiring = $domain->lifecycle_state === DomainLifecycleState::Deprovisioning && $domain->deprovision_after?->isPast();
         $records = $retiring ? collect() : $domain->dnsRecords->where('mode', 'proxied')->sortBy('name')->values();
@@ -53,16 +57,41 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             if ($pools->isEmpty()) {
                 throw new \RuntimeException('No enabled shared edge pool exists.');
             }
-            $placement = DomainEdgePlacement::query()->firstOrCreate(['domain_id' => $domain->id], ['desired_revision' => $revision]);
-            $target = $placement->target_pool_id !== null
-                ? EdgePool::query()->whereKey($placement->target_pool_id)->where('enabled', true)->firstOrFail()
-                : ($placement->active_pool_id !== null
-                    ? EdgePool::query()->whereKey($placement->active_pool_id)->where('enabled', true)->firstOrFail()
-                    : $pools[abs(crc32($domain->name)) % $pools->count()]);
-            $alreadyActive = $placement->state === 'active' && $placement->active_pool_id === $target->id
-                && $placement->desired_revision === $revision && $domain->active_edge_revision === $revision;
-            if (! $alreadyActive) {
-                $placement->update(['target_pool_id' => $target->id, 'desired_revision' => $revision, 'state' => 'deploying', 'last_error' => null]);
+            DomainEdgePlacement::query()->firstOrCreate(['domain_id' => $domain->id], ['desired_revision' => $revision]);
+            $obsolete = false;
+            $placement = DB::transaction(function () use ($domain, $pools, $revision, &$obsolete): DomainEdgePlacement {
+                $placement = DomainEdgePlacement::query()->where('domain_id', $domain->id)->lockForUpdate()->firstOrFail();
+                $currentDomain = Domain::query()->select(['revision', 'active_edge_revision'])->findOrFail($domain->id);
+                if ($currentDomain->revision !== $revision || $placement->desired_revision > $revision) {
+                    $obsolete = true;
+
+                    return $placement;
+                }
+                $target = $placement->target_pool_id !== null
+                    ? EdgePool::query()->whereKey($placement->target_pool_id)->where('enabled', true)->firstOrFail()
+                    : ($placement->active_pool_id !== null
+                        ? EdgePool::query()->whereKey($placement->active_pool_id)->where('enabled', true)->firstOrFail()
+                        : $pools[abs(crc32($domain->name)) % $pools->count()]);
+                $revisionIsActive = $placement->desired_revision === $revision && $currentDomain->active_edge_revision === $revision;
+                $alreadyActive = $placement->state === 'active' && $placement->active_pool_id === $target->id && $revisionIsActive;
+                $alreadyDraining = $placement->state === 'draining' && $placement->target_pool_id === $target->id && $revisionIsActive;
+                if (! $alreadyActive && ! $alreadyDraining) {
+                    $placement->update([
+                        'target_pool_id' => $target->id,
+                        'desired_revision' => $revision,
+                        'state' => 'deploying',
+                        'drain_after' => null,
+                        'last_error' => null,
+                    ]);
+                }
+
+                return $placement;
+            });
+            if ($obsolete) {
+                $operation?->update(['status' => 'pending']);
+                self::dispatch($domain->id);
+
+                return;
             }
         }
 
@@ -76,17 +105,41 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
         $proxySettings = is_array($domain->proxy_settings) ? $domain->proxy_settings : self::defaults();
         $proxySettings['enabled'] = $domain->lifecycle_state === DomainLifecycleState::Active
             && ($proxySettings['enabled'] ?? true);
+        $tlsCertificates = $domain->tls_mode === 'disabled' ? collect() : ($domain->tls_mode === 'custom'
+            ? collect([$domain->activeTlsCertificate])->filter()
+            : $domain->tlsCertificates->where('kind', 'managed')->where('status', 'active')->filter(fn ($certificate) => $certificate->expires_at->isFuture()));
+        $certificatePayload = fn ($certificate): array => [
+            'id' => $certificate->id, 'certificate_pem' => $certificate->certificate_pem,
+            'chain_pem' => $certificate->chain_pem, 'private_key_pem' => $certificate->private_key_ciphertext,
+            'expires_at' => $certificate->expires_at->timestamp, 'names' => $certificate->names,
+        ];
         $snapshot = [
             'schema_version' => 1, 'domain_id' => $domain->id, 'domain' => $domain->name,
             'revision' => $revision, 'settings' => $proxySettings,
+            'cache' => [
+                ...($domain->cache_settings ?? CacheController::defaults()),
+                'epoch' => $domain->cache_epoch,
+                'development_mode_until' => $domain->cache_development_mode_until?->isFuture() ? $domain->cache_development_mode_until->timestamp : null,
+            ],
+            'tls' => [
+                'mode' => $domain->tls_mode,
+                'certificate' => $domain->activeTlsCertificate !== null && $domain->activeTlsCertificate->expires_at->isFuture()
+                    ? $certificatePayload($domain->activeTlsCertificate) : null,
+                'certificates' => $tlsCertificates->map($certificatePayload)->values()->all(),
+            ],
             'pools' => $poolNames,
-            'hostnames' => $records->map(function ($record) use ($blockedAddresses): array {
+            'hostnames' => $records->map(function ($record) use ($blockedAddresses, $tlsCertificates): array {
                 $origin = $record->origin;
                 $origin['private_allowlist'] = app(PlatformSettings::class)->get('origin_safety', 'private_origin_allowlist');
                 $origin['blocked_networks'] = app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_networks');
                 $origin['blocked_addresses'] = $blockedAddresses;
 
-                return ['hostname' => $record->name, 'type' => $record->type, 'ttl' => $record->ttl, 'origin' => $origin];
+                $certificate = $tlsCertificates->first(fn ($candidate): bool => ManagedCertificateNames::coveredBy($record->name, $candidate->names));
+
+                return [
+                    'hostname' => $record->name, 'type' => $record->type, 'ttl' => $record->ttl,
+                    'tls_certificate_id' => $certificate?->id, 'origin' => $origin,
+                ];
             })->all(),
         ];
         $canonical = ArtifactSigner::encode($snapshot);
@@ -94,19 +147,27 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             throw new \RuntimeException('The domain edge artifact exceeds the configured per-domain byte limit.');
         }
         $checksum = hash('sha256', $canonical);
-        EdgeRevision::query()->updateOrCreate(['domain_id' => $domain->id, 'revision' => $revision], [
-            'snapshot' => $snapshot, 'checksum' => $checksum, 'status' => 'validated', 'created_by' => $operation?->actor_id,
-        ]);
         $activeEdges = Edge::query()->where('enabled', true)->whereNull('identity_revoked_at')->get();
-        foreach ($activeEdges as $edge) {
-            $payload = $records->isEmpty() ? ['domain' => $domain->name, 'revision' => $revision] : $snapshot;
-            $artifactChecksum = hash('sha256', ArtifactSigner::encode($payload));
-            EdgeArtifact::query()->firstOrCreate([
-                'edge_id' => $edge->id, 'domain_id' => $domain->id, 'revision' => $revision,
-                'kind' => $records->isEmpty() ? 'tombstone' : 'domain', 'checksum' => $artifactChecksum,
-            ], ['payload' => $payload, 'signature' => ArtifactSigner::sign($artifactChecksum)]);
-        }
-        if (Domain::query()->whereKey($domain->id)->value('revision') !== $revision) {
+        $published = DB::transaction(function () use ($activeEdges, $checksum, $domain, $operation, $records, $revision, $snapshot): bool {
+            $currentDomain = Domain::query()->lockForUpdate()->findOrFail($domain->id);
+            if ($currentDomain->revision !== $revision) {
+                return false;
+            }
+            EdgeRevision::query()->updateOrCreate(['domain_id' => $domain->id, 'revision' => $revision], [
+                'snapshot' => $snapshot, 'checksum' => $checksum, 'status' => 'validated', 'created_by' => $operation?->actor_id,
+            ]);
+            foreach ($activeEdges as $edge) {
+                $payload = $records->isEmpty() ? ['domain' => $domain->name, 'revision' => $revision] : $snapshot;
+                $artifactChecksum = hash('sha256', ArtifactSigner::encode($payload));
+                EdgeArtifact::query()->firstOrCreate([
+                    'edge_id' => $edge->id, 'domain_id' => $domain->id, 'revision' => $revision,
+                    'kind' => $records->isEmpty() ? 'tombstone' : 'domain', 'checksum' => $artifactChecksum,
+                ], ['payload' => $payload, 'signature' => ArtifactSigner::sign($artifactChecksum)]);
+            }
+
+            return true;
+        });
+        if (! $published) {
             $operation?->update(['status' => 'pending']);
             self::dispatch($domain->id);
 
@@ -117,6 +178,7 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             'result' => ['revision' => $revision, 'edges' => $activeEdges->count(), 'awaiting_acknowledgements' => true],
             'finished_at' => $records->isEmpty() && $activeEdges->isEmpty() ? now() : null,
         ]);
+        PromoteReadyEdgePlacements::execute();
     }
 
     public static function defaults(): array

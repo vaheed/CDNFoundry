@@ -1,6 +1,6 @@
 # Phase 2 qualification
 
-Qualification was re-run on 2026-07-18 against the development Compose stack. Browser acceptance remains manual and public registrar delegation requires an externally delegated domain; neither is claimed here.
+Qualification was re-run on 2026-07-19 against the development Compose stack. Browser acceptance remains manual and public registrar delegation requires an externally delegated domain; neither is claimed here.
 
 ## Environment
 
@@ -53,7 +53,7 @@ The script temporarily inserts 500,000 bounded disabled zones and two records pe
 Observed result:
 
 ```text
-phase2_scale=passed zones=500000 records=1000000 changes=50000 burst_first_two=10000 dataset_seconds=104.05 mutation_seconds=230.52
+phase2_scale=passed zones=500000 records=1000000 changes=50000 burst_first_two=10000 dataset_seconds=114.25 mutation_seconds=236.03
 ```
 
 These numbers qualify correctness and bounded operation on the stated development host; they are not production capacity promises.

@@ -1,6 +1,6 @@
 # Phase 4 qualification
 
-Phase 4 agent-owned implementation and non-browser qualification completed on 2026-07-18. Browser usability and traffic through owner-operated physical edge hosts remain manual release checks.
+Phase 4 agent-owned implementation and non-browser qualification was re-audited on 2026-07-19. Browser usability and traffic through owner-operated physical edge hosts remain manual release checks.
 
 ## Automated application and agent checks
 
@@ -11,7 +11,7 @@ Phase 4 agent-owned implementation and non-browser qualification completed on 20
 Observed cumulative application result:
 
 ```text
-Tests: 101 passed (785 assertions)
+Tests: 118 passed (925 assertions)
 ```
 
 The frontend production bundle built without external font downloads. All six distinct production application images built successfully, contain their packaged assets/runtime files, and carry repository linkage metadata; the agent image executes its Go tests as part of the build. Production Compose contains no application build or mutable/local tag fallback and selects every image through one commit-SHA release value.
@@ -25,6 +25,8 @@ python3 tests/e2e/phase4_control_plane.py
 ```
 
 The job provisions two desired edges, binds two distinct real client certificates through an ephemeral mTLS edge-control listener, submits fresh dual-stack cell heartbeats, and acknowledges signed artifacts through the agent API. It verifies that PowerDNS publishes only fresh cells through DNSdist for IPv4 and IPv6, administrative drain removes one edge, and undrain restores it. Its assertions select artifacts by disposable domain ID and tolerate unrelated durable ready edges, so the supported persistent development database does not weaken or break the qualification.
+
+Source-pool retirement allocates a new domain revision before it dispatches the source-removal artifact. The focused feature test and real migration workflow prove that an already-acknowledged two-pool candidate cannot satisfy the new revision, so a concurrent heartbeat cannot promote placement before both edges acknowledge source removal.
 
 It then creates an active domain with different apex/subdomain origins and verifies the exact shared-pool CNAME and apex-safe Lua routing while DNS-only apex MX/TXT/CAA continue to answer. A move to quarantine must retain source and target in the candidate, wait for both target acknowledgements, publish target DNS, start the drain only after DNS deployment, create a second source-removal artifact, and remain running until both edges acknowledge it. The final placement and DNS answer must use only quarantine.
 

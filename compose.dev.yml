@@ -17,6 +17,11 @@ x-core-env: &core-env
   REDIS_HOST: redis
   REDIS_CLIENT: predis
   GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb
+  ACME_ENABLED: "true"
+  ACME_DIRECTORY_URL: https://pebble:14000/dir
+  ACME_VERIFY_TLS: "false"
+  ACME_CONTACT_EMAIL: admin@example.test
+  ACME_INITIAL_JITTER_SECONDS: "1"
   EDGE_IDENTITY_CA_CERTIFICATE: /run/dev-pki/edge-identity-ca.crt
   EDGE_IDENTITY_CA_PRIVATE_KEY: /run/dev-pki/edge-identity-ca.key
 
@@ -205,6 +210,18 @@ services:
     networks: [dns]
     restart: unless-stopped
 
+  pebble:
+    image: ghcr.io/letsencrypt/pebble@sha256:ddf230642b1a584f519f32e347de1b05a6e4c1f6c35c1863b33effeab5f78199
+    command: [-dnsserver, dnsdist:53]
+    environment:
+      PEBBLE_VA_NOSLEEP: "1"
+      PEBBLE_WFE_NONCEREJECT: "0"
+      PEBBLE_AUTHZREUSE: "0"
+    depends_on:
+      dnsdist: { condition: service_started }
+    networks: [control, dns]
+    restart: unless-stopped
+
   clickhouse:
     image: clickhouse/clickhouse-server:26.3.12.3-alpine
     environment:
@@ -246,6 +263,8 @@ services:
 
   origin-http:
     image: nginx:1.30.3-alpine
+    command: [sh, -c, "dd if=/dev/zero of=/tmp/large-object bs=1048576 count=2 >/dev/null 2>&1 && exec nginx -g 'daemon off;'"]
+    tmpfs: [/tmp:size=4m]
     volumes: [./docker/nginx/origin.conf:/etc/nginx/conf.d/default.conf:ro]
     networks: [edge]
 
@@ -279,6 +298,8 @@ services:
     volumes:
       - dev-pki:/run/edge:ro
       - edge-a-state:/var/lib/cdnfoundry/runtime:ro
+    tmpfs:
+      - /var/cache/nginx:rw,noexec,nosuid,size=256m
     networks: [edge]
     depends_on:
       dev-pki: { condition: service_completed_successfully }
@@ -301,6 +322,8 @@ services:
     volumes:
       - dev-pki:/run/edge:ro
       - edge-a-state:/var/lib/cdnfoundry/runtime:ro
+    tmpfs:
+      - /var/cache/nginx:rw,noexec,nosuid,size=256m
     networks: [edge]
     depends_on:
       dev-pki: { condition: service_completed_successfully }
@@ -347,6 +370,8 @@ services:
     volumes:
       - dev-pki:/run/edge:ro
       - edge-b-state:/var/lib/cdnfoundry/runtime:ro
+    tmpfs:
+      - /var/cache/nginx:rw,noexec,nosuid,size=256m
     networks: [edge]
     depends_on:
       dev-pki: { condition: service_completed_successfully }
@@ -369,6 +394,8 @@ services:
     volumes:
       - dev-pki:/run/edge:ro
       - edge-b-state:/var/lib/cdnfoundry/runtime:ro
+    tmpfs:
+      - /var/cache/nginx:rw,noexec,nosuid,size=256m
     networks: [edge]
     depends_on:
       dev-pki: { condition: service_completed_successfully }

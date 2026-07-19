@@ -17,6 +17,8 @@ the complete traffic, control, placement, and failure flows in operator terms.
 - PowerDNS zones and edge artifacts are revisioned, derived, and rebuildable.
 - DNS changes and edge deployment are asynchronous, idempotent, coalesced, and
   preserve the previous valid runtime on failure.
+- Domain changes deploy automatically; monotonic revision history is bounded
+  without renumbering and retains current state plus recent rollback points.
 - DNSdist is the only public authoritative DNS endpoint.
 - One generic OpenResty runtime serves many domains without per-domain
   containers, processes, server blocks, reloads, or timers.
@@ -77,14 +79,15 @@ noisy domains, and `dedicated` is an explicit exceptional allocation. See
 ```sh
 make config-check
 make openapi-check
+make docs-check
 make dev-test
 make dev-e2e
 make dev-scale-e2e
 ```
 
 `make dev-e2e` uses the real HTTP APIs, PostgreSQL, queues, PowerDNS, DNSdist,
-mTLS edge control, pool migration, and OpenResty runtime. Browser acceptance is
-deliberately manual and is specified in
+mTLS edge control, pool migration, Pebble DNS-01 issuance, cache/purge delivery,
+and OpenResty HTTP/HTTPS runtime. Browser acceptance is deliberately manual and is specified in
 [manual browser qualification](docs/manual-browser-qualification.md).
 
 Production uses immutable commit-SHA GHCR images through

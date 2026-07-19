@@ -2,12 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\DomainLifecycleState;
+use App\Actions\PromoteReadyEdgePlacements;
 use App\Jobs\ReconcileAllEdgeDomains;
-use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcilePlatformDnsIdentity;
-use App\Models\AuditLog;
-use App\Models\DnsCluster;
+use App\Models\CachePurge;
 use App\Models\DnsRecord;
 use App\Models\Domain;
 use App\Models\DomainEdgePlacement;
@@ -139,7 +137,7 @@ class EdgeAgentController extends Controller
                     'reported_at' => now()->toIso8601String(),
                 ]]);
         }
-        $this->promoteReadyPlacements();
+        PromoteReadyEdgePlacements::execute();
         $this->completeAcknowledgedTombstones();
 
         return response()->json(['data' => ['accepted' => true, 'server_time' => now()->toIso8601String()]]);
@@ -195,7 +193,7 @@ class EdgeAgentController extends Controller
         abort_if($data['sequence'] < $edge->active_sequence, 409, 'An edge cannot acknowledge a sequence older than its active state.');
         abort_if($data['sequence'] > 0 && ! $edge->artifacts()->where('sequence', $data['sequence'])->exists(), 422, 'The applied sequence was not issued to this edge.');
         $edge->update(['active_sequence' => $data['sequence']]);
-        $this->promoteReadyPlacements();
+        PromoteReadyEdgePlacements::execute();
         $this->completeAcknowledgedTombstones();
 
         return response()->json(['data' => ['accepted' => true]]);
@@ -228,7 +226,9 @@ class EdgeAgentController extends Controller
     {
         $edge = $request->attributes->get('edge');
 
-        return response()->json(['data' => $edge->tasks()->where('status', 'pending')->orderBy('created_at')->limit(100)->get()]);
+        return response()->json(['data' => $edge->tasks()->where('status', 'pending')
+            ->where(fn ($query) => $query->whereNull('available_at')->orWhere('available_at', '<=', now()))
+            ->orderBy('created_at')->limit(100)->get()]);
     }
 
     public function taskResult(Request $request, string $task): JsonResponse
@@ -250,7 +250,14 @@ class EdgeAgentController extends Controller
         ];
         $data = $request->validate($rules);
         $result = array_merge($data['result'], ['edge_id' => $edge->id, 'reported_at' => now()->toIso8601String()]);
-        $row->update(['status' => $data['status'], 'result' => $result, 'finished_at' => now()]);
+        $attempts = $row->attempts + 1;
+        $retryPurge = $row->type === 'cache_purge' && $data['status'] === 'failed' && $attempts < 5;
+        $row->update([
+            'status' => $retryPurge ? 'pending' : $data['status'], 'attempts' => $attempts, 'result' => $result,
+            'last_error' => $data['status'] === 'failed' ? ($data['result']['failure_reason'] ?? 'edge_purge_failed') : null,
+            'available_at' => $retryPurge ? now()->addSeconds(min(300, 5 * (2 ** ($attempts - 1)))) : null,
+            'finished_at' => $retryPurge ? null : now(),
+        ]);
         if (str_starts_with($row->type, 'cell_') && isset($row->payload['cell_id'])) {
             $cell = $edge->cells()->whereKey($row->payload['cell_id'])->first();
             if ($cell !== null && $data['status'] === 'succeeded') {
@@ -277,75 +284,16 @@ class EdgeAgentController extends Controller
                 ]);
             }
         }
+        if ($row->type === 'cache_purge' && $row->cache_purge_id !== null) {
+            $purge = CachePurge::query()->find($row->cache_purge_id);
+            if ($purge !== null) {
+                $tasks = $purge->tasks()->get();
+                $terminal = $tasks->isNotEmpty() && $tasks->every(fn (EdgeTask $task): bool => in_array($task->status, ['succeeded', 'failed'], true));
+                $purge->update(['status' => $terminal ? ($tasks->contains('status', 'failed') ? 'failed' : 'succeeded') : 'running']);
+            }
+        }
 
         return response()->json(['data' => ['accepted' => true]]);
-    }
-
-    private function promoteReadyPlacements(): void
-    {
-        $edges = Edge::query()->readyForTraffic()->get();
-        if ($edges->isEmpty()) {
-            return;
-        }
-        $published = [];
-        DomainEdgePlacement::query()->where('state', 'deploying')->whereNotNull('target_pool_id')->orderBy('id')->limit(100)->get()->each(function (DomainEdgePlacement $placement) use ($edges, &$published): void {
-            $participants = $edges->filter(function (Edge $edge) use ($placement): bool {
-                $cell = $edge->cells()->where('edge_pool_id', $placement->target_pool_id)->first();
-
-                return $cell !== null && ! $cell->drained && $cell->service_ipv4 !== null
-                    && ($edge->ipv6 === null || $cell->service_ipv6 !== null);
-            });
-            if ($participants->isEmpty()) {
-                return;
-            }
-            $ready = $participants->every(function (Edge $edge) use ($placement): bool {
-                $cell = $edge->cells()->where('edge_pool_id', $placement->target_pool_id)->firstOrFail();
-                if ($cell->status !== 'ready') {
-                    return false;
-                }
-                $artifact = EdgeArtifact::query()->where('edge_id', $edge->id)->where('domain_id', $placement->domain_id)
-                    ->where('revision', $placement->desired_revision)->latest('sequence')->first();
-
-                return $artifact !== null && $edge->active_sequence >= $artifact->sequence;
-            });
-            if (! $ready) {
-                return;
-            }
-            DB::transaction(function () use ($placement, &$published): void {
-                $locked = DomainEdgePlacement::query()->lockForUpdate()->find($placement->id);
-                if ($locked === null || $locked->state !== 'deploying' || $locked->target_pool_id === null) {
-                    return;
-                }
-                $previousPool = $locked->active_pool_id;
-                $targetPool = $locked->target_pool_id;
-                $moving = $previousPool !== null && $previousPool !== $locked->target_pool_id;
-                $locked->update($moving ? [
-                    'state' => 'draining', 'drain_after' => null,
-                ] : [
-                    'active_pool_id' => $locked->target_pool_id, 'target_pool_id' => null, 'state' => 'active', 'drain_after' => null,
-                ]);
-                Domain::query()->whereKey($locked->domain_id)->update(['active_edge_revision' => $locked->desired_revision]);
-                Operation::query()->where('type', 'edge.domain_reconcile')->whereIn('status', ['pending', 'running'])
-                    ->where('input->domain_id', $locked->domain_id)->update([
-                        'status' => $moving ? 'running' : 'succeeded',
-                        'result' => [
-                            'revision' => $locked->desired_revision,
-                            'placement_state' => $locked->state,
-                            'awaiting_dns_drain' => $moving,
-                        ],
-                        'error' => null, 'finished_at' => $moving ? null : now(),
-                    ]);
-                AuditLog::record(null, 'edge.placement_target_ready', $locked, ['active_pool_id' => $previousPool, 'target_pool_id' => $targetPool, 'state' => $locked->state]);
-                $published[] = $locked->domain_id;
-            });
-        });
-        foreach (array_unique($published) as $domainId) {
-            $domain = Domain::query()->find($domainId);
-            if ($domain?->lifecycle_state === DomainLifecycleState::Active && DnsCluster::query()->where('enabled', true)->exists()) {
-                Operation::coalesceDomain('dns.zone_reconcile', $domain->id);
-                ReconcileDnsZone::dispatch($domain->id)->afterCommit();
-            }
-        }
     }
 
     private function completeAcknowledgedTombstones(): void

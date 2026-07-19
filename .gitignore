@@ -2,3 +2,5 @@
 /.env.prod
 /.dev/
 /edge-agent/edge-agent
+__pycache__/
+*.py[cod]

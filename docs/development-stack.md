@@ -27,7 +27,9 @@ Run the Python non-UI end-to-end qualification against the real stack:
 make dev-e2e
 ```
 
-This cumulative job exercises Phases 1–4 through HTTP APIs, authorization, idempotency, queues, persisted operations, real PowerDNS/DNSdist answers, Geo-DNS, mTLS edge control, pool migration, and the generic OpenResty runtime. Run the heavier 500,000-zone/1,000,000-record qualification separately with `make dev-scale-e2e`. Browser/UI acceptance remains the project owner's manual checklist.
+This cumulative job exercises Phases 1–5 through HTTP APIs, authorization, idempotency, queues, persisted operations, real PowerDNS/DNSdist answers, Geo-DNS, mTLS edge control, pool migration, signed cache configuration, cache rollback, durable purge retry/replay, real Pebble DNS-01 issuance, and generic OpenResty HTTP/HTTPS/cache runtime. Run the heavier 500,000-zone/1,000,000-record qualification separately with `make dev-scale-e2e`. Browser/UI acceptance remains the project owner's manual checklist.
+
+`make docs-check` validates every repository-local Markdown link. CI additionally checks Composer and production npm advisories, Python syntax, Go formatting/vetting/tests, OpenAPI drift, frontend compilation, Compose contracts, and self-contained image builds before running the real-stack jobs.
 
 Hosted scale qualification starts only the bounded control-plane dependencies with `make dev-scale-up`; it does not make an unrelated MMDB download or start DNS, telemetry, origin, and edge services. The full developer stack remains `make dev-up`.
 

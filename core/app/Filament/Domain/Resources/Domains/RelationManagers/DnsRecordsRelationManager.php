@@ -4,6 +4,7 @@ namespace App\Filament\Domain\Resources\Domains\RelationManagers;
 
 use App\Enums\DomainLifecycleState;
 use App\Jobs\DispatchOriginTest;
+use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
@@ -301,6 +302,7 @@ class DnsRecordsRelationManager extends RelationManager
     {
         Operation::coalesceDomain('edge.domain_reconcile', $domain->id, auth()->id());
         ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
+        EnsureManagedCertificates::dispatch($domain->id)->afterCommit();
         if ($domain->lifecycle_state === DomainLifecycleState::Active && DnsCluster::query()->where('enabled', true)->exists()) {
             ReconcileDnsZone::dispatch($domain->id)->afterCommit();
         }

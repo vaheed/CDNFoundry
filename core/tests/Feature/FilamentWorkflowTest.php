@@ -2,18 +2,22 @@
 
 namespace Tests\Feature;
 
+use App\Enums\DomainLifecycleState;
 use App\Filament\Admin\Resources\Edges\Pages\EditEdge;
 use App\Filament\Admin\Resources\Edges\RelationManagers\CellsRelationManager;
 use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
 use App\Filament\Domain\Resources\Domains\RelationManagers\DnsRecordsRelationManager;
+use App\Jobs\ReconcileEdgeDomain;
 use App\Models\Domain;
 use App\Models\Edge;
+use App\Models\EdgeArtifact;
 use App\Models\EdgeCell;
 use App\Models\EdgePool;
 use App\Models\User;
 use App\Support\DnsRecordData;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -149,5 +153,61 @@ class FilamentWorkflowTest extends TestCase
             'service_ipv4' => '203.0.113.11',
             'service_ipv6' => '2001:db8::11',
         ]);
+    }
+
+    public function test_cache_actions_save_visible_bounded_state_and_queue_purges(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $domain = Domain::query()->create(['name' => 'cache-ui.example.test', 'display_name' => 'Cache UI', 'revision' => 1]);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+        $component = fn () => Livewire::test(ViewDomain::class, ['record' => $domain->id]);
+
+        $component()->assertSee('Cache UI')->assertSee('cache-ui.example.test')
+            ->assertSee('Domain actions')->assertSee('Delivery')->assertSee('Cache')->assertSee('TLS')
+            ->assertDontSee('Deploy proxy configuration')
+            ->assertSee('Cache settings')->assertSee('Enable development mode')->assertSee('Purge cache')
+            ->callAction('cacheSettings', data: [
+                'enabled' => true, 'edge_ttl_seconds' => 600, 'browser_ttl_seconds' => 120,
+                'maximum_object_bytes' => 104857600, 'respect_origin_headers' => true,
+                'include_query_string' => true, 'bypass_cookie_names' => ['session_id'], 'stale_if_error_seconds' => 30,
+            ])->assertHasNoActionErrors();
+        $this->assertSame(600, $domain->refresh()->cache_settings['edge_ttl_seconds']);
+
+        $component()->callAction('developmentMode', data: ['duration_minutes' => 30])->assertHasNoActionErrors();
+        $this->assertTrue($domain->refresh()->cache_development_mode_until->isFuture());
+
+        $component()->callAction('purgeCache', data: ['type' => 'urls', 'urls' => "https://cache-ui.example.test/app.css\n"])->assertHasNoActionErrors();
+        $this->assertDatabaseHas('cache_purges', ['domain_id' => $domain->id, 'type' => 'urls', 'status' => 'succeeded']);
+    }
+
+    public function test_disabling_from_the_domain_panel_automatically_queues_edge_reconciliation(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        $domain = Domain::query()->create([
+            'name' => 'disable-ui.example.test',
+            'display_name' => 'Disable UI',
+            'lifecycle_state' => DomainLifecycleState::Active,
+            'revision' => 4,
+        ]);
+        $edge = Edge::query()->create([
+            'name' => 'disable-ui-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
+            'ipv4' => '203.0.113.44',
+        ]);
+        EdgeArtifact::query()->create([
+            'edge_id' => $edge->id, 'domain_id' => $domain->id, 'revision' => 4, 'kind' => 'domain',
+            'payload' => ['revision' => 4], 'checksum' => str_repeat('a', 64), 'signature' => str_repeat('b', 64),
+        ]);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->callAction('disable')
+            ->assertHasNoActionErrors();
+
+        $this->assertSame(DomainLifecycleState::Disabled, $domain->refresh()->lifecycle_state);
+        $this->assertSame(5, $domain->revision);
+        Queue::assertPushed(ReconcileEdgeDomain::class, fn (ReconcileEdgeDomain $job): bool => $job->domainId === $domain->id);
     }
 }

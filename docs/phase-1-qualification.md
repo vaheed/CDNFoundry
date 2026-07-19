@@ -1,10 +1,10 @@
 # Phase 1 qualification
 
-Phase 1 implementation and non-browser qualification was re-audited on 2026-07-18. Browser E2E remains a manual, user-owned release check under the repository contract.
+Phase 1 implementation and non-browser qualification was re-audited on 2026-07-19. Browser E2E remains a manual, user-owned release check under the repository contract.
 
 ## Evidence
 
-- `make dev-test`: the cumulative Phase 1–4 suite passed 93 tests with 712 assertions inside the development Compose service. The command fails closed unless the effective database is isolated in-memory SQLite.
+- `make dev-test`: the cumulative Phase 1–5 suite passed 118 tests with 925 assertions inside the development Compose service. The command fails closed unless the effective database is isolated in-memory SQLite.
 - `make dev-e2e`: the cumulative real-stack target passed, including `phase1_backend_e2e=passed`; the Phase 1 job exercised the real API, authorization, idempotency, token revocation, queues, auditing, PostgreSQL-backed platform settings, and asynchronous system-identity application.
 - `vendor/bin/pint --test`: passed.
 - `npm ci --no-audit --no-fund && npm run build`: production assets built successfully without a build-time network font dependency.

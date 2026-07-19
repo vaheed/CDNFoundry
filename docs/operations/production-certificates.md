@@ -5,7 +5,7 @@ CDNFoundry uses three distinct certificate roles:
 - `edge-identity-ca`: signs short-lived edge-agent client identities. Its private key belongs only on the control plane.
 - `edge-server-ca`: signs the edge-control and bootstrap runtime server certificates. Only its public certificate is copied to edge-agent hosts.
 - `edge-control-server`: secures the agent-facing control endpoint such as `edge-control.example.com:8443`.
-- `edge-runtime`: bootstrap/default certificate for the public OpenResty listener. Phase 5 managed per-domain TLS will replace it through dynamic certificate selection.
+- `edge-runtime`: bootstrap/default certificate for the public OpenResty listener. Phase 5 dynamically selects each active domain's managed or custom certificate by SNI; the mounted certificate remains only the non-customer bootstrap fallback.
 
 The repository helper creates a private CA and two ten-year P-256 server certificates. Ten years is useful for private bootstrap infrastructure but increases key-compromise exposure. Prefer certificates from your organizational PKI with automated renewal when available. Public browsers will not trust the generated private CA automatically.
 

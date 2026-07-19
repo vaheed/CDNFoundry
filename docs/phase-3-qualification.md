@@ -4,7 +4,7 @@ Phase 3 implements bounded DNS-only geographic answers for every qualified runti
 
 ## Automated qualification
 
-`make dev-test` passed the cumulative 93-test suite with 712 assertions using the required isolated in-memory SQLite configuration. Coverage includes authorization, idempotency, the shared ISO country/continent vocabulary, country/continent/default priority, type-aware answer validation, malicious-input bounds, duplicate rejection, unknown fallback, ordinary DNS isolation, deterministic compilation, deployment failure retention, and the OpenAPI contract.
+`make dev-test` passed the cumulative 118-test suite with 925 assertions using the required isolated in-memory SQLite configuration. Coverage includes authorization, idempotency, the shared ISO country/continent vocabulary, country/continent/default priority, type-aware answer validation, malicious-input bounds, duplicate rejection, unknown fallback, ordinary DNS isolation, deterministic compilation, deployment failure retention, and the OpenAPI contract.
 
 Laravel Pint, Python syntax compilation, development Compose validation, and production Compose validation with `.env.prod.example` completed successfully.
 

@@ -18,6 +18,22 @@ return [
                 ],
             ],
         ],
+        'revision_history' => [
+            'label' => 'Configuration history',
+            'description' => 'Bounded retention for derived edge snapshots and artifacts. Revision numbers remain monotonic and are never reused.',
+            'fields' => [
+                'retention_days' => [
+                    'type' => 'integer', 'label' => 'Revision retention (days)', 'default' => 1,
+                    'description' => 'Keep every validated edge revision created within this many days.',
+                    'rules' => ['required', 'integer', 'between:1,365'],
+                ],
+                'minimum_revisions_per_domain' => [
+                    'type' => 'integer', 'label' => 'Minimum revisions per domain', 'default' => 10,
+                    'description' => 'Always keep at least this many recent rollback points per domain, even after the time window expires.',
+                    'rules' => ['required', 'integer', 'between:2,100'],
+                ],
+            ],
+        ],
         'rate_limits' => [
             'label' => 'API rate limits',
             'description' => 'Per-identity request limits that protect interactive and runtime API lanes.',

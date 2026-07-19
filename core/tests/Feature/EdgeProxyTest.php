@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\ReconcileEdgeDomain;
 use App\Models\Domain;
 use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
@@ -15,11 +16,50 @@ use App\Models\User;
 use App\Support\ArtifactSigner;
 use App\Support\PowerDnsZone;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class EdgeProxyTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_pool_move_publishes_latest_state_when_its_requested_revision_is_superseded(): void
+    {
+        Queue::fake();
+        [$user, $domain] = $this->ownedDomain();
+        $domain->update(['lifecycle_state' => 'active']);
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $this->record('www', '8.8.8.8'))->assertCreated();
+        $shared = EdgePool::query()->where('kind', 'shared')->firstOrFail();
+        $quarantine = EdgePool::query()->where('kind', 'quarantine')->firstOrFail();
+        DomainEdgePlacement::query()->create([
+            'domain_id' => $domain->id,
+            'active_pool_id' => $shared->id,
+            'desired_revision' => $domain->refresh()->revision,
+            'state' => 'active',
+        ]);
+        $edge = Edge::query()->create([
+            'name' => 'coalesced-move-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
+            'ipv4' => '203.0.113.45',
+        ]);
+        $admin = User::factory()->admin()->create();
+        $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/move", ['pool_id' => $quarantine->id])->assertAccepted();
+        $moveRevision = $domain->refresh()->revision;
+
+        $domain->update(['revision' => $moveRevision + 1]);
+        (new ReconcileEdgeDomain($domain->id))->handle();
+
+        $this->assertDatabaseMissing('edge_revisions', ['domain_id' => $domain->id, 'revision' => $moveRevision]);
+        $this->assertDatabaseHas('domain_edge_placements', [
+            'domain_id' => $domain->id,
+            'active_pool_id' => $shared->id,
+            'target_pool_id' => $quarantine->id,
+            'desired_revision' => $moveRevision + 1,
+            'state' => 'deploying',
+        ]);
+        $artifact = EdgeArtifact::query()->where('edge_id', $edge->id)->where('domain_id', $domain->id)->firstOrFail();
+        $this->assertSame($moveRevision + 1, $artifact->revision);
+        $this->assertSame(['quarantine-default', 'shared-default'], $artifact->payload['pools']);
+    }
 
     public function test_only_address_and_cname_records_can_be_proxied_without_dns_content(): void
     {
@@ -261,9 +301,23 @@ class EdgeProxyTest extends TestCase
         $this->assertDatabaseHas('domain_edge_placements', ['domain_id' => $domain->id, 'active_pool_id' => 1, 'target_pool_id' => $pool, 'state' => 'draining']);
         $this->assertNull($domain->edgePlacement->refresh()->drain_after, 'The source drain must not begin before target DNS deployment succeeds.');
         $this->assertSame('running', $operation->refresh()->status);
+        $moveRevision = $domain->refresh()->revision;
+        $scheduledDrain = now()->addMinutes(5)->startOfSecond();
+        DomainEdgePlacement::query()->where('domain_id', $domain->id)->update(['drain_after' => $scheduledDrain]);
+        (new ReconcileEdgeDomain($domain->id))->handle();
+        $placement = $domain->edgePlacement->refresh();
+        $this->assertSame('draining', $placement->state, 'A duplicate reconcile must not restart an acknowledged migration.');
+        $this->assertTrue($placement->drain_after->equalTo($scheduledDrain), 'A duplicate reconcile must preserve the scheduled source drain.');
         DomainEdgePlacement::query()->where('domain_id', $domain->id)->update(['drain_after' => now()->subSecond()]);
         $this->artisan('edge:complete-placement-drains')->assertSuccessful();
-        $this->assertDatabaseHas('domain_edge_placements', ['domain_id' => $domain->id, 'active_pool_id' => $pool, 'target_pool_id' => $pool, 'state' => 'deploying']);
+        $this->assertSame($moveRevision + 1, $domain->refresh()->revision);
+        $this->assertDatabaseHas('domain_edge_placements', [
+            'domain_id' => $domain->id,
+            'active_pool_id' => $pool,
+            'target_pool_id' => $pool,
+            'desired_revision' => $moveRevision + 1,
+            'state' => 'deploying',
+        ]);
         $drainedArtifact = EdgeArtifact::query()->where('edge_id', $id)->where('domain_id', $domain->id)->latest('sequence')->firstOrFail();
         $this->assertGreaterThan($moveArtifact->sequence, $drainedArtifact->sequence);
         $this->withHeaders($identity)->postJson('/edge/v1/config/applied', ['sequence' => $drainedArtifact->sequence])->assertOk();
