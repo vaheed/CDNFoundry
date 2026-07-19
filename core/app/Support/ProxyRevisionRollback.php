@@ -7,6 +7,7 @@ use App\Models\DnsRecord;
 use App\Models\Domain;
 use App\Models\EdgeRevision;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 final class ProxyRevisionRollback
@@ -32,7 +33,22 @@ final class ProxyRevisionRollback
                 );
             }
             $settings = is_array($snapshot['settings'] ?? null) ? $snapshot['settings'] : null;
-            $locked->update(['proxy_settings' => $settings, 'revision' => $locked->revision + 1]);
+            $cache = is_array($snapshot['cache'] ?? null) ? $snapshot['cache'] : null;
+            $cacheSettings = $cache === null ? null : collect($cache)->only([
+                'enabled', 'edge_ttl_seconds', 'browser_ttl_seconds', 'maximum_object_bytes',
+                'respect_origin_headers', 'include_query_string', 'bypass_cookie_names', 'stale_if_error_seconds',
+            ])->all();
+            $developmentUntil = isset($cache['development_mode_until'])
+                ? CarbonImmutable::createFromTimestamp((int) $cache['development_mode_until'])
+                : null;
+            if ($developmentUntil?->isPast()) {
+                $developmentUntil = null;
+            }
+            $locked->update([
+                'proxy_settings' => $settings, 'cache_settings' => $cacheSettings,
+                'cache_epoch' => $locked->cache_epoch + 1, 'cache_development_mode_until' => $developmentUntil,
+                'revision' => $locked->revision + 1,
+            ]);
             AuditLog::record($actor, 'proxy.revision_rolled_back', $locked, ['from' => $prior->revision, 'revision' => $locked->revision], $ipAddress);
 
             return $locked;

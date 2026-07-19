@@ -103,6 +103,29 @@ func TestActivationPreservesPreviousAndRestartState(t *testing.T) {
 	if err != nil || json.Unmarshal(poolBytes, &poolRuntime) != nil || poolRuntime.Hosts["www.example.test"] == nil {
 		t.Fatal("placement-aware pool runtime was not published")
 	}
+	poolInfo, err := os.Stat(filepath.Join(dir, "runtime", "shared-default.json"))
+	if err != nil || poolInfo.Mode().Perm() != 0600 {
+		t.Fatalf("runtime snapshot containing TLS keys must be mode 0600: %v", err)
+	}
+}
+
+func TestRuntimeAssignsSupplementalCertificatesPerHostname(t *testing.T) {
+	domain := json.RawMessage(`{"domain":"example.test","revision":1,"pools":["shared-default"],"settings":{"enabled":true},"cache":{},"tls":{"mode":"managed","certificates":[{"id":"base","certificate_pem":"base-cert","private_key_pem":"base-key"},{"id":"deep","certificate_pem":"deep-cert","private_key_pem":"deep-key"}]},"hostnames":[{"hostname":"www.example.test","tls_certificate_id":"base","origin":{"host":"origin.example"}},{"hostname":"a.b.example.test","tls_certificate_id":"deep","origin":{"host":"origin.example"}}]}`)
+	_, pools, err := compileRuntime(state{Sequence: 1, Domains: map[string]json.RawMessage{"1": domain}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := pools["shared-default"]
+	hosts := pool["hosts"].(map[string]any)
+	if hosts["www.example.test"].(map[string]any)["tls"].(map[string]any)["certificate_id"] != "base" {
+		t.Fatal("base hostname did not receive the base certificate")
+	}
+	if hosts["a.b.example.test"].(map[string]any)["tls"].(map[string]any)["certificate_id"] != "deep" {
+		t.Fatal("deep hostname did not receive its supplemental certificate")
+	}
+	if len(pool["certificates"].(map[string]any)) != 2 {
+		t.Fatal("cell runtime did not deduplicate both required certificates")
+	}
 }
 
 func TestFreshFullSnapshotThenIncrementalArtifact(t *testing.T) {
@@ -356,5 +379,5 @@ func signedJSON(t *testing.T, private ed25519.PrivateKey, value any) (string, st
 }
 
 func runtimeDomain(revision int) json.RawMessage {
-	return json.RawMessage(`{"domain":"example.test","revision":` + strconv.Itoa(revision) + `,"pools":["shared-default"],"settings":{"enabled":true},"hostnames":[{"hostname":"www.example.test","origin":{"host":"origin.example"}}]}`)
+	return json.RawMessage(`{"domain":"example.test","revision":` + strconv.Itoa(revision) + `,"pools":["shared-default"],"settings":{"enabled":true},"cache":{"enabled":true,"epoch":2},"hostnames":[{"hostname":"www.example.test","origin":{"host":"origin.example"}}]}`)
 }

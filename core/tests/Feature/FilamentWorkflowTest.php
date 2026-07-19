@@ -150,4 +150,27 @@ class FilamentWorkflowTest extends TestCase
             'service_ipv6' => '2001:db8::11',
         ]);
     }
+
+    public function test_cache_actions_save_visible_bounded_state_and_queue_purges(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $domain = Domain::query()->create(['name' => 'cache-ui.example.test', 'display_name' => 'Cache UI', 'revision' => 1]);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+        $component = fn () => Livewire::test(ViewDomain::class, ['record' => $domain->id]);
+
+        $component()->assertSee('Cache settings')->assertSee('Enable development mode')->assertSee('Purge cache')
+            ->callAction('cacheSettings', data: [
+                'enabled' => true, 'edge_ttl_seconds' => 600, 'browser_ttl_seconds' => 120,
+                'maximum_object_bytes' => 104857600, 'respect_origin_headers' => true,
+                'include_query_string' => true, 'bypass_cookie_names' => ['session_id'], 'stale_if_error_seconds' => 30,
+            ])->assertHasNoActionErrors();
+        $this->assertSame(600, $domain->refresh()->cache_settings['edge_ttl_seconds']);
+
+        $component()->callAction('developmentMode', data: ['duration_minutes' => 30])->assertHasNoActionErrors();
+        $this->assertTrue($domain->refresh()->cache_development_mode_until->isFuture());
+
+        $component()->callAction('purgeCache', data: ['type' => 'urls', 'urls' => "https://cache-ui.example.test/app.css\n"])->assertHasNoActionErrors();
+        $this->assertDatabaseHas('cache_purges', ['domain_id' => $domain->id, 'type' => 'urls', 'status' => 'succeeded']);
+    }
 }

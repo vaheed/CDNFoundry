@@ -21,12 +21,20 @@ EDGE_NETWORK = os.environ.get(
 
 
 def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(args, cwd=ROOT, check=check, text=True, capture_output=True)
+    result = subprocess.run(args, cwd=ROOT, check=False, text=True, capture_output=True)
+    if check and result.returncode != 0:
+        raise RuntimeError(f"command failed ({result.returncode}): {' '.join(args)}\n{result.stdout}\n{result.stderr}")
+    return result
 
 
 def state(hosts: dict[str, str], sequence: int) -> dict:
-    return {"schema_version": 1, "sequence": sequence, "hosts": {
-        hostname: {"domain": hostname, "revision": sequence, "settings": {"enabled": True}, "origin": {
+    return {"schema_version": 1, "sequence": sequence, "certificates": {}, "hosts": {
+        hostname: {"domain": hostname, "revision": sequence, "settings": {"enabled": True}, "cache": {
+            "enabled": True, "edge_ttl_seconds": 3600, "browser_ttl_seconds": 300,
+            "maximum_object_bytes": 104857600, "respect_origin_headers": True,
+            "include_query_string": True, "bypass_cookie_names": ["session_id"],
+            "stale_if_error_seconds": 60, "epoch": 1, "development_mode_until": None,
+        }, "origin": {
             "host": "origin-http", "port": 80, "scheme": "http", "host_header": origin_host,
             "sni": None, "verify_tls": False, "connect_timeout_ms": 1000,
             "response_timeout_ms": 5000, "retry_count": 0, "websocket": False,
@@ -51,8 +59,33 @@ def add_https_origin(runtime_state: dict, hostname: str, sni: str, host_header: 
     }
 
 
+def add_serving_certificate(runtime_state: dict, certificate: str, private_key: str) -> None:
+    runtime_state["certificates"]["runtime-test-certificate"] = {
+        "id": "runtime-test-certificate", "certificate_pem": certificate, "chain_pem": "",
+        "private_key_pem": private_key, "expires_at": int(time.time()) + 3600,
+        "names": list(runtime_state["hosts"].keys()),
+    }
+    for config in runtime_state["hosts"].values():
+        config["tls"] = {"mode": "custom", "certificate_id": "runtime-test-certificate"}
+
+
 def request(host: str, container: str = NAME) -> subprocess.CompletedProcess[str]:
     return run("docker", "exec", container, "wget", "-S", "-O-", f"--header=Host: {host}", "http://127.0.0.1:8080/", check=False)
+
+
+def request_with(host: str, path: str = "/", headers: tuple[str, ...] = (), container: str = NAME) -> subprocess.CompletedProcess[str]:
+    command = ["docker", "exec", container, "wget", "-S", "-O-", f"--header=Host: {host}"]
+    command.extend(f"--header={header}" for header in headers)
+    command.append(f"http://127.0.0.1:8080{path}")
+    return run(*command, check=False)
+
+
+def response_headers(host: str, path: str = "/") -> str:
+    return run(
+        "docker", "run", "--rm", "--network", f"container:{NAME}", "curlimages/curl:8.16.0",
+        "-sS", "--max-redirs", "0", "-D", "-", "-o", "/dev/null", "-H", f"Host: {host}",
+        f"http://127.0.0.1:8080{path}", check=False,
+    ).stdout
 
 
 def raw_request(payload: str) -> str:
@@ -102,6 +135,7 @@ def worker_children(container: str, master: str) -> str:
 def main() -> None:
     run("docker", "compose", "-f", "compose.dev.yml", "up", "-d", "origin-http")
     run("docker", "build", "-t", "cdnfoundry/edge-agent:test", "edge-agent")
+    run("docker", "build", "-f", "docker/openresty/Dockerfile", "-t", "cdnfoundry/edge-runtime:test", ".")
     with tempfile.TemporaryDirectory(prefix="cdnf-phase4-") as directory:
         os.chmod(directory, 0o755)
         temporary = pathlib.Path(directory)
@@ -130,6 +164,20 @@ def main() -> None:
             "-v", f"{directory}:/run/tls:ro", "nginx:1.30.3-alpine")
         runtime = pathlib.Path(directory) / "shared-default.json"
         initial = state({"runtime.example": "origin-one.example"}, 1)
+        initial["hosts"]["development.example"] = state({"development.example": "development-origin.example"}, 1)["hosts"]["development.example"]
+        initial["hosts"]["development.example"]["cache"]["development_mode_until"] = int(time.time()) + 3600
+        for cache_host in ("admission.example", "origin-policy.example", "small-object.example", "stale.example", "no-stale.example"):
+            initial["hosts"][cache_host] = state({cache_host: "cache-origin.example"}, 1)["hosts"][cache_host]
+        initial["hosts"]["origin-policy.example"]["cache"].update({
+            "edge_ttl_seconds": 3, "browser_ttl_seconds": 7, "respect_origin_headers": False,
+        })
+        initial["hosts"]["small-object.example"]["cache"]["maximum_object_bytes"] = 1048576
+        initial["hosts"]["stale.example"]["cache"].update({
+            "edge_ttl_seconds": 1, "browser_ttl_seconds": 5, "stale_if_error_seconds": 3,
+        })
+        initial["hosts"]["no-stale.example"]["cache"].update({
+            "edge_ttl_seconds": 1, "browser_ttl_seconds": 5, "stale_if_error_seconds": 0,
+        })
         add_https_origin(initial, "tls.example", "tls-origin")
         add_https_origin(initial, "bad-tls.example", "wrong-origin", "wrong-host")
         initial["hosts"]["blocked.example"] = initial["hosts"]["runtime.example"] | {
@@ -138,6 +186,7 @@ def main() -> None:
         initial["hosts"]["policy-blocked.example"] = initial["hosts"]["runtime.example"] | {
             "origin": initial["hosts"]["runtime.example"]["origin"] | {"blocked_networks": ["172.16.0.0/12"]},
         }
+        add_serving_certificate(initial, (temporary / "tls.crt").read_text(), (temporary / "tls.key").read_text())
         runtime.write_text(json.dumps(initial, separators=(",", ":")))
         runtime.chmod(0o644)
         quarantine_runtime = pathlib.Path(directory) / "quarantine-default.json"
@@ -146,41 +195,114 @@ def main() -> None:
         dedicated_runtime = pathlib.Path(directory) / "dedicated-test.json"
         dedicated_runtime.write_text(json.dumps(state({"dedicated.example": "dedicated-origin.example"}, 1), separators=(",", ":")))
         dedicated_runtime.chmod(0o644)
-        run("docker", "run", "-d", "--rm", "--name", NAME, "--network", EDGE_NETWORK,
+        run("docker", "run", "-d", "--name", NAME, "--network", EDGE_NETWORK, "--tmpfs", "/var/cache/nginx:rw,size=128m",
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/shared-default.json",
             "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
             "-v", f"{ROOT / 'docker/nginx/openresty.conf'}:/usr/local/openresty/nginx/conf/nginx.conf:ro",
             "-v", f"{ROOT / 'docker/nginx/edge-runtime.conf'}:/etc/nginx/conf.d/default.conf:ro",
+            "-v", f"{ROOT / 'docker/nginx/proxy-cache.conf'}:/etc/nginx/proxy-cache.conf:ro",
+            "-v", f"{ROOT / 'docker/nginx/cache-upstream.conf'}:/etc/nginx/cache-upstream.conf:ro",
+            "-v", f"{ROOT / 'docker/nginx/origin-proxy.conf'}:/etc/nginx/origin-proxy.conf:ro",
             "-v", f"{ROOT / 'docker/openresty/runtime.lua'}:/etc/cdnfoundry/runtime.lua:ro",
             "-v", f"{temporary / 'ca.crt'}:/etc/ssl/certs/ca-certificates.crt:ro",
             "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro",
             "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
-            "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro", "openresty/openresty:1.31.1.1-0-alpine")
-        run("docker", "run", "-d", "--rm", "--name", QUARANTINE_NAME, "--network", EDGE_NETWORK,
+            "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro", "cdnfoundry/edge-runtime:test")
+        run("docker", "run", "-d", "--rm", "--name", QUARANTINE_NAME, "--network", EDGE_NETWORK, "--tmpfs", "/var/cache/nginx:rw,size=64m",
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/quarantine-default.json",
             "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
             "-v", f"{ROOT / 'docker/nginx/openresty.conf'}:/usr/local/openresty/nginx/conf/nginx.conf:ro",
             "-v", f"{ROOT / 'docker/nginx/edge-runtime.conf'}:/etc/nginx/conf.d/default.conf:ro",
+            "-v", f"{ROOT / 'docker/nginx/proxy-cache.conf'}:/etc/nginx/proxy-cache.conf:ro",
+            "-v", f"{ROOT / 'docker/nginx/cache-upstream.conf'}:/etc/nginx/cache-upstream.conf:ro",
+            "-v", f"{ROOT / 'docker/nginx/origin-proxy.conf'}:/etc/nginx/origin-proxy.conf:ro",
             "-v", f"{ROOT / 'docker/openresty/runtime.lua'}:/etc/cdnfoundry/runtime.lua:ro",
             "-v", f"{temporary / 'ca.crt'}:/etc/ssl/certs/ca-certificates.crt:ro",
             "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro",
             "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
-            "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro", "openresty/openresty:1.31.1.1-0-alpine")
+            "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro", "cdnfoundry/edge-runtime:test")
         run("docker", "run", "-d", "--rm", "--name", AGENT_NAME, "--network", EDGE_NETWORK,
             "-e", "EDGE_CONTROL_URL=http://127.0.0.1:1", "-e", "EDGE_STATE_DIR=/state",
             "-v", f"{agent_state}:/state", "cdnfoundry/edge-agent:test")
-        run("docker", "run", "-d", "--rm", "--name", DEDICATED_NAME, "--network", EDGE_NETWORK,
+        run("docker", "run", "-d", "--rm", "--name", DEDICATED_NAME, "--network", EDGE_NETWORK, "--tmpfs", "/var/cache/nginx:rw,size=64m",
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/dedicated-test.json", "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
             "-v", f"{ROOT / 'docker/nginx/openresty.conf'}:/usr/local/openresty/nginx/conf/nginx.conf:ro",
             "-v", f"{ROOT / 'docker/nginx/edge-runtime.conf'}:/etc/nginx/conf.d/default.conf:ro",
+            "-v", f"{ROOT / 'docker/nginx/proxy-cache.conf'}:/etc/nginx/proxy-cache.conf:ro",
+            "-v", f"{ROOT / 'docker/nginx/cache-upstream.conf'}:/etc/nginx/cache-upstream.conf:ro",
+            "-v", f"{ROOT / 'docker/nginx/origin-proxy.conf'}:/etc/nginx/origin-proxy.conf:ro",
             "-v", f"{ROOT / 'docker/openresty/runtime.lua'}:/etc/cdnfoundry/runtime.lua:ro",
             "-v", f"{temporary / 'ca.crt'}:/etc/ssl/certs/ca-certificates.crt:ro",
             "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro", "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
-            "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro", "openresty/openresty:1.31.1.1-0-alpine")
+            "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro", "cdnfoundry/edge-runtime:test")
         try:
             run("docker", "exec", NAME, "openresty", "-t")
             known = wait_for("runtime.example")
-            assert known.returncode == 0 and '"host":"origin-one.example"' in known.stdout, known.stderr
+            runtime_logs = run("docker", "logs", NAME, check=False)
+            assert known.returncode == 0 and '"host":"origin-one.example"' in known.stdout, known.stderr + runtime_logs.stdout + runtime_logs.stderr
+            assert "X-CDNFoundry-Cache: MISS" in known.stderr, known.stderr
+            cached = request("runtime.example")
+            assert cached.returncode == 0 and "X-CDNFoundry-Cache: HIT" in cached.stderr, cached.stderr
+            authorized = request_with("runtime.example", headers=("Authorization: Bearer cache-bypass",))
+            assert "X-CDNFoundry-Cache: BYPASS" in authorized.stderr, authorized.stderr
+            cookie_bypass = request_with("runtime.example", headers=("Cookie: session_id=present",))
+            assert "X-CDNFoundry-Cache: BYPASS" in cookie_bypass.stderr, cookie_bypass.stderr
+            development = request("development.example")
+            assert "X-CDNFoundry-Cache: BYPASS" in development.stderr, development.stderr
+            query_a = request_with("runtime.example", "/asset.css?a=1")
+            assert "X-CDNFoundry-Cache: MISS" in query_a.stderr, query_a.stderr
+            assert "X-CDNFoundry-Cache: HIT" in request_with("runtime.example", "/asset.css?a=1").stderr
+            assert "X-CDNFoundry-Cache: MISS" in request_with("runtime.example", "/asset.css?a=2").stderr
+            assert "max-age=300" in cached.stderr, cached.stderr
+            for path in ("/set-cookie", "/private", "/no-store", "/vary-star", "/vary-language"):
+                first = request_with("admission.example", path)
+                second = request_with("admission.example", path)
+                assert "X-CDNFoundry-Cache: BYPASS" in first.stderr, f"{path}: {first.stderr}"
+                assert "X-CDNFoundry-Cache: BYPASS" in second.stderr, f"{path}: {second.stderr}"
+            for path, expected in (("/negative", "404"), ("/redirect", "302")):
+                first_headers, second_headers = response_headers("admission.example", path), response_headers("admission.example", path)
+                assert expected in first_headers and "X-CDNFoundry-Cache: BYPASS" in first_headers, first_headers
+                assert expected in second_headers and "X-CDNFoundry-Cache: BYPASS" in second_headers, second_headers
+            vary_encoding = request_with("admission.example", "/vary-encoding", headers=("Accept-Encoding: gzip, br",))
+            assert "X-CDNFoundry-Cache: MISS" in vary_encoding.stderr, vary_encoding.stderr
+            assert "X-CDNFoundry-Cache: HIT" in request_with("admission.example", "/vary-encoding", headers=("Accept-Encoding: gzip",)).stderr
+            ranged = request_with("admission.example", headers=("Range: bytes=0-4",))
+            assert "X-CDNFoundry-Cache: BYPASS" in ranged.stderr, ranged.stderr
+            posted = run("docker", "exec", NAME, "wget", "-S", "-O-", "--post-data=body", "--header=Host: admission.example", "http://127.0.0.1:8080/", check=False)
+            assert "X-CDNFoundry-Cache: BYPASS" in posted.stderr, posted.stderr
+            large_first = request_with("small-object.example", "/large-object")
+            large_second = request_with("small-object.example", "/large-object")
+            assert "X-CDNFoundry-Cache: BYPASS" in large_first.stderr and "X-CDNFoundry-Cache: BYPASS" in large_second.stderr
+            origin_ttl = request_with("admission.example", "/origin-ttl")
+            assert "X-CDNFoundry-Cache: MISS" in origin_ttl.stderr
+            assert "X-CDNFoundry-Cache: HIT" in request_with("admission.example", "/origin-ttl").stderr
+            for _ in range(15):
+                expired = request_with("admission.example", "/origin-ttl")
+                if "X-CDNFoundry-Cache: EXPIRED" in expired.stderr:
+                    break
+                time.sleep(0.2)
+            else:
+                raise AssertionError(expired.stderr)
+            ignored_origin_ttl = request_with("origin-policy.example", "/origin-ttl")
+            assert "max-age=7" in ignored_origin_ttl.stderr, ignored_origin_ttl.stderr
+            time.sleep(1.2)
+            ignored_origin_cached = request_with("origin-policy.example", "/origin-ttl")
+            assert "X-CDNFoundry-Cache: HIT" in ignored_origin_cached.stderr, ignored_origin_cached.stderr
+            stale_seed = request_with("stale.example", "/stale")
+            assert "X-CDNFoundry-Cache: MISS" in stale_seed.stderr
+            no_stale_seed = request_with("no-stale.example", "/stale")
+            assert "X-CDNFoundry-Cache: MISS" in no_stale_seed.stderr
+            time.sleep(1.2)
+            run("docker", "compose", "-f", "compose.dev.yml", "stop", "origin-http")
+            stale = request_with("stale.example", "/stale")
+            assert stale.returncode == 0 and "X-CDNFoundry-Cache: STALE" in stale.stderr, stale.stderr
+            no_stale = request_with("no-stale.example", "/stale")
+            assert no_stale.returncode != 0 and "502 Bad Gateway" in no_stale.stderr, no_stale.stderr
+            time.sleep(3.2)
+            expired_stale = request_with("stale.example", "/stale")
+            assert expired_stale.returncode != 0 and "502 Bad Gateway" in expired_stale.stderr, expired_stale.stderr
+            run("docker", "compose", "-f", "compose.dev.yml", "up", "-d", "origin-http")
+            assert wait_for("runtime.example").returncode == 0
             master = run("docker", "exec", NAME, "cat", "/usr/local/openresty/nginx/logs/nginx.pid").stdout.strip()
             children = worker_children(NAME, master)
             assert children, "OpenResty did not start worker processes"
@@ -195,9 +317,14 @@ def main() -> None:
             assert wait_for("runtime.example").returncode == 0
             full_purge = cache_purge("runtime-purge-all-1", "all", [])
             assert full_purge["accepted"] is True and full_purge["replayed"] is False and full_purge["applied_keys"] == 0, full_purge
-            url_purge = cache_purge("runtime-purge-url-1", "urls", ["https|runtime.example|/app.css?a=1"])
+            after_full_purge = request("runtime.example")
+            assert "X-CDNFoundry-Cache: MISS" in after_full_purge.stderr, after_full_purge.stderr
+            assert "X-CDNFoundry-Cache: HIT" in request("runtime.example").stderr
+            url_purge = cache_purge("runtime-purge-url-1", "urls", ["http|runtime.example|/"])
             assert url_purge["accepted"] is True and url_purge["applied_keys"] == 1, url_purge
-            assert cache_purge("runtime-purge-url-1", "urls", ["https|runtime.example|/app.css?a=1"])["replayed"] is True
+            after_url_purge = request("runtime.example")
+            assert "X-CDNFoundry-Cache: MISS" in after_url_purge.stderr, after_url_purge.stderr
+            assert cache_purge("runtime-purge-url-1", "urls", ["http|runtime.example|/"])["replayed"] is True
             control("restart", "runtime-restart-1")
             for _ in range(20):
                 time.sleep(0.25)
@@ -256,11 +383,13 @@ def main() -> None:
             scaled_hosts = {f"scale-{index}.example": "origin-scale.example" for index in range(2000)}
             scaled_hosts.update({"runtime.example": "origin-one.example", "hot.example": "origin-two.example", "disabled.example": "disabled.example"})
             updated = state(scaled_hosts, 2)
+            add_serving_certificate(updated, (temporary / "tls.crt").read_text(), (temporary / "tls.key").read_text())
             updated["hosts"]["disabled.example"]["settings"]["enabled"] = False
             runtime.write_text(json.dumps(updated, separators=(",", ":")))
             hot = wait_for("hot.example")
             assert hot.returncode == 0 and '"host":"origin-two.example"' in hot.stdout, hot.stderr
-            assert request("scale-1999.example").returncode == 0
+            scaled = wait_for("scale-1999.example")
+            assert scaled.returncode == 0, scaled.stderr
             assert "503 Service Temporarily Unavailable" in request("disabled.example").stderr
             assert "421 Misdirected Request" in request("tls.example").stderr
             assert run("docker", "exec", NAME, "cat", "/usr/local/openresty/nginx/logs/nginx.pid").stdout.strip() == pid
@@ -271,7 +400,7 @@ def main() -> None:
             time.sleep(1.5)
             assert request("runtime.example").returncode == 0
         finally:
-            run("docker", "stop", NAME, check=False)
+            run("docker", "rm", "-f", NAME, check=False)
             run("docker", "stop", QUARANTINE_NAME, check=False)
             run("docker", "stop", AGENT_NAME, check=False)
             run("docker", "stop", DEDICATED_NAME, check=False)

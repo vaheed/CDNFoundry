@@ -13,6 +13,7 @@ use App\Models\EdgePool;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
 use App\Support\ArtifactSigner;
+use App\Support\ManagedCertificateNames;
 use App\Support\PlatformSettings;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -39,7 +40,7 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
 
     public function handle(): void
     {
-        $domain = Domain::query()->with('dnsRecords')->findOrFail($this->domainId);
+        $domain = Domain::query()->with(['dnsRecords', 'activeTlsCertificate', 'tlsCertificates'])->findOrFail($this->domainId);
         $revision = $domain->revision;
         $retiring = $domain->lifecycle_state === DomainLifecycleState::Deprovisioning && $domain->deprovision_after?->isPast();
         $records = $retiring ? collect() : $domain->dnsRecords->where('mode', 'proxied')->sortBy('name')->values();
@@ -77,6 +78,14 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
         $proxySettings = is_array($domain->proxy_settings) ? $domain->proxy_settings : self::defaults();
         $proxySettings['enabled'] = $domain->lifecycle_state === DomainLifecycleState::Active
             && ($proxySettings['enabled'] ?? true);
+        $tlsCertificates = $domain->tls_mode === 'disabled' ? collect() : ($domain->tls_mode === 'custom'
+            ? collect([$domain->activeTlsCertificate])->filter()
+            : $domain->tlsCertificates->where('kind', 'managed')->where('status', 'active')->filter(fn ($certificate) => $certificate->expires_at->isFuture()));
+        $certificatePayload = fn ($certificate): array => [
+            'id' => $certificate->id, 'certificate_pem' => $certificate->certificate_pem,
+            'chain_pem' => $certificate->chain_pem, 'private_key_pem' => $certificate->private_key_ciphertext,
+            'expires_at' => $certificate->expires_at->timestamp, 'names' => $certificate->names,
+        ];
         $snapshot = [
             'schema_version' => 1, 'domain_id' => $domain->id, 'domain' => $domain->name,
             'revision' => $revision, 'settings' => $proxySettings,
@@ -85,14 +94,25 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
                 'epoch' => $domain->cache_epoch,
                 'development_mode_until' => $domain->cache_development_mode_until?->isFuture() ? $domain->cache_development_mode_until->timestamp : null,
             ],
+            'tls' => [
+                'mode' => $domain->tls_mode,
+                'certificate' => $domain->activeTlsCertificate !== null && $domain->activeTlsCertificate->expires_at->isFuture()
+                    ? $certificatePayload($domain->activeTlsCertificate) : null,
+                'certificates' => $tlsCertificates->map($certificatePayload)->values()->all(),
+            ],
             'pools' => $poolNames,
-            'hostnames' => $records->map(function ($record) use ($blockedAddresses): array {
+            'hostnames' => $records->map(function ($record) use ($blockedAddresses, $tlsCertificates): array {
                 $origin = $record->origin;
                 $origin['private_allowlist'] = app(PlatformSettings::class)->get('origin_safety', 'private_origin_allowlist');
                 $origin['blocked_networks'] = app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_networks');
                 $origin['blocked_addresses'] = $blockedAddresses;
 
-                return ['hostname' => $record->name, 'type' => $record->type, 'ttl' => $record->ttl, 'origin' => $origin];
+                $certificate = $tlsCertificates->first(fn ($candidate): bool => ManagedCertificateNames::coveredBy($record->name, $candidate->names));
+
+                return [
+                    'hostname' => $record->name, 'type' => $record->type, 'ttl' => $record->ttl,
+                    'tls_certificate_id' => $certificate?->id, 'origin' => $origin,
+                ];
             })->all(),
         ];
         $canonical = ArtifactSigner::encode($snapshot);

@@ -5,9 +5,12 @@ namespace Tests\Feature;
 use App\Models\CachePurge;
 use App\Models\Domain;
 use App\Models\Edge;
+use App\Models\EdgeRevision;
 use App\Models\EdgeTask;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class CacheApiTest extends TestCase
@@ -56,10 +59,10 @@ class CacheApiTest extends TestCase
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/cache/purge", ['type' => 'urls', 'urls' => ['https://other.example/app.css']])
             ->assertUnprocessable()->assertJsonValidationErrors('urls');
         $urls = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/cache/purge", ['type' => 'urls', 'urls' => [
-            'https://example.test/app.css?b=2&a=1', 'http://example.test/logo.png',
+            'https://example.test/app.css?b=2&a=1', 'http://example.test/logo.png', 'https://www.example.test/site.css',
         ]])->assertAccepted();
         $purge = CachePurge::query()->findOrFail($urls->json('data.id'));
-        $this->assertSame(['https|example.test|/app.css?b=2&a=1', 'http|example.test|/logo.png'], $purge->cache_keys);
+        $this->assertSame(['https|example.test|/app.css?b=2&a=1', 'http|example.test|/logo.png', 'https|www.example.test|/site.css'], $purge->cache_keys);
         $this->assertSame(2, $domain->refresh()->cache_epoch);
 
         $task = EdgeTask::query()->where('cache_purge_id', $purge->id)->firstOrFail();
@@ -93,6 +96,40 @@ class CacheApiTest extends TestCase
         $this->assertSame(5, $task->attempts);
         $this->assertSame('failed', CachePurge::query()->findOrFail($purgeId)->status);
         $this->assertSame($edge->id, $task->edge_id);
+    }
+
+    public function test_outstanding_purge_backlog_is_bounded_per_domain(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $now = now();
+        foreach (range(1, 10) as $chunk) {
+            DB::table('cache_purges')->insert(collect(range(1, 100))->map(fn (): array => [
+                'id' => (string) Str::uuid(), 'domain_id' => $domain->id, 'requested_by' => $user->id,
+                'type' => 'all', 'cache_epoch' => 1, 'cache_keys' => null, 'status' => 'running',
+                'created_at' => $now, 'updated_at' => $now,
+            ])->all());
+        }
+
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/cache/purge", ['type' => 'all'])
+            ->assertUnprocessable()->assertJsonValidationErrors('type');
+        $this->assertSame(1000, CachePurge::query()->where('domain_id', $domain->id)->count());
+        $this->assertSame(1, $domain->refresh()->cache_epoch);
+    }
+
+    public function test_cache_settings_roll_back_as_a_new_epoch_and_revision(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $prior = EdgeRevision::query()->create([
+            'domain_id' => $domain->id, 'revision' => 1, 'checksum' => str_repeat('a', 64), 'status' => 'validated',
+            'snapshot' => ['settings' => null, 'hostnames' => [], 'cache' => [...$this->settings(), 'edge_ttl_seconds' => 900, 'epoch' => 1, 'development_mode_until' => null]],
+        ]);
+        $domain->update(['revision' => 2, 'cache_epoch' => 4, 'cache_settings' => [...$this->settings(), 'edge_ttl_seconds' => 30]]);
+
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/rollback", ['revision' => $prior->revision])->assertAccepted();
+        $domain->refresh();
+        $this->assertSame(900, $domain->cache_settings['edge_ttl_seconds']);
+        $this->assertSame(5, $domain->cache_epoch);
+        $this->assertSame(3, $domain->revision);
     }
 
     private function ownedDomain(): array

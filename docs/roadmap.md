@@ -1720,7 +1720,7 @@ Implementation and non-browser qualification evidence: [Phase 4 qualification](p
 
 ### Phase 5 — TLS, Cache, and Purge
 
-> **Implementation progress (2026-07-19):** Cache desired state is present: bounded typed settings, expiring development mode, cache-epoch full purge, exact URL-key normalization, durable per-edge delivery state, revisioned artifact inclusion, authorization, idempotent routes, and OpenAPI coverage. The edge agent fans purge tasks out to every configured cell through authenticated bounded control calls; OpenResty stores monotonic epoch/URL generations with replay safety. Failed delivery retries the same task with bounded exponential delay and terminates after five attempts. Customer-response caching, Filament workflows, cache traffic qualification, and all TLS work remain incomplete. Evidence: [Phase 5 qualification](phase-5-qualification.md).
+> **Implementation progress (2026-07-19):** Phase 5 implementation and agent-owned qualification are complete. Managed DNS-01 issuance, supplemental coverage, renewal/reissue, alerts, custom certificates, protected edge keys, dynamic SNI, bounded cache admission/TTL/stale behavior, and asynchronous epoch/exact-key purges passed isolated and real-runtime qualification. The exact owner-run browser/public-HTTPS checklist is current but has not been executed, so Phase 5 is not owner release-qualified. Evidence: [Phase 5 qualification](phase-5-qualification.md).
 
 #### Goal
 
@@ -1870,54 +1870,54 @@ Certificate bundles are part of normal edge revision delivery and atomic activat
 
 ##### TLS
 
-- [ ] Managed apex and wildcard issuance starts when the first hostname becomes proxied after nameserver verification and activation.
-- [ ] DNS-only domains do not consume ACME orders or edge certificate storage.
-- [ ] Duplicate valid certificates are reused instead of reissued.
-- [ ] No fake hidden apex record is created.
-- [ ] DNS-01 works without sending user traffic to the origin.
-- [ ] Renewal jobs are jittered and safely retry.
-- [ ] CA rate-limit and validation errors are visible.
-- [ ] Deep proxied hostnames receive supplemental coverage when needed.
-- [ ] Custom upload validates key, chain, names, algorithm, size, and expiry.
-- [ ] Private keys are encrypted at rest.
-- [ ] Existing certificates continue serving during control-plane outage.
-- [ ] Expiring and failed certificates generate administrator alerts.
+- [x] Managed apex and wildcard issuance starts when the first hostname becomes proxied after nameserver verification and activation.
+- [x] DNS-only domains do not consume ACME orders or edge certificate storage.
+- [x] Duplicate valid certificates are reused instead of reissued.
+- [x] No fake hidden apex record is created.
+- [x] DNS-01 works without sending user traffic to the origin.
+- [x] Renewal jobs are jittered and safely retry.
+- [x] CA rate-limit and validation errors are visible.
+- [x] Deep proxied hostnames receive supplemental coverage when needed.
+- [x] Custom upload validates key, chain, names, algorithm, size, and expiry.
+- [x] Private keys are encrypted at rest.
+- [x] Existing certificates continue serving during control-plane outage.
+- [x] Expiring and failed certificates generate administrator alerts.
 
 ##### Cache
 
-- [ ] HIT, MISS, BYPASS, EXPIRED, and STALE are correct and logged.
-- [ ] Origin cache headers are respected when enabled.
-- [ ] Query-string and cookie behaviour match configured policy.
-- [ ] Authorization, Set-Cookie, private/no-store, Vary, Range, redirect, and negative-response defaults match the documented cache contract.
-- [ ] Maximum object size is enforced safely.
-- [ ] Stale content is served during configured origin failure.
-- [ ] Development mode bypasses the entire domain and expires automatically.
-- [ ] Cache settings roll back through normal revisions.
+- [x] HIT, MISS, BYPASS, EXPIRED, and STALE are correct and logged.
+- [x] Origin cache headers are respected when enabled.
+- [x] Query-string and cookie behaviour match configured policy.
+- [x] Authorization, Set-Cookie, private/no-store, Vary, Range, redirect, and negative-response defaults match the documented cache contract.
+- [x] Maximum object size is enforced safely.
+- [x] Stale content is served during configured origin failure.
+- [x] Development mode bypasses the entire domain and expires automatically.
+- [x] Cache settings roll back through normal revisions.
 
 ##### Purge
 
-- [ ] Full purge increments the cache epoch without scanning files.
-- [ ] URL purge uses the exact runtime cache-key implementation.
-- [ ] Every healthy edge receives the purge.
-- [ ] Per-edge state is visible.
-- [ ] Repeating the same request is safe.
-- [ ] Failed edge delivery retries without a second user-visible purge.
-- [ ] Purge backlog cannot grow without bounds.
+- [x] Full purge increments the cache epoch without scanning files.
+- [x] URL purge uses the exact runtime cache-key implementation.
+- [x] Every healthy edge receives the purge.
+- [x] Per-edge state is visible.
+- [x] Repeating the same request is safe.
+- [x] Failed edge delivery retries without a second user-visible purge.
+- [x] Purge backlog cannot grow without bounds.
 
 ##### Browser and Real Runtime
 
 - [ ] Managed TLS status progresses from queued to active in the browser.
-- [ ] HTTPS works with the dynamically selected certificate.
-- [ ] Cache MISS, HIT, development-mode BYPASS, full purge, and URL purge are visible and verified with real requests.
+- [x] HTTPS works with the dynamically selected certificate.
+- [x] Cache MISS, HIT, development-mode BYPASS, full purge, and URL purge are visible and verified with real requests.
 
 ##### Documentation
 
-- [ ] Managed TLS lifecycle guide
-- [ ] Custom certificate guide
-- [ ] ACME failure guide
-- [ ] Cache semantics guide
-- [ ] Development-mode guide
-- [ ] Purge troubleshooting guide
+- [x] Managed TLS lifecycle guide
+- [x] Custom certificate guide
+- [x] ACME failure guide
+- [x] Cache semantics guide
+- [x] Development-mode guide
+- [x] Purge troubleshooting guide
 
 ---
 

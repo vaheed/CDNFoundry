@@ -7,6 +7,7 @@ use App\Filament\Domain\Resources\Domains\Pages\ListDomains;
 use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
 use App\Filament\Domain\Resources\Domains\RelationManagers\DnsRecordsRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\UsersRelationManager;
+use App\Http\Controllers\CacheController;
 use App\Models\Domain;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
@@ -110,6 +111,28 @@ class DomainResource extends Resource
                     TextEntry::make('dnsDeployments.status')->label('Deployment states')->badge()->placeholder('Not deployed'),
                     TextEntry::make('dnsDeployments.last_error')->label('Deployment errors')->placeholder('None'),
                 ])->columns(2)->collapsible(),
+            Section::make('Cache')
+                ->description('Desired cache policy, epoch-based invalidation, and temporary development bypass.')
+                ->icon('heroicon-o-circle-stack')
+                ->schema([
+                    TextEntry::make('cache_policy')->label('Policy')->state(fn (Domain $record): string => self::cacheSettingsSummary($record)),
+                    TextEntry::make('cache_epoch')->label('Full-purge epoch'),
+                    TextEntry::make('cache_development_mode_until')->label('Development mode until')->dateTime()->placeholder('Off'),
+                ])->columns(3),
+            Section::make('TLS')
+                ->description('Serving mode and the currently selected validated certificate. Private keys are never displayed.')
+                ->icon('heroicon-o-lock-closed')
+                ->schema([
+                    TextEntry::make('tls_mode')->label('Mode')->badge(),
+                    TextEntry::make('activeTlsCertificate.status')->label('Certificate status')->badge()->placeholder('Pending managed issuance'),
+                    TextEntry::make('activeTlsCertificate.names')->label('Covered names')->listWithLineBreaks()->placeholder('None'),
+                    TextEntry::make('activeTlsCertificate.expires_at')->label('Expires')->dateTime()->placeholder('None'),
+                    TextEntry::make('activeTlsCertificate.fingerprint_sha256')->label('SHA-256 fingerprint')->copyable()->placeholder('None')->columnSpanFull(),
+                    TextEntry::make('activeTlsCertificate.last_error')->label('Last failure')->placeholder('None')->columnSpanFull(),
+                    TextEntry::make('latestTlsOrder.status')->label('Latest managed order')->badge()->placeholder('Not queued'),
+                    TextEntry::make('latestTlsOrder.names')->label('Requested names')->listWithLineBreaks()->placeholder('None'),
+                    TextEntry::make('latestTlsOrder.last_error')->label('ACME failure')->placeholder('None')->columnSpanFull(),
+                ])->columns(3),
         ]);
     }
 
@@ -157,6 +180,19 @@ class DomainResource extends Resource
             ($settings['redirect_https'] ?? false) ? 'HTTPS redirect on' : 'HTTPS redirect off',
             (int) ($settings['retry_count'] ?? 0).' origin retries',
             is_array($settings['maintenance'] ?? null) ? 'Maintenance on' : 'Maintenance off',
+        ]);
+    }
+
+    private static function cacheSettingsSummary(Domain $domain): string
+    {
+        $settings = $domain->cache_settings ?? CacheController::defaults();
+
+        return implode(' · ', [
+            $settings['enabled'] ? 'Enabled' : 'Disabled',
+            'Edge '.(int) $settings['edge_ttl_seconds'].'s',
+            'Browser '.(int) $settings['browser_ttl_seconds'].'s',
+            number_format(((int) $settings['maximum_object_bytes']) / 1048576, 1).' MiB max',
+            $settings['respect_origin_headers'] ? 'Origin headers respected' : 'Configured TTL enforced',
         ]);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\DomainLifecycleState;
 use App\Http\Resources\DnsRecordResource;
+use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
@@ -212,6 +213,7 @@ class DnsRecordController extends Controller
         if ($needsEdgeReconciliation) {
             Operation::coalesceDomain('edge.domain_reconcile', $domain->id, $request->user()?->getKey());
             ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
+            EnsureManagedCertificates::dispatch($domain->id)->afterCommit();
         }
         if ($domain->refresh()->lifecycle_state === DomainLifecycleState::Active && DnsCluster::query()->where('enabled', true)->exists()) {
             ReconcileDnsZone::dispatch($domain->id)->afterCommit();

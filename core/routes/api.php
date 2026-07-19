@@ -23,6 +23,7 @@ use App\Http\Controllers\HealthController;
 use App\Http\Controllers\NameserverController;
 use App\Http\Controllers\OperationController;
 use App\Http\Controllers\ProxyController;
+use App\Http\Controllers\TlsController;
 use App\Http\Controllers\TokenController;
 use Illuminate\Support\Facades\Route;
 
@@ -79,6 +80,13 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:account'])->group
     Route::post('/domains/{domain}/cache/purge', [CacheController::class, 'purge'])->middleware(['idempotent', 'throttle:bulk']);
     Route::get('/domains/{domain}/cache/purges', [CacheController::class, 'purges']);
     Route::get('/domains/{domain}/cache/purges/{purge}', [CacheController::class, 'purgeStatus']);
+    Route::get('/domains/{domain}/tls', [TlsController::class, 'show']);
+    Route::get('/domains/{domain}/tls/status', [TlsController::class, 'status']);
+    Route::patch('/domains/{domain}/tls', [TlsController::class, 'update'])->middleware('idempotent');
+    Route::post('/domains/{domain}/tls/reissue', [TlsController::class, 'reissue'])->middleware(['idempotent', 'throttle:bulk']);
+    Route::post('/domains/{domain}/tls/renew', [TlsController::class, 'renew'])->middleware(['idempotent', 'throttle:bulk']);
+    Route::post('/domains/{domain}/tls/upload', [TlsController::class, 'upload'])->middleware('idempotent');
+    Route::delete('/domains/{domain}/tls/custom-certificate', [TlsController::class, 'destroyCustom'])->middleware('idempotent');
 
     Route::prefix('admin')->middleware('admin')->group(function (): void {
         Route::get('/users', [UserController::class, 'index']);

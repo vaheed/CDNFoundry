@@ -5,12 +5,13 @@ namespace App\Models;
 use App\Enums\DomainLifecycleState;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['name', 'display_name', 'lifecycle_state', 'revision', 'nameservers_verified_at', 'nameservers_verified_by', 'disabled_at', 'deprovision_after', 'proxy_settings', 'active_edge_revision', 'cache_settings', 'cache_epoch', 'cache_development_mode_until'])]
+#[Fillable(['name', 'display_name', 'lifecycle_state', 'revision', 'nameservers_verified_at', 'nameservers_verified_by', 'disabled_at', 'deprovision_after', 'proxy_settings', 'active_edge_revision', 'cache_settings', 'cache_epoch', 'cache_development_mode_until', 'tls_mode', 'active_tls_certificate_id'])]
 class Domain extends Model
 {
     use SoftDeletes;
@@ -33,6 +34,26 @@ class Domain extends Model
     public function edgePlacement(): HasOne
     {
         return $this->hasOne(DomainEdgePlacement::class);
+    }
+
+    public function tlsCertificates(): HasMany
+    {
+        return $this->hasMany(TlsCertificate::class);
+    }
+
+    public function tlsOrders(): HasMany
+    {
+        return $this->hasMany(TlsOrder::class);
+    }
+
+    public function latestTlsOrder(): HasOne
+    {
+        return $this->hasOne(TlsOrder::class)->latestOfMany();
+    }
+
+    public function activeTlsCertificate(): BelongsTo
+    {
+        return $this->belongsTo(TlsCertificate::class, 'active_tls_certificate_id');
     }
 
     protected function casts(): array

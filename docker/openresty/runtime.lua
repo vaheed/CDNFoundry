@@ -5,9 +5,13 @@ local bit = require "bit"
 local ffi = require "ffi"
 ffi.cdef[[int kill(int pid, int sig);]]
 local M = {}
-local state = { hosts = {}, sequence = 0 }
+local state = { hosts = {}, certificates = {}, sequence = 0 }
 local path = os.getenv("EDGE_RUNTIME_FILE") or "/var/lib/cdnfoundry/runtime/active.json"
 local restart_generation = 0
+local certificate_cache = {}
+local certificate_cache_order = {}
+local certificate_cache_limit = 512
+local cache_control_directives
 
 local function ipv4_number(ip)
     local a,b,c,d = ip:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
@@ -111,6 +115,12 @@ local function load()
     if #raw > 64 * 1024 * 1024 then return nil, "runtime state exceeds limit" end
     local decoded = cjson.decode(raw)
     if not decoded or decoded.schema_version ~= 1 or type(decoded.hosts) ~= "table" then return nil, "invalid runtime state" end
+    if decoded.certificates == nil then decoded.certificates = {} end
+    if type(decoded.certificates) ~= "table" then return nil, "invalid runtime certificates" end
+    if decoded.sequence ~= state.sequence then
+        certificate_cache = {}
+        certificate_cache_order = {}
+    end
     state = decoded
     return true
 end
@@ -147,9 +157,33 @@ function M.select_certificate()
     local ssl = require "ngx.ssl"
     local name = ssl.server_name()
     name = name and name:lower():gsub("%.$", "") or ""
-    if not state.hosts[name] then
+    local config = state.hosts[name]
+    if not config then
         error("unknown TLS SNI")
     end
+    if not config.tls or config.tls.mode == "disabled" or not config.tls.certificate_id then error("TLS disabled or certificate unavailable") end
+    local certificate = state.certificates[config.tls.certificate_id]
+    if not certificate then error("TLS certificate unavailable") end
+    if tonumber(certificate.expires_at) and tonumber(certificate.expires_at) <= ngx.time() then error("TLS certificate expired") end
+    local cached = certificate_cache[certificate.id]
+    if not cached then
+        local cert_der, cert_err = ssl.cert_pem_to_der((certificate.certificate_pem or "") .. (certificate.chain_pem or ""))
+        local key_der, key_err = ssl.priv_key_pem_to_der(certificate.private_key_pem or "")
+        if not cert_der or not key_der then error("invalid TLS bundle: " .. (cert_err or key_err or "unknown")) end
+        cached = {certificate = cert_der, key = key_der}
+        certificate_cache[certificate.id] = cached
+        certificate_cache_order[#certificate_cache_order + 1] = certificate.id
+        if #certificate_cache_order > certificate_cache_limit then
+            local expired_id = table.remove(certificate_cache_order, 1)
+            certificate_cache[expired_id] = nil
+        end
+    end
+    local ok, err = ssl.clear_certs()
+    if not ok then error("unable to clear bootstrap certificate: " .. (err or "unknown")) end
+    ok, err = ssl.set_der_cert(cached.certificate)
+    if not ok then error("unable to select certificate: " .. (err or "unknown")) end
+    ok, err = ssl.set_der_priv_key(cached.key)
+    if not ok then error("unable to select certificate key: " .. (err or "unknown")) end
 end
 
 local function resolve(host, networks, blocked_networks, denied)
@@ -178,6 +212,34 @@ local function reject(status)
     return ngx.exit(status)
 end
 
+local function request_cache_key(domain, host, cache)
+    local request_uri = ngx.var.request_uri or "/"
+    if cache.include_query_string == false then request_uri = request_uri:match("^([^?]*)") or "/" end
+    local base = (ngx.var.scheme or "http") .. "|" .. host .. "|" .. request_uri
+    local dictionary = ngx.shared.runtime_limits
+    local configured_epoch = tonumber(cache.epoch) or 1
+    local runtime_epoch = tonumber(dictionary:get("cache:epoch:" .. domain)) or 0
+    local epoch = math.max(configured_epoch, runtime_epoch)
+    local generation = dictionary:get("cache:url:" .. ngx.md5(base)) or 0
+    local ttl = math.max(0, math.min(31536000, tonumber(cache.edge_ttl_seconds) or 0))
+    local policy = table.concat({
+        tostring(ttl), tostring(math.max(0, math.min(31536000, tonumber(cache.browser_ttl_seconds) or 0))),
+        tostring(math.max(1024, math.min(1073741824, tonumber(cache.maximum_object_bytes) or 104857600))),
+        cache.respect_origin_headers == false and "0" or "1",
+        tostring(math.max(0, math.min(86400, tonumber(cache.stale_if_error_seconds) or 0))),
+    }, ":")
+    return base .. "|e" .. epoch .. "|g" .. generation .. "|p" .. ngx.md5(policy), ttl
+end
+
+local function cookie_bypassed(names)
+    local raw = ngx.var.http_cookie or ""
+    if raw == "" then return false end
+    local present = {}
+    for name in raw:gmatch("%s*([^=;%s]+)%s*=") do present[name] = true end
+    for _, name in ipairs(names or {}) do if present[name] then return true end end
+    return false
+end
+
 function M.access()
     local dictionary = ngx.shared.runtime_limits
     dictionary:incr("capacity:requests:" .. ngx.time(), 1, 0, 2)
@@ -200,6 +262,36 @@ function M.access()
     if config.settings and config.settings.maintenance then
         ngx.status = 503; ngx.header["Content-Type"] = "text/plain"; ngx.say(config.settings.maintenance.body or "Service unavailable"); return ngx.exit(503)
     end
+    local cache = config.cache or {}
+    local cache_key, cache_ttl = request_cache_key(config.domain, host, cache)
+    local development_until = tonumber(cache.development_mode_until) or 0
+    local cacheable = cache.enabled == true and cache_ttl > 0
+        and (ngx.req.get_method() == "GET" or ngx.req.get_method() == "HEAD")
+        and not ngx.var.http_authorization and not ngx.var.http_range
+        and not cookie_bypassed(cache.bypass_cookie_names)
+        and development_until <= ngx.time()
+        and #cache_key <= 8192
+    ngx.var.cdn_cache_key = cache_key
+    ngx.var.cdn_cache_bypass = cacheable and "0" or "1"
+    ngx.var.cdn_cache_no_store = "0"
+    ngx.var.cdn_cache_edge_ttl = tostring(cache_ttl)
+    ngx.var.cdn_cache_browser_ttl = tostring(math.max(0, math.min(31536000, tonumber(cache.browser_ttl_seconds) or 0)))
+    ngx.var.cdn_cache_max_object = tostring(math.max(1024, math.min(1073741824, tonumber(cache.maximum_object_bytes) or 104857600)))
+    ngx.var.cdn_cache_stale = tostring(math.max(0, math.min(86400, tonumber(cache.stale_if_error_seconds) or 0)))
+    ngx.var.cdn_cache_respect_origin = cache.respect_origin_headers == false and "0" or "1"
+    local accept_encoding = (ngx.var.http_accept_encoding or ""):lower()
+    if accept_encoding:find("gzip", 1, true) then ngx.req.set_header("Accept-Encoding", "gzip") else ngx.req.clear_header("Accept-Encoding") end
+    local maximum = tonumber(cache.maximum_object_bytes) or 104857600
+    if maximum <= 1048576 then return ngx.exec("@cache_1m") end
+    if maximum <= 10485760 then return ngx.exec("@cache_10m") end
+    return ngx.exec("@cache_100m")
+end
+
+function M.origin_access()
+    local dictionary = ngx.shared.runtime_limits
+    local host = (ngx.var.host or ""):lower():gsub("%.$", "")
+    local config = state.hosts[host]
+    if not config then return reject(421) end
     local origin = config.origin
     local address, err = resolve(origin.host, origin.private_allowlist, origin.blocked_networks, origin.blocked_addresses)
     if not address then ngx.log(ngx.WARN, "origin rejected: ", err); ngx.header["X-CDNFoundry-Error"] = err; return reject(502) end
@@ -225,6 +317,64 @@ function M.access()
     if origin.scheme == "https" and origin.verify_tls == true then return ngx.exec("@proxy_verified") end
     if origin.scheme == "https" then return ngx.exec("@proxy_unverified_https") end
     return ngx.exec("@proxy_http")
+end
+
+function M.prepare_cache_response()
+    local host = (ngx.var.host or ""):lower():gsub("%.$", "")
+    local config = state.hosts[host]
+    if not config then return end
+    local cache = config.cache or {}
+    local status = tonumber(ngx.status) or 0
+    local headers = ngx.header
+    local cache_control = cache_control_directives(headers["Cache-Control"])
+    local no_store = status ~= 200 or headers["Set-Cookie"] ~= nil
+        or cache_control["private"] ~= nil or cache_control["no-store"] ~= nil or cache_control["no-cache"] ~= nil
+    local vary = headers["Vary"]
+    if vary then
+        local tokens, count = {}, 0
+        for token in tostring(vary):lower():gmatch("[^,%s]+") do tokens[token] = true; count = count + 1 end
+        if #tostring(vary) > 256 or count > 4 or tokens["*"] or (count > 0 and not (count == 1 and tokens["accept-encoding"])) then no_store = true end
+    end
+    local maximum = math.max(1048576, math.min(104857600, tonumber(cache.maximum_object_bytes) or 104857600))
+    local length = tonumber(headers["Content-Length"])
+    if length and length > maximum then no_store = true end
+    if no_store then
+        headers["X-CDNFoundry-No-Store"] = "1"
+        return
+    end
+    local edge_ttl = math.max(0, math.min(31536000, tonumber(cache.edge_ttl_seconds) or 0))
+    if cache.respect_origin_headers ~= false then
+        local origin_ttl = tonumber(cache_control["s-maxage"] or cache_control["max-age"])
+        if not origin_ttl and headers["Expires"] then
+            local expires = ngx.parse_http_time(tostring(headers["Expires"]))
+            if expires then origin_ttl = math.max(0, expires - ngx.time()) end
+        end
+        if origin_ttl then edge_ttl = math.max(0, math.min(31536000, origin_ttl)) end
+    else
+        headers["Expires"] = nil
+    end
+    if edge_ttl <= 0 then
+        headers["X-CDNFoundry-No-Store"] = "1"
+        return
+    end
+    local browser = math.max(0, math.min(31536000, tonumber(cache.browser_ttl_seconds) or 0))
+    local stale = math.max(0, math.min(86400, tonumber(cache.stale_if_error_seconds) or 0))
+    headers["Cache-Control"] = "public, s-maxage=" .. edge_ttl .. ", max-age=" .. browser .. (stale > 0 and ", stale-if-error=" .. stale or "")
+end
+
+function M.cache_status()
+    local no_store = ngx.var.upstream_http_x_cdnfoundry_no_store == "1"
+    ngx.header["X-CDNFoundry-Cache"] = (ngx.var.cdn_cache_bypass == "1" or no_store)
+        and "BYPASS" or (ngx.var.upstream_cache_status or "MISS")
+end
+
+cache_control_directives = function(raw)
+    local directives = {}
+    for part in (raw or ""):lower():gmatch("[^,]+") do
+        local name, value = part:match("^%s*([%w%-]+)%s*=?%s*(.-)%s*$")
+        if name then directives[name] = value:gsub('^"', ''):gsub('"$', '') end
+    end
+    return directives
 end
 
 function M.balance()

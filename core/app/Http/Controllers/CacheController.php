@@ -2,18 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\DispatchCachePurge;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
 use App\Models\CachePurge;
 use App\Models\Domain;
-use App\Models\Edge;
-use App\Models\EdgeTask;
-use App\Support\CacheKey;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Str;
 
 class CacheController extends Controller
 {
@@ -70,25 +67,7 @@ class CacheController extends Controller
         Gate::authorize('update', $domain);
         $data = $request->validate(['type' => ['required', 'in:all,urls'], 'urls' => ['required_if:type,urls', 'prohibited_if:type,all', 'array', 'min:1', 'max:100'], 'urls.*' => ['string', 'max:2048', 'distinct']]);
         abort_if(strlen($request->getContent()) > 128 * 1024, 413, 'The purge payload exceeds 128 KiB.');
-        $settings = $domain->cache_settings ?? self::defaults();
-        $keys = $data['type'] === 'urls' ? collect($data['urls'])->map(fn (string $url): string => CacheKey::fromUrl($domain, $url, $settings['include_query_string']))->unique()->values()->all() : null;
-        $purge = DB::transaction(function () use ($domain, $data, $keys, $request): CachePurge {
-            $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
-            if ($data['type'] === 'all') {
-                $locked->increment('cache_epoch');
-            }
-            $purge = CachePurge::query()->create(['domain_id' => $locked->id, 'requested_by' => $request->user()->id, 'type' => $data['type'], 'cache_epoch' => $locked->cache_epoch, 'cache_keys' => $keys, 'status' => 'pending']);
-            foreach (Edge::query()->where('enabled', true)->whereNull('identity_revoked_at')->cursor() as $edge) {
-                EdgeTask::query()->create(['id' => (string) Str::uuid(), 'edge_id' => $edge->id, 'cache_purge_id' => $purge->id, 'type' => 'cache_purge', 'payload' => ['domain_id' => $locked->id, 'domain' => $locked->name, 'type' => $data['type'], 'cache_epoch' => $locked->cache_epoch, 'cache_keys' => $keys], 'status' => 'pending']);
-            }
-            $purge->update(['status' => $purge->tasks()->exists() ? 'running' : 'succeeded']);
-            AuditLog::record($request->user(), 'cache.purge_requested', $purge, ['type' => $data['type'], 'url_count' => count($keys ?? [])], $request->ip());
-
-            return $purge;
-        });
-        if ($data['type'] === 'all') {
-            ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
-        }
+        $purge = DispatchCachePurge::execute($domain, $data['type'], $data['urls'] ?? [], $request->user(), $request->ip());
 
         return response()->json(['data' => $this->purgeData($purge)], 202);
     }
@@ -127,6 +106,6 @@ class CacheController extends Controller
 
     private function rules(): array
     {
-        return ['enabled' => ['required', 'boolean'], 'edge_ttl_seconds' => ['required', 'integer', 'between:0,31536000'], 'browser_ttl_seconds' => ['required', 'integer', 'between:0,31536000'], 'maximum_object_bytes' => ['required', 'integer', 'between:1024,1073741824'], 'respect_origin_headers' => ['required', 'boolean'], 'include_query_string' => ['required', 'boolean'], 'bypass_cookie_names' => ['required', 'array', 'max:32'], 'bypass_cookie_names.*' => ['required', 'regex:/^[A-Za-z0-9_\-]{1,64}$/', 'distinct'], 'stale_if_error_seconds' => ['required', 'integer', 'between:0,86400']];
+        return ['enabled' => ['required', 'boolean'], 'edge_ttl_seconds' => ['required', 'integer', 'between:0,31536000'], 'browser_ttl_seconds' => ['required', 'integer', 'between:0,31536000'], 'maximum_object_bytes' => ['required', 'integer', 'in:1048576,10485760,104857600'], 'respect_origin_headers' => ['required', 'boolean'], 'include_query_string' => ['required', 'boolean'], 'bypass_cookie_names' => ['required', 'array', 'max:32'], 'bypass_cookie_names.*' => ['required', 'regex:/^[A-Za-z0-9_\-]{1,64}$/', 'distinct'], 'stale_if_error_seconds' => ['required', 'integer', 'between:0,86400']];
     }
 }

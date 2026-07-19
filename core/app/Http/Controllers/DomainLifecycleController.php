@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\DomainLifecycleState;
 use App\Http\Resources\DomainResource;
+use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Jobs\VerifyDomainNameservers;
@@ -79,6 +80,7 @@ class DomainLifecycleController extends Controller
         if ($domain->dnsRecords()->where('mode', 'proxied')->exists() || EdgeArtifact::query()->where('domain_id', $domain->id)->exists()) {
             Operation::coalesceDomain('edge.domain_reconcile', $domain->id, $request->user()->id);
             ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
+            EnsureManagedCertificates::dispatch($domain->id)->afterCommit();
         }
 
         return response()->json(['data' => $operation->refresh()], 202);

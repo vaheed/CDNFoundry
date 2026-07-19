@@ -17,3 +17,4 @@ Schedule::command('domains:finalize-deprovisioning')->everyMinute()->withoutOver
 Schedule::command('edge:complete-placement-drains')->everyMinute()->withoutOverlapping();
 Schedule::command('edge:dispatch-origin-checks')->everyMinute()->withoutOverlapping();
 Schedule::job(new ReconcilePlatformDnsIdentity)->everyMinute()->withoutOverlapping();
+Schedule::command('tls:dispatch-maintenance')->hourly()->withoutOverlapping();

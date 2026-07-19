@@ -15,7 +15,8 @@ final class CacheKey
         }
         $scheme = strtolower($parts['scheme']);
         $host = strtolower(rtrim($parts['host'], '.'));
-        if (! in_array($scheme, ['http', 'https'], true) || $host !== strtolower($domain->name)) {
+        $domainName = strtolower($domain->name);
+        if (! in_array($scheme, ['http', 'https'], true) || ($host !== $domainName && ! str_ends_with($host, '.'.$domainName))) {
             throw ValidationException::withMessages(['urls' => 'Every purge URL must use HTTP or HTTPS and belong to the selected domain.']);
         }
         $port = $parts['port'] ?? null;

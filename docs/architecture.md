@@ -376,9 +376,10 @@ exist:
   TLS roadmap phase.
 - The cache control plane stores bounded desired settings, an epoch, and durable
   per-edge purge tasks. Edge agents apply purge generations to every bounded
-  cell through authenticated control endpoints. The current OpenResty path
-  remains a proxy runtime without customer-content response caching; advanced
-  security profiles and analytics dashboards are also later work.
+  cell through authenticated control endpoints. OpenResty uses a bounded,
+  cell-local response cache with deterministic TTL/epoch/URL-generation keys;
+  advanced cache variants, security profiles, and analytics dashboards remain
+  later work.
 - ClickHouse is provisioned and Vector currently exports its own internal
   Prometheus metrics. The repository does not yet claim that raw edge request
   telemetry is flowing into ClickHouse.

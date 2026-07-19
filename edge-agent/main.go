@@ -625,7 +625,7 @@ func (c *client) activate(s state) error {
 		if err := os.MkdirAll(c.runtimeDir, 0755); err != nil {
 			return c.rollbackActive(active, previous, err)
 		}
-		if err := atomicPublicJSON(filepath.Join(c.runtimeDir, "active.json"), runtime); err != nil {
+		if err := atomicJSON(filepath.Join(c.runtimeDir, "active.json"), runtime); err != nil {
 			return c.rollbackActive(active, previous, err)
 		}
 		existing, _ := filepath.Glob(filepath.Join(c.runtimeDir, "*.json"))
@@ -641,7 +641,7 @@ func (c *client) activate(s state) error {
 			if !validPoolName(name) {
 				return c.rollbackActive(active, previous, errors.New("invalid runtime pool name"))
 			}
-			if err := atomicPublicJSON(filepath.Join(c.runtimeDir, name+".json"), poolRuntime); err != nil {
+			if err := atomicJSON(filepath.Join(c.runtimeDir, name+".json"), poolRuntime); err != nil {
 				return c.rollbackActive(active, previous, err)
 			}
 		}
@@ -660,15 +660,20 @@ func (c *client) rollbackActive(active, previous string, cause error) error {
 func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) {
 	hosts := map[string]any{}
 	poolHosts := map[string]map[string]any{}
+	certificates := map[string]any{}
+	poolCertificates := map[string]map[string]any{}
 	for _, raw := range s.Domains {
 		var domain struct {
 			Domain    string         `json:"domain"`
 			Revision  uint64         `json:"revision"`
 			Settings  map[string]any `json:"settings"`
+			Cache     map[string]any `json:"cache"`
+			TLS       map[string]any `json:"tls"`
 			Pools     []string       `json:"pools"`
 			Hostnames []struct {
-				Hostname string         `json:"hostname"`
-				Origin   map[string]any `json:"origin"`
+				Hostname         string         `json:"hostname"`
+				Origin           map[string]any `json:"origin"`
+				TLSCertificateID string         `json:"tls_certificate_id"`
 			} `json:"hostnames"`
 		}
 		if err := json.Unmarshal(raw, &domain); err != nil {
@@ -677,12 +682,49 @@ func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) 
 		if domain.Domain == "" || len(domain.Hostnames) > 10000 {
 			return nil, nil, errors.New("invalid runtime domain")
 		}
+		tlsReference := map[string]any{"mode": domain.TLS["mode"]}
+		var certificateID string
+		if certificateList, ok := domain.TLS["certificates"].([]any); ok {
+			if len(certificateList) > 100 {
+				return nil, nil, errors.New("too many runtime certificates for domain")
+			}
+			for _, item := range certificateList {
+				certificate, ok := item.(map[string]any)
+				if !ok {
+					return nil, nil, errors.New("invalid runtime certificate")
+				}
+				id, _ := certificate["id"].(string)
+				if id == "" || certificate["certificate_pem"] == nil || certificate["private_key_pem"] == nil {
+					return nil, nil, errors.New("invalid runtime certificate")
+				}
+				certificates[id] = certificate
+			}
+		}
+		if certificate, ok := domain.TLS["certificate"].(map[string]any); ok && certificate != nil {
+			certificateID, _ = certificate["id"].(string)
+			if certificateID == "" || certificate["certificate_pem"] == nil || certificate["private_key_pem"] == nil {
+				return nil, nil, errors.New("invalid runtime certificate")
+			}
+			certificates[certificateID] = certificate
+			tlsReference["certificate_id"] = certificateID
+		}
 		for _, host := range domain.Hostnames {
 			name := strings.ToLower(strings.TrimSuffix(host.Hostname, "."))
 			if name == "" || host.Origin["host"] == nil || hosts[name] != nil {
 				return nil, nil, errors.New("invalid or duplicate runtime hostname")
 			}
-			compiled := map[string]any{"domain": domain.Domain, "revision": domain.Revision, "settings": domain.Settings, "origin": host.Origin}
+			hostTLS := map[string]any{"mode": domain.TLS["mode"]}
+			hostCertificateID := host.TLSCertificateID
+			if hostCertificateID == "" {
+				hostCertificateID = certificateID
+			}
+			if hostCertificateID != "" {
+				if certificates[hostCertificateID] == nil {
+					return nil, nil, errors.New("runtime hostname references an unavailable certificate")
+				}
+				hostTLS["certificate_id"] = hostCertificateID
+			}
+			compiled := map[string]any{"domain": domain.Domain, "revision": domain.Revision, "settings": domain.Settings, "cache": domain.Cache, "tls": hostTLS, "origin": host.Origin}
 			hosts[name] = compiled
 			for _, pool := range domain.Pools {
 				if !validPoolName(pool) {
@@ -690,19 +732,23 @@ func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) 
 				}
 				if poolHosts[pool] == nil {
 					poolHosts[pool] = map[string]any{}
+					poolCertificates[pool] = map[string]any{}
 				}
 				if poolHosts[pool][name] != nil {
 					return nil, nil, errors.New("duplicate runtime pool hostname")
 				}
 				poolHosts[pool][name] = compiled
+				if hostCertificateID != "" {
+					poolCertificates[pool][hostCertificateID] = certificates[hostCertificateID]
+				}
 			}
 		}
 	}
 	pools := map[string]map[string]any{}
 	for name, assigned := range poolHosts {
-		pools[name] = map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": assigned}
+		pools[name] = map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": assigned, "certificates": poolCertificates[name]}
 	}
-	return map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": hosts}, pools, nil
+	return map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": hosts, "certificates": certificates}, pools, nil
 }
 
 func validPoolName(name string) bool {
@@ -911,17 +957,6 @@ func atomicJSON(p string, v any) error {
 	}
 	tmp := p + ".tmp"
 	if e = os.WriteFile(tmp, b, 0600); e != nil {
-		return e
-	}
-	return os.Rename(tmp, p)
-}
-func atomicPublicJSON(p string, v any) error {
-	b, e := json.Marshal(v)
-	if e != nil {
-		return e
-	}
-	tmp := p + ".tmp"
-	if e = os.WriteFile(tmp, b, 0644); e != nil {
 		return e
 	}
 	return os.Rename(tmp, p)

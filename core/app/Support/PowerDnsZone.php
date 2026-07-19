@@ -62,6 +62,15 @@ final class PowerDnsZone
             };
             $rows->push(['name' => $record->name.'.', 'type' => $record->type, 'ttl' => $record->ttl, 'content' => $content]);
         }
+        foreach ($domain->tlsOrders()->whereIn('status', ['publishing', 'validating'])->with('challenges')->get()->pluck('challenges')->flatten() as $challenge) {
+            if ($challenge->cleaned_at === null && $challenge->expires_at->isFuture()) {
+                $rows->push([
+                    'name' => rtrim($challenge->record_name, '.').'.', 'type' => 'TXT',
+                    'ttl' => (int) config('services.acme.dns_ttl'),
+                    'content' => '"'.addcslashes($challenge->record_value, '"\\').'"',
+                ]);
+            }
+        }
 
         return $rows->groupBy(fn (array $row): string => $row['name'].'|'.$row['type'])
             ->map(function ($group): array {
