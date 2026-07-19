@@ -329,19 +329,25 @@ def heartbeat(edge: dict, active_sequence: int, quarantine_ready: bool = False) 
     }, context=edge["context"])
 
 
-def latest_artifact(edge: dict, domain_id: int, after: int = 0) -> tuple[int, dict]:
+def latest_artifact(edge: dict, domain_id: int, after: int = 0, expected_revision: int | None = None) -> tuple[int, dict]:
     deadline = time.monotonic() + 60
     rows: list[dict] = []
     while time.monotonic() < deadline:
         _, manifest = call("GET", f"/edge/v1/config/manifest?cursor={after}", context=edge["context"])
-        rows = [row for row in manifest["data"] if int(row.get("domain_id") or 0) == domain_id]
+        rows = [
+            row for row in manifest["data"]
+            if int(row.get("domain_id") or 0) == domain_id
+            and (expected_revision is None or int(row["revision"]) == expected_revision)
+        ]
         if rows:
             row = rows[-1]
             _, artifact = call("GET", f"/edge/v1/config/artifacts/{row['checksum']}", context=edge["context"])
             payload = json.loads(base64.b64decode(artifact["encoded_payload"]))
             return int(row["sequence"]), payload
         time.sleep(0.5)
-    raise AssertionError(f"edge {edge['id']} received no artifact after {after}: {rows}")
+    raise AssertionError(
+        f"edge {edge['id']} received no revision {expected_revision or '*'} artifact after {after}: {rows}"
+    )
 
 
 def acknowledge(edge: dict, sequence: int) -> None:
@@ -548,13 +554,21 @@ def main() -> None:
 
         _, moved = call("POST", f"/api/admin/domains/{domain_id}/move", {"pool_id": quarantine["id"]}, token)
         move_operation = moved["data"]["operation_id"]
+        _, moving = call("GET", f"/api/admin/domains/{domain_id}/isolation", token=token)
+        move_revision = int(moving["data"]["desired_revision"])
         for edge in edges:
-            sequence, payload = latest_artifact(edge, domain_id, sequences[edge["id"]])
+            sequence, payload = latest_artifact(edge, domain_id, sequences[edge["id"]], move_revision)
             assert set(payload["pools"]) == {"shared-default", "quarantine-default"}, payload
             sequences[edge["id"]] = sequence
             acknowledge(edge, sequence)
         placement = wait_isolation(token, domain_id, "draining", drain_scheduled=True)
         assert placement["active_pool_id"] == shared["id"] and placement["target_pool_id"] == quarantine["id"]
+        obsolete_target_artifacts = sql_value(
+            "SELECT COUNT(*) FROM edge_artifacts "
+            f"WHERE domain_id={domain_id} AND revision<{move_revision} "
+            "AND payload->'pools' @> '[\"quarantine-default\"]'::jsonb"
+        )
+        assert obsolete_target_artifacts == "0", obsolete_target_artifacts
         _, moving_operation = call("GET", f"/api/operations/{move_operation}", token=token)
         assert moving_operation["data"]["status"] == "running", moving_operation
         wait_deployment(token, domain_id)
@@ -578,7 +592,7 @@ def main() -> None:
         wait_operation(token, move_operation)
         assert dig(f"www.{ZONE}", "CNAME") == [f"pool-{quarantine['id']}.proxy.cdnf.test."]
 
-    print("phase4_control_plane_e2e=passed edges=2 pool_dns=ipv4+ipv6 drain=passed migration=acknowledged")
+    print("phase4_control_plane_e2e=passed edges=2 pool_dns=ipv4+ipv6 drain=passed migration=acknowledged obsolete_artifacts=0")
 
 
 if __name__ == "__main__":
