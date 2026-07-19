@@ -16,11 +16,50 @@ use App\Models\User;
 use App\Support\ArtifactSigner;
 use App\Support\PowerDnsZone;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class EdgeProxyTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_pool_move_publishes_latest_state_when_its_requested_revision_is_superseded(): void
+    {
+        Queue::fake();
+        [$user, $domain] = $this->ownedDomain();
+        $domain->update(['lifecycle_state' => 'active']);
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $this->record('www', '8.8.8.8'))->assertCreated();
+        $shared = EdgePool::query()->where('kind', 'shared')->firstOrFail();
+        $quarantine = EdgePool::query()->where('kind', 'quarantine')->firstOrFail();
+        DomainEdgePlacement::query()->create([
+            'domain_id' => $domain->id,
+            'active_pool_id' => $shared->id,
+            'desired_revision' => $domain->refresh()->revision,
+            'state' => 'active',
+        ]);
+        $edge = Edge::query()->create([
+            'name' => 'coalesced-move-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
+            'ipv4' => '203.0.113.45',
+        ]);
+        $admin = User::factory()->admin()->create();
+        $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/move", ['pool_id' => $quarantine->id])->assertAccepted();
+        $moveRevision = $domain->refresh()->revision;
+
+        $domain->update(['revision' => $moveRevision + 1]);
+        (new ReconcileEdgeDomain($domain->id))->handle();
+
+        $this->assertDatabaseMissing('edge_revisions', ['domain_id' => $domain->id, 'revision' => $moveRevision]);
+        $this->assertDatabaseHas('domain_edge_placements', [
+            'domain_id' => $domain->id,
+            'active_pool_id' => $shared->id,
+            'target_pool_id' => $quarantine->id,
+            'desired_revision' => $moveRevision + 1,
+            'state' => 'deploying',
+        ]);
+        $artifact = EdgeArtifact::query()->where('edge_id', $edge->id)->where('domain_id', $domain->id)->firstOrFail();
+        $this->assertSame($moveRevision + 1, $artifact->revision);
+        $this->assertSame(['quarantine-default', 'shared-default'], $artifact->payload['pools']);
+    }
 
     public function test_only_address_and_cname_records_can_be_proxied_without_dns_content(): void
     {

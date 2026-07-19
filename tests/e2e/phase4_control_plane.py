@@ -329,29 +329,92 @@ def heartbeat(edge: dict, active_sequence: int, quarantine_ready: bool = False) 
     }, context=edge["context"])
 
 
-def latest_artifact(edge: dict, domain_id: int, after: int = 0, expected_revision: int | None = None) -> tuple[int, dict]:
-    deadline = time.monotonic() + 60
-    rows: list[dict] = []
+def latest_artifact(
+    edge: dict,
+    domain_id: int,
+    after: int = 0,
+    minimum_revision: int | None = None,
+    timeout: int = 60,
+) -> tuple[int, dict]:
+    deadline = time.monotonic() + timeout
+    observed: list[dict] = []
     while time.monotonic() < deadline:
         _, manifest = call("GET", f"/edge/v1/config/manifest?cursor={after}", context=edge["context"])
-        rows = [
+        observed = [
             row for row in manifest["data"]
             if int(row.get("domain_id") or 0) == domain_id
-            and (expected_revision is None or int(row["revision"]) == expected_revision)
         ]
+        rows = observed
+        if minimum_revision is not None:
+            rows = [row for row in rows if int(row["revision"]) >= minimum_revision]
         if rows:
-            row = rows[-1]
+            row = max(rows, key=lambda candidate: int(candidate["sequence"]))
             _, artifact = call("GET", f"/edge/v1/config/artifacts/{row['checksum']}", context=edge["context"])
             payload = json.loads(base64.b64decode(artifact["encoded_payload"]))
             return int(row["sequence"]), payload
         time.sleep(0.5)
     raise AssertionError(
-        f"edge {edge['id']} received no revision {expected_revision or '*'} artifact after {after}: {rows}"
+        f"edge {edge['id']} received no matching artifact after {after}; "
+        f"minimum_revision={minimum_revision}, observed={observed}"
     )
 
 
 def acknowledge(edge: dict, sequence: int) -> None:
     call("POST", "/edge/v1/config/applied", {"sequence": sequence}, context=edge["context"])
+
+
+def converge_placement_artifacts(
+    token: str,
+    domain_id: int,
+    edges: list[dict],
+    sequences: dict[str, int],
+    minimum_revision: int,
+    expected_state: str,
+    expected_pools: set[str],
+    drain_scheduled: bool,
+) -> tuple[dict, dict[str, int]]:
+    deadline = time.monotonic() + 120
+    applied_revisions: dict[str, int] = {}
+    placement: dict = {}
+    errors: dict[str, str] = {}
+    while time.monotonic() < deadline:
+        _, response = call("GET", f"/api/admin/domains/{domain_id}/isolation", token=token)
+        placement = response["data"]
+        desired_revision = max(minimum_revision, int(placement["desired_revision"]))
+        for edge in edges:
+            edge_id = edge["id"]
+            if applied_revisions.get(edge_id, 0) >= desired_revision:
+                continue
+            try:
+                sequence, payload = latest_artifact(
+                    edge,
+                    domain_id,
+                    sequences[edge_id],
+                    minimum_revision=desired_revision,
+                    timeout=5,
+                )
+            except AssertionError as error:
+                errors[edge_id] = str(error)
+                continue
+            revision = int(payload["revision"])
+            assert set(payload["pools"]) == expected_pools, payload
+            sequences[edge_id] = sequence
+            acknowledge(edge, sequence)
+            applied_revisions[edge_id] = revision
+            errors.pop(edge_id, None)
+
+        _, response = call("GET", f"/api/admin/domains/{domain_id}/isolation", token=token)
+        placement = response["data"]
+        desired_revision = int(placement["desired_revision"])
+        scheduled = placement.get("drain_after") is not None
+        all_current = all(applied_revisions.get(edge["id"], 0) >= desired_revision for edge in edges)
+        if placement["state"] == expected_state and all_current and (not drain_scheduled or scheduled):
+            return placement, applied_revisions
+        time.sleep(0.25)
+    raise AssertionError(
+        f"placement artifacts did not converge to {expected_state}: "
+        f"placement={placement}, applied_revisions={applied_revisions}, errors={errors}"
+    )
 
 
 def pending_purge_task(edge: dict, purge_id: str, timeout: int = 30) -> dict:
@@ -556,12 +619,16 @@ def main() -> None:
         move_operation = moved["data"]["operation_id"]
         _, moving = call("GET", f"/api/admin/domains/{domain_id}/isolation", token=token)
         move_revision = int(moving["data"]["desired_revision"])
-        for edge in edges:
-            sequence, payload = latest_artifact(edge, domain_id, sequences[edge["id"]], move_revision)
-            assert set(payload["pools"]) == {"shared-default", "quarantine-default"}, payload
-            sequences[edge["id"]] = sequence
-            acknowledge(edge, sequence)
-        placement = wait_isolation(token, domain_id, "draining", drain_scheduled=True)
+        placement, move_revisions = converge_placement_artifacts(
+            token,
+            domain_id,
+            edges,
+            sequences,
+            move_revision,
+            "draining",
+            {"shared-default", "quarantine-default"},
+            drain_scheduled=True,
+        )
         assert placement["active_pool_id"] == shared["id"] and placement["target_pool_id"] == quarantine["id"]
         obsolete_target_artifacts = sql_value(
             "SELECT COUNT(*) FROM edge_artifacts "
@@ -582,17 +649,27 @@ def main() -> None:
             "Illuminate\\Support\\Facades\\Artisan::call('edge:complete-placement-drains');"
         )
         wait_isolation(token, domain_id, "deploying", drain_scheduled=False)
-        for edge in edges:
-            sequence, payload = latest_artifact(edge, domain_id, sequences[edge["id"]])
-            assert payload["pools"] == ["quarantine-default"], payload
-            sequences[edge["id"]] = sequence
-            acknowledge(edge, sequence)
-        final = wait_isolation(token, domain_id, "active", drain_scheduled=False)
+        final, final_revisions = converge_placement_artifacts(
+            token,
+            domain_id,
+            edges,
+            sequences,
+            move_revision + 1,
+            "active",
+            {"quarantine-default"},
+            drain_scheduled=False,
+        )
         assert final["active_pool_id"] == quarantine["id"] and final["target_pool_id"] is None
         wait_operation(token, move_operation)
         assert dig(f"www.{ZONE}", "CNAME") == [f"pool-{quarantine['id']}.proxy.cdnf.test."]
 
-    print("phase4_control_plane_e2e=passed edges=2 pool_dns=ipv4+ipv6 drain=passed migration=acknowledged obsolete_artifacts=0")
+    coalesced_move_revisions = max(move_revisions.values()) - move_revision
+    final_revision = max(final_revisions.values())
+    print(
+        "phase4_control_plane_e2e=passed edges=2 pool_dns=ipv4+ipv6 drain=passed "
+        f"migration=acknowledged coalesced_move_revisions={coalesced_move_revisions} "
+        f"final_revision={final_revision} obsolete_artifacts=0"
+    )
 
 
 if __name__ == "__main__":
