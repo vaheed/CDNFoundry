@@ -81,6 +81,14 @@ def main() -> None:
     domain_id = int(created["data"]["id"])
     call("POST", f"/api/admin/domains/{domain_id}/force-verify", {}, token)
     call("POST", f"/api/domains/{domain_id}/activate", {}, token)
+    artisan(
+        f"$domain=App\\Models\\Domain::query()->findOrFail({domain_id});"
+        "$pool=App\\Models\\EdgePool::query()->where('name','shared-default')->where('enabled',true)->firstOrFail();"
+        "App\\Models\\DomainEdgePlacement::query()->updateOrCreate(['domain_id'=>$domain->id],["
+        "'active_pool_id'=>$pool->id,'target_pool_id'=>null,'state'=>'active',"
+        "'desired_revision'=>$domain->revision,'drain_after'=>null,'last_error'=>null]);"
+        "$domain->update(['active_edge_revision'=>$domain->revision]);"
+    )
     call("POST", f"/api/domains/{domain_id}/dns/records", {
         "type": "A", "name": "www", "ttl": 60, "mode": "proxied",
         "origin": {"host": "8.8.8.8", "port": 80, "scheme": "http", "host_header": f"www.{ZONE}",

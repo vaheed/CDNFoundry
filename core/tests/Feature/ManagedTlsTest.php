@@ -96,7 +96,7 @@ class ManagedTlsTest extends TestCase
         $order->update(['next_poll_at' => now()->subSecond()]);
         $job->handle($client);
         $this->assertSame('publishing', $order->refresh()->status, 'CA validation must not start before every DNS deployment acknowledges the challenge revision.');
-        Queue::assertPushed(ReconcileDnsZone::class, fn (ReconcileDnsZone $queued): bool => $queued->domainId === $domain->id && $queued->recovery);
+        Queue::assertPushed(ReconcileDnsZone::class, fn (ReconcileDnsZone $queued): bool => $queued->domainId === $domain->id);
         $this->assertDatabaseHas('operations', [
             'type' => 'dns.zone_reconcile',
             'status' => 'pending',

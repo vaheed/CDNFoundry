@@ -119,10 +119,6 @@ class DnsReconciliationTest extends TestCase
         $this->assertInstanceOf(ShouldBeUniqueUntilProcessing::class, $job);
         $this->assertSame('123', $job->uniqueId());
         $this->assertSame(300, $job->uniqueFor);
-
-        $recovery = new ReconcileDnsZone(123, recovery: true);
-        $this->assertSame('123:recovery', $recovery->uniqueId());
-        $this->assertSame(300, $recovery->uniqueFor);
     }
 
     private function domain(): Domain
