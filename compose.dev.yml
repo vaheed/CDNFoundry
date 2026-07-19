@@ -298,7 +298,8 @@ services:
     volumes:
       - dev-pki:/run/edge:ro
       - edge-a-state:/var/lib/cdnfoundry/runtime:ro
-    tmpfs: [/var/cache/nginx:rw,noexec,nosuid,size=256m]
+    tmpfs:
+      - /var/cache/nginx:rw,noexec,nosuid,size=256m
     networks: [edge]
     depends_on:
       dev-pki: { condition: service_completed_successfully }
@@ -321,7 +322,8 @@ services:
     volumes:
       - dev-pki:/run/edge:ro
       - edge-a-state:/var/lib/cdnfoundry/runtime:ro
-    tmpfs: [/var/cache/nginx:rw,noexec,nosuid,size=256m]
+    tmpfs:
+      - /var/cache/nginx:rw,noexec,nosuid,size=256m
     networks: [edge]
     depends_on:
       dev-pki: { condition: service_completed_successfully }
@@ -368,7 +370,8 @@ services:
     volumes:
       - dev-pki:/run/edge:ro
       - edge-b-state:/var/lib/cdnfoundry/runtime:ro
-    tmpfs: [/var/cache/nginx:rw,noexec,nosuid,size=256m]
+    tmpfs:
+      - /var/cache/nginx:rw,noexec,nosuid,size=256m
     networks: [edge]
     depends_on:
       dev-pki: { condition: service_completed_successfully }
@@ -391,7 +394,8 @@ services:
     volumes:
       - dev-pki:/run/edge:ro
       - edge-b-state:/var/lib/cdnfoundry/runtime:ro
-    tmpfs: [/var/cache/nginx:rw,noexec,nosuid,size=256m]
+    tmpfs:
+      - /var/cache/nginx:rw,noexec,nosuid,size=256m
     networks: [edge]
     depends_on:
       dev-pki: { condition: service_completed_successfully }
