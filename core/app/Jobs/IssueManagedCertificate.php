@@ -148,7 +148,9 @@ class IssueManagedCertificate implements ShouldQueue
     {
         $clusters = DnsCluster::query()->where('enabled', true)->count();
         $deployed = $order->dns_revision !== null && $order->domain_id !== null
-            ? Domain::query()->findOrFail($order->domain_id)->dnsDeployments()->where('status', 'succeeded')->where('deployed_revision', '>=', $order->dns_revision)->count()
+            ? Domain::query()->findOrFail($order->domain_id)->dnsDeployments()
+                ->whereHas('cluster', fn ($query) => $query->where('enabled', true))
+                ->where('status', 'succeeded')->where('deployed_revision', '>=', $order->dns_revision)->count()
             : 0;
         if ($clusters === 0 || $deployed !== $clusters) {
             if ($clusters > 0 && $order->domain_id !== null) {

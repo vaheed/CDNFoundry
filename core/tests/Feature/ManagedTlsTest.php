@@ -82,6 +82,15 @@ class ManagedTlsTest extends TestCase
         $this->assertSame('publishing', $order->status);
         $this->assertDatabaseHas('acme_challenges', ['record_name' => '_acme-challenge.example.test', 'status' => 'published']);
         $this->assertNotSame(DB::table('acme_accounts')->first()->private_key_ciphertext, DB::table('acme_accounts')->first()->contact_email);
+        $disabled = DnsCluster::query()->create([
+            'name' => 'disabled', 'location' => 'test', 'enabled' => false, 'last_health_status' => 'healthy',
+            'api_url' => 'https://disabled-pdns.test', 'api_key' => 'secret', 'server_id' => 'localhost',
+            'nameservers' => [['hostname' => 'ns1.disabled.test'], ['hostname' => 'ns2.disabled.test']], 'capacity_zones' => 100,
+        ]);
+        DnsDeployment::query()->create([
+            'domain_id' => $domain->id, 'dns_cluster_id' => $disabled->id, 'status' => 'succeeded',
+            'deployed_revision' => $order->dns_revision, 'active_rrsets' => [],
+        ]);
 
         Queue::fake();
         $order->update(['next_poll_at' => now()->subSecond()]);
