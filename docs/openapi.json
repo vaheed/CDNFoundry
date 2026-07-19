@@ -2580,6 +2580,7 @@
                             "type": "string",
                             "enum": [
                                 "dns_lifecycle",
+                                "revision_history",
                                 "rate_limits",
                                 "edge_runtime",
                                 "origin_safety",
@@ -2619,6 +2620,7 @@
                             "type": "string",
                             "enum": [
                                 "dns_lifecycle",
+                                "revision_history",
                                 "rate_limits",
                                 "edge_runtime",
                                 "origin_safety",
