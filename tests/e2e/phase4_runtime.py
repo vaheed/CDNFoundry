@@ -292,7 +292,10 @@ def main() -> None:
             assert "X-CDNFoundry-Cache: MISS" in stale_seed.stderr
             no_stale_seed = request_with("no-stale.example", "/stale")
             assert "X-CDNFoundry-Cache: MISS" in no_stale_seed.stderr
-            time.sleep(1.2)
+            # Nginx cache freshness is evaluated at whole-second resolution. Give
+            # the one-second TTL a full additional clock tick before taking the
+            # origin offline so slower CI runners cannot still observe a HIT.
+            time.sleep(2.2)
             run("docker", "compose", "-f", "compose.dev.yml", "stop", "origin-http")
             stale = request_with("stale.example", "/stale")
             assert stale.returncode == 0 and "X-CDNFoundry-Cache: STALE" in stale.stderr, stale.stderr
