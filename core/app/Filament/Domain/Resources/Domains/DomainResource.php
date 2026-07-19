@@ -66,6 +66,7 @@ class DomainResource extends Resource
                     TextEntry::make('display_name')->label('Display label')->placeholder('Same as canonical domain'),
                     TextEntry::make('lifecycle_state')->label('Lifecycle')->badge(),
                     TextEntry::make('revision')->label('Desired revision'),
+                    TextEntry::make('revision_changed_at')->label('Desired revision changed')->dateTime()->placeholder('Unknown'),
                     TextEntry::make('nameservers_verified_at')->label('Nameservers verified')->dateTime()->placeholder('Pending'),
                     TextEntry::make('nameserver_verification_status')->label('Latest verification')
                         ->state(fn (Domain $record): ?string => $record->nameservers_verified_by !== null
@@ -85,6 +86,9 @@ class DomainResource extends Resource
                     TextEntry::make('proxy_hostnames')->label('Proxied hostnames')
                         ->state(fn (Domain $record): int => $record->dnsRecords()->where('mode', 'proxied')->count()),
                     TextEntry::make('active_edge_revision')->label('Active edge revision')->placeholder('Not deployed'),
+                    TextEntry::make('active_edge_revision_created_at')->label('Active revision created')
+                        ->state(fn (Domain $record) => EdgeRevision::query()->where('domain_id', $record->id)->where('revision', $record->active_edge_revision)->value('created_at'))
+                        ->dateTime()->placeholder('Not deployed'),
                     TextEntry::make('edgePlacement.state')->label('Placement state')->badge()->placeholder('Not placed'),
                     TextEntry::make('edgePlacement.activePool.name')->label('Active service pool')->placeholder('None'),
                     TextEntry::make('edgePlacement.targetPool.name')->label('Target service pool')->placeholder('None'),
@@ -97,8 +101,9 @@ class DomainResource extends Resource
                             return $pool !== null && $settings !== null ? EdgeRoutingCompiler::poolHostname($settings, $pool) : null;
                         })->copyable()->placeholder('Waiting for placement'),
                     TextEntry::make('validated_edge_revisions')->label('Validated revisions')
-                        ->state(fn (Domain $record): string => EdgeRevision::query()->where('domain_id', $record->id)->where('status', 'validated')->latest('revision')->limit(10)->pluck('revision')->implode(', '))
-                        ->placeholder('None'),
+                        ->state(fn (Domain $record): array => EdgeRevision::query()->where('domain_id', $record->id)->where('status', 'validated')->latest('revision')->limit(10)->get()
+                            ->map(fn (EdgeRevision $revision): string => "#{$revision->revision} · {$revision->created_at->format('Y-m-d H:i:s T')}")->all())
+                        ->listWithLineBreaks()->placeholder('None'),
                     TextEntry::make('proxy_settings_summary')->label('Proxy defaults')
                         ->state(fn (Domain $record): string => self::proxySettingsSummary($record->proxy_settings))
                         ->columnSpanFull(),
@@ -109,8 +114,18 @@ class DomainResource extends Resource
                 ->icon('heroicon-o-server-stack')
                 ->schema([
                     TextEntry::make('dnsDeployments.status')->label('Deployment states')->badge()->placeholder('Not deployed'),
+                    TextEntry::make('dns_deployment_revisions')->label('Cluster revisions')
+                        ->state(fn (Domain $record): array => $record->dnsDeployments()->with('cluster')->orderBy('dns_cluster_id')->get()
+                            ->map(fn ($deployment): string => sprintf(
+                                '%s: desired #%d · active #%d%s',
+                                $deployment->cluster->name,
+                                $deployment->desired_revision,
+                                $deployment->deployed_revision,
+                                $deployment->deployed_at === null ? '' : ' · '.$deployment->deployed_at->format('Y-m-d H:i:s T'),
+                            ))->all())
+                        ->listWithLineBreaks()->placeholder('Not deployed'),
                     TextEntry::make('dnsDeployments.last_error')->label('Deployment errors')->placeholder('None'),
-                ])->columns(['default' => 1, 'md' => 2])->collapsible(),
+                ])->columns(['default' => 1, 'md' => 3])->collapsible(),
             Section::make('Cache')
                 ->description('Desired cache policy, epoch-based invalidation, and temporary development bypass.')
                 ->icon('heroicon-o-circle-stack')

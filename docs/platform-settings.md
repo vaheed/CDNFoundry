@@ -8,6 +8,7 @@ The administrator **Platform settings** page, administrator API, and `platform:s
 |---|---|---:|---|
 | DNS lifecycle | Deprovision delay | 7 days | Preserve the last valid serving state after disable before asynchronous removal. |
 | DNS lifecycle | Domain reclaim cooldown | 7 days | Reserve a released name before another account can claim it. |
+| Configuration history | Revision retention / minimum revisions | 1 day / 10 | Bound derived snapshots and artifacts while preserving current state and recent rollback points. |
 | API rate limits | Login | 10/minute | Bound login attempts by source IP and normalized account. |
 | API rate limits | Account reads / mutations | 600 / 240 per minute | Protect authenticated interactive lanes. |
 | API rate limits | Bulk / origin tests | 12 / 20 per minute | Keep expensive work from starving interactive work. |
@@ -38,5 +39,7 @@ php artisan platform:settings:set dns_lifecycle '{"deprovision_delay_days":14,"d
 ```
 
 Run these commands in the `core` container in Compose deployments. CLI mutations have no browser actor but are still audited. A missing group row is a migration/deployment error and fails closed; run the explicit migration command rather than adding an environment override.
+
+See [configuration revisions and automatic deployment](revision-history.md) for pruning guarantees, protected revisions, the scheduled command, and why revision numbers are never reset.
 
 The separate **System DNS identity** settings remain a high-risk workflow because they change public authoritative identity. They continue to require normalized preview, a short-lived confirmation token, an audit entry, and asynchronous deployment rather than using the generic settings mutation.

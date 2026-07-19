@@ -17,6 +17,8 @@ the complete traffic, control, placement, and failure flows in operator terms.
 - PowerDNS zones and edge artifacts are revisioned, derived, and rebuildable.
 - DNS changes and edge deployment are asynchronous, idempotent, coalesced, and
   preserve the previous valid runtime on failure.
+- Domain changes deploy automatically; monotonic revision history is bounded
+  without renumbering and retains current state plus recent rollback points.
 - DNSdist is the only public authoritative DNS endpoint.
 - One generic OpenResty runtime serves many domains without per-domain
   containers, processes, server blocks, reloads, or timers.

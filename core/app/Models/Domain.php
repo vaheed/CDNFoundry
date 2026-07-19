@@ -67,6 +67,16 @@ class Domain extends Model
             'cache_settings' => 'array',
             'cache_development_mode_until' => 'immutable_datetime',
             'active_edge_revision' => 'integer',
+            'revision_changed_at' => 'immutable_datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (Domain $domain): void {
+            if (! $domain->exists || $domain->isDirty('revision')) {
+                $domain->revision_changed_at = now();
+            }
+        });
     }
 }

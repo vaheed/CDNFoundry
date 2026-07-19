@@ -15,6 +15,7 @@ use App\Models\AuditLog;
 use App\Models\DnsCluster;
 use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
+use App\Models\EdgeArtifact;
 use App\Models\EdgePool;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
@@ -232,15 +233,9 @@ class ViewDomain extends ViewRecord
                     ->color($proxiedCount > 0 && $readyEdgeExists ? 'success' : 'warning')
                     ->send();
             }),
-            Action::make('deployProxy')->label('Deploy proxy configuration')->icon('heroicon-o-cloud-arrow-up')
-                ->visible(fn (): bool => $this->record->dnsRecords()->where('mode', 'proxied')->exists())
-                ->action(function (): void {
-                    $operation = Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
-                    ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
-                    Notification::make()->info()->title('Edge deployment queued')->body("Operation {$operation->id} will deploy the latest desired revision.")->send();
-                }),
             Action::make('rollbackProxy')->label('Rollback proxy revision')->color('warning')->requiresConfirmation()->schema([
-                Select::make('revision')->options(fn (): array => EdgeRevision::query()->where('domain_id', $this->record->id)->where('status', 'validated')->where('revision', '<', $this->record->revision)->latest('revision')->limit(50)->pluck('revision', 'revision')->all())->required(),
+                Select::make('revision')->options(fn (): array => EdgeRevision::query()->where('domain_id', $this->record->id)->where('status', 'validated')->where('revision', '<', $this->record->revision)->latest('revision')->limit(50)->get()
+                    ->mapWithKeys(fn (EdgeRevision $revision): array => [$revision->revision => "#{$revision->revision} · {$revision->created_at->format('Y-m-d H:i:s T')}"])->all())->required(),
             ])->visible(fn (): bool => EdgeRevision::query()->where('domain_id', $this->record->id)->where('status', 'validated')->where('revision', '<', $this->record->revision)->exists())
                 ->action(function (array $data): void {
                     $prior = EdgeRevision::query()->where('domain_id', $this->record->id)->where('revision', $data['revision'])->where('status', 'validated')->firstOrFail();
@@ -303,12 +298,24 @@ class ViewDomain extends ViewRecord
                         AuditLog::record(auth()->user(), 'domain.activated', $domain, ['revision' => $domain->revision], request()->ip());
                     });
                     ReconcileDnsZone::dispatch($this->record->id)->afterCommit();
+                    if ($this->record->dnsRecords()->where('mode', 'proxied')->exists() || EdgeArtifact::query()->where('domain_id', $this->record->id)->exists()) {
+                        Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
+                        ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
+                        EnsureManagedCertificates::dispatch($this->record->id)->afterCommit();
+                    }
                 }),
             Action::make('disable')->color('danger')->requiresConfirmation()
                 ->visible(fn (): bool => $this->record->lifecycle_state === DomainLifecycleState::Active)
                 ->action(function (): void {
-                    $this->record->forceFill(['lifecycle_state' => DomainLifecycleState::Disabled, 'disabled_at' => now(), 'revision' => $this->record->revision + 1])->save();
-                    AuditLog::record(auth()->user(), 'domain.disabled', $this->record, ['revision' => $this->record->revision], request()->ip());
+                    DB::transaction(function (): void {
+                        $domain = $this->record->newQuery()->lockForUpdate()->findOrFail($this->record->id);
+                        $domain->forceFill(['lifecycle_state' => DomainLifecycleState::Disabled, 'disabled_at' => now(), 'revision' => $domain->revision + 1])->save();
+                        AuditLog::record(auth()->user(), 'domain.disabled', $domain, ['revision' => $domain->revision], request()->ip());
+                    });
+                    if ($this->record->dnsRecords()->where('mode', 'proxied')->exists() || EdgeArtifact::query()->where('domain_id', $this->record->id)->exists()) {
+                        Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
+                        ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
+                    }
                 }),
             Action::make('importZone')->label('Import zone')->schema([
                 Textarea::make('zone')->required()->maxLength(BindZone::MAX_BYTES)->rows(12),
@@ -350,7 +357,7 @@ class ViewDomain extends ViewRecord
                 ->icon('heroicon-o-globe-alt')
                 ->color('gray')
                 ->button(),
-            ActionGroup::make($group(['proxyDefaults', 'deployProxy', 'rollbackProxy', 'moveEdgePool']))
+            ActionGroup::make($group(['proxyDefaults', 'rollbackProxy', 'moveEdgePool']))
                 ->label('Delivery')
                 ->icon('heroicon-o-cloud')
                 ->button(),
