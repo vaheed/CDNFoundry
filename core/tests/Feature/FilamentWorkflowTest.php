@@ -159,7 +159,9 @@ class FilamentWorkflowTest extends TestCase
         $this->actingAs($admin);
         $component = fn () => Livewire::test(ViewDomain::class, ['record' => $domain->id]);
 
-        $component()->assertSee('Cache settings')->assertSee('Enable development mode')->assertSee('Purge cache')
+        $component()->assertSee('Cache UI')->assertSee('cache-ui.example.test')
+            ->assertSee('Domain actions')->assertSee('Delivery')->assertSee('Cache')->assertSee('TLS')
+            ->assertSee('Cache settings')->assertSee('Enable development mode')->assertSee('Purge cache')
             ->callAction('cacheSettings', data: [
                 'enabled' => true, 'edge_ttl_seconds' => 600, 'browser_ttl_seconds' => 120,
                 'maximum_object_bytes' => 104857600, 'respect_origin_headers' => true,

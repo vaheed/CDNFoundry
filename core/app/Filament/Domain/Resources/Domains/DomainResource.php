@@ -57,7 +57,7 @@ class DomainResource extends Resource
 
     public static function infolist(Schema $schema): Schema
     {
-        return $schema->components([
+        return $schema->columns(1)->components([
             Section::make('Domain status')
                 ->description('Identity, lifecycle, and authoritative delegation state.')
                 ->icon('heroicon-o-globe-alt')
@@ -77,7 +77,7 @@ class DomainResource extends Resource
                             ? null
                             : self::latestNameserverVerification($record)?->error)
                         ->placeholder('None')->columnSpanFull(),
-                ])->columns(3),
+                ])->columns(['default' => 1, 'md' => 2, 'xl' => 3]),
             Section::make('Edge delivery')
                 ->description('A service pool is the bounded set of equivalent OpenResty cells and public addresses serving this domain. Normal domains use the shared pool; quarantine and dedicated pools provide deliberate isolation.')
                 ->icon('heroicon-o-cloud')
@@ -103,14 +103,14 @@ class DomainResource extends Resource
                         ->state(fn (Domain $record): string => self::proxySettingsSummary($record->proxy_settings))
                         ->columnSpanFull(),
                     TextEntry::make('edgePlacement.last_error')->label('Last deployment failure')->placeholder('None')->columnSpanFull(),
-                ])->columns(3),
+                ])->columns(['default' => 1, 'md' => 2, 'xl' => 3]),
             Section::make('Authoritative DNS deployment')
                 ->description('Per-cluster deployment acknowledgements and failures.')
                 ->icon('heroicon-o-server-stack')
                 ->schema([
                     TextEntry::make('dnsDeployments.status')->label('Deployment states')->badge()->placeholder('Not deployed'),
                     TextEntry::make('dnsDeployments.last_error')->label('Deployment errors')->placeholder('None'),
-                ])->columns(2)->collapsible(),
+                ])->columns(['default' => 1, 'md' => 2])->collapsible(),
             Section::make('Cache')
                 ->description('Desired cache policy, epoch-based invalidation, and temporary development bypass.')
                 ->icon('heroicon-o-circle-stack')
@@ -118,7 +118,7 @@ class DomainResource extends Resource
                     TextEntry::make('cache_policy')->label('Policy')->state(fn (Domain $record): string => self::cacheSettingsSummary($record)),
                     TextEntry::make('cache_epoch')->label('Full-purge epoch'),
                     TextEntry::make('cache_development_mode_until')->label('Development mode until')->dateTime()->placeholder('Off'),
-                ])->columns(3),
+                ])->columns(['default' => 1, 'md' => 3]),
             Section::make('TLS')
                 ->description('Serving mode and the currently selected validated certificate. Private keys are never displayed.')
                 ->icon('heroicon-o-lock-closed')
@@ -132,7 +132,7 @@ class DomainResource extends Resource
                     TextEntry::make('latestTlsOrder.status')->label('Latest managed order')->badge()->placeholder('Not queued'),
                     TextEntry::make('latestTlsOrder.names')->label('Requested names')->listWithLineBreaks()->placeholder('None'),
                     TextEntry::make('latestTlsOrder.last_error')->label('ACME failure')->placeholder('None')->columnSpanFull(),
-                ])->columns(3),
+                ])->columns(['default' => 1, 'md' => 2, 'xl' => 3]),
         ]);
     }
 

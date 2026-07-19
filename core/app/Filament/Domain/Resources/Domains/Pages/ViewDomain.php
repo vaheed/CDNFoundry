@@ -23,6 +23,7 @@ use App\Support\DnsZoneImporter;
 use App\Support\ProxyRevisionRollback;
 use App\Support\UploadedCertificate;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
@@ -37,9 +38,21 @@ class ViewDomain extends ViewRecord
 {
     protected static string $resource = DomainResource::class;
 
+    public function getTitle(): string
+    {
+        return $this->record->display_name ?: $this->record->name;
+    }
+
+    public function getSubheading(): ?string
+    {
+        return $this->record->display_name && $this->record->display_name !== $this->record->name
+            ? $this->record->name
+            : 'Domain configuration and delivery status';
+    }
+
     protected function getHeaderActions(): array
     {
-        return [
+        $actions = [
             Action::make('tlsMode')->label('TLS mode')->icon('heroicon-o-lock-closed')->schema([
                 Select::make('mode')->options(['managed' => 'Managed', 'custom' => 'Custom', 'disabled' => 'Disabled'])->required(),
             ])->fillForm(fn (): array => ['mode' => $this->record->tls_mode])
@@ -324,6 +337,33 @@ class ViewDomain extends ViewRecord
                     ['Content-Type' => 'text/dns; charset=utf-8'],
                 );
             }),
+        ];
+        $group = fn (array $names): array => collect($actions)
+            ->keyBy(fn (Action $action): string => $action->getName())
+            ->only($names)
+            ->values()
+            ->all();
+
+        return [
+            ActionGroup::make($group(['verifyNameservers', 'forceVerifyNameservers', 'activate', 'disable', 'importZone', 'exportZone']))
+                ->label('Domain actions')
+                ->icon('heroicon-o-globe-alt')
+                ->color('gray')
+                ->button(),
+            ActionGroup::make($group(['proxyDefaults', 'deployProxy', 'rollbackProxy', 'moveEdgePool']))
+                ->label('Delivery')
+                ->icon('heroicon-o-cloud')
+                ->button(),
+            ActionGroup::make($group(['cacheSettings', 'developmentMode', 'disableDevelopmentMode', 'purgeCache']))
+                ->label('Cache')
+                ->icon('heroicon-o-circle-stack')
+                ->color('gray')
+                ->button(),
+            ActionGroup::make($group(['tlsMode', 'renewManagedCertificate', 'reissueManagedCertificate', 'uploadCertificate', 'deleteCustomCertificate']))
+                ->label('TLS')
+                ->icon('heroicon-o-lock-closed')
+                ->color('gray')
+                ->button(),
         ];
     }
 }
