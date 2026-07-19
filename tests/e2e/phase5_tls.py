@@ -100,7 +100,11 @@ def main() -> None:
             raise AssertionError(last)
         time.sleep(1)
     else:
-        raise AssertionError(f"managed certificate did not become active: {last}")
+        _, deployments = call("GET", f"/api/domains/{domain_id}/dns/deployment", token=token)
+        raise AssertionError(
+            f"managed certificate did not become active: tls={last}, "
+            f"dns_deployments={deployments['data']}"
+        )
 
     certificate = last["active_certificate"]
     assert certificate["kind"] == "managed", certificate

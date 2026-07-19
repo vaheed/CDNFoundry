@@ -6,6 +6,7 @@ use App\Enums\DomainLifecycleState;
 use App\Enums\UserType;
 use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\IssueManagedCertificate;
+use App\Jobs\ReconcileDnsZone;
 use App\Models\DnsCluster;
 use App\Models\DnsDeployment;
 use App\Models\Domain;
@@ -82,9 +83,15 @@ class ManagedTlsTest extends TestCase
         $this->assertDatabaseHas('acme_challenges', ['record_name' => '_acme-challenge.example.test', 'status' => 'published']);
         $this->assertNotSame(DB::table('acme_accounts')->first()->private_key_ciphertext, DB::table('acme_accounts')->first()->contact_email);
 
+        Queue::fake();
         $order->update(['next_poll_at' => now()->subSecond()]);
         $job->handle($client);
         $this->assertSame('publishing', $order->refresh()->status, 'CA validation must not start before every DNS deployment acknowledges the challenge revision.');
+        Queue::assertPushed(ReconcileDnsZone::class, fn (ReconcileDnsZone $queued): bool => $queued->domainId === $domain->id);
+        $this->assertDatabaseHas('operations', [
+            'type' => 'dns.zone_reconcile',
+            'status' => 'pending',
+        ]);
         DnsDeployment::query()->where('domain_id', $domain->id)->update(['status' => 'succeeded', 'deployed_revision' => $order->dns_revision]);
 
         foreach (['publishing', 'validating', 'finalizing'] as $expected) {
