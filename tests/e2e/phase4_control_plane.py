@@ -68,7 +68,7 @@ def call(
         request_headers["Content-Type"] = "application/json"
         body = json.dumps(payload).encode()
         if path.startswith("/api/"):
-            request_headers["Idempotency-Key"] = str(uuid.uuid4())
+            request_headers.setdefault("Idempotency-Key", str(uuid.uuid4()))
     if token:
         request_headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(BASE + path, data=body, headers=request_headers, method=method)
@@ -348,6 +348,104 @@ def acknowledge(edge: dict, sequence: int) -> None:
     call("POST", "/edge/v1/config/applied", {"sequence": sequence}, context=edge["context"])
 
 
+def pending_purge_task(edge: dict, purge_id: str, timeout: int = 30) -> dict:
+    deadline = time.monotonic() + timeout
+    rows: list[dict] = []
+    while time.monotonic() < deadline:
+        _, response = call("GET", "/edge/v1/tasks", context=edge["context"])
+        rows = response["data"]
+        task = next((row for row in rows if row.get("cache_purge_id") == purge_id), None)
+        if task is not None:
+            return task
+        time.sleep(0.25)
+    raise AssertionError(f"edge {edge['id']} received no pending task for purge {purge_id}: {rows}")
+
+
+def complete_purge_task(edge: dict, task_id: str, status: str = "succeeded") -> None:
+    result = {"status": "completed" if status == "succeeded" else "failed"}
+    if status == "failed":
+        result["failure_reason"] = "cache_purge_control_failed"
+    call("POST", f"/edge/v1/tasks/{task_id}/result", {
+        "status": status,
+        "result": result,
+    }, context=edge["context"])
+
+
+def exercise_phase5_cache(token: str, domain_id: int, edges: list[dict], sequences: dict[str, int], baseline_revision: int) -> None:
+    settings = {
+        "enabled": True,
+        "edge_ttl_seconds": 120,
+        "browser_ttl_seconds": 45,
+        "maximum_object_bytes": 1048576,
+        "respect_origin_headers": True,
+        "include_query_string": True,
+        "bypass_cookie_names": ["session_id"],
+        "stale_if_error_seconds": 30,
+    }
+    status, changed = call("PATCH", f"/api/domains/{domain_id}/cache", settings, token)
+    assert status == 202 and changed["data"]["settings"] == settings, changed
+    for edge in edges:
+        sequence, payload = latest_artifact(edge, domain_id, sequences[edge["id"]])
+        assert payload["cache"]["edge_ttl_seconds"] == 120, payload["cache"]
+        assert payload["cache"]["bypass_cookie_names"] == ["session_id"], payload["cache"]
+        sequences[edge["id"]] = sequence
+        acknowledge(edge, sequence)
+    wait_isolation(token, domain_id, "active")
+
+    call("POST", f"/api/domains/{domain_id}/rollback", {"revision": baseline_revision}, token)
+    rollback_epochs: set[int] = set()
+    for edge in edges:
+        sequence, payload = latest_artifact(edge, domain_id, sequences[edge["id"]])
+        assert payload["cache"]["edge_ttl_seconds"] == 3600, payload["cache"]
+        rollback_epochs.add(int(payload["cache"]["epoch"]))
+        sequences[edge["id"]] = sequence
+        acknowledge(edge, sequence)
+    assert len(rollback_epochs) == 1, rollback_epochs
+    wait_isolation(token, domain_id, "active")
+
+    replay_key = str(uuid.uuid4())
+    headers = {"Idempotency-Key": replay_key}
+    status, first = call("POST", f"/api/domains/{domain_id}/cache/purge", {"type": "all"}, token, headers=headers)
+    replay_status, replay = call("POST", f"/api/domains/{domain_id}/cache/purge", {"type": "all"}, token, headers=headers)
+    assert status == replay_status == 202 and first == replay, (first, replay)
+    purge_id = first["data"]["id"]
+    assert int(first["data"]["cache_epoch"]) > next(iter(rollback_epochs)), first
+
+    full_tasks = [pending_purge_task(edge, purge_id) for edge in edges]
+    complete_purge_task(edges[0], full_tasks[0]["id"], "failed")
+    _, pending = call("GET", "/edge/v1/tasks", context=edges[0]["context"])
+    assert all(row["id"] != full_tasks[0]["id"] for row in pending["data"]), pending
+    complete_purge_task(edges[1], full_tasks[1]["id"])
+    sql_value(f"UPDATE edge_tasks SET available_at=NOW()-INTERVAL '1 second' WHERE id='{full_tasks[0]['id']}'")
+    retried = pending_purge_task(edges[0], purge_id)
+    assert retried["id"] == full_tasks[0]["id"], retried
+    complete_purge_task(edges[0], retried["id"])
+    attempts = sql_value(f"SELECT attempts FROM edge_tasks WHERE id='{retried['id']}'")
+    assert attempts == "2", attempts
+
+    for edge in edges:
+        sequence, payload = latest_artifact(edge, domain_id, sequences[edge["id"]])
+        assert int(payload["cache"]["epoch"]) == int(first["data"]["cache_epoch"]), payload["cache"]
+        sequences[edge["id"]] = sequence
+        acknowledge(edge, sequence)
+    wait_isolation(token, domain_id, "active")
+
+    status, url_purge = call("POST", f"/api/domains/{domain_id}/cache/purge", {
+        "type": "urls",
+        "urls": [f"https://{ZONE}/asset.css?b=2&a=1", f"http://www.{ZONE}/logo.png"],
+    }, token)
+    assert status == 202 and url_purge["data"]["url_count"] == 2, url_purge
+    expected_keys = [f"https|{ZONE}|/asset.css?b=2&a=1", f"http|www.{ZONE}|/logo.png"]
+    for edge in edges:
+        task = pending_purge_task(edge, url_purge["data"]["id"])
+        assert task["payload"]["cache_keys"] == expected_keys, task
+        complete_purge_task(edge, task["id"])
+
+    _, persisted = call("GET", f"/api/domains/{domain_id}/cache", token=token)
+    assert persisted["data"]["cache_epoch"] == first["data"]["cache_epoch"], persisted
+    print("phase5_cache_control_plane_e2e=passed propagation=acked rollback=acked purge_retry=2 idempotency=replayed")
+
+
 def main() -> None:
     artisan(
         "App\\Models\\User::query()->create(["
@@ -419,9 +517,11 @@ def main() -> None:
         }, token)
 
         sequences: dict[str, int] = {}
+        baseline_revision: int | None = None
         for edge in edges:
             sequence, payload = latest_artifact(edge, domain_id)
             assert payload["pools"] == ["shared-default"], payload
+            baseline_revision = int(payload["revision"])
             sequences[edge["id"]] = sequence
             acknowledge(edge, sequence)
         wait_isolation(token, domain_id, "active")
@@ -434,6 +534,8 @@ def main() -> None:
         assert dig(ZONE, "MX") == ["10 mail.example.net."]
         assert dig(ZONE, "TXT") == ['"proxy-apex=qualified"']
         assert dig(ZONE, "CAA") == ['0 issue "letsencrypt.org"']
+        assert baseline_revision is not None
+        exercise_phase5_cache(token, domain_id, edges, sequences, baseline_revision)
 
         for index, edge in enumerate(edges):
             _, detail = call("GET", f"/api/admin/edges/{edge['id']}", token=token)

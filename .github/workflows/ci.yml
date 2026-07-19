@@ -35,8 +35,12 @@ jobs:
           cache-dependency-path: core/package-lock.json
       - name: Install PHP dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Validate PHP dependency contract and advisories
+        run: composer validate --strict && composer audit --locked --no-interaction
       - name: Install frontend dependencies
         run: npm ci
+      - name: Check production frontend dependency advisories
+        run: npm audit --omit=dev --audit-level=moderate
       - name: Check PHP formatting
         run: vendor/bin/pint --test
       - name: Build frontend assets
@@ -55,6 +59,8 @@ jobs:
         run: docker compose -f compose.dev.yml config --quiet
       - name: Validate production topology
         run: docker compose --env-file .env.prod.example -f compose.prod.yml config --quiet
+      - name: Validate documentation links and Python syntax
+        run: make docs-check && python3 -m compileall -q tests/e2e tests/docs
       - name: Build every production image from its pinned base
         run: |
           docker build --target production -t cdnfoundry/core:ci core
@@ -159,7 +165,9 @@ jobs:
           fi
           for module in "${modules[@]}"; do
             echo "Testing ${module}"
-            (cd "${module}" && go test ./... && go build ./...)
+            unformatted="$(find "${module}" -name '*.go' -type f -print0 | xargs -0 gofmt -l)"
+            test -z "${unformatted}" || { printf 'Unformatted Go files:\n%s\n' "${unformatted}"; exit 1; }
+            (cd "${module}" && go vet ./... && go test ./... && go build ./...)
           done
 
   publish-images:

@@ -117,5 +117,20 @@ def main() -> None:
     print(json.dumps({"result": "passed", "domain_id": domain_id, "zone": ZONE, "certificate_id": certificate["id"]}))
 
 
+def cleanup() -> None:
+    artisan(
+        "foreach(App\\Models\\Domain::withTrashed()->where('name'," + quote(ZONE) + ")->get() as $d){"
+        "foreach(App\\Models\\DnsCluster::all() as $c){try{app(App\\Support\\PowerDnsClient::class)->deleteZone($c,$d->name);}catch(Throwable $e){}}"
+        "$d->forceDelete();}"
+        "App\\Models\\User::query()->where('email'," + quote(EMAIL) + ")->delete();"
+    )
+
+
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally:
+        try:
+            cleanup()
+        except Exception as cleanup_error:
+            print(f"warning: Phase 5 TLS E2E cleanup failed: {cleanup_error}")

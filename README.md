@@ -77,14 +77,15 @@ noisy domains, and `dedicated` is an explicit exceptional allocation. See
 ```sh
 make config-check
 make openapi-check
+make docs-check
 make dev-test
 make dev-e2e
 make dev-scale-e2e
 ```
 
 `make dev-e2e` uses the real HTTP APIs, PostgreSQL, queues, PowerDNS, DNSdist,
-mTLS edge control, pool migration, and OpenResty runtime. Browser acceptance is
-deliberately manual and is specified in
+mTLS edge control, pool migration, Pebble DNS-01 issuance, cache/purge delivery,
+and OpenResty HTTP/HTTPS runtime. Browser acceptance is deliberately manual and is specified in
 [manual browser qualification](docs/manual-browser-qualification.md).
 
 Production uses immutable commit-SHA GHCR images through

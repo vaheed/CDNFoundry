@@ -261,9 +261,17 @@ class EdgeProxyTest extends TestCase
         $this->assertDatabaseHas('domain_edge_placements', ['domain_id' => $domain->id, 'active_pool_id' => 1, 'target_pool_id' => $pool, 'state' => 'draining']);
         $this->assertNull($domain->edgePlacement->refresh()->drain_after, 'The source drain must not begin before target DNS deployment succeeds.');
         $this->assertSame('running', $operation->refresh()->status);
+        $moveRevision = $domain->refresh()->revision;
         DomainEdgePlacement::query()->where('domain_id', $domain->id)->update(['drain_after' => now()->subSecond()]);
         $this->artisan('edge:complete-placement-drains')->assertSuccessful();
-        $this->assertDatabaseHas('domain_edge_placements', ['domain_id' => $domain->id, 'active_pool_id' => $pool, 'target_pool_id' => $pool, 'state' => 'deploying']);
+        $this->assertSame($moveRevision + 1, $domain->refresh()->revision);
+        $this->assertDatabaseHas('domain_edge_placements', [
+            'domain_id' => $domain->id,
+            'active_pool_id' => $pool,
+            'target_pool_id' => $pool,
+            'desired_revision' => $moveRevision + 1,
+            'state' => 'deploying',
+        ]);
         $drainedArtifact = EdgeArtifact::query()->where('edge_id', $id)->where('domain_id', $domain->id)->latest('sequence')->firstOrFail();
         $this->assertGreaterThan($moveArtifact->sequence, $drainedArtifact->sequence);
         $this->withHeaders($identity)->postJson('/edge/v1/config/applied', ['sequence' => $drainedArtifact->sequence])->assertOk();

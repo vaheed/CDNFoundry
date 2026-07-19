@@ -1,7 +1,7 @@
 # CDNFoundry architecture
 
 This is the architecture that exists in the repository today. It describes the
-current control plane, authoritative DNS path, Phase 4 proxy path, service-pool
+current control plane, authoritative DNS path, Phase 4 proxy path, Phase 5 TLS/cache path, service-pool
 placement, and failure behaviour. Later roadmap features are called out
 separately so operators do not mistake planned work for a deployed capability.
 
@@ -371,15 +371,15 @@ The four queue lanes are `interactive`, `runtime`, `certificate_purge`, and
 Do not infer later roadmap features from containers or schema that already
 exist:
 
-- The current edge Compose listener uses mounted TLS certificate/key files.
-  Full per-host managed certificate issuance/distribution belongs to the later
-  TLS roadmap phase.
+- The edge listener uses its mounted certificate only as a bootstrap/default.
+  Phase 5 dynamically selects validated managed or custom certificates from the
+  last signed, atomically activated domain artifact; unknown or disabled SNI is
+  rejected and a failed candidate does not replace the active certificate set.
 - The cache control plane stores bounded desired settings, an epoch, and durable
   per-edge purge tasks. Edge agents apply purge generations to every bounded
   cell through authenticated control endpoints. OpenResty uses a bounded,
   cell-local response cache with deterministic TTL/epoch/URL-generation keys;
-  advanced cache variants, security profiles, and analytics dashboards remain
-  later work.
+  advanced cache variants, security profiles, and analytics dashboards remain later work.
 - ClickHouse is provisioned and Vector currently exports its own internal
   Prometheus metrics. The repository does not yet claim that raw edge request
   telemetry is flowing into ClickHouse.

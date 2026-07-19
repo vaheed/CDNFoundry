@@ -954,7 +954,7 @@ Automated end-to-end qualification is Python-based and intentionally limited to 
 
 Rendered UI and browser usability remain project-owner acceptance responsibilities. The owner follows `docs/manual-browser-qualification.md`; coding agents do not install or launch browser automation. This manual responsibility does not block Phase 2 development, but its roadmap checkbox remains open until the owner records a successful release acceptance run.
 
-GitHub Actions runs PHP tests and formatting, OpenAPI contract checks, frontend asset compilation, development and production Compose validation, self-contained builds for every production image, the cumulative Python real-stack E2E, the bounded Phase 2 scale job, and pinned Go 1.24 tests/builds for the edge agent. After every successful `main` run it publishes only commit-SHA-tagged application images to this repository's GHCR packages; production Compose requires that immutable release SHA and has no local build or `latest` fallback.
+GitHub Actions runs PHP tests and formatting, production dependency advisory checks, OpenAPI and documentation-link checks, frontend asset compilation, development and production Compose validation, self-contained builds for every production image, the cumulative Phase 1–5 Python real-stack E2E (including real DNS-01 and cache/purge propagation), the bounded Phase 2 scale job, and pinned Go 1.24 formatting, vetting, tests, and builds for the edge agent. After every successful `main` run it publishes only commit-SHA-tagged application images to this repository's GHCR packages; production Compose requires that immutable release SHA and has no local build or `latest` fallback.
 
 Qualification evidence is maintained in `docs/phase-1-qualification.md`.
 
@@ -1642,7 +1642,7 @@ Implementation and non-browser qualification evidence: [Phase 4 qualification](p
 
 ##### Control Plane
 
-> **Implementation audit (2026-07-18):** Agent-owned Phase 4 implementation and non-browser runtime qualification are complete. Service addresses are durable per cell; authoritative routing selects the assigned pool; migration waits for target-cell readiness and acknowledgement, target DNS deployment, a bounded drain, source-removal delivery, and final acknowledgement. Authenticated drain, undrain, and bounded worker replacement execute without a Docker socket. Owner-run browser/two-physical-edge release acceptance remains open below.
+> **Implementation audit (2026-07-19):** Agent-owned Phase 4 implementation and non-browser runtime qualification are complete. Service addresses are durable per cell; authoritative routing selects the assigned pool; migration waits for target-cell readiness and acknowledgement, target DNS deployment, a bounded drain, a newly revisioned source-removal artifact, and final acknowledgement. The distinct retirement revision prevents a concurrent heartbeat from treating the earlier two-pool candidate as source-removal acknowledgement. Authenticated drain, undrain, and bounded worker replacement execute without a Docker socket. Owner-run browser/two-physical-edge release acceptance remains open below.
 
 > **Apex routing clarification (2026-07-18):** A proxied apex owns the sole A/AAAA/CNAME routing decision but may coexist with apex MX, TXT, CAA, NS, and other non-routing data. Non-apex proxy records publish a pool-specific CNAME. Application and real PowerDNS tests enforce both behaviours.
 
