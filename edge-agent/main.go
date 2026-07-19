@@ -116,6 +116,10 @@ type edgeTask struct {
 		Addresses       []string `json:"addresses"`
 		Allowlist       []string `json:"private_allowlist"`
 		BlockedNetworks []string `json:"blocked_networks"`
+		Domain          string   `json:"domain"`
+		PurgeType       string   `json:"type"`
+		CacheEpoch      uint64   `json:"cache_epoch"`
+		CacheKeys       []string `json:"cache_keys"`
 		Origin          struct {
 			Host              string `json:"host"`
 			Scheme            string `json:"scheme"`
@@ -147,12 +151,38 @@ func (c *client) processTasks() error {
 			status = "succeeded"
 		} else if strings.HasPrefix(task.Type, "cell_") {
 			result, status = c.runCellTask(task)
+		} else if task.Type == "cache_purge" {
+			result, status = c.runCachePurge(task)
 		}
 		if err := c.request("POST", "/edge/v1/tasks/"+task.ID+"/result", map[string]any{"status": status, "result": result}, &map[string]any{}, true); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (c *client) runCachePurge(task edgeTask) (map[string]any, string) {
+	if task.Payload.Domain == "" || (task.Payload.PurgeType != "all" && task.Payload.PurgeType != "urls") || task.Payload.CacheEpoch == 0 || len(task.Payload.CacheKeys) > 100 {
+		return map[string]any{"status": "failed", "failure_reason": "invalid_cache_purge_task"}, "failed"
+	}
+	if task.Payload.PurgeType == "all" && len(task.Payload.CacheKeys) != 0 || task.Payload.PurgeType == "urls" && len(task.Payload.CacheKeys) == 0 {
+		return map[string]any{"status": "failed", "failure_reason": "invalid_cache_purge_task"}, "failed"
+	}
+	command := map[string]any{
+		"task_id": task.ID, "action": "cache_purge", "domain": task.Payload.Domain,
+		"type": task.Payload.PurgeType, "cache_epoch": task.Payload.CacheEpoch, "cache_keys": task.Payload.CacheKeys,
+	}
+	applied := 0
+	for _, endpoint := range c.statusURLs {
+		if err := c.control(endpoint, command); err != nil {
+			return map[string]any{"status": "failed", "failure_reason": "cache_purge_control_failed", "applied_cells": applied}, "failed"
+		}
+		applied++
+	}
+	if applied == 0 {
+		return map[string]any{"status": "failed", "failure_reason": "cell_not_found"}, "failed"
+	}
+	return map[string]any{"status": "completed", "applied_cells": applied, "type": task.Payload.PurgeType}, "succeeded"
 }
 
 func (c *client) runCellTask(task edgeTask) (map[string]any, string) {
@@ -179,10 +209,17 @@ func (c *client) runCellTask(task edgeTask) (map[string]any, string) {
 }
 
 func (c *client) controlCell(endpoint, taskID, action string) error {
+	return c.control(endpoint, map[string]any{"task_id": taskID, "action": action})
+}
+
+func (c *client) control(endpoint string, command map[string]any) error {
 	controlURL := strings.TrimSuffix(endpoint, "/passive-failures") + "/control"
-	body, err := json.Marshal(map[string]any{"task_id": taskID, "action": action})
+	body, err := json.Marshal(command)
 	if err != nil {
 		return err
+	}
+	if len(body) > 128<<10 {
+		return errors.New("cell control payload exceeds 128 KiB")
 	}
 	req, err := http.NewRequest("POST", controlURL, bytes.NewReader(body))
 	if err != nil {

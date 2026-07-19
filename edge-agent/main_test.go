@@ -294,6 +294,37 @@ func TestCellControlTaskUsesAuthenticatedBoundedSupervisorEndpoint(t *testing.T)
 	}
 }
 
+func TestCachePurgeFansOutToEveryAuthenticatedCell(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Edge-Status-Token") != "status-secret" || r.URL.Path != "/control" {
+			http.NotFound(w, r)
+			return
+		}
+		var command struct {
+			Action, Domain, Type string
+			CacheEpoch           uint64   `json:"cache_epoch"`
+			CacheKeys            []string `json:"cache_keys"`
+		}
+		if json.NewDecoder(io.LimitReader(r.Body, 128<<10)).Decode(&command) != nil || command.Action != "cache_purge" || command.Domain != "example.test" || command.Type != "urls" || command.CacheEpoch != 4 || len(command.CacheKeys) != 1 {
+			http.Error(w, "invalid purge", http.StatusBadRequest)
+			return
+		}
+		calls++
+		_, _ = w.Write([]byte(`{"data":{"accepted":true}}`))
+	}))
+	defer server.Close()
+	c := &client{http: server.Client(), statusToken: "status-secret", statusURLs: []string{server.URL + "/passive-failures", server.URL + "/passive-failures"}}
+	var task edgeTask
+	task.ID, task.Type = "purge-1", "cache_purge"
+	task.Payload.Domain, task.Payload.PurgeType, task.Payload.CacheEpoch = "example.test", "urls", 4
+	task.Payload.CacheKeys = []string{"https|example.test|/app.css?a=1"}
+	result, status := c.runCachePurge(task)
+	if status != "succeeded" || result["status"] != "completed" || result["applied_cells"] != 2 || calls != 2 {
+		t.Fatalf("cache purge fanout failed: status=%s result=%#v calls=%d", status, result, calls)
+	}
+}
+
 func signedGzipJSON(t *testing.T, private ed25519.PrivateKey, value any) (string, string, string) {
 	t.Helper()
 	payload, err := json.Marshal(value)

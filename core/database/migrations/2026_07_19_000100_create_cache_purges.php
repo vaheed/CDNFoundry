@@ -27,7 +27,11 @@ return new class extends Migration
         });
         Schema::table('edge_tasks', function (Blueprint $table): void {
             $table->foreignUuid('cache_purge_id')->nullable()->constrained('cache_purges')->cascadeOnDelete();
+            $table->unsignedSmallInteger('attempts')->default(0);
+            $table->timestampTz('available_at')->nullable();
+            $table->string('last_error', 255)->nullable();
             $table->unique(['edge_id', 'cache_purge_id']);
+            $table->index(['status', 'available_at']);
         });
         if (DB::getDriverName() === 'pgsql') {
             DB::statement("ALTER TABLE cache_purges ADD CONSTRAINT cache_purges_type_check CHECK (type IN ('all', 'urls'))");
@@ -38,7 +42,10 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('edge_tasks', fn (Blueprint $table) => $table->dropConstrainedForeignId('cache_purge_id'));
+        Schema::table('edge_tasks', function (Blueprint $table): void {
+            $table->dropConstrainedForeignId('cache_purge_id');
+            $table->dropColumn(['attempts', 'available_at', 'last_error']);
+        });
         Schema::dropIfExists('cache_purges');
         Schema::table('domains', fn (Blueprint $table) => $table->dropColumn(['cache_settings', 'cache_epoch', 'cache_development_mode_until']));
     }

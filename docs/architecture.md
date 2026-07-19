@@ -375,8 +375,9 @@ exist:
   Full per-host managed certificate issuance/distribution belongs to the later
   TLS roadmap phase.
 - The cache control plane stores bounded desired settings, an epoch, and durable
-  per-edge purge tasks. The current OpenResty path remains a bounded proxy
-  runtime without customer-content caching or purge execution; advanced
+  per-edge purge tasks. Edge agents apply purge generations to every bounded
+  cell through authenticated control endpoints. The current OpenResty path
+  remains a proxy runtime without customer-content response caching; advanced
   security profiles and analytics dashboards are also later work.
 - ClickHouse is provisioned and Vector currently exports its own internal
   Prometheus metrics. The repository does not yet claim that raw edge request

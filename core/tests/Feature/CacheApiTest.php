@@ -69,6 +69,32 @@ class CacheApiTest extends TestCase
             ->assertOk()->assertJsonPath('data.status', 'succeeded')->assertJsonPath('data.edges.0.edge_id', $edge->id);
     }
 
+    public function test_failed_edge_purge_retries_with_a_bound_and_same_task(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $edge = Edge::query()->create([
+            'name' => 'retry-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'ipv4' => '203.0.113.11',
+            'enabled' => true, 'registered_at' => now(), 'identity_certificate_serial' => 'ABCD1234',
+            'identity_certificate_expires_at' => now()->addDay(),
+        ]);
+        $purgeId = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/cache/purge", ['type' => 'all'])->assertAccepted()->json('data.id');
+        $task = EdgeTask::query()->where('cache_purge_id', $purgeId)->firstOrFail();
+        $headers = ['X-Edge-Certificate-Verify' => 'SUCCESS', 'X-Edge-Certificate-Serial' => 'ABCD1234'];
+
+        $this->withHeaders($headers)->postJson("/edge/v1/tasks/{$task->id}/result", ['status' => 'failed', 'result' => ['status' => 'failed', 'failure_reason' => 'cache_purge_control_failed']])->assertOk();
+        $this->assertSame('pending', $task->refresh()->status);
+        $this->assertSame(1, $task->attempts);
+        $this->assertTrue($task->available_at->isFuture());
+        $this->withHeaders($headers)->getJson('/edge/v1/tasks')->assertOk()->assertJsonCount(0, 'data');
+
+        $task->update(['attempts' => 4, 'available_at' => now()->subSecond()]);
+        $this->withHeaders($headers)->postJson("/edge/v1/tasks/{$task->id}/result", ['status' => 'failed', 'result' => ['status' => 'failed', 'failure_reason' => 'cache_purge_control_failed']])->assertOk();
+        $this->assertSame('failed', $task->refresh()->status);
+        $this->assertSame(5, $task->attempts);
+        $this->assertSame('failed', CachePurge::query()->findOrFail($purgeId)->status);
+        $this->assertSame($edge->id, $task->edge_id);
+    }
+
     private function ownedDomain(): array
     {
         $user = User::factory()->create();

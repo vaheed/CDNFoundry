@@ -332,11 +332,24 @@ function M.control()
     if ngx.req.get_method() ~= "POST" then return ngx.exit(405) end
     ngx.req.read_body()
     local raw = ngx.req.get_body_data() or ""
-    if #raw == 0 or #raw > 4096 then return ngx.exit(400) end
+    if #raw == 0 or #raw > 128 * 1024 then return ngx.exit(400) end
     local command = cjson.decode(raw)
     if type(command) ~= "table" or type(command.task_id) ~= "string" or #command.task_id > 64
-        or (command.action ~= "drain" and command.action ~= "undrain" and command.action ~= "restart") then
+        or (command.action ~= "drain" and command.action ~= "undrain" and command.action ~= "restart" and command.action ~= "cache_purge") then
         return ngx.exit(400)
+    end
+    if command.action == "cache_purge" then
+        if type(command.domain) ~= "string" or #command.domain == 0 or #command.domain > 253
+            or (command.type ~= "all" and command.type ~= "urls")
+            or type(command.cache_epoch) ~= "number" or command.cache_epoch < 1
+            or type(command.cache_keys) ~= "table" or #command.cache_keys > 100
+            or (command.type == "all" and #command.cache_keys ~= 0)
+            or (command.type == "urls" and #command.cache_keys == 0) then
+            return ngx.exit(400)
+        end
+        for _, key in ipairs(command.cache_keys) do
+            if type(key) ~= "string" or #key == 0 or #key > 4096 then return ngx.exit(400) end
+        end
     end
     local dictionary = ngx.shared.runtime_limits
     local replayed = dictionary:get("control:last_task_id") == command.task_id
@@ -346,17 +359,25 @@ function M.control()
         elseif command.action == "undrain" then
             dictionary:delete("control:drained")
             dictionary:delete("control:restart_resume_at")
-        else
+        elseif command.action == "restart" then
             local already_drained = dictionary:get("control:drained") == true
             dictionary:set("control:drained", true)
             if not already_drained then dictionary:set("control:restart_resume_at", ngx.now() + 2) end
             dictionary:set("control:last_restart_at", ngx.time())
             dictionary:incr("control:restart_generation", 1, 0)
+        elseif command.type == "all" then
+            local epoch_key = "cache:epoch:" .. command.domain
+            local current = dictionary:get(epoch_key) or 0
+            if command.cache_epoch > current then dictionary:set(epoch_key, command.cache_epoch) end
+        else
+            for _, key in ipairs(command.cache_keys) do
+                dictionary:incr("cache:url:" .. ngx.md5(key), 1, 0)
+            end
         end
         dictionary:set("control:last_task_id", command.task_id)
     end
     ngx.header["Content-Type"] = "application/json"
-    ngx.say(cjson.encode({data = {accepted = true, replayed = replayed, action = command.action}}))
+    ngx.say(cjson.encode({data = {accepted = true, replayed = replayed, action = command.action, applied_keys = command.cache_keys and #command.cache_keys or 0}}))
 end
 
 return M

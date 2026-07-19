@@ -229,7 +229,9 @@ class EdgeAgentController extends Controller
     {
         $edge = $request->attributes->get('edge');
 
-        return response()->json(['data' => $edge->tasks()->where('status', 'pending')->orderBy('created_at')->limit(100)->get()]);
+        return response()->json(['data' => $edge->tasks()->where('status', 'pending')
+            ->where(fn ($query) => $query->whereNull('available_at')->orWhere('available_at', '<=', now()))
+            ->orderBy('created_at')->limit(100)->get()]);
     }
 
     public function taskResult(Request $request, string $task): JsonResponse
@@ -251,7 +253,14 @@ class EdgeAgentController extends Controller
         ];
         $data = $request->validate($rules);
         $result = array_merge($data['result'], ['edge_id' => $edge->id, 'reported_at' => now()->toIso8601String()]);
-        $row->update(['status' => $data['status'], 'result' => $result, 'finished_at' => now()]);
+        $attempts = $row->attempts + 1;
+        $retryPurge = $row->type === 'cache_purge' && $data['status'] === 'failed' && $attempts < 5;
+        $row->update([
+            'status' => $retryPurge ? 'pending' : $data['status'], 'attempts' => $attempts, 'result' => $result,
+            'last_error' => $data['status'] === 'failed' ? ($data['result']['failure_reason'] ?? 'edge_purge_failed') : null,
+            'available_at' => $retryPurge ? now()->addSeconds(min(300, 5 * (2 ** ($attempts - 1)))) : null,
+            'finished_at' => $retryPurge ? null : now(),
+        ]);
         if (str_starts_with($row->type, 'cell_') && isset($row->payload['cell_id'])) {
             $cell = $edge->cells()->whereKey($row->payload['cell_id'])->first();
             if ($cell !== null && $data['status'] === 'succeeded') {

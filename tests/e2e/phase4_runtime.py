@@ -80,6 +80,21 @@ def control(action: str, task_id: str, container: str = NAME) -> dict:
     return json.loads(response.stdout)["data"]
 
 
+def cache_purge(task_id: str, purge_type: str, keys: list[str], container: str = NAME) -> dict:
+    payload = {
+        "task_id": task_id, "action": "cache_purge", "domain": "runtime.example",
+        "type": purge_type, "cache_epoch": 2, "cache_keys": keys,
+    }
+    response = run(
+        "docker", "exec", container, "wget", "-q", "-O-",
+        "--header=X-Edge-Status-Token: runtime-test-token",
+        "--header=Content-Type: application/json",
+        f"--post-data={json.dumps(payload, separators=(',', ':'))}",
+        "http://127.0.0.1:9080/control",
+    )
+    return json.loads(response.stdout)["data"]
+
+
 def worker_children(container: str, master: str) -> str:
     return run("docker", "exec", container, "cat", f"/proc/{master}/task/{master}/children").stdout.strip()
 
@@ -178,6 +193,11 @@ def main() -> None:
             assert control("drain", "runtime-drain-1")["replayed"] is True
             control("undrain", "runtime-undrain-1")
             assert wait_for("runtime.example").returncode == 0
+            full_purge = cache_purge("runtime-purge-all-1", "all", [])
+            assert full_purge["accepted"] is True and full_purge["replayed"] is False and full_purge["applied_keys"] == 0, full_purge
+            url_purge = cache_purge("runtime-purge-url-1", "urls", ["https|runtime.example|/app.css?a=1"])
+            assert url_purge["accepted"] is True and url_purge["applied_keys"] == 1, url_purge
+            assert cache_purge("runtime-purge-url-1", "urls", ["https|runtime.example|/app.css?a=1"])["replayed"] is True
             control("restart", "runtime-restart-1")
             for _ in range(20):
                 time.sleep(0.25)
