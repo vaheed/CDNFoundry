@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\ReconcileEdgeDomain;
 use App\Models\Domain;
 use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
@@ -262,6 +263,12 @@ class EdgeProxyTest extends TestCase
         $this->assertNull($domain->edgePlacement->refresh()->drain_after, 'The source drain must not begin before target DNS deployment succeeds.');
         $this->assertSame('running', $operation->refresh()->status);
         $moveRevision = $domain->refresh()->revision;
+        $scheduledDrain = now()->addMinutes(5)->startOfSecond();
+        DomainEdgePlacement::query()->where('domain_id', $domain->id)->update(['drain_after' => $scheduledDrain]);
+        (new ReconcileEdgeDomain($domain->id))->handle();
+        $placement = $domain->edgePlacement->refresh();
+        $this->assertSame('draining', $placement->state, 'A duplicate reconcile must not restart an acknowledged migration.');
+        $this->assertTrue($placement->drain_after->equalTo($scheduledDrain), 'A duplicate reconcile must preserve the scheduled source drain.');
         DomainEdgePlacement::query()->where('domain_id', $domain->id)->update(['drain_after' => now()->subSecond()]);
         $this->artisan('edge:complete-placement-drains')->assertSuccessful();
         $this->assertSame($moveRevision + 1, $domain->refresh()->revision);

@@ -18,6 +18,7 @@ use App\Support\PlatformSettings;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
@@ -55,17 +56,33 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             if ($pools->isEmpty()) {
                 throw new \RuntimeException('No enabled shared edge pool exists.');
             }
-            $placement = DomainEdgePlacement::query()->firstOrCreate(['domain_id' => $domain->id], ['desired_revision' => $revision]);
-            $target = $placement->target_pool_id !== null
-                ? EdgePool::query()->whereKey($placement->target_pool_id)->where('enabled', true)->firstOrFail()
-                : ($placement->active_pool_id !== null
-                    ? EdgePool::query()->whereKey($placement->active_pool_id)->where('enabled', true)->firstOrFail()
-                    : $pools[abs(crc32($domain->name)) % $pools->count()]);
-            $alreadyActive = $placement->state === 'active' && $placement->active_pool_id === $target->id
-                && $placement->desired_revision === $revision && $domain->active_edge_revision === $revision;
-            if (! $alreadyActive) {
-                $placement->update(['target_pool_id' => $target->id, 'desired_revision' => $revision, 'state' => 'deploying', 'last_error' => null]);
-            }
+            DomainEdgePlacement::query()->firstOrCreate(['domain_id' => $domain->id], ['desired_revision' => $revision]);
+            $placement = DB::transaction(function () use ($domain, $pools, $revision): DomainEdgePlacement {
+                $placement = DomainEdgePlacement::query()->where('domain_id', $domain->id)->lockForUpdate()->firstOrFail();
+                $currentDomain = Domain::query()->select(['revision', 'active_edge_revision'])->findOrFail($domain->id);
+                if ($currentDomain->revision !== $revision || $placement->desired_revision > $revision) {
+                    return $placement;
+                }
+                $target = $placement->target_pool_id !== null
+                    ? EdgePool::query()->whereKey($placement->target_pool_id)->where('enabled', true)->firstOrFail()
+                    : ($placement->active_pool_id !== null
+                        ? EdgePool::query()->whereKey($placement->active_pool_id)->where('enabled', true)->firstOrFail()
+                        : $pools[abs(crc32($domain->name)) % $pools->count()]);
+                $revisionIsActive = $placement->desired_revision === $revision && $currentDomain->active_edge_revision === $revision;
+                $alreadyActive = $placement->state === 'active' && $placement->active_pool_id === $target->id && $revisionIsActive;
+                $alreadyDraining = $placement->state === 'draining' && $placement->target_pool_id === $target->id && $revisionIsActive;
+                if (! $alreadyActive && ! $alreadyDraining) {
+                    $placement->update([
+                        'target_pool_id' => $target->id,
+                        'desired_revision' => $revision,
+                        'state' => 'deploying',
+                        'drain_after' => null,
+                        'last_error' => null,
+                    ]);
+                }
+
+                return $placement;
+            });
         }
 
         $poolNames = $placement === null ? [] : EdgePool::query()
