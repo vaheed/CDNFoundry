@@ -12,7 +12,7 @@ return new class extends Migration
             $table->uuid('id')->primary();
             $table->string('type');
             $table->morphs('notifiable');
-            $table->text('data');
+            $table->jsonb('data');
             $table->timestampTz('read_at')->nullable();
             $table->timestampsTz();
             $table->index(['read_at', 'created_at']);
