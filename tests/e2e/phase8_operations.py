@@ -81,7 +81,19 @@ def counts(container: str, user: str, database: str) -> set[str]:
     return set(run("docker", "exec", container, "psql", "-U", user, "-d", database, "-Atc", sql).stdout.splitlines())
 
 
+def ensure_development_repository() -> None:
+    command = ("docker", "compose", "-f", COMPOSE, "exec", "-T", "core", "restic", "snapshots")
+    probe = run(*command, check=False)
+    if probe.returncode == 0:
+        return
+    details = f"{probe.stdout}\n{probe.stderr}"
+    if "repository does not exist" not in details:
+        raise RuntimeError(f"unable to inspect development Restic repository:\n{details}")
+    compose("exec", "-T", "core", "restic", "init")
+
+
 def main() -> None:
+    ensure_development_repository()
     expression = (
         "App\\Models\\User::query()->create(["
         f"'name'=>'Phase 8 runtime admin','email'=>{php_string(EMAIL)},"
