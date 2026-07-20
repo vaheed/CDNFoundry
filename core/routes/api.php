@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AnalyticsController as AdminAnalyticsController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\DnsClusterController;
 use App\Http\Controllers\Admin\DnsOperationController;
@@ -8,10 +9,13 @@ use App\Http\Controllers\Admin\DomainVerificationController;
 use App\Http\Controllers\Admin\EdgeController;
 use App\Http\Controllers\Admin\EdgeOperationsController;
 use App\Http\Controllers\Admin\EdgePoolController;
+use App\Http\Controllers\Admin\LogController as AdminLogController;
 use App\Http\Controllers\Admin\PlatformDnsSettingsController;
 use App\Http\Controllers\Admin\SecurityOperationsController;
 use App\Http\Controllers\Admin\SystemSettingsController;
+use App\Http\Controllers\Admin\UsageController as AdminUsageController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CacheController;
 use App\Http\Controllers\DnsDeploymentController;
@@ -19,6 +23,7 @@ use App\Http\Controllers\DnsRecordController;
 use App\Http\Controllers\DnsZoneController;
 use App\Http\Controllers\DomainController;
 use App\Http\Controllers\DomainLifecycleController;
+use App\Http\Controllers\DomainLogController;
 use App\Http\Controllers\GeoDnsController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\NameserverController;
@@ -27,6 +32,7 @@ use App\Http\Controllers\ProxyController;
 use App\Http\Controllers\SecurityController;
 use App\Http\Controllers\TlsController;
 use App\Http\Controllers\TokenController;
+use App\Http\Controllers\UsageController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', [HealthController::class, 'health']);
@@ -101,8 +107,33 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:account'])->group
     Route::get('/domains/{domain}/security/ddos/status', [SecurityController::class, 'status']);
     Route::get('/domains/{domain}/security/ddos/events', [SecurityController::class, 'events']);
     Route::get('/domains/{domain}/security/events', [SecurityController::class, 'events']);
+    Route::get('/domains/{domain}/analytics/summary', [AnalyticsController::class, 'summary']);
+    Route::get('/domains/{domain}/analytics/timeseries', [AnalyticsController::class, 'view'])->defaults('view', 'timeseries');
+    Route::get('/domains/{domain}/analytics/status-codes', [AnalyticsController::class, 'view'])->defaults('view', 'status-codes');
+    Route::get('/domains/{domain}/analytics/cache', [AnalyticsController::class, 'view'])->defaults('view', 'cache');
+    Route::get('/domains/{domain}/analytics/countries', [AnalyticsController::class, 'view'])->defaults('view', 'countries');
+    Route::get('/domains/{domain}/analytics/hostnames', [AnalyticsController::class, 'view'])->defaults('view', 'hostnames');
+    Route::get('/domains/{domain}/analytics/top-urls', [AnalyticsController::class, 'view'])->defaults('view', 'top-urls');
+    Route::get('/domains/{domain}/analytics/origin', [AnalyticsController::class, 'view'])->defaults('view', 'origin');
+    Route::get('/domains/{domain}/analytics/edges', [AnalyticsController::class, 'view'])->defaults('view', 'edges');
+    Route::get('/domains/{domain}/analytics/dns', [AnalyticsController::class, 'view'])->defaults('view', 'dns');
+    Route::get('/domains/{domain}/logs/requests', [DomainLogController::class, 'index'])->defaults('stream', 'requests');
+    Route::get('/domains/{domain}/logs/dns', [DomainLogController::class, 'index'])->defaults('stream', 'dns');
+    Route::get('/domains/{domain}/logs/errors', [DomainLogController::class, 'index'])->defaults('stream', 'errors');
+    Route::get('/domains/{domain}/logs/security', [DomainLogController::class, 'index'])->defaults('stream', 'security');
+    Route::get('/domains/{domain}/usage', [UsageController::class, 'index']);
+    Route::get('/domains/{domain}/usage/export', [UsageController::class, 'export']);
 
     Route::prefix('admin')->middleware('admin')->group(function (): void {
+        Route::get('/analytics/summary', [AdminAnalyticsController::class, 'summary']);
+        Route::get('/analytics/traffic', [AdminAnalyticsController::class, 'view'])->defaults('view', 'traffic');
+        Route::get('/analytics/dns', [AdminAnalyticsController::class, 'view'])->defaults('view', 'dns');
+        Route::get('/logs/errors', [AdminLogController::class, 'index'])->defaults('stream', 'errors');
+        Route::get('/logs/security', [AdminLogController::class, 'index'])->defaults('stream', 'security');
+        Route::get('/logs/edges', [AdminLogController::class, 'index'])->defaults('stream', 'edges');
+        Route::get('/usage', [AdminUsageController::class, 'index']);
+        Route::get('/usage/export', [AdminUsageController::class, 'export']);
+        Route::post('/usage/rebuild', [AdminUsageController::class, 'rebuild'])->middleware('idempotent');
         Route::get('/users', [UserController::class, 'index']);
         Route::post('/users', [UserController::class, 'store'])->middleware('idempotent');
         Route::get('/users/{user}', [UserController::class, 'show']);

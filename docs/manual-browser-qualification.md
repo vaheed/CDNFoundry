@@ -532,6 +532,82 @@ path.
 - Manual browser/real-host qualification: owner-run; **not executed and Phase 6
   is not release-qualified until every checkpoint above is recorded as passed**.
 
+## Phase 7 — Logs, analytics, and usage export
+
+Before opening the browser, choose one active proxied disposable domain assigned
+to `user@example.test`. Generate at least: two cacheable HTTP requests producing
+MISS then HIT, one controlled 5xx origin response, one blocked security request,
+one IPv4 and one IPv6 request, and DNSdist UDP/TCP A/AAAA queries. Wait at least
+two Vector batch intervals. Record exact UTC generation times and byte counts.
+
+### Domain analytics
+
+1. Sign in at `/app`, open **Analytics**, and select the assigned domain button.
+   Confirm no unassigned domain button or data appears. Directly request
+   `/app/analytics?domain=<unassigned-id>` and confirm it cannot reveal that
+   domain.
+2. Confirm the heading names the selected domain and visibly states the exact
+   UTC range, `bytes`, `milliseconds`, and `no sampling`. The newest interval
+   must show **Partial / provisional**, not silently appear finalized.
+3. Inspect the six summary cards, **Request and bandwidth timeseries**, **Status
+   codes**, **Cache ratio**, **Countries and continents**, **Hostnames**, **Top URLs**,
+   **Origin health and latency**, **Edge distribution**, and **DNS activity**.
+   Match request/DNS counts, bytes, status, MISS/HIT, hostname, edge, origin
+   failure, and security block to the generated evidence. Unknown geography must
+   be labelled `ZZ`, never guessed.
+4. Inspect the **Recent logs** previews for **Requests**, **DNS**, **Errors**, and
+   **Security**. Confirm each preview is limited to at most 10 rows from the
+   selected domain and one-hour raw range. Verify IPv4 renders
+   as its `/24`, IPv6 as its `/48`, paths contain no query string, and no
+   authorization header, cookie, token, request body, or private key appears.
+5. Open **Usage CSV export**. Confirm the header exactly matches
+   `usage-export-contract.md`, timestamps are UTC, bandwidth is bytes, and the
+   domain ID is the selected domain. Save the file and its checksum for the
+   rebuild comparison.
+6. At a narrow mobile width, repeat domain selection and inspect every panel and
+   log/export button. Content may scroll within its bounded preview but must not
+   overlap navigation or hide scope/range/unit/partial labels.
+
+### Administrator telemetry
+
+1. Sign in at `/admin`, open **Telemetry**, and confirm **ClickHouse available**,
+   **Vector metrics available**, and the current partial/finalized label plus
+   exact UTC range and units.
+2. Match the global summary cards, **Global traffic**, and **Global DNS** to the
+   domain evidence plus known other traffic. Confirm **Vector buffer and delivery
+   metrics** shows bounded buffer/error/drop metrics, not customer secrets.
+3. Inspect the **Recent logs** previews for **Errors**, **Security**, and
+   **Edges** and confirm each has at most 10 masked rows from the last hour.
+   Sign back in as the domain user and directly request `/admin/telemetry` and
+   `/admin/telemetry/usage.csv`; both must be forbidden. Confirm no page button
+   navigates to a token-protected `/api/admin/...` URL.
+4. Inspect the latest 20 **Finalized usage** rows and open **Global usage CSV**.
+   Rebuild the generated
+   complete UTC interval through the documented administrator API/action using
+   one `Idempotency-Key`; replay it and record the same operation/result. Export
+   again and confirm the selected domain row and contract version are unchanged.
+5. Stop only ClickHouse with `docker compose -f compose.dev.yml stop clickhouse`.
+   Refresh both analytics pages: each must render a clear analytics-unavailable
+   message while its panel/navigation stays usable. During the interruption,
+   repeat DNSdist UDP/TCP and edge HTTP/HTTPS requests and record continued
+   responses.
+6. Start ClickHouse with `docker compose -f compose.dev.yml start clickhouse`.
+   Confirm the availability labels recover, Vector buffer bytes drain, and a
+   uniquely generated outage request eventually appears. Any discarded-event
+   increase must be recorded as a telemetry-loss interval, not treated as exact
+   usage. Repeat at a narrow mobile width.
+
+### Phase 7 completion gate
+
+- Implementation: present for direct bounded telemetry, ClickHouse raw and
+  aggregate storage, scoped APIs/UI, and idempotent PostgreSQL usage exports.
+- Documentation: present in the analytics, log schema, retention/privacy,
+  export-contract, outage-runbook, and qualification documents.
+- Automated/runtime qualification: agent-owned evidence is recorded in
+  `docs/phase-7-qualification.md`.
+- Manual browser qualification: owner-run; **not executed and Phase 7 is not
+  release-qualified until every checkpoint above is recorded as passed**.
+
 ## Record the result
 
 For each phase record: date/operator, commit SHA, browser/version, desktop/mobile viewports, exact domain and edge addresses, every checkpoint as pass/fail/not-ready, operation IDs, revisions, screenshots, relevant logs, and any deviations from the example values. Also record Horizon, PowerAdmin, DNSdist UDP/TCP, Prometheus, Alertmanager, and edge results where applicable.

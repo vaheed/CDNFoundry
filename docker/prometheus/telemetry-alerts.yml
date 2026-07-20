@@ -1,0 +1,27 @@
+groups:
+  - name: cdnfoundry-telemetry
+    rules:
+      - alert: TelemetryEventsDropped
+        expr: increase(vector_component_discarded_events_total[5m]) > 0
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: Vector dropped telemetry after a bounded buffer or transform limit
+      - alert: TelemetryDeliveryFailures
+        expr: increase(vector_component_errors_total[5m]) > 0
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: Vector is failing to deliver telemetry
+      - alert: TelemetryBufferNearLimit
+        expr: vector_buffer_byte_size > 858993459
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: A Vector telemetry buffer is above 80 percent of its 1 GiB limit
+      - alert: TelemetryCollectorUnavailable
+        expr: up{job="vector"} == 0
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: Prometheus cannot scrape the Vector telemetry collector

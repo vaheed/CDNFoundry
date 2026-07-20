@@ -22,12 +22,14 @@ class SystemSettingsTest extends TestCase
         $admin = User::factory()->admin()->create();
         $response = $this->actingAs($admin)->getJson('/api/admin/system/settings')->assertOk();
 
-        $this->assertCount(6, $response->json('data'));
-        $response->assertJsonPath('data.0.group', 'dns_lifecycle')
-            ->assertJsonPath('data.0.fields.0.value', 7)
-            ->assertJsonPath('data.0.fields.0.default', 7);
-        $this->assertNotEmpty($response->json('data.0.fields.0.description'));
-        $this->assertDatabaseCount('system_settings', 6);
+        $this->assertCount(7, $response->json('data'));
+        $settings = collect($response->json('data'));
+        $dnsLifecycle = $settings->firstWhere('group', 'dns_lifecycle');
+        $this->assertSame(7, $dnsLifecycle['fields'][0]['value']);
+        $this->assertSame(7, $dnsLifecycle['fields'][0]['default']);
+        $this->assertNotEmpty($dnsLifecycle['fields'][0]['description']);
+        $this->assertNotNull($settings->firstWhere('group', 'telemetry'));
+        $this->assertDatabaseCount('system_settings', 7);
     }
 
     public function test_dns_lifecycle_update_is_typed_audited_and_reads_from_postgresql(): void

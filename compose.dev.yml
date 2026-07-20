@@ -24,6 +24,10 @@ x-core-env: &core-env
   ACME_INITIAL_JITTER_SECONDS: "1"
   EDGE_IDENTITY_CA_CERTIFICATE: /run/dev-pki/edge-identity-ca.crt
   EDGE_IDENTITY_CA_PRIVATE_KEY: /run/dev-pki/edge-identity-ca.key
+  CLICKHOUSE_URL: http://clickhouse:8123
+  CLICKHOUSE_DATABASE: cdnf
+  CLICKHOUSE_USER: cdnf
+  CLICKHOUSE_PASSWORD: cdnf-dev-only
 
 x-core: &core
   build:
@@ -46,7 +50,7 @@ x-core: &core
     vendor-init: { condition: service_completed_successfully }
     control-db: { condition: service_healthy }
     redis: { condition: service_healthy }
-  networks: [control]
+  networks: [control, telemetry]
   restart: unless-stopped
 
 services:
@@ -241,10 +245,14 @@ services:
 
   vector:
     image: timberio/vector:0.55.0-alpine
+    environment:
+      CLICKHOUSE_ENDPOINT: http://clickhouse:8123
+      CLICKHOUSE_USER: cdnf
+      CLICKHOUSE_PASSWORD: cdnf-dev-only
     volumes:
       - ./docker/vector/vector.yaml:/etc/vector/vector.yaml:ro
       - vector-data:/vector-data-dir
-    networks: [telemetry]
+    networks: [telemetry, edge, dns]
     restart: unless-stopped
 
   prometheus:
@@ -252,6 +260,7 @@ services:
     ports: ["9090:9090"]
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro
       - prometheus:/prometheus
     networks: [telemetry]
 

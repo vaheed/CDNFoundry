@@ -215,6 +215,16 @@ This is application and origin protection, not upstream volumetric scrubbing.
 Physical circuit saturation must be mitigated by the transit or hosting
 provider before traffic reaches the edge.
 
+## Telemetry and analytics path
+
+DNSdist streams response DNSTap and OpenResty streams fixed-schema request logs
+to Vector. Vector redacts and bounds fields, buffers each ClickHouse sink on at
+most 1 GiB of local disk, and writes raw edge/DNS tables directly. ClickHouse
+materialized views build hourly and daily aggregates. Laravel only issues
+policy-scoped, time- and resource-bounded queries; scheduled jobs copy compact
+finalized hourly usage rows into PostgreSQL for export. Valkey and PostgreSQL
+never carry raw traffic logs, and telemetry failure never changes serving.
+
 ## Administrator change to active runtime
 
 An interactive request stores intent; it does not wait for PowerDNS or edges.

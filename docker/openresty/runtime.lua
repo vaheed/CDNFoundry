@@ -27,6 +27,7 @@ local function security_reject(status, reason)
     end
     ngx.header["X-CDNFoundry-Security-Reason"] = reason
     ngx.var.cdn_security_reason = reason
+    ngx.var.cdn_security_action = "block"
     return ngx.exit(status)
 end
 
@@ -356,6 +357,8 @@ function M.access()
     local config = state.hosts[host]
     if not config then return security_reject(421, "unknown_host") end
     ngx.var.cdn_original_host = host
+    ngx.var.cdn_domain_id = tostring(config.domain_id or 0)
+    ngx.var.cdn_edge_id = os.getenv("EDGE_CELL_NAME") or "unknown"
     ngx.ctx.security_domain = config.domain_id or config.domain
     ngx.ctx.security_hostname = host
     if config.settings and config.settings.enabled == false then return reject(503) end
@@ -377,6 +380,9 @@ function M.access()
     if size > (tonumber(limits.maximum_request_body_size) or 16777216) then return security_reject(413, "body_too_large") end
     local client = client_address(security)
     local country, continent = geography(client)
+    ngx.var.cdn_client_ip = client
+    ngx.var.cdn_country = country or "ZZ"
+    ngx.var.cdn_continent = continent or "ZZ"
     for _, rule in ipairs(security.rules or {}) do
         if rule_matches(rule, client, country, continent) then
             if rule.action == "block" then return security_reject(403, "domain_restricted") end

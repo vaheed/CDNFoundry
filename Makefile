@@ -2,7 +2,7 @@ COMPOSE_DEV := docker compose -f compose.dev.yml
 COMPOSE_PROD := docker compose --env-file .env.prod -f compose.prod.yml
 COMPOSE_PROD_EXAMPLE := docker compose --env-file .env.prod.example -f compose.prod.yml
 
-.PHONY: dev-assets dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-scale-e2e dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check docs-check
+.PHONY: dev-assets dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-phase7-e2e dev-scale-e2e dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check docs-check
 
 dev-assets:
 	docker build --target frontend-assets-export --output type=local,dest=./core/public/build ./core
@@ -40,10 +40,14 @@ dev-e2e:
 	python3 tests/e2e/phase4_mtls.py
 	python3 tests/e2e/phase5_tls.py
 	python3 tests/e2e/phase6_security.py
+	python3 tests/e2e/phase7_analytics.py
 	python3 tests/e2e/phase4_runtime.py
 
 dev-scale-e2e:
 	python3 tests/e2e/phase2_scale.py
+
+dev-phase7-e2e:
+	python3 tests/e2e/phase7_analytics.py
 
 dev-logs:
 	$(COMPOSE_DEV) logs -f --tail=200

@@ -2,6 +2,18 @@
 
 return [
     'groups' => [
+        'telemetry' => [
+            'label' => 'Telemetry retention and privacy',
+            'description' => 'Bounded raw telemetry, aggregate retention, finalization delay, and client-address masking.',
+            'fields' => [
+                'raw_retention_days' => ['type' => 'integer', 'label' => 'Raw retention (days)', 'default' => 7, 'description' => 'Maximum time raw request and DNS events remain queryable.', 'rules' => ['required', 'integer', 'between:1,30']],
+                'hourly_retention_days' => ['type' => 'integer', 'label' => 'Hourly retention (days)', 'default' => 400, 'description' => 'Retention for hourly operational aggregates.', 'rules' => ['required', 'integer', 'between:30,730']],
+                'daily_retention_days' => ['type' => 'integer', 'label' => 'Daily retention (days)', 'default' => 1095, 'description' => 'Retention for compact daily aggregates.', 'rules' => ['required', 'integer', 'between:365,3650']],
+                'finalization_delay_minutes' => ['type' => 'integer', 'label' => 'Finalization delay (minutes)', 'default' => 15, 'description' => 'Intervals newer than this delay are labelled provisional.', 'rules' => ['required', 'integer', 'between:5,1440']],
+                'ipv4_mask_bits' => ['type' => 'integer', 'label' => 'IPv4 display mask', 'default' => 24, 'description' => 'Prefix retained in normal views and exports.', 'rules' => ['required', 'integer', 'between:8,32']],
+                'ipv6_mask_bits' => ['type' => 'integer', 'label' => 'IPv6 display mask', 'default' => 48, 'description' => 'Prefix retained in normal views and exports.', 'rules' => ['required', 'integer', 'between:16,64']],
+            ],
+        ],
         'dns_lifecycle' => [
             'label' => 'DNS lifecycle',
             'description' => 'Retention windows for disabled domains and released domain names.',

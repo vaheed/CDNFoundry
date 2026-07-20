@@ -26,6 +26,10 @@ x-core-env: &core-env
   EDGE_IDENTITY_CA_CERTIFICATE: /run/secrets/edge-identity-ca.crt
   EDGE_IDENTITY_CA_PRIVATE_KEY: /run/secrets/edge-identity-ca.key
   EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE: ${EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE:-}
+  CLICKHOUSE_URL: ${CLICKHOUSE_URL:?CLICKHOUSE_URL is required}
+  CLICKHOUSE_DATABASE: cdnf
+  CLICKHOUSE_USER: cdnf
+  CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
 
 x-core: &core
   image: ghcr.io/vaheed/cdnfoundry-core:${CDNF_RELEASE:?CDNF_RELEASE must be an immutable commit SHA}
@@ -33,7 +37,7 @@ x-core: &core
   depends_on:
     control-db: { condition: service_healthy }
     redis: { condition: service_healthy }
-  networks: [control]
+  networks: [control, telemetry]
   restart: unless-stopped
   read_only: true
   tmpfs: [/tmp]
@@ -206,10 +210,14 @@ services:
   vector:
     image: timberio/vector:0.55.0-alpine
     profiles: [telemetry, edge]
+    environment:
+      CLICKHOUSE_ENDPOINT: ${CLICKHOUSE_URL:?CLICKHOUSE_URL is required}
+      CLICKHOUSE_USER: cdnf
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
     volumes:
       - ./docker/vector/vector.yaml:/etc/vector/vector.yaml:ro
       - vector-data:/vector-data-dir
-    networks: [telemetry]
+    networks: [telemetry, edge, dns-private]
     restart: unless-stopped
 
   prometheus:
@@ -217,6 +225,7 @@ services:
     profiles: [telemetry]
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro
       - prometheus:/prometheus
     networks: [telemetry]
     restart: unless-stopped
