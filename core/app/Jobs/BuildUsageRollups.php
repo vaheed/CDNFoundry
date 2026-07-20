@@ -36,19 +36,21 @@ class BuildUsageRollups implements ShouldQueue
             $to = CarbonImmutable::parse($this->to)->utc();
             for ($interval = $from; $interval < $to; $interval = $interval->addHour()) {
                 $end = $interval->addHour();
-                $totals = collect($store->usageInterval($interval, $end, $this->domainId))->groupBy('domain_id')->map(fn ($rows): array => [
-                    'requests' => $rows->sum('requests'), 'bytes_in' => $rows->sum('bytes_in'), 'bytes_out' => $rows->sum('bytes_out'),
-                    'cache_hits' => $rows->sum('cache_hits'), 'dns_queries' => $rows->sum('dns_queries'),
-                ]);
-                $domainIds = $this->domainId === null ? $totals->keys()->map(fn ($id): int => (int) $id)->all() : [$this->domainId];
-                $existing = Domain::query()->whereIn('id', $domainIds)->pluck('id')->all();
-                foreach ($existing as $domainId) {
-                    $values = $totals->get((string) $domainId, $totals->get($domainId, ['requests' => 0, 'bytes_in' => 0, 'bytes_out' => 0, 'cache_hits' => 0, 'dns_queries' => 0]));
-                    UsageRollup::query()->updateOrCreate(
-                        ['domain_id' => $domainId, 'interval_start' => $interval, 'granularity' => 'hour'],
-                        [...$values, 'interval_end' => $end, 'status' => 'finalized', 'source_finalized_at' => now()],
-                    );
-                }
+                Domain::query()->when($this->domainId !== null, fn ($query) => $query->whereKey($this->domainId))
+                    ->orderBy('id')->select(['id', 'name'])->chunkById(250, function ($domains) use ($store, $interval, $end): void {
+                        $scope = $domains->pluck('name', 'id')->all();
+                        $totals = collect($store->usageInterval($interval, $end, $scope))->groupBy('domain_id')->map(fn ($rows): array => [
+                            'requests' => $rows->sum('requests'), 'bytes_in' => $rows->sum('bytes_in'), 'bytes_out' => $rows->sum('bytes_out'),
+                            'cache_hits' => $rows->sum('cache_hits'), 'dns_queries' => $rows->sum('dns_queries'),
+                        ]);
+                        foreach (array_keys($scope) as $domainId) {
+                            $values = $totals->get((string) $domainId, $totals->get($domainId, ['requests' => 0, 'bytes_in' => 0, 'bytes_out' => 0, 'cache_hits' => 0, 'dns_queries' => 0]));
+                            UsageRollup::query()->updateOrCreate(
+                                ['domain_id' => $domainId, 'interval_start' => $interval, 'granularity' => 'hour'],
+                                [...$values, 'interval_end' => $end, 'status' => 'finalized', 'source_finalized_at' => now()],
+                            );
+                        }
+                    });
             }
             $operation?->update(['status' => 'succeeded', 'finished_at' => now(), 'result' => ['from' => $this->from, 'to' => $this->to]]);
         } catch (Throwable $exception) {

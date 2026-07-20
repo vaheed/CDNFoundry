@@ -13,6 +13,13 @@ sources:
     type: http_server
     address: 0.0.0.0:8687
     encoding: json
+  dns_dnstap:
+    type: dnstap
+    address: 0.0.0.0:6000
+    mode: tcp
+    connection_limit: 32
+    max_frame_length: 102400
+    multithreaded: true
   internal_metrics:
     type: internal_metrics
 
@@ -27,38 +34,40 @@ transforms:
     inputs: [edge_events, decoded_edge_syslog]
     drop_on_error: true
     source: |
-      .occurred_at = to_string(.occurred_at ?? now())
+      event_time = parse_timestamp(to_string(.occurred_at) ?? "", format: "%+") ?? now()
+      .occurred_at = format_timestamp!(event_time, format: "%Y-%m-%d %H:%M:%S%.3f")
       .domain_id = to_int!(.domain_id)
-      .hostname = slice!(replace(to_string(.hostname) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 253)
+      .hostname = slice!(replace!(to_string(.hostname) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 253)
       .method = slice!(upcase(to_string(.method) ?? "GET"), 0, 16)
       raw_path = split(to_string(.path) ?? "/", "?")[0]
-      .path = slice!(replace(raw_path, r'[\x00-\x1f\x7f]', ""), 0, 2048)
+      .path = slice!(replace!(raw_path, r'[\x00-\x1f\x7f]', ""), 0, 2048)
       .status = to_int(.status) ?? 0
       .bytes_in = to_int(.bytes_in) ?? 0
       .bytes_out = to_int(.bytes_out) ?? 0
       .cache_status = slice!(to_string(.cache_status) ?? "unknown", 0, 24)
       .origin_latency_ms = to_int(.origin_latency_ms) ?? null
-      .origin_error = slice!(replace(to_string(.origin_error) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 256)
-      .tls_error = slice!(replace(to_string(.tls_error) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 256)
+      .origin_error = slice!(replace!(to_string(.origin_error) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 256)
+      .tls_error = slice!(replace!(to_string(.tls_error) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 256)
       .security_action = slice!(to_string(.security_action) ?? "allow", 0, 24)
       .security_reason = slice!(to_string(.security_reason) ?? "", 0, 64)
       .edge_id = slice!(to_string(.edge_id) ?? "unknown", 0, 64)
       .client_ip = slice!(to_string(.client_ip) ?? "", 0, 45)
       .country = slice!(upcase(to_string(.country) ?? "ZZ"), 0, 2)
       .continent = slice!(upcase(to_string(.continent) ?? "ZZ"), 0, 2)
-      .user_agent = slice!(replace(to_string(.user_agent) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 256)
-      .referrer = slice!(replace(to_string(.referrer) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 512)
+      .user_agent = slice!(replace!(to_string(.user_agent) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 256)
+      .referrer = slice!(replace!(to_string(.referrer) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 512)
       .event_type = slice!(to_string(.event_type) ?? "request", 0, 32)
       del(.authorization); del(.cookie); del(.cookies); del(.request_body); del(.body); del(.query)
   safe_dns_events:
     type: remap
-    inputs: [dns_events]
+    inputs: [dns_events, decoded_dns_dnstap]
     drop_on_error: true
     source: |
-      .occurred_at = to_string(.occurred_at ?? now())
+      event_time = parse_timestamp(to_string(.occurred_at) ?? "", format: "%+") ?? now()
+      .occurred_at = format_timestamp!(event_time, format: "%Y-%m-%d %H:%M:%S%.3f")
       .domain_id = to_int(.domain_id) ?? 0
-      .zone = slice!(replace(to_string(.zone) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 253)
-      .qname = slice!(replace(to_string(.qname) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 253)
+      .zone = slice!(replace!(to_string(.zone) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 253)
+      .qname = slice!(replace!(to_string(.qname) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 253)
       .qtype = slice!(upcase(to_string(.qtype) ?? "UNKNOWN"), 0, 16)
       .rcode = slice!(upcase(to_string(.rcode) ?? "UNKNOWN"), 0, 16)
       .client_ip = slice!(to_string(.client_ip) ?? "", 0, 45)
@@ -67,6 +76,28 @@ transforms:
       .continent = slice!(upcase(to_string(.continent) ?? "ZZ"), 0, 2)
       .outcome = slice!(to_string(.outcome) ?? "answered", 0, 32)
       del(.authorization); del(.cookie); del(.request_body); del(.body)
+  decoded_dns_dnstap:
+    type: remap
+    inputs: [dns_dnstap]
+    drop_on_error: true
+    source: |
+      if .messageType != "ClientResponse" && .messageType != "ResolverResponse" && .messageType != "AuthResponse" {
+        abort
+      }
+      question = .responseData.question[0]
+      . = {
+        "occurred_at": .timestamp,
+        "domain_id": 0,
+        "zone": replace(to_string!(question.domainName), r'\.$', ""),
+        "qname": replace(to_string!(question.domainName), r'\.$', ""),
+        "qtype": to_string!(question.questionType),
+        "rcode": to_string(.responseData.rcodeName) ?? "UNKNOWN",
+        "client_ip": to_string(.sourceAddress) ?? "",
+        "dns_cluster": to_string(.serverId) ?? "dnsdist",
+        "country": "ZZ",
+        "continent": "ZZ",
+        "outcome": "answered"
+      }
 
 sinks:
   clickhouse_edge:

@@ -49,15 +49,18 @@ final class AnalyticsStore
         $parameters = $this->parameters($range, $domain);
         [$select, $group, $order, $table] = match ($view) {
             'timeseries', 'traffic' => ['toStartOfHour(interval_start) AS bucket, sum(requests) AS requests, sum(bytes_in) AS bytes_in, sum(bytes_out) AS bytes_out', 'bucket', 'bucket', 'edge_hourly'],
-            'status-codes' => ['status, sum(requests) AS requests', 'status', 'requests DESC, status', 'edge_hourly'],
-            'cache' => ['cache_status, sum(requests) AS requests', 'cache_status', 'requests DESC, cache_status', 'edge_hourly'],
-            'countries' => ['country, continent, sum(requests) AS requests, sum(bytes_out) AS bytes_out', 'country, continent', 'requests DESC, country', 'edge_hourly'],
-            'hostnames' => ['hostname, sum(requests) AS requests, sum(bytes_out) AS bytes_out', 'hostname', 'requests DESC, hostname', 'edge_hourly'],
+            'status-codes' => ['status, sum(requests) AS requests', 'status', 'sum(requests) DESC, status', 'edge_hourly'],
+            'cache' => ['cache_status, sum(requests) AS requests', 'cache_status', 'sum(requests) DESC, cache_status', 'edge_hourly'],
+            'countries' => ['country, continent, sum(requests) AS requests, sum(bytes_out) AS bytes_out', 'country, continent', 'sum(requests) DESC, country', 'edge_hourly'],
+            'hostnames' => ['hostname, sum(requests) AS requests, sum(bytes_out) AS bytes_out', 'hostname', 'sum(requests) DESC, hostname', 'edge_hourly'],
             'origin' => ['sum(origin_errors) AS errors, sum(origin_latency_sum) AS latency_sum_ms, sum(origin_latency_samples) AS latency_samples, if(latency_samples = 0, 0, latency_sum_ms / latency_samples) AS average_latency_ms', '', 'errors DESC', 'edge_hourly'],
-            'edges' => ['edge_id, sum(requests) AS requests, sum(bytes_out) AS bytes_out', 'edge_id', 'requests DESC, edge_id', 'edge_hourly'],
-            'dns' => ['qtype, rcode, sum(queries) AS queries', 'qtype, rcode', 'queries DESC, qtype, rcode', 'dns_hourly'],
+            'edges' => ['edge_id, sum(requests) AS requests, sum(bytes_out) AS bytes_out', 'edge_id', 'sum(requests) DESC, edge_id', 'edge_hourly'],
+            'dns' => ['qtype, rcode, sum(queries) AS queries', 'qtype, rcode', 'sum(queries) DESC, qtype, rcode', 'dns_hourly'],
             default => throw ValidationException::withMessages(['view' => 'The analytics view is invalid.']),
         };
+        if ($view === 'dns' && $domain !== null) {
+            $scope = '(domain_id = {domain_id:UInt64} OR zone = {domain_name:String} OR endsWith(zone, concat(\'.\', {domain_name:String})))';
+        }
         $groupSql = $group === '' ? '' : " GROUP BY {$group}";
 
         return $this->query("SELECT {$select} FROM cdnf.{$table} WHERE {$scope} AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64}{$groupSql} ORDER BY {$order} LIMIT 1000", $parameters);
@@ -75,6 +78,9 @@ final class AnalyticsStore
         $scope = $domain === null ? '1' : 'domain_id = {domain_id:UInt64}';
         $cursorSql = '(occurred_at, event_id) < ({cursor_time:DateTime64}, {cursor_id:UUID})';
         if ($stream === 'dns') {
+            if ($domain !== null) {
+                $scope = '(domain_id = {domain_id:UInt64} OR zone = {domain_name:String} OR endsWith(zone, concat(\'.\', {domain_name:String})))';
+            }
             $rows = $this->query("SELECT occurred_at, event_id, domain_id, zone, qname, qtype, rcode, client_ip, dns_cluster, country, continent, outcome FROM cdnf.dns_events WHERE {$scope} AND occurred_at >= {from:DateTime64} AND occurred_at < {to:DateTime64} AND {$cursorSql} ORDER BY occurred_at DESC, event_id DESC LIMIT 101", $parameters);
         } else {
             $filter = match ($stream) {
@@ -98,15 +104,21 @@ final class AnalyticsStore
         return ['items' => $rows, 'next_cursor' => $hasMore && is_array($last) ? $this->encodeCursor($last) : null];
     }
 
-    public function usageInterval(CarbonImmutable $from, CarbonImmutable $to, ?int $domainId = null): array
+    /** @param array<int, string> $domains */
+    public function usageInterval(CarbonImmutable $from, CarbonImmutable $to, array $domains): array
     {
-        $scope = $domainId === null ? '1' : 'domain_id = {domain_id:UInt64}';
-        $parameters = ['from' => $from->format('Y-m-d H:i:s.u'), 'to' => $to->format('Y-m-d H:i:s.u')];
-        if ($domainId !== null) {
-            $parameters['domain_id'] = $domainId;
+        if ($domains === []) {
+            return [];
         }
+        $ids = array_keys($domains);
+        $names = array_values($domains);
+        $parameters = [
+            'from' => $from->format('Y-m-d H:i:s.u'), 'to' => $to->format('Y-m-d H:i:s.u'),
+            'domain_ids' => '['.implode(',', $ids).']',
+            'domain_names' => '['.implode(',', array_map(fn (string $name): string => "'".str_replace("'", "\\'", $name)."'", $names)).']',
+        ];
 
-        return $this->query("SELECT domain_id, sum(requests) AS requests, sum(bytes_in) AS bytes_in, sum(bytes_out) AS bytes_out, sumIf(requests, cache_status = 'HIT') AS cache_hits, 0 AS dns_queries FROM cdnf.edge_hourly WHERE {$scope} AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64} GROUP BY domain_id UNION ALL SELECT domain_id, 0, 0, 0, 0, sum(queries) FROM cdnf.dns_hourly WHERE {$scope} AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64} GROUP BY domain_id", $parameters);
+        return $this->query("SELECT domain_id, sum(requests) AS requests, sum(bytes_in) AS bytes_in, sum(bytes_out) AS bytes_out, sumIf(requests, cache_status = 'HIT') AS cache_hits, 0 AS dns_queries FROM cdnf.edge_hourly WHERE domain_id IN {domain_ids:Array(UInt64)} AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64} GROUP BY domain_id UNION ALL WITH {domain_names:Array(String)} AS names, {domain_ids:Array(UInt64)} AS ids SELECT arrayElement(ids, arrayFirstIndex(name -> zone = name OR endsWith(zone, concat('.', name)), names)) AS mapped_domain_id, 0, 0, 0, 0, sum(queries) FROM cdnf.dns_hourly WHERE arrayFirstIndex(name -> zone = name OR endsWith(zone, concat('.', name)), names) > 0 AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64} GROUP BY mapped_domain_id", $parameters);
     }
 
     public function metadata(array $range): array
@@ -120,7 +132,7 @@ final class AnalyticsStore
     private function query(string $sql, array $parameters): array
     {
         $configuration = config('services.clickhouse');
-        $query = ['database' => $configuration['database'], 'default_format' => 'JSONEachRow', 'max_execution_time' => $configuration['max_execution_time'], 'max_memory_usage' => $configuration['max_memory_usage'], 'max_rows_to_read' => $configuration['max_rows_to_read'], 'max_result_rows' => $configuration['max_result_rows']];
+        $query = ['database' => $configuration['database'], 'default_format' => 'JSONEachRow', 'max_execution_time' => $configuration['max_execution_time'], 'max_memory_usage' => $configuration['max_memory_usage'], 'max_rows_to_read' => $configuration['max_rows_to_read'], 'max_result_rows' => $configuration['max_result_rows'], 'prefer_column_name_to_alias' => 1];
         foreach ($parameters as $key => $value) {
             $query["param_{$key}"] = $value;
         }
@@ -144,7 +156,7 @@ final class AnalyticsStore
 
     private function parameters(array $range, ?Domain $domain): array
     {
-        return array_filter(['from' => $range['from']->format('Y-m-d H:i:s.u'), 'to' => $range['to']->format('Y-m-d H:i:s.u'), 'domain_id' => $domain?->getKey()], fn ($value): bool => $value !== null);
+        return array_filter(['from' => $range['from']->format('Y-m-d H:i:s.u'), 'to' => $range['to']->format('Y-m-d H:i:s.u'), 'domain_id' => $domain?->getKey(), 'domain_name' => $domain?->name], fn ($value): bool => $value !== null);
     }
 
     private function maskAddress(string $address): string
