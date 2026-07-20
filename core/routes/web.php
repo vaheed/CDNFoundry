@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\UsageController as AdminUsageController;
 use App\Http\Controllers\EdgeAgentController;
+use App\Http\Controllers\MetricsController;
 use App\Http\Controllers\UsageController;
 use Illuminate\Support\Facades\Route;
 
@@ -22,6 +23,7 @@ Route::prefix('edge/v1')->middleware('api')->group(function (): void {
 Route::get('/', function () {
     return view('welcome');
 });
+Route::get('/metrics', MetricsController::class);
 
 Route::middleware(['auth', 'account.active'])->group(function (): void {
     Route::get('/app/analytics/domains/{domain}/usage.csv', [UsageController::class, 'csv'])

@@ -13,6 +13,7 @@ use App\Models\Domain;
 use App\Models\Edge;
 use App\Models\Operation;
 use App\Models\User;
+use App\Support\SystemHealth;
 use Filament\Pages\Dashboard;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Redis;
@@ -95,6 +96,15 @@ class AdminDashboard extends Dashboard
             ['label' => 'System DNS identity', 'icon' => 'heroicon-o-globe-alt', 'url' => SystemDnsIdentity::getUrl()],
             ['label' => 'Operations', 'icon' => 'heroicon-o-arrow-path', 'url' => OperationResource::getUrl()],
         ];
+    }
+
+    public function getComponentStateProperty(): array
+    {
+        try {
+            return collect(app(SystemHealth::class)->components())->map(fn (array $state, string $name): array => ['name' => str($name)->replace('_', ' ')->headline()->toString(), ...$state])->values()->all();
+        } catch (Throwable) {
+            return [['name' => 'Operational health', 'status' => 'unavailable', 'checked_at' => now()->toIso8601String(), 'details' => []]];
+        }
     }
 
     private function queueAge(?int $pushedAt, int $depth): string

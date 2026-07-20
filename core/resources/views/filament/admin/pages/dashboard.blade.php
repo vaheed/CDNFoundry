@@ -7,6 +7,17 @@
         </div>
 
         <div class="cdn-dashboard-columns">
+            <x-filament::section heading="Component health" description="Bounded dependency and reconciliation checks. Prometheus and Alertmanager own alerting." icon="heroicon-o-heart">
+                <div class="cdn-queue-list">
+                    @foreach ($this->componentState as $healthState)
+                        <div class="cdn-queue-row">
+                            <div><div class="cdn-row-title">{{ $healthState['name'] }}</div><div class="cdn-row-meta">Checked {{ $healthState['checked_at'] }}</div></div>
+                            <x-ui.status-pill :tone="$healthState['status'] === 'healthy' ? 'success' : ($healthState['status'] === 'degraded' ? 'warning' : 'danger')">{{ str($healthState['status'])->headline() }}</x-ui.status-pill>
+                        </div>
+                    @endforeach
+                </div>
+            </x-filament::section>
+
             <x-filament::section heading="Queue lanes" description="Current Redis backlog by bounded worker lane." icon="heroicon-o-queue-list">
                 <div class="cdn-queue-list">
                     @foreach ($this->queueState as $lane)

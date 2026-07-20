@@ -1,0 +1,42 @@
+rule_files:
+  - telemetry-alerts.yml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'node_timex_sync_status{instance="test-host"}'
+        values: '0 0 0 0'
+      - series: 'node_timex_offset_seconds{instance="test-host"}'
+        values: '6 6 6 6'
+      - series: 'up{job="dnsdist",instance="dns-host"}'
+        values: '0 0 0 0'
+      - series: 'up{job="powerdns",instance="pdns-host"}'
+        values: '0 0 0 0'
+      - series: 'dnsdist_server_status{instance="dns-host",server="pdns-auth"}'
+        values: '0 0 0 0'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: HostClockUnsynchronized
+        exp_alerts:
+          - exp_labels: { severity: critical, instance: test-host }
+            exp_annotations: { summary: A CDNFoundry host clock is not synchronized }
+      - eval_time: 3m
+        alertname: HostClockDrift
+        exp_alerts:
+          - exp_labels: { severity: critical, instance: test-host }
+            exp_annotations: { summary: A CDNFoundry host clock offset exceeds five seconds }
+      - eval_time: 3m
+        alertname: DNSDistUnavailable
+        exp_alerts:
+          - exp_labels: { severity: critical, job: dnsdist, instance: dns-host }
+            exp_annotations: { summary: DNSdist authoritative ingress is unavailable }
+      - eval_time: 3m
+        alertname: PowerDNSUnavailable
+        exp_alerts:
+          - exp_labels: { severity: critical, job: powerdns, instance: pdns-host }
+            exp_annotations: { summary: PowerDNS authoritative backend is unavailable }
+      - eval_time: 3m
+        alertname: DNSDistBackendUnavailable
+        exp_alerts:
+          - exp_labels: { severity: critical, instance: dns-host, server: pdns-auth }
+            exp_annotations: { summary: DNSdist has marked an authoritative backend unavailable }

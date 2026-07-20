@@ -2748,9 +2748,9 @@ Filament summarizes operational state. Prometheus and Alertmanager remain the mo
 - [ ] Encryption keys and secrets are included in the documented recovery set.
 - [ ] PowerDNS runtime state is rebuilt from control-plane data.
 - [ ] A fresh edge recovers from a full snapshot.
-- [ ] Queue loss is repaired by reconciliation.
+- [x] Queue loss is repaired by reconciliation.
 - [ ] TLS state is reconstructed after edge loss.
-- [ ] Usage intervals can be rebuilt from retained ClickHouse data.
+- [x] Usage intervals can be rebuilt from retained ClickHouse data.
 - [ ] Runbooks exist for control DB, DNS cluster, edge, certificate, ClickHouse, Vector, queue backlog, and MMDB failure.
 - [ ] Measured RPO and RTO are recorded.
 - [ ] Clock drift beyond the configured threshold produces a degraded health state and alert.
@@ -2762,8 +2762,8 @@ Filament summarizes operational state. Prometheus and Alertmanager remain the mo
 - [ ] One failed edge does not interrupt healthy edges.
 - [ ] DNSdist and PowerDNS restart tests pass.
 - [ ] ClickHouse and Vector restart without traffic interruption.
-- [ ] MMDB provider outage retains the last valid file.
-- [ ] Graceful shutdown prevents partially activated state.
+- [x] MMDB provider outage retains the last valid file.
+- [x] Graceful shutdown prevents partially activated state.
 - [ ] A canary control-plane/agent upgrade succeeds through a mixed-version window and can roll back without database restore.
 - [ ] A stale edge is removed from new system edge-routing answers according to policy.
 - [ ] A drained edge stops receiving new preferred traffic while completing existing work according to runtime capability.
@@ -2804,6 +2804,17 @@ Filament summarizes operational state. Prometheus and Alertmanager remain the mo
 - [ ] Capacity-planning guide
 - [ ] Every required failure runbook
 - [ ] Complete OpenAPI reference
+
+> **Implementation progress (2026-07-20):** Phase 8 operations implementation
+> and local agent-owned qualification are present. Encrypted S3-compatible
+> object-host recovery into clean replacement PostgreSQL passed with measured
+> local RPO/RTO; prior/current images passed an expand-schema rollback without a
+> database restore; constrained single-cell HTTP/HTTPS results are published;
+> and the cumulative restart/isolation suites remain green. Phase 8 is not
+> release-qualified until the external off-host/fresh physical-host recovery,
+> production-like multi-host canary, disposable-host clock rehearsal, and
+> owner-run browser/real-traffic checkpoints are recorded.
+> Evidence: [Phase 8 qualification](phase-8-qualification.md).
 
 ---
 

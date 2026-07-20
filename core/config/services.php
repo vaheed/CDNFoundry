@@ -13,7 +13,18 @@ return [
         'max_rows_to_read' => 10000000,
         'max_result_rows' => 10001,
     ],
-    'geoip' => ['database' => env('GEOIP_DATABASE', '/mmdb/GeoLite2-City.mmdb')],
+    'geoip' => [
+        'database' => env('GEOIP_DATABASE', '/mmdb/GeoLite2-City.mmdb'),
+        'stale_hours' => (int) env('MMDB_STALE_HOURS', 48),
+    ],
+    'vector' => ['metrics_url' => env('VECTOR_METRICS_URL', 'http://vector:9598/metrics')],
+    'metrics' => ['token' => env('METRICS_TOKEN', ''), 'token_file' => env('METRICS_TOKEN_FILE')],
+    'backups' => [
+        'repository' => env('RESTIC_REPOSITORY', ''), 'password_file' => env('RESTIC_PASSWORD_FILE', ''),
+        'access_key' => env('BACKUP_ACCESS_KEY_ID', ''), 'secret_key' => env('BACKUP_SECRET_ACCESS_KEY', ''),
+        'region' => env('BACKUP_DEFAULT_REGION', 'us-east-1'),
+    ],
+    'prometheus' => ['url' => env('PROMETHEUS_URL', 'http://prometheus:9090')],
     'acme' => [
         'enabled' => filter_var(env('ACME_ENABLED', false), FILTER_VALIDATE_BOOL),
         'verify_tls' => filter_var(env('ACME_VERIFY_TLS', true), FILTER_VALIDATE_BOOL),

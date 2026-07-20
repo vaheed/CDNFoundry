@@ -398,19 +398,25 @@ function M.access()
     local burst = tonumber(limits.request_burst) or 200
     if client_requests and client_requests > rps + burst then return security_reject(429, "client_rate_exceeded") end
     if domain_requests and domain_requests > rps * 8 + burst then return security_reject(429, "domain_rate_exceeded") end
-    local client_connections = dictionary:incr("security:conn:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client), 1, 0)
-    local domain_connections = dictionary:incr("security:conn:domain:" .. tostring(config.domain), 1, 0)
+    local client_connection_key = "security:conn:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client)
+    local domain_connection_key = "security:conn:domain:" .. tostring(config.domain)
+    local client_connections = dictionary:incr(client_connection_key, 1, 0)
+    local domain_connections = dictionary:incr(domain_connection_key, 1, 0)
     if client_connections and client_connections > (tonumber(limits.connections_per_client) or 64) then
-        dictionary:incr("security:conn:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client), -1, 0)
-        dictionary:incr("security:conn:domain:" .. tostring(config.domain), -1, 0)
+        dictionary:incr(client_connection_key, -1, 0)
+        dictionary:incr(domain_connection_key, -1, 0)
         return security_reject(429, "client_connections_exceeded")
     end
     if domain_connections and domain_connections > (tonumber(limits.connections_per_domain) or 512) then
-        dictionary:incr("security:conn:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client), -1, 0)
-        dictionary:incr("security:conn:domain:" .. tostring(config.domain), -1, 0)
+        dictionary:incr(client_connection_key, -1, 0)
+        dictionary:incr(domain_connection_key, -1, 0)
         return security_reject(429, "domain_connections_exceeded")
     end
-    ngx.ctx.security_connection_keys = {"security:conn:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client), "security:conn:domain:" .. tostring(config.domain)}
+    -- ngx.exec enters a named cache location and may replace ngx.ctx. Nginx
+    -- request variables survive that redirect and let the log phase release
+    -- the active-request counters reliably.
+    ngx.var.cdn_security_client_connection_key = client_connection_key
+    ngx.var.cdn_security_domain_connection_key = domain_connection_key
     if config.settings and config.settings.redirect_https == true and ngx.var.scheme == "http" then
         return ngx.redirect("https://" .. host .. ngx.var.request_uri, 308)
     end
@@ -435,11 +441,11 @@ function M.access()
         and development_until <= ngx.time()
         and #cache_key <= (tonumber(limits.maximum_cache_key_length) or 4096)
     local admissions = dictionary:incr("security:cache:" .. tostring(config.domain) .. ":" .. second, 1, 0, 2)
-    if admissions and admissions > (tonumber(limits.cache_admissions_per_second) or 50) then cacheable = false end
+    local admission_allowed = not admissions or admissions <= (tonumber(limits.cache_admissions_per_second) or 50)
     if #cache_key > (tonumber(limits.maximum_cache_key_length) or 4096) then ngx.var.cdn_security_reason = "cache_abuse_detected" end
     ngx.var.cdn_cache_key = cache_key
     ngx.var.cdn_cache_bypass = cacheable and "0" or "1"
-    ngx.var.cdn_cache_no_store = "0"
+    ngx.var.cdn_cache_no_store = cacheable and admission_allowed and "0" or "1"
     ngx.var.cdn_cache_edge_ttl = tostring(cache_ttl)
     ngx.var.cdn_cache_browser_ttl = tostring(math.max(0, math.min(31536000, tonumber(cache.browser_ttl_seconds) or 0)))
     ngx.var.cdn_cache_max_object = tostring(math.max(1024, math.min(1073741824, tonumber(cache.maximum_object_bytes) or 104857600)))
@@ -561,7 +567,8 @@ end
 
 function M.cache_status()
     local no_store = ngx.var.upstream_http_x_cdnfoundry_no_store == "1"
-    ngx.header["X-CDNFoundry-Cache"] = (ngx.var.cdn_cache_bypass == "1" or no_store)
+    local admission_bypass = ngx.var.cdn_cache_no_store == "1" and ngx.var.upstream_cache_status ~= "HIT"
+    ngx.header["X-CDNFoundry-Cache"] = (ngx.var.cdn_cache_bypass == "1" or no_store or admission_bypass)
         and "BYPASS" or (ngx.var.upstream_cache_status or "MISS")
 end
 
@@ -607,11 +614,14 @@ function M.record_passive_failure()
 end
 
 function M.finish()
-    local keys = ngx.ctx.security_connection_keys
-    if not keys then return end
-    for _, key in ipairs(keys) do
-        local current = ngx.shared.runtime_limits:incr(key, -1, 0)
-        if current and current <= 0 then ngx.shared.runtime_limits:delete(key) end
+    for _, key in ipairs({
+        ngx.var.cdn_security_client_connection_key,
+        ngx.var.cdn_security_domain_connection_key,
+    }) do
+        if key and key ~= "" then
+            local current = ngx.shared.runtime_limits:incr(key, -1, 0)
+            if current and current <= 0 then ngx.shared.runtime_limits:delete(key) end
+        end
     end
 end
 
@@ -683,6 +693,13 @@ function M.passive_failures()
         memory_usage = tonumber(memory_file:read("*l")) or 0
         memory_file:close()
     end
+    local memory_limit = nil
+    local memory_limit_file = io.open("/sys/fs/cgroup/memory.max", "r")
+    if memory_limit_file then
+        local raw_limit = memory_limit_file:read("*l")
+        if raw_limit ~= "max" then memory_limit = tonumber(raw_limit) end
+        memory_limit_file:close()
+    end
     local cpu_usage = 0
     local cpu_file = io.open("/sys/fs/cgroup/cpu.stat", "r")
     if cpu_file then
@@ -713,8 +730,11 @@ function M.passive_failures()
                 origin_connections = ngx.shared.runtime_limits:get("capacity:origin_connections") or 0,
                 cpu_usage = cpu_usage,
                 memory_usage = memory_usage,
+                memory_limit = memory_limit or cjson.null,
                 cache_usage = 10 * 1024 * 1024 - cache_free,
+                cache_limit = 10 * 1024 * 1024,
                 cache_free_bytes = cache_free,
+                connection_limit = 4096,
                 temporary_storage_usage = cjson.null,
                 telemetry_buffer_usage = cjson.null,
                 rejected_requests = ngx.shared.runtime_limits:get("capacity:rejected_requests") or 0,

@@ -32,10 +32,17 @@ The default edge and quarantine cells use separate listeners, cache volumes, tem
 
 ## Process lifecycle
 
-`core`, `horizon`, and `scheduler` are independent services. Restart one at a time; committed PostgreSQL state is not tied to process lifetime. Replace workers gracefully with `php artisan horizon:terminate`. Readiness checks use bounded PostgreSQL and Valkey timeouts. `/api/health` is process-only liveness; `/api/ready` checks required dependencies; `/api/admin/system/status` adds queue depth and oldest queued-job age per lane.
+`core`, `horizon`, and `scheduler` are independent services. Restart one at a time; committed PostgreSQL state is not tied to process lifetime. Replace workers gracefully with `php artisan horizon:terminate`. Readiness checks use bounded PostgreSQL and Valkey timeouts. `/api/health` is process-only liveness; `/api/ready` checks required dependencies; `/api/admin/system/components` adds dependency state plus queue depth and oldest queued-job age per lane.
+
+Production Compose gives control workers bounded stop windows and sends
+`SIGQUIT` to Nginx/OpenResty listeners, allowing existing requests to finish
+before container replacement. Do not use forced removal for routine rollout.
+The edge agent and runtime still enforce target activation and acknowledgement
+before source drain; a graceful process stop is not a substitute for that
+placement protocol.
 
 ## Durable recovery set
 
-Back up the control PostgreSQL database, `.env.prod` secrets (especially `APP_KEY`), the artifact-signing key, edge identity CA, listener identities, and externally held custom TLS keys. Managed certificate keys are encrypted in control PostgreSQL and are unrecoverable without the same `APP_KEY`. PowerDNS runtime PostgreSQL is derived and rebuildable from desired state, though a backup can shorten recovery. A clean-host restore/RPO/RTO claim is intentionally deferred until the Phase 8 recovery qualification is actually run; Phase 1–5 documentation does not claim it today.
+Back up the control PostgreSQL database through the encrypted off-host Restic workflow, plus `.env.prod` secrets (especially `APP_KEY`), the Restic password/decryption material stored separately, artifact-signing key, edge identity CA, listener identities, and externally held custom TLS keys. Managed certificate keys are encrypted in control PostgreSQL and are unrecoverable without the same `APP_KEY`. PowerDNS runtime PostgreSQL is derived and rebuildable from desired state, though a backup can shorten recovery. See [Operations and recovery](operations/operations-and-recovery.md). A clean-host RPO/RTO claim remains deferred until the production qualification is recorded.
 
 Do not place control PostgreSQL, Valkey, PowerDNS, ClickHouse, or internal metrics on a public network. Use host firewalls in addition to Compose internal networks.

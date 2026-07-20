@@ -1,6 +1,6 @@
 FROM php:8.5-fpm-alpine AS php-dependencies
 
-RUN apk add --no-cache icu-libs libpq libzip libmaxminddb nginx supervisor su-exec \
+RUN apk add --no-cache icu-libs libpq libzip libmaxminddb nginx supervisor su-exec postgresql-client restic \
     && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS icu-dev postgresql-dev libzip-dev \
     && docker-php-ext-install intl pcntl pdo_pgsql zip \
     && apk del .build-deps
@@ -40,7 +40,9 @@ RUN composer dump-autoload --no-dev --classmap-authoritative \
     && chown -R www-data:www-data storage bootstrap/cache
 
 COPY docker/php/entrypoint.sh /usr/local/bin/cdnf-entrypoint
-RUN chmod +x /usr/local/bin/cdnf-entrypoint
+COPY docker/backup/create.sh /usr/local/bin/cdnf-backup-create
+COPY docker/backup/restore.sh /usr/local/bin/cdnf-backup-restore
+RUN chmod +x /usr/local/bin/cdnf-entrypoint /usr/local/bin/cdnf-backup-create /usr/local/bin/cdnf-backup-restore
 
 ENTRYPOINT ["cdnf-entrypoint"]
 CMD ["php-fpm", "-F"]

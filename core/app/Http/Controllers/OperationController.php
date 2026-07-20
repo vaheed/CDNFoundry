@@ -3,11 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\ApplyPlatformDnsSettings;
+use App\Jobs\BuildUsageRollups;
+use App\Jobs\CreateControlBackup;
+use App\Jobs\DeleteControlBackup;
 use App\Jobs\DispatchOriginTest;
 use App\Jobs\ImportDnsZone;
+use App\Jobs\PreflightBackupRestore;
 use App\Jobs\ProvisionEdgePoolCells;
 use App\Jobs\ReconcileAllDnsZones;
 use App\Jobs\ReconcileAllEdgeDomains;
+use App\Jobs\ReconcileAllPurges;
+use App\Jobs\ReconcileAllTls;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Jobs\TestDnsCluster;
@@ -37,7 +43,7 @@ class OperationController extends Controller
     public function retry(Request $request, Operation $operation): JsonResponse
     {
         abort_unless($operation->status === 'failed', 409, 'Only failed operations can be retried.');
-        abort_unless(in_array($operation->type, ['platform_dns_identity.update', 'system_settings.update', 'domain.nameservers_verify', 'dns.zone_reconcile', 'dns.zone_import', 'dns.cluster_test', 'dns.global_reconcile', 'edge.global_reconcile', 'edge.pool_provision', 'edge.domain_reconcile', 'edge.origin_test'], true), 422, 'Unsupported operation type.');
+        abort_unless(in_array($operation->type, ['platform_dns_identity.update', 'system_settings.update', 'domain.nameservers_verify', 'dns.zone_reconcile', 'dns.zone_import', 'dns.cluster_test', 'dns.global_reconcile', 'edge.global_reconcile', 'edges.global_reconcile', 'tls.global_reconcile', 'purges.global_reconcile', 'usage.global_reconcile', 'backup.create', 'backup.restore', 'backup.delete', 'edge.pool_provision', 'edge.domain_reconcile', 'edge.origin_test'], true), 422, 'Unsupported operation type.');
         $operation->update(['status' => 'pending', 'error' => null, 'finished_at' => null]);
         AuditLog::record($request->user(), 'operation.retry_requested', $operation, [], $request->ip());
         match ($operation->type) {
@@ -49,6 +55,13 @@ class OperationController extends Controller
             'dns.cluster_test' => TestDnsCluster::dispatch($operation->getKey()),
             'dns.global_reconcile' => ReconcileAllDnsZones::dispatch($operation->getKey()),
             'edge.global_reconcile' => ReconcileAllEdgeDomains::dispatch($operation->getKey()),
+            'edges.global_reconcile' => ReconcileAllEdgeDomains::dispatch($operation->getKey()),
+            'tls.global_reconcile' => ReconcileAllTls::dispatch($operation->getKey()),
+            'purges.global_reconcile' => ReconcileAllPurges::dispatch($operation->getKey()),
+            'usage.global_reconcile' => BuildUsageRollups::dispatch($operation->input['from'], $operation->input['to'], null, $operation->getKey()),
+            'backup.create' => CreateControlBackup::dispatch($operation->input['backup_id'], $operation->getKey()),
+            'backup.restore' => PreflightBackupRestore::dispatch($operation->input['backup_id'], $operation->getKey()),
+            'backup.delete' => DeleteControlBackup::dispatch($operation->input['backup_id'], $operation->getKey()),
             'edge.pool_provision' => ProvisionEdgePoolCells::dispatch((int) $operation->input['pool_id'], $operation->id),
             'edge.domain_reconcile' => ReconcileEdgeDomain::dispatch((int) $operation->input['domain_id']),
             'edge.origin_test' => DispatchOriginTest::dispatch($operation->getKey()),
