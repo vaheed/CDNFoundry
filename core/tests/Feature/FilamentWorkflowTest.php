@@ -3,16 +3,24 @@
 namespace Tests\Feature;
 
 use App\Enums\DomainLifecycleState;
+use App\Filament\Admin\Pages\Telemetry;
+use App\Filament\Admin\Resources\DnsClusters\Pages\ListDnsClusters;
 use App\Filament\Admin\Resources\Edges\Pages\EditEdge;
+use App\Filament\Admin\Resources\Edges\Pages\ListEdges;
 use App\Filament\Admin\Resources\Edges\RelationManagers\CellsRelationManager;
 use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
 use App\Filament\Domain\Resources\Domains\RelationManagers\DnsRecordsRelationManager;
+use App\Jobs\BuildUsageRollups;
+use App\Jobs\ReconcileAllDnsZones;
+use App\Jobs\ReconcileAllEdgeDomains;
+use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\Domain;
 use App\Models\Edge;
 use App\Models\EdgeArtifact;
 use App\Models\EdgeCell;
 use App\Models\EdgePool;
+use App\Models\Operation;
 use App\Models\User;
 use App\Support\DnsRecordData;
 use Filament\Facades\Filament;
@@ -231,6 +239,70 @@ class FilamentWorkflowTest extends TestCase
 
         $this->assertSame(DomainLifecycleState::Disabled, $domain->refresh()->lifecycle_state);
         $this->assertSame(5, $domain->revision);
+        Queue::assertPushed(ReconcileEdgeDomain::class, fn (ReconcileEdgeDomain $job): bool => $job->domainId === $domain->id);
+    }
+
+    public function test_administrator_can_queue_global_reconciliation_and_bounded_usage_rebuilds(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        $domain = Domain::query()->create(['name' => 'usage-ui.example.test', 'display_name' => 'Usage UI']);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(ListDnsClusters::class)->callAction('reconcileAllZones')->assertHasNoActionErrors();
+        Livewire::test(ListEdges::class)->callAction('reconcileAllDomains')->assertHasNoActionErrors();
+        Livewire::test(Telemetry::class)->callAction('rebuildUsage', data: [
+            'domain_id' => $domain->id,
+            'from' => '2026-07-20 08:00:00',
+            'to' => '2026-07-20 10:00:00',
+        ])->assertHasNoActionErrors();
+
+        $this->assertSame(1, Operation::query()->where('type', 'dns.global_reconcile')->count());
+        $this->assertSame(1, Operation::query()->where('type', 'edge.global_reconcile')->count());
+        $this->assertDatabaseHas('operations', [
+            'type' => 'usage.rebuild',
+            'actor_id' => $admin->id,
+        ]);
+        Queue::assertPushed(ReconcileAllDnsZones::class);
+        Queue::assertPushed(ReconcileAllEdgeDomains::class);
+        Queue::assertPushed(BuildUsageRollups::class);
+    }
+
+    public function test_domain_reconcile_actions_reuse_the_policy_aware_deployment_endpoints(): void
+    {
+        Queue::fake();
+        $user = User::factory()->create();
+        $domain = Domain::query()->create([
+            'name' => 'reconcile-ui.example.test',
+            'display_name' => 'Reconcile UI',
+            'lifecycle_state' => DomainLifecycleState::Active,
+            'revision' => 3,
+        ]);
+        $domain->users()->attach($user);
+        $domain->dnsRecords()->create(DnsRecordData::validate([
+            'type' => 'A',
+            'name' => 'www',
+            'content' => '192.0.2.20',
+            'ttl' => 300,
+            'mode' => 'proxied',
+            'origin' => [
+                'host' => '8.8.8.8', 'port' => 443, 'scheme' => 'https',
+                'host_header' => 'www.reconcile-ui.example.test', 'sni' => 'www.reconcile-ui.example.test',
+                'verify_tls' => true, 'connect_timeout_ms' => 2000, 'response_timeout_ms' => 30000,
+                'retry_count' => 0, 'websocket' => false, 'health_check' => null,
+            ],
+        ], $domain->name));
+        Filament::setCurrentPanel(Filament::getPanel('app'));
+        $this->actingAs($user);
+
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->callAction('reconcileDns')->assertHasNoActionErrors()
+            ->callAction('deployEdge')->assertHasNoActionErrors();
+
+        $this->assertDatabaseHas('operations', ['type' => 'dns.zone_reconcile', 'actor_id' => $user->id]);
+        $this->assertDatabaseHas('operations', ['type' => 'edge.domain_reconcile', 'actor_id' => $user->id]);
+        Queue::assertPushed(ReconcileDnsZone::class, fn (ReconcileDnsZone $job): bool => $job->domainId === $domain->id);
         Queue::assertPushed(ReconcileEdgeDomain::class, fn (ReconcileEdgeDomain $job): bool => $job->domainId === $domain->id);
     }
 }
