@@ -115,6 +115,33 @@ class AnalyticsApiTest extends TestCase
             ->assertUnprocessable();
     }
 
+    public function test_filament_surfaces_show_scope_range_units_partial_state_and_outage(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $admin = User::factory()->admin()->create();
+        Http::fake([
+            config('services.clickhouse.url').'*' => Http::response(''),
+            'http://vector:9598/metrics' => Http::response("vector_buffer_byte_size 42\nvector_component_discarded_events_total 0\n"),
+        ]);
+
+        $this->actingAs($user)->get("/app/analytics?domain={$domain->id}")->assertOk()
+            ->assertSee($domain->name)->assertSee('Partial / provisional')->assertSee('bytes')->assertSee('milliseconds')
+            ->assertSee('Request and bandwidth timeseries')->assertSee('DNS activity')->assertSee('Usage CSV export');
+        $this->actingAs($admin)->get('/admin/telemetry')->assertOk()
+            ->assertSee('Global traffic')->assertSee('Vector metrics available')->assertSee('Global usage CSV');
+
+    }
+
+    public function test_filament_surfaces_label_telemetry_outage_without_failing(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $admin = User::factory()->admin()->create();
+        Http::fake([config('services.clickhouse.url').'*' => Http::response('down', 503), 'http://vector:9598/metrics' => Http::response('', 503)]);
+
+        $this->actingAs($user)->get("/app/analytics?domain={$domain->id}")->assertOk()->assertSee('Analytics unavailable')->assertSee('serving continue normally');
+        $this->actingAs($admin)->get('/admin/telemetry')->assertOk()->assertSee('ClickHouse unavailable')->assertSee('Traffic serving is independent');
+    }
+
     private function ownedDomain(): array
     {
         $user = User::factory()->create();
