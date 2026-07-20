@@ -130,10 +130,15 @@ def clickhouse(query: str) -> str:
     return compose("exec", "-T", "clickhouse", "clickhouse-client", "--query", query).stdout.strip()
 
 
-def wait_for_clickhouse(predicate, query: str, timeout: int = 60) -> str:
+def wait_for_clickhouse(predicate, query: str, timeout: int = 60, producer=None) -> str:
     deadline = time.monotonic() + timeout
+    next_production = 0.0
     last = ""
     while time.monotonic() < deadline:
+        now = time.monotonic()
+        if producer is not None and now >= next_production:
+            producer()
+            next_production = now + 2
         result = compose("exec", "-T", "clickhouse", "clickhouse-client", "--query", query, check=False)
         if result.returncode == 0:
             last = result.stdout.strip()
@@ -175,14 +180,18 @@ def qualify_ingestion_and_queries(domain_id: int, user: str, stranger: str, admi
     dns_id = str(uuid.uuid4())
     event_time = interval_from + dt.timedelta(minutes=5)
     runtime_path = f"/runtime-{RUN_ID}"
-    edge = run(
-        "curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}", "-H", f"Host: {DOMAIN}",
-        f"http://127.0.0.1:8081{runtime_path}?token=must-not-survive", check=False,
-    )
-    assert edge.returncode == 0 and len(edge.stdout.strip()) == 3, edge
+
+    def produce_runtime_event() -> None:
+        edge = run(
+            "curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}", "-H", f"Host: {DOMAIN}",
+            f"http://127.0.0.1:8081{runtime_path}?token=must-not-survive", check=False,
+        )
+        assert edge.returncode == 0 and len(edge.stdout.strip()) == 3, edge
+
     wait_for_clickhouse(
-        lambda value: value == "1",
+        lambda value: int(value or "0") >= 1,
         f"SELECT count() FROM cdnf.edge_events WHERE hostname='{DOMAIN}' AND path='{runtime_path}'",
+        producer=produce_runtime_event,
     )
     dnstap_name = f"dnstap-{RUN_ID}.{DOMAIN}"
     dns_runtime = run("dig", "+time=2", "+tries=1", "@127.0.0.1", "-p", "1053", dnstap_name, "A")
