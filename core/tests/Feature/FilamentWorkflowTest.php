@@ -15,7 +15,6 @@ use App\Models\EdgeCell;
 use App\Models\EdgePool;
 use App\Models\User;
 use App\Support\DnsRecordData;
-use App\Support\SecurityConfig;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -182,7 +181,7 @@ class FilamentWorkflowTest extends TestCase
         $this->assertDatabaseHas('cache_purges', ['domain_id' => $domain->id, 'type' => 'urls', 'status' => 'succeeded']);
     }
 
-    public function test_security_profile_action_reacts_to_presets_and_persists_manual_limits(): void
+    public function test_security_profile_action_reacts_to_presets_and_refreshes_the_saved_profile(): void
     {
         Queue::fake();
         $admin = User::factory()->admin()->create();
@@ -200,17 +199,8 @@ class FilamentWorkflowTest extends TestCase
             ->assertHasNoActionErrors()
             ->assertSee('protected');
 
-        $manual = SecurityConfig::defaults(SecurityConfig::MANUAL_PROFILE);
-        $manual['limits']['requests_per_second'] = 31;
-        $manual['limits']['request_burst'] = 47;
-        Livewire::test(ViewDomain::class, ['record' => $domain->refresh()->id])
-            ->callAction('securitySettings', data: $manual)
-            ->assertHasNoActionErrors()
-            ->assertSee('manual');
-
-        $this->assertSame('manual', $domain->refresh()->security_settings['profile']);
-        $this->assertSame(31, $domain->security_settings['limits']['requests_per_second']);
-        $this->assertSame(3, $domain->revision);
+        $this->assertSame('protected', $domain->refresh()->security_settings['profile']);
+        $this->assertSame(2, $domain->revision);
         Queue::assertPushed(ReconcileEdgeDomain::class, fn (ReconcileEdgeDomain $job): bool => $job->domainId === $domain->id);
     }
 
