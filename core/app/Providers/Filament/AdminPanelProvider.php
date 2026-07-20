@@ -36,7 +36,7 @@ class AdminPanelProvider extends PanelProvider
             ->colors(['primary' => Color::Blue])
             ->sidebarCollapsibleOnDesktop()
             ->databaseNotifications()
-            ->navigationGroups(['Control plane', 'Customers', 'Edge network', 'Operations'])
+            ->navigationGroups(['Control plane', 'Customers', 'Edge network', 'Operations', 'Observe', 'Account'])
             ->discoverResources(in: app_path('Filament/Admin/Resources'), for: 'App\\Filament\\Admin\\Resources')
             ->resources([DomainResource::class])
             ->discoverPages(in: app_path('Filament/Admin/Pages'), for: 'App\\Filament\\Admin\\Pages')

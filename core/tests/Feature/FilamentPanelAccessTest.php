@@ -77,7 +77,7 @@ class FilamentPanelAccessTest extends TestCase
         $admin = User::factory()->admin()->create();
         $user = User::factory()->create();
 
-        foreach (['/admin/users', '/admin/domains', '/admin/dns-clusters', '/admin/edges', '/admin/edge-pools', '/admin/operations', '/admin/audit-logs', '/admin/system-dns-identity', '/admin/platform-settings', '/admin/tokens', '/admin/profile'] as $path) {
+        foreach (['/admin/users', '/admin/domains', '/admin/dns-clusters', '/admin/edges', '/admin/edge-pools', '/admin/operations', '/admin/audit-logs', '/admin/system-dns-identity', '/admin/platform-settings', '/admin/telemetry', '/admin/tokens', '/admin/profile'] as $path) {
             $this->actingAs($admin)->get($path)->assertOk();
             $this->actingAs($user)->get($path)->assertForbidden();
         }

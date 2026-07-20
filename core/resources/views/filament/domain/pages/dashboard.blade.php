@@ -2,11 +2,7 @@
     <div class="cdn-dashboard">
         <div class="cdn-stat-grid">
             @foreach ($this->summary as $stat)
-                <a class="cdn-stat-card" data-tone="{{ $stat['tone'] }}" href="{{ $stat['url'] }}" aria-label="Open {{ $stat['label'] }}">
-                    <div class="cdn-stat-label">{{ $stat['label'] }}</div>
-                    <div class="cdn-stat-value">{{ number_format($stat['value']) }}</div>
-                    <div class="cdn-stat-description">{{ $stat['description'] }}</div>
-                </a>
+                <x-ui.stat-card :label="$stat['label']" :value="number_format($stat['value'])" :description="$stat['description']" :tone="$stat['tone']" :href="$stat['url']" />
             @endforeach
         </div>
 
@@ -19,12 +15,12 @@
                                 <div class="cdn-row-title">{{ $domain->display_name ?: $domain->name }}</div>
                                 <div class="cdn-row-meta">{{ $domain->name }} · {{ $domain->dns_records_count }} records · {{ $domain->proxied_records_count }} proxied</div>
                             </div>
-                            <span class="cdn-status-pill" data-tone="{{ $domain->lifecycle_state->value === 'active' ? 'success' : 'warning' }}">
+                            <x-ui.status-pill :tone="$domain->lifecycle_state->value === 'active' ? 'success' : 'warning'">
                                 {{ str($domain->lifecycle_state->value)->replace('_', ' ')->headline() }}
-                            </span>
+                            </x-ui.status-pill>
                         </a>
                     @empty
-                        <div class="cdn-empty-state">No domains are assigned yet. Create your first domain to begin.</div>
+                        <x-ui.empty-state title="No assigned domains" description="Create a domain or ask an administrator to assign one to this account." />
                     @endforelse
                 </div>
             </x-filament::section>
