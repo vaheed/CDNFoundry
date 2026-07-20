@@ -88,7 +88,9 @@ make dev-scale-e2e
 `make dev-e2e` uses the real HTTP APIs, PostgreSQL, queues, PowerDNS, DNSdist,
 mTLS edge control, pool migration, Pebble DNS-01 issuance, cache/purge delivery,
 and OpenResty HTTP/HTTPS runtime. Browser acceptance is deliberately manual and is specified in
-[manual browser qualification](docs/manual-browser-qualification.md).
+[manual browser qualification](docs/manual-browser-qualification.md). The
+[frontend route coverage audit](docs/frontend-route-coverage.md) maps every
+application route family to its human, automation-only, or agent-only surface.
 
 Production uses immutable commit-SHA GHCR images through
 [`compose.prod.yml`](compose.prod.yml); it has no `latest` tags and no production
