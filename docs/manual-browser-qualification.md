@@ -43,7 +43,7 @@ For every phase, check desktop and narrow mobile widths, browser-console errors,
 
 ### Administrator checkpoints
 
-1. Sign in at `/admin`. Confirm the blue active-navigation treatment, collapsible desktop sidebar, readable responsive stat cards, **Control plane**, **Customers**, **Edge network**, and **Operations** groups, `Local Administrator`, and no missing-theme or console asset errors. The dashboard must show Domains, Users, DNS clusters, Serving edges, Work in progress, Failed operations, Queue lanes, Recent audit activity, and Common tasks without raw unstyled lists.
+1. Open `/` first. Confirm the CDNFoundry landing page (not the Laravel starter screen) links to the domain workspace, administration, and `/api/health`, remains readable in light/dark mode, and has no missing assets. Sign in at `/admin`. Confirm the blue active-navigation treatment, collapsible desktop sidebar, readable responsive stat cards, **Control plane**, **Customers**, **Edge network**, **Operations**, **Observe**, and **Account** groups, `Local Administrator`, and no missing-theme or console asset errors. The dashboard must show Domains, Users, DNS clusters, Serving edges, Work in progress, Failed operations, Queue lanes, Recent audit activity, and Common tasks without raw unstyled lists.
 2. Open **Users** and create:
 
    | Field | Value |
@@ -63,7 +63,7 @@ For every phase, check desktop and narrow mobile widths, browser-console errors,
 ### Domain-user authorization checkpoints
 
 1. Sign in at `/app` as `user@example.test` / `cdnfoundry-user-test`.
-2. Confirm administrator navigation is absent. Confirm the dashboard shows only assigned-domain totals and recent domains, plus the three-step **Start serving a domain** guide; an unassigned domain name must not appear.
+2. Confirm administrator navigation is absent and **Domains**, **Observe**, and **Account** are the only application groups. Confirm the dashboard shows only assigned-domain totals and recent domains, plus the three-step **Start serving a domain** guide; an unassigned domain name must not appear.
 3. Repeat the personal token and profile checks; changes must affect only this user.
 4. Directly request `/admin/users`, `/admin/dns-clusters`, `/admin/audit-logs`, and `/horizon`; all must be forbidden.
 
@@ -147,6 +147,13 @@ dig @127.0.0.1 -p 1053 browser-test.example.test TXT
 ```
 
 Use PowerAdmin only to inspect derived state. Never edit desired state there.
+
+As administrator, open **DNS clusters**, choose **Reconcile all zones**, confirm
+the warning, and copy the resulting `dns.global_reconcile` operation ID. On one
+active domain choose **Domain actions → Reconcile authoritative DNS** and confirm
+the existing or new `dns.zone_reconcile` operation is shown without a duplicate
+active operation. Repeat as its assigned domain user; an unassigned domain must
+remain not found.
 
 ### Phase 2 completion gate
 
@@ -313,6 +320,10 @@ unchanged MX/TXT/CAA records.
 4. Confirm the domain view header shows four compact action menus—**Domain actions**, **Delivery**, **Cache**, and **TLS**—without horizontal overflow at desktop or mobile widths. Confirm the page renders **Domain status**, **Edge delivery**, **Authoritative DNS deployment**, **Cache**, and **TLS** as one ordered stack of cards, with fields reducing to one column on a narrow viewport. Proxy defaults must appear as one readable summary (for example, `Enabled · HTTP/1.1 + HTTP/2 · HTTPS redirect off · 0 origin retries · Maintenance off`) rather than raw JSON or separate boolean/list fragments. Confirm proxied-host count, desired/active revision, placement/pools, failure, and recent validated revisions. The desired revision, active edge revision, retained rollback revisions, and each DNS cluster acknowledgement must show dates rather than bare revision numbers.
 5. Send HTTP and HTTPS through both real edges. Confirm correct origin selection, Host, SNI, IPv4/IPv6 behavior, unknown-host/SNI rejection, and continued serving of the last valid revision after a deliberately invalid candidate.
 6. Move the domain shared → quarantine → dedicated. For each move record the target-ready acknowledgement, target DNS answer, non-null drain deadline, source-removal artifact, final acknowledgement, and active pool. A failed/rejected target must leave source DNS and traffic active.
+7. As administrator, open **Edges**, choose **Reconcile all domains**, confirm the
+   warning, and verify one `edge.global_reconcile` operation processes domains
+   in bounded chunks. This is maintenance reconciliation; the per-domain UI must
+   still have no manual deploy action because normal saves deploy automatically.
 
 Saving **Proxy defaults** alone does not turn a DNS-only record into a proxied
 hostname. Confirm its notice says that no hostname will be deployed until an A,
@@ -582,10 +593,13 @@ two Vector batch intervals. Record exact UTC generation times and byte counts.
    `/admin/telemetry/usage.csv`; both must be forbidden. Confirm no page button
    navigates to a token-protected `/api/admin/...` URL.
 4. Inspect the latest 20 **Finalized usage** rows and open **Global usage CSV**.
-   Rebuild the generated
-   complete UTC interval through the documented administrator API/action using
-   one `Idempotency-Key`; replay it and record the same operation/result. Export
-   again and confirm the selected domain row and contract version are unchanged.
+   Choose **Rebuild usage**, optionally select the disposable domain, enter a
+   complete UTC-hour range no longer than 31 days, confirm, and copy the
+   `usage.rebuild` operation ID. Confirm an end before the start and a range over
+   31 days are rejected. Separately rebuild the same interval through the API
+   with one `Idempotency-Key`; replay it and record the same operation/result.
+   Export again and confirm the selected domain row and contract version are
+   unchanged.
 5. Stop only ClickHouse with `docker compose -f compose.dev.yml stop clickhouse`.
    Refresh both analytics pages: each must render a clear analytics-unavailable
    message while its panel/navigation stays usable. During the interruption,
