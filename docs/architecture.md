@@ -1,7 +1,7 @@
 # CDNFoundry architecture
 
 This is the architecture that exists in the repository today. It describes the
-current control plane, authoritative DNS path, Phase 4 proxy path, Phase 5 TLS/cache path, service-pool
+current control plane, authoritative DNS path, Phase 4 proxy path, Phase 5 TLS/cache path, Phase 6 security path, service-pool
 placement, and failure behaviour. Later roadmap features are called out
 separately so operators do not mistake planned work for a deployed capability.
 
@@ -193,6 +193,27 @@ multicast, platform, edge-service, proxy-loop, and other blocked destinations.
 The standard UI maps HTTP to port 80 and HTTPS to port 443. The typed API allows
 a deliberately configured custom port. TLS verification is meaningful only for
 HTTPS origins.
+
+## Security enforcement path
+
+Phase 6 security settings and ordered rules are desired PostgreSQL state. The
+normal edge reconciler compiles them into the signed per-cell artifact; invalid
+configuration cannot replace the last activated revision. OpenResty evaluates
+the direct or explicitly trusted client IP, local MMDB geography, method and
+size policy, fixed-size client/domain counters, origin concurrency/circuit
+state, and cache admission before expensive work. Request decisions never call
+Laravel, Valkey, PostgreSQL, or ClickHouse.
+
+Cells are resource-bounded and shared by delivery class. Restricted state
+changes only the affected domain's effective profile; quarantine uses the
+existing target-first pool movement so the source remains active until the
+target acknowledges. Agents aggregate at most 20 noisy-domain events per
+heartbeat and persist emergency cell controls across restart. A withdrawn pool
+is excluded from new derived PowerDNS answers without removing other pools.
+
+This is application and origin protection, not upstream volumetric scrubbing.
+Physical circuit saturation must be mitigated by the transit or hosting
+provider before traffic reaches the edge.
 
 ## Administrator change to active runtime
 

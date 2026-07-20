@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\DnsRecord;
 use App\Models\Domain;
 use App\Models\EdgeRevision;
+use App\Models\SecurityRule;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -44,8 +45,24 @@ final class ProxyRevisionRollback
             if ($developmentUntil?->isPast()) {
                 $developmentUntil = null;
             }
+            $security = is_array($snapshot['security'] ?? null) ? $snapshot['security'] : null;
+            $securitySettings = $security === null ? null : [
+                'profile' => $security['profile'], 'quarantine_policy' => $security['quarantine_policy'],
+                'allowed_methods' => $security['allowed_methods'], 'trusted_proxy_cidrs' => $security['trusted_proxy_cidrs'],
+                'limits' => $security['configured_limits'] ?? $security['limits'],
+            ];
+            if ($security !== null) {
+                $locked->securityRules()->delete();
+                $now = now();
+                SecurityRule::query()->insert(collect($security['rules'] ?? [])->map(fn (array $rule): array => [
+                    'domain_id' => $locked->id, 'match_type' => $rule['match_type'], 'value' => $rule['value'],
+                    'action' => $rule['action'], 'priority' => $rule['priority'], 'enabled' => true,
+                    'note' => null, 'created_at' => $now, 'updated_at' => $now,
+                ])->all());
+            }
             $locked->update([
                 'proxy_settings' => $settings, 'cache_settings' => $cacheSettings,
+                'security_settings' => $securitySettings,
                 'cache_epoch' => $locked->cache_epoch + 1, 'cache_development_mode_until' => $developmentUntil,
                 'revision' => $locked->revision + 1,
             ]);

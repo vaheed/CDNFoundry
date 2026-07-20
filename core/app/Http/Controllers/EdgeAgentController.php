@@ -13,9 +13,11 @@ use App\Models\Edge;
 use App\Models\EdgeArtifact;
 use App\Models\EdgeTask;
 use App\Models\Operation;
+use App\Models\SecurityEvent;
 use App\Support\ArtifactSigner;
 use App\Support\EdgeCertificateAuthority;
 use App\Support\PlatformSettings;
+use App\Support\SecurityConfig;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -91,6 +93,11 @@ class EdgeAgentController extends Controller
             'active_sequence' => ['required', 'integer', 'min:0'], 'cells' => ['required', 'array', 'max:32'],
             'cells.*.name' => ['required', 'string', 'max:100', 'distinct'], 'cells.*.status' => ['required', 'in:ready,degraded,failed,drained'],
             'cells.*.capacity' => ['required', 'array', 'max:20'], 'noisy_domains' => ['sometimes', 'array', 'max:20'],
+            'noisy_domains.*.domain_id' => ['required', 'integer', 'exists:domains,id'],
+            'noisy_domains.*.hostname' => ['nullable', 'string', 'max:253'],
+            'noisy_domains.*.reason_code' => ['required', 'string', 'in:'.implode(',', SecurityConfig::REASON_CODES)],
+            'noisy_domains.*.count' => ['required', 'integer', 'between:1,2147483647'],
+            'noisy_domains.*.occurred_at' => ['required', 'integer', 'min:0'],
             'passive_origins' => ['sometimes', 'array', 'max:100'],
             'passive_origins.*.domain' => ['required', 'string', 'max:253'],
             'passive_origins.*.hostname' => ['required', 'string', 'max:253'],
@@ -136,6 +143,29 @@ class EdgeAgentController extends Controller
                     'failure_count' => $failure['failure_count'], 'http_status' => $failure['last_status'] ?: null,
                     'reported_at' => now()->toIso8601String(),
                 ]]);
+        }
+        foreach ($data['noisy_domains'] ?? [] as $event) {
+            $domain = Domain::query()->find($event['domain_id']);
+            if ($domain === null || ! $domain->dnsRecords()->where('mode', 'proxied')->where('name', $event['hostname'])->exists()) {
+                continue;
+            }
+            SecurityEvent::query()->create([
+                'domain_id' => $domain->id, 'edge_id' => $edge->id, 'hostname' => $event['hostname'],
+                'state' => $domain->security_state, 'reason_code' => $event['reason_code'],
+                'details' => ['count' => $event['count']], 'occurred_at' => CarbonImmutable::createFromTimestamp($event['occurred_at']),
+            ]);
+            $settings = $domain->security_settings ?? SecurityConfig::defaults();
+            if ($event['count'] >= 50 && $domain->security_state === 'normal') {
+                $domain->update(['security_state' => 'suspected', 'security_state_changed_at' => now(), 'revision' => $domain->revision + 1]);
+                Operation::coalesceDomain('edge.domain_reconcile', $domain->id);
+                ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
+            }
+            if ($event['count'] >= 100 && str_starts_with($settings['quarantine_policy'], 'automatic')
+                && in_array($domain->refresh()->security_state, ['normal', 'suspected'], true)) {
+                $domain->update(['security_state' => 'restricted', 'security_state_changed_at' => now(), 'revision' => $domain->revision + 1]);
+                Operation::coalesceDomain('edge.domain_reconcile', $domain->id);
+                ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
+            }
         }
         PromoteReadyEdgePlacements::execute();
         $this->completeAcknowledgedTombstones();
@@ -290,6 +320,20 @@ class EdgeAgentController extends Controller
                 $tasks = $purge->tasks()->get();
                 $terminal = $tasks->isNotEmpty() && $tasks->every(fn (EdgeTask $task): bool => in_array($task->status, ['succeeded', 'failed'], true));
                 $purge->update(['status' => $terminal ? ($tasks->contains('status', 'failed') ? 'failed' : 'succeeded') : 'running']);
+            }
+        }
+        if ($row->type === 'emergency_mode' && isset($row->payload['operation_id'])) {
+            $operation = Operation::query()->find($row->payload['operation_id']);
+            if ($operation !== null) {
+                $tasks = EdgeTask::query()->where('type', 'emergency_mode')->where('payload->operation_id', $operation->id)->get();
+                $completed = $tasks->whereIn('status', ['succeeded', 'failed']);
+                $terminal = $tasks->isNotEmpty() && $completed->count() === $tasks->count();
+                $operation->update([
+                    'status' => $terminal ? ($tasks->contains('status', 'failed') ? 'failed' : 'succeeded') : 'running',
+                    'result' => ['tasks' => $tasks->count(), 'completed' => $completed->count()],
+                    'error' => $terminal && $tasks->contains('status', 'failed') ? 'One or more emergency-mode deliveries failed.' : null,
+                    'finished_at' => $terminal ? now() : null,
+                ]);
             }
         }
 

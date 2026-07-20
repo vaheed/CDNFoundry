@@ -263,16 +263,65 @@ func TestPassiveFailuresAreBoundedAndAuthenticated(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{
 			"domain": "example.test", "hostname": "www.example.test", "failure_count": 2,
 			"last_status": 502, "last_failed_at": 123,
-		}}, "cell": map[string]any{"name": "shared-default", "status": "ready", "capacity": map[string]any{}}})
+		}}, "security": []map[string]any{{"domain_id": 1, "reason_code": "client_rate_exceeded", "count": 3}}, "cell": map[string]any{"name": "shared-default", "status": "ready", "capacity": map[string]any{}}})
 	}))
 	defer server.Close()
 	c := &client{http: server.Client(), statusToken: "status-secret", statusURLs: []string{server.URL}}
-	cells, failures := c.runtimeStatus()
+	cells, failures, security := c.runtimeStatus()
 	if len(failures) != 1 || failures[0]["hostname"] != "www.example.test" {
 		t.Fatalf("passive failures were not collected: %#v", failures)
 	}
 	if len(cells) != 1 || cells[0]["name"] != "shared-default" {
 		t.Fatalf("cell status was not collected: %#v", cells)
+	}
+	if len(security) != 1 || security[0]["reason_code"] != "client_rate_exceeded" {
+		t.Fatalf("security top-N was not collected: %#v", security)
+	}
+}
+
+func TestEmergencyModeTargetsOneCellWithBoundedActions(t *testing.T) {
+	controlCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Edge-Status-Token") != "status-secret" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Path == "/passive-failures" {
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{}, "security": []any{}, "cell": map[string]any{"name": "quarantine-default", "status": "ready", "capacity": map[string]any{}}})
+			return
+		}
+		var command struct {
+			Action  string   `json:"action"`
+			Active  bool     `json:"active"`
+			Actions []string `json:"actions"`
+		}
+		_ = json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&command)
+		if command.Action != "emergency_mode" || !command.Active || len(command.Actions) != 2 {
+			http.Error(w, "invalid emergency command", http.StatusBadRequest)
+			return
+		}
+		controlCalls++
+		_, _ = w.Write([]byte(`{"data":{"accepted":true}}`))
+	}))
+	defer server.Close()
+	c := &client{http: server.Client(), statusToken: "status-secret", statusURLs: []string{server.URL + "/passive-failures"}, dir: t.TempDir()}
+	var task edgeTask
+	task.ID = "emergency-1"
+	task.Type = "emergency_mode"
+	task.Payload.CellNames = []string{"quarantine-default"}
+	task.Payload.EmergencyActive = true
+	task.Payload.EmergencyActions = []string{"allow_get_head_only", "disable_origin_retries"}
+	result, status := c.runEmergencyMode(task)
+	if status != "succeeded" || result["status"] != "completed" || controlCalls != 1 {
+		t.Fatalf("emergency mode did not reach the selected cell: status=%s result=%#v calls=%d", status, result, controlCalls)
+	}
+	controls, err := c.loadEmergencyControls()
+	if err != nil || !controls["quarantine-default"].Active {
+		t.Fatalf("emergency mode was not persisted: controls=%#v err=%v", controls, err)
+	}
+	c.runtimeStatus()
+	if controlCalls != 2 {
+		t.Fatalf("persisted emergency mode was not restored: calls=%d", controlCalls)
 	}
 }
 

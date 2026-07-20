@@ -6,6 +6,7 @@ use App\Filament\Domain\Resources\Domains\Pages\CreateDomain;
 use App\Filament\Domain\Resources\Domains\Pages\ListDomains;
 use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
 use App\Filament\Domain\Resources\Domains\RelationManagers\DnsRecordsRelationManager;
+use App\Filament\Domain\Resources\Domains\RelationManagers\SecurityRulesRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\UsersRelationManager;
 use App\Http\Controllers\CacheController;
 use App\Models\Domain;
@@ -13,6 +14,7 @@ use App\Models\EdgeRevision;
 use App\Models\Operation;
 use App\Models\PlatformDnsSetting;
 use App\Support\EdgeRoutingCompiler;
+use App\Support\SecurityConfig;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
@@ -148,6 +150,22 @@ class DomainResource extends Resource
                     TextEntry::make('latestTlsOrder.names')->label('Requested names')->listWithLineBreaks()->placeholder('None'),
                     TextEntry::make('latestTlsOrder.last_error')->label('ACME failure')->placeholder('None')->columnSpanFull(),
                 ])->columns(['default' => 1, 'md' => 2, 'xl' => 3]),
+            Section::make('Security and DDoS readiness')
+                ->description('Local edge enforcement with bounded platform ceilings. This is readiness and isolation, not volumetric upstream scrubbing.')
+                ->icon('heroicon-o-shield-check')
+                ->schema([
+                    TextEntry::make('security_profile')->label('Configured profile')->state(fn (Domain $record): string => ($record->security_settings ?? SecurityConfig::defaults())['profile'])->badge(),
+                    TextEntry::make('security_state')->label('Operational state')->badge(),
+                    TextEntry::make('security_state_changed_at')->label('State changed')->dateTime()->placeholder('Never'),
+                    TextEntry::make('security_rules_count')->label('Rules')->state(fn (Domain $record): int => $record->securityRules()->count()),
+                    TextEntry::make('security_limits_summary')->label('Effective request/origin limits')->state(function (Domain $record): string {
+                        $compiled = SecurityConfig::compile($record);
+                        $limits = $compiled['limits'];
+
+                        return "{$limits['requests_per_second']} req/s · {$limits['connections_per_client']} client connections · {$limits['connections_per_domain']} domain connections · {$limits['origin_max_connections']} origin connections · {$limits['maximum_request_body_size']} body bytes";
+                    })->columnSpanFull(),
+                    TextEntry::make('recent_security_events')->label('Recent reason codes')->state(fn (Domain $record): array => $record->securityEvents()->latest('occurred_at')->limit(10)->get()->map(fn ($event): string => "{$event->reason_code} · {$event->occurred_at->format('Y-m-d H:i:s T')}")->all())->listWithLineBreaks()->placeholder('None')->columnSpanFull(),
+                ])->columns(['default' => 1, 'md' => 2, 'xl' => 4]),
         ]);
     }
 
@@ -161,7 +179,7 @@ class DomainResource extends Resource
 
     public static function getRelations(): array
     {
-        return [DnsRecordsRelationManager::class, UsersRelationManager::class];
+        return [DnsRecordsRelationManager::class, SecurityRulesRelationManager::class, UsersRelationManager::class];
     }
 
     public static function getPages(): array

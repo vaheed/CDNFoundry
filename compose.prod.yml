@@ -238,10 +238,14 @@ services:
       EDGE_CELL_NAME: shared-default
       EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/shared-default.json
       EDGE_STATUS_TOKEN: ${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}
+      GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb
     volumes:
       - ${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro
       - ${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro
       - edge-state:/var/lib/cdnfoundry/runtime:ro
+      - mmdb:/mmdb:ro
+    depends_on:
+      mmdb-updater: { condition: service_healthy }
     read_only: true
     tmpfs:
       - /var/cache/nginx:rw,noexec,nosuid,size=512m
@@ -252,6 +256,7 @@ services:
     mem_limit: 2g
     cpus: 2
     pids_limit: 256
+    sysctls: { net.ipv4.tcp_syncookies: "1" }
     ulimits:
       nofile: { soft: 65536, hard: 65536 }
     deploy:
@@ -270,10 +275,14 @@ services:
       EDGE_CELL_NAME: quarantine-default
       EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/quarantine-default.json
       EDGE_STATUS_TOKEN: ${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}
+      GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb
     volumes:
       - ${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro
       - ${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro
       - edge-state:/var/lib/cdnfoundry/runtime:ro
+      - mmdb:/mmdb:ro
+    depends_on:
+      mmdb-updater: { condition: service_healthy }
     read_only: true
     tmpfs:
       - /var/cache/nginx:rw,noexec,nosuid,size=256m
@@ -284,6 +293,7 @@ services:
     mem_limit: 512m
     cpus: 0.5
     pids_limit: 128
+    sysctls: { net.ipv4.tcp_syncookies: "1" }
     ulimits:
       nofile: { soft: 32768, hard: 32768 }
     deploy:

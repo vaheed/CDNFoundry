@@ -22,6 +22,7 @@ use App\Models\Operation;
 use App\Support\BindZone;
 use App\Support\DnsZoneImporter;
 use App\Support\ProxyRevisionRollback;
+use App\Support\SecurityConfig;
 use App\Support\UploadedCertificate;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -32,6 +33,8 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -233,6 +236,50 @@ class ViewDomain extends ViewRecord
                     ->color($proxiedCount > 0 && $readyEdgeExists ? 'success' : 'warning')
                     ->send();
             }),
+            Action::make('securitySettings')->label('Security profile and limits')->icon('heroicon-o-shield-check')->schema([
+                Select::make('profile')->options(SecurityConfig::profileOptions())->required()->live()
+                    ->helperText(fn (Get $get): string => SecurityConfig::profileDescription((string) $get('profile')))
+                    ->afterStateUpdated(function (?string $state, Set $set): void {
+                        if ($state === null || $state === SecurityConfig::MANUAL_PROFILE) {
+                            return;
+                        }
+                        foreach (SecurityConfig::ceilingLimits($state) as $field => $value) {
+                            $set("limits.$field", $value);
+                        }
+                    }),
+                Select::make('quarantine_policy')->label('Automatic readiness policy')->options([
+                    'manual' => 'Manual', 'automatic' => 'Automatic restriction',
+                    'automatic_with_admin_notification' => 'Automatic restriction with administrator notification',
+                ])->required(),
+                TagsInput::make('allowed_methods')->label('Allowed methods')->suggestions(config('security.allowed_methods'))->required()->nestedRecursiveRules(['in:'.implode(',', config('security.allowed_methods'))]),
+                TagsInput::make('trusted_proxy_cidrs')->label('Trusted L4 proxy CIDRs')->helperText('Leave empty unless requests arrive only through an approved balancer that overwrites X-Forwarded-For.'),
+                ...collect(array_keys(config('security.profiles.standard')))->map(fn (string $field): TextInput => TextInput::make("limits.$field")
+                    ->label(str($field)->replace('_', ' ')->title()->toString())->numeric()
+                    ->minValue($field === 'origin_retry_limit' ? 0 : 1)
+                    ->maxValue(fn (Get $get): int => SecurityConfig::ceilingLimits((string) $get('profile'))[$field])
+                    ->disabled(fn (Get $get): bool => $get('profile') !== SecurityConfig::MANUAL_PROFILE)->dehydrated()->required())->all(),
+            ])->fillForm(fn (): array => $this->record->security_settings ?? SecurityConfig::defaults())
+                ->action(function (array $data): void {
+                    $settings = SecurityConfig::validateSettings($data);
+                    DB::transaction(function () use ($settings): void {
+                        $domain = $this->record->newQuery()->lockForUpdate()->findOrFail($this->record->id);
+                        $domain->update(['security_settings' => $settings, 'revision' => $domain->revision + 1]);
+                        AuditLog::record(auth()->user(), 'security.settings_updated', $domain, ['profile' => $settings['profile'], 'revision' => $domain->revision], request()->ip());
+                    });
+                    $this->record->refresh();
+                    Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
+                    ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
+                    Notification::make()->success()->title('Security profile saved')->body('The bounded policy is queued in the normal signed edge revision.')->send();
+                }),
+            Action::make('restrictSecurity')->label('Restrict domain')->color('warning')->requiresConfirmation()
+                ->visible(fn (): bool => auth()->user()?->isAdmin() === true && ! in_array($this->record->security_state, ['restricted', 'quarantined'], true))
+                ->action(fn () => $this->changeSecurityState('restricted', null)),
+            Action::make('quarantineSecurity')->label('Quarantine domain')->color('danger')->requiresConfirmation()
+                ->visible(fn (): bool => auth()->user()?->isAdmin() === true && $this->record->security_state !== 'quarantined' && $this->record->dnsRecords()->where('mode', 'proxied')->exists())
+                ->action(fn () => $this->changeSecurityState('quarantined', EdgePool::query()->where('enabled', true)->where('withdrawn', false)->where('kind', 'quarantine')->orderBy('id')->firstOrFail())),
+            Action::make('releaseSecurity')->label('Release domain')->color('success')->requiresConfirmation()
+                ->visible(fn (): bool => auth()->user()?->isAdmin() === true && in_array($this->record->security_state, ['restricted', 'quarantined'], true))
+                ->action(fn () => $this->changeSecurityState('recovering', EdgePool::query()->where('enabled', true)->where('withdrawn', false)->where('kind', 'shared')->orderBy('id')->firstOrFail())),
             Action::make('rollbackProxy')->label('Rollback proxy revision')->color('warning')->requiresConfirmation()->schema([
                 Select::make('revision')->options(fn (): array => EdgeRevision::query()->where('domain_id', $this->record->id)->where('status', 'validated')->where('revision', '<', $this->record->revision)->latest('revision')->limit(50)->get()
                     ->mapWithKeys(fn (EdgeRevision $revision): array => [$revision->revision => "#{$revision->revision} · {$revision->created_at->format('Y-m-d H:i:s T')}"])->all())->required(),
@@ -371,6 +418,33 @@ class ViewDomain extends ViewRecord
                 ->icon('heroicon-o-lock-closed')
                 ->color('gray')
                 ->button(),
+            ActionGroup::make($group(['securitySettings', 'restrictSecurity', 'quarantineSecurity', 'releaseSecurity']))
+                ->label('Security')
+                ->icon('heroicon-o-shield-check')
+                ->color('warning')
+                ->button(),
         ];
+    }
+
+    private function changeSecurityState(string $state, ?EdgePool $pool): void
+    {
+        DB::transaction(function () use ($pool, $state): void {
+            $domain = $this->record->newQuery()->lockForUpdate()->findOrFail($this->record->id);
+            $domain->update(['security_state' => $state, 'security_state_changed_at' => now(), 'revision' => $domain->revision + 1]);
+            if ($pool !== null) {
+                DomainEdgePlacement::query()->updateOrCreate(['domain_id' => $domain->id], [
+                    'target_pool_id' => $pool->id, 'desired_revision' => $domain->revision,
+                    'state' => 'deploying', 'drain_after' => null, 'last_error' => null,
+                ]);
+            }
+            $domain->securityEvents()->create([
+                'state' => $state, 'reason_code' => $state === 'quarantined' ? 'domain_quarantined' : 'domain_restricted',
+                'details' => ['actor_id' => auth()->id(), 'target_pool_id' => $pool?->id], 'occurred_at' => now(),
+            ]);
+            AuditLog::record(auth()->user(), "security.domain_$state", $domain, ['revision' => $domain->revision, 'target_pool_id' => $pool?->id], request()->ip());
+        });
+        $operation = Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
+        ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
+        Notification::make()->warning()->title('Security state queued')->body("{$state} is deploying as operation {$operation->id}; placement changes activate the target before draining the source.")->send();
     }
 }

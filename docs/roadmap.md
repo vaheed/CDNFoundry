@@ -670,6 +670,14 @@ The platform defines configurable maximums for:
 
 Every proxied hostname receives safe platform ceilings automatically. A domain user may choose a stricter supported profile or stricter values but cannot raise limits above platform safety ceilings.
 
+The security settings surface offers three shipped, immutable recommendations:
+`standard`, `protected`, and `quarantine`. Selecting one replaces every displayed
+limit with that preset and users cannot edit its values. One `manual` profile is
+the only editable limit set; every field is validated against the field-wise
+platform safety ceiling derived from the shipped presets. Operational
+restriction or quarantine may still compile a stricter effective ceiling than
+the configured profile without overwriting the user's saved settings.
+
 The edge node reserves capacity for the operating system, edge agent, configuration activation, health reporting, and telemetry. OpenResty cells must never be allowed to consume all node memory, processes, file descriptors, or disk.
 
 Runtime code must avoid:
@@ -1923,6 +1931,8 @@ Certificate bundles are part of normal edge revision delivery and atomic activat
 
 ### Phase 6 — Basic Security and DDoS Readiness
 
+> **Implementation progress (2026-07-20):** Phase 6 implementation and agent-owned qualification are complete. Ordered local rules, bounded readiness profiles, request/connection/origin/cache controls, operational states, target-first quarantine, persisted emergency controls, and pool withdrawal passed isolated and cumulative real-runtime qualification. The exact owner-run browser/real-host checklist is current but has not been executed, so Phase 6 is not owner release-qualified. Evidence: [Phase 6 qualification](phase-6-qualification.md).
+
 #### Goal
 
 Provide understandable request protection, origin protection, noisy-neighbour isolation, quarantine, and emergency controls without claiming to be a volumetric scrubbing or advanced WAF platform.
@@ -1963,17 +1973,21 @@ Evaluation is deterministic:
 
 ##### DDoS-Readiness Profiles
 
-Each proxied hostname uses one platform-managed profile:
+Each proxied hostname uses one configured profile:
 
 ```text
 standard
 protected
 quarantine
+manual
 ```
 
 `standard` provides safe normal limits. `protected` lowers expensive limits and increases origin protection during suspicious traffic. `quarantine` applies strict limits, may use cache-only or stale-first behaviour, and may move the domain into the quarantine edge pool.
 
-Users may choose supported profiles and stricter values within platform-defined ranges. Users cannot disable or raise platform safety ceilings.
+The first three are immutable platform-managed recommendations. `manual` is the
+only profile whose values users can edit, and it remains within field-wise
+platform-defined ranges. Users cannot disable or raise platform safety
+ceilings.
 
 ##### Host and Network Readiness
 
@@ -2246,79 +2260,79 @@ GET    /api/domains/{domain}/security/events
 
 ##### Rules
 
-- [ ] IPv4, IPv6, CIDR, country, and continent values validate.
-- [ ] Priority and tie-breaking are deterministic.
-- [ ] Large imports create one desired revision.
-- [ ] Rules deploy and roll back through the normal pipeline.
-- [ ] Security and analytics use the same geographic vocabulary.
-- [ ] Unknown IPv6 geography does not break the domain.
+- [x] IPv4, IPv6, CIDR, country, and continent values validate.
+- [x] Priority and tie-breaking are deterministic.
+- [x] Large imports create one desired revision.
+- [x] Rules deploy and roll back through the normal pipeline.
+- [x] Security and analytics use the same geographic vocabulary.
+- [x] Unknown IPv6 geography does not break the domain.
 
 ##### Early Rejection and Limits
 
-- [ ] Unknown HTTP hosts and TLS SNI names are rejected before expensive processing.
-- [ ] One client IP cannot consume every connection assigned to a domain.
-- [ ] One domain cannot consume every request or connection slot in a cell.
-- [ ] Per-client and total-domain request limits work together.
-- [ ] Fixed-size limit zones cannot grow without bound from random IPs or hostnames.
-- [ ] Maximum header and body sizes reject before unsafe buffering.
-- [ ] Slow-header, slow-body, idle, and keep-alive attacks release resources within configured timeouts.
-- [ ] HTTP/2 stream, header, request-per-connection, and reset-rate limits remain bounded under attack.
-- [ ] Disallowed methods return the defined response.
+- [x] Unknown HTTP hosts and TLS SNI names are rejected before expensive processing.
+- [x] One client IP cannot consume every connection assigned to a domain.
+- [x] One domain cannot consume every request or connection slot in a cell.
+- [x] Per-client and total-domain request limits work together.
+- [x] Fixed-size limit zones cannot grow without bound from random IPs or hostnames.
+- [x] Maximum header and body sizes reject before unsafe buffering.
+- [x] Slow-header, slow-body, idle, and keep-alive attacks release resources within configured timeouts.
+- [x] HTTP/2 stream, header, request-per-connection, and reset-rate limits remain bounded under attack.
+- [x] Disallowed methods return the defined response.
 
 ##### Origin and Cache Protection
 
-- [ ] Origin concurrency remains bounded during a request flood.
-- [ ] Origin retries do not amplify incoming attacks.
-- [ ] The origin circuit breaker serves cached, stale, or controlled error responses.
-- [ ] Random URLs and query strings cannot fill cache storage indefinitely.
-- [ ] Cache and temporary-storage exhaustion in one cell does not affect other cells.
+- [x] Origin concurrency remains bounded during a request flood.
+- [x] Origin retries do not amplify incoming attacks.
+- [x] The origin circuit breaker serves cached, stale, or controlled error responses.
+- [x] Random URLs and query strings cannot fill cache storage indefinitely.
+- [x] Cache and temporary-storage exhaustion in one cell does not affect other cells.
 
 ##### Isolation and Emergency Operations
 
-- [ ] Restricted mode does not reduce limits for unrelated domains.
-- [ ] A quarantined domain moves only after target-cell readiness.
-- [ ] Failed quarantine migration keeps the previous valid placement.
-- [ ] A quarantined domain does not restart unrelated cells.
-- [ ] One cell out-of-memory or crash event does not stop other cells or the agent.
-- [ ] Emergency mode can target a domain, cell, pool, service IP, or edge.
-- [ ] Emergency mode expires automatically when configured.
-- [ ] Service-IP withdrawal removes only the affected pool from new DNS answers.
-- [ ] IPv4 and IPv6 follow equivalent readiness and placement rules.
+- [x] Restricted mode does not reduce limits for unrelated domains.
+- [x] A quarantined domain moves only after target-cell readiness.
+- [x] Failed quarantine migration keeps the previous valid placement.
+- [x] A quarantined domain does not restart unrelated cells.
+- [x] One cell out-of-memory or crash event does not stop other cells or the agent.
+- [x] Emergency mode can target a domain, cell, pool, service IP, or edge.
+- [x] Emergency mode expires automatically when configured.
+- [x] Service-IP withdrawal removes only the affected pool from new DNS answers.
+- [x] IPv4 and IPv6 follow equivalent readiness and placement rules.
 
 ##### Events and Availability
 
-- [ ] Every rejection emits a stable reason code.
-- [ ] Telemetry failure does not interrupt protection or traffic.
-- [ ] Protection rules continue while Laravel, PostgreSQL, Redis/Valkey, and ClickHouse are unavailable.
-- [ ] Bounded top-N noisy-domain metrics do not create per-domain heartbeat explosions.
-- [ ] Legitimate traffic qualification measures false positives for standard and protected profiles.
+- [x] Every rejection emits a stable reason code.
+- [x] Telemetry failure does not interrupt protection or traffic.
+- [x] Protection rules continue while Laravel, PostgreSQL, Redis/Valkey, and ClickHouse are unavailable.
+- [x] Bounded top-N noisy-domain metrics do not create per-domain heartbeat explosions.
+- [x] Legitimate traffic qualification measures false positives for standard and protected profiles.
 
 ##### Scope
 
-- [ ] No CAPTCHA, bot score, challenge, custom WAF language, or volumetric scrubbing exists.
-- [ ] No customer-editable ModSecurity or OWASP CRS rule surface exists.
-- [ ] No runtime security decision calls Laravel or ClickHouse.
-- [ ] Documentation clearly states that physical uplink saturation requires upstream mitigation.
+- [x] No CAPTCHA, bot score, challenge, custom WAF language, or volumetric scrubbing exists.
+- [x] No customer-editable ModSecurity or OWASP CRS rule surface exists.
+- [x] No runtime security decision calls Laravel or ClickHouse.
+- [x] Documentation clearly states that physical uplink saturation requires upstream mitigation.
 
 ##### Browser and Real Runtime
 
 - [ ] User changes between standard and protected profiles within platform ceilings.
 - [ ] Administrator restricts, quarantines, releases, and moves a domain in the browser.
-- [ ] Real IPv4, IPv6, rate, connection, body-size, timeout, origin-capacity, and country tests match displayed events.
-- [ ] Cache-abuse and random-query tests remain inside disk and memory limits.
-- [ ] A simulated attacked domain does not interrupt traffic for a domain in another cell.
-- [ ] Invalid readiness deployment leaves prior rules and placement active.
+- [x] Real IPv4, IPv6, rate, connection, body-size, timeout, origin-capacity, and country tests match displayed events.
+- [x] Cache-abuse and random-query tests remain inside disk and memory limits.
+- [x] A simulated attacked domain does not interrupt traffic for a domain in another cell.
+- [x] Invalid readiness deployment leaves prior rules and placement active.
 
 ##### Documentation
 
-- [ ] Security-rule and ordering guide
-- [ ] DDoS-readiness profile and platform-ceiling guide
-- [ ] Request, connection, timeout, and origin-limit semantics
-- [ ] Trusted client-IP deployment guide
-- [ ] Security and DDoS reason-code reference
-- [ ] Quarantine and recovery runbook
-- [ ] Edge emergency-mode runbook
-- [ ] Explicit volumetric-attack scope boundary
+- [x] Security-rule and ordering guide
+- [x] DDoS-readiness profile and platform-ceiling guide
+- [x] Request, connection, timeout, and origin-limit semantics
+- [x] Trusted client-IP deployment guide
+- [x] Security and DDoS reason-code reference
+- [x] Quarantine and recovery runbook
+- [x] Edge emergency-mode runbook
+- [x] Explicit volumetric-attack scope boundary
 
 ---
 

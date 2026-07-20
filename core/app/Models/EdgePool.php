@@ -16,6 +16,6 @@ class EdgePool extends Model
 
     protected function casts(): array
     {
-        return ['enabled' => 'boolean'];
+        return ['enabled' => 'boolean', 'withdrawn' => 'boolean'];
     }
 }

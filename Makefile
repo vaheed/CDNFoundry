@@ -39,6 +39,7 @@ dev-e2e:
 	python3 tests/e2e/phase4_control_plane.py
 	python3 tests/e2e/phase4_mtls.py
 	python3 tests/e2e/phase5_tls.py
+	python3 tests/e2e/phase6_security.py
 	python3 tests/e2e/phase4_runtime.py
 
 dev-scale-e2e:

@@ -181,6 +181,29 @@ class FilamentWorkflowTest extends TestCase
         $this->assertDatabaseHas('cache_purges', ['domain_id' => $domain->id, 'type' => 'urls', 'status' => 'succeeded']);
     }
 
+    public function test_security_profile_action_reacts_to_presets_and_refreshes_the_saved_profile(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        $domain = Domain::query()->create(['name' => 'security-ui.example.test', 'display_name' => 'Security UI', 'revision' => 1]);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->mountAction('securitySettings')
+            ->assertSet('mountedActions.0.data.profile', 'standard')
+            ->set('mountedActions.0.data.profile', 'protected')
+            ->assertSet('mountedActions.0.data.limits.requests_per_second', 50)
+            ->assertSet('mountedActions.0.data.limits.origin_retry_limit', 1)
+            ->callMountedAction()
+            ->assertHasNoActionErrors()
+            ->assertSee('protected');
+
+        $this->assertSame('protected', $domain->refresh()->security_settings['profile']);
+        $this->assertSame(2, $domain->revision);
+        Queue::assertPushed(ReconcileEdgeDomain::class, fn (ReconcileEdgeDomain $job): bool => $job->domainId === $domain->id);
+    }
+
     public function test_disabling_from_the_domain_panel_automatically_queues_edge_reconciliation(): void
     {
         Queue::fake();
