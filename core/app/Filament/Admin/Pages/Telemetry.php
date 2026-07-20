@@ -2,9 +2,15 @@
 
 namespace App\Filament\Admin\Pages;
 
+use App\Http\Controllers\Admin\UsageController;
+use App\Models\Domain;
 use App\Models\UsageRollup;
 use App\Support\AnalyticsStore;
 use Carbon\CarbonImmutable;
+use Filament\Actions\Action;
+use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Select;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Http;
 use Throwable;
@@ -20,6 +26,39 @@ class Telemetry extends Page
     protected static ?int $navigationSort = 10;
 
     protected string $view = 'filament.admin.pages.telemetry';
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('rebuildUsage')
+                ->label('Rebuild usage')
+                ->icon('heroicon-o-arrow-path')
+                ->color('warning')
+                ->schema([
+                    Select::make('domain_id')->label('Domain (optional)')
+                        ->options(fn (): array => Domain::query()->orderBy('name')->limit(500)->pluck('name', 'id')->all())
+                        ->searchable(),
+                    DateTimePicker::make('from')->label('From (UTC)')->timezone('UTC')->seconds(false)->required(),
+                    DateTimePicker::make('to')->label('To (UTC)')->timezone('UTC')->seconds(false)->required()->after('from'),
+                ])
+                ->fillForm(fn (): array => [
+                    'from' => CarbonImmutable::now('UTC')->subHour()->startOfHour(),
+                    'to' => CarbonImmutable::now('UTC')->startOfHour(),
+                ])
+                ->requiresConfirmation()
+                ->action(function (array $data): void {
+                    request()->merge([
+                        'domain_id' => $data['domain_id'] ?? null,
+                        'from' => CarbonImmutable::parse($data['from'], 'UTC')->startOfHour()->toIso8601String(),
+                        'to' => CarbonImmutable::parse($data['to'], 'UTC')->startOfHour()->toIso8601String(),
+                    ]);
+                    $response = app(UsageController::class)->rebuild(request());
+                    $operation = $response->getData(true)['data'];
+                    Notification::make()->info()->title('Usage rebuild queued')
+                        ->body("Operation {$operation['operation_id']} will rebuild complete UTC hours without changing serving behavior.")->send();
+                }),
+        ];
+    }
 
     public function getStateProperty(): array
     {
