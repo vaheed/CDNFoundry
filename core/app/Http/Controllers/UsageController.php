@@ -40,6 +40,13 @@ class UsageController extends Controller
         }, "usage-domain-{$domain->id}.csv", ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
+    public function csv(Request $request, Domain $domain): StreamedResponse
+    {
+        $request->merge(['format' => 'csv']);
+
+        return $this->export($request, $domain);
+    }
+
     public function range(Request $request): array
     {
         $validated = $request->validate(['from' => ['sometimes', 'date'], 'to' => ['sometimes', 'date']]);

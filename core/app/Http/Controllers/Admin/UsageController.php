@@ -37,6 +37,13 @@ class UsageController extends Controller
         }, 'usage-all-domains.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
+    public function csv(Request $request, DomainUsageController $usage): StreamedResponse
+    {
+        $request->merge(['format' => 'csv']);
+
+        return $this->export($request, $usage);
+    }
+
     public function rebuild(Request $request): JsonResponse
     {
         $data = $request->validate(['domain_id' => ['sometimes', 'integer', 'exists:domains,id'], 'from' => ['required', 'date'], 'to' => ['required', 'date']]);

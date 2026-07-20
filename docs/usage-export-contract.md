@@ -20,3 +20,12 @@ integers, `granularity` is `hour`, and finalized rows use `status=finalized`.
 Consumers must reject unknown contract versions and store the entire compound
 interval identity, not assume delivery order. A newer contract must use a new
 version rather than silently changing column meaning.
+
+Filament downloads use session-authenticated browser routes:
+
+- `/app/analytics/domains/{domain}/usage.csv` for an assigned domain
+- `/admin/telemetry/usage.csv` for an administrator-wide export
+
+These routes force CSV output, apply the same range bounds and policy scope as
+the API, and stream the same contract. They intentionally do not send a browser
+session to token-protected `/api/...` URLs.
