@@ -2525,53 +2525,53 @@ Charts never hide their time range, sampling, units, or partial-data state.
 
 ##### Pipeline
 
-- [ ] DNS telemetry reaches ClickHouse directly through Vector.
-- [ ] Edge telemetry reaches ClickHouse directly through Vector.
-- [ ] Laravel, core PostgreSQL, and Redis/Valkey never ingest raw traffic logs.
-- [ ] Disk buffering survives a temporary ClickHouse outage.
-- [ ] Disk buffering has a hard byte and age limit.
-- [ ] Dropped events are measured and alerted.
-- [ ] IPv4 and IPv6 enrichment works or returns `unknown`.
-- [ ] Authorization, cookies, tokens, private keys, and request bodies never appear in telemetry.
-- [ ] URL, query, user-agent, referrer, and error fields are bounded and sanitized.
-- [ ] Telemetry overload cannot exhaust edge or DNS-host storage.
+- [x] DNS telemetry reaches ClickHouse directly through Vector.
+- [x] Edge telemetry reaches ClickHouse directly through Vector.
+- [x] Laravel, core PostgreSQL, and Redis/Valkey never ingest raw traffic logs.
+- [x] Disk buffering survives a temporary ClickHouse outage.
+- [x] Disk buffering has a hard byte and age limit.
+- [x] Dropped events are measured and alerted.
+- [x] IPv4 and IPv6 enrichment works or returns `unknown`.
+- [x] Authorization, cookies, tokens, private keys, and request bodies never appear in telemetry.
+- [x] URL, query, user-agent, referrer, and error fields are bounded and sanitized.
+- [x] Telemetry overload cannot exhaust edge or DNS-host storage.
 
 ##### Access and Accuracy
 
-- [ ] Domain users see only assigned domains.
-- [ ] Administrators can query global data.
-- [ ] Requests, bandwidth, status, cache, hostname, country, edge, and DNS totals match generated traffic.
-- [ ] Origin latency and failures identify unhealthy origins.
-- [ ] Raw and aggregate queries use consistent domain and time boundaries.
-- [ ] Usage rollups are idempotent.
-- [ ] Missing usage intervals can be rebuilt.
-- [ ] JSON and CSV usage exports are stable for external billing consumers.
+- [x] Domain users see only assigned domains.
+- [x] Administrators can query global data.
+- [x] Requests, bandwidth, status, cache, hostname, country, edge, and DNS totals match generated traffic.
+- [x] Origin latency and failures identify unhealthy origins.
+- [x] Raw and aggregate queries use consistent domain and time boundaries.
+- [x] Usage rollups are idempotent.
+- [x] Missing usage intervals can be rebuilt.
+- [x] JSON and CSV usage exports are stable for external billing consumers.
 
 ##### Failure and Performance
 
-- [ ] ClickHouse restart does not affect DNS, proxy, cache, TLS, or security.
-- [ ] Query limits protect ClickHouse and Laravel.
-- [ ] Expensive filter combinations are rejected or bounded.
-- [ ] Analytics remains responsive across the 20,000-domain qualification dataset.
-- [ ] Partial or delayed telemetry is visibly labelled.
-- [ ] Vector recovery drains backlog without starving live traffic.
+- [x] ClickHouse restart does not affect DNS, proxy, cache, TLS, or security.
+- [x] Query limits protect ClickHouse and Laravel.
+- [x] Expensive filter combinations are rejected or bounded.
+- [x] Analytics remains responsive across the 20,000-domain qualification dataset.
+- [x] Partial or delayed telemetry is visibly labelled.
+- [x] Vector recovery drains backlog without starving live traffic.
 
 ##### Browser and Real Runtime
 
-- [ ] Generated DNS and HTTP traffic appears in domain analytics and logs.
-- [ ] Domain and administrator views enforce different scopes.
-- [ ] Usage export matches generated traffic and remains stable after rebuilding an interval.
-- [ ] ClickHouse interruption is shown as analytics unavailable while traffic continues.
+- [x] Generated DNS and HTTP traffic appears in domain analytics and logs.
+- [x] Domain and administrator views enforce different scopes.
+- [x] Usage export matches generated traffic and remains stable after rebuilding an interval.
+- [x] ClickHouse interruption is shown as analytics unavailable while traffic continues.
 
 ##### Documentation
 
-- [ ] Analytics field and unit reference
-- [ ] Log schema reference
-- [ ] Retention guide
-- [ ] Telemetry-loss semantics
-- [ ] Telemetry privacy, redaction, IP masking, and deletion semantics
-- [ ] Usage export contract
-- [ ] ClickHouse outage runbook
+- [x] Analytics field and unit reference
+- [x] Log schema reference
+- [x] Retention guide
+- [x] Telemetry-loss semantics
+- [x] Telemetry privacy, redaction, IP masking, and deletion semantics
+- [x] Usage export contract
+- [x] ClickHouse outage runbook
 
 ---
 
