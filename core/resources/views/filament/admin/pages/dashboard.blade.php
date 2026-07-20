@@ -2,11 +2,7 @@
     <div class="cdn-dashboard">
         <div class="cdn-stat-grid">
             @foreach ($this->summary as $stat)
-                <a class="cdn-stat-card" data-tone="{{ $stat['tone'] }}" href="{{ $stat['url'] }}" aria-label="Open {{ $stat['label'] }}">
-                    <div class="cdn-stat-label">{{ $stat['label'] }}</div>
-                    <div class="cdn-stat-value">{{ number_format($stat['value']) }}</div>
-                    <div class="cdn-stat-description">{{ $stat['description'] }}</div>
-                </a>
+                <x-ui.stat-card :label="$stat['label']" :value="number_format($stat['value'])" :description="$stat['description']" :tone="$stat['tone']" :href="$stat['url']" />
             @endforeach
         </div>
 
@@ -19,9 +15,9 @@
                                 <div class="cdn-row-title">{{ $lane['label'] }}</div>
                                 <div class="cdn-row-meta"><code>{{ $lane['key'] }}</code> · {{ $lane['oldest'] }}</div>
                             </div>
-                            <span class="cdn-status-pill" data-tone="{{ $lane['tone'] }}">
+                            <x-ui.status-pill :tone="$lane['tone']">
                                 {{ $lane['depth'] === null ? 'Unavailable' : number_format($lane['depth']) }}
-                            </span>
+                            </x-ui.status-pill>
                         </div>
                     @endforeach
                 </div>
@@ -35,10 +31,10 @@
                                 <div class="cdn-row-title">{{ str($entry->action)->replace(['.', '_'], ' ')->headline() }}</div>
                                 <div class="cdn-row-meta">{{ $entry->actor?->email ?? 'System' }} · {{ $entry->created_at?->diffForHumans() }}</div>
                             </div>
-                            <span class="cdn-status-pill">#{{ $entry->id }}</span>
+                            <x-ui.status-pill>#{{ $entry->id }}</x-ui.status-pill>
                         </div>
                     @empty
-                        <div class="cdn-empty-state">No audit activity has been recorded yet.</div>
+                        <x-ui.empty-state title="No audit activity" description="Configuration and security changes will appear here." />
                     @endforelse
                 </div>
             </x-filament::section>
