@@ -82,14 +82,16 @@ def counts(container: str, user: str, database: str) -> set[str]:
 
 
 def ensure_development_repository() -> None:
-    command = ("docker", "compose", "-f", COMPOSE, "exec", "-T", "core", "restic", "snapshots")
+    command = (
+        "docker", "compose", "-f", COMPOSE, "exec", "-T", "--user", "www-data", "core", "restic", "snapshots",
+    )
     probe = run(*command, check=False)
     if probe.returncode == 0:
         return
     details = f"{probe.stdout}\n{probe.stderr}"
     if "repository does not exist" not in details:
         raise RuntimeError(f"unable to inspect development Restic repository:\n{details}")
-    compose("exec", "-T", "core", "restic", "init")
+    compose("exec", "-T", "--user", "www-data", "core", "restic", "init")
 
 
 def main() -> None:
