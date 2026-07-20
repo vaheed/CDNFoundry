@@ -7,7 +7,6 @@ use App\Enums\DomainLifecycleState;
 use App\Filament\Domain\Resources\Domains\DomainResource;
 use App\Http\Controllers\CacheController;
 use App\Http\Controllers\DnsDeploymentController;
-use App\Http\Controllers\ProxyController;
 use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\ImportDnsZone;
 use App\Jobs\ReconcileDnsZone;
@@ -66,14 +65,6 @@ class ViewDomain extends ViewRecord
                     $operation = $response->getData(true)['data'];
                     Notification::make()->info()->title('DNS reconciliation queued')
                         ->body("Operation {$operation['id']} will preserve the previous valid zone until activation succeeds.")->send();
-                }),
-            Action::make('deployEdge')->label('Reconcile edge delivery')->icon('heroicon-o-cloud-arrow-up')
-                ->visible(fn (): bool => $this->record->dnsRecords()->where('mode', 'proxied')->exists())
-                ->action(function (): void {
-                    $response = app(ProxyController::class)->deploy(request(), $this->record);
-                    $operation = $response->getData(true)['data'];
-                    Notification::make()->info()->title('Edge reconciliation queued')
-                        ->body("Operation {$operation['operation_id']} will deploy the latest desired revision.")->send();
                 }),
             Action::make('tlsMode')->label('TLS mode')->icon('heroicon-o-lock-closed')->schema([
                 Select::make('mode')->options(['managed' => 'Managed', 'custom' => 'Custom', 'disabled' => 'Disabled'])->required(),
@@ -422,7 +413,7 @@ class ViewDomain extends ViewRecord
                 ->icon('heroicon-o-globe-alt')
                 ->color('gray')
                 ->button(),
-            ActionGroup::make($group(['deployEdge', 'proxyDefaults', 'rollbackProxy', 'moveEdgePool']))
+            ActionGroup::make($group(['proxyDefaults', 'rollbackProxy', 'moveEdgePool']))
                 ->label('Delivery')
                 ->icon('heroicon-o-cloud')
                 ->button(),
