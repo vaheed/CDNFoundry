@@ -126,9 +126,11 @@ class AnalyticsApiTest extends TestCase
 
         $this->actingAs($user)->get("/app/analytics?domain={$domain->id}")->assertOk()
             ->assertSee($domain->name)->assertSee('Partial / provisional')->assertSee('bytes')->assertSee('milliseconds')
-            ->assertSee('Request and bandwidth timeseries')->assertSee('DNS activity')->assertSee('Usage CSV export');
+            ->assertSee('Request and bandwidth timeseries')->assertSee('DNS activity')->assertSee('Recent logs')->assertSee('Usage CSV export')
+            ->assertDontSee("/api/domains/{$domain->id}/logs", false);
         $this->actingAs($admin)->get('/admin/telemetry')->assertOk()
-            ->assertSee('Global traffic')->assertSee('Vector metrics available')->assertSee('Global usage CSV');
+            ->assertSee('Global traffic')->assertSee('Vector metrics available')->assertSee('Recent logs')->assertSee('Global usage CSV')
+            ->assertDontSee('/api/admin/logs', false);
 
     }
 

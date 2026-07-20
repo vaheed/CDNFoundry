@@ -27,3 +27,10 @@ not describe DNS or edge serving health.
 
 No sampling is currently used. The most recent finalization-delay window is
 marked partial because late Vector delivery can still change its aggregate.
+
+The Filament pages render these values as stat cards, bounded tables, and up to
+10 masked rows from each one-hour raw-log stream; they do not expose API JSON as
+the operator interface. Finalized PostgreSQL usage remains visible when
+ClickHouse is unavailable. API routes continue to require Sanctum credentials,
+while browser CSV buttons use the current authenticated panel session and the
+same domain policy or administrator check.

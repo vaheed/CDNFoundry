@@ -2,6 +2,7 @@
 
 namespace App\Filament\Admin\Pages;
 
+use App\Models\UsageRollup;
 use App\Support\AnalyticsStore;
 use Carbon\CarbonImmutable;
 use Filament\Pages\Page;
@@ -25,15 +26,44 @@ class Telemetry extends Page
         $store = app(AnalyticsStore::class);
         $to = CarbonImmutable::now('UTC');
         $range = ['from' => $to->subDay(), 'to' => $to, 'raw' => false];
+        $rawRange = ['from' => $to->subHour(), 'to' => $to, 'raw' => true];
+        $state = [
+            'available' => false,
+            'meta' => ['from' => $range['from']->toIso8601String(), 'to' => $range['to']->toIso8601String(), 'partial' => true],
+            'summary' => [],
+            'traffic' => [],
+            'dns' => [],
+            'logs' => ['errors' => [], 'security' => [], 'edges' => []],
+            'buffer' => $this->bufferStatus(),
+            'usage' => $this->recentUsage(),
+        ];
         try {
-            return ['available' => true, 'meta' => $store->metadata($range), 'views' => [
-                'Global summary' => [$store->summary(null, $range)],
-                'Global traffic' => $store->aggregate(null, $range, 'traffic'),
-                'Global DNS' => $store->aggregate(null, $range, 'dns'),
-            ], 'buffer' => $this->bufferStatus()];
+            $state['meta'] = $store->metadata($range);
+            $state['summary'] = $store->summary(null, $range);
+            $state['traffic'] = $store->aggregate(null, $range, 'traffic');
+            $state['dns'] = $store->aggregate(null, $range, 'dns');
+            foreach (array_keys($state['logs']) as $stream) {
+                $state['logs'][$stream] = array_slice($store->logs(null, $rawRange, $stream, null)['items'], 0, 10);
+            }
+            $state['available'] = true;
         } catch (Throwable) {
-            return ['available' => false, 'meta' => ['from' => $range['from']->toIso8601String(), 'to' => $range['to']->toIso8601String(), 'partial' => true], 'views' => [], 'buffer' => $this->bufferStatus()];
+            // PostgreSQL usage and Vector health remain independently useful.
         }
+
+        return $state;
+    }
+
+    private function recentUsage(): array
+    {
+        return UsageRollup::query()->with('domain:id,name')->latest('interval_start')->limit(20)->get()
+            ->map(fn (UsageRollup $row): array => [
+                'domain' => $row->domain?->name ?? "Domain #{$row->domain_id}",
+                'interval' => $row->interval_start->toIso8601String(),
+                'requests' => $row->requests,
+                'bytes' => $row->bytes_in + $row->bytes_out,
+                'dns_queries' => $row->dns_queries,
+                'status' => $row->status,
+            ])->all();
     }
 
     private function bufferStatus(): array

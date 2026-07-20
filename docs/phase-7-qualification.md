@@ -7,7 +7,9 @@ Compose development stack without deleting volumes.
 
 - Isolated SQLite feature suite: Phase 7 analytics API/UI tests cover policies,
   bounds, masking, explicit outage behavior, usage idempotency/exports, and both
-  Filament scopes.
+  Filament scopes. Session-authenticated browser CSV routes additionally cover
+  guests, cross-domain access, non-administrators, owners, and administrators;
+  rendered-page checks reject the former token-protected API links.
 - Real runtime: `tests/e2e/phase7_analytics.py` passed direct Vector edge/DNS
   ingestion, DNSTap-backed DNS collection, all domain/admin query surfaces,
   secret/query removal, IPv4 `/24` and IPv6 `/48` masking, stable JSON/CSV usage,

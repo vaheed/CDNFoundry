@@ -549,14 +549,15 @@ two Vector batch intervals. Record exact UTC generation times and byte counts.
 2. Confirm the heading names the selected domain and visibly states the exact
    UTC range, `bytes`, `milliseconds`, and `no sampling`. The newest interval
    must show **Partial / provisional**, not silently appear finalized.
-3. Inspect **Summary**, **Request and bandwidth timeseries**, **Status codes**,
-   **Cache outcomes**, **Countries and continents**, **Hostnames**, **Top URLs**,
+3. Inspect the six summary cards, **Request and bandwidth timeseries**, **Status codes**,
+   **Cache ratio**, **Countries and continents**, **Hostnames**, **Top URLs**,
    **Origin health and latency**, **Edge distribution**, and **DNS activity**.
    Match request/DNS counts, bytes, status, MISS/HIT, hostname, edge, origin
    failure, and security block to the generated evidence. Unknown geography must
    be labelled `ZZ`, never guessed.
-4. Open **Requests logs**, **DNS logs**, **Errors logs**, and **Security logs**.
-   Confirm the selected domain and one-hour raw range only. Verify IPv4 renders
+4. Inspect the **Recent logs** previews for **Requests**, **DNS**, **Errors**, and
+   **Security**. Confirm each preview is limited to at most 10 rows from the
+   selected domain and one-hour raw range. Verify IPv4 renders
    as its `/24`, IPv6 as its `/48`, paths contain no query string, and no
    authorization header, cookie, token, request body, or private key appears.
 5. Open **Usage CSV export**. Confirm the header exactly matches
@@ -572,14 +573,16 @@ two Vector batch intervals. Record exact UTC generation times and byte counts.
 1. Sign in at `/admin`, open **Telemetry**, and confirm **ClickHouse available**,
    **Vector metrics available**, and the current partial/finalized label plus
    exact UTC range and units.
-2. Match **Global summary**, **Global traffic**, and **Global DNS** to the domain
+2. Match the global summary cards, **Global traffic**, and **Global DNS** to the domain
    evidence plus known other traffic. Confirm **Vector buffer and delivery
    metrics** shows bounded buffer/error/drop metrics, not customer secrets.
-3. Open **Errors**, **Security**, and **Edges**. Confirm global data is available
-   only to the administrator. Sign back in as the domain user and directly
-   request `/admin/telemetry` and each `/api/admin/...` link; all must be
-   forbidden.
-4. Open **Usage finalization** and **Global usage CSV**. Rebuild the generated
+3. Inspect the **Recent logs** previews for **Errors**, **Security**, and
+   **Edges** and confirm each has at most 10 masked rows from the last hour.
+   Sign back in as the domain user and directly request `/admin/telemetry` and
+   `/admin/telemetry/usage.csv`; both must be forbidden. Confirm no page button
+   navigates to a token-protected `/api/admin/...` URL.
+4. Inspect the latest 20 **Finalized usage** rows and open **Global usage CSV**.
+   Rebuild the generated
    complete UTC interval through the documented administrator API/action using
    one `Idempotency-Key`; replay it and record the same operation/result. Export
    again and confirm the selected domain row and contract version are unchanged.
