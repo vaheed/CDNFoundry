@@ -34,11 +34,11 @@
         @if ($state['domain'])
             <x-filament::section :heading="'Analytics for ' . $state['domain']->name" :description="($state['meta']['from'] ?? '') . ' through ' . ($state['meta']['to'] ?? '') . ' · UTC · bytes · milliseconds · no sampling'" icon="heroicon-o-chart-bar-square">
                 <div class="flex flex-wrap gap-3">
-                    <span class="cdn-status-pill" data-tone="{{ $state['available'] ? 'success' : 'danger' }}">ClickHouse {{ $state['available'] ? 'available' : 'unavailable' }}</span>
-                    <span class="cdn-status-pill" data-tone="{{ ($state['meta']['partial'] ?? true) ? 'warning' : 'success' }}">{{ ($state['meta']['partial'] ?? true) ? 'Partial / provisional' : 'Finalized' }}</span>
+                    <x-ui.status-pill :tone="$state['available'] ? 'success' : 'danger'">ClickHouse {{ $state['available'] ? 'available' : 'unavailable' }}</x-ui.status-pill>
+                    <x-ui.status-pill :tone="($state['meta']['partial'] ?? true) ? 'warning' : 'success'">{{ ($state['meta']['partial'] ?? true) ? 'Partial / provisional' : 'Finalized' }}</x-ui.status-pill>
                 </div>
                 @if (!$state['available'])
-                    <div class="cdn-empty-state mt-4">Analytics unavailable. DNS and edge serving continue normally; finalized PostgreSQL usage remains available below.</div>
+                    <x-ui.empty-state class="mt-4" title="Analytics unavailable" description="DNS and edge serving continue normally; finalized PostgreSQL usage remains available below." />
                 @endif
             </x-filament::section>
 
@@ -55,11 +55,7 @@
                         ['label' => 'Origin errors', 'value' => number_format((int) ($summary['origin_errors'] ?? 0)), 'description' => 'Origin failures', 'tone' => ((int) ($summary['origin_errors'] ?? 0)) > 0 ? 'warning' : 'success'],
                         ['label' => 'Security blocks', 'value' => number_format((int) ($summary['security_blocks'] ?? 0)), 'description' => 'Protection decisions', 'tone' => 'warning'],
                     ] as $stat)
-                        <div class="cdn-stat-card" data-tone="{{ $stat['tone'] }}">
-                            <div class="cdn-stat-label">{{ $stat['label'] }}</div>
-                            <div class="cdn-stat-value">{{ $stat['value'] }}</div>
-                            <div class="cdn-stat-description">{{ $stat['description'] }}</div>
-                        </div>
+                        <x-ui.stat-card :label="$stat['label']" :value="$stat['value']" :description="$stat['description']" :tone="$stat['tone']" />
                     @endforeach
                 </div>
 
@@ -79,7 +75,7 @@
                                         <div class="min-w-0"><div class="cdn-row-title">{{ $title }}</div><div class="cdn-row-meta">{{ $metrics ?: 'No activity' }}</div></div>
                                     </div>
                                 @empty
-                                    <div class="cdn-empty-state">No data was recorded for this view.</div>
+                                    <x-ui.empty-state title="No data" description="No activity was recorded for this view and time range." />
                                 @endforelse
                             </div>
                         </x-filament::section>
@@ -101,7 +97,7 @@
                                             @if (isset($row['status']))<span class="cdn-status-pill" data-tone="{{ (int) $row['status'] >= 500 ? 'danger' : 'success' }}">{{ $row['status'] }}</span>@endif
                                         </div>
                                     @empty
-                                        <div class="cdn-empty-state">No {{ $stream }} events in the last hour.</div>
+                                        <x-ui.empty-state :title="'No ' . $stream . ' events'" description="Nothing was recorded in the last hour." />
                                     @endforelse
                                 </div>
                             </div>
@@ -114,18 +110,14 @@
                 <div class="mb-4">
                     <x-filament::button tag="a" icon="heroicon-o-arrow-down-tray" :href="route('app.analytics.usage.csv', $state['domain'])">Usage CSV export</x-filament::button>
                 </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left text-sm">
-                        <thead class="text-xs uppercase text-gray-500"><tr><th class="px-3 py-2">UTC interval</th><th class="px-3 py-2 text-right">Requests</th><th class="px-3 py-2 text-right">Transfer</th><th class="px-3 py-2 text-right">DNS</th><th class="px-3 py-2">State</th></tr></thead>
-                        <tbody class="divide-y divide-gray-200 dark:divide-white/10">
+                <x-ui.data-table caption="Finalized domain usage intervals">
+                    <x-slot:header><tr><th>UTC interval</th><th class="text-right">Requests</th><th class="text-right">Transfer</th><th class="text-right">DNS</th><th>State</th></tr></x-slot:header>
                             @forelse ($state['usage'] as $row)
                                 <tr><td class="px-3 py-2 whitespace-nowrap">{{ $row['interval'] }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format($row['requests']) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes($row['bytes']) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format($row['dns_queries']) }}</td><td class="px-3 py-2"><span class="cdn-status-pill" data-tone="{{ $row['status'] === 'finalized' ? 'success' : 'warning' }}">{{ str($row['status'])->headline() }}</span></td></tr>
                             @empty
                                 <tr><td colspan="5" class="px-3 py-6 text-center text-gray-500">No finalized usage intervals are available yet.</td></tr>
                             @endforelse
-                        </tbody>
-                    </table>
-                </div>
+                </x-ui.data-table>
             </x-filament::section>
         @endif
     </div>
