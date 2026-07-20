@@ -14,6 +14,8 @@ class ApiTokens extends Page
 
     protected static ?string $navigationLabel = 'API tokens';
 
+    protected static string|\UnitEnum|null $navigationGroup = 'Account';
+
     protected static ?string $slug = 'tokens';
 
     protected string $view = 'filament.shared.pages.api-tokens';
