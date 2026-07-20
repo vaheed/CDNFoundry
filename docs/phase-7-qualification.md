@@ -24,4 +24,3 @@ Browser automation was not run, as required. The exact owner-run Phase 7 job is
 in `docs/manual-browser-qualification.md`. Phase 7 implementation and agent-owned
 qualification are complete; release qualification remains pending until those
 rendered desktop/mobile checkpoints are recorded as passed.
-

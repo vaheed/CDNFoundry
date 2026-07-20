@@ -27,4 +27,3 @@ not describe DNS or edge serving health.
 
 No sampling is currently used. The most recent finalization-delay window is
 marked partial because late Vector delivery can still change its aggregate.
-
