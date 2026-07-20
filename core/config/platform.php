@@ -2,6 +2,16 @@
 
 return [
     'groups' => [
+        'operations' => [
+            'label' => 'Operations and recovery',
+            'description' => 'Bounded retention and freshness thresholds used by health checks, alerts, and recovery policy.',
+            'fields' => [
+                'audit_retention_days' => ['type' => 'integer', 'label' => 'Audit retention (days)', 'default' => 365, 'description' => 'Delete audit events older than this period in bounded daily batches.', 'rules' => ['required', 'integer', 'between:30,3650']],
+                'scheduler_stale_seconds' => ['type' => 'integer', 'label' => 'Scheduler stale threshold (seconds)', 'default' => 180, 'description' => 'Mark scheduler health degraded when its durable heartbeat is older than this threshold.', 'rules' => ['required', 'integer', 'between:60,3600']],
+                'clock_drift_warning_seconds' => ['type' => 'integer', 'label' => 'Clock drift warning (seconds)', 'default' => 5, 'description' => 'Maximum accepted host clock offset for external monitoring and qualification.', 'rules' => ['required', 'integer', 'between:1,300']],
+                'backup_stale_hours' => ['type' => 'integer', 'label' => 'Backup stale threshold (hours)', 'default' => 26, 'description' => 'Maximum age of the most recent verified encrypted off-host control database backup.', 'rules' => ['required', 'integer', 'between:1,168']],
+            ],
+        ],
         'telemetry' => [
             'label' => 'Telemetry retention and privacy',
             'description' => 'Bounded raw telemetry, aggregate retention, finalization delay, and client-address masking.',

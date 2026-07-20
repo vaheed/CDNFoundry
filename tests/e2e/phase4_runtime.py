@@ -14,6 +14,7 @@ TLS_NAME = "cdnf-phase4-tls-origin-e2e"
 QUARANTINE_NAME = "cdnf-phase4-quarantine-e2e"
 AGENT_NAME = "cdnf-phase4-agent-e2e"
 DEDICATED_NAME = "cdnf-phase4-dedicated-e2e"
+GRACEFUL_CLIENT_NAME = "cdnf-phase4-graceful-client-e2e"
 EDGE_NETWORK = os.environ.get(
     "CDNF_EDGE_NETWORK",
     f"{os.environ.get('COMPOSE_PROJECT_NAME', 'cdnfoundry-dev')}_edge",
@@ -166,8 +167,14 @@ def main() -> None:
         initial = state({"runtime.example": "origin-one.example"}, 1)
         initial["hosts"]["development.example"] = state({"development.example": "development-origin.example"}, 1)["hosts"]["development.example"]
         initial["hosts"]["development.example"]["cache"]["development_mode_until"] = int(time.time()) + 3600
-        for cache_host in ("admission.example", "origin-policy.example", "small-object.example", "stale.example", "no-stale.example"):
+        for cache_host in (
+            "admission.example", "admission-limit.example", "origin-policy.example",
+            "small-object.example", "stale.example", "no-stale.example",
+        ):
             initial["hosts"][cache_host] = state({cache_host: "cache-origin.example"}, 1)["hosts"][cache_host]
+        initial["hosts"]["admission-limit.example"]["security"] = {
+            "limits": {"cache_admissions_per_second": 1},
+        }
         initial["hosts"]["origin-policy.example"]["cache"].update({
             "edge_ttl_seconds": 3, "browser_ttl_seconds": 7, "respect_origin_headers": False,
         })
@@ -254,6 +261,16 @@ def main() -> None:
             assert "X-CDNFoundry-Cache: HIT" in request_with("runtime.example", "/asset.css?a=1").stderr
             assert "X-CDNFoundry-Cache: MISS" in request_with("runtime.example", "/asset.css?a=2").stderr
             assert "max-age=300" in cached.stderr, cached.stderr
+            # The admission ceiling blocks creation of additional cache entries;
+            # it must never bypass a resident entry and stampede the origin.
+            time.sleep(1.05 - (time.time() % 1))
+            admitted = request_with("admission-limit.example", "/resident")
+            resident = request_with("admission-limit.example", "/resident")
+            assert "X-CDNFoundry-Cache: MISS" in admitted.stderr, admitted.stderr
+            assert "X-CDNFoundry-Cache: HIT" in resident.stderr, resident.stderr
+            for _ in range(70):
+                resident = request_with("admission-limit.example", "/resident")
+                assert resident.returncode == 0 and "X-CDNFoundry-Cache: HIT" in resident.stderr, resident.stderr
             for path in ("/set-cookie", "/private", "/no-store", "/vary-star", "/vary-language"):
                 first = request_with("admission.example", path)
                 second = request_with("admission.example", path)
@@ -402,8 +419,19 @@ def main() -> None:
             runtime.write_text('{"invalid"')
             time.sleep(1.5)
             assert request("runtime.example").returncode == 0
+            graceful_client = subprocess.Popen([
+                "docker", "run", "--rm", "--name", GRACEFUL_CLIENT_NAME,
+                "--network", f"container:{NAME}", "curlimages/curl:8.16.0",
+                "-fsS", "-o", "/dev/null", "-H", "Host: runtime.example",
+                "http://127.0.0.1:8080/graceful",
+            ], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            time.sleep(0.75)
+            run("docker", "kill", "--signal=QUIT", NAME)
+            _, graceful_error = graceful_client.communicate(timeout=15)
+            assert graceful_client.returncode == 0, graceful_error
         finally:
             if os.environ.get("CDNF_KEEP_FAILED_RUNTIME") != "1":
+                run("docker", "rm", "-f", GRACEFUL_CLIENT_NAME, check=False)
                 run("docker", "rm", "-f", NAME, check=False)
                 run("docker", "stop", QUARANTINE_NAME, check=False)
                 run("docker", "stop", AGENT_NAME, check=False)

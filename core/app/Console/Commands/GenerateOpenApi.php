@@ -165,9 +165,10 @@ class GenerateOpenApi extends Command
 
         return collect($matches[1])->map(function (string $name): array {
             $schema = match ($name) {
-                'operation', 'edge', 'purge' => ['type' => 'string', 'format' => 'uuid'],
+                'operation', 'edge', 'purge', 'backup', 'job' => ['type' => 'string', 'format' => 'uuid'],
                 'checksum' => ['type' => 'string', 'pattern' => '^[a-f0-9]{64}$'],
                 'group' => ['type' => 'string', 'enum' => array_keys(config('platform.groups', []))],
+                'scope' => ['type' => 'string', 'enum' => ['dns', 'edges', 'tls', 'purges', 'usage']],
                 default => ['type' => 'integer', 'minimum' => 1],
             };
 

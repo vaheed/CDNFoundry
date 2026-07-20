@@ -37,8 +37,14 @@ func TestVerifyAndCompatibility(t *testing.T) {
 	if _, err := verify(base64.StdEncoding.EncodeToString(append(payload, 'x')), checksum, hex.EncodeToString(signature), hex.EncodeToString(public)); err == nil {
 		t.Fatal("tampered payload accepted")
 	}
-	if !compatible("1.0.0", "1.99.99") || compatible("1.1.0", "1.99.99") {
+	if !compatible("1.0.0", "1.99.99") || compatible("1.0.0", "1.0.99") {
 		t.Fatal("compatibility bounds are incorrect")
+	}
+}
+
+func TestVersionCommand(t *testing.T) {
+	if version != "1.1.0" {
+		t.Fatalf("unexpected release version %q", version)
 	}
 }
 

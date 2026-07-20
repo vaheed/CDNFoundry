@@ -1,4 +1,66 @@
 groups:
+  - name: cdnfoundry-operations
+    rules:
+      - alert: ControlPlaneMetricsUnavailable
+        expr: up{job="cdnfoundry-control"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: CDNFoundry operational metrics are unavailable
+      - alert: CDNFoundryComponentUnhealthy
+        expr: cdnfoundry_component_health == 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: A CDNFoundry dependency or reconciliation component is degraded
+      - alert: CDNFoundryQueueBacklog
+        expr: cdnfoundry_queue_depth > 1000 or cdnfoundry_queue_oldest_job_age_seconds > 900
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: A bounded CDNFoundry worker lane has excessive depth or age
+      - alert: CDNFoundryFailedOperations
+        expr: cdnfoundry_operations_failed > 0
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: CDNFoundry has failed operations requiring inspection
+      - alert: CDNFoundryCertificateExpiry
+        expr: cdnfoundry_tls_certificates_expiring > 0
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: One or more active TLS certificates are inside the expiry alert window
+      - alert: DNSDistUnavailable
+        expr: up{job="dnsdist"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: DNSdist authoritative ingress is unavailable
+      - alert: PowerDNSUnavailable
+        expr: up{job="powerdns"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: PowerDNS authoritative backend is unavailable
+      - alert: DNSDistBackendUnavailable
+        expr: dnsdist_server_status == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: DNSdist has marked an authoritative backend unavailable
+      - alert: HostClockUnsynchronized
+        expr: node_timex_sync_status == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: A CDNFoundry host clock is not synchronized
+      - alert: HostClockDrift
+        expr: abs(node_timex_offset_seconds) > 5
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: A CDNFoundry host clock offset exceeds five seconds
   - name: cdnfoundry-telemetry
     rules:
       - alert: TelemetryEventsDropped

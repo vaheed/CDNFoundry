@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AnalyticsController as AdminAnalyticsController;
 use App\Http\Controllers\Admin\AuditLogController;
+use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\DnsClusterController;
 use App\Http\Controllers\Admin\DnsOperationController;
 use App\Http\Controllers\Admin\DomainUserController;
@@ -9,9 +10,12 @@ use App\Http\Controllers\Admin\DomainVerificationController;
 use App\Http\Controllers\Admin\EdgeController;
 use App\Http\Controllers\Admin\EdgeOperationsController;
 use App\Http\Controllers\Admin\EdgePoolController;
+use App\Http\Controllers\Admin\FailedJobController;
 use App\Http\Controllers\Admin\LogController as AdminLogController;
 use App\Http\Controllers\Admin\PlatformDnsSettingsController;
+use App\Http\Controllers\Admin\ReconciliationController;
 use App\Http\Controllers\Admin\SecurityOperationsController;
+use App\Http\Controllers\Admin\SystemOperationsController;
 use App\Http\Controllers\Admin\SystemSettingsController;
 use App\Http\Controllers\Admin\UsageController as AdminUsageController;
 use App\Http\Controllers\Admin\UserController;
@@ -158,6 +162,17 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:account'])->group
         Route::get('/dns/failed-deployments', [DnsOperationController::class, 'failures']);
         Route::post('/dns/reconcile', [DnsOperationController::class, 'reconcile'])->middleware('idempotent');
         Route::get('/system/status', [HealthController::class, 'status']);
+        Route::get('/system/health', [SystemOperationsController::class, 'health']);
+        Route::get('/system/components', [SystemOperationsController::class, 'components']);
+        Route::get('/jobs/failed', [FailedJobController::class, 'index']);
+        Route::post('/jobs/failed/{job}/retry', [FailedJobController::class, 'retry'])->middleware('idempotent');
+        Route::delete('/jobs/failed/{job}', [FailedJobController::class, 'destroy'])->middleware('idempotent');
+        Route::post('/reconcile/{scope}', [ReconciliationController::class, 'run'])->whereIn('scope', ['dns', 'edges', 'tls', 'purges', 'usage'])->middleware('idempotent');
+        Route::get('/backups', [BackupController::class, 'index']);
+        Route::post('/backups', [BackupController::class, 'store'])->middleware('idempotent');
+        Route::get('/backups/{backup}', [BackupController::class, 'show']);
+        Route::post('/backups/{backup}/restore', [BackupController::class, 'restore'])->middleware('idempotent');
+        Route::delete('/backups/{backup}', [BackupController::class, 'destroy'])->middleware('idempotent');
         Route::get('/operations', [OperationController::class, 'index']);
         Route::get('/operations/{operation}', [OperationController::class, 'show']);
         Route::post('/operations/{operation}/retry', [OperationController::class, 'retry'])->middleware('idempotent');

@@ -29,7 +29,7 @@ import (
 	"time"
 )
 
-const version = "1.0.0"
+const version = "1.1.0"
 
 type identity struct{ EdgeID, Certificate, PrivateKey, PublicKey string }
 type state struct {
@@ -55,6 +55,10 @@ type manifest struct {
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		fmt.Println(version)
+		return
+	}
 	c := &client{
 		base: strings.TrimRight(required("EDGE_CONTROL_URL"), "/"), dir: env("EDGE_STATE_DIR", "/var/lib/cdnfoundry/agent"),
 		runtimeDir: env("EDGE_RUNTIME_DIR", ""), statusToken: env("EDGE_STATUS_TOKEN", ""),

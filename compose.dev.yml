@@ -28,6 +28,10 @@ x-core-env: &core-env
   CLICKHOUSE_DATABASE: cdnf
   CLICKHOUSE_USER: cdnf
   CLICKHOUSE_PASSWORD: cdnf-dev-only
+  PROMETHEUS_URL: http://prometheus:9090
+  METRICS_TOKEN_FILE: /run/dev-metrics/metrics-token
+  RESTIC_REPOSITORY: /app/storage/app/restic
+  RESTIC_PASSWORD_FILE: /run/dev-backup/restic-password
 
 x-core: &core
   build:
@@ -45,6 +49,8 @@ x-core: &core
     - core-bootstrap-cache:/app/bootstrap/cache
     - mmdb:/mmdb:ro
     - dev-pki:/run/dev-pki:ro
+    - ./docker/prometheus/dev-metrics-token:/run/dev-metrics/metrics-token:ro
+    - ./docker/backup/dev-restic-password:/run/dev-backup/restic-password:ro
   depends_on:
     dev-pki: { condition: service_completed_successfully }
     vendor-init: { condition: service_completed_successfully }
@@ -213,6 +219,11 @@ services:
       pdns-auth: { condition: service_healthy }
     networks: [dns]
     restart: unless-stopped
+    healthcheck:
+      test: [CMD, python3, -c, "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:8083/metrics', timeout=2).read(1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
 
   pebble:
     image: ghcr.io/letsencrypt/pebble@sha256:ddf230642b1a584f519f32e347de1b05a6e4c1f6c35c1863b33effeab5f78199
@@ -261,8 +272,22 @@ services:
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro
+      - ./docker/prometheus/alerts.test.yml:/etc/prometheus/alerts.test.yml:ro
+      - ./docker/prometheus/dev-metrics-token:/run/secrets/metrics-token:ro
       - prometheus:/prometheus
+    networks: [telemetry, control, dns]
+
+  node-exporter:
+    image: prom/node-exporter:v1.10.2
+    command: [--path.procfs=/host/proc, --path.sysfs=/host/sys, --path.rootfs=/host/root, --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)]
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro,rslave
     networks: [telemetry]
+    read_only: true
+    restart: unless-stopped
 
   alertmanager:
     image: prom/alertmanager:v0.32.1
@@ -272,7 +297,7 @@ services:
 
   origin-http:
     image: nginx:1.30.3-alpine
-    command: [sh, -c, "dd if=/dev/zero of=/tmp/large-object bs=1048576 count=2 >/dev/null 2>&1 && exec nginx -g 'daemon off;'"]
+    command: [sh, -c, "dd if=/dev/zero of=/tmp/large-object bs=1048576 count=2 >/dev/null 2>&1 && dd if=/dev/zero of=/tmp/graceful-object bs=8192 count=1 >/dev/null 2>&1 && exec nginx -g 'daemon off;'"]
     tmpfs: [/tmp:size=4m]
     volumes: [./docker/nginx/origin.conf:/etc/nginx/conf.d/default.conf:ro]
     networks: [edge]

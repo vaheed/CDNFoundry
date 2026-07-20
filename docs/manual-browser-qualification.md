@@ -622,6 +622,75 @@ two Vector batch intervals. Record exact UTC generation times and byte counts.
 - Manual browser qualification: owner-run; **not executed and Phase 7 is not
   release-qualified until every checkpoint above is recorded as passed**.
 
+## Phase 8 — Operations and production qualification
+
+### Administrator operations
+
+1. Sign in at `/admin`. Confirm **Component health** shows every component with
+   exactly Healthy, Degraded, or Unavailable and a check time. The API detail
+   must include control database, queue backend/workers, scheduler, host clock,
+   MMDB, DNS/deployments, ClickHouse, Vector, edge nodes/listeners/cells/pools,
+   placement/configuration/capacity, emergency modes, TLS, purges/runtime tasks,
+   usage, operations, and backups. Stop ClickHouse; confirm only
+   analytics/telemetry degrades while DNSdist UDP/TCP and edge HTTP/HTTPS
+   continue. Restart it and confirm recovery.
+2. Open **Platform settings → Operations and recovery**. Set audit retention
+   `365`, scheduler stale threshold `180`, clock drift warning `5`, and backup
+   stale threshold `26`. Save, refresh, and confirm typed persistence. Values
+   outside displayed bounds must reject the whole save.
+3. Create one disposable failed queue job. Call the failed-jobs API and confirm
+   its lane, job name, first exception line, and time appear but serialized
+   arguments/secrets do not. Correct the cause, retry it, and confirm an audit
+   event. Delete a second disposable failure and confirm deletion is audited.
+4. Invoke DNS, edge, TLS, purge, and usage reconciliation with five UUID
+   `Idempotency-Key` values. Repeat each request and confirm one operation per
+   scope, bounded progress, completion, and no duplicate per-resource storm.
+5. Open Prometheus and confirm `cdnfoundry-control` is up; inspect component,
+   queue depth/age, failed operation, DNS drift, stale edge, and certificate
+   expiry series. Trigger one disposable threshold and confirm Alertmanager
+   receives and later resolves the expected rule without customer labels or
+   secrets.
+6. Sign in as the domain user. Direct requests to system health/components,
+   failed jobs, all reconciliation routes, settings, and Horizon must be
+   forbidden. `/metrics` without the separate bearer token must be not found.
+
+### Recovery, upgrade, and scale evidence
+
+1. Using the approved off-host system, create an encrypted control PostgreSQL
+   backup. Record external ID, checksum, cutoff time, encryption recipient, and
+   separate recovery location for decryption material. Never attach secrets to
+   this record.
+2. Restore on an empty environment and a separate fresh replacement host. Supply
+   the exact recovery set, run forward migrations, rebuild PowerDNS, enroll a
+   fresh edge from a full snapshot, reconcile lost queues and TLS, rebuild one
+   retained usage interval, and verify DNSdist UDP/TCP and edge IPv4/IPv6
+   HTTP/HTTPS. Record measured RPO and RTO.
+3. Stop/restart control, DNSdist, PowerDNS, one DNS database, one edge,
+   ClickHouse, Vector, and the MMDB provider one at a time. Confirm last-valid
+   serving, isolation, graceful activation, recovery, and alerts for each.
+4. Create real clock offset beyond `5` seconds on a disposable host or inject it
+   through the qualified host exporter. Confirm degraded health and alert, then
+   restore synchronization and confirm resolution.
+5. Canary one prior/current mixed-version control worker, DNS target, and edge.
+   Confirm artifact compatibility, stop thresholds, then roll back application
+   images without restoring PostgreSQL.
+6. Run the roadmap dataset: at least 500,000 domains, 1,000,000 DNS records,
+   50,000 daily changes, burst mutations, repeated-domain coalescing, and
+   concurrent multi-DNS/multi-edge deployment. Add an edge and prove an
+   edge-health change does not rewrite every domain.
+
+### Phase 8 completion gate
+
+- Implementation: present for the encrypted Restic backup API/CLI and
+  maintenance-only restore executor.
+- Documentation: current operations/recovery runbook and checklist are present.
+- Automated/runtime qualification: incomplete until every outstanding item in
+  `phase-8-qualification.md` has recorded evidence.
+- Manual browser/host qualification: owner-run; **not executed and not complete
+  until every Phase 8 checkpoint above is recorded as passed**.
+
+---
+
 ## Record the result
 
 For each phase record: date/operator, commit SHA, browser/version, desktop/mobile viewports, exact domain and edge addresses, every checkpoint as pass/fail/not-ready, operation IDs, revisions, screenshots, relevant logs, and any deviations from the example values. Also record Horizon, PowerAdmin, DNSdist UDP/TCP, Prometheus, Alertmanager, and edge results where applicable.

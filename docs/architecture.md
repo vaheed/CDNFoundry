@@ -414,9 +414,11 @@ exist:
 - ClickHouse is provisioned and Vector currently exports its own internal
   Prometheus metrics. The repository does not yet claim that raw edge request
   telemetry is flowing into ClickHouse.
-- Prometheus/Alertmanager services exist, but complete product monitoring and
-  alert coverage must follow their roadmap qualification rather than being
-  assumed from container presence.
+- Prometheus privately scrapes protected control metrics, Vector, and Node
+  Exporter. Alertmanager rules cover component health, bounded queue backlog,
+  failed operations, certificate expiry, telemetry delivery/buffering, and host
+  clock synchronization/drift. Production alert rehearsals remain explicit
+  Phase 8 qualification gates rather than being inferred from container presence.
 
 Verified completion status remains in [roadmap.md](roadmap.md). This distinction
 is important: architecture documentation must describe real runtime behaviour,
