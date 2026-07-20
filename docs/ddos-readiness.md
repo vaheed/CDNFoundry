@@ -1,10 +1,16 @@
 # DDoS readiness profiles
 
-Every proxied domain uses `standard`, `protected`, or `quarantine`. The selected
-profile supplies safety ceilings; a user may make a value stricter but cannot
-raise the ceiling or disable the platform guardrail. `suspected` and
+Every proxied domain selects `standard`, `protected`, `quarantine`, or `manual`.
+The first three are immutable platform recommendations whose exact limits are
+shown in the security action. `manual` is the single editable limit set and
+cannot exceed the field-wise platform safety ceilings. `suspected` and
 `restricted` state enforce at least `protected`; `quarantined` enforces
-`quarantine` regardless of the selected normal profile.
+`quarantine` regardless of the configured normal profile. These operational
+overrides do not rewrite the configured choice.
+
+The exact values, units, manual ranges, API behavior, and owner-run UI checks
+are documented in `request-origin-limits.md` and
+`manual-browser-qualification.md`.
 
 The operational states are `normal`, `suspected`, `restricted`, `quarantined`,
 and `recovering`. Edge heartbeats report at most 20 aggregated noisy-domain

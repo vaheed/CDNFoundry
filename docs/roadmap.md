@@ -670,6 +670,14 @@ The platform defines configurable maximums for:
 
 Every proxied hostname receives safe platform ceilings automatically. A domain user may choose a stricter supported profile or stricter values but cannot raise limits above platform safety ceilings.
 
+The security settings surface offers three shipped, immutable recommendations:
+`standard`, `protected`, and `quarantine`. Selecting one replaces every displayed
+limit with that preset and users cannot edit its values. One `manual` profile is
+the only editable limit set; every field is validated against the field-wise
+platform safety ceiling derived from the shipped presets. Operational
+restriction or quarantine may still compile a stricter effective ceiling than
+the configured profile without overwriting the user's saved settings.
+
 The edge node reserves capacity for the operating system, edge agent, configuration activation, health reporting, and telemetry. OpenResty cells must never be allowed to consume all node memory, processes, file descriptors, or disk.
 
 Runtime code must avoid:
@@ -1965,17 +1973,21 @@ Evaluation is deterministic:
 
 ##### DDoS-Readiness Profiles
 
-Each proxied hostname uses one platform-managed profile:
+Each proxied hostname uses one configured profile:
 
 ```text
 standard
 protected
 quarantine
+manual
 ```
 
 `standard` provides safe normal limits. `protected` lowers expensive limits and increases origin protection during suspicious traffic. `quarantine` applies strict limits, may use cache-only or stale-first behaviour, and may move the domain into the quarantine edge pool.
 
-Users may choose supported profiles and stricter values within platform-defined ranges. Users cannot disable or raise platform safety ceilings.
+The first three are immutable platform-managed recommendations. `manual` is the
+only profile whose values users can edit, and it remains within field-wise
+platform-defined ranges. Users cannot disable or raise platform safety
+ceilings.
 
 ##### Host and Network Readiness
 

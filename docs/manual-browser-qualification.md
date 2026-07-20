@@ -389,7 +389,7 @@ Use an active, nameserver-verified disposable domain assigned to the domain user
 
 Use two disposable proxied domains: one assigned to the domain user and one
 healthy comparison domain placed in another ready cell. Keep IPv4 and IPv6
-service paths active. Sign in at `http://localhost:8080/domain/login` with the
+service paths active. Sign in at `http://localhost:8080/app/login` with the
 documented local domain-user account, and at `/admin/login` with
 `admin@example.test` / `cdnlite-local-admin`. Replace documentation addresses
 with controlled test clients/origins; never block the operator's only access
@@ -397,18 +397,50 @@ path.
 
 ### Domain security rules and profiles
 
-1. Open the assigned domain. Confirm the Security section shows selected and
-   effective profile, operational state, allowed methods, trusted proxy CIDRs,
-   platform ceilings, and request/origin/cache limits. Open **Security →
-   Security profile and limits**.
-2. Select `protected`, policy `manual`, and methods `GET`, `HEAD`, `POST`.
-   Enter each displayed protected ceiling and save. Record the new domain
-   revision and edge operation, refresh, and confirm persistence. Enter one
-   value above its displayed ceiling; save must fail without a revision.
-3. Set `requests_per_second` and `request_burst` below the ceiling, save, and
-   confirm the stricter values deploy. Return to `standard`; confirm values must
-   be explicitly valid for that profile rather than silently raised.
-4. In **Security allow/block rules**, create these enabled rows and record IDs:
+1. Open the assigned domain. Record its current revision. Confirm the Security
+   section shows configured/effective profile, operational state, rule count,
+   recent reason codes, and the effective request/origin summary. Open
+   **Security → Security profile and limits**.
+2. Confirm the selector initially matches the configured profile. Select
+   `standard`. The description must say it is recommended for normal traffic.
+   Every limit field must immediately show the Standard column in
+   `request-origin-limits.md` and remain disabled. Do not save yet; refresh the
+   page and confirm the revision did not change.
+3. Reopen the action and select `protected`. Without closing the modal, confirm
+   every displayed value immediately changes to the Protected column, including
+   `requests_per_second = 50`, `request_burst = 75`,
+   `origin_retry_limit = 1`, and `origin_recovery_timeout = 60`. Every limit
+   remains disabled. Select `quarantine` and confirm all values change again,
+   including `requests_per_second = 10`, `origin_retry_limit = 0`, and
+   `origin_recovery_timeout = 120`.
+4. Select `standard`, policy `manual`, and methods `GET`, `HEAD`, `POST`; save.
+   Confirm the success notification appears, the modal closes, and the Security
+   section immediately shows configured profile `standard` with `100 req/s`
+   without requiring a page reload. Record the one new revision and coalesced
+   edge operation. Refresh and reopen the action; all Standard values must
+   persist and remain disabled.
+5. Select `manual`. Confirm every limit field becomes editable while policy,
+   methods, and trusted proxy fields retain their current values. Set
+   `requests_per_second = 37`, `request_burst = 61`, and
+   `origin_recovery_timeout = 120`; leave every other field within its displayed
+   range. Save and record exactly one new revision/operation. Confirm the page
+   immediately shows `manual` and `37 req/s`; refresh and confirm all three
+   edited values persist.
+6. Reopen the manual profile, enter `requests_per_second = 101`, and save. The
+   field must show its maximum validation error, the modal must retain the
+   input, and no revision, operation, audit success, or effective runtime change
+   may occur. Restore `37`. Repeat with `origin_retry_limit = -1` and
+   `origin_recovery_timeout = 121`; each must fail without durable change.
+7. With the saved manual profile open, select `protected`. Confirm all protected
+   values replace the displayed manual values and are disabled, then cancel the
+   modal. Reopen it and confirm the durable profile is still `manual` with
+   `37`, `61`, and `120`. Select `protected` again and save; confirm exactly one
+   revision, immediate `protected` display, and persistence after refresh.
+8. If the domain is currently restricted or quarantined, separately confirm the
+   configured profile remains the saved choice while the effective profile and
+   enforced summary use the stricter operational-state ceilings. Releasing the
+   disposable domain must restore the configured policy without rewriting it.
+9. In **Security allow/block rules**, create these enabled rows and record IDs:
 
    | Priority | Type | Value | Action | Note |
    |---:|---|---|---|---|
@@ -419,17 +451,17 @@ path.
    | 50 | Country | a known MMDB country code | Block | browser country |
    | 60 | Continent | a known MMDB continent code | Block | browser continent |
 
-5. Confirm malformed IP/CIDR, IPv4 prefix above 32, IPv6 prefix above 128,
+10. Confirm malformed IP/CIDR, IPv4 prefix above 32, IPv6 prefix above 128,
    unsupported geography, priority outside `-1000000..1000000`, and a note
    above 250 characters each remain in the form with errors and create no
    revision. Send controlled requests and confirm first-match priority and ID
    tie-break behavior, including unknown IPv6 geography continuing through
    IP/CIDR evaluation.
-6. Choose **Import rules**. Add multiple preview rows, leave **Replace existing
+11. Choose **Import rules**. Add multiple preview rows, leave **Replace existing
    rules** off, confirm every normalized row before the confirmation, and save.
    All rows must appear under one new desired revision. Repeat with replacement
    after saving evidence; cancel once and confirm cancellation changes nothing.
-7. Configure one **Trusted L4 proxy CIDR** only for a controlled balancer that
+12. Configure one **Trusted L4 proxy CIDR** only for a controlled balancer that
    overwrites `X-Forwarded-For`. A direct spoofed header must not change the
    client identity; traffic from the trusted peer must use its overwritten
    first address. Remove the test CIDR afterward.
