@@ -1,6 +1,18 @@
 <?php
 
 return [
+    'clickhouse' => [
+        'url' => env('CLICKHOUSE_URL', 'http://clickhouse:8123'),
+        'database' => env('CLICKHOUSE_DATABASE', 'cdnf'),
+        'username' => env('CLICKHOUSE_USER', 'cdnf'),
+        'password' => env('CLICKHOUSE_PASSWORD', ''),
+        'connect_timeout' => 1.0,
+        'timeout' => 4.0,
+        'max_execution_time' => 3,
+        'max_memory_usage' => 134217728,
+        'max_rows_to_read' => 10000000,
+        'max_result_rows' => 10001,
+    ],
     'geoip' => ['database' => env('GEOIP_DATABASE', '/mmdb/GeoLite2-City.mmdb')],
     'acme' => [
         'enabled' => filter_var(env('ACME_ENABLED', false), FILTER_VALIDATE_BOOL),

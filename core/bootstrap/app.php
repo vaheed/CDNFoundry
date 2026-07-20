@@ -1,5 +1,6 @@
 <?php
 
+use App\Exceptions\AnalyticsUnavailableException;
 use App\Http\Middleware\AuthenticateEdge;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureHorizonAdmin;
@@ -32,6 +33,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: ['edge/v1/*']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->render(function (AnalyticsUnavailableException $exception, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            return response()->json(['message' => 'Analytics are temporarily unavailable.', 'code' => 'analytics_unavailable', 'details' => (object) []], 503);
+        });
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->is('edge/*'),
         );

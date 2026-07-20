@@ -61,6 +61,11 @@ class Domain extends Model
         return $this->hasMany(SecurityEvent::class);
     }
 
+    public function usageRollups(): HasMany
+    {
+        return $this->hasMany(UsageRollup::class);
+    }
+
     public function activeTlsCertificate(): BelongsTo
     {
         return $this->belongsTo(TlsCertificate::class, 'active_tls_certificate_id');
