@@ -549,8 +549,8 @@ two Vector batch intervals. Record exact UTC generation times and byte counts.
 2. Confirm the heading names the selected domain and visibly states the exact
    UTC range, `bytes`, `milliseconds`, and `no sampling`. The newest interval
    must show **Partial / provisional**, not silently appear finalized.
-3. Inspect the six summary cards, **Request and bandwidth timeseries**, **Status codes**,
-   **Cache ratio**, **Countries and continents**, **Hostnames**, **Top URLs**,
+3. Inspect the six summary cards, **Request and bandwidth timeseries**, **Status
+   codes**, **Cache ratio**, **Countries and continents**, **Hostnames**, **Top URLs**,
    **Origin health and latency**, **Edge distribution**, and **DNS activity**.
    Match request/DNS counts, bytes, status, MISS/HIT, hostname, edge, origin
    failure, and security block to the generated evidence. Unknown geography must
@@ -573,8 +573,8 @@ two Vector batch intervals. Record exact UTC generation times and byte counts.
 1. Sign in at `/admin`, open **Telemetry**, and confirm **ClickHouse available**,
    **Vector metrics available**, and the current partial/finalized label plus
    exact UTC range and units.
-2. Match the global summary cards, **Global traffic**, and **Global DNS** to the domain
-   evidence plus known other traffic. Confirm **Vector buffer and delivery
+2. Match the global summary cards, **Global traffic**, and **Global DNS** to the
+   domain evidence plus known other traffic. Confirm **Vector buffer and delivery
    metrics** shows bounded buffer/error/drop metrics, not customer secrets.
 3. Inspect the **Recent logs** previews for **Errors**, **Security**, and
    **Edges** and confirm each has at most 10 masked rows from the last hour.
