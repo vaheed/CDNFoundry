@@ -17,6 +17,9 @@ Compose development stack without deleting volumes.
   ingestion, DNSTap-backed DNS collection, all domain/admin query surfaces,
   secret/query removal, IPv4 `/24` and IPv6 `/48` masking, stable JSON/CSV usage,
   idempotent rebuild replay, and a 20,000-event aggregation check.
+- Full non-UI `make dev-e2e` reproduction also passed sequential Phase 1 through
+  Phase 7 API, DNS, Geo-DNS, edge-control, mTLS, cache, TLS, security, telemetry,
+  outage, and OpenResty runtime qualification on the preserved local stack.
 - Failure rehearsal: ClickHouse was stopped and restored. DNS and edge endpoints
   continued responding, the analytics API returned `analytics_unavailable`,
   Vector buffered the unique outage event, and the backlog drained afterward.
