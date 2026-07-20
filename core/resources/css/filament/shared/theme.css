@@ -251,6 +251,137 @@
     text-align: center;
 }
 
+.cdn-empty-title {
+    color: rgb(51 65 85);
+    font-size: 0.875rem;
+    font-weight: 650;
+}
+
+.dark .cdn-empty-title {
+    color: rgb(226 232 240);
+}
+
+.cdn-empty-description {
+    margin-top: 0.2rem;
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+}
+
+.cdn-empty-actions {
+    display: flex;
+    justify-content: center;
+    margin-top: 1rem;
+}
+
+.cdn-list-row {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    border-radius: 0.65rem;
+    padding: 0.7rem 0.75rem;
+}
+
+.cdn-list-row:nth-child(odd) {
+    background: rgb(248 250 252);
+}
+
+.dark .cdn-list-row:nth-child(odd) {
+    background: rgb(30 41 59 / 0.55);
+}
+
+.cdn-row-aside {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.cdn-form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    border-top: 1px solid rgb(226 232 240);
+    padding-top: 1.25rem;
+}
+
+.dark .cdn-form-actions {
+    border-top-color: rgb(51 65 85);
+}
+
+.cdn-inline-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.cdn-field-label {
+    display: block;
+    margin-bottom: 0.4rem;
+    color: rgb(51 65 85);
+    font-size: 0.8125rem;
+    font-weight: 650;
+}
+
+.dark .cdn-field-label {
+    color: rgb(226 232 240);
+}
+
+.cdn-field-error {
+    margin-top: 0.35rem;
+    color: rgb(220 38 38);
+    font-size: 0.8125rem;
+}
+
+.cdn-secret-value {
+    display: block;
+    overflow-wrap: anywhere;
+    border-radius: 0.65rem;
+    background: rgb(248 250 252);
+    padding: 0.85rem;
+    user-select: all;
+}
+
+.cdn-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.cdn-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: start;
+    font-size: 0.875rem;
+}
+
+.cdn-data-table thead {
+    color: rgb(100 116 139);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+}
+
+.cdn-data-table th,
+.cdn-data-table td {
+    padding: 0.65rem 0.75rem;
+}
+
+.cdn-data-table tbody tr + tr {
+    border-top: 1px solid rgb(226 232 240);
+}
+
+.dark .cdn-data-table thead {
+    color: rgb(148 163 184);
+}
+
+.dark .cdn-data-table tbody tr + tr {
+    border-top-color: rgb(255 255 255 / 0.1);
+}
+
+.dark .cdn-secret-value {
+    background: rgb(30 41 59);
+}
+
 .dark .cdn-empty-state {
     border-color: rgb(71 85 105);
     color: rgb(148 163 184);
@@ -287,6 +418,11 @@
 @media (min-width: 40rem) {
     .cdn-stat-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .cdn-inline-form {
+        flex-direction: row;
+        align-items: end;
     }
 }
 

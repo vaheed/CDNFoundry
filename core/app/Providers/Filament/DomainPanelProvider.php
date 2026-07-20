@@ -35,6 +35,7 @@ class DomainPanelProvider extends PanelProvider
             ->readOnlyRelationManagersOnResourceViewPagesByDefault(false)
             ->colors(['primary' => Color::Blue])
             ->sidebarCollapsibleOnDesktop()
+            ->navigationGroups(['Domains', 'Observe', 'Account'])
             ->discoverResources(in: app_path('Filament/Domain/Resources'), for: 'App\\Filament\\Domain\\Resources')
             ->discoverPages(in: app_path('Filament/Domain/Pages'), for: 'App\\Filament\\Domain\\Pages')
             ->pages([DomainDashboard::class, ApiTokens::class])

@@ -35,7 +35,7 @@ class DomainResource extends Resource
 
     public static function getNavigationGroup(): string|\UnitEnum|null
     {
-        return Filament::getCurrentPanel()?->getId() === 'admin' ? 'Customers' : null;
+        return Filament::getCurrentPanel()?->getId() === 'admin' ? 'Customers' : 'Domains';
     }
 
     public static function form(Schema $schema): Schema

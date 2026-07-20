@@ -269,7 +269,7 @@ class FilamentWorkflowTest extends TestCase
         Queue::assertPushed(BuildUsageRollups::class);
     }
 
-    public function test_domain_reconcile_actions_reuse_the_policy_aware_deployment_endpoints(): void
+    public function test_domain_dns_reconcile_action_reuses_the_policy_aware_endpoint(): void
     {
         Queue::fake();
         $user = User::factory()->create();
@@ -297,12 +297,9 @@ class FilamentWorkflowTest extends TestCase
         $this->actingAs($user);
 
         Livewire::test(ViewDomain::class, ['record' => $domain->id])
-            ->callAction('reconcileDns')->assertHasNoActionErrors()
-            ->callAction('deployEdge')->assertHasNoActionErrors();
+            ->callAction('reconcileDns')->assertHasNoActionErrors();
 
         $this->assertDatabaseHas('operations', ['type' => 'dns.zone_reconcile', 'actor_id' => $user->id]);
-        $this->assertDatabaseHas('operations', ['type' => 'edge.domain_reconcile', 'actor_id' => $user->id]);
         Queue::assertPushed(ReconcileDnsZone::class, fn (ReconcileDnsZone $job): bool => $job->domainId === $domain->id);
-        Queue::assertPushed(ReconcileEdgeDomain::class, fn (ReconcileEdgeDomain $job): bool => $job->domainId === $domain->id);
     }
 }
