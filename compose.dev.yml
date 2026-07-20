@@ -260,6 +260,7 @@ services:
     ports: ["9090:9090"]
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro
       - prometheus:/prometheus
     networks: [telemetry]
 
