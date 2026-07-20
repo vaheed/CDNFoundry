@@ -9,6 +9,8 @@ use Illuminate\Validation\ValidationException;
 
 final class SecurityConfig
 {
+    public const MANUAL_PROFILE = 'manual';
+
     public const REASON_CODES = [
         'unknown_host', 'unknown_sni', 'invalid_method', 'malformed_request', 'header_too_large',
         'body_too_large', 'header_timeout', 'body_timeout', 'client_rate_exceeded',
@@ -19,29 +21,70 @@ final class SecurityConfig
 
     public static function defaults(string $profile = 'standard'): array
     {
-        $profile = array_key_exists($profile, config('security.profiles')) ? $profile : 'standard';
+        $profile = array_key_exists($profile, self::profileOptions()) ? $profile : 'standard';
 
         return [
             'profile' => $profile,
             'quarantine_policy' => 'manual',
             'allowed_methods' => config('security.allowed_methods'),
             'trusted_proxy_cidrs' => [],
-            'limits' => config("security.profiles.$profile"),
+            'limits' => self::ceilingLimits($profile),
         ];
+    }
+
+    public static function profileOptions(): array
+    {
+        return [
+            'standard' => 'Standard — balanced recommended defaults',
+            'protected' => 'Protected — stricter recommended defaults',
+            'quarantine' => 'Quarantine — strictest recommended defaults',
+            self::MANUAL_PROFILE => 'Manual — custom limits',
+        ];
+    }
+
+    public static function profileDescription(string $profile): string
+    {
+        return match ($profile) {
+            'protected' => 'Recommended for traffic under elevated risk. Its displayed limits are fixed.',
+            'quarantine' => 'Recommended for isolating high-risk traffic. Its displayed limits are fixed.',
+            self::MANUAL_PROFILE => 'Edit one custom set of limits. Values cannot exceed the platform safety ceilings.',
+            default => 'Recommended for normal traffic. Its displayed limits are fixed.',
+        };
+    }
+
+    public static function ceilingLimits(string $profile): array
+    {
+        if ($profile === self::MANUAL_PROFILE) {
+            return collect(config('security.profiles'))
+                ->reduce(function (array $ceilings, array $limits): array {
+                    foreach ($limits as $field => $value) {
+                        $ceilings[$field] = max($ceilings[$field] ?? $value, $value);
+                    }
+
+                    return $ceilings;
+                }, []);
+        }
+
+        $limits = config("security.profiles.$profile");
+
+        return is_array($limits) ? $limits : config('security.profiles.standard');
     }
 
     public static function validateSettings(array $input): array
     {
-        $profiles = array_keys(config('security.profiles'));
+        $profiles = array_keys(self::profileOptions());
         $profile = (string) ($input['profile'] ?? 'standard');
-        $ceilings = config("security.profiles.$profile");
-        if (! is_array($ceilings)) {
+        if (! in_array($profile, $profiles, true)) {
             throw ValidationException::withMessages(['profile' => 'The selected security profile is invalid.']);
         }
+        $ceilings = self::ceilingLimits($profile);
         $integerRules = [];
         foreach ($ceilings as $field => $maximum) {
             $minimum = in_array($field, ['origin_retry_limit'], true) ? 0 : 1;
             $integerRules["limits.$field"] = ['required', 'integer', "between:$minimum,$maximum"];
+            if ($profile !== self::MANUAL_PROFILE) {
+                $integerRules["limits.$field"][] = Rule::in([$maximum]);
+            }
         }
         $data = Validator::make($input, [
             'profile' => ['required', Rule::in($profiles)],
@@ -68,7 +111,7 @@ final class SecurityConfig
             'restricted', 'suspected' => 'protected',
             default => $configured['profile'],
         };
-        $enforced = config("security.profiles.$enforcedProfile");
+        $enforced = self::ceilingLimits($enforcedProfile);
         $limits = [];
         foreach ($enforced as $name => $maximum) {
             $limits[$name] = min((int) ($configured['limits'][$name] ?? $maximum), (int) $maximum);

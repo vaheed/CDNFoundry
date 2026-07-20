@@ -43,6 +43,52 @@ class SecurityApiTest extends TestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'security.settings_updated', 'subject_id' => (string) $domain->id]);
     }
 
+    public function test_recommended_profiles_are_fixed_and_the_single_manual_profile_is_bounded(): void
+    {
+        Queue::fake();
+        [$user, $domain] = $this->ownedDomain();
+
+        foreach (['standard', 'protected', 'quarantine'] as $profile) {
+            $settings = $this->settings($profile);
+            $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/security", $settings)->assertAccepted();
+            $this->assertSame(config("security.profiles.$profile"), $domain->refresh()->security_settings['limits']);
+
+            $changed = $settings;
+            $changed['limits']['requests_per_second']--;
+            $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/security", $changed)
+                ->assertUnprocessable()->assertJsonValidationErrors('limits.requests_per_second');
+        }
+
+        $manual = $this->settings(SecurityConfig::MANUAL_PROFILE);
+        $manual['limits']['requests_per_second'] = 37;
+        $manual['limits']['request_burst'] = 61;
+        $manual['limits']['origin_recovery_timeout'] = 120;
+        $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/security", $manual)->assertAccepted();
+        $this->assertSame('manual', $domain->refresh()->security_settings['profile']);
+        $this->assertSame(37, $domain->security_settings['limits']['requests_per_second']);
+        $this->assertSame(120, $domain->security_settings['limits']['origin_recovery_timeout']);
+
+        $manual['limits']['requests_per_second'] = config('security.profiles.standard.requests_per_second') + 1;
+        $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/security", $manual)
+            ->assertUnprocessable()->assertJsonValidationErrors('limits.requests_per_second');
+    }
+
+    public function test_manual_limits_compile_under_stricter_operational_state_ceilings(): void
+    {
+        [, $domain] = $this->ownedDomain();
+        $manual = SecurityConfig::defaults(SecurityConfig::MANUAL_PROFILE);
+        $manual['limits']['requests_per_second'] = 80;
+        $manual['limits']['origin_max_connections'] = 100;
+        $domain->update(['security_settings' => $manual, 'security_state' => 'restricted']);
+
+        $compiled = SecurityConfig::compile($domain->refresh());
+
+        $this->assertSame('manual', $compiled['profile']);
+        $this->assertSame('protected', $compiled['effective_profile']);
+        $this->assertSame(50, $compiled['limits']['requests_per_second']);
+        $this->assertSame(64, $compiled['limits']['origin_max_connections']);
+    }
+
     public function test_ipv4_ipv6_cidr_and_geo_rules_validate_and_order_deterministically(): void
     {
         [$user, $domain] = $this->ownedDomain();

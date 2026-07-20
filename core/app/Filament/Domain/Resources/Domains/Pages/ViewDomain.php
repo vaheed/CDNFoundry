@@ -33,6 +33,8 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -235,7 +237,16 @@ class ViewDomain extends ViewRecord
                     ->send();
             }),
             Action::make('securitySettings')->label('Security profile and limits')->icon('heroicon-o-shield-check')->schema([
-                Select::make('profile')->options(['standard' => 'Standard', 'protected' => 'Protected', 'quarantine' => 'Quarantine'])->required(),
+                Select::make('profile')->options(SecurityConfig::profileOptions())->required()->live()
+                    ->helperText(fn (Get $get): string => SecurityConfig::profileDescription((string) $get('profile')))
+                    ->afterStateUpdated(function (?string $state, Set $set): void {
+                        if ($state === null || $state === SecurityConfig::MANUAL_PROFILE) {
+                            return;
+                        }
+                        foreach (SecurityConfig::ceilingLimits($state) as $field => $value) {
+                            $set("limits.$field", $value);
+                        }
+                    }),
                 Select::make('quarantine_policy')->label('Automatic readiness policy')->options([
                     'manual' => 'Manual', 'automatic' => 'Automatic restriction',
                     'automatic_with_admin_notification' => 'Automatic restriction with administrator notification',
@@ -243,7 +254,10 @@ class ViewDomain extends ViewRecord
                 TagsInput::make('allowed_methods')->label('Allowed methods')->suggestions(config('security.allowed_methods'))->required()->nestedRecursiveRules(['in:'.implode(',', config('security.allowed_methods'))]),
                 TagsInput::make('trusted_proxy_cidrs')->label('Trusted L4 proxy CIDRs')->helperText('Leave empty unless requests arrive only through an approved balancer that overwrites X-Forwarded-For.'),
                 ...collect(array_keys(config('security.profiles.standard')))->map(fn (string $field): TextInput => TextInput::make("limits.$field")
-                    ->label(str($field)->replace('_', ' ')->title()->toString())->numeric()->minValue($field === 'origin_retry_limit' ? 0 : 1)->required())->all(),
+                    ->label(str($field)->replace('_', ' ')->title()->toString())->numeric()
+                    ->minValue($field === 'origin_retry_limit' ? 0 : 1)
+                    ->maxValue(fn (Get $get): int => SecurityConfig::ceilingLimits((string) $get('profile'))[$field])
+                    ->disabled(fn (Get $get): bool => $get('profile') !== SecurityConfig::MANUAL_PROFILE)->dehydrated()->required())->all(),
             ])->fillForm(fn (): array => $this->record->security_settings ?? SecurityConfig::defaults())
                 ->action(function (array $data): void {
                     $settings = SecurityConfig::validateSettings($data);
@@ -252,6 +266,7 @@ class ViewDomain extends ViewRecord
                         $domain->update(['security_settings' => $settings, 'revision' => $domain->revision + 1]);
                         AuditLog::record(auth()->user(), 'security.settings_updated', $domain, ['profile' => $settings['profile'], 'revision' => $domain->revision], request()->ip());
                     });
+                    $this->record->refresh();
                     Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
                     ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
                     Notification::make()->success()->title('Security profile saved')->body('The bounded policy is queued in the normal signed edge revision.')->send();

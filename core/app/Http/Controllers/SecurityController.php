@@ -151,7 +151,7 @@ class SecurityController extends Controller
     {
         $settings = is_array($domain->security_settings) ? $domain->security_settings : SecurityConfig::defaults();
 
-        return [...$settings, 'platform_ceilings' => config("security.profiles.{$settings['profile']}"), 'maximum_rules' => config('security.maximum_rules_per_domain')];
+        return [...$settings, 'platform_ceilings' => SecurityConfig::ceilingLimits($settings['profile']), 'maximum_rules' => config('security.maximum_rules_per_domain')];
     }
 
     private function queue(Request $request, Domain $domain): JsonResponse

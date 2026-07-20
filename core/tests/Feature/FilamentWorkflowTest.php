@@ -15,6 +15,7 @@ use App\Models\EdgeCell;
 use App\Models\EdgePool;
 use App\Models\User;
 use App\Support\DnsRecordData;
+use App\Support\SecurityConfig;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -179,6 +180,38 @@ class FilamentWorkflowTest extends TestCase
 
         $component()->callAction('purgeCache', data: ['type' => 'urls', 'urls' => "https://cache-ui.example.test/app.css\n"])->assertHasNoActionErrors();
         $this->assertDatabaseHas('cache_purges', ['domain_id' => $domain->id, 'type' => 'urls', 'status' => 'succeeded']);
+    }
+
+    public function test_security_profile_action_reacts_to_presets_and_persists_manual_limits(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        $domain = Domain::query()->create(['name' => 'security-ui.example.test', 'display_name' => 'Security UI', 'revision' => 1]);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->mountAction('securitySettings')
+            ->assertSet('mountedActions.0.data.profile', 'standard')
+            ->set('mountedActions.0.data.profile', 'protected')
+            ->assertSet('mountedActions.0.data.limits.requests_per_second', 50)
+            ->assertSet('mountedActions.0.data.limits.origin_retry_limit', 1)
+            ->callMountedAction()
+            ->assertHasNoActionErrors()
+            ->assertSee('protected');
+
+        $manual = SecurityConfig::defaults(SecurityConfig::MANUAL_PROFILE);
+        $manual['limits']['requests_per_second'] = 31;
+        $manual['limits']['request_burst'] = 47;
+        Livewire::test(ViewDomain::class, ['record' => $domain->refresh()->id])
+            ->callAction('securitySettings', data: $manual)
+            ->assertHasNoActionErrors()
+            ->assertSee('manual');
+
+        $this->assertSame('manual', $domain->refresh()->security_settings['profile']);
+        $this->assertSame(31, $domain->security_settings['limits']['requests_per_second']);
+        $this->assertSame(3, $domain->revision);
+        Queue::assertPushed(ReconcileEdgeDomain::class, fn (ReconcileEdgeDomain $job): bool => $job->domainId === $domain->id);
     }
 
     public function test_disabling_from_the_domain_panel_automatically_queues_edge_reconciliation(): void
