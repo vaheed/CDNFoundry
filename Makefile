@@ -92,6 +92,7 @@ prod-edge:
 config-check:
 	$(COMPOSE_DEV) config --quiet
 	$(COMPOSE_PROD_EXAMPLE) config --quiet
+	./scripts/validate-production-overrides.sh
 
 openapi-check:
 	$(COMPOSE_DEV) run --rm core php artisan api:openapi --check

@@ -6,16 +6,21 @@ x-core-env: &core-env
   APP_KEY: ${APP_KEY:?APP_KEY is required}
   EDGE_ARTIFACT_SIGNING_KEY: ${EDGE_ARTIFACT_SIGNING_KEY:?EDGE_ARTIFACT_SIGNING_KEY is required}
   APP_URL: ${APP_URL:?APP_URL is required}
+  SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-true}
   DB_CONNECTION: pgsql
-  DB_HOST: control-db
-  DB_PORT: 5432
+  DB_URL: ${DB_URL:-}
+  DB_HOST: ${DB_HOST:-control-db}
+  DB_PORT: ${DB_PORT:-5432}
   DB_DATABASE: cdnf
   DB_USERNAME: cdnf
   DB_PASSWORD: ${CONTROL_DB_PASSWORD:?CONTROL_DB_PASSWORD is required}
+  DB_SSLMODE: ${DB_SSLMODE:-prefer}
   CACHE_STORE: redis
   SESSION_DRIVER: redis
   QUEUE_CONNECTION: redis
-  REDIS_HOST: redis
+  REDIS_URL: ${REDIS_URL:-}
+  REDIS_HOST: ${REDIS_HOST:-redis}
+  REDIS_PORT: ${REDIS_PORT:-6379}
   REDIS_CLIENT: predis
   REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
   GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb
@@ -26,6 +31,7 @@ x-core-env: &core-env
   EDGE_IDENTITY_CA_CERTIFICATE: /run/secrets/edge-identity-ca.crt
   EDGE_IDENTITY_CA_PRIVATE_KEY: /run/secrets/edge-identity-ca.key
   EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE: ${EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE:-}
+  PDNS_CA_CERTIFICATE: /run/secrets/pdns-api-ca.crt
   CLICKHOUSE_URL: ${CLICKHOUSE_URL:?CLICKHOUSE_URL is required}
   CLICKHOUSE_DATABASE: cdnf
   CLICKHOUSE_USER: cdnf
@@ -54,6 +60,7 @@ x-core: &core
     - mmdb:/mmdb:ro
     - ${EDGE_IDENTITY_CA_CERTIFICATE:?EDGE_IDENTITY_CA_CERTIFICATE is required}:/run/secrets/edge-identity-ca.crt:ro
     - ${EDGE_IDENTITY_CA_PRIVATE_KEY:?EDGE_IDENTITY_CA_PRIVATE_KEY is required}:/run/secrets/edge-identity-ca.key:ro
+    - ${PDNS_CA_CERTIFICATE:?PDNS_CA_CERTIFICATE is required}:/run/secrets/pdns-api-ca.crt:ro
     - ${METRICS_TOKEN_FILE:?METRICS_TOKEN_FILE is required}:/run/secrets/metrics-token:ro
     - ${RESTIC_PASSWORD_FILE:?RESTIC_PASSWORD_FILE is required}:/run/secrets/restic-password:ro
 

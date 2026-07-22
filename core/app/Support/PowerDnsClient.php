@@ -49,8 +49,13 @@ class PowerDnsClient
 
     private function request(DnsCluster $cluster): PendingRequest
     {
-        return Http::baseUrl(rtrim($cluster->api_url, '/'))
+        $request = Http::baseUrl(rtrim($cluster->api_url, '/'))
             ->withHeader('X-API-Key', $cluster->api_key)->acceptJson()->asJson()
             ->connectTimeout(2)->timeout(10)->retry(2, 100, throw: false);
+        $caCertificate = config('services.powerdns.ca_certificate');
+
+        return is_string($caCertificate) && $caCertificate !== ''
+            ? $request->withOptions(['verify' => $caCertificate])
+            : $request;
     }
 }

@@ -1,0 +1,20 @@
+{
+	admin off
+	auto_https off
+}
+
+https://{$DNS_API_HOSTNAME}:8444 {
+	tls /run/secrets/dns-api.crt /run/secrets/dns-api.key
+
+	@control_source remote_ip {$CONTROL_PUBLIC_IPV4_ALLOWLIST}
+
+	handle @control_source {
+		reverse_proxy pdns-auth:8081
+	}
+
+	respond 403
+}
+
+http://127.0.0.1:2019 {
+	respond /healthz 200
+}

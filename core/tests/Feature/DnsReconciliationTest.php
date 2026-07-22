@@ -98,6 +98,16 @@ class DnsReconciliationTest extends TestCase
         $this->assertStringContainsString('503', $deployment->last_error);
     }
 
+    public function test_powerdns_client_uses_the_configured_private_ca(): void
+    {
+        config()->set('services.powerdns.ca_certificate', '/run/secrets/pdns-api-ca.crt');
+        $cluster = DnsCluster::query()->create($this->clusterData());
+        $method = new \ReflectionMethod(PowerDnsClient::class, 'request');
+        $request = $method->invoke(app(PowerDnsClient::class), $cluster);
+
+        $this->assertSame('/run/secrets/pdns-api-ca.crt', $request->getOptions()['verify']);
+    }
+
     public function test_manual_reconcile_is_coalesced_to_one_pending_operation(): void
     {
         Queue::fake();

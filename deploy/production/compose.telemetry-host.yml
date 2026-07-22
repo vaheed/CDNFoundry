@@ -1,27 +1,24 @@
 services:
-  caddy:
+  telemetry-gateway:
     image: caddy:2.11.4-alpine
-    profiles: [control]
+    profiles: [telemetry]
     environment:
-      CONTROL_HOSTNAME: ${CONTROL_HOSTNAME:?CONTROL_HOSTNAME is required}
       TELEMETRY_HOSTNAME: ${TELEMETRY_HOSTNAME:?TELEMETRY_HOSTNAME is required}
       ACME_CONTACT_EMAIL: ${ACME_CONTACT_EMAIL:?ACME_CONTACT_EMAIL is required}
       EDGE_PUBLIC_IPV4_ALLOWLIST: ${EDGE_PUBLIC_IPV4_ALLOWLIST:?EDGE_PUBLIC_IPV4_ALLOWLIST is required}
     ports:
       - "${PUBLIC_BIND_IPV4:?PUBLIC_BIND_IPV4 is required}:80:80/tcp"
       - "${PUBLIC_BIND_IPV4:?PUBLIC_BIND_IPV4 is required}:443:443/tcp"
-      - "${PUBLIC_BIND_IPV4:?PUBLIC_BIND_IPV4 is required}:443:443/udp"
+      - "${PUBLIC_BIND_IPV4:?PUBLIC_BIND_IPV4 is required}:8444:8444/tcp"
       - "[${PUBLIC_BIND_IPV6:?PUBLIC_BIND_IPV6 is required}]:80:80/tcp"
       - "[${PUBLIC_BIND_IPV6:?PUBLIC_BIND_IPV6 is required}]:443:443/tcp"
-      - "[${PUBLIC_BIND_IPV6:?PUBLIC_BIND_IPV6 is required}]:443:443/udp"
-      - "${PUBLIC_BIND_IPV4:?PUBLIC_BIND_IPV4 is required}:8444:8444/tcp"
     volumes:
-      - ./deploy/production/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
+      - ./deploy/production/Caddyfile.telemetry:/etc/caddy/Caddyfile:ro
+      - telemetry-caddy-data:/data
+      - telemetry-caddy-config:/config
     depends_on:
-      web: { condition: service_healthy }
-    networks: [ingress, telemetry]
+      clickhouse: { condition: service_started }
+    networks: [telemetry, egress]
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
@@ -30,6 +27,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
+
 volumes:
-  caddy-data: {}
-  caddy-config: {}
+  telemetry-caddy-data: {}
+  telemetry-caddy-config: {}

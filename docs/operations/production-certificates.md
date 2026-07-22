@@ -1,13 +1,19 @@
 # Production certificate bootstrap and rotation
 
-CDNFoundry uses three distinct certificate roles:
+CDNFoundry uses these certificate roles:
 
 - `edge-identity-ca`: signs short-lived edge-agent client identities. Its private key belongs only on the control plane.
 - `edge-server-ca`: signs the edge-control and bootstrap runtime server certificates. Only its public certificate is copied to edge-agent hosts.
 - `edge-control-server`: secures the agent-facing control endpoint such as `edge-control.example.com:8443`.
 - `edge-runtime`: bootstrap/default certificate for the public OpenResty listener. Phase 5 dynamically selects each active domain's managed or custom certificate by SNI; the mounted certificate remains only the non-customer bootstrap fallback.
+- `dns-api-N`: one certificate per source-restricted HTTPS gateway in front of a private PowerDNS API. `N` is the hostname's order in the generation command, so it is not fixed to the two-host starter.
 
-The repository helper creates a private CA and two ten-year P-256 server certificates. Ten years is useful for private bootstrap infrastructure but increases key-compromise exposure. Prefer certificates from your organizational PKI with automated renewal when available. Public browsers will not trust the generated private CA automatically.
+The repository helper creates two private CAs, the two required ten-year P-256
+server certificates, and optionally one certificate for each DNS API gateway.
+Ten years is useful for private bootstrap infrastructure but increases
+key-compromise exposure. Prefer certificates from your organizational PKI with
+automated renewal when available. Public browsers will not trust the generated
+private CA automatically.
 
 ## Initial generation
 
@@ -19,7 +25,9 @@ Run on a protected control-plane administration host, outside the repository:
   edge-control.example.com \
   edge.example.com \
   203.0.113.10 \
-  203.0.113.20
+  203.0.113.20 \
+  dns-api-a.ops.example.com \
+  dns-api-b.ops.example.com
 ```
 
 The IP arguments are optional. Supply them only when agents or clients connect by IP. The script refuses to overwrite an existing directory, creates private keys with mode `0600`, verifies both chains, and prints no private-key content.
@@ -34,7 +42,33 @@ EDGE_IDENTITY_CA_CERTIFICATE=/etc/cdnfoundry/pki/edge-identity-ca.crt
 EDGE_IDENTITY_CA_PRIVATE_KEY=/etc/cdnfoundry/pki/edge-identity-ca.key
 EDGE_RUNTIME_TLS_CERTIFICATE=/etc/cdnfoundry/pki/edge-runtime.crt
 EDGE_RUNTIME_TLS_PRIVATE_KEY=/etc/cdnfoundry/pki/edge-runtime.key
+PDNS_CA_CERTIFICATE=/etc/cdnfoundry/pki/edge-server-ca.crt
 ```
+
+On the first DNS host, mount `dns-api-1.crt` and `dns-api-1.key` as
+`DNS_API_SERVER_CERTIFICATE` and `DNS_API_SERVER_PRIVATE_KEY`. Use `dns-api-2`
+on the second host, continuing in argument order for additional initial hosts.
+Copy `edge-server-ca.crt` to every DNS/edge host, but never copy either CA
+private key.
+
+## Add another DNS host later
+
+Do not regenerate the fleet PKI merely to add capacity. Issue one new
+hostname-bound certificate from the existing server CA. The output name is an
+operator label and need not be sequential.
+
+```sh
+./scripts/issue-production-dns-api-certificate.sh \
+  /etc/cdnfoundry/pki \
+  dns-api-eu-3 \
+  dns-api-eu-3.ops.example.com
+```
+
+Transfer only `dns-api-eu-3.crt`, `dns-api-eu-3.key`, and
+`edge-server-ca.crt` to that host. Add its public address to the controller and
+provider firewall only if it also runs an edge or Vector. Add every control
+worker public IPv4 address that can reconcile DNS to the DNS host's
+`CONTROL_PUBLIC_IPV4_ALLOWLIST` and firewall.
 
 Validate before starting services:
 
@@ -60,10 +94,19 @@ identity. A root-only identity CA key makes enrollment fail closed as
 
 ## Replacement and renewal
 
-Never overwrite mounted key files in place. Generate into a new versioned directory, validate hostname/SAN, chain, key match, and dates, update the six `.env.prod` paths, then recreate only the affected services:
+Never overwrite mounted key files in place. Generate into a new versioned
+directory, validate hostname/SAN, chain, key match, and dates, update the
+relevant `.env.prod` paths, then recreate only the affected services:
 
 ```sh
-./scripts/generate-production-certificates.sh /etc/cdnfoundry/pki-2035 edge-control.example.com edge.example.com
+./scripts/generate-production-certificates.sh \
+  /etc/cdnfoundry/pki-2035 \
+  edge-control.example.com \
+  edge.example.com \
+  203.0.113.10 \
+  203.0.113.20 \
+  dns-api-a.ops.example.com \
+  dns-api-b.ops.example.com
 docker compose --env-file .env.prod -f compose.prod.yml up -d --force-recreate edge-control edge edge-quarantine
 ```
 

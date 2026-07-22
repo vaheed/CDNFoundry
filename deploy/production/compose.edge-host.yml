@@ -1,0 +1,5 @@
+services:
+  edge:
+    ports:
+      - "[${PUBLIC_BIND_IPV6:?PUBLIC_BIND_IPV6 is required}]:80:8080/tcp"
+      - "[${PUBLIC_BIND_IPV6:?PUBLIC_BIND_IPV6 is required}]:443:8443/tcp"

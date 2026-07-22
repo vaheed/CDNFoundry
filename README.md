@@ -98,8 +98,9 @@ and does no production host builds. CI publishes every successful `main` commit
 under its immutable SHA and the `latest` discovery channel; a `vMAJOR.MINOR.PATCH`
 Git tag additionally publishes exact version, major, and minor aliases. Pin a
 commit SHA or exact release tag for deployment. Follow the
-[three-host production quick start](docs/production-quick-start.md) and
-[production layout](docs/production-layout.md).
+[three-host production quick start](docs/production-quick-start.md), then use
+[production scaling](docs/production-scaling.md) and the
+[production layout](docs/production-layout.md) for larger split-role fleets.
 
 ## Contributing and security
 

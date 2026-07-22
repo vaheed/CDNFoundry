@@ -30,11 +30,6 @@ services:
       - "[${PUBLIC_BIND_IPV6:?PUBLIC_BIND_IPV6 is required}]:53:53/udp"
       - "[${PUBLIC_BIND_IPV6:?PUBLIC_BIND_IPV6 is required}]:53:53/tcp"
 
-  edge:
-    ports:
-      - "[${PUBLIC_BIND_IPV6:?PUBLIC_BIND_IPV6 is required}]:80:8080/tcp"
-      - "[${PUBLIC_BIND_IPV6:?PUBLIC_BIND_IPV6 is required}]:443:8443/tcp"
-
 volumes:
   dns-api-caddy-data: {}
   dns-api-caddy-config: {}

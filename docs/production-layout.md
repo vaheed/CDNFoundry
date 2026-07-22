@@ -33,12 +33,15 @@ a new schema. No service performs implicit migrations.
 
 Operator-tunable product policy is not stored in `.env.prod`. After migration, manage it through the administrator **Platform settings** page, `/api/admin/system/settings`, or `php artisan platform:settings:*`; see [Platform settings](platform-settings.md). PostgreSQL remains the runtime source of truth.
 
-The profiles may run on separate hosts with host-specific Compose overrides.
-Only DNSdist and the edge listeners should be public. PowerDNS, its PostgreSQL
-database, the control database, Valkey, ClickHouse, and internal metrics remain
-on private networks. Production does not include PowerAdmin or test origins.
-See [Architecture](architecture.md) for the complete operator-readable DNS,
-HTTP, enrollment, deployment, failure, and recovery flows.
+The profiles may run repeatedly on separate hosts with host-specific Compose
+overrides. DNSdist and edge listeners are public. The public-only multi-host
+example also exposes source-restricted TLS gateways for telemetry and the
+PowerDNS API; raw PowerDNS, its PostgreSQL database, the control database,
+Valkey, ClickHouse, and internal metrics remain container-private. Production
+does not include PowerAdmin or test origins. See [Production scaling](production-scaling.md)
+for standalone role overrides and [Architecture](architecture.md) for the
+complete operator-readable DNS, HTTP, enrollment, deployment, failure, and
+recovery flows.
 
 The default edge and quarantine cells use separate listeners, cache volumes, temporary filesystems, memory/CPU/PID limits, and public service addresses. `EDGE_HTTP_BIND`/`EDGE_HTTPS_BIND` belong to the default shared cell; `EDGE_QUARANTINE_HTTP_BIND`/`EDGE_QUARANTINE_HTTPS_BIND` must route the quarantine pool's distinct addresses. Configure the same unique IPv4/IPv6 values in each participating edge cell's durable control-plane state before enabling the pool. A cell added later without addresses is excluded from that pool until its complete address pair and ready heartbeat are present; it cannot block existing participants. Exceptional dedicated pools use a host-specific Compose override that repeats the same bounded OpenResty service shape with unique bindings and volumes. Do not generate an automatic service, volume, or server block per domain.
 

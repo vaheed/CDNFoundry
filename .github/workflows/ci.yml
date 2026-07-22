@@ -59,6 +59,8 @@ jobs:
         run: docker compose -f compose.dev.yml config --quiet
       - name: Validate production topology
         run: docker compose --env-file .env.prod.example -f compose.prod.yml config --quiet
+      - name: Validate production role overrides
+        run: ./scripts/validate-production-overrides.sh
       - name: Validate documentation links and Python syntax
         run: make docs-check && python3 -m compileall -q tests/e2e tests/docs
       - name: Build every production image from its pinned base

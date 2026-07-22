@@ -1,0 +1,15 @@
+# Use only when PostgreSQL and Valkey are provided by external TLS-protected
+# endpoints. This prevents the control profile from starting local primaries.
+services:
+  core:
+    depends_on: !reset {}
+  horizon:
+    depends_on: !reset {}
+  scheduler:
+    depends_on: !reset {}
+  migrate:
+    depends_on: !reset {}
+  control-db:
+    profiles: !override [local-control-data]
+  redis:
+    profiles: !override [local-control-data]
