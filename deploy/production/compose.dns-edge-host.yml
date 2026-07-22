@@ -1,0 +1,6 @@
+services:
+  pdns-auth:
+    # Horizon reaches the PowerDNS API through the private VPN. DNS service port
+    # 53 remains private; DNSdist is the only public authoritative listener.
+    ports:
+      - "${PRIVATE_BIND_IP:?PRIVATE_BIND_IP is required}:8081:8081"

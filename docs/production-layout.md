@@ -12,7 +12,19 @@ make prod-telemetry
 make prod-edge
 ```
 
-Set `CDNF_RELEASE` to the exact 40-character Git commit SHA from a successful `main` CI run. Production Compose references `ghcr.io/vaheed/cdnfoundry-{core,web,edge-control,edge-runtime,edge-agent,mmdb-updater}:$CDNF_RELEASE`; it contains no application build definitions, source-mounted web/runtime code, `latest` tag, branch tag, or local-image fallback. Authenticate the host with a least-privilege GHCR token if the packages are not public, run `make prod-pull`, and verify the pulled image digests before starting a profile. The GitHub Actions image job publishes these immutable SHA tags only after dependency advisories, PHP, frontend, Go format/vet/tests, documentation/OpenAPI contracts, Compose/image builds, the cumulative Phase 1–5 backend/runtime E2E, and the bounded scale job pass.
+Set `CDNF_RELEASE` to the exact 40-character Git commit SHA from a successful
+`main` CI run (recommended) or an exact `vMAJOR.MINOR.PATCH` release tag.
+Production Compose references
+`ghcr.io/vaheed/cdnfoundry-{core,web,edge-control,edge-runtime,edge-agent,mmdb-updater}:$CDNF_RELEASE`;
+it contains no application build definitions, source-mounted web/runtime code,
+or local-image fallback. Authenticate the host with a least-privilege GHCR token
+if the packages are not public, run `make prod-pull`, and verify the pulled image
+digests before starting a profile. After all required checks pass, the GitHub
+Actions image job publishes every successful `main` commit under its immutable
+SHA and `latest`. A `vMAJOR.MINOR.PATCH` Git tag also publishes `vMAJOR.MINOR.PATCH`,
+`MAJOR.MINOR.PATCH`, `MAJOR.MINOR`, `MAJOR`, and `latest`; prereleases publish only
+their exact `v` and non-`v` aliases. `latest`, major, and minor are mutable
+discovery channels and must not be used as production deployment pins.
 
 The DNS profile starts the shared MMDB updater and does not start PowerDNS until a valid database is present. DNSdist then waits for PowerDNS's native readiness check before resolving its private backend. This ordering is required on a new host and after loss of the rebuildable MMDB volume.
 

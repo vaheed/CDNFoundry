@@ -36,6 +36,7 @@ FROM php-dependencies AS php-base
 COPY . .
 COPY --from=frontend-assets /app/public/build ./public/build
 RUN composer dump-autoload --no-dev --classmap-authoritative \
+    && php artisan filament:assets \
     && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
 

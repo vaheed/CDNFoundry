@@ -9,6 +9,7 @@ data-driven OpenResty edge cells; they never pass through Laravel.
 The [roadmap](docs/roadmap.md) is the product contract and records verified
 implementation status. The [architecture guide](docs/architecture.md) explains
 the complete traffic, control, placement, and failure flows in operator terms.
+For a real deployment, start with the [three-host production quick start](docs/production-quick-start.md).
 
 ## Core properties
 
@@ -92,10 +93,13 @@ and OpenResty HTTP/HTTPS runtime. Browser acceptance is deliberately manual and 
 [frontend route coverage audit](docs/frontend-route-coverage.md) maps every
 application route family to its human, automation-only, or agent-only surface.
 
-Production uses immutable commit-SHA GHCR images through
-[`compose.prod.yml`](compose.prod.yml); it has no `latest` tags and no production
-host builds. Follow the [production layout](docs/production-layout.md) and
-[installation guide](docs/installation.md) before deployment.
+Production uses published GHCR images through [`compose.prod.yml`](compose.prod.yml)
+and does no production host builds. CI publishes every successful `main` commit
+under its immutable SHA and the `latest` discovery channel; a `vMAJOR.MINOR.PATCH`
+Git tag additionally publishes exact version, major, and minor aliases. Pin a
+commit SHA or exact release tag for deployment. Follow the
+[three-host production quick start](docs/production-quick-start.md) and
+[production layout](docs/production-layout.md).
 
 ## Contributing and security
 

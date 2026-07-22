@@ -39,12 +39,12 @@ x-core-env: &core-env
   BACKUP_DEFAULT_REGION: ${BACKUP_DEFAULT_REGION:-us-east-1}
 
 x-core: &core
-  image: ghcr.io/vaheed/cdnfoundry-core:${CDNF_RELEASE:?CDNF_RELEASE must be an immutable commit SHA}
+  image: ghcr.io/vaheed/cdnfoundry-core:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
   environment: *core-env
   depends_on:
     control-db: { condition: service_healthy }
     redis: { condition: service_healthy }
-  networks: [control, telemetry]
+  networks: [control, telemetry, egress]
   restart: unless-stopped
   stop_grace_period: 60s
   read_only: true
@@ -68,7 +68,7 @@ services:
       retries: 10
 
   web:
-    image: ghcr.io/vaheed/cdnfoundry-web:${CDNF_RELEASE:?CDNF_RELEASE must be an immutable commit SHA}
+    image: ghcr.io/vaheed/cdnfoundry-web:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
     profiles: [control]
     ports: ["${CONTROL_BIND:-127.0.0.1:8080}:8080"]
     depends_on:
@@ -84,7 +84,7 @@ services:
       retries: 10
 
   edge-control:
-    image: ghcr.io/vaheed/cdnfoundry-edge-control:${CDNF_RELEASE:?CDNF_RELEASE must be an immutable commit SHA}
+    image: ghcr.io/vaheed/cdnfoundry-edge-control:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
     profiles: [control]
     ports: ["${EDGE_CONTROL_BIND:-0.0.0.0:8443}:8443"]
     volumes:
@@ -274,7 +274,7 @@ services:
     restart: unless-stopped
 
   edge:
-    image: ghcr.io/vaheed/cdnfoundry-edge-runtime:${CDNF_RELEASE:?CDNF_RELEASE must be an immutable commit SHA}
+    image: ghcr.io/vaheed/cdnfoundry-edge-runtime:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
     profiles: [edge]
     ports:
       - "${EDGE_HTTP_BIND:-0.0.0.0:80}:8080"
@@ -311,9 +311,10 @@ services:
         limits:
           memory: 2g
           cpus: "2"
+          pids: 256
 
   edge-quarantine:
-    image: ghcr.io/vaheed/cdnfoundry-edge-runtime:${CDNF_RELEASE:?CDNF_RELEASE must be an immutable commit SHA}
+    image: ghcr.io/vaheed/cdnfoundry-edge-runtime:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
     profiles: [edge]
     ports:
       - "${EDGE_QUARANTINE_HTTP_BIND:-127.0.0.1:18080}:8080"
@@ -350,9 +351,10 @@ services:
         limits:
           memory: 512m
           cpus: "0.5"
+          pids: 128
 
   edge-agent:
-    image: ghcr.io/vaheed/cdnfoundry-edge-agent:${CDNF_RELEASE:?CDNF_RELEASE must be an immutable commit SHA}
+    image: ghcr.io/vaheed/cdnfoundry-edge-agent:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
     profiles: [edge]
     environment:
       EDGE_CONTROL_URL: ${EDGE_CONTROL_URL:?EDGE_CONTROL_URL is required}
@@ -380,9 +382,10 @@ services:
         limits:
           memory: 128m
           cpus: "0.25"
+          pids: 64
 
   mmdb-updater:
-    image: ghcr.io/vaheed/cdnfoundry-mmdb-updater:${CDNF_RELEASE:?CDNF_RELEASE must be an immutable commit SHA}
+    image: ghcr.io/vaheed/cdnfoundry-mmdb-updater:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
     profiles: [dns, edge]
     environment:
       MMDB_PROVIDER: ${MMDB_PROVIDER:-dbip-jsdelivr}
@@ -408,6 +411,7 @@ networks:
   dns-private: { internal: true }
   telemetry: { internal: true }
   edge: {}
+  egress: {}
 
 volumes:
   core-storage: {}

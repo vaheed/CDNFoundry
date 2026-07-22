@@ -69,6 +69,19 @@ jobs:
           docker build -t cdnfoundry/edge-runtime:ci -f docker/openresty/Dockerfile .
           docker build -t cdnfoundry/edge-agent:ci edge-agent
           docker build -t cdnfoundry/mmdb-updater:ci docker/mmdb-updater
+      - name: Smoke-test the read-only core image
+        shell: bash
+        run: |
+          set -euo pipefail
+          container_id="$(docker run -d --read-only --tmpfs /tmp --tmpfs /app/storage cdnfoundry/core:ci)"
+          trap 'docker logs "${container_id}"; docker rm -f "${container_id}" >/dev/null' EXIT
+          for attempt in {1..30}; do
+            if docker exec "${container_id}" php -r "exit(@fsockopen('127.0.0.1', 9000) ? 0 : 1);"; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
 
   backend-e2e:
     name: Python backend and runtime E2E
@@ -171,8 +184,8 @@ jobs:
           done
 
   publish-images:
-    name: Publish immutable GHCR images
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    name: Publish GHCR images
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     needs: [core, compose, backend-e2e, scale-e2e, go]
     runs-on: ubuntu-latest
     permissions:
@@ -185,7 +198,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build immutable images
+      - name: Build commit-addressed images
         env:
           RELEASE: ${{ github.sha }}
         run: |
@@ -195,13 +208,39 @@ jobs:
           docker build -t ghcr.io/vaheed/cdnfoundry-edge-runtime:${RELEASE} -f docker/openresty/Dockerfile .
           docker build -t ghcr.io/vaheed/cdnfoundry-edge-agent:${RELEASE} edge-agent
           docker build -t ghcr.io/vaheed/cdnfoundry-mmdb-updater:${RELEASE} docker/mmdb-updater
-      - name: Push immutable images
+      - name: Push commit and channel tags
         env:
           RELEASE: ${{ github.sha }}
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_REF_NAME: ${{ github.ref_name }}
         run: |
-          docker push ghcr.io/vaheed/cdnfoundry-core:${RELEASE}
-          docker push ghcr.io/vaheed/cdnfoundry-web:${RELEASE}
-          docker push ghcr.io/vaheed/cdnfoundry-edge-control:${RELEASE}
-          docker push ghcr.io/vaheed/cdnfoundry-edge-runtime:${RELEASE}
-          docker push ghcr.io/vaheed/cdnfoundry-edge-agent:${RELEASE}
-          docker push ghcr.io/vaheed/cdnfoundry-mmdb-updater:${RELEASE}
+          set -euo pipefail
+
+          images=(core web edge-control edge-runtime edge-agent mmdb-updater)
+          aliases=()
+
+          if [[ "${RELEASE_REF}" == "refs/heads/main" ]]; then
+            aliases+=(latest)
+          elif [[ "${RELEASE_REF}" == refs/tags/v* ]]; then
+            version="${RELEASE_REF_NAME#v}"
+            if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+              echo "Release tags must use vMAJOR.MINOR.PATCH with an optional prerelease suffix." >&2
+              exit 1
+            fi
+
+            aliases+=("${RELEASE_REF_NAME}" "${version}")
+            if [[ "${version}" != *-* ]]; then
+              minor="${version%.*}"
+              major="${minor%.*}"
+              aliases+=("${minor}" "${major}" latest)
+            fi
+          fi
+
+          for component in "${images[@]}"; do
+            image="ghcr.io/vaheed/cdnfoundry-${component}"
+            docker push "${image}:${RELEASE}"
+            for alias in "${aliases[@]}"; do
+              docker tag "${image}:${RELEASE}" "${image}:${alias}"
+              docker push "${image}:${alias}"
+            done
+          done

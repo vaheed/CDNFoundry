@@ -33,6 +33,10 @@ flows are in [Architecture](architecture.md).
 
 ## Production installation
 
+For the minimum production-like topology, firewall matrix, private-network
+wiring, certificate bootstrap, first administrator, DNS clusters, edges, and
+first domain, follow the [three-host production quick start](production-quick-start.md).
+
 Copy `.env.prod.example` to a host-private `.env.prod`, replace every placeholder, generate a Laravel `APP_KEY`, and retain that key with backups. Then run:
 
 ```sh

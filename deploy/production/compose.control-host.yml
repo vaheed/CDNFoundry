@@ -1,0 +1,6 @@
+services:
+  clickhouse:
+    # Vector on the two DNS/edge hosts reaches this listener through the private VPN.
+    # The host firewall must allow TCP 8123 only from those private addresses.
+    ports:
+      - "${PRIVATE_BIND_IP:?PRIVATE_BIND_IP is required}:8123:8123"
