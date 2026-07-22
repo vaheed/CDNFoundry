@@ -109,8 +109,17 @@ def restart_vector(reconnect_sources: bool = False) -> None:
                 compose("restart", "dnsdist", "edge-a", timeout=90)
                 deadline = time.monotonic() + 30
                 while time.monotonic() < deadline:
-                    health = run("curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}", "http://127.0.0.1:8081/healthz", check=False)
-                    if health.returncode == 0 and health.stdout.strip() == "200":
+                    edge_health = run(
+                        "curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}",
+                        "http://127.0.0.1:8081/healthz", check=False,
+                    )
+                    dns_health = compose(
+                        "exec", "-T", "dnsdist", "python3", "-c",
+                        "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/metrics', timeout=2).read(1)",
+                        check=False,
+                    )
+                    if (edge_health.returncode == 0 and edge_health.stdout.strip() == "200"
+                            and dns_health.returncode == 0):
                         return
                     time.sleep(1)
                 raise RuntimeError("telemetry producers did not recover after collector restart")
@@ -194,11 +203,18 @@ def qualify_ingestion_and_queries(domain_id: int, user: str, stranger: str, admi
         producer=produce_runtime_event,
     )
     dnstap_name = f"dnstap-{RUN_ID}.{DOMAIN}"
-    dns_runtime = run("dig", "+time=2", "+tries=1", "@127.0.0.1", "-p", "1053", dnstap_name, "A")
-    assert "status:" in dns_runtime.stdout, dns_runtime.stdout
+
+    def produce_dns_runtime_event() -> None:
+        dns_runtime = run(
+            "dig", "+time=2", "+tries=1", "@127.0.0.1", "-p", "1053", dnstap_name, "A",
+            check=False,
+        )
+        assert dns_runtime.returncode == 0 and "status:" in dns_runtime.stdout, dns_runtime
+
     wait_for_clickhouse(
         lambda value: int(value or "0") >= 1,
         f"SELECT count() FROM cdnf.dns_events WHERE zone='{dnstap_name}'",
+        producer=produce_dns_runtime_event,
     )
     vector_event(8686, {
         "occurred_at": iso(event_time), "event_id": edge_id, "domain_id": domain_id,
