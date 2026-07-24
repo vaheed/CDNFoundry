@@ -1,0 +1,5 @@
+services:
+  telemetry-gateway:
+    ports:
+      - "[${PUBLIC_BIND_IPV6:?PUBLIC_BIND_IPV6 is required by the IPv6 override}]:80:80/tcp"
+      - "[${PUBLIC_BIND_IPV6:?PUBLIC_BIND_IPV6 is required by the IPv6 override}]:443:443/tcp"

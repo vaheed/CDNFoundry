@@ -21,17 +21,30 @@ compose() {
     docker compose --env-file .env.prod.example -f compose.prod.yml "$@"
 }
 
+# IPv4-only configuration must not require a fake IPv6 value.
+unset PUBLIC_BIND_IPV6
 compose -f deploy/production/compose.control-host.yml --profile control --profile telemetry config --quiet
 
 export PUBLIC_BIND_IPV4=198.51.100.20
-export PUBLIC_BIND_IPV6=2001:db8:20::20
 compose -f deploy/production/compose.dns-edge-host.yml --profile dns --profile edge config --quiet
 compose -f deploy/production/compose.dns-host.yml --profile dns config --quiet
 compose -f deploy/production/compose.edge-host.yml --profile edge config --quiet
 
 export PUBLIC_BIND_IPV4=198.51.100.50
-export PUBLIC_BIND_IPV6=2001:db8:50::50
 compose -f deploy/production/compose.telemetry-host.yml --profile telemetry config --quiet
+
+# IPv6 publication is explicit and validated independently.
+export PUBLIC_BIND_IPV6=2001:db8:50::50
+compose -f deploy/production/compose.control-host.yml \
+    -f deploy/production/compose.control-host-ipv6.yml \
+    --profile control --profile telemetry config --quiet
+compose -f deploy/production/compose.dns-edge-host.yml \
+    -f deploy/production/compose.dns-host-ipv6.yml \
+    -f deploy/production/compose.edge-host-ipv6.yml \
+    --profile dns --profile edge config --quiet
+compose -f deploy/production/compose.telemetry-host.yml \
+    -f deploy/production/compose.telemetry-host-ipv6.yml \
+    --profile telemetry config --quiet
 
 export DB_URL='postgresql://cdnf:password@db.ops.example.com:5432/cdnf?sslmode=verify-full'
 export REDIS_URL='tls://:password@redis.ops.example.com:6379'

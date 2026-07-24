@@ -10,8 +10,6 @@ services:
       - "${PUBLIC_BIND_IPV4:?PUBLIC_BIND_IPV4 is required}:80:80/tcp"
       - "${PUBLIC_BIND_IPV4:?PUBLIC_BIND_IPV4 is required}:443:443/tcp"
       - "${PUBLIC_BIND_IPV4:?PUBLIC_BIND_IPV4 is required}:8444:8444/tcp"
-      - "[${PUBLIC_BIND_IPV6:?PUBLIC_BIND_IPV6 is required}]:80:80/tcp"
-      - "[${PUBLIC_BIND_IPV6:?PUBLIC_BIND_IPV6 is required}]:443:443/tcp"
     volumes:
       - ./deploy/production/Caddyfile.telemetry:/etc/caddy/Caddyfile:ro
       - telemetry-caddy-data:/data

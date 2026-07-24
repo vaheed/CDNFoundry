@@ -25,11 +25,6 @@ services:
       timeout: 3s
       retries: 10
 
-  dnsdist:
-    ports:
-      - "[${PUBLIC_BIND_IPV6:?PUBLIC_BIND_IPV6 is required}]:53:53/udp"
-      - "[${PUBLIC_BIND_IPV6:?PUBLIC_BIND_IPV6 is required}]:53:53/tcp"
-
 volumes:
   dns-api-caddy-data: {}
   dns-api-caddy-config: {}
