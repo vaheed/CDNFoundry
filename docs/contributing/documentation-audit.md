@@ -48,7 +48,7 @@ dependency evidence, not prose to paraphrase.
 | The raw `docs/openapi.json` was the API documentation. | The generator describes routes but has intentionally generic bodies/responses. A generated human endpoint catalog and authored conventions/feature guides are also required. |
 | `core/README.md` described the project. | It was the generic Laravel skeleton README and did not document CDNFoundry. |
 | Historical phase test counts were current qualification status. | Counts such as 118 or 140 tests apply only to their recorded commits; the current suite contains more tests and must be rerun. |
-| Roadmap future stages, current operation, agent rules, and qualification evidence belonged in one current guide. | They served different audiences and duplicated `AGENTS.md`; the new roadmap is a contract/status index and legacy keeps the original proposal history. |
+| Roadmap future stages, current operation, agent rules, and qualification evidence belonged in one public guide. | Governance and owner qualification are repository concerns, not public product documentation; legacy keeps the original proposal history. |
 | Telemetry retention settings automatically define runtime TTLs. | Masking/finalization are active application policy, while shipped ClickHouse TTLs are static in `docker/clickhouse/init.sql` and require an operator migration to change. |
 
 ## Duplication and conflicts removed
@@ -99,5 +99,5 @@ These are implementation or operator gaps, not invitations to invent behaviour:
 
 When code and documentation disagree, fix the current Markdown from verified
 implementation and record a product defect separately if the code violates
-`AGENTS.md` or [Roadmap and status](/roadmap). Do not silently change legacy
+`AGENTS.md` or the repository product contract. Do not silently change legacy
 files; their value is historical traceability.

@@ -18,7 +18,7 @@ when upgrading VitePress; do not remove them without a clean `npm audit`.
 
 1. executable code and runtime configuration;
 2. tests that prove the behaviour;
-3. `AGENTS.md` and the accepted roadmap for product invariants;
+3. `AGENTS.md` and repository governance for product invariants;
 4. current documentation;
 5. legacy documents as historical evidence only.
 
@@ -35,6 +35,18 @@ Use images only when they add information. Give every Markdown image meaningful
 alt text; use empty alt text only for a truly decorative image. The current site
 uses no prose images.
 
+Use Mermaid when a state machine, request path, trust boundary, ownership
+relationship, or multi-step activation is easier to understand visually.
+Include the same meaning in nearby prose or a table so the page remains useful
+to assistive technology and plain Markdown readers.
+
+Use VitePress callouts deliberately:
+
+- `::: info` for architectural boundaries;
+- `::: tip` for safe shortcuts and verification;
+- `::: warning` or `::: caution` before risky or commonly misunderstood work;
+- `::: danger` where data loss, secret exposure, or traffic outage is possible.
+
 ## Add or move a page
 
 1. add the Markdown file in the audience-oriented section;
@@ -42,6 +54,11 @@ uses no prose images.
 3. update inbound links instead of leaving redirects undocumented;
 4. update `tests/docs/check_links.py` if the required architecture changes;
 5. run `make docs-check`.
+
+The validator also extracts Make targets, script/Compose command paths, and
+environment variables from the implementation. A documented command that no
+longer exists or a newly introduced configuration key without reference
+coverage fails CI.
 
 Do not edit `docs/legacy/` to repair old links. It is a verbatim archive and is
 excluded from build, search, lint, and current-link guarantees.
@@ -63,3 +80,8 @@ VitePress generates clean URLs, local search, metadata chunks, and a sitemap.
 `transformHead` emits canonical and social metadata from each page. Set
 `DOCS_SITE_URL` and `DOCS_BASE` to the production location; update
 `docs/public/robots.txt` if the canonical origin changes.
+
+Pages with specific search intent should set a concise `keywords` frontmatter
+list. The generated head also contains `TechArticle` or `WebSite` and
+`BreadcrumbList` JSON-LD. Titles and descriptions must describe verified
+implementation rather than promise unsupported scale or security.

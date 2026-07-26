@@ -5,6 +5,30 @@ description: Operate managed DNS-01 issuance, custom certificate upload, renewal
 
 # TLS certificates
 
+| Mode | Private-key owner | Validation |
+| --- | --- | --- |
+| Managed | Control plane, encrypted | ACME DNS-01 after an eligible proxied hostname |
+| Custom | Uploaded then encrypted | Key match, chain, names, expiry, and size |
+| Disabled | No domain certificate | Explicit policy |
+
+```mermaid
+stateDiagram-v2
+    [*] --> Ineligible: DNS-only or unverified
+    Ineligible --> Pending: first eligible proxied hostname
+    Pending --> Challenge: publish DNS-01
+    Challenge --> Issued: DNS acknowledged and CA finalized
+    Issued --> Published: edge revision acknowledged
+    Published --> Renewing: jittered renewal window
+    Renewing --> Published: valid replacement
+    Renewing --> LastValid: issuance failure
+    LastValid --> Renewing: bounded retry
+```
+
+::: danger Private-key handling
+Never log or expose certificate keys. Recovery needs the original application
+encryption key and externally retained TLS material.
+:::
+
 A domain TLS mode is `managed`, `custom`, or `disabled`.
 
 ## Managed certificates

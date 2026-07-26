@@ -46,6 +46,5 @@ forms for usability.
 
 Feature tests render panel routes, scope resources, confirm shared themes and
 navigation, and exercise Livewire/Filament actions without browser automation.
-Visual layout, keyboard navigation, mobile viewports, focus, error messages,
-one-time secrets, and real browser downloads remain the owner's
-[manual checklist](/manual-browser-qualification).
+Feature tests do not claim to prove visual layout, keyboard navigation, mobile
+viewports, focus behavior, or real browser downloads.

@@ -5,6 +5,20 @@ description: Understand CDNFoundry edge enrollment, runtime cells, placement, an
 
 # Edges, pools, and cells
 
+```mermaid
+flowchart TB
+    Domain["Domain desired state"] --> Placement["Stable placement"]
+    Placement --> Pool["shared, quarantine, or dedicated pool"]
+    Pool --> EdgeA["Edge A"]
+    Pool --> EdgeB["Edge B"]
+    EdgeA --> SharedA["Shared cell"]
+    EdgeA --> QuarantineA["Quarantine cell"]
+    EdgeB --> SharedB["Shared cell"]
+    EdgeB --> QuarantineB["Quarantine cell"]
+    SharedA -->|"assigned domains as data"| RuntimeA["One OpenResty runtime"]
+    SharedB -->|"assigned domains as data"| RuntimeB["One OpenResty runtime"]
+```
+
 An edge is one enrolled agent identity and host. A pool is a stable service
 class: `shared`, `quarantine`, or exceptional `dedicated`. A cell is the bounded
 OpenResty runtime for one pool on one edge.
@@ -46,5 +60,15 @@ A domain has one active pool and may have one target pool during movement.
 Target cells receive and acknowledge the current revision first. DNS then
 publishes the target; the source remains active for the configured drain
 interval. This avoids withdrawing the only valid route.
+
+The transition is target-first: render and activate the destination, observe
+listener readiness, switch derived routing, then drain the source. A failed
+destination leaves the source active.
+
+::: warning Protection boundary
+Cell CPU, memory, PID, connection, and rate limits contain application-level
+resource use. They cannot scrub volumetric traffic after a host or uplink is
+saturated.
+:::
 
 See [Edges and placement](/guides/edges) and [Edge-agent API](/reference/api/edge-agent).

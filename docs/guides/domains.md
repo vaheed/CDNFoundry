@@ -5,6 +5,35 @@ description: Create, verify, activate, disable, deprovision, and re-create domai
 
 # Domain lifecycle
 
+| Concern | Implemented boundary |
+| --- | --- |
+| Durable owner | PostgreSQL domain, deployment, and tombstone rows |
+| External work | NS verification, DNS reconciliation, edge deployment |
+| Completion | Operation plus target-specific acknowledgement |
+| Failure | Preserve last-valid runtime and expose the failed target |
+| Retirement | Delayed deprovision, acknowledged tombstones, reclaim cooldown |
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant CP as Control plane
+    participant PublicDNS as Public DNS
+    participant Targets as DNS and edge targets
+    User->>CP: Create domain
+    CP-->>User: pending_verification + revision
+    User->>CP: Verify nameservers
+    CP->>PublicDNS: Resolve exact NS set
+    PublicDNS-->>CP: Delegation result
+    User->>CP: Activate
+    CP->>Targets: Reconcile desired revision
+    Targets-->>CP: Per-target acknowledgement
+```
+
+::: caution Form save is not runtime activation
+Inspect domain status, the operation receipt, and DNS/edge deployment state
+before declaring a lifecycle change complete.
+:::
+
 ## Create
 
 `POST /api/domains` and the domain create form accept a `name` and optional
@@ -49,3 +78,10 @@ The name is then held in `domain_name_tombstones` for
 
 Never delete PowerDNS zones, edge files, or cache directories as a substitute
 for this lifecycle.
+
+## Operational proof
+
+After activation, query every authoritative target over UDP and TCP and compare
+SOA serials. Before retirement, confirm tombstones are acknowledged and the
+cooldown is visible. Repair or deliberately withdraw a failed target instead
+of deleting durable state.

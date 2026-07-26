@@ -5,6 +5,33 @@ description: Configure proxied hostnames, origin safety, forwarding, health chec
 
 # Proxy and origins
 
+| Concern | Implemented contract |
+| --- | --- |
+| Eligible records | Proxied A, AAAA, and CNAME only |
+| Origin cardinality | Exactly one validated origin per hostname |
+| Runtime | Shared data-driven OpenResty cell |
+| Safety | Revalidate resolution before connection |
+| Failure | Last-valid edge revision remains active |
+
+```mermaid
+flowchart LR
+    Request["Client request"] --> Host{"Known hostname?"}
+    Host -- No --> Reject["Reject"]
+    Host -- Yes --> Security["Client and security policy"]
+    Security --> Cache{"Cache hit?"}
+    Cache -- Yes --> Return["Return response"]
+    Cache -- No --> Resolve["Resolve explicit origin"]
+    Resolve --> Safe{"Safe public target?"}
+    Safe -- No --> Fail["Fail closed"]
+    Safe -- Yes --> Origin["Bounded origin request"]
+    Origin --> Return
+```
+
+::: warning Private origins are not implemented
+Do not weaken safety checks to reach RFC1918, loopback, link-local, metadata,
+platform-service, or proxy-loop destinations.
+:::
+
 A proxied hostname uses one DNS record and one explicit origin. Only `A`,
 `AAAA`, and `CNAME` records can use `proxied` mode. Their DNS `content` becomes
 platform-managed; do not treat it as the origin.

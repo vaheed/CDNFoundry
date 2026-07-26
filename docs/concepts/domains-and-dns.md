@@ -5,6 +5,17 @@ description: Understand domain lifecycle, delegation, DNS modes, and proxy publi
 
 # Domains and DNS concepts
 
+```mermaid
+stateDiagram-v2
+    [*] --> PendingVerification: create
+    PendingVerification --> Active: verify then activate
+    Active --> Disabled: disable
+    Disabled --> Active: re-enable before retirement
+    Disabled --> Deprovisioning: delay expires
+    Deprovisioning --> Tombstoned: targets acknowledge removal
+    Tombstoned --> Reclaimable: cooldown expires
+```
+
 A domain begins as desired state without an origin. Its lifecycle is:
 
 `pending_verification` → `active` → `disabled` → `deprovisioning` → deleted
@@ -37,6 +48,19 @@ Every participating cell needs a unique public IPv4 address and may have IPv6.
 The platform DNS zone advertises only enabled, fresh, non-drained, ready
 listeners. The target placement activates before the source begins its drain
 window.
+
+::: caution Disable is not deletion
+Disabling preserves last-valid state for the configured delay. Final removal
+uses target tombstones and a name cooldown so stale agents and delayed jobs
+cannot recreate an earlier tenant.
+:::
+
+## Ownership boundaries
+
+Domain users manage records only inside assigned zones. Platform SOA,
+nameserver identity, and delegation-sensitive NS records remain administrator
+concerns. Proxied record content is platform managed because it represents
+listener-ready capacity, while its origin remains explicit desired state.
 
 ## DNS request path
 

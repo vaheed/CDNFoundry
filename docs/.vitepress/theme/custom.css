@@ -21,3 +21,16 @@
 .vp-doc code {
   overflow-wrap: anywhere;
 }
+
+.vp-doc .mermaid {
+  margin: 1.5rem 0;
+  overflow-x: auto;
+  padding: 1rem;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  background: var(--vp-c-bg-soft);
+}
+
+.vp-doc .custom-block {
+  box-shadow: 0 1px 2px rgb(8 31 42 / 8%);
+}

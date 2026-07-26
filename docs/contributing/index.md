@@ -5,7 +5,7 @@ description: Contribute to CDNFoundry within its architecture, scope, safety, an
 
 # Contributing
 
-Read `AGENTS.md` and [Roadmap and status](/roadmap) before changing behaviour.
+Read `AGENTS.md` before changing behaviour.
 The key invariants are:
 
 - one Laravel modular monolith owns management;
@@ -13,7 +13,6 @@ The key invariants are:
 - DNS and HTTP traffic never pass through Laravel;
 - external effects are asynchronous, revisioned, bounded, and last-valid-state preserving;
 - no default per-domain process, container, timer, cache directory, or server block;
-- browser qualification is manual and user owned;
 - real non-browser runtime qualification lives under `tests/e2e`.
 
 Keep changes small and production named. Do not introduce lifecycle labels such

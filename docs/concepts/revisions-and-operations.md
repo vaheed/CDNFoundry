@@ -5,6 +5,18 @@ description: Understand monotonic revisions, operation receipts, retries, and ro
 
 # Revisions and operations
 
+```mermaid
+flowchart LR
+    Mutation["Mutation + Idempotency-Key"] --> Receipt["Operation receipt"]
+    Receipt --> Pending
+    Pending --> Running
+    Running --> Succeeded
+    Running --> Failed
+    Failed -->|"supported retry"| Pending
+    Mutation -->|"same key and input"| Replay["Recorded response"]
+    Mutation -->|"same key, different input"| Conflict["409 conflict"]
+```
+
 Each domain revision is monotonic. DNS and edge deployments record desired and
 active revisions separately so operators can see pending work and last-valid
 state. Revision numbers are never reused.
@@ -20,6 +32,15 @@ assigned domain.
 Operations are not a promise that every external target will succeed
 immediately. The operation response and the domain-specific deployment endpoint
 together show control-plane completion and target acknowledgement.
+
+| Evidence | What it proves |
+| --- | --- |
+| HTTP `200` or `201` | Synchronous control-state action completed |
+| HTTP `202` and operation ID | Work was durably accepted |
+| Operation `succeeded` | The job's completion condition passed |
+| DNS active checksum | One DNS cluster activated the candidate |
+| Edge acknowledgement | One agent/cell activated the sequence |
+| Runtime probe | The real listener serves expected behavior |
 
 ## Idempotent requests
 

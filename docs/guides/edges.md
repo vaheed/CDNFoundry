@@ -5,6 +5,35 @@ description: Create edge pools and hosts, enroll agents, manage cells, and move 
 
 # Edges and placement
 
+| Concern | Durable/runtime boundary |
+| --- | --- |
+| Identity | Edge UUID plus short-lived mTLS certificate |
+| Bootstrap | One-time token exchanged for persistent identity |
+| Delivery | Signed incremental manifest or bounded recovery snapshot |
+| Placement | Pool/cell state in PostgreSQL |
+| Movement | Target acknowledged before source drain |
+| Eligibility | Heartbeat, listener readiness, drain, emergency, and capacity |
+
+```mermaid
+sequenceDiagram
+    participant CP as Control plane
+    participant Source as Source cell
+    participant Target as Target cell
+    participant DNS as Platform DNS
+    CP->>Target: Publish signed current revision
+    Target-->>CP: Activate and become listener-ready
+    CP->>DNS: Publish target capacity
+    DNS-->>CP: Acknowledge
+    CP->>Source: Begin bounded drain
+    Source-->>CP: Drain complete
+    CP->>Source: Remove assignment
+```
+
+::: caution Never clone identity state
+An edge-agent volume belongs to one edge row and host. Restore it only to that
+identity, or rotate the edge and enroll again.
+:::
+
 ## Pools
 
 Administrators create `shared`, `quarantine`, or `dedicated` pools. Pool names

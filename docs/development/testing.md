@@ -1,9 +1,15 @@
 ---
 title: Testing and qualification
-description: Run CDNFoundry unit, feature, contract, real-runtime, scale, and manual browser qualification safely.
+description: Run CDNFoundry unit, feature, contract, real-runtime, and scale qualification safely.
 ---
 
 # Testing and qualification
+
+::: danger Database guard
+Laravel tests must use `APP_ENV=testing`, `DB_CONNECTION=sqlite`, and
+`DB_DATABASE=:memory:`. Never point migration or truncation tests at the
+persistent development PostgreSQL volume.
+:::
 
 ## Laravel tests
 
@@ -83,16 +89,9 @@ Application CI additionally runs Composer validation/advisories, npm production
 advisories, Pint, frontend build, Python compilation, production image builds,
 and a read-only core-image smoke test.
 
-## Browser qualification
-
-Browser E2E is manual and user owned. Coding agents must not launch Chromium,
-Playwright, Selenium, Cypress, or another browser automation tool. Use
-[Manual browser qualification](/manual-browser-qualification), record exact
-expected and actual results, and never report an unexecuted checkpoint as passed.
-
 ## Reporting
 
 Record the exact commands, revision, environment, result counts or terminal
-markers, migration activity, manual-browser status, and limitations. Historical
+markers, migration activity, and limitations. Historical
 results in `docs/legacy/` are evidence for their recorded commits, not proof for
 the current tree.

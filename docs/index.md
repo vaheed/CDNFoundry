@@ -2,6 +2,7 @@
 layout: home
 title: CDNFoundry documentation
 description: Deploy, operate, use, integrate, and develop the CDNFoundry private CDN.
+keywords: private CDN, build private CDN, ISP CDN software, self-hosted CDN, on-premises CDN, PowerDNS, OpenResty
 hero:
   name: CDNFoundry
   text: Private CDN documentation
@@ -11,8 +12,8 @@ hero:
       text: Get started
       link: /getting-started/
     - theme: alt
-      text: Production deployment
-      link: /deployment/
+      text: Production quick start
+      link: /deployment/production-quick-start
 features:
   - title: Domain users
     details: Add domains, manage DNS, proxy origins, TLS, cache, security, analytics, and usage.
@@ -39,6 +40,25 @@ control plane owns desired state in PostgreSQL; DNS and HTTP traffic remain on
 PowerDNS, DNSdist, and bounded OpenResty cells. External changes run
 asynchronously through revisioned reconciliation, and invalid candidates never
 replace the last valid runtime state.
+
+```mermaid
+flowchart LR
+    Users["Internet users"] -->|"DNS"| DNS["DNSdist + PowerDNS"]
+    Users -->|"HTTP/HTTPS"| Edge["Bounded OpenResty cells"]
+    Edge --> Origin["Validated customer origins"]
+    Admins["Administrators"] --> Control["Laravel + Filament"]
+    Control --> State[("PostgreSQL desired state")]
+    Control -->|"asynchronous reconciliation"| DNS
+    Control -->|"signed snapshots"| Edge
+    DNS -. "best-effort telemetry" .-> Analytics["Vector + ClickHouse"]
+    Edge -. "best-effort telemetry" .-> Analytics
+```
+
+::: info Designed for private operators and ISPs
+CDNFoundry is intended for organizations that operate their own authoritative
+DNS and edge capacity. It favors predictable failure, bounded resources, and
+operational clarity over a hyperscale public-cloud feature surface.
+:::
 
 Start with [the product overview](/getting-started/), or choose a destination
 from the audience cards above. The [documentation audit](/contributing/documentation-audit)

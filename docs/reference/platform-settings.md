@@ -5,6 +5,12 @@ description: Reference every PostgreSQL-backed CDNFoundry platform policy field,
 
 # Platform settings reference
 
+::: caution Settings are durable product policy
+These values live in PostgreSQL, are audited, and may queue global runtime
+reconciliation. An environment variable does not replace a setting, and a
+runtime change is incomplete until affected targets acknowledge it.
+:::
+
 Platform settings are validated groups in `core/config/platform.php` and stored
 in `system_settings`. Manage them at `/admin/platform-settings`,
 `/api/admin/system/settings`, or with `platform:settings:show` and

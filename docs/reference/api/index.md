@@ -5,6 +5,11 @@ description: Authenticate to the CDNFoundry API and handle pagination, idempoten
 
 # API conventions
 
+::: warning Retry mutations safely
+Do not retry a mutation without the same UUID `Idempotency-Key` and identical
+input. A timeout can occur after the server commits desired state.
+:::
+
 The control API is rooted at `/api`. It is the same policy boundary used by the
 Filament panels. The [endpoint catalog](/reference/api/endpoints) is generated
 from the Laravel route registry; the [OpenAPI 3.1 contract](/openapi.json) is a

@@ -5,6 +5,23 @@ description: Learn how CDNFoundry commits desired state and safely reconciles ex
 
 # Desired state and reconciliation
 
+```mermaid
+stateDiagram-v2
+    [*] --> Committed: transaction commits revision
+    Committed --> Queued: unique job dispatched
+    Queued --> Superseded: newer revision exists
+    Queued --> Rendered: latest revision rendered
+    Rendered --> Rejected: validation fails
+    Rendered --> Activated: atomic target switch
+    Activated --> Acknowledged: verification succeeds
+    Activated --> Failed: verification fails
+    Rejected --> PreviousValid: discard candidate
+    Failed --> PreviousValid: preserve active state
+    Acknowledged --> [*]
+    Superseded --> [*]
+    PreviousValid --> [*]
+```
+
 PostgreSQL is authoritative for domains, DNS records, platform identity,
 clusters, edges, pools, cells, placements, cache and security settings,
 certificates, operations, and audit history. Runtime stores are derived:
@@ -32,6 +49,11 @@ A runtime-affecting mutation follows this order:
 An HTTP request never waits for DNS, edge, TLS, purge, or backup work. Such
 requests return `202 Accepted` with an operation or task identifier.
 
+::: warning Accepted is not activated
+`202 Accepted` proves durable desired state and an operation receipt. Poll the
+operation and target deployment status before treating the runtime as changed.
+:::
+
 ## Failure guarantee
 
 A failed candidate does not replace the previous valid state. DNS deployments
@@ -46,6 +68,11 @@ ClickHouse is unavailable.
 Repeated work for the same domain or global scope is coalesced. Horizon isolates
 `interactive`, `runtime`, `certificate_purge`, and `bulk_maintenance` queues so
 large imports and global reconciliation do not consume every worker.
+
+The transaction never waits on an external network. The desired row, monotonic
+revision, audit entry, and operation boundary are committed first. Queue locks
+coalesce equivalent work while still allowing one follow-up reconciliation if
+a newer revision arrives during processing.
 
 See [Revisions and operations](/concepts/revisions-and-operations) for client
 behaviour and [CLI and scheduler](/reference/cli-and-scheduler) for scheduled

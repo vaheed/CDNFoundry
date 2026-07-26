@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
   <title id="title">CDNFoundry documentation</title>
-  <desc id="description">Documentation for deploying, operating, using, and developing CDNFoundry.</desc>
+  <desc id="description">Build and operate a private CDN for companies, hosting providers, and ISPs.</desc>
   <rect width="1200" height="630" fill="#081f2a"/>
   <circle cx="1040" cy="90" r="310" fill="#0f6f8f" opacity=".28"/>
   <circle cx="930" cy="560" r="260" fill="#1c9a7d" opacity=".18"/>
   <text x="96" y="280" fill="#fff" font-family="system-ui,sans-serif" font-size="88" font-weight="700">CDNFoundry</text>
-  <text x="100" y="370" fill="#bce8f3" font-family="system-ui,sans-serif" font-size="42">Private CDN documentation</text>
-  <text x="100" y="450" fill="#cbd5e1" font-family="system-ui,sans-serif" font-size="28">Deploy · Operate · Integrate · Develop</text>
+  <text x="100" y="370" fill="#bce8f3" font-family="system-ui,sans-serif" font-size="42">Build and operate a private CDN</text>
+  <text x="100" y="450" fill="#cbd5e1" font-family="system-ui,sans-serif" font-size="28">Companies · Hosting providers · ISPs</text>
 </svg>

@@ -5,6 +5,34 @@ description: Manage records, zone import and export, clusters, reconciliation, a
 
 # Authoritative DNS
 
+| Concern | Source of truth or bound |
+| --- | --- |
+| Desired records | Control PostgreSQL |
+| Runtime records | Derived PowerDNS PostgreSQL |
+| Public ingress | DNSdist only, UDP and TCP port 53 |
+| Mutation | One monotonic domain revision; bulk/import is atomic |
+| Target bounds | 16 clusters and 8 nameserver identities |
+| Failure rule | Invalid candidate never replaces active RRsets |
+
+```mermaid
+flowchart LR
+    Change["Record, import, or identity change"] --> Revision["Commit revision"]
+    Revision --> Render["Canonical RRsets + serial"]
+    Render --> Validate["Zone validation"]
+    Validate --> Target1["Cluster 1 candidate"]
+    Validate --> Target2["Cluster 2 candidate"]
+    Target1 --> Active1["Atomic active zone"]
+    Target2 --> Active2["Atomic active zone"]
+    Active1 --> Receipt["Acknowledgements"]
+    Active2 --> Receipt
+    Validate -- failure --> Preserve["Preserve previous zones"]
+```
+
+::: danger Never expose PowerDNS directly
+DNSdist is the only public authoritative listener. Keep the raw PowerDNS API
+and daemon private behind the source-restricted TLS gateway.
+:::
+
 ## Records
 
 Use the domain's **DNS records** relation or

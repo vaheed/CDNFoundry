@@ -5,6 +5,12 @@ description: Back up, preflight, restore, and reconstruct CDNFoundry control and
 
 # Backup and recovery
 
+::: danger Practice before an incident
+A snapshot listing is not recovery proof. Restore to an isolated environment,
+retain the encryption/signing and PKI keys, rebuild derived runtimes, and
+record measured RPO and RTO.
+:::
+
 ## Recovery set
 
 A database snapshot alone is insufficient. Retain:

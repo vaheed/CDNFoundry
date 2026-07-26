@@ -5,6 +5,33 @@ description: Configure ordered rules, bounded profiles, readiness states, quaran
 
 # Security and DDoS readiness
 
+```mermaid
+flowchart TD
+    Request["Incoming request"] --> Emergency{"Emergency mode?"}
+    Emergency -- Restrict --> Decision["Bounded emergency decision"]
+    Emergency -- Normal --> Client["Resolve trusted client IP"]
+    Client --> Rules["Ordered allow/block rules"]
+    Rules --> Profile["Profile ceilings"]
+    Profile --> Limits["Rate, concurrency, connection limits"]
+    Limits --> Method["Method and request bounds"]
+    Method --> Serve["Cache or origin"]
+    Decision --> Event["Reason + telemetry"]
+    Serve --> Event
+```
+
+| Layer | Purpose |
+| --- | --- |
+| Trusted-client parsing | Trust forwarded addresses only from configured proxies |
+| Ordered rules | Deterministic IP/CIDR/country/continent allow or block |
+| Profiles | Fixed presets or bounded manual values |
+| Readiness | Remove stale, drained, failed, or overloaded targets |
+| Emergency controls | Persisted, audited, expiring actions |
+
+::: warning Not volumetric scrubbing
+Upstream transit controls and provider scrubbing remain necessary for attacks
+that saturate a host or uplink.
+:::
+
 CDNFoundry provides bounded application-layer controls. It does not claim to
 absorb volumetric traffic after a host or uplink is saturated.
 

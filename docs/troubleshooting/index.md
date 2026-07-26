@@ -5,6 +5,12 @@ description: Diagnose CDNFoundry failures from durable state toward derived runt
 
 # Troubleshooting
 
+::: tip Diagnose from durable intent outward
+Start with the desired revision and operation receipt, then inspect target
+deployment state, runtime acknowledgement, and finally a real network probe.
+This distinguishes control failure from runtime failure.
+:::
+
 Start with the durable operation and desired revision, then move outward:
 
 1. Check `/api/ready` and administrator component health.

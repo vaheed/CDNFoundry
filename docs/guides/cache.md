@@ -5,6 +5,35 @@ description: Configure deterministic cache policy, development mode, URL purge, 
 
 # Cache and purge
 
+| Concern | Contract |
+| --- | --- |
+| Namespace | Shared cell storage isolated by domain ID and epoch |
+| Key | Same normalized key for lookup and URL purge |
+| Full purge | Increment epoch; never scan the filesystem |
+| URL purge | Durable per-edge task |
+| Development mode | Absolute bounded bypass expiry |
+| Failure | Retry the same task and expose backlog |
+
+```mermaid
+flowchart LR
+    Request["Request"] --> Normalize["Normalize cache key"]
+    Normalize --> Epoch["Domain epoch"]
+    Epoch --> Lookup{"Fresh object?"}
+    Lookup -- Yes --> Hit["HIT"]
+    Lookup -- No --> Origin["Fetch origin"]
+    Origin --> Admit{"Eligible and bounded?"}
+    Admit -- Yes --> Store["Atomic store"]
+    Admit -- No --> Bypass["BYPASS"]
+    Full["Full purge"] --> Increment["Increment epoch"]
+    URL["URL purge"] --> Normalize
+    Normalize --> Task["Per-edge delete task"]
+```
+
+::: info Purge completion
+An accepted purge proves task creation. Confirm edge task completion and make a
+real request to verify the expected MISS.
+:::
+
 Cache policy is per domain and revisioned with edge configuration.
 
 | Setting | Allowed values |

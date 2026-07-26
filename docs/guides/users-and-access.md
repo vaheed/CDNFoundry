@@ -5,6 +5,30 @@ description: Manage administrators, domain users, assignments, sessions, and API
 
 # Users and access
 
+| Concern | Implemented boundary |
+| --- | --- |
+| Human identity | `users.type` is `admin` or `user` |
+| Browser authentication | Panel session with active-user enforcement |
+| API authentication | Hashed Sanctum bearer tokens shown once |
+| Tenant scope | Explicit `domain_user` assignments plus scoped route binding |
+| Machine identity | Separate edge mTLS enrollment, never a human token |
+
+```mermaid
+flowchart TD
+    Login["Session or bearer token"] --> Active{"Account active?"}
+    Active -- No --> Deny["Deny access"]
+    Active -- Yes --> Type{"User type"}
+    Type -- Admin --> Admin["Administrator policies"]
+    Type -- Domain user --> Assigned{"Assigned domain?"}
+    Assigned -- No --> Hidden["404/403 without tenant disclosure"]
+    Assigned -- Yes --> Domain["Domain-scoped policy"]
+```
+
+::: warning One-time secrets
+Passwords, new Sanctum tokens, and edge bootstrap tokens are not recoverable
+status fields. Capture them only at their intended one-time boundary.
+:::
+
 CDNFoundry has two user types: `admin` and `user`. It does not implement custom
 roles or per-feature permission matrices.
 

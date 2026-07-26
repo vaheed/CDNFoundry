@@ -5,6 +5,33 @@ description: Query bounded telemetry, understand privacy and partial data, and e
 
 # Analytics, logs, and usage
 
+```mermaid
+flowchart LR
+    DNS["DNSdist dnstap"] --> Vector["Vector"]
+    Edge["OpenResty JSON"] --> Vector
+    Vector --> Redact["Redact and bound"]
+    Redact --> Buffer["Bounded disk buffer"]
+    Buffer --> Raw[("ClickHouse raw")]
+    Raw --> Aggregate[("Aggregates")]
+    Aggregate --> API["Bounded analytics API"]
+    Aggregate --> Rollup["Hourly idempotent rollup"]
+    Rollup --> PG[("PostgreSQL usage")]
+    PG --> Export["JSON/CSV export"]
+```
+
+| Data class | Contract |
+| --- | --- |
+| Raw logs | Domain/admin scoped, maximum 24-hour query |
+| Aggregates | Bounded analytics, maximum 90-day query |
+| Usage | Compact PostgreSQL rows for stable export |
+| Client address | IPv4/IPv6 masking applied |
+| Sensitive fields | Authorization, cookies, bodies, and query strings removed |
+
+::: caution Analytics is not authoritative
+ClickHouse loss can create partial intervals, but it cannot change DNS, edge
+state, security decisions, certificate selection, or serving.
+:::
+
 Vector sends normalized edge and DNS events directly to ClickHouse. Laravel
 queries bounded results; it does not receive raw traffic through a queue or
 store it in PostgreSQL.

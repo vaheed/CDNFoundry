@@ -1,4 +1,5 @@
 import { defineConfig, type HeadConfig } from 'vitepress'
+import { withMermaid } from 'vitepress-plugin-mermaid'
 
 const siteUrl = (process.env.DOCS_SITE_URL ?? 'https://vaheed.github.io/CDNFoundry').replace(/\/$/, '')
 const siteBase = process.env.DOCS_BASE ?? '/CDNFoundry/'
@@ -10,7 +11,33 @@ function pageUrl(relativePath: string): string {
   return `${siteUrl}/${cleanPath}`.replace(/([^:]\/)\/+/g, '$1')
 }
 
-export default defineConfig({
+function breadcrumbItems(relativePath: string): Array<Record<string, unknown>> {
+  const cleanPath = relativePath
+    .replace(/(^|\/)index\.md$/, '$1')
+    .replace(/\.md$/, '')
+    .replace(/\/$/, '')
+  const segments = cleanPath.split('/').filter(Boolean)
+  const items: Array<Record<string, unknown>> = [{
+    '@type': 'ListItem',
+    position: 1,
+    name: 'Documentation',
+    item: `${siteUrl}/`
+  }]
+
+  segments.forEach((segment, index) => {
+    const itemPath = segments.slice(0, index + 1).join('/')
+    items.push({
+      '@type': 'ListItem',
+      position: index + 2,
+      name: segment.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()),
+      item: `${siteUrl}/${itemPath}`
+    })
+  })
+
+  return items
+}
+
+export default withMermaid(defineConfig({
   lang: 'en-US',
   title: 'CDNFoundry Documentation',
   description: 'Operate, deploy, use, and develop the CDNFoundry private CDN.',
@@ -22,7 +49,9 @@ export default defineConfig({
     hostname: `${siteUrl}/`
   },
   srcExclude: [
-    'legacy/**'
+    'legacy/**',
+    'roadmap.md',
+    'manual-browser-qualification.md'
   ],
   head: [
     ['meta', { name: 'theme-color', content: '#0f5f7a' }],
@@ -36,18 +65,56 @@ export default defineConfig({
     const description = pageData.frontmatter.description ?? 'CDNFoundry private CDN documentation.'
     const canonical = pageUrl(pageData.relativePath)
     const socialImage = `${siteUrl}/social-card.svg`
+    const keywords = pageData.frontmatter.keywords ?? [
+      'private CDN',
+      'self-hosted CDN',
+      'ISP CDN',
+      'on-premises CDN',
+      'PowerDNS',
+      'OpenResty',
+      'Laravel'
+    ]
+    const articleSchema = {
+      '@context': 'https://schema.org',
+      '@type': pageData.relativePath === 'index.md' ? 'WebSite' : 'TechArticle',
+      name: title,
+      headline: title,
+      description,
+      url: canonical,
+      inLanguage: 'en-US',
+      isPartOf: {
+        '@type': 'WebSite',
+        name: 'CDNFoundry Documentation',
+        url: `${siteUrl}/`
+      }
+    }
+    const breadcrumbSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: breadcrumbItems(pageData.relativePath)
+    }
 
     return [
       ['link', { rel: 'canonical', href: canonical }],
       ['meta', { name: 'description', content: description }],
+      ['meta', { name: 'keywords', content: Array.isArray(keywords) ? keywords.join(', ') : keywords }],
+      ['meta', { name: 'author', content: 'CDNFoundry contributors' }],
       ['meta', { property: 'og:title', content: title }],
       ['meta', { property: 'og:description', content: description }],
       ['meta', { property: 'og:url', content: canonical }],
       ['meta', { property: 'og:image', content: socialImage }],
+      ['meta', { property: 'og:locale', content: 'en_US' }],
       ['meta', { name: 'twitter:title', content: title }],
       ['meta', { name: 'twitter:description', content: description }],
-      ['meta', { name: 'twitter:image', content: socialImage }]
+      ['meta', { name: 'twitter:image', content: socialImage }],
+      ['script', { type: 'application/ld+json' }, JSON.stringify(articleSchema)],
+      ['script', { type: 'application/ld+json' }, JSON.stringify(breadcrumbSchema)]
     ]
+  },
+  mermaid: {
+    securityLevel: 'strict',
+    startOnLoad: false,
+    theme: 'neutral'
   },
   themeConfig: {
     logo: {
@@ -63,6 +130,7 @@ export default defineConfig({
     },
     nav: [
       { text: 'Get started', link: '/getting-started/' },
+      { text: 'Production quick start', link: '/deployment/production-quick-start' },
       { text: 'Guides', link: '/guides/' },
       { text: 'API', link: '/reference/api/' },
       { text: 'Operations', link: '/operations/' },
@@ -74,6 +142,7 @@ export default defineConfig({
           text: 'Getting started',
           items: [
             { text: 'Overview', link: '/getting-started/' },
+            { text: 'Private CDN design guide', link: '/getting-started/private-cdn-design' },
             { text: 'Installation', link: '/getting-started/installation' },
             { text: 'First domain', link: '/getting-started/first-domain' }
           ]
@@ -149,6 +218,7 @@ export default defineConfig({
           text: 'Deployment',
           items: [
             { text: 'Production deployment', link: '/deployment/' },
+            { text: 'Production quick start', link: '/deployment/production-quick-start' },
             { text: 'Topology', link: '/deployment/topology' },
             { text: 'Certificates', link: '/deployment/certificates' },
             { text: 'Upgrade', link: '/deployment/upgrade' }
@@ -224,4 +294,4 @@ export default defineConfig({
       copyright: 'Licensed under MIT'
     }
   }
-})
+}))

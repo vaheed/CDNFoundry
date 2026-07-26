@@ -5,6 +5,12 @@ description: Reference every CDNFoundry deployment, edge-agent, development, and
 
 # Configuration reference
 
+::: danger Environment files contain production secrets
+Keep `.env.prod` mode `0600`, outside version control, and accessible only to
+the owning host administrators. Share individual cross-host values through a
+protected channel, never by copying the whole file.
+:::
+
 Use `.env.prod.example` as the production key inventory. Create `.env.prod` with
 `scripts/generate-production-env.sh` or copy the template, keep it mode `0600`,
 and never commit it. A variable is required only on hosts running its owning

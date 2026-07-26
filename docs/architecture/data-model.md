@@ -7,6 +7,27 @@ description: Understand the durable CDNFoundry entities and derived runtime reco
 
 The migrations define these major durable groups.
 
+```mermaid
+erDiagram
+    USERS ||--o{ DOMAIN_USER : assigned
+    DOMAINS ||--o{ DOMAIN_USER : grants
+    DOMAINS ||--o{ DNS_RECORDS : owns
+    DOMAINS ||--o{ DNS_DEPLOYMENTS : reconciles
+    DNS_CLUSTERS ||--o{ DNS_DEPLOYMENTS : receives
+    DOMAINS ||--o{ EDGE_REVISIONS : versions
+    DOMAINS ||--o{ DOMAIN_EDGE_PLACEMENTS : placed
+    EDGE_POOLS ||--o{ EDGES : groups
+    EDGES ||--o{ EDGE_CELLS : runs
+    EDGE_REVISIONS ||--o{ EDGE_ARTIFACTS : renders
+    EDGES ||--o{ EDGE_TASKS : executes
+    DOMAINS ||--o{ TLS_CERTIFICATES : owns
+    DOMAINS ||--o{ CACHE_PURGES : requests
+    CACHE_PURGES ||--o{ EDGE_TASKS : delivers
+    DOMAINS ||--o{ SECURITY_RULES : filters
+    DOMAINS ||--o{ USAGE_ROLLUPS : aggregates
+    USERS ||--o{ OPERATIONS : initiates
+```
+
 | Group | Tables and purpose |
 | --- | --- |
 | Identity | `users`, `personal_access_tokens`, `domain_user` assignments |
@@ -34,6 +55,31 @@ cache purge task delivery, and usage intervals.
 JSON and JSONB columns are not arbitrary extension bags. Controllers and support
 types validate proxy, origin, Geo-DNS, cache, security, operation, capacity, and
 platform-setting shapes before storage.
+
+## Identity and authorization relationships
+
+`users.type` distinguishes administrators from domain users. The `domain_user`
+pivot is the customer-scope assignment. Policies apply that relationship to
+browser sessions and Sanctum tokens; scoped binding prevents a child record
+from being addressed through another domain URL.
+
+## Revision relationships
+
+Domain changes monotonically increase desired revision. DNS deployments track
+candidate and active checksums per cluster. Edge revisions retain canonical
+state and artifacts; placements and tasks record delivery. Rollback creates a
+new higher revision instead of decreasing a sequence.
+
+## Secret-bearing rows
+
+Recoverable application secrets are encrypted using the application key. API
+tokens are one-way hashed. One-time bootstrap and plaintext token boundaries
+cannot be replayed from normal status endpoints.
+
+::: danger Recovery dependency
+A PostgreSQL dump without the original encryption/signing keys and external
+TLS material is not a complete recovery set.
+:::
 
 ## Derived data
 
