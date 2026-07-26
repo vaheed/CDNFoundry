@@ -75,6 +75,10 @@ def main() -> int:
         "accessible appearance switch": 'class="VPSwitch VPSwitchAppearance"',
         "Mermaid rendering container": 'class="mermaid"',
         "Mermaid client module": "virtual_mermaid-config",
+        "Google Search Console verification": (
+            'name="google-site-verification" '
+            'content="5Vy61YITiNmNEK2ePkuwEyAL34Lq2UQ6C7xXGXt05uI"'
+        ),
     }
     for feature, marker in shell_markers.items():
         if marker not in home_markup:

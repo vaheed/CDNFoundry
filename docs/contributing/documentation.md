@@ -103,7 +103,8 @@ The default VitePress theme provides keyboard-accessible local search,
 responsive navigation, and a light/dark appearance switch. The Mermaid plugin
 detects dark mode and changes diagram rendering with it. The rendered-site
 validator requires the navigation, search, appearance control, Mermaid
-container, and Mermaid client module before an artifact can deploy.
+container, Mermaid client module, and Google Search Console verification meta
+tag before an artifact can deploy.
 
 Pages with specific search intent should set a concise `keywords` frontmatter
 list. The generated head also contains `TechArticle` or `WebSite` and

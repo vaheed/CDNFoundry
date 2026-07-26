@@ -56,6 +56,10 @@ export default withMermaid(defineConfig({
   ],
   head: [
     ['meta', { name: 'theme-color', content: '#0f5f7a' }],
+    ['meta', {
+      name: 'google-site-verification',
+      content: '5Vy61YITiNmNEK2ePkuwEyAL34Lq2UQ6C7xXGXt05uI'
+    }],
     ['meta', { property: 'og:site_name', content: 'CDNFoundry Documentation' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
