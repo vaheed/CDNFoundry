@@ -9,19 +9,28 @@ Production uses `compose.prod.yml`, `.env.prod`, immutable GHCR image tags, and
 optional files under `deploy/production/`. It does not build application images
 on production hosts and never migrates a database during container startup.
 
+::: tip Recommended starting point
+Use the [Production quick start](/deployment/production-quick-start) for the
+complete three-host sequence: bootstrap DNS, private PKI, explicit migrations,
+cluster qualification, edge enrollment, acceptance checks, and diagnosis.
+:::
+
 The minimum documented layout is one control/telemetry host plus two combined
 DNS/edge hosts. The base file also supports colocated development-like
 qualification, while overlays expose split roles with restricted TLS gateways.
 
 Before deploying, read:
 
-1. [Topology](/deployment/topology) for networks, profiles, and public ports.
-2. [Certificates](/deployment/certificates) for the edge-control and DNS API PKI.
-3. [Configuration](/reference/configuration) for every `.env.prod` key.
-4. [Upgrade](/deployment/upgrade) for schema, worker, DNS, and edge sequencing.
+1. [Production quick start](/deployment/production-quick-start) for an end-to-end first installation.
+2. [Topology](/deployment/topology) for networks, profiles, and public ports.
+3. [Certificates](/deployment/certificates) for the edge-control and DNS API PKI.
+4. [Configuration](/reference/configuration) for every `.env.prod` key.
+5. [Upgrade](/deployment/upgrade) for schema, worker, DNS, and edge sequencing.
 
-The complete installation procedure appears later on this page after the
-topology and secret prerequisites are understood.
+The [Production quick start](/deployment/production-quick-start) is the
+authoritative first-install procedure. The remaining deployment pages explain
+individual decisions and are linked from that runbook where they become
+relevant.
 
 ## Deployment rules
 
@@ -33,5 +42,6 @@ topology and secret prerequisites are understood.
   and internal metrics off public networks.
 - Preserve the control PostgreSQL volume and all named volumes during upgrades.
 
-See [Production procedure](/deployment/topology#production-procedure) for the
-verified command sequence.
+See [Production quick start](/deployment/production-quick-start) for the
+verified command sequence and [Topology](/deployment/topology) for the role and
+overlay model.

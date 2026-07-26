@@ -5,6 +5,12 @@ description: Upgrade CDNFoundry with explicit migrations, canaries, compatibilit
 
 # Upgrade and rollback
 
+::: danger Preserve durable state
+Never remove named volumes, regenerate encryption or CA keys, or run a
+destructive database refresh during an upgrade. Roll back images only within
+the proven schema compatibility envelope.
+:::
+
 ## Before the change
 
 1. Pin the current and target immutable image references.

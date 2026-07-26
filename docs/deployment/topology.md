@@ -1,9 +1,16 @@
 ---
-title: Production topology and procedure
-description: Deploy CDNFoundry control, DNS, edge, and telemetry roles with verified Compose overlays.
+title: Production topology and Compose roles
+description: Understand CDNFoundry control, DNS, edge, and telemetry roles, networks, listeners, and Compose overlays.
 ---
 
-# Production topology and procedure
+# Production topology and Compose roles
+
+::: info Procedure versus reference
+This page explains the role model and gives a compact command map. Use the
+[Production quick start](/deployment/production-quick-start) for the complete
+first-install sequence, its prerequisites, acceptance checklist, and failure
+diagnostics.
+:::
 
 ## Minimum topology
 
@@ -21,7 +28,7 @@ Use one operator-owned DNS zone for control, edge-control, telemetry, and DNS AP
 hostnames. Use a separate platform DNS zone for CDNFoundry nameservers, proxy
 hostnames, and pool records.
 
-## Production procedure
+## Deployment sequence overview
 
 ### 1. Prepare hosts and DNS
 
@@ -162,9 +169,8 @@ From external networks, verify:
 - telemetry and usage without affecting serving;
 - backup and recovery procedure.
 
-Run the current non-browser qualification suite and complete
-[Manual browser qualification](/manual-browser-qualification). Record the exact
-revision, topology, operation IDs, certificate fingerprints, and deviations.
+Run the current non-browser qualification suite. Record the exact revision,
+topology, operation IDs, certificate fingerprints, checks, and deviations.
 
 ## Split-role overlays
 
