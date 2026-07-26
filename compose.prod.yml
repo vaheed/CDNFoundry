@@ -56,7 +56,14 @@ x-core: &core
   read_only: true
   tmpfs: [/tmp]
   volumes:
-    - core-storage:/app/storage
+    # Runtime storage is initialized by the entrypoint. Disabling Docker's
+    # automatic copy-up prevents concurrent control-plane workers from racing
+    # while a brand-new shared volume is populated.
+    - type: volume
+      source: core-storage
+      target: /app/storage
+      volume:
+        nocopy: true
     - mmdb:/mmdb:ro
     - ${EDGE_IDENTITY_CA_CERTIFICATE:?EDGE_IDENTITY_CA_CERTIFICATE is required}:/run/secrets/edge-identity-ca.crt:ro
     - ${EDGE_IDENTITY_CA_PRIVATE_KEY:?EDGE_IDENTITY_CA_PRIVATE_KEY is required}:/run/secrets/edge-identity-ca.key:ro

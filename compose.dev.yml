@@ -45,7 +45,14 @@ x-core: &core
     - ./AGENTS.md:/AGENTS.md:ro
     - ./.agents:/.agents:ro
     - core-vendor:/app/vendor
-    - core-storage:/app/storage
+    # Runtime storage is initialized by the entrypoint. Disabling Docker's
+    # automatic copy-up prevents concurrent core workers from racing while a
+    # brand-new shared volume is populated.
+    - type: volume
+      source: core-storage
+      target: /app/storage
+      volume:
+        nocopy: true
     - core-bootstrap-cache:/app/bootstrap/cache
     - mmdb:/mmdb:ro
     - dev-pki:/run/dev-pki:ro

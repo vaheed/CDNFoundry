@@ -23,6 +23,13 @@ development-tools profile. Migrations are always explicit. The supported test
 target forces `APP_ENV=testing`, SQLite `:memory:`, array cache, and synchronous
 queues before any Laravel test may migrate data.
 
+::: info Persistent storage initialization
+The shared Laravel storage volume disables Docker's automatic image copy-up.
+The application entrypoint creates its runtime directories instead, preventing
+parallel `core`, `horizon`, and `scheduler` startup from racing on a new volume.
+Existing volume contents are retained across starts and rebuilds.
+:::
+
 The development URLs are:
 
 | Service | URL or address |

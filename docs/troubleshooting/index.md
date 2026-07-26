@@ -29,3 +29,22 @@ Choose a symptom:
 
 Do not repair desired state in PowerAdmin or by editing generated edge files.
 Those are derived and will be overwritten.
+
+## Docker reports `storage/logs: file exists`
+
+This message during `make dev-up` comes from Docker attempting concurrent
+copy-up into the shared Laravel storage volume, not from Laravel logging. The
+current Compose contract mounts `core-storage` with `volume.nocopy: true`, and
+the application entrypoint creates the required directories.
+
+1. Confirm the checkout contains the current `compose.dev.yml`.
+2. Run `docker compose -f compose.dev.yml config` and verify the
+   `/app/storage` volume reports `nocopy: true`.
+3. Run `make dev-up` again.
+
+::: danger Preserve durable development state
+Do not use `docker compose down -v` or remove `core-storage` as a workaround.
+If the current contract still fails, capture `docker compose ps`, the daemon
+error, and `docker volume inspect cdnfoundry-dev_core-storage` before changing
+anything.
+:::
