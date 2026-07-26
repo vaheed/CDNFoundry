@@ -7,7 +7,7 @@ description: Understand CDNFoundry control, DNS, edge, and telemetry roles, netw
 
 ::: info Procedure versus reference
 This page explains the role model and gives a compact command map. Use the
-[Production quick start](/deployment/production-quick-start) for the complete
+[Production quick start](production-quick-start.md) for the complete
 first-install sequence, its prerequisites, acceptance checklist, and failure
 diagnostics.
 :::
@@ -66,7 +66,7 @@ chmod 600 .env.prod
 ```
 
 Run it separately on each host. Review every key against
-[Configuration](/reference/configuration). For split DNS-only, edge-only, or
+[Configuration](../reference/configuration.md). For split DNS-only, edge-only, or
 telemetry-only hosts, copy `.env.prod.example` and populate only the owning
 profile's required values.
 
@@ -91,7 +91,7 @@ scripts/generate-production-certificates.sh \
   dns-api-2.ops.example.com
 ```
 
-Distribute only the files described in [Certificates](/deployment/certificates).
+Distribute only the files described in [Certificates](certificates.md).
 Never copy CA private keys to edge hosts.
 
 ### 6. Validate configuration
@@ -156,7 +156,7 @@ then remove the bootstrap token from `.env.prod`.
 
 ### 10. Qualify traffic
 
-Delegate a test customer domain and use [First domain](/getting-started/first-domain).
+Delegate a test customer domain and use [First domain](../getting-started/first-domain.md).
 From external networks, verify:
 
 - DNSdist UDP and TCP;
@@ -180,5 +180,5 @@ topology, operation IDs, certificate fingerprints, checks, and deviations.
 - `compose.external-control-data.yml` disables local PostgreSQL and Valkey.
 - `*-ipv6.yml` files explicitly add IPv6 publications.
 
-Use [Scaling](/operations/scaling) before splitting data services or adding
+Use [Scaling](../operations/scaling.md) before splitting data services or adding
 workers.

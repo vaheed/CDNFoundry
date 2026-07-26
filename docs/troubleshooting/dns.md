@@ -15,7 +15,7 @@ description: Diagnose delegation, record validation, DNS cluster, reconciliation
 
 ## Record mutation returns 422
 
-Read the field errors, then check [DNS records](/reference/dns-records). Common
+Read the field errors, then check [DNS records](../reference/dns-records.md). Common
 causes are an owner outside the zone, TTL below 30, invalid IDNA label, CNAME
 coexistence, a second routing record on a proxied hostname, missing MX/SRV
 numbers, or PTR outside a reverse zone.
@@ -44,5 +44,5 @@ Confirm the MMDB age and provider, preview the exact client IP, and determine
 whether the public query carried trusted EDNS Client Subnet. Without ECS the
 recursive resolver address may be classified.
 
-Use the [DNS cluster runbook](/operations/runbooks#dns-cluster-failure) for
+Use the [DNS cluster runbook](../operations/runbooks.md#dns-cluster-failure) for
 recovery.

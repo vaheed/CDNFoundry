@@ -89,7 +89,7 @@ flowchart LR
 4. The target validates and activates the candidate.
 5. Deployment rows, tasks, and operations record acknowledgement or failure.
 
-See [Desired state](/concepts/desired-state) for failure behaviour.
+See [Desired state](../concepts/desired-state.md) for failure behaviour.
 
 ## Edge enrollment and sync
 

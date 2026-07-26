@@ -70,7 +70,7 @@ reduce recovery time when retained.
 The development topology adds persistent dependency/bootstrap volumes, two
 shared and two quarantine cells, two optional agents, Pebble, origin fixtures,
 PowerAdmin, and development PKI. Host publications are listed in
-[Developer setup](/development/).
+[Developer setup](../development/index.md).
 
 PowerAdmin is enabled by the `devtools` profile used by `make dev-up`. It is not
 part of production.

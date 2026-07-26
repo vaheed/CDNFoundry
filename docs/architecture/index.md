@@ -100,5 +100,5 @@ during a customer DNS or HTTP request, it violates the serving boundary.
 | ClickHouse or Vector unavailable | DNS and HTTP continue | Analytics becomes partial or unavailable |
 | Origin unavailable | Cache/stale policy may serve eligible objects | Origin health and errors become visible |
 
-Continue with [Components](/architecture/components),
-[Data flows](/architecture/data-flows), and [Data model](/architecture/data-model).
+Continue with [Components](components.md),
+[Data flows](data-flows.md), and [Data model](data-model.md).

@@ -71,4 +71,4 @@ resource use. They cannot scrub volumetric traffic after a host or uplink is
 saturated.
 :::
 
-See [Edges and placement](/guides/edges) and [Edge-agent API](/reference/api/edge-agent).
+See [Edges and placement](../guides/edges.md) and [Edge-agent API](../reference/api/edge-agent.md).

@@ -65,8 +65,9 @@ dependency evidence, not prose to paraphrase.
   One internal-certificate guide now owns generation, distribution, and rotation.
 - The root README, installation guide, and development guide used different
   first-administrator procedures. They now use `cdnf:admin:create`.
-- Relative links assumed all pages lived in one flat `docs/` directory. Current
-  pages use site-root links and are anchor validated.
+- Old relative links assumed all pages lived in one flat `docs/` directory.
+  Current pages use explicit portable `.md` paths that work on GitHub and in
+  VitePress; source and rendered anchors are validated.
 
 ## Areas not fully documented by executable contracts
 

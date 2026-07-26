@@ -21,17 +21,17 @@ clients authenticate with Laravel Sanctum bearer tokens.
 
 ## Choose your path
 
-- To evaluate a company or ISP deployment, read [How to build a private CDN](/getting-started/private-cdn-design).
-- To run the repository locally, follow [Installation](/getting-started/installation).
-- To onboard a domain, follow [First domain](/getting-started/first-domain).
-- To understand state and failure guarantees, read [Desired state](/concepts/desired-state).
-- To deploy real hosts, start with the [Production quick start](/deployment/production-quick-start).
-- To integrate over HTTP, use the [API reference](/reference/api/).
+- To evaluate a company or ISP deployment, read [How to build a private CDN](private-cdn-design.md).
+- To run the repository locally, follow [Installation](installation.md).
+- To onboard a domain, follow [First domain](first-domain.md).
+- To understand state and failure guarantees, read [Desired state](../concepts/desired-state.md).
+- To deploy real hosts, start with the [Production quick start](../deployment/production-quick-start.md).
+- To integrate over HTTP, use the [API reference](../reference/api/index.md).
 
 ## Current product boundary
 
 The implemented system supports the features documented under
-[Feature guides](/guides/). It does not include Kubernetes orchestration,
+[Feature guides](../guides/index.md). It does not include Kubernetes orchestration,
 billing, reseller hierarchies, a plugin runtime, GraphQL, HTTP/3, private-origin
 tunnels, or automated multi-region failover. Those are not implied by the
 presence of extension points in underlying dependencies.

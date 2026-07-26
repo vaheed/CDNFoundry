@@ -22,10 +22,10 @@ Start with the durable operation and desired revision, then move outward:
 
 Choose a symptom:
 
-- [DNS](/troubleshooting/dns)
-- [Edge and origin](/troubleshooting/edge-and-origin)
-- [TLS and cache](/troubleshooting/tls-and-cache)
-- [Telemetry](/troubleshooting/telemetry)
+- [DNS](dns.md)
+- [Edge and origin](edge-and-origin.md)
+- [TLS and cache](tls-and-cache.md)
+- [Telemetry](telemetry.md)
 
 Do not repair desired state in PowerAdmin or by editing generated edge files.
 Those are derived and will be overwritten.

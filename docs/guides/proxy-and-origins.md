@@ -85,7 +85,7 @@ batches of at most 100 per minute.
 
 OpenResty strips hop-by-hop input, controls `Host`, SNI, and forwarded headers,
 and uses bounded request buffering, response buffering, temporary storage, and
-origin connection accounting. See [Cache and purge](/guides/cache) for admission
+origin connection accounting. See [Cache and purge](cache.md) for admission
 and stale behaviour.
 
 ## Deployment and rollback

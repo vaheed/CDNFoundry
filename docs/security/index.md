@@ -52,5 +52,5 @@ Use fingerprints, checksums, operation IDs, and redacted setting names in
 diagnostics. Never paste environments, tokens, private keys, or customer data.
 :::
 
-Continue with [Deployment hardening](/security/hardening) and
-[Report a vulnerability](/security/reporting).
+Continue with [Deployment hardening](hardening.md) and
+[Report a vulnerability](reporting.md).

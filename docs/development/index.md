@@ -53,5 +53,5 @@ docker compose -f compose.dev.yml exec core \
   php artisan cdnf:admin:create --name="Local Administrator" --email="admin@example.test"
 ```
 
-Continue with [Testing](/development/testing), [Project layout](/development/project-layout),
-[Frontend](/development/frontend), and [Scripts and CI](/development/scripts-and-ci).
+Continue with [Testing](testing.md), [Project layout](project-layout.md),
+[Frontend](frontend.md), and [Scripts and CI](scripts-and-ci.md).

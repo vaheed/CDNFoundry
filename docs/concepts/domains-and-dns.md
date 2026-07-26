@@ -69,5 +69,5 @@ selects a private PowerDNS backend. PowerDNS reads its derived PostgreSQL schema
 and the local validated MMDB for Geo-DNS. No query calls Laravel or an external
 GeoIP API.
 
-See [Authoritative DNS](/guides/dns), [DNS records](/reference/dns-records), and
-[Geo-DNS](/guides/geo-dns).
+See [Authoritative DNS](../guides/dns.md), [DNS records](../reference/dns-records.md), and
+[Geo-DNS](../guides/geo-dns.md).

@@ -107,3 +107,4 @@ docs-check:
 	python3 tests/docs/check_links.py
 	npm --prefix docs run lint
 	$(MAKE) docs-build
+	python3 tests/docs/check_built_site.py

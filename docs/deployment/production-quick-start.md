@@ -121,7 +121,7 @@ A reasonable *starting point*, not a capacity promise, is:
 
 Measure DNS QPS, HTTP requests per second, concurrent origin connections,
 bandwidth, cache churn, telemetry volume, ClickHouse retention, and disk
-latency before resizing. See [Scaling](/operations/scaling) for the actual
+latency before resizing. See [Scaling](../operations/scaling.md) for the actual
 scaling units.
 
 ## Network policy
@@ -276,7 +276,7 @@ Copy to each edge only:
 
 Certificate mode is `0644`; private-key mode is `0600`. Never copy
 `edge-server-ca.key` or `edge-identity-ca.key` to an edge. See
-[Internal certificates](/deployment/certificates) for the complete ownership
+[Internal certificates](certificates.md) for the complete ownership
 and rotation matrix.
 
 ## Step 5: validate and start the control host
@@ -715,13 +715,13 @@ application and runtime compatibility within the documented envelope. Run
 explicit migrations and never roll back a database after an incompatible
 migration.
 
-Use [Upgrade and rollback](/deployment/upgrade) for the canary sequence and
-[Backup and recovery](/operations/backup-and-recovery) for the recovery set.
+Use [Upgrade and rollback](upgrade.md) for the canary sequence and
+[Backup and recovery](../operations/backup-and-recovery.md) for the recovery set.
 
 ## Next steps
 
-- [Understand the production topology](/deployment/topology)
-- [Harden secrets and networks](/security/hardening)
-- [Configure monitoring](/operations/monitoring)
-- [Practice incident runbooks](/operations/runbooks)
-- [Scale roles independently](/operations/scaling)
+- [Understand the production topology](topology.md)
+- [Harden secrets and networks](../security/hardening.md)
+- [Configure monitoring](../operations/monitoring.md)
+- [Practice incident runbooks](../operations/runbooks.md)
+- [Scale roles independently](../operations/scaling.md)

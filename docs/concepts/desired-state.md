@@ -74,6 +74,6 @@ revision, audit entry, and operation boundary are committed first. Queue locks
 coalesce equivalent work while still allowing one follow-up reconciliation if
 a newer revision arrives during processing.
 
-See [Revisions and operations](/concepts/revisions-and-operations) for client
-behaviour and [CLI and scheduler](/reference/cli-and-scheduler) for scheduled
+See [Revisions and operations](revisions-and-operations.md) for client
+behaviour and [CLI and scheduler](../reference/cli-and-scheduler.md) for scheduled
 reconciliation.

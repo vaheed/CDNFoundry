@@ -61,8 +61,8 @@ qualification; it is not proof of public delegation.
 
 ## Add content
 
-- Add DNS-only records with [Authoritative DNS](/guides/dns).
+- Add DNS-only records with [Authoritative DNS](../guides/dns.md).
 - Add a proxied hostname and explicit safe origin with
-  [Proxy and origins](/guides/proxy-and-origins).
-- The first eligible proxied hostname starts [managed TLS](/guides/tls).
-- Assign domain users with [Users and access](/guides/users-and-access).
+  [Proxy and origins](../guides/proxy-and-origins.md).
+- The first eligible proxied hostname starts [managed TLS](../guides/tls.md).
+- Assign domain users with [Users and access](../guides/users-and-access.md).

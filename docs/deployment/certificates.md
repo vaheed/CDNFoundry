@@ -5,7 +5,7 @@ description: Generate, distribute, verify, and rotate CDNFoundry edge-control, r
 
 # Internal certificates
 
-Customer TLS is documented in [TLS certificates](/guides/tls). This page covers
+Customer TLS is documented in [TLS certificates](../guides/tls.md). This page covers
 private service PKI used by edge enrollment, agent control, bootstrap listeners,
 and DNS API gateways.
 

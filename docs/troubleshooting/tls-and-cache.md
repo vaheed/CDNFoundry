@@ -42,5 +42,5 @@ Inspect per-edge task status and `last_error`, then confirm the agent can reach
 each cell control endpoint with the correct status token. Retry the durable task
 or purge reconciliation; do not create many new purges.
 
-See [ACME failure](/operations/runbooks#acme-failure) and
-[Cache purge failure](/operations/runbooks#cache-purge-failure).
+See [ACME failure](../operations/runbooks.md#acme-failure) and
+[Cache purge failure](../operations/runbooks.md#cache-purge-failure).

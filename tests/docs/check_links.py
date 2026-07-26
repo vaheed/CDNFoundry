@@ -347,6 +347,14 @@ def main() -> int:
                 ("http://", "https://", "mailto:", "tel:", "data:", "javascript:")
             ):
                 continue
+            if target.startswith("/"):
+                line = text.count("\n", 0, match.start()) + 1
+                failures.append(
+                    f"{document.relative_to(ROOT)}:{line}: non-portable root-relative "
+                    f"link {target}; use a relative Markdown or asset path so the link "
+                    "works on GitHub and in VitePress"
+                )
+                continue
             resolved, anchor = resolve_target(document, target)
             if not resolved.exists():
                 line = text.count("\n", 0, match.start()) + 1
@@ -363,6 +371,13 @@ def main() -> int:
                     )
                     continue
                 resolved = index
+            target_path = target.partition("#")[0].split("?", 1)[0]
+            if resolved.suffix == ".md" and target_path and not target_path.endswith(".md"):
+                line = text.count("\n", 0, match.start()) + 1
+                failures.append(
+                    f"{document.relative_to(ROOT)}:{line}: non-portable extensionless "
+                    f"Markdown link {target}; include the .md filename for GitHub"
+                )
             if anchor and resolved.suffix == ".md":
                 identifiers = headings.get(resolved.resolve())
                 if identifiers is None:

@@ -78,4 +78,4 @@ notifications.
 2. Read component details and the responsible queue.
 3. Inspect failed operations, failed jobs, deployments, tasks, orders, or backups.
 4. Verify that the last valid DNS or edge state is still serving.
-5. Follow the narrow [incident runbook](/operations/runbooks).
+5. Follow the narrow [incident runbook](runbooks.md).

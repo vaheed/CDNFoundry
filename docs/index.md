@@ -60,7 +60,7 @@ DNS and edge capacity. It favors predictable failure, bounded resources, and
 operational clarity over a hyperscale public-cloud feature surface.
 :::
 
-Start with [the product overview](/getting-started/), or choose a destination
-from the audience cards above. The [documentation audit](/contributing/documentation-audit)
+Start with [the product overview](getting-started/index.md), or choose a destination
+from the audience cards above. The [documentation audit](contributing/documentation-audit.md)
 records how this site was reconstructed from the implementation and what remains
 outside the verified product boundary.

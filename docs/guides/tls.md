@@ -88,5 +88,5 @@ preserves any valid active certificate and edge artifact. Do not delete a valid
 certificate to force recovery. Repair DNS, CA access, clock, or configuration,
 then renew or reissue.
 
-See [Certificates](/deployment/certificates) for internal service PKI, which is
+See [Certificates](../deployment/certificates.md) for internal service PKI, which is
 separate from customer TLS.

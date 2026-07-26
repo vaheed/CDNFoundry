@@ -10,7 +10,7 @@ optional files under `deploy/production/`. It does not build application images
 on production hosts and never migrates a database during container startup.
 
 ::: tip Recommended starting point
-Use the [Production quick start](/deployment/production-quick-start) for the
+Use the [Production quick start](production-quick-start.md) for the
 complete three-host sequence: bootstrap DNS, private PKI, explicit migrations,
 cluster qualification, edge enrollment, acceptance checks, and diagnosis.
 :::
@@ -21,13 +21,13 @@ qualification, while overlays expose split roles with restricted TLS gateways.
 
 Before deploying, read:
 
-1. [Production quick start](/deployment/production-quick-start) for an end-to-end first installation.
-2. [Topology](/deployment/topology) for networks, profiles, and public ports.
-3. [Certificates](/deployment/certificates) for the edge-control and DNS API PKI.
-4. [Configuration](/reference/configuration) for every `.env.prod` key.
-5. [Upgrade](/deployment/upgrade) for schema, worker, DNS, and edge sequencing.
+1. [Production quick start](production-quick-start.md) for an end-to-end first installation.
+2. [Topology](topology.md) for networks, profiles, and public ports.
+3. [Certificates](certificates.md) for the edge-control and DNS API PKI.
+4. [Configuration](../reference/configuration.md) for every `.env.prod` key.
+5. [Upgrade](upgrade.md) for schema, worker, DNS, and edge sequencing.
 
-The [Production quick start](/deployment/production-quick-start) is the
+The [Production quick start](production-quick-start.md) is the
 authoritative first-install procedure. The remaining deployment pages explain
 individual decisions and are linked from that runbook where they become
 relevant.
@@ -42,6 +42,6 @@ relevant.
   and internal metrics off public networks.
 - Preserve the control PostgreSQL volume and all named volumes during upgrades.
 
-See [Production quick start](/deployment/production-quick-start) for the
-verified command sequence and [Topology](/deployment/topology) for the role and
+See [Production quick start](production-quick-start.md) for the
+verified command sequence and [Topology](topology.md) for the role and
 overlay model.

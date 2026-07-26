@@ -254,8 +254,8 @@ orchestration.
 
 ## Continue
 
-1. Read the [architecture](/architecture/) and [desired-state model](/concepts/desired-state).
-2. Follow the [Production quick start](/deployment/production-quick-start).
-3. Review [security hardening](/security/hardening).
-4. Establish [monitoring](/operations/monitoring) and [backup recovery](/operations/backup-and-recovery).
-5. Use [scaling guidance](/operations/scaling) after measuring the first fleet.
+1. Read the [architecture](../architecture/index.md) and [desired-state model](../concepts/desired-state.md).
+2. Follow the [Production quick start](../deployment/production-quick-start.md).
+3. Review [security hardening](../security/hardening.md).
+4. Establish [monitoring](../operations/monitoring.md) and [backup recovery](../operations/backup-and-recovery.md).
+5. Use [scaling guidance](../operations/scaling.md) after measuring the first fleet.

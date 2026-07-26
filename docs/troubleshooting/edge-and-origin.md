@@ -46,5 +46,5 @@ TLS validation, HTTP status, or response timeout. Recheck SNI and `Host`
 separately. Origin addresses are validated again after resolution; a DNS change
 to a blocked address is intentionally rejected.
 
-Follow [Edge or cell failure](/operations/runbooks#edge-or-cell-failure) before
+Follow [Edge or cell failure](../operations/runbooks.md#edge-or-cell-failure) before
 draining or restarting.

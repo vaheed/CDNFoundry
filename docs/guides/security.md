@@ -54,7 +54,7 @@ header size, timeouts, keepalive, request duration, origin concurrency and
 retries, cache key length, and cache admission. `manual` permits values up to
 the standard ceiling; it cannot exceed platform capacity policy.
 
-The exact ceilings appear in [Limits](/reference/limits).
+The exact ceilings appear in [Limits](../reference/limits.md).
 
 ## Readiness states
 

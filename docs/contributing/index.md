@@ -20,5 +20,5 @@ as phase numbers into production filenames or classes. Normal CRUD belongs in
 controllers and Eloquent; add abstractions only for real external boundaries or
 genuinely reusable policy.
 
-See [Documentation contributions](/contributing/documentation) and the
-[Documentation audit](/contributing/documentation-audit).
+See [Documentation contributions](documentation.md) and the
+[Documentation audit](documentation-audit.md).

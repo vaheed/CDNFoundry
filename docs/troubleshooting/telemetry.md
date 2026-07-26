@@ -42,4 +42,4 @@ Normal views and exports intentionally apply the platform IPv4/IPv6 prefix mask.
 Raw storage retention is short and access remains policy scoped. Do not weaken
 masking to troubleshoot unrelated delivery.
 
-Use the [ClickHouse or Vector runbook](/operations/runbooks#clickhouse-or-vector-outage).
+Use the [ClickHouse or Vector runbook](../operations/runbooks.md#clickhouse-or-vector-outage).

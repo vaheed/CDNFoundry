@@ -7,13 +7,13 @@ description: Task-oriented guides for every implemented CDNFoundry feature area.
 
 | Area | Guide |
 | --- | --- |
-| Accounts, roles, assignments, tokens | [Users and access](/guides/users-and-access) |
-| Domain lifecycle and delegation | [Domains](/guides/domains) |
-| Records, imports, exports, reconciliation | [Authoritative DNS](/guides/dns) |
-| Geographic answers | [Geo-DNS](/guides/geo-dns) |
-| Proxied hostnames and safe origins | [Proxy and origins](/guides/proxy-and-origins) |
-| Enrollment, pools, cells, placement | [Edges and placement](/guides/edges) |
-| Managed DNS-01 and custom certificates | [TLS](/guides/tls) |
-| Cache policy, development mode, purges | [Cache and purge](/guides/cache) |
-| Rules, profiles, readiness, emergency actions | [Security](/guides/security) |
-| Logs, analytics, privacy, usage exports | [Analytics and usage](/guides/analytics) |
+| Accounts, roles, assignments, tokens | [Users and access](users-and-access.md) |
+| Domain lifecycle and delegation | [Domains](domains.md) |
+| Records, imports, exports, reconciliation | [Authoritative DNS](dns.md) |
+| Geographic answers | [Geo-DNS](geo-dns.md) |
+| Proxied hostnames and safe origins | [Proxy and origins](proxy-and-origins.md) |
+| Enrollment, pools, cells, placement | [Edges and placement](edges.md) |
+| Managed DNS-01 and custom certificates | [TLS](tls.md) |
+| Cache policy, development mode, purges | [Cache and purge](cache.md) |
+| Rules, profiles, readiness, emergency actions | [Security](security.md) |
+| Logs, analytics, privacy, usage exports | [Analytics and usage](analytics.md) |

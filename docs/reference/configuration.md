@@ -17,7 +17,7 @@ and never commit it. A variable is required only on hosts running its owning
 profile.
 
 Runtime product policy is not an environment variable. Manage it through
-[Platform settings](/reference/platform-settings).
+[Platform settings](platform-settings.md).
 
 ## Control plane
 

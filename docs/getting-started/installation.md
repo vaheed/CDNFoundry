@@ -103,4 +103,4 @@ administrator **Rotate identity** action and a new token.
 Do not promote the development environment. Production uses published images,
 host-private `.env.prod` files, explicit PKI, explicit Laravel and PowerDNS
 migrations, firewalls, off-host backups, and the profiles described in
-[Production deployment](/deployment/).
+[Production deployment](../deployment/index.md).

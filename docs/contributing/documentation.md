@@ -55,10 +55,13 @@ Use VitePress callouts deliberately:
 4. update `tests/docs/check_links.py` if the required architecture changes;
 5. run `make docs-check`.
 
-The validator also extracts Make targets, script/Compose command paths, and
-environment variables from the implementation. A documented command that no
-longer exists or a newly introduced configuration key without reference
-coverage fails CI.
+The source validator rejects missing files and anchors, root-relative links,
+and extensionless Markdown links that would fail on GitHub. It also extracts
+Make targets, script/Compose command paths, and environment variables from the
+implementation. After VitePress builds, a second validator crawls every
+generated internal link and anchor. A documented command that no longer exists,
+a newly introduced configuration key without reference coverage, or an
+unresolvable source or rendered link fails CI.
 
 Do not edit `docs/legacy/` to repair old links. It is a verbatim archive and is
 excluded from build, search, lint, and current-link guarantees.

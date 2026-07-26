@@ -11,9 +11,10 @@ input. A timeout can occur after the server commits desired state.
 :::
 
 The control API is rooted at `/api`. It is the same policy boundary used by the
-Filament panels. The [endpoint catalog](/reference/api/endpoints) is generated
-from the Laravel route registry; the [OpenAPI 3.1 contract](/openapi.json) is a
-downloadable build artifact.
+Filament panels. The [endpoint catalog](endpoints.md) is generated from the
+Laravel route registry; the
+[OpenAPI 3.1 contract](https://raw.githubusercontent.com/vaheed/CDNFoundry/main/docs/public/openapi.json)
+is a downloadable build artifact.
 
 ## Authentication
 
@@ -88,8 +89,8 @@ domain-specific deployment or task endpoint when target acknowledgement matters.
 
 Login, account reads, account mutations, bulk requests, origin tests, edge
 registration, and edge-agent traffic use independent rate limiters backed by
-[Platform settings](/reference/platform-settings). Payload limits are collected
-in [Limits](/reference/limits).
+[Platform settings](../platform-settings.md). Payload limits are collected
+in [Limits](../limits.md).
 
 ## Route binding and permissions
 

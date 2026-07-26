@@ -41,7 +41,7 @@ Create, update, delete, and bulk operations validate the final zone before
 incrementing its revision.
 
 Supported types, modes, field bounds, and CNAME rules are in
-[DNS record reference](/reference/dns-records).
+[DNS record reference](../reference/dns-records.md).
 
 Bulk input is limited by controller validation and payload-size checks. Every
 record is normalized before duplicates and zone-wide constraints are checked.
