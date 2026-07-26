@@ -9,7 +9,11 @@
     "lint": "markdownlint-cli2 \"**/*.md\" \"#legacy/**\" \"#node_modules/**\" \"#.vitepress/**\""
   },
   "devDependencies": {
-    "markdownlint-cli2": "0.18.1",
+    "markdownlint-cli2": "0.23.1",
     "vitepress": "1.6.4"
+  },
+  "overrides": {
+    "js-yaml": "5.2.2",
+    "vite": "6.4.3"
   }
 }

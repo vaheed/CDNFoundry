@@ -197,6 +197,8 @@ jobs:
           cache-dependency-path: docs/package-lock.json
       - name: Install documentation dependencies
         run: npm ci --prefix docs
+      - name: Audit documentation dependencies
+        run: npm audit --prefix docs --audit-level=high
       - name: Validate and build documentation
         run: make docs-check
 

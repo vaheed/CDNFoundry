@@ -10,6 +10,10 @@ VitePress config, theme code, and static SEO assets support the site but are not
 documentation content. The OpenAPI JSON file is generated machine-readable
 contract data.
 
+The package overrides keep VitePress on its stable `1.6.4` site contract while
+pinning audited transitive Vite and YAML parser patches. Recheck the overrides
+when upgrading VitePress; do not remove them without a clean `npm audit`.
+
 ## Source-of-truth order
 
 1. executable code and runtime configuration;
