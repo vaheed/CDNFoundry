@@ -42,6 +42,7 @@ export default withMermaid(defineConfig({
   title: 'CDNFoundry Documentation',
   description: 'Operate, deploy, use, and develop the CDNFoundry private CDN.',
   base: siteBase,
+  appearance: true,
   cleanUrls: true,
   lastUpdated: true,
   metaChunk: true,

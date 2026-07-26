@@ -5,7 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f6f8f.svg)](LICENSE)
 [![PHP 8.3+](https://img.shields.io/badge/PHP-8.3%2B-777bb4.svg)](core/composer.json)
 [![Go 1.24](https://img.shields.io/badge/Go-1.24-00add8.svg)](edge-agent/go.mod)
-[![Documentation: VitePress](https://img.shields.io/badge/docs-VitePress-1c9a7d.svg)](docs/index.md)
+[![Documentation website](https://img.shields.io/badge/docs-VitePress-1c9a7d.svg)](https://vaheed.github.io/CDNFoundry/)
+[![Documentation deployment](https://github.com/vaheed/CDNFoundry/actions/workflows/docs-pages.yml/badge.svg)](https://github.com/vaheed/CDNFoundry/actions/workflows/docs-pages.yml)
 
 CDNFoundry is an open-source, production-oriented **private CDN platform** for
 companies, hosting providers, and large ISPs that want to operate their own
@@ -157,6 +158,11 @@ receipts for asynchronous work.
 - [Edge-agent protocol](docs/reference/api/edge-agent.md)
 
 ## Documentation
+
+Browse the production [CDNFoundry documentation
+website](https://vaheed.github.io/CDNFoundry/) for full navigation, local
+search, rendered architecture diagrams, and light/dark modes. The Markdown
+links below also work directly on GitHub.
 
 | Audience | Start here |
 | --- | --- |

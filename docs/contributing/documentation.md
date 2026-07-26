@@ -84,6 +84,27 @@ VitePress generates clean URLs, local search, metadata chunks, and a sitemap.
 `DOCS_SITE_URL` and `DOCS_BASE` to the production location; update
 `docs/public/robots.txt` if the canonical origin changes.
 
+The `Documentation website` GitHub Actions workflow validates the source and
+rendered output, uploads `docs/.vitepress/dist`, and deploys that artifact to
+GitHub Pages. Production uses:
+
+```text
+DOCS_SITE_URL=https://vaheed.github.io/CDNFoundry
+DOCS_BASE=/CDNFoundry/
+```
+
+The repository's **Settings → Pages → Build and deployment → Source** must be
+set to **GitHub Actions**. A push to `main` that changes documentation,
+documentation validation, or the website workflow then publishes
+<https://vaheed.github.io/CDNFoundry/>. The deployment workflow uses the
+protected `github-pages` environment and does not need a repository secret.
+
+The default VitePress theme provides keyboard-accessible local search,
+responsive navigation, and a light/dark appearance switch. The Mermaid plugin
+detects dark mode and changes diagram rendering with it. The rendered-site
+validator requires the navigation, search, appearance control, Mermaid
+container, and Mermaid client module before an artifact can deploy.
+
 Pages with specific search intent should set a concise `keywords` frontmatter
 list. The generated head also contains `TechArticle` or `WebSite` and
 `BreadcrumbList` JSON-LD. Titles and descriptions must describe verified

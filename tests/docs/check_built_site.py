@@ -57,13 +57,29 @@ def resolve_output(path: str) -> pathlib.Path | None:
 
 def main() -> int:
     pages: dict[pathlib.Path, PageParser] = {}
+    page_markup: dict[pathlib.Path, str] = {}
     for path in sorted(DIST.rglob("*.html")):
+        markup = path.read_text(encoding="utf-8")
         parser = PageParser()
-        parser.feed(path.read_text(encoding="utf-8"))
+        parser.feed(markup)
         pages[path.resolve()] = parser
+        page_markup[path.resolve()] = markup
 
     failures: list[str] = []
     link_count = 0
+    home = DIST / "index.html"
+    home_markup = page_markup.get(home.resolve(), "")
+    shell_markers = {
+        "VitePress navigation": 'class="VPNav"',
+        "local search": 'id="local-search"',
+        "accessible appearance switch": 'class="VPSwitch VPSwitchAppearance"',
+        "Mermaid rendering container": 'class="mermaid"',
+        "Mermaid client module": "virtual_mermaid-config",
+    }
+    for feature, marker in shell_markers.items():
+        if marker not in home_markup:
+            failures.append(f"index.html: missing {feature}")
+
     for source, parser in pages.items():
         source_url = page_url(source)
         for raw_target in parser.links:
