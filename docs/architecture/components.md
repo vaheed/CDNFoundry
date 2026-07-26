@@ -1,0 +1,66 @@
+---
+title: Architecture components
+description: Reference the responsibility and failure boundary of every CDNFoundry service.
+---
+
+# Architecture components
+
+## Control plane
+
+| Component | Implementation | Responsibility |
+| --- | --- | --- |
+| `core` | PHP 8.5, Laravel 13, Filament 5 | API, panels, policies, desired state |
+| `web` | Nginx | Browser/API ingress to PHP-FPM |
+| `horizon` | Laravel Horizon | Four isolated Redis queue lanes |
+| `scheduler` | Laravel scheduler | Periodic bounded dispatch, retention, heartbeat |
+| `control-db` | PostgreSQL 18 | Authoritative desired and operational state |
+| `redis` | Valkey 9 | Queues, sessions, cache, locks |
+| `edge-control` | Nginx plus the core image | Mutual-TLS edge-agent ingress |
+
+`core`, Horizon, and the scheduler are independent processes. Application image
+startup creates writable directories but deliberately does not migrate.
+
+## DNS
+
+| Component | Responsibility |
+| --- | --- |
+| `dnsdist` | Only public authoritative DNS endpoint, backend selection, bounded dnstap |
+| `pdns-auth` | Private PowerDNS authoritative service |
+| `pdns-db` | Rebuildable PowerDNS runtime schema |
+| `pdns-migrate` | Explicit PowerDNS runtime migration tool |
+| `dns-api` overlay | Source-restricted TLS proxy for the private PowerDNS API |
+
+PowerAdmin exists only in the development-tools profile and is diagnostic.
+Direct edits are drift.
+
+## Edge
+
+| Component | Responsibility |
+| --- | --- |
+| `edge-agent` | Enrollment, signed artifacts, atomic activation, heartbeat, tasks |
+| `edge` | Shared OpenResty cell |
+| `edge-quarantine` | Smaller isolated quarantine cell |
+| `mmdb-updater` | Download, validate, and atomically activate the GeoIP database |
+
+OpenResty selects certificates and domain configuration from data-driven
+runtime JSON. It applies bounded request, connection, header, body, origin, and
+cache policies. No normal domain change generates an Nginx server block or reload.
+
+## Telemetry
+
+| Component | Responsibility |
+| --- | --- |
+| `vector` | Redact, normalize, buffer, and deliver edge/DNS events |
+| `clickhouse` | Raw events plus hourly and daily materialized aggregates |
+| `prometheus` | Metrics and alert evaluation |
+| `alertmanager` | Alert routing |
+| `node-exporter` | Host resource and clock metrics |
+
+Vector has separate 1 GiB disk buffers for edge and DNS sinks and drops newest
+events when full. Telemetry loss is visible but never blocks serving.
+
+## Development-only components
+
+Pebble provides a local ACME directory, two Nginx origin fixtures provide HTTP
+and HTTPS origins, `dev-pki` initializes persistent development certificates,
+and PowerAdmin provides runtime diagnostics. None belongs in production.

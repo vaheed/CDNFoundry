@@ -1,0 +1,15 @@
+{
+  "name": "cdnfoundry-documentation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress .",
+    "build": "vitepress build .",
+    "preview": "vitepress preview .",
+    "lint": "markdownlint-cli2 \"**/*.md\" \"#legacy/**\" \"#node_modules/**\" \"#.vitepress/**\""
+  },
+  "devDependencies": {
+    "markdownlint-cli2": "0.18.1",
+    "vitepress": "1.6.4"
+  }
+}

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://vaheed.github.io/CDNFoundry/sitemap.xml
