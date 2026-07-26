@@ -24,6 +24,7 @@ PUBLIC_DOCUMENTS = [
 REQUIRED_PAGES = {
     "index.md",
     "getting-started/index.md",
+    "getting-started/private-cdn-design.md",
     "getting-started/installation.md",
     "concepts/index.md",
     "architecture/index.md",
@@ -33,6 +34,7 @@ REQUIRED_PAGES = {
     "reference/api/index.md",
     "reference/api/endpoints.md",
     "deployment/index.md",
+    "deployment/production-quick-start.md",
     "deployment/upgrade.md",
     "operations/index.md",
     "security/index.md",
@@ -54,6 +56,11 @@ ENDPOINT_ROW = re.compile(
     r"^\| `(?P<method>[A-Z]+)` \| `(?P<path>/[^`]+)` \| "
     r"(?:Required|No) \| (?:Supported|No) \| `(?P<operation>[^`]+)` \|$",
     re.MULTILINE,
+)
+MAKE_INVOCATION = re.compile(r"(?m)^\s*make\s+([A-Za-z0-9_.-]+)")
+SCRIPT_PATH = re.compile(r"(?:\./)?(scripts/[A-Za-z0-9_./-]+\.sh)")
+COMPOSE_PATH = re.compile(
+    r"(?<![A-Za-z0-9_./-])((?:deploy/production/)?compose[A-Za-z0-9_.-]*\.ya?ml)"
 )
 
 
@@ -215,6 +222,70 @@ def validate_openapi(failures: list[str]) -> None:
     visit(contract)
 
 
+def validate_implementation_references(
+    documents: list[pathlib.Path], failures: list[str]
+) -> tuple[int, int, int]:
+    """Validate commands, repository paths, and environment-key coverage."""
+    text = "\n".join(
+        document.read_text(encoding="utf-8")
+        for document in documents
+        if document.exists()
+    )
+
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    make_targets = set(re.findall(r"(?m)^([A-Za-z0-9_.-]+):", makefile))
+    used_targets = set(MAKE_INVOCATION.findall(text))
+    for target in sorted(used_targets - make_targets):
+        failures.append(f"documentation: unknown Make target {target}")
+
+    referenced_paths = set(SCRIPT_PATH.findall(text))
+    referenced_paths.update(COMPOSE_PATH.findall(text))
+    for path in sorted(referenced_paths):
+        if not (ROOT / path).is_file() and not (
+            ROOT / "deploy" / "production" / path
+        ).is_file():
+            failures.append(f"documentation: missing command/configuration path {path}")
+
+    environment_keys: set[str] = set()
+    for example in (ROOT / ".env.dev.example", ROOT / ".env.prod.example"):
+        for line in example.read_text(encoding="utf-8").splitlines():
+            match = re.match(r"([A-Z][A-Z0-9_]*)=", line)
+            if match:
+                environment_keys.add(match.group(1))
+
+    implementation_files = [
+        *(ROOT / "core" / "config").glob("*.php"),
+        ROOT / "compose.dev.yml",
+        ROOT / "compose.prod.yml",
+        *(ROOT / "edge-agent").rglob("*.go"),
+    ]
+    for source in implementation_files:
+        source_text = source.read_text(encoding="utf-8")
+        environment_keys.update(
+            re.findall(r"""env\(['"]([A-Z][A-Z0-9_]*)""", source_text)
+        )
+        environment_keys.update(
+            re.findall(r"\$\{([A-Z][A-Z0-9_]*)", source_text)
+        )
+        environment_keys.update(
+            re.findall(
+                r"""(?:Getenv|LookupEnv)\(["`]([A-Z][A-Z0-9_]*)""",
+                source_text,
+            )
+        )
+
+    configuration = (
+        DOCS_ROOT / "reference" / "configuration.md"
+    ).read_text(encoding="utf-8")
+    for key in sorted(environment_keys):
+        if f"`{key}`" not in configuration:
+            failures.append(
+                f"docs/reference/configuration.md: missing implementation environment key {key}"
+            )
+
+    return len(used_targets), len(referenced_paths), len(environment_keys)
+
+
 def main() -> int:
     failures: list[str] = []
     documents = maintained_documents()
@@ -227,6 +298,9 @@ def main() -> int:
         failures.append(f"docs/{required}: required documentation page is missing")
 
     validate_openapi(failures)
+    target_count, path_count, environment_count = validate_implementation_references(
+        documents, failures
+    )
 
     headings: dict[pathlib.Path, set[str]] = {}
     for document in documents:
@@ -305,7 +379,9 @@ def main() -> int:
         return 1
     print(
         "documentation_validation=passed "
-        f"documents={len(documents)} required_pages={len(REQUIRED_PAGES)}"
+        f"documents={len(documents)} required_pages={len(REQUIRED_PAGES)} "
+        f"make_targets={target_count} command_paths={path_count} "
+        f"environment_keys={environment_count}"
     )
     return 0
 
