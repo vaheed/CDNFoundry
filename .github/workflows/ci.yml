@@ -61,8 +61,8 @@ jobs:
         run: docker compose --env-file .env.prod.example -f compose.prod.yml config --quiet
       - name: Validate production role overrides
         run: ./scripts/validate-production-overrides.sh
-      - name: Validate documentation links and Python syntax
-        run: make docs-check && python3 -m compileall -q tests/e2e tests/docs
+      - name: Validate Python syntax
+        run: python3 -m compileall -q tests/e2e tests/docs
       - name: Build every production image from its pinned base
         run: |
           docker build --target production -t cdnfoundry/core:ci core
@@ -185,10 +185,25 @@ jobs:
             (cd "${module}" && go vet ./... && go test ./... && go build ./...)
           done
 
+  docs:
+    name: Documentation contracts and production build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+      - name: Install documentation dependencies
+        run: npm ci --prefix docs
+      - name: Validate and build documentation
+        run: make docs-check
+
   publish-images:
     name: Publish GHCR images
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
-    needs: [core, compose, backend-e2e, scale-e2e, go]
+    needs: [core, compose, backend-e2e, scale-e2e, go, docs]
     runs-on: ubuntu-latest
     permissions:
       contents: read

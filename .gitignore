@@ -2,5 +2,9 @@
 /.env.prod
 /.dev/
 /edge-agent/edge-agent
+/docs/node_modules/
+/docs/.vitepress/cache/
+/docs/.vitepress/dist/
+/docs/.vitepress/.temp/
 __pycache__/
 *.py[cod]

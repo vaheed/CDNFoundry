@@ -27,11 +27,12 @@ MMDB updater downloads, extracts, validates, and atomically activates GeoIP data
 | `backend-e2e` | full real development stack, migrations, cumulative Python non-UI E2E |
 | `scale-e2e` | bounded control stack and 500,000-zone/1,000,000-record mutation qualification |
 | `go` | Go 1.24 formatting, vet, tests, build |
+| `docs` | current-page/anchor/API contracts, Markdown lint, and production VitePress build |
 | `publish-images` | immutable images after all required jobs |
 
-Documentation validation is part of `compose` and includes Markdown lint,
-duplicate headings, local pages/anchors, required information architecture,
-route/catalog drift, and a production VitePress build.
+The independent `docs` job gates publication alongside the application jobs.
+It checks Markdown, duplicate headings, local pages/anchors, required information
+architecture, OpenAPI/catalog consistency, and the production site build.
 
 ## Published images
 

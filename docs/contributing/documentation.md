@@ -36,7 +36,7 @@ uses no prose images.
 1. add the Markdown file in the audience-oriented section;
 2. add it to `.vitepress/config.mts` navigation when it is a primary page;
 3. update inbound links instead of leaving redirects undocumented;
-4. update `tests/docs/validate_docs.py` if the required architecture changes;
+4. update `tests/docs/check_links.py` if the required architecture changes;
 5. run `make docs-check`.
 
 Do not edit `docs/legacy/` to repair old links. It is a verbatim archive and is
