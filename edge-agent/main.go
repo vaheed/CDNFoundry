@@ -43,6 +43,9 @@ type ack struct {
 }
 type client struct {
 	base, dir, runtimeDir, statusToken string
+	gatewayBindings                    string
+	gatewayStatusURL                   string
+	derivedEnsured                     bool
 	statusURLs                         []string
 	http                               *http.Client
 	id                                 identity
@@ -62,7 +65,9 @@ func main() {
 	c := &client{
 		base: strings.TrimRight(required("EDGE_CONTROL_URL"), "/"), dir: env("EDGE_STATE_DIR", "/var/lib/cdnfoundry/agent"),
 		runtimeDir: env("EDGE_RUNTIME_DIR", ""), statusToken: env("EDGE_STATUS_TOKEN", ""),
-		statusURLs: splitNonempty(env("EDGE_CELL_STATUS_URLS", "")), http: &http.Client{Timeout: 15 * time.Second},
+		gatewayBindings:  env("EDGE_GATEWAY_BINDINGS", ""),
+		gatewayStatusURL: env("EDGE_GATEWAY_STATUS_URL", ""),
+		statusURLs:       splitNonempty(env("EDGE_CELL_STATUS_URLS", "")), http: &http.Client{Timeout: 15 * time.Second},
 	}
 	if err := c.configureServerTrust(env("EDGE_CONTROL_CA_CERTIFICATE", "")); err != nil {
 		fatal(err)
@@ -109,6 +114,35 @@ func (c *client) configureServerTrust(path string) error {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}
 	c.http.Transport = transport
+	return nil
+}
+
+func (c *client) ensureDerivedRuntime(current state) error {
+	if c.runtimeDir == "" || c.derivedEnsured {
+		return nil
+	}
+	runtime, pools, err := compileRuntime(current)
+	if err != nil {
+		return err
+	}
+	if err := atomicJSON(filepath.Join(c.runtimeDir, "active.json"), runtime); err != nil {
+		return err
+	}
+	for name, pool := range pools {
+		if err := atomicJSON(filepath.Join(c.runtimeDir, name+".json"), pool); err != nil {
+			return err
+		}
+	}
+	if c.gatewayBindings != "" {
+		gateway, err := compileGateway(current.Sequence, pools, c.gatewayBindings)
+		if err != nil {
+			return err
+		}
+		if err := atomicJSON(filepath.Join(c.runtimeDir, "gateway.json"), gateway); err != nil {
+			return err
+		}
+	}
+	c.derivedEnsured = true
 	return nil
 }
 
@@ -559,6 +593,9 @@ func (c *client) sync() error {
 	if err != nil {
 		return err
 	}
+	if err := c.ensureDerivedRuntime(current); err != nil {
+		return err
+	}
 	var response struct {
 		Data []struct {
 			Sequence            uint64  `json:"sequence"`
@@ -730,6 +767,15 @@ func (c *client) activate(s state) error {
 				return c.rollbackActive(active, previous, err)
 			}
 		}
+		if c.gatewayBindings != "" {
+			gateway, err := compileGateway(s.Sequence, pools, c.gatewayBindings)
+			if err != nil {
+				return c.rollbackActive(active, previous, err)
+			}
+			if err := atomicJSON(filepath.Join(c.runtimeDir, "gateway.json"), gateway); err != nil {
+				return c.rollbackActive(active, previous, err)
+			}
+		}
 	}
 	return nil
 }
@@ -768,6 +814,18 @@ func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) 
 		}
 		if domain.Domain == "" || len(domain.Hostnames) > 10000 {
 			return nil, nil, errors.New("invalid runtime domain")
+		}
+		if domain.Settings == nil {
+			domain.Settings = map[string]any{}
+		}
+		if domain.Cache == nil {
+			domain.Cache = map[string]any{}
+		}
+		if domain.Security == nil {
+			domain.Security = map[string]any{}
+		}
+		if domain.TLS == nil {
+			domain.TLS = map[string]any{}
 		}
 		tlsReference := map[string]any{"mode": domain.TLS["mode"]}
 		var certificateID string
@@ -850,6 +908,61 @@ func validPoolName(name string) bool {
 	return true
 }
 
+type gatewayBinding struct {
+	Address string `json:"address"`
+	Pool    string `json:"pool"`
+	HTTP    string `json:"http"`
+	HTTPS   string `json:"https"`
+}
+
+func compileGateway(sequence uint64, pools map[string]map[string]any, raw string) (map[string]any, error) {
+	var bindings []gatewayBinding
+	if len(raw) > 64<<10 || json.Unmarshal([]byte(raw), &bindings) != nil || len(bindings) == 0 || len(bindings) > 32 {
+		return nil, errors.New("invalid gateway bindings")
+	}
+	listenerSet := map[string]bool{}
+	routes := []map[string]any{}
+	routeSet := map[string]bool{}
+	for _, binding := range bindings {
+		address := net.ParseIP(binding.Address)
+		poolRuntime := pools[binding.Pool]
+		hosts, _ := poolRuntime["hosts"].(map[string]any)
+		if address == nil || !validPoolName(binding.Pool) || hosts == nil || binding.HTTP == "" || binding.HTTPS == "" {
+			return nil, errors.New("invalid gateway binding")
+		}
+		for _, target := range []string{binding.HTTP, binding.HTTPS} {
+			host, port, err := net.SplitHostPort(target)
+			value, _ := strconv.Atoi(port)
+			if err != nil || value < 1 || value > 65535 || net.ParseIP(host) == nil && !validPoolName(host) {
+				return nil, errors.New("invalid gateway target")
+			}
+		}
+		listenerSet[net.JoinHostPort(address.String(), "80")] = true
+		listenerSet[net.JoinHostPort(address.String(), "443")] = true
+		names := make([]string, 0, len(hosts))
+		for name := range hosts {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			key := address.String() + "|" + name
+			if routeSet[key] {
+				return nil, errors.New("duplicate gateway address and hostname")
+			}
+			routeSet[key] = true
+			routes = append(routes, map[string]any{
+				"address": address.String(), "hostname": name, "http": binding.HTTP, "https": binding.HTTPS,
+			})
+		}
+	}
+	listeners := make([]string, 0, len(listenerSet))
+	for listener := range listenerSet {
+		listeners = append(listeners, listener)
+	}
+	sort.Strings(listeners)
+	return map[string]any{"schema_version": 1, "revision": sequence, "listeners": listeners, "routes": routes}, nil
+}
+
 func (c *client) heartbeat(sequence uint64) error {
 	cells, failures, security := c.runtimeStatus()
 	listenerReady := false
@@ -858,10 +971,62 @@ func (c *client) heartbeat(sequence uint64) error {
 			listenerReady = true
 		}
 	}
+	gateway := c.gatewayStatus()
+	if c.gatewayStatusURL != "" {
+		listenerReady = gateway["ready"] == true && gateway["active_revision"] == sequence
+	}
 	return c.request("POST", "/edge/v1/heartbeat", map[string]any{
 		"agent_version": version, "listener_ready": listenerReady, "active_sequence": sequence,
-		"cells": cells, "passive_origins": failures, "noisy_domains": security,
+		"cells": cells, "passive_origins": failures, "noisy_domains": security, "gateway": gateway,
 	}, &map[string]any{}, true)
+}
+
+func (c *client) gatewayStatus() map[string]any {
+	status := map[string]any{"ready": false}
+	if c.gatewayStatusURL == "" {
+		return status
+	}
+	request, err := http.NewRequest("GET", c.gatewayStatusURL, nil)
+	if err != nil {
+		return status
+	}
+	response, err := c.http.Do(request)
+	if err != nil {
+		return status
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return status
+	}
+	body, err := io.ReadAll(io.LimitReader(response.Body, (64<<10)+1))
+	if err != nil || len(body) > 64<<10 {
+		return status
+	}
+	names := map[string]string{
+		"cdnfoundry_gateway_ready": "ready", "cdnfoundry_gateway_active_revision": "active_revision",
+		"cdnfoundry_gateway_routes": "routes", "cdnfoundry_gateway_listeners": "listeners",
+		"cdnfoundry_gateway_connections_active":         "connections_active",
+		"cdnfoundry_gateway_connections_accepted_total": "connections_accepted",
+		"cdnfoundry_gateway_connections_rejected_total": "connections_rejected",
+		"cdnfoundry_gateway_errors_total":               "errors", "cdnfoundry_gateway_candidate_rejections_total": "candidate_rejections",
+	}
+	for _, line := range strings.Split(string(body), "\n") {
+		fields := strings.Fields(line)
+		key := names[first(fields...)]
+		if len(fields) != 2 || key == "" {
+			continue
+		}
+		value, err := strconv.ParseUint(fields[1], 10, 64)
+		if err != nil {
+			continue
+		}
+		if key == "ready" {
+			status[key] = value == 1
+		} else {
+			status[key] = value
+		}
+	}
+	return status
 }
 
 func (c *client) runtimeStatus() ([]map[string]any, []map[string]any, []map[string]any) {

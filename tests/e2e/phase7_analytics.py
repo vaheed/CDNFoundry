@@ -109,16 +109,16 @@ def restart_vector(reconnect_sources: bool = False) -> None:
                 compose("restart", "dnsdist", "edge-a", timeout=90)
                 deadline = time.monotonic() + 30
                 while time.monotonic() < deadline:
-                    edge_health = run(
-                        "curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}",
-                        "http://127.0.0.1:8081/healthz", check=False,
+                    edge_health = compose(
+                        "exec", "-T", "edge-a", "wget", "-qO-",
+                        "http://127.0.0.1:8080/healthz", check=False,
                     )
                     dns_health = compose(
                         "exec", "-T", "dnsdist", "python3", "-c",
                         "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/metrics', timeout=2).read(1)",
                         check=False,
                     )
-                    if (edge_health.returncode == 0 and edge_health.stdout.strip() == "200"
+                    if (edge_health.returncode == 0 and edge_health.stdout.strip() == "ok"
                             and dns_health.returncode == 0):
                         return
                     time.sleep(1)
@@ -132,6 +132,13 @@ def vector_event(port: int, event: dict[str, object]) -> None:
     compose(
         "exec", "-T", "vector", "wget", "-qO-", "--header", "Content-Type: application/json",
         "--post-data", json.dumps(event, separators=(",", ":")), f"http://127.0.0.1:{port}/",
+    )
+
+
+def cell_request(path: str) -> subprocess.CompletedProcess[str]:
+    return compose(
+        "exec", "-T", "edge-a", "wget", "-S", "-O", "/dev/null",
+        "--header", f"Host: {DOMAIN}", f"http://127.0.0.1:8080{path}", check=False,
     )
 
 
@@ -191,11 +198,8 @@ def qualify_ingestion_and_queries(domain_id: int, user: str, stranger: str, admi
     runtime_path = f"/runtime-{RUN_ID}"
 
     def produce_runtime_event() -> None:
-        edge = run(
-            "curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}", "-H", f"Host: {DOMAIN}",
-            f"http://127.0.0.1:8081{runtime_path}?token=must-not-survive", check=False,
-        )
-        assert edge.returncode == 0 and len(edge.stdout.strip()) == 3, edge
+        edge = cell_request(f"{runtime_path}?token=must-not-survive")
+        assert "HTTP/1.1" in edge.stderr, edge
 
     wait_for_clickhouse(
         lambda value: int(value or "0") >= 1,
@@ -292,8 +296,8 @@ def qualify_usage(domain_id: int, user: str, admin: str, interval_from: dt.datet
 
 
 def qualify_outage(domain_id: int, user: str) -> None:
-    before = run("curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}", "-H", f"Host: {DOMAIN}", "http://127.0.0.1:8081/", check=False)
-    assert before.returncode == 0 and len(before.stdout.strip()) == 3, before
+    before = cell_request("/")
+    assert "HTTP/1.1" in before.stderr, before
     buffered_id = str(uuid.uuid4())
     clickhouse_stopped = False
     try:
@@ -309,8 +313,8 @@ def qualify_outage(domain_id: int, user: str) -> None:
         })
         dns = run("dig", "+time=2", "+tries=1", "@127.0.0.1", "-p", "1053", f"outage.{DOMAIN}", "SOA")
         assert "status:" in dns.stdout, dns.stdout
-        during = run("curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}", "-H", f"Host: {DOMAIN}", "http://127.0.0.1:8081/", check=False)
-        assert during.returncode == 0 and len(during.stdout.strip()) == 3, during
+        during = cell_request("/")
+        assert "HTTP/1.1" in during.stderr, during
         metrics = compose("exec", "-T", "vector", "wget", "-qO-", "http://127.0.0.1:9598/metrics").stdout
         assert "vector_buffer" in metrics and "vector_component" in metrics, metrics[:1000]
     finally:

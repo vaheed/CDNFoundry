@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\DnsCluster;
 use App\Models\Domain;
+use App\Models\Edge;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -61,6 +62,41 @@ class FilamentPanelAccessTest extends TestCase
         $this->assertFileExists(public_path('build/manifest.json'));
         $manifest = json_decode((string) file_get_contents(public_path('build/manifest.json')), true, flags: JSON_THROW_ON_ERROR);
         $this->assertArrayHasKey($theme, $manifest);
+    }
+
+    public function test_administrator_can_open_edge_gateway_status_and_domain_user_cannot(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $user = User::factory()->create();
+        $edge = Edge::query()->create([
+            'name' => 'gateway-ui-edge',
+            'country_code' => 'IR',
+            'continent_code' => 'AS',
+            'ipv4' => '203.0.113.80',
+            'registered_at' => now(),
+            'last_heartbeat_at' => now(),
+            'active_sequence' => 42,
+            'capacity' => [
+                'listener_ready' => true,
+                'gateway' => [
+                    'ready' => true,
+                    'active_revision' => 42,
+                    'listeners' => 2,
+                    'routes' => 20,
+                    'connections_active' => 1,
+                    'errors' => 0,
+                    'candidate_rejections' => 0,
+                ],
+            ],
+        ]);
+
+        $this->actingAs($admin)->get("/admin/edges/{$edge->id}")
+            ->assertOk()
+            ->assertSee('Gateway map revision')
+            ->assertSee('Gateway listeners')
+            ->assertSee('Gateway routes')
+            ->assertSee('Gateway rejected candidates');
+        $this->actingAs($user)->get("/admin/edges/{$edge->id}")->assertForbidden();
     }
 
     public function test_disabled_users_cannot_access_either_panel(): void

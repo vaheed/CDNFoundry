@@ -41,7 +41,7 @@ Create one record for every run.
 | Desktop viewport | |
 | Narrow/mobile viewport | |
 | Gateway, agent, and cell image versions | |
-| IPv4 and IPv6 service addresses | |
+| IPv4 and optional IPv6 service addresses | |
 | Disposable domains and origins | |
 | Operation, revision, and task IDs | |
 | Metrics/log evidence location | |
@@ -87,8 +87,8 @@ only and do not qualify real traffic.
    - one real delegated disposable domain;
    - two proxied hostnames with distinguishable origin responses;
    - one DNS-only hostname;
-   - at least two gateway service-address pairs;
-   - working IPv4 and IPv6 paths;
+   - at least two gateway service-address sets, including one IPv4-only edge;
+   - a working IPv4 path and, for this support qualification, one configured IPv6 path;
    - one healthy comparison domain that must remain available during failures.
 
 6. Record the exact public address, pool/cell, hostname, origin marker, and
@@ -229,13 +229,13 @@ The baseline regression passes only when every row is **Passed**.
 
 ### Purpose and topology
 
-Qualify one minimal gateway per edge that binds several public IPv4/IPv6
-service pairs and routes to bounded OpenResty cells. The gateway routes HTTP by
+Qualify one minimal gateway per edge that binds public IPv4 and optional IPv6
+service addresses and routes to bounded OpenResty cells. The gateway routes HTTP by
 destination address and validated Host, and routes HTTPS by destination address
 and TLS SNI without terminating customer TLS.
 
-Use at least two service-address pairs on one edge, two distinguishable
-hostnames, two target cells, and one unrelated comparison route. Record the
+Use one dual-stack service-address set, one IPv4-only service-address set, two
+distinguishable hostnames, two target cells, and one unrelated comparison route. Record the
 exact mapping before the run:
 
 | Route | Service IPv4 | Service IPv6 | Host/SNI | Target cell | Origin marker |
@@ -254,7 +254,8 @@ exact mapping before the run:
 3. Open the **Cells** relation. Expect each target to show **Cell**,
    **Service pool**, status, **Service addresses**, runtime/version, workload,
    resources, storage, and drain state. Confirm Route A and Route B have the
-   intended unique IPv4/IPv6 addresses and ready cells.
+   intended unique configured addresses and ready cells. The IPv4-only cell
+   must save and become ready with its IPv6 field empty.
 4. Open **Edge network → Service pools**. Expect the relevant enabled pool,
    withdrawal state, **DNS routing target**, revision, and edge-cell count.
 5. Refresh both pages. Expect the same durable desired state and current
@@ -262,10 +263,11 @@ exact mapping before the run:
 6. Sign in as a domain user and directly request the edge and service-pool
    administrator URLs. Expect denial with no fleet addresses, revisions,
    capacity, or failure details disclosed.
-7. If the current Phase 1 implementation adds gateway-specific status to these
-   existing surfaces, record its listener addresses, active map revision,
-   readiness, route count, connection state, and last bounded error. If any
-   required gateway state is unavailable, mark this checkpoint **Failed**.
+7. On each edge detail page, expect **Gateway** = **Ready**, **Gateway map
+   revision** equal to **Active configuration sequence**, and visible **Gateway
+   listeners**, **Gateway routes**, **Gateway active connections**, **Gateway
+   errors**, and **Gateway rejected candidates**. Record every value. If any
+   field is absent or the revision differs, mark this checkpoint **Failed**.
 
 ### HTTP routing
 
@@ -276,8 +278,8 @@ target cell, origin marker, gateway revision, and relevant metric/log evidence.
    Route A's cell and origin marker.
 2. Repeat over Route A's service IPv6. Expect the same logical route and
    response.
-3. Repeat both families for Route B. Expect Route B's cell and origin marker,
-   not Route A's.
+3. Repeat over Route B's IPv4-only address. Expect Route B's cell and origin
+   marker, not Route A's, with no IPv6 value required or synthesized.
 4. Send Route A's Host to Route B's address and Route B's Host to Route A's
    address. Expect only mappings explicitly present in the active routing map;
    an absent address/Host pair must be rejected before origin traffic.
@@ -300,7 +302,8 @@ Development-only `-k` probes do not qualify certificate behavior.
 1. Connect to Route A's IPv4 with Route A's exact SNI and send its matching HTTP
    Host through the TLS connection. Expect the cell-selected certificate,
    Route A's origin marker, and no customer TLS termination at the gateway.
-2. Repeat over IPv6 and repeat both families for Route B.
+2. Repeat Route A over IPv6, then repeat Route B over IPv4 only. Expect all
+   configured paths to serve without requiring an IPv6 value for Route B.
 3. Record the served certificate fingerprint for each route and compare it with
    the expected cell certificate.
 4. Send Route A's SNI with Route B's Host and the reverse. Expect the
@@ -322,7 +325,7 @@ Never edit generated gateway or cell files directly.
    to become visible, a validated candidate to activate atomically, and the
    acknowledged revision to advance.
 2. During activation, continuously request Route A, Route B, and the comparison
-   route over IPv4 and IPv6. Expect no partial map, cross-route response, or
+   route over every configured family. Expect no partial map, cross-route response, or
    unnecessary interruption.
 3. Submit a deliberately invalid candidate using the supported qualification
    fixture. Expect validation failure, a stable reason, no acknowledgement of
@@ -349,7 +352,8 @@ Never edit generated gateway or cell files directly.
 1. In the implemented monitoring surface, confirm gateway listener, active
    revision, route count, connections, errors, and readiness are visible per
    edge without customer secrets or unbounded labels.
-2. Generate accepted and rejected IPv4/IPv6 HTTP and HTTPS traffic. Expect the
+2. Generate accepted and rejected HTTP and HTTPS traffic over every configured
+   family, including the IPv4-only edge. Expect the
    corresponding counters/state to change and unrelated cell telemetry to
    remain attributable.
 3. Link the agent-owned scale report for at least 50,000 Host/SNI mappings and
@@ -366,24 +370,34 @@ Never edit generated gateway or cell files directly.
 
 Fill every row. Link evidence instead of writing only “passed.”
 
+Agent-owned status on 2026-07-27: implementation, Go unit/scale tests, 162
+isolated Laravel tests, Compose/Prometheus validation, documentation checks,
+the non-browser dual-stack and IPv4-only HTTP/HTTPS runtime test, and the
+completed-baseline non-browser regression stages passed. See
+[Edge gateway ingress](operations/gateway-ingress.md). Agent-owned strict TLS
+verification passed with the active development ACME trust root. Owner browser
+evidence, including browser-native strict certificate verification, remains
+**Pending owner run**, so the release decision remains **Blocked** and the rows
+below must not be marked Passed by a coding agent.
+
 | Gate | Result | Required evidence |
 | --- | --- | --- |
-| Implementation | | Gateway state, authorization, asynchronous revision workflow, atomic activation, and rollback |
-| Unit and feature tests | | Happy path, permissions, validation, bounds, idempotency, and stable errors |
-| Real-runtime E2E | | Real HTTP Host and HTTPS SNI routing and rejection behavior |
-| IPv4 and IPv6 | | Both families for configured, unknown, failure, and recovery paths |
-| Scale | | 50,000 mappings, multiple dual-stack pairs, hardware, load, resources, and saturation |
-| Failure and recovery | | Invalid candidate, retry, obsolete work, restart, outage, rollback, and last-valid map |
-| Isolation | | One route/cell failure leaves unrelated traffic, agent, and gateway healthy |
-| Observability | | Listener, revision, routes, connections, errors, readiness, alerts, and bounded logs |
-| Documentation | | User, administrator, API/OpenAPI, architecture, deployment, operations, troubleshooting, and runbooks |
-| Manual qualification | | Every baseline and Phase 1 checkpoint recorded by the owner |
-| Regression | | Completed DNS, proxy, TLS, cache, security, telemetry, analytics, backup, and operations baseline remains healthy |
-| Release decision | | Passed, Failed, Blocked, or Removed from scope with approved contract change |
+| Implementation | Passed | [Gateway design and operation](operations/gateway-ingress.md) and administrator gateway state |
+| Unit and feature tests | Passed | [CI run 30290594675](https://github.com/vaheed/CDNFoundry/actions/runs/30290594675) |
+| Real-runtime E2E | Passed | [Gateway qualification evidence](operations/gateway-ingress.md#qualification-evidence) |
+| IPv4 and IPv6 | Passed | Dual-stack and IPv4-only runtime evidence in the gateway qualification report |
+| Scale | Passed | 50,000-map hardware, load, resource, latency, and saturation report |
+| Failure and recovery | Passed | Invalid candidate, restart, outage, rollback, and last-valid runtime qualification |
+| Isolation | Passed | Unknown route and target failure remain isolated in the runtime suite |
+| Observability | Passed | [Metrics, alerts, and diagnostics](operations/gateway-ingress.md#monitoring-and-failures) |
+| Documentation | Passed | User, administrator, architecture, deployment, operations, troubleshooting, and runbook checks |
+| Manual qualification | Pending owner run | One gateway-detail screenshot accepted; all remaining baseline and Phase 1 checkpoints require owner evidence |
+| Regression | Passed | CI backend/runtime E2E and completed-baseline non-browser regression stages |
+| Release decision | Blocked | Awaiting the remaining owner-run manual browser qualification |
 
 Phase 1 is complete only when every applicable gate is **Passed**. A missing UI,
-unavailable IPv6 path, unexecuted scale run, or unrecorded browser result keeps
-the phase incomplete.
+failed configured IPv6 path, failed IPv4-only path, unexecuted scale run, or
+unrecorded browser result keeps the phase incomplete.
 
 ## Failure record
 

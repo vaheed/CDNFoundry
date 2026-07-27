@@ -5,6 +5,9 @@ description: Operate health, reconciliation, backups, incidents, and capacity fo
 
 # Operations
 
+See [Edge gateway ingress](gateway-ingress.md) for service-address binding,
+Host/SNI routing, migration, last-valid recovery, metrics, and scale evidence.
+
 The administrator dashboard and `/api/admin/system/components` expose dependency,
 queue, scheduler, backup, MMDB, TLS, runtime-task, and edge-capacity state.
 Prometheus scrapes the token-protected `/metrics` endpoint plus Vector,

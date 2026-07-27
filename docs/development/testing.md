@@ -5,6 +5,11 @@ description: Run CDNFoundry unit, feature, contract, real-runtime, and scale qua
 
 # Testing and qualification
 
+Run `python3 tests/e2e/gateway_ingress.py` for the non-browser gateway runtime
+qualification. It requires the development edge profile and the locally built
+`cdnfoundry/edge-gateway:qualification` image. Coding agents must not run the separate
+manual browser checklist.
+
 ::: danger Database guard
 Laravel tests must use `APP_ENV=testing`, `DB_CONNECTION=sqlite`, and
 `DB_DATABASE=:memory:`. Never point migration or truncation tests at the

@@ -205,9 +205,14 @@ class EdgeProxyTest extends TestCase
         $this->postJson('/edge/v1/register', $differentRegistration)->assertUnauthorized();
         $this->withHeaders($identity)->postJson('/edge/v1/heartbeat', ['agent_version' => '1.0.0', 'listener_ready' => true, 'active_sequence' => 0, 'cells' => [
             ['name' => 'shared-default', 'status' => 'ready', 'capacity' => ['active_connections' => 0, 'memory_usage' => 0]],
+        ], 'gateway' => [
+            'ready' => true, 'active_revision' => 0, 'routes' => 2, 'listeners' => 4,
+            'connections_active' => 0, 'connections_accepted' => 12, 'connections_rejected' => 3,
+            'errors' => 1, 'candidate_rejections' => 1,
         ]])->assertOk();
         $this->postJson('/edge/v1/register', $registration)->assertUnauthorized();
         $this->assertDatabaseHas('edge_cells', ['edge_id' => $id, 'name' => 'shared-default', 'status' => 'ready']);
+        $this->assertSame(4, Edge::query()->findOrFail($id)->capacity['gateway']['listeners']);
 
         [$user, $domain] = $this->ownedDomain();
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $this->record('edge-loop', '203.0.113.10'))->assertUnprocessable();

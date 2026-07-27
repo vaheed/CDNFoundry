@@ -134,6 +134,46 @@ func TestRuntimeAssignsSupplementalCertificatesPerHostname(t *testing.T) {
 	}
 }
 
+func TestCompileGatewayRoutesByAddressAndPool(t *testing.T) {
+	pools := map[string]map[string]any{
+		"shared-default": {
+			"hosts": map[string]any{"b.example.test": map[string]any{}, "a.example.test": map[string]any{}},
+		},
+		"quarantine-default": {"hosts": map[string]any{"blocked.example.test": map[string]any{}}},
+	}
+	compiled, err := compileGateway(41, pools, `[
+		{"address":"192.0.2.10","pool":"shared-default","http":"edge-a:8081","https":"edge-a:8444"},
+		{"address":"2001:db8::10","pool":"shared-default","http":"edge-a:8081","https":"edge-a:8444"}
+	]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if compiled["revision"] != uint64(41) {
+		t.Fatalf("unexpected gateway revision: %#v", compiled)
+	}
+	listeners := compiled["listeners"].([]string)
+	if len(listeners) != 4 || listeners[0] != "192.0.2.10:443" {
+		t.Fatalf("unexpected listeners: %#v", listeners)
+	}
+	routes := compiled["routes"].([]map[string]any)
+	if len(routes) != 4 || routes[0]["hostname"] != "a.example.test" || routes[2]["address"] != "2001:db8::10" {
+		t.Fatalf("unexpected routes: %#v", routes)
+	}
+}
+
+func TestCompileGatewayRejectsUnknownPoolDuplicateAndBounds(t *testing.T) {
+	pools := map[string]map[string]any{"shared": {"hosts": map[string]any{"a.example.test": map[string]any{}}}}
+	for _, raw := range []string{
+		`[{"address":"192.0.2.10","pool":"missing","http":"cell:8081","https":"cell:8444"}]`,
+		`[{"address":"192.0.2.10","pool":"shared","http":"cell:8081","https":"cell:8444"},{"address":"192.0.2.10","pool":"shared","http":"cell:8081","https":"cell:8444"}]`,
+		`[{"address":"not-an-ip","pool":"shared","http":"cell:8081","https":"cell:8444"}]`,
+	} {
+		if _, err := compileGateway(1, pools, raw); err == nil {
+			t.Fatalf("invalid gateway bindings passed: %s", raw)
+		}
+	}
+}
+
 func TestFreshFullSnapshotThenIncrementalArtifact(t *testing.T) {
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

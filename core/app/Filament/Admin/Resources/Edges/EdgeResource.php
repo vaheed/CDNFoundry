@@ -6,6 +6,7 @@ use App\Actions\DispatchEmergencyMode;
 use App\Filament\Admin\Resources\Edges\Pages\CreateEdge;
 use App\Filament\Admin\Resources\Edges\Pages\EditEdge;
 use App\Filament\Admin\Resources\Edges\Pages\ListEdges;
+use App\Filament\Admin\Resources\Edges\Pages\ViewEdge;
 use App\Filament\Admin\Resources\Edges\RelationManagers\CellsRelationManager;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
@@ -15,6 +16,7 @@ use App\Support\GeoVocabulary;
 use App\Support\NetworkAddress;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -73,7 +75,24 @@ class EdgeResource extends Resource
                     false => 'danger',
                     default => 'gray',
                 }),
+            TextEntry::make('capacity.gateway.ready')->label('Gateway')->badge()
+                ->formatStateUsing(fn (mixed $state): string => match ($state) {
+                    true => 'Ready',
+                    false => 'Not ready',
+                    default => 'Awaiting heartbeat',
+                })
+                ->color(fn (mixed $state): string => match ($state) {
+                    true => 'success',
+                    false => 'danger',
+                    default => 'gray',
+                }),
             TextEntry::make('active_sequence')->label('Active configuration sequence'),
+            TextEntry::make('capacity.gateway.active_revision')->label('Gateway map revision')->placeholder('Gateway not reporting'),
+            TextEntry::make('capacity.gateway.listeners')->label('Gateway listeners')->placeholder('Gateway not reporting'),
+            TextEntry::make('capacity.gateway.routes')->label('Gateway routes')->placeholder('Gateway not reporting'),
+            TextEntry::make('capacity.gateway.connections_active')->label('Gateway active connections')->placeholder('Gateway not reporting'),
+            TextEntry::make('capacity.gateway.errors')->label('Gateway errors')->placeholder('Gateway not reporting'),
+            TextEntry::make('capacity.gateway.candidate_rejections')->label('Gateway rejected candidates')->placeholder('Gateway not reporting'),
             TextEntry::make('identity_certificate_expires_at')->label('Identity expires')->dateTime()->placeholder('Not enrolled'),
             TextEntry::make('capacity.last_rejection.reason')->label('Latest deployment rejection')->placeholder('None reported'),
         ]);
@@ -94,6 +113,7 @@ class EdgeResource extends Resource
             TextColumn::make('cells_count')->counts('cells')->label('Cells'),
             TextColumn::make('capacity.last_rejection.reason')->label('Deployment failure')->placeholder('None'),
         ])->recordActions([
+            ViewAction::make(),
             Action::make('enable')->visible(fn (Edge $record): bool => ! $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => true], 'edge.enable')),
             Action::make('disable')->color('danger')->requiresConfirmation()->visible(fn (Edge $record): bool => $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => false], 'edge.disable')),
             Action::make('drain')->color('warning')->requiresConfirmation()->visible(fn (Edge $record): bool => ! $record->drained)->action(fn (Edge $record) => self::changeState($record, ['drained' => true], 'edge.drain')),
@@ -137,7 +157,12 @@ class EdgeResource extends Resource
 
     public static function getPages(): array
     {
-        return ['index' => ListEdges::route('/'), 'create' => CreateEdge::route('/create'), 'edit' => EditEdge::route('/{record}/edit')];
+        return [
+            'index' => ListEdges::route('/'),
+            'create' => CreateEdge::route('/create'),
+            'view' => ViewEdge::route('/{record}'),
+            'edit' => EditEdge::route('/{record}/edit'),
+        ];
     }
 
     private static function changeState(Edge $edge, array $changes, string $action): void

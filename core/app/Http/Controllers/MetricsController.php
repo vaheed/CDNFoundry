@@ -32,6 +32,10 @@ class MetricsController extends Controller
         $lines[] = 'cdnfoundry_operations_failed '.Operation::query()->where('status', 'failed')->count();
         $lines[] = 'cdnfoundry_dns_deployments_drifted '.DnsDeployment::query()->whereIn('status', ['pending', 'failed'])->count();
         $lines[] = 'cdnfoundry_edges_stale '.Edge::query()->where('enabled', true)->where(fn ($query) => $query->whereNull('last_heartbeat_at')->orWhere('last_heartbeat_at', '<', now()->subSeconds(app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds'))))->count();
+        $enabledEdges = Edge::query()->where('enabled', true)->get(['capacity']);
+        $lines[] = 'cdnfoundry_edge_gateways_unready '.$enabledEdges->filter(fn (Edge $edge): bool => ! ($edge->capacity['gateway']['ready'] ?? false))->count();
+        $lines[] = 'cdnfoundry_edge_gateway_errors_total '.$enabledEdges->sum(fn (Edge $edge): int => (int) ($edge->capacity['gateway']['errors'] ?? 0));
+        $lines[] = 'cdnfoundry_edge_gateway_candidate_rejections_total '.$enabledEdges->sum(fn (Edge $edge): int => (int) ($edge->capacity['gateway']['candidate_rejections'] ?? 0));
         $lines[] = 'cdnfoundry_tls_certificates_expiring '.TlsCertificate::query()->where('status', 'active')->where('expires_at', '<=', now()->addDays((int) config('services.acme.expiry_alert_days')))->count();
 
         return response(implode("\n", $lines)."\n", 200, ['Content-Type' => 'text/plain; version=0.0.4; charset=utf-8', 'Cache-Control' => 'no-store']);

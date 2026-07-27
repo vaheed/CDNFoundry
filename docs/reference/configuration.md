@@ -83,6 +83,10 @@ The Compose file fixes `APP_ENV=production`, `APP_DEBUG=false`,
 | `PDNS_API_KEY` | DNS | Private PowerDNS API credential |
 | `DNS_BIND_V4` | DNS | DNSdist IPv4 publication; default `0.0.0.0` |
 | `PDNS_CA_CERTIFICATE` | control worker | Trust anchor for HTTPS PowerDNS API gateways |
+| `EDGE_GATEWAY_BINDINGS` | edge agent | Bounded JSON array of service address, pool, and private cell targets |
+| `EDGE_GATEWAY_STATUS_URL` | edge agent | Gateway metrics URL used for heartbeat readiness |
+| `EDGE_GATEWAY_METRICS_ADDRESS` | edge gateway | Restricted metrics listener; production default `0.0.0.0:9105` |
+| `EDGE_GATEWAY_MAX_CONNECTIONS` | edge gateway | Global accepted-connection bound, `128`–`65536` (default `8192`) |
 | `DNS_API_HOSTNAME` | DNS overlay | DNS API TLS hostname |
 | `DNS_API_SERVER_CERTIFICATE` | DNS overlay | Absolute server certificate path |
 | `DNS_API_SERVER_PRIVATE_KEY` | DNS overlay | Absolute mode-`0600` key path |
@@ -118,8 +122,6 @@ whose default is `/mmdb`.
 | `CDNF_RELEASE` | every production host | Exact commit SHA or exact release tag |
 | `PUBLIC_BIND_IPV4` | multi-host overlay | Exact public IPv4 owned by the host |
 | `PUBLIC_BIND_IPV6` | IPv6 overlay | Exact public IPv6; omit the overlay when absent |
-| `EDGE_HTTP_BIND` | edge | Shared-cell HTTP, default `0.0.0.0:80` |
-| `EDGE_HTTPS_BIND` | edge | Shared-cell HTTPS, default `0.0.0.0:443` |
 | `EDGE_QUARANTINE_HTTP_BIND` | edge | Quarantine HTTP, default `127.0.0.1:18080` |
 | `EDGE_QUARANTINE_HTTPS_BIND` | edge | Quarantine HTTPS, default `127.0.0.1:18443` |
 | `EDGE_RUNTIME_TLS_CERTIFICATE` | edge | Bootstrap listener certificate path |

@@ -39,7 +39,7 @@ class CellsRelationManager extends RelationManager
                 })
                 ->helperText('Address advertised for this pool cell. It must be public, unique, and routed to this runtime listener.'),
             TextInput::make('service_ipv6')->label('Public service IPv6')->ipv6()
-                ->required(fn (): bool => $this->getOwnerRecord()->ipv6 !== null)
+                ->helperText('Optional. Leave empty for an IPv4-only service endpoint.')
                 ->rule(fn () => function (string $attribute, mixed $value, \Closure $fail): void {
                     if (filled($value) && NetworkAddress::isUnsafe((string) $value)) {
                         $fail('The cell service address must be public unicast.');

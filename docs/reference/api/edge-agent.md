@@ -13,7 +13,7 @@ valid client certificate whose serial belongs to the enabled edge.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `POST` | `/register` | Exchange edge UUID, one-time token, version, and CSR for identity |
-| `POST` | `/heartbeat` | Report sequence, listener readiness, cells, capacity, origin health, security |
+| `POST` | `/heartbeat` | Report sequence, listener readiness, bounded gateway/cell capacity, origin health, and security |
 | `GET` | `/config/manifest?cursor=` | Fetch up to 500 newer artifact descriptors |
 | `GET` | `/config/artifacts/{checksum}` | Fetch one signed encoded artifact |
 | `GET` | `/config/full` | Fetch a bounded signed gzip recovery snapshot |
@@ -45,6 +45,12 @@ signature, schema version, and minimum/maximum agent version. Agent version
 5. compiled per-pool runtime structure.
 
 Rejected candidates never replace active state.
+
+When gateway mode is configured, the heartbeat `gateway` object reports
+readiness, active map revision, listener and route counts, active/accepted/
+rejected connections, errors, and rejected candidates. Values are bounded
+integers and carry no hostnames or customer data. `listener_ready` is true only
+when the gateway is ready and its revision equals the agent's active sequence.
 
 ## Task contract
 

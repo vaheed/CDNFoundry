@@ -80,8 +80,8 @@ class SystemDnsIdentity extends Page
             Repeater::make('nameservers')->minItems(2)->maxItems(8)->schema([
                 TextInput::make('hostname')->required()->maxLength(253),
                 TextInput::make('ipv4')->required()->ipv4(),
-                TextInput::make('ipv6')->required()->ipv6()
-                    ->helperText('Required by the dual-stack platform contract. Use the public IPv6 glue address.'),
+                TextInput::make('ipv6')->ipv6()
+                    ->helperText('Optional. Leave empty for IPv4-only authoritative DNS.'),
             ])->columns(3),
             TextInput::make('soa_primary')->required()->maxLength(253),
             TextInput::make('soa_mailbox')->required()->maxLength(253),

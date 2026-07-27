@@ -5,6 +5,9 @@ description: Diagnose enrollment, heartbeat, artifacts, listeners, placement, an
 
 # Troubleshoot edge and origin
 
+For gateway listener, Host/SNI rejection, revision drift, and last-valid
+recovery, see [Edge gateway ingress](../operations/gateway-ingress.md).
+
 ## Agent will not enroll
 
 - Confirm `EDGE_ID` and the one-time token belong to the same enabled edge.

@@ -64,9 +64,8 @@ class EdgePoolController extends Controller
         if ($state === 'enable') {
             $enabledEdges = Edge::query()->where('enabled', true)->count();
             $incomplete = $pool->cells()->whereHas('edge', fn ($query) => $query->where('enabled', true))->count() !== $enabledEdges
-                || $pool->cells()->whereHas('edge', fn ($query) => $query->where('enabled', true))->whereNull('service_ipv4')->exists()
-                || $pool->cells()->whereNull('service_ipv6')->whereHas('edge', fn ($query) => $query->where('enabled', true)->whereNotNull('ipv6'))->exists();
-            abort_if($incomplete, 409, 'Every enabled edge requires IPv4 and declared IPv6 service addresses before the pool can be enabled.');
+                || $pool->cells()->whereHas('edge', fn ($query) => $query->where('enabled', true))->whereNull('service_ipv4')->exists();
+            abort_if($incomplete, 409, 'Every enabled edge requires an IPv4 service address before the pool can be enabled.');
         } else {
             abort_if(DomainEdgePlacement::query()->where('active_pool_id', $pool->id)->orWhere('target_pool_id', $pool->id)->exists(), 409, 'A pool with active or target placements cannot be disabled.');
         }

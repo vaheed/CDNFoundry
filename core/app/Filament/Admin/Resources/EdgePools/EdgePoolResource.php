@@ -61,8 +61,7 @@ class EdgePoolResource extends Resource
             TextColumn::make('updated_at')->since()->sortable(),
         ])->recordActions([
             Action::make('enable')->visible(fn (EdgePool $record): bool => ! $record->enabled)->action(function (EdgePool $record): void {
-                $incomplete = $record->cells()->whereHas('edge', fn ($query) => $query->where('enabled', true))->whereNull('service_ipv4')->exists()
-                    || $record->cells()->whereNull('service_ipv6')->whereHas('edge', fn ($query) => $query->where('enabled', true)->whereNotNull('ipv6'))->exists();
+                $incomplete = $record->cells()->whereHas('edge', fn ($query) => $query->where('enabled', true))->whereNull('service_ipv4')->exists();
                 if ($incomplete) {
                     Notification::make()->danger()->title('Configure every enabled edge cell service address first')->send();
 

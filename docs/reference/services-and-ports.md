@@ -28,7 +28,10 @@ gateways.
 | Edge control mTLS | `0.0.0.0:8443` | Restrict to registered edge sources |
 | DNSdist | `${DNS_BIND_V4}:53` TCP and UDP | Public authoritative DNS |
 | Shared cell HTTP/HTTPS | `0.0.0.0:80`, `0.0.0.0:443` | Public customer traffic |
-| Quarantine cell | `127.0.0.1:18080`, `127.0.0.1:18443` | Route only on distinct service addresses |
+| Quarantine cell | private TCP `8081`, `8444` | Reachable only from its gateway network |
+| Edge gateway | operator service IPv4/IPv6 TCP `80`, `443` | Public ingress; TLS passes through |
+| Gateway metrics | TCP `9105` | Restrict to edge agent and monitoring |
+| Cell gateway contract | TCP `8081`, `8444` | Private gateway-to-cell network; PROXY protocol version 2 required |
 | DNS API Caddy | `${PUBLIC_BIND_IPV4}:8444` | Exact-source allowlist, TLS |
 | Telemetry Caddy | `${PUBLIC_BIND_IPV4}:8686`, `:8687` | Exact-source allowlist, TLS |
 

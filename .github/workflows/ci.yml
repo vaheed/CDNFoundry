@@ -70,6 +70,7 @@ jobs:
           docker build --build-arg CORE_IMAGE=cdnfoundry/core:ci --target edge-control -t cdnfoundry/edge-control:ci -f docker/nginx/Dockerfile.production .
           docker build -t cdnfoundry/edge-runtime:ci -f docker/openresty/Dockerfile .
           docker build -t cdnfoundry/edge-agent:ci edge-agent
+          docker build -t cdnfoundry/edge-gateway:ci edge-gateway
           docker build -t cdnfoundry/mmdb-updater:ci docker/mmdb-updater
       - name: Smoke-test the read-only core image
         shell: bash
@@ -173,17 +174,33 @@ jobs:
       - name: Test and build every Go module
         shell: bash
         run: |
-          mapfile -t modules < <(find . -name go.mod -not -path './.git/*' -printf '%h\n' | sort -u)
-          if (( ${#modules[@]} == 0 )); then
-            echo 'No Go modules are present yet; nothing to test or build.'
-            exit 0
+          set +e
+          {
+            mapfile -t modules < <(find . -name go.mod -not -path './.git/*' -printf '%h\n' | sort -u)
+            if (( ${#modules[@]} == 0 )); then
+              echo 'No Go modules are present yet; nothing to test or build.'
+              exit 0
+            fi
+            for module in "${modules[@]}"; do
+              echo "Testing ${module}"
+              unformatted="$(find "${module}" -name '*.go' -type f -print0 | xargs -0 gofmt -l)"
+              test -z "${unformatted}" || { printf 'Unformatted Go files:\n%s\n' "${unformatted}"; exit 1; }
+              (cd "${module}" && go vet ./... && go test -v ./... && go build ./...)
+            done
+          } 2>&1 | tee /tmp/cdnfoundry-go.log
+          status=${PIPESTATUS[0]}
+          if (( status != 0 )); then
+            tail -n 40 /tmp/cdnfoundry-go.log > /tmp/cdnfoundry-go-tail.log
+            {
+              echo '### Go test/build failure tail'
+              echo '```text'
+              cat /tmp/cdnfoundry-go-tail.log
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+            annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-go-tail.log)"
+            echo "::error title=Go test/build failed::${annotation}"
           fi
-          for module in "${modules[@]}"; do
-            echo "Testing ${module}"
-            unformatted="$(find "${module}" -name '*.go' -type f -print0 | xargs -0 gofmt -l)"
-            test -z "${unformatted}" || { printf 'Unformatted Go files:\n%s\n' "${unformatted}"; exit 1; }
-            (cd "${module}" && go vet ./... && go test ./... && go build ./...)
-          done
+          exit "${status}"
 
   docs:
     name: Documentation contracts and production build
@@ -226,6 +243,7 @@ jobs:
           docker build --build-arg CORE_IMAGE=ghcr.io/vaheed/cdnfoundry-core:${RELEASE} --target edge-control -t ghcr.io/vaheed/cdnfoundry-edge-control:${RELEASE} -f docker/nginx/Dockerfile.production .
           docker build -t ghcr.io/vaheed/cdnfoundry-edge-runtime:${RELEASE} -f docker/openresty/Dockerfile .
           docker build -t ghcr.io/vaheed/cdnfoundry-edge-agent:${RELEASE} edge-agent
+          docker build -t ghcr.io/vaheed/cdnfoundry-edge-gateway:${RELEASE} edge-gateway
           docker build -t ghcr.io/vaheed/cdnfoundry-mmdb-updater:${RELEASE} docker/mmdb-updater
       - name: Push commit and channel tags
         env:
@@ -235,7 +253,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          images=(core web edge-control edge-runtime edge-agent mmdb-updater)
+          images=(core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater)
           aliases=()
 
           if [[ "${RELEASE_REF}" == "refs/heads/main" ]]; then
