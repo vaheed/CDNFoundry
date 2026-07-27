@@ -399,6 +399,95 @@ Phase 1 is complete only when every applicable gate is **Passed**. A missing UI,
 failed configured IPv6 path, failed IPv4-only path, unexecuted scale run, or
 unrecorded browser result keeps the phase incomplete.
 
+## Phase 2 — Bounded cell inventory
+
+Do not start this gate until Phase 1 is Passed. Record the edge UUID, configured
+slot count, release SHA, host, browser, and timestamps. The shipped topology
+uses eight slots.
+
+### Fresh inventory and authorization
+
+1. Sign in as an administrator and open **Edge network → Edges → New edge**.
+   Enter a unique name, country, continent, public IPv4, optional public IPv6,
+   and **Cell slots = 8**. Save and copy the one-time bootstrap token.
+2. Open the new edge and its **Cells** relation. Expect exactly `cell-01`
+   through `cell-08`, consecutive slot numbers, unique HTTP/HTTPS/status ports,
+   unique runtime paths, and no extra row. Expect `cell-01` assigned to shared,
+   `cell-02` assigned to quarantine, and `cell-03`–`cell-08` unassigned.
+3. Attempt another edge with slot counts 0 and 33. Expect field validation and
+   no edge, slot, token, task, or audit side effect. Create a disposable edge
+   with one slot and expect exactly `cell-01`; drain, disable, and delete it.
+4. Enroll the eight-slot edge. Refresh its detail page and Cells relation.
+   Expect current enrollment, heartbeat, agent version, gateway readiness, and
+   every running slot's ready/drained state and capacity. No bootstrap secret
+   may reappear.
+5. Sign in as a domain user and request the edge list/detail and cell API URLs.
+   Expect denial without slot identity, assignment, address, capacity, path,
+   resource, revision, or failure disclosure.
+
+### Runtime controls and isolation
+
+1. Record every cell's status, active revision, assigned domain count, active
+   connections, CPU, memory, cache, temporary storage, and last restart.
+2. Drain `cell-02`. Expect one pending operation/task, then **Drained** only for
+   that slot. Repeat the action with the same idempotency key through the API;
+   expect the same operation and no duplicate task.
+3. Undrain `cell-02`. Expect pending then ready. Restart `cell-02`; expect its
+   restart timestamp/generation to advance after a bounded drain while the
+   edge agent, gateway, `cell-01`, and `cell-03`–`cell-08` remain available.
+4. Stop `cell-04` through the operator runtime fixture. Expect it to become
+   stopped or degraded with a stable reason. Valid traffic targeting another
+   cell must continue, gateway and agent readiness must remain, and unrelated
+   revisions/capacity must not reset.
+5. Saturate the disposable `cell-04` CPU and memory only up to its cgroup
+   ceilings. Expect the container limit to hold and another cell's traffic and
+   status to remain available. Record host and per-cell metrics.
+6. Restore `cell-04`. Expect reconciliation to return it to the latest active
+   revision without editing generated files or replaying unrelated cells.
+
+### Recovery, bounds, and evidence
+
+1. Restart the agent. Expect enrollment identity, mutual TLS, acknowledgements,
+   active sequence, all eight slot files, drained controls, and last-valid
+   snapshot recovery. No cell-engine socket may be mounted in the agent.
+2. Make the control plane unavailable. Restart one cell and keep valid traffic
+   on another. Expect local serving and previous valid state to continue; after
+   restoration, expect convergence without duplicate activation.
+3. Present an invalid slot mapping and invalid runtime candidate through the
+   supported fixture. Expect rejection, bounded reason, and previous active
+   state for every unrelated slot.
+4. Confirm each cell has 512 MiB memory, 0.5 CPU, 128 PID, 256 MiB cache, 64 MiB
+   request-temporary, and 16 MiB log ceilings. Fill each disposable storage area
+   to its ceiling and expect bounded failure without host filesystem growth or
+   another cell losing service.
+5. Link the eight-slot agent-owned report with host/topology, idle and active
+   overhead per slot, concurrency, workload, saturation result, accepted limit,
+   crash isolation, restart, snapshot recovery, IPv4/IPv6, and baseline
+   regression evidence.
+
+### Phase 2 completion gate
+
+Agent-owned implementation, PostgreSQL expand migration, 162 isolated Laravel
+tests, Go format/vet/test/build, Compose validation, the cumulative non-browser
+baseline/runtime regression, and the eight-slot overhead/isolation test passed
+on 2026-07-27. The owner browser run above and the Phase 1 release gate must both
+be Passed before changing this phase's release decision from **Blocked**.
+
+| Gate | Result | Required evidence |
+| --- | --- | --- |
+| Implementation | Passed | [Bounded inventory design and operations](operations/cell-inventory.md) |
+| Unit and feature tests | Passed | 162 Laravel tests / 1,280 assertions and Go format/vet/test/build |
+| Real-runtime E2E | Passed | Eight-slot test plus enrollment, mTLS, snapshot, restart, and cumulative baseline runtime suite |
+| IPv4 and IPv6 | Passed | Authoritative DNS and edge baseline dual-stack/IPv4-only evidence |
+| Scale | Passed | Eight-slot idle/active overhead and isolation report |
+| Failure and recovery | Passed | Control outage, restart, retry, rollback, and last-valid cumulative evidence |
+| Isolation | Passed | `cell-04` stop left `cell-05` and support process ready |
+| Observability | Pending owner run | Runtime metrics passed; cell state/capacity and alert screenshots remain owner evidence |
+| Documentation | Passed | User, administrator, reference, deployment, operations, troubleshooting, and runbook checks |
+| Manual qualification | Pending owner run | Every exact browser checkpoint above |
+| Regression | Passed | Completed baseline and Phase 1 cumulative non-browser checks |
+| Release decision | Blocked | Phase 1 and owner-run Phase 2 browser evidence are not Passed |
+
 ## Failure record
 
 For every failed or blocked checkpoint, record:

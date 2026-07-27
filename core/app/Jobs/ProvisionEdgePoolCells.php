@@ -8,6 +8,7 @@ use App\Models\Operation;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\DB;
 
 class ProvisionEdgePoolCells implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
@@ -35,7 +36,27 @@ class ProvisionEdgePoolCells implements ShouldBeUniqueUntilProcessing, ShouldQue
             ->orderBy('id')->limit(250)->get();
         $operation->update(['status' => 'running', 'started_at' => $operation->started_at ?? now(), 'attempts' => $operation->attempts + 1]);
         foreach ($edges as $edge) {
-            $edge->cells()->firstOrCreate(['edge_pool_id' => $pool->id], ['name' => $pool->name]);
+            $assigned = DB::transaction(function () use ($edge, $pool): bool {
+                if ($edge->cells()->where('edge_pool_id', $pool->id)->exists()) {
+                    return true;
+                }
+                $slot = $edge->cells()->whereNull('edge_pool_id')->orderBy('slot')->lockForUpdate()->first();
+                if ($slot === null) {
+                    return false;
+                }
+                $slot->update(['edge_pool_id' => $pool->id, 'status' => 'assigned']);
+
+                return true;
+            });
+            if (! $assigned) {
+                $operation->update([
+                    'status' => 'failed', 'error' => 'cell_slot_capacity_exhausted',
+                    'result' => ['pool_id' => $pool->id, 'cursor' => $cursor, 'cells_provisioned' => $provisioned, 'failed_edge_id' => $edge->id],
+                    'finished_at' => now(),
+                ]);
+
+                return;
+            }
             $provisioned++;
             $cursor = $edge->id;
         }

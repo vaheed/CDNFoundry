@@ -11,26 +11,42 @@ flowchart TB
     Placement --> Pool["shared, quarantine, or dedicated pool"]
     Pool --> EdgeA["Edge A"]
     Pool --> EdgeB["Edge B"]
-    EdgeA --> SharedA["Shared cell"]
-    EdgeA --> QuarantineA["Quarantine cell"]
-    EdgeB --> SharedB["Shared cell"]
-    EdgeB --> QuarantineB["Quarantine cell"]
+    EdgeA --> SharedA["cell-01 assigned to shared"]
+    EdgeA --> QuarantineA["cell-02 assigned to quarantine"]
+    EdgeB --> SharedB["cell-01 assigned to shared"]
+    EdgeB --> QuarantineB["cell-02 assigned to quarantine"]
     SharedA -->|"assigned domains as data"| RuntimeA["One OpenResty runtime"]
     SharedB -->|"assigned domains as data"| RuntimeB["One OpenResty runtime"]
 ```
 
 An edge is one enrolled agent identity and host. A pool is a stable service
-class: `shared`, `quarantine`, or exceptional `dedicated`. A cell is the bounded
-OpenResty runtime for one pool on one edge.
+class: `shared`, `quarantine`, or exceptional `dedicated`. A cell slot is a
+bounded OpenResty runtime with stable identity independent of its optional pool
+assignment.
 
-The shipped production profile creates two cells per edge host:
+The shipped production profile creates exactly eight slots per edge host,
+`cell-01` through `cell-08`. Fresh control-plane edges default to the same
+bounded count and may select 1–32 slots before creation. The count is immutable
+after creation. Each slot has unique host ports, runtime/cache/temporary paths,
+status, capacity, and resource limits. Initially:
 
-- `shared-default`, with 2 GiB memory and 2 CPU limits;
-- `quarantine-default`, with 512 MiB memory and 0.5 CPU limits.
+- `cell-01` is assigned to `shared-default`;
+- `cell-02` is assigned to `quarantine-default`;
+- the remaining slots are unassigned, hold an empty runtime, and are available
+  for explicit later placement work.
 
-The edge agent is separate, read-only, non-root, and limited to 128 MiB and 0.25
+Assignment never changes slot identity or storage paths. The registered states
+are assigned, unassigned, ready, degraded, drained, and stopped. A missing
+assigned runtime becomes degraded; a missing unassigned runtime remains
+stopped.
+
+Every cell is limited to 512 MiB, 0.5 CPU, 128 PIDs, 256 MiB cache temporary
+storage, 64 MiB request temporary storage, and 16 MiB logs by the shipped
+topology. The edge agent is separate, read-only, non-root, and limited to 128 MiB and 0.25
 CPU. It owns identity, artifact validation, atomic runtime files, acknowledgements,
-and control tasks. It does not proxy customer traffic.
+and control tasks. It does not proxy customer traffic and has no container-engine
+socket. Drain, undrain, and bounded restart controls use authenticated private
+cell endpoints.
 
 ## Enrollment
 

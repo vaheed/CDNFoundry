@@ -43,7 +43,7 @@ func TestVerifyAndCompatibility(t *testing.T) {
 }
 
 func TestVersionCommand(t *testing.T) {
-	if version != "1.1.0" {
+	if version != "1.2.0" {
 		t.Fatalf("unexpected release version %q", version)
 	}
 }
@@ -440,6 +440,53 @@ func TestCachePurgeFansOutToEveryAuthenticatedCell(t *testing.T) {
 	result, status := c.runCachePurge(task)
 	if status != "succeeded" || result["status"] != "completed" || result["applied_cells"] != 2 || calls != 2 {
 		t.Fatalf("cache purge fanout failed: status=%s result=%#v calls=%d", status, result, calls)
+	}
+}
+
+func TestWriteCellRuntimesKeepsStableSlotsAndEmptyUnassignedState(t *testing.T) {
+	dir := t.TempDir()
+	c := &client{runtimeDir: dir, cellAssignments: map[string]string{"cell-01": "shared-default", "cell-02": ""}}
+	pools := map[string]map[string]any{
+		"shared-default": {"schema_version": 1, "sequence": uint64(9), "hosts": map[string]any{"www.example.test": map[string]any{}}},
+	}
+	if err := c.writeCellRuntimes(9, pools); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"cell-01", "cell-02"} {
+		if _, err := os.Stat(filepath.Join(dir, name+".json")); err != nil {
+			t.Fatalf("missing stable runtime for %s: %v", name, err)
+		}
+	}
+	var empty map[string]any
+	body, err := os.ReadFile(filepath.Join(dir, "cell-02.json"))
+	if err != nil || json.Unmarshal(body, &empty) != nil {
+		t.Fatalf("invalid unassigned runtime: %v", err)
+	}
+	if empty["sequence"] != float64(9) || len(empty["hosts"].(map[string]any)) != 0 {
+		t.Fatalf("unexpected unassigned runtime: %#v", empty)
+	}
+}
+
+func TestValidCellNameIsBounded(t *testing.T) {
+	for _, name := range []string{"cell-01", "cell-08", "cell-32"} {
+		if !validCellName(name) {
+			t.Fatalf("expected %s to be valid", name)
+		}
+	}
+	for _, name := range []string{"shared-default", "cell-00", "cell-1", "cell-33", "cell-01-extra"} {
+		if validCellName(name) {
+			t.Fatalf("expected %s to be invalid", name)
+		}
+	}
+}
+
+func TestUnassignedSlotsReceiveAdditionalRuntimePoolsDeterministically(t *testing.T) {
+	c := &client{cellAssignments: map[string]string{"cell-01": "shared-default", "cell-02": "", "cell-03": ""}}
+	resolved := c.resolvedCellAssignments(map[string]map[string]any{
+		"shared-default": {}, "reserved-z": {}, "dedicated-a": {},
+	})
+	if resolved["cell-01"] != "shared-default" || resolved["cell-02"] != "dedicated-a" || resolved["cell-03"] != "reserved-z" {
+		t.Fatalf("unexpected deterministic assignments: %#v", resolved)
 	}
 }
 

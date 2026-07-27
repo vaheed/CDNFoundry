@@ -6,11 +6,13 @@ use App\Actions\DispatchEmergencyMode;
 use App\Filament\Admin\Resources\EdgePools\Pages\CreateEdgePool;
 use App\Filament\Admin\Resources\EdgePools\Pages\EditEdgePool;
 use App\Filament\Admin\Resources\EdgePools\Pages\ListEdgePools;
+use App\Jobs\ProvisionEdgePoolCells;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
 use App\Models\DomainEdgePlacement;
 use App\Models\EdgePool;
 use App\Models\EmergencyMode;
+use App\Models\Operation;
 use App\Models\PlatformDnsSetting;
 use App\Support\EdgeRoutingCompiler;
 use Filament\Actions\Action;
@@ -60,6 +62,18 @@ class EdgePoolResource extends Resource
             TextColumn::make('cells_count')->counts('cells')->label('Edge cells'),
             TextColumn::make('updated_at')->since()->sortable(),
         ])->recordActions([
+            Action::make('reconcileCells')->label('Reconcile cells')->icon('heroicon-o-arrow-path')
+                ->requiresConfirmation()
+                ->action(function (EdgePool $record): void {
+                    $operation = Operation::query()->create([
+                        'actor_id' => auth()->id(), 'type' => 'edge.pool_provision', 'status' => 'pending',
+                        'input' => ['pool_id' => $record->id],
+                    ]);
+                    AuditLog::record(auth()->user(), 'edge.pool_provision_requested', $record, ['operation_id' => $operation->id], request()->ip());
+                    ProvisionEdgePoolCells::dispatch($record->id, $operation->id);
+                    Notification::make()->info()->title('Cell reconciliation queued')
+                        ->body("Operation {$operation->id} will assign one existing unassigned slot on each missing edge.")->send();
+                }),
             Action::make('enable')->visible(fn (EdgePool $record): bool => ! $record->enabled)->action(function (EdgePool $record): void {
                 $incomplete = $record->cells()->whereHas('edge', fn ($query) => $query->where('enabled', true))->whereNull('service_ipv4')->exists();
                 if ($incomplete) {

@@ -18,6 +18,7 @@ x-core-env: &core-env
   CACHE_STORE: redis
   SESSION_DRIVER: redis
   QUEUE_CONNECTION: redis
+
   REDIS_URL: ${REDIS_URL:-}
   REDIS_HOST: ${REDIS_HOST:-redis}
   REDIS_PORT: ${REDIS_PORT:-6379}
@@ -43,6 +44,35 @@ x-core-env: &core-env
   BACKUP_ACCESS_KEY_ID: ${BACKUP_ACCESS_KEY_ID:?BACKUP_ACCESS_KEY_ID is required}
   BACKUP_SECRET_ACCESS_KEY: ${BACKUP_SECRET_ACCESS_KEY:?BACKUP_SECRET_ACCESS_KEY is required}
   BACKUP_DEFAULT_REGION: ${BACKUP_DEFAULT_REGION:-us-east-1}
+
+x-edge-cell: &edge-cell
+  image: ghcr.io/vaheed/cdnfoundry-edge-runtime:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
+  profiles: [edge]
+  volumes:
+    - ${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro
+    - ${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro
+    - edge-state:/var/lib/cdnfoundry/runtime:ro
+    - mmdb:/mmdb:ro
+  depends_on:
+    mmdb-updater: { condition: service_healthy }
+  read_only: true
+  tmpfs:
+    - /var/cache/nginx:rw,noexec,nosuid,size=256m
+    - /var/lib/nginx/tmp:rw,noexec,nosuid,size=64m
+    - /usr/local/openresty/nginx/logs:rw,noexec,nosuid,size=16m
+  networks: [edge, telemetry]
+  restart: unless-stopped
+  stop_signal: SIGQUIT
+  stop_grace_period: 30s
+  mem_limit: 512m
+  cpus: 0.5
+  pids_limit: 128
+  sysctls: { net.ipv4.tcp_syncookies: "1" }
+  ulimits:
+    nofile: { soft: 32768, hard: 32768 }
+  deploy:
+    resources:
+      limits: { memory: 512m, cpus: "0.5", pids: 128 }
 
 x-core: &core
   image: ghcr.io/vaheed/cdnfoundry-core:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
@@ -287,85 +317,51 @@ services:
     networks: [telemetry]
     restart: unless-stopped
 
-  edge:
-    image: ghcr.io/vaheed/cdnfoundry-edge-runtime:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
-    profiles: [edge]
-    ports:
-      - "127.0.0.1:18081:8081"
-      - "127.0.0.1:18444:8444"
-    environment:
-      EDGE_CELL_NAME: shared-default
-      EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/shared-default.json
-      EDGE_STATUS_TOKEN: ${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}
-      GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb
-    volumes:
-      - ${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro
-      - ${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro
-      - edge-state:/var/lib/cdnfoundry/runtime:ro
-      - mmdb:/mmdb:ro
-    depends_on:
-      mmdb-updater: { condition: service_healthy }
-    read_only: true
-    tmpfs:
-      - /var/cache/nginx:rw,noexec,nosuid,size=512m
-      - /var/lib/nginx/tmp:rw,noexec,nosuid,size=128m
-      - /usr/local/openresty/nginx/logs:rw,noexec,nosuid,size=16m
-    networks: [edge, telemetry]
-    restart: unless-stopped
-    stop_signal: SIGQUIT
-    stop_grace_period: 30s
-    mem_limit: 2g
-    cpus: 2
-    pids_limit: 256
-    sysctls: { net.ipv4.tcp_syncookies: "1" }
-    ulimits:
-      nofile: { soft: 65536, hard: 65536 }
-    deploy:
-      resources:
-        limits:
-          memory: 2g
-          cpus: "2"
-          pids: 256
+  cell-01: &cell-01
+    <<: *edge-cell
+    ports: ["127.0.0.1:18081:8081", "127.0.0.1:18444:8444", "127.0.0.1:19081:9080"]
+    environment: { EDGE_CELL_NAME: cell-01, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-01.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    networks:
+      edge: { aliases: [edge] }
+      telemetry: {}
 
-  edge-quarantine:
-    image: ghcr.io/vaheed/cdnfoundry-edge-runtime:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
-    profiles: [edge]
-    ports:
-      - "127.0.0.1:28081:8081"
-      - "127.0.0.1:28444:8444"
-    environment:
-      EDGE_CELL_NAME: quarantine-default
-      EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/quarantine-default.json
-      EDGE_STATUS_TOKEN: ${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}
-      GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb
-    volumes:
-      - ${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro
-      - ${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro
-      - edge-state:/var/lib/cdnfoundry/runtime:ro
-      - mmdb:/mmdb:ro
-    depends_on:
-      mmdb-updater: { condition: service_healthy }
-    read_only: true
-    tmpfs:
-      - /var/cache/nginx:rw,noexec,nosuid,size=256m
-      - /var/lib/nginx/tmp:rw,noexec,nosuid,size=64m
-      - /usr/local/openresty/nginx/logs:rw,noexec,nosuid,size=16m
-    networks: [edge, telemetry]
-    restart: unless-stopped
-    stop_signal: SIGQUIT
-    stop_grace_period: 30s
-    mem_limit: 512m
-    cpus: 0.5
-    pids_limit: 128
-    sysctls: { net.ipv4.tcp_syncookies: "1" }
-    ulimits:
-      nofile: { soft: 32768, hard: 32768 }
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-          cpus: "0.5"
-          pids: 128
+  cell-02:
+    <<: *edge-cell
+    ports: ["127.0.0.1:18082:8081", "127.0.0.1:18445:8444", "127.0.0.1:19082:9080"]
+    environment: { EDGE_CELL_NAME: cell-02, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-02.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    networks:
+      edge: { aliases: [edge-quarantine] }
+      telemetry: {}
+
+  cell-03:
+    <<: *edge-cell
+    ports: ["127.0.0.1:18083:8081", "127.0.0.1:18446:8444", "127.0.0.1:19083:9080"]
+    environment: { EDGE_CELL_NAME: cell-03, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-03.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+
+  cell-04:
+    <<: *edge-cell
+    ports: ["127.0.0.1:18084:8081", "127.0.0.1:18447:8444", "127.0.0.1:19084:9080"]
+    environment: { EDGE_CELL_NAME: cell-04, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-04.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+
+  cell-05:
+    <<: *edge-cell
+    ports: ["127.0.0.1:18085:8081", "127.0.0.1:18448:8444", "127.0.0.1:19085:9080"]
+    environment: { EDGE_CELL_NAME: cell-05, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-05.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+
+  cell-06:
+    <<: *edge-cell
+    ports: ["127.0.0.1:18086:8081", "127.0.0.1:18449:8444", "127.0.0.1:19086:9080"]
+    environment: { EDGE_CELL_NAME: cell-06, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-06.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+
+  cell-07:
+    <<: *edge-cell
+    ports: ["127.0.0.1:18087:8081", "127.0.0.1:18450:8444", "127.0.0.1:19087:9080"]
+    environment: { EDGE_CELL_NAME: cell-07, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-07.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+
+  cell-08:
+    <<: *edge-cell
+    ports: ["127.0.0.1:18088:8081", "127.0.0.1:18451:8444", "127.0.0.1:19088:9080"]
+    environment: { EDGE_CELL_NAME: cell-08, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-08.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
 
   edge-agent:
     image: ghcr.io/vaheed/cdnfoundry-edge-agent:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
@@ -379,7 +375,8 @@ services:
       EDGE_RUNTIME_DIR: /var/lib/cdnfoundry/runtime
       EDGE_GATEWAY_BINDINGS: ${EDGE_GATEWAY_BINDINGS:?EDGE_GATEWAY_BINDINGS is required}
       EDGE_GATEWAY_STATUS_URL: ${EDGE_GATEWAY_STATUS_URL:-http://host-gateway:9105/metrics}
-      EDGE_CELL_STATUS_URLS: http://edge:9080/passive-failures,http://edge-quarantine:9080/passive-failures
+      EDGE_CELL_ASSIGNMENTS: '{"cell-01":"shared-default","cell-02":"quarantine-default","cell-03":"","cell-04":"","cell-05":"","cell-06":"","cell-07":"","cell-08":""}'
+      EDGE_CELL_STATUS_URLS: http://cell-01:9080/passive-failures,http://cell-02:9080/passive-failures,http://cell-03:9080/passive-failures,http://cell-04:9080/passive-failures,http://cell-05:9080/passive-failures,http://cell-06:9080/passive-failures,http://cell-07:9080/passive-failures,http://cell-08:9080/passive-failures
       EDGE_STATUS_TOKEN: ${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}
     volumes:
       - edge-agent-state:/var/lib/cdnfoundry/agent

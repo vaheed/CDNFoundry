@@ -14,6 +14,7 @@ use App\Support\PlatformSettings;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -22,7 +23,6 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 
 class CellsRelationManager extends RelationManager
 {
@@ -31,6 +31,9 @@ class CellsRelationManager extends RelationManager
     public function form(Schema $schema): Schema
     {
         return $schema->components([
+            Select::make('edge_pool_id')->label('Service pool assignment')->relationship('pool', 'name')
+                ->placeholder('Unassigned')->disabled()->dehydrated(false)
+                ->helperText('Assignments are managed through service-pool provisioning so every participating edge changes asynchronously and consistently.'),
             TextInput::make('service_ipv4')->label('Public service IPv4')->ipv4()->required()
                 ->rule(fn () => function (string $attribute, mixed $value, \Closure $fail): void {
                     if (NetworkAddress::isUnsafe((string) $value)) {
@@ -54,7 +57,8 @@ class CellsRelationManager extends RelationManager
         return $table->description(fn (): string => $this->edgeReadinessDescription())
             ->columns([
                 TextColumn::make('name')->label('Cell')->searchable(),
-                TextColumn::make('pool.name')->label('Service pool'),
+                TextColumn::make('slot')->label('Slot')->sortable(),
+                TextColumn::make('pool.name')->label('Assignment')->placeholder('Unassigned'),
                 TextColumn::make('status')->badge()
                     ->formatStateUsing(fn (string $state, EdgeCell $record): string => $record->drained ? 'Drained' : ucfirst($state))
                     ->color(fn (string $state, EdgeCell $record): string => match (true) {
@@ -75,13 +79,17 @@ class CellsRelationManager extends RelationManager
                         ? data_get($record->capacity, 'active_connections').' active connections'
                         : 'Connections not reported'),
                 TextColumn::make('capacity.cpu_usage')->label('Resources')->placeholder('Awaiting heartbeat')
+                    ->formatStateUsing(fn (mixed $state): string => is_numeric($state) ? number_format((float) $state, 2).' CPU' : (string) $state)
                     ->description(fn (EdgeCell $record): string => filled(data_get($record->capacity, 'memory_usage'))
-                        ? data_get($record->capacity, 'memory_usage').' memory bytes used'
+                        ? self::formatBytes(data_get($record->capacity, 'memory_usage')).' / '.self::formatBytes(data_get($record->capacity, 'memory_limit', data_get($record->resource_limits, 'memory_bytes'))).' memory'
                         : 'Memory use not reported'),
                 TextColumn::make('capacity.cache_usage')->label('Storage')->placeholder('Awaiting heartbeat')
+                    ->formatStateUsing(fn (mixed $state, EdgeCell $record): string => self::formatBytes($state).' / '.self::formatBytes(data_get($record->capacity, 'cache_limit', data_get($record->resource_limits, 'cache_bytes'))).' cache')
                     ->description(fn (EdgeCell $record): string => filled(data_get($record->capacity, 'temporary_storage_usage'))
-                        ? data_get($record->capacity, 'temporary_storage_usage').' temporary bytes used'
+                        ? self::formatBytes(data_get($record->capacity, 'temporary_storage_usage')).' / '.self::formatBytes(data_get($record->capacity, 'temporary_storage_limit', data_get($record->resource_limits, 'temporary_bytes'))).' temporary'
                         : 'Temporary use not reported'),
+                TextColumn::make('http_port')->label('Ports')->description(fn (EdgeCell $record): string => "HTTPS {$record->https_port}; status {$record->status_port}"),
+                TextColumn::make('runtime_path')->label('Runtime path')->toggleable(isToggledHiddenByDefault: true),
                 IconColumn::make('drained')->boolean(),
             ])->recordActions([
                 EditAction::make()->mutateDataUsing(fn (array $data, EdgeCell $record): array => EdgeCellAddressData::validate($record, $data))
@@ -112,11 +120,8 @@ class CellsRelationManager extends RelationManager
 
     private static function queue(EdgeCell $cell, string $action): void
     {
-        if ($action !== 'drain' && $cell->service_ipv4 === null) {
-            throw ValidationException::withMessages(['service_ipv4' => 'Configure the cell service addresses before making it available.']);
-        }
         if ($action !== 'restart') {
-            $cell->update(['drained' => $action === 'drain', ...($action === 'undrain' ? ['status' => 'pending'] : [])]);
+            $cell->update(['drained' => $action === 'drain', ...($action === 'undrain' ? ['status' => $cell->edge_pool_id === null ? 'unassigned' : 'assigned'] : [])]);
         }
         $task = EdgeTask::query()->where('edge_id', $cell->edge_id)->where('type', 'cell_'.$action)
             ->where('status', 'pending')->where('payload->cell_id', $cell->id)->first() ?? EdgeTask::query()->create([
@@ -154,5 +159,22 @@ class CellsRelationManager extends RelationManager
         }
 
         return 'Agent connected. Capacity values come from the latest authenticated runtime heartbeat.';
+    }
+
+    private static function formatBytes(mixed $bytes): string
+    {
+        if (! is_numeric($bytes)) {
+            return 'Not reported';
+        }
+
+        $value = max(0, (float) $bytes);
+        $units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+        $unit = 0;
+        while ($value >= 1024 && $unit < count($units) - 1) {
+            $value /= 1024;
+            $unit++;
+        }
+
+        return ($unit === 0 ? number_format($value, 0) : number_format($value, $value < 10 ? 2 : 1)).' '.$units[$unit];
     }
 }

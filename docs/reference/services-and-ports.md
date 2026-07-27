@@ -12,7 +12,7 @@ description: Map CDNFoundry Compose services, profiles, listeners, networks, and
 | `control` | `core`, `web`, `edge-control`, `horizon`, `scheduler`, local `control-db`, local `redis` |
 | `dns` | `pdns-db`, `pdns-auth`, `dnsdist`, `mmdb-updater` |
 | `telemetry` | `clickhouse`, `vector`, `prometheus`, `node-exporter`, `alertmanager` |
-| `edge` | `edge`, `edge-quarantine`, `edge-agent`, `vector`, `mmdb-updater` |
+| `edge` | `cell-01` through `cell-08`, `edge-agent`, `edge-gateway`, `vector`, `mmdb-updater` |
 | `tools` | explicit `migrate` and `pdns-migrate` one-shot services |
 
 `deploy/production/compose.external-control-data.yml` replaces local
@@ -27,8 +27,7 @@ gateways.
 | Browser/API web | `127.0.0.1:8080` | Publish through the control Caddy overlay |
 | Edge control mTLS | `0.0.0.0:8443` | Restrict to registered edge sources |
 | DNSdist | `${DNS_BIND_V4}:53` TCP and UDP | Public authoritative DNS |
-| Shared cell HTTP/HTTPS | `0.0.0.0:80`, `0.0.0.0:443` | Public customer traffic |
-| Quarantine cell | private TCP `8081`, `8444` | Reachable only from its gateway network |
+| Cell slot host diagnostics | loopback `18081`–`18088`, `18444`–`18451`, `19081`–`19088` | HTTP, HTTPS, and status; never public |
 | Edge gateway | operator service IPv4/IPv6 TCP `80`, `443` | Public ingress; TLS passes through |
 | Gateway metrics | TCP `9105` | Restrict to edge agent and monitoring |
 | Cell gateway contract | TCP `8081`, `8444` | Private gateway-to-cell network; PROXY protocol version 2 required |
