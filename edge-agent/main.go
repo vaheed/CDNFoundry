@@ -47,6 +47,7 @@ type client struct {
 	gatewayStatusURL                   string
 	derivedEnsured                     bool
 	statusURLs                         []string
+	cellAssignments                    map[string]string
 	http                               *http.Client
 	id                                 identity
 }
@@ -68,6 +69,14 @@ func main() {
 		gatewayBindings:  env("EDGE_GATEWAY_BINDINGS", ""),
 		gatewayStatusURL: env("EDGE_GATEWAY_STATUS_URL", ""),
 		statusURLs:       splitNonempty(env("EDGE_CELL_STATUS_URLS", "")), http: &http.Client{Timeout: 15 * time.Second},
+	}
+	if err := json.Unmarshal([]byte(env("EDGE_CELL_ASSIGNMENTS", "{}")), &c.cellAssignments); err != nil || len(c.cellAssignments) > 32 {
+		fatal(errors.New("EDGE_CELL_ASSIGNMENTS must be an object with at most 32 slots"))
+	}
+	for cellName, poolName := range c.cellAssignments {
+		if !validCellName(cellName) || poolName != "" && !validPoolName(poolName) {
+			fatal(errors.New("EDGE_CELL_ASSIGNMENTS contains an invalid slot or pool"))
+		}
 	}
 	if err := c.configureServerTrust(env("EDGE_CONTROL_CA_CERTIFICATE", "")); err != nil {
 		fatal(err)
@@ -132,6 +141,9 @@ func (c *client) ensureDerivedRuntime(current state) error {
 		if err := atomicJSON(filepath.Join(c.runtimeDir, name+".json"), pool); err != nil {
 			return err
 		}
+	}
+	if err := c.writeCellRuntimes(current.Sequence, pools); err != nil {
+		return err
 	}
 	if c.gatewayBindings != "" {
 		gateway, err := compileGateway(current.Sequence, pools, c.gatewayBindings)
@@ -767,6 +779,9 @@ func (c *client) activate(s state) error {
 				return c.rollbackActive(active, previous, err)
 			}
 		}
+		if err := c.writeCellRuntimes(s.Sequence, pools); err != nil {
+			return c.rollbackActive(active, previous, err)
+		}
 		if c.gatewayBindings != "" {
 			gateway, err := compileGateway(s.Sequence, pools, c.gatewayBindings)
 			if err != nil {
@@ -778,6 +793,27 @@ func (c *client) activate(s state) error {
 		}
 	}
 	return nil
+}
+
+func (c *client) writeCellRuntimes(sequence uint64, pools map[string]map[string]any) error {
+	for cellName, poolName := range c.cellAssignments {
+		runtime := pools[poolName]
+		if runtime == nil {
+			runtime = map[string]any{"schema_version": 1, "sequence": sequence, "hosts": map[string]any{}, "certificates": map[string]any{}}
+		}
+		if err := atomicJSON(filepath.Join(c.runtimeDir, cellName+".json"), runtime); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validCellName(name string) bool {
+	if len(name) != 7 || !strings.HasPrefix(name, "cell-") {
+		return false
+	}
+	slot, err := strconv.Atoi(name[5:])
+	return err == nil && slot >= 1 && slot <= 32 && fmt.Sprintf("cell-%02d", slot) == name
 }
 
 func (c *client) rollbackActive(active, previous string, cause error) error {
@@ -967,7 +1003,7 @@ func (c *client) heartbeat(sequence uint64) error {
 	cells, failures, security := c.runtimeStatus()
 	listenerReady := false
 	for _, cell := range cells {
-		if cell["name"] == "shared-default" && cell["status"] == "ready" {
+		if cell["status"] == "ready" {
 			listenerReady = true
 		}
 	}
