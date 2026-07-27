@@ -93,7 +93,8 @@ certificates, customer content, or secrets.
 On 2026-07-27 `python3 tests/e2e/gateway_ingress.py` passed real HTTP Host and
 HTTPS SNI routing through OpenResty on dual-stack and IPv4-only gateways,
 unknown-route rejection, restart, invalid-candidate rejection, and last-valid recovery.
-Development TLS used `-k`; strict verification remains owner-run.
+HTTPS used the active Pebble ACME root with strict hostname and chain
+verification; no insecure client override was used.
 
 The reproducible 50,000-mapping test ran on a VMware x86_64 host with 32 Intel
 Xeon E5-2697 v4 vCPUs, 15 GiB RAM, Docker 29.1.3, and Go 1.24.6. It used two

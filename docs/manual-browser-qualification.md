@@ -375,9 +375,10 @@ isolated Laravel tests, Compose/Prometheus validation, documentation checks,
 the non-browser dual-stack and IPv4-only HTTP/HTTPS runtime test, and the
 completed-baseline non-browser regression stages passed. See
 [Edge gateway ingress](operations/gateway-ingress.md). Manual browser evidence
-and strict certificate verification remain **Pending owner run**, so the
-release decision remains **Blocked** and the rows below must not be marked
-Passed by a coding agent.
+passed with the active development ACME trust root. Owner browser evidence,
+including browser-native strict certificate verification, remains **Pending
+owner run**, so the release decision remains **Blocked** and the rows below
+must not be marked Passed by a coding agent.
 
 | Gate | Result | Required evidence |
 | --- | --- | --- |

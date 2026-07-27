@@ -38,7 +38,8 @@ def runtime(volume: str = STATE_VOLUME) -> tuple[dict, dict]:
     return json.loads(gateway), json.loads(cell)
 
 
-def curl(address: str, hostname: str, tls: bool = False, expect_success: bool = True, gateway: str = GATEWAY) -> str:
+def curl(address: str, hostname: str, tls: bool = False, expect_success: bool = True,
+         gateway: str = GATEWAY, tls_ca: pathlib.Path | None = None) -> str:
     url = f"{'https' if tls else 'http'}://{hostname}/"
     command = [
         "docker", "run", "--rm", "--network", f"container:{gateway}", "curlimages/curl:8.16.0",
@@ -46,7 +47,10 @@ def curl(address: str, hostname: str, tls: bool = False, expect_success: bool = 
         "--resolve", f"{hostname}:{443 if tls else 80}:{'[' + address + ']' if ':' in address else address}",
     ]
     if tls:
-        command.append("-k")  # Routing qualification; strict certificate validation remains owner-run.
+        if tls_ca is None:
+            raise RuntimeError("strict TLS probe requires a CA certificate")
+        command[5:5] = ["-v", f"{tls_ca}:/tls/ca.pem:ro"]
+        command.extend(["--cacert", "/tls/ca.pem"])
     result = run(*command, url, check=False)
     if expect_success and (result.returncode or "server: openresty" not in result.stdout.lower()):
         raise RuntimeError(f"route {address}/{hostname} did not reach OpenResty:\n{result.stdout}")
@@ -121,31 +125,40 @@ def main() -> None:
     if not {"172.28.10.10", "fd00:cd0f:10::10"}.issubset(addresses):
         raise RuntimeError(f"dual-stack route missing for {hostname}: {sorted(addresses)}")
     revision = metrics()["cdnfoundry_gateway_active_revision"]
-    for address in ("172.28.10.10", "fd00:cd0f:10::10"):
-        curl(address, hostname)
-        curl(address, hostname, tls=True)
-        curl(address, "unknown-gateway.example.test", expect_success=False)
-    run(*COMPOSE, "restart", "edge-gateway-a")
-    time.sleep(2)
-    if metrics()["cdnfoundry_gateway_active_revision"] != revision:
-        raise RuntimeError("gateway restart changed the active revision")
-    curl("172.28.10.10", hostname)
+    with tempfile.TemporaryDirectory(prefix="cdnfoundry-gateway-ca-") as ca_directory:
+        ca_path = pathlib.Path(ca_directory) / "root.pem"
+        pathlib.Path(ca_directory).chmod(0o777)
+        run(
+            "docker", "run", "--rm", "--network", "cdnfoundry-dev_control",
+            "-v", f"{ca_directory}:/out", "curlimages/curl:8.16.0", "-ksS",
+            "https://pebble:15000/roots/0", "-o", "/out/root.pem",
+        )
+        for address in ("172.28.10.10", "fd00:cd0f:10::10"):
+            curl(address, hostname)
+            curl(address, hostname, tls=True, tls_ca=ca_path)
+            curl(address, "unknown-gateway.example.test", expect_success=False)
+        run(*COMPOSE, "restart", "edge-gateway-a")
+        time.sleep(2)
+        if metrics()["cdnfoundry_gateway_active_revision"] != revision:
+            raise RuntimeError("gateway restart changed the active revision")
+        curl("172.28.10.10", hostname)
 
-    ipv4_gateway, ipv4_cell = runtime(IPV4_ONLY_STATE_VOLUME)
-    ipv4_hostname = next(
-        name for name, value in ipv4_cell["hosts"].items()
-        if value.get("tls", {}).get("certificate_id")
-    )
-    ipv4_addresses = {route["address"] for route in ipv4_gateway["routes"] if route["hostname"] == ipv4_hostname}
-    if "172.28.20.10" not in ipv4_addresses or any(":" in address for address in ipv4_addresses):
-        raise RuntimeError(f"IPv4-only gateway unexpectedly required another family: {sorted(ipv4_addresses)}")
-    curl("172.28.20.10", ipv4_hostname, gateway=IPV4_ONLY_GATEWAY)
-    curl("172.28.20.10", ipv4_hostname, tls=True, gateway=IPV4_ONLY_GATEWAY)
+        ipv4_gateway, ipv4_cell = runtime(IPV4_ONLY_STATE_VOLUME)
+        ipv4_hostname = next(
+            name for name, value in ipv4_cell["hosts"].items()
+            if value.get("tls", {}).get("certificate_id")
+        )
+        ipv4_addresses = {route["address"] for route in ipv4_gateway["routes"] if route["hostname"] == ipv4_hostname}
+        if "172.28.20.10" not in ipv4_addresses or any(":" in address for address in ipv4_addresses):
+            raise RuntimeError(f"IPv4-only gateway unexpectedly required another family: {sorted(ipv4_addresses)}")
+        curl("172.28.20.10", ipv4_hostname, gateway=IPV4_ONLY_GATEWAY)
+        curl("172.28.20.10", ipv4_hostname, tls=True, gateway=IPV4_ONLY_GATEWAY, tls_ca=ca_path)
 
     isolated_last_valid_test()
     print(json.dumps({
         "status": "passed", "revision": revision, "hostname": hostname,
         "families": ["IPv4", "IPv6"], "protocols": ["HTTP Host", "HTTPS SNI"],
+        "tls_verification": "strict",
         "ipv4_only_gateway": {"hostname": ipv4_hostname, "addresses": sorted(ipv4_addresses)},
         "metrics": metrics(),
     }, indent=2))
