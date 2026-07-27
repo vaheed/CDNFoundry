@@ -382,18 +382,18 @@ below must not be marked Passed by a coding agent.
 
 | Gate | Result | Required evidence |
 | --- | --- | --- |
-| Implementation | | Gateway state, authorization, asynchronous revision workflow, atomic activation, and rollback |
-| Unit and feature tests | | Happy path, permissions, validation, bounds, idempotency, and stable errors |
-| Real-runtime E2E | | Real HTTP Host and HTTPS SNI routing and rejection behavior |
-| IPv4 and IPv6 | | Both families for configured, unknown, failure, and recovery paths |
-| Scale | | 50,000 mappings, multiple dual-stack pairs, hardware, load, resources, and saturation |
-| Failure and recovery | | Invalid candidate, retry, obsolete work, restart, outage, rollback, and last-valid map |
-| Isolation | | One route/cell failure leaves unrelated traffic, agent, and gateway healthy |
-| Observability | | Listener, revision, routes, connections, errors, readiness, alerts, and bounded logs |
-| Documentation | | User, administrator, API/OpenAPI, architecture, deployment, operations, troubleshooting, and runbooks |
-| Manual qualification | | Every baseline and Phase 1 checkpoint recorded by the owner |
-| Regression | | Completed DNS, proxy, TLS, cache, security, telemetry, analytics, backup, and operations baseline remains healthy |
-| Release decision | | Passed, Failed, Blocked, or Removed from scope with approved contract change |
+| Implementation | Passed | [Gateway design and operation](operations/gateway-ingress.md) and administrator gateway state |
+| Unit and feature tests | Passed | [CI run 30290594675](https://github.com/vaheed/CDNFoundry/actions/runs/30290594675) |
+| Real-runtime E2E | Passed | [Gateway qualification evidence](operations/gateway-ingress.md#qualification-evidence) |
+| IPv4 and IPv6 | Passed | Dual-stack and IPv4-only runtime evidence in the gateway qualification report |
+| Scale | Passed | 50,000-map hardware, load, resource, latency, and saturation report |
+| Failure and recovery | Passed | Invalid candidate, restart, outage, rollback, and last-valid runtime qualification |
+| Isolation | Passed | Unknown route and target failure remain isolated in the runtime suite |
+| Observability | Passed | [Metrics, alerts, and diagnostics](operations/gateway-ingress.md#monitoring-and-failures) |
+| Documentation | Passed | User, administrator, architecture, deployment, operations, troubleshooting, and runbook checks |
+| Manual qualification | Pending owner run | One gateway-detail screenshot accepted; all remaining baseline and Phase 1 checkpoints require owner evidence |
+| Regression | Passed | CI backend/runtime E2E and completed-baseline non-browser regression stages |
+| Release decision | Blocked | Awaiting the remaining owner-run manual browser qualification |
 
 Phase 1 is complete only when every applicable gate is **Passed**. A missing UI,
 failed configured IPv6 path, failed IPv4-only path, unexecuted scale run, or
