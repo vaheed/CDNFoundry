@@ -195,6 +195,14 @@ class EdgeProxyTest extends TestCase
         $created = $this->actingAs($admin)->postJson('/api/admin/edges', ['name' => 'edge-ir-1', 'country_code' => 'IR', 'continent_code' => 'AS', 'ipv4' => '203.0.113.10', 'ipv6' => '2001:db8::10'])
             ->assertCreated();
         $id = $created->json('data.id');
+        $slots = Edge::query()->findOrFail($id)->cells()->orderBy('slot')->get();
+        $this->assertCount(8, $slots);
+        $this->assertSame(['cell-01', 'cell-02', 'cell-03', 'cell-04', 'cell-05', 'cell-06', 'cell-07', 'cell-08'], $slots->pluck('name')->all());
+        $this->assertCount(8, $slots->pluck('runtime_path')->unique());
+        $this->assertCount(8, $slots->pluck('http_port')->unique());
+        $this->assertSame(6, $slots->whereNull('edge_pool_id')->where('status', 'unassigned')->count());
+        $this->assertSame(536870912, $slots->first()->resource_limits['memory_bytes']);
+        $this->actingAs($admin)->postJson('/api/admin/edges', ['name' => 'too-many-slots', 'country_code' => 'IR', 'continent_code' => 'AS', 'ipv4' => '203.0.113.19', 'cell_slot_count' => 33])->assertUnprocessable();
         $bootstrap = $created->json('data.bootstrap_token');
         $registration = ['edge_id' => $id, 'bootstrap_token' => $bootstrap, 'agent_version' => '1.0.0', 'certificate_request' => $this->certificateRequest($id)];
         $registered = $this->postJson('/edge/v1/register', $registration)->assertCreated();
@@ -204,14 +212,14 @@ class EdgeProxyTest extends TestCase
         $differentRegistration = [...$registration, 'certificate_request' => $this->certificateRequest($id)];
         $this->postJson('/edge/v1/register', $differentRegistration)->assertUnauthorized();
         $this->withHeaders($identity)->postJson('/edge/v1/heartbeat', ['agent_version' => '1.0.0', 'listener_ready' => true, 'active_sequence' => 0, 'cells' => [
-            ['name' => 'shared-default', 'status' => 'ready', 'capacity' => ['active_connections' => 0, 'memory_usage' => 0]],
+            ['name' => 'cell-01', 'status' => 'ready', 'capacity' => ['active_connections' => 0, 'memory_usage' => 0]],
         ], 'gateway' => [
             'ready' => true, 'active_revision' => 0, 'routes' => 2, 'listeners' => 4,
             'connections_active' => 0, 'connections_accepted' => 12, 'connections_rejected' => 3,
             'errors' => 1, 'candidate_rejections' => 1,
         ]])->assertOk();
         $this->postJson('/edge/v1/register', $registration)->assertUnauthorized();
-        $this->assertDatabaseHas('edge_cells', ['edge_id' => $id, 'name' => 'shared-default', 'status' => 'ready']);
+        $this->assertDatabaseHas('edge_cells', ['edge_id' => $id, 'name' => 'cell-01', 'slot' => 1, 'status' => 'ready']);
         $this->assertSame(4, Edge::query()->findOrFail($id)->capacity['gateway']['listeners']);
 
         [$user, $domain] = $this->ownedDomain();
@@ -234,7 +242,7 @@ class EdgeProxyTest extends TestCase
         $artifactCount = EdgeArtifact::query()->where('domain_id', $domain->id)->count();
         $hostname = $domain->dnsRecords()->findOrFail($record)->name;
         $this->withHeaders($identity)->postJson('/edge/v1/heartbeat', ['agent_version' => '1.0.0', 'listener_ready' => true, 'active_sequence' => $artifact->sequence, 'cells' => [
-            ['name' => 'shared-default', 'status' => 'ready', 'capacity' => ['active_connections' => 1]],
+            ['name' => 'cell-01', 'status' => 'ready', 'capacity' => ['active_connections' => 1]],
         ], 'passive_origins' => [[
             'domain' => $domain->name, 'hostname' => $hostname, 'failure_count' => 2,
             'last_status' => 502, 'last_failed_at' => now()->timestamp,
@@ -299,7 +307,7 @@ class EdgeProxyTest extends TestCase
         $operation = Operation::query()->findOrFail($move->json('data.operation_id'));
         $moveArtifact = EdgeArtifact::query()->where('edge_id', $id)->where('domain_id', $domain->id)->latest('sequence')->firstOrFail();
         $this->withHeaders($identity)->postJson('/edge/v1/heartbeat', ['agent_version' => '1.0.0', 'listener_ready' => true, 'active_sequence' => $artifact->sequence, 'cells' => [
-            ['name' => 'shared-default', 'status' => 'ready', 'capacity' => ['active_connections' => 1]],
+            ['name' => 'cell-01', 'status' => 'ready', 'capacity' => ['active_connections' => 1]],
             ['name' => 'dedicated-test', 'status' => 'ready', 'capacity' => ['active_connections' => 0]],
         ]])->assertOk();
         $this->withHeaders($identity)->postJson('/edge/v1/config/applied', ['sequence' => $moveArtifact->sequence])->assertOk();
@@ -343,7 +351,7 @@ class EdgeProxyTest extends TestCase
         $registered = $this->postJson('/edge/v1/register', ['edge_id' => $edgeId, 'bootstrap_token' => $created->json('data.bootstrap_token'), 'agent_version' => '1.0.0', 'certificate_request' => $this->certificateRequest($edgeId)])->assertCreated();
         $identity = $this->edgeIdentityHeaders($registered->json('data.identity_certificate_serial'));
         $this->withHeaders($identity)->postJson('/edge/v1/heartbeat', ['agent_version' => '1.0.0', 'listener_ready' => true, 'active_sequence' => 0, 'cells' => [
-            ['name' => 'shared-default', 'status' => 'ready', 'capacity' => ['active_connections' => 0]],
+            ['name' => 'cell-01', 'status' => 'ready', 'capacity' => ['active_connections' => 0]],
         ]])->assertOk();
 
         [$user, $domain] = $this->ownedDomain();

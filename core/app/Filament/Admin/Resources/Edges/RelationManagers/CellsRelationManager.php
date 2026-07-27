@@ -54,7 +54,8 @@ class CellsRelationManager extends RelationManager
         return $table->description(fn (): string => $this->edgeReadinessDescription())
             ->columns([
                 TextColumn::make('name')->label('Cell')->searchable(),
-                TextColumn::make('pool.name')->label('Service pool'),
+                TextColumn::make('slot')->label('Slot')->sortable(),
+                TextColumn::make('pool.name')->label('Assignment')->placeholder('Unassigned'),
                 TextColumn::make('status')->badge()
                     ->formatStateUsing(fn (string $state, EdgeCell $record): string => $record->drained ? 'Drained' : ucfirst($state))
                     ->color(fn (string $state, EdgeCell $record): string => match (true) {
@@ -82,6 +83,8 @@ class CellsRelationManager extends RelationManager
                     ->description(fn (EdgeCell $record): string => filled(data_get($record->capacity, 'temporary_storage_usage'))
                         ? data_get($record->capacity, 'temporary_storage_usage').' temporary bytes used'
                         : 'Temporary use not reported'),
+                TextColumn::make('http_port')->label('Ports')->description(fn (EdgeCell $record): string => "HTTPS {$record->https_port}; status {$record->status_port}"),
+                TextColumn::make('runtime_path')->label('Runtime path')->toggleable(isToggledHiddenByDefault: true),
                 IconColumn::make('drained')->boolean(),
             ])->recordActions([
                 EditAction::make()->mutateDataUsing(fn (array $data, EdgeCell $record): array => EdgeCellAddressData::validate($record, $data))

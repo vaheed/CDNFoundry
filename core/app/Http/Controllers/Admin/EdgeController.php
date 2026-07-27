@@ -29,17 +29,20 @@ class EdgeController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $data = $request->validate(['name' => ['required', 'string', 'max:100', 'unique:edges'], 'country_code' => ['required', Rule::in(GeoVocabulary::countries())], 'continent_code' => ['required', Rule::in(GeoVocabulary::CONTINENTS)], 'ipv4' => ['required', 'ipv4', 'unique:edges'], 'ipv6' => ['nullable', 'ipv6', 'unique:edges']]);
+        $data = $request->validate(['name' => ['required', 'string', 'max:100', 'unique:edges'], 'country_code' => ['required', Rule::in(GeoVocabulary::countries())], 'continent_code' => ['required', Rule::in(GeoVocabulary::CONTINENTS)], 'ipv4' => ['required', 'ipv4', 'unique:edges'], 'ipv6' => ['nullable', 'ipv6', 'unique:edges'], 'cell_slot_count' => ['sometimes', 'integer', 'between:1,32']]);
         abort_if(NetworkAddress::isUnsafe($data['ipv4']) || (isset($data['ipv6']) && NetworkAddress::isUnsafe($data['ipv6'])), 422, 'Edge addresses must be public unicast service addresses.');
         $token = Str::random(64);
         $edge = DB::transaction(function () use ($data, $token, $request): Edge {
             $edge = Edge::query()->create(array_merge($data, ['country_code' => strtoupper($data['country_code']), 'continent_code' => strtoupper($data['continent_code']), 'bootstrap_token_hash' => hash('sha256', $token)]));
-            $defaultSharedId = EdgePool::query()->where('enabled', true)->where('kind', 'shared')->orderBy('id')->value('id');
-            foreach (EdgePool::query()->orderBy('id')->get() as $pool) {
+            $pools = EdgePool::query()->where('enabled', true)->orderByRaw("CASE WHEN kind = 'shared' THEN 0 WHEN kind = 'quarantine' THEN 1 ELSE 2 END")->orderBy('id')->limit($edge->cell_slot_count)->get();
+            $defaultSharedId = $pools->firstWhere('kind', 'shared')?->id;
+            for ($slot = 1; $slot <= $edge->cell_slot_count; $slot++) {
+                $pool = $pools->get($slot - 1);
                 $edge->cells()->create([
-                    'edge_pool_id' => $pool->id, 'name' => $pool->name,
-                    'service_ipv4' => $pool->id === $defaultSharedId ? $edge->ipv4 : null,
-                    'service_ipv6' => $pool->id === $defaultSharedId ? $edge->ipv6 : null,
+                    'slot' => $slot, 'edge_pool_id' => $pool?->id,
+                    'status' => $pool === null ? 'unassigned' : 'assigned',
+                    'service_ipv4' => $pool?->id === $defaultSharedId ? $edge->ipv4 : null,
+                    'service_ipv6' => $pool?->id === $defaultSharedId ? $edge->ipv6 : null,
                 ]);
             }
             AuditLog::record($request->user(), 'edge.created', $edge, [], $request->ip());

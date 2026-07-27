@@ -101,7 +101,7 @@ class EdgeAgentController extends Controller
             'gateway.connections_rejected' => ['sometimes', 'integer', 'min:0'],
             'gateway.errors' => ['sometimes', 'integer', 'min:0'],
             'gateway.candidate_rejections' => ['sometimes', 'integer', 'min:0'],
-            'cells.*.name' => ['required', 'string', 'max:100', 'distinct'], 'cells.*.status' => ['required', 'in:ready,degraded,failed,drained'],
+            'cells.*.name' => ['required', 'regex:/^cell-(0[1-9]|[12][0-9]|3[0-2])$/', 'distinct'], 'cells.*.status' => ['required', 'in:ready,degraded,drained,stopped'],
             'cells.*.capacity' => ['required', 'array', 'max:20'], 'noisy_domains' => ['sometimes', 'array', 'max:20'],
             'noisy_domains.*.domain_id' => ['required', 'integer', 'exists:domains,id'],
             'noisy_domains.*.hostname' => ['nullable', 'string', 'max:253'],
@@ -132,8 +132,9 @@ class EdgeAgentController extends Controller
             $edge->cells()->where('name', $cell['name'])->limit(1)->update(['status' => $cell['status'], 'capacity' => $cell['capacity']]);
         }
         $reportedNames = collect($data['cells'])->pluck('name');
-        $edge->cells()->whereNotIn('name', $reportedNames)->update(['status' => 'degraded', 'capacity' => null]);
-        $computedReady = $edge->cells()->where('drained', false)->where('status', 'ready')->whereNotNull('service_ipv4')->exists();
+        $edge->cells()->whereNotIn('name', $reportedNames)->whereNotNull('edge_pool_id')->update(['status' => 'degraded', 'capacity' => null]);
+        $edge->cells()->whereNotIn('name', $reportedNames)->whereNull('edge_pool_id')->update(['status' => 'stopped', 'capacity' => null]);
+        $computedReady = $edge->cells()->whereNotNull('edge_pool_id')->where('drained', false)->where('status', 'ready')->whereNotNull('service_ipv4')->exists();
         $listenerReady = $data['listener_ready'] && $computedReady;
         $edge->update([
             'last_heartbeat_at' => now(), 'agent_version' => $data['agent_version'],

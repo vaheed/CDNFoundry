@@ -26,12 +26,20 @@ class CreateEdge extends CreateRecord
         $data['bootstrap_token_hash'] = hash('sha256', $this->bootstrapToken);
         $edge = DB::transaction(function () use ($data): Edge {
             $edge = Edge::query()->create($data);
-            $defaultSharedId = EdgePool::query()->where('enabled', true)->where('kind', 'shared')->orderBy('id')->value('id');
-            foreach (EdgePool::query()->orderBy('id')->limit(32)->get() as $pool) {
+            $pools = EdgePool::query()->where('enabled', true)->orderByRaw("CASE WHEN kind = 'shared' THEN 0 WHEN kind = 'quarantine' THEN 1 ELSE 2 END")->orderBy('id')->limit($edge->cell_slot_count)->get();
+            $defaultSharedId = $pools->firstWhere('kind', 'shared')?->id;
+            for ($slot = 1; $slot <= $edge->cell_slot_count; $slot++) {
+                $pool = $pools->get($slot - 1);
+                $name = sprintf('cell-%02d', $slot);
                 $edge->cells()->create([
-                    'edge_pool_id' => $pool->id, 'name' => $pool->name,
-                    'service_ipv4' => $pool->id === $defaultSharedId ? $edge->ipv4 : null,
-                    'service_ipv6' => $pool->id === $defaultSharedId ? $edge->ipv6 : null,
+                    'slot' => $slot, 'edge_pool_id' => $pool?->id, 'name' => $name,
+                    'http_port' => 18080 + $slot, 'https_port' => 18443 + $slot, 'status_port' => 19080 + $slot,
+                    'runtime_path' => "/var/lib/cdnfoundry/runtime/{$name}.json",
+                    'cache_path' => "/var/cache/cdnfoundry/{$name}", 'temporary_path' => "/var/lib/cdnfoundry/tmp/{$name}",
+                    'resource_limits' => ['memory_bytes' => 536870912, 'cpu_millis' => 500, 'pids' => 128, 'cache_bytes' => 268435456, 'temporary_bytes' => 67108864, 'log_bytes' => 16777216],
+                    'status' => $pool === null ? 'unassigned' : 'assigned',
+                    'service_ipv4' => $pool?->id === $defaultSharedId ? $edge->ipv4 : null,
+                    'service_ipv6' => $pool?->id === $defaultSharedId ? $edge->ipv6 : null,
                 ]);
             }
             AuditLog::record(auth()->user(), 'edge.created', $edge, [], request()->ip());

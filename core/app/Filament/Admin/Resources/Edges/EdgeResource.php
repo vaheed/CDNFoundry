@@ -41,6 +41,8 @@ class EdgeResource extends Resource
     {
         return $schema->components([
             TextInput::make('name')->required()->maxLength(100)->unique(ignoreRecord: true),
+            TextInput::make('cell_slot_count')->label('Cell slots')->numeric()->integer()->required()->minValue(1)->maxValue(32)->default(8)->disabledOn('edit')
+                ->helperText('Bounded OpenResty slots created during edge installation. This cannot be changed after creation.'),
             Select::make('country_code')->label('Country')->options(array_combine(GeoVocabulary::countries(), GeoVocabulary::countries()))->searchable()->required(),
             Select::make('continent_code')->label('Continent')->options(array_combine(GeoVocabulary::CONTINENTS, GeoVocabulary::CONTINENTS))->required(),
             TextInput::make('ipv4')->label('IPv4')->ipv4()->required()->unique(ignoreRecord: true)
