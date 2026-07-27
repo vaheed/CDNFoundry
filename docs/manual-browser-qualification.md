@@ -370,7 +370,7 @@ Never edit generated gateway or cell files directly.
 
 Fill every row. Link evidence instead of writing only “passed.”
 
-Agent-owned status on 2026-07-27: implementation, Go unit/scale tests, 161
+Agent-owned status on 2026-07-27: implementation, Go unit/scale tests, 162
 isolated Laravel tests, Compose/Prometheus validation, documentation checks,
 the non-browser dual-stack and IPv4-only HTTP/HTTPS runtime test, and the
 completed-baseline non-browser regression stages passed. See
