@@ -150,9 +150,10 @@ The edge-agent binary also accepts these internal variables:
 | `EDGE_STATE_DIR` | `/var/lib/cdnfoundry/agent` | Persistent identity, state, controls, acknowledgements |
 | `EDGE_RUNTIME_DIR` | empty | Active and previous compiled runtime directories |
 | `EDGE_CELL_STATUS_URLS` | empty | Comma-separated internal cell endpoints |
+| `EDGE_CELL_ASSIGNMENTS` | `{}` | JSON object mapping at most 32 stable `cell-NN` names to a pool name or an empty unassigned value |
 | `EDGE_ONCE` | `false` | Run one sync cycle for diagnostics |
 
-The OpenResty container receives `EDGE_CELL_NAME`, `EDGE_RUNTIME_FILE`, and
+Production fixes `EDGE_CELL_ASSIGNMENTS` to eight stable slots. The OpenResty container receives `EDGE_CELL_NAME`, `EDGE_RUNTIME_FILE`, and
 `EDGE_STATUS_TOKEN` from Compose. These describe a cell and are not customer
 settings.
 

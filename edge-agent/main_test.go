@@ -43,7 +43,7 @@ func TestVerifyAndCompatibility(t *testing.T) {
 }
 
 func TestVersionCommand(t *testing.T) {
-	if version != "1.1.0" {
+	if version != "1.2.0" {
 		t.Fatalf("unexpected release version %q", version)
 	}
 }
@@ -477,6 +477,16 @@ func TestValidCellNameIsBounded(t *testing.T) {
 		if validCellName(name) {
 			t.Fatalf("expected %s to be invalid", name)
 		}
+	}
+}
+
+func TestUnassignedSlotsReceiveAdditionalRuntimePoolsDeterministically(t *testing.T) {
+	c := &client{cellAssignments: map[string]string{"cell-01": "shared-default", "cell-02": "", "cell-03": ""}}
+	resolved := c.resolvedCellAssignments(map[string]map[string]any{
+		"shared-default": {}, "reserved-z": {}, "dedicated-a": {},
+	})
+	if resolved["cell-01"] != "shared-default" || resolved["cell-02"] != "dedicated-a" || resolved["cell-03"] != "reserved-z" {
+		t.Fatalf("unexpected deterministic assignments: %#v", resolved)
 	}
 }
 

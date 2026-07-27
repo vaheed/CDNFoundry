@@ -250,7 +250,7 @@ class EdgeProxyTest extends TestCase
         $this->assertSame('passive', $domain->dnsRecords()->findOrFail($record)->origin_health['source']);
         $this->assertSame($artifactCount, EdgeArtifact::query()->where('domain_id', $domain->id)->count());
         $this->actingAs($admin)->getJson('/api/admin/edge-routing')->assertOk()->assertJsonPath('data.global.0.id', $id);
-        $cell = Edge::query()->findOrFail($id)->cells()->firstOrFail();
+        $cell = Edge::query()->findOrFail($id)->cells()->whereNotNull('service_ipv4')->firstOrFail();
         $this->actingAs($admin)->postJson("/api/admin/edge-cells/{$cell->id}/drain")->assertAccepted();
         $this->assertTrue($cell->refresh()->drained);
         $this->actingAs($admin)->postJson("/api/admin/edge-cells/{$cell->id}/undrain")->assertAccepted();
@@ -273,6 +273,8 @@ class EdgeProxyTest extends TestCase
         $poolResponse = $this->actingAs($admin)->postJson('/api/admin/edge-pools', ['name' => 'dedicated-test', 'kind' => 'dedicated'])->assertAccepted();
         $pool = $poolResponse->json('data.pool.id');
         $dedicatedCell = Edge::query()->findOrFail($id)->cells()->where('edge_pool_id', $pool)->firstOrFail();
+        $this->assertSame(8, Edge::query()->findOrFail($id)->cells()->count(), 'Pool provisioning must assign an existing bounded slot.');
+        $this->assertSame(3, $dedicatedCell->slot);
         $this->actingAs($admin)->patchJson("/api/admin/edge-cells/{$dedicatedCell->id}", [
             'service_ipv4' => '203.0.113.20', 'service_ipv6' => '2001:db8::20',
         ])->assertOk();
@@ -308,7 +310,7 @@ class EdgeProxyTest extends TestCase
         $moveArtifact = EdgeArtifact::query()->where('edge_id', $id)->where('domain_id', $domain->id)->latest('sequence')->firstOrFail();
         $this->withHeaders($identity)->postJson('/edge/v1/heartbeat', ['agent_version' => '1.0.0', 'listener_ready' => true, 'active_sequence' => $artifact->sequence, 'cells' => [
             ['name' => 'cell-01', 'status' => 'ready', 'capacity' => ['active_connections' => 1]],
-            ['name' => 'dedicated-test', 'status' => 'ready', 'capacity' => ['active_connections' => 0]],
+            ['name' => $dedicatedCell->name, 'status' => 'ready', 'capacity' => ['active_connections' => 0]],
         ]])->assertOk();
         $this->withHeaders($identity)->postJson('/edge/v1/config/applied', ['sequence' => $moveArtifact->sequence])->assertOk();
         $this->assertDatabaseHas('domain_edge_placements', ['domain_id' => $domain->id, 'active_pool_id' => 1, 'target_pool_id' => $pool, 'state' => 'draining']);

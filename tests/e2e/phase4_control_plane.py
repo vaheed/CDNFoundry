@@ -311,13 +311,13 @@ def provision_edge(token: str, name: str, country: str, continent: str, ipv4: st
 
 def heartbeat(edge: dict, active_sequence: int, quarantine_ready: bool = False) -> None:
     cells = [{
-        "name": "shared-default",
+        "name": "cell-01",
         "status": "ready",
         "capacity": {"assigned_domain_count": 0, "active_connections": 0, "requests_per_second": 0},
     }]
     if quarantine_ready:
         cells.append({
-            "name": "quarantine-default",
+            "name": "cell-02",
             "status": "ready",
             "capacity": {"assigned_domain_count": 0, "active_connections": 0, "requests_per_second": 0},
         })

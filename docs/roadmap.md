@@ -117,12 +117,12 @@ active overhead per slot.
 
 **Completion checklist:**
 
-- [ ] Fresh installation creates exactly the configured slots.
-- [ ] Every slot has unique identity, paths, ports, health, and limits.
-- [ ] One crashed or saturated cell does not stop the gateway, agent, or other cells.
-- [ ] Cell restart and rollback preserve unrelated traffic.
-- [ ] Cache, temporary, and log storage remain bounded.
-- [ ] Existing enrollment, mTLS, and snapshot recovery still pass.
+- [x] Fresh installation creates exactly the configured slots.
+- [x] Every slot has unique identity, paths, ports, health, and limits.
+- [x] One crashed or saturated cell does not stop the gateway, agent, or other cells.
+- [x] Cell restart and rollback preserve unrelated traffic.
+- [x] Cache, temporary, and log storage remain bounded.
+- [x] Existing enrollment, mTLS, and snapshot recovery still pass.
 - [ ] Tests, scale, documentation, and manual qualification pass.
 
 ## Phase 3 — Multi-cell pools and stable placement

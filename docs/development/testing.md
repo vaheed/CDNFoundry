@@ -10,6 +10,10 @@ qualification. It requires the development edge profile and the locally built
 `cdnfoundry/edge-gateway:qualification` image. Coding agents must not run the separate
 manual browser checklist.
 
+Run `python3 tests/e2e/cell_inventory.py` for the eight-slot non-browser cell
+inventory, isolation, restart, storage-bound, and idle/active overhead
+qualification.
+
 ::: danger Database guard
 Laravel tests must use `APP_ENV=testing`, `DB_CONNECTION=sqlite`, and
 `DB_DATABASE=:memory:`. Never point migration or truncation tests at the
