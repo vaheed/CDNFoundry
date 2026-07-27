@@ -119,7 +119,7 @@ class CellsRelationManager extends RelationManager
             throw ValidationException::withMessages(['service_ipv4' => 'Configure the cell service addresses before making it available.']);
         }
         if ($action !== 'restart') {
-            $cell->update(['drained' => $action === 'drain', ...($action === 'undrain' ? ['status' => 'pending'] : [])]);
+            $cell->update(['drained' => $action === 'drain', ...($action === 'undrain' ? ['status' => $cell->edge_pool_id === null ? 'unassigned' : 'assigned'] : [])]);
         }
         $task = EdgeTask::query()->where('edge_id', $cell->edge_id)->where('type', 'cell_'.$action)
             ->where('status', 'pending')->where('payload->cell_id', $cell->id)->first() ?? EdgeTask::query()->create([

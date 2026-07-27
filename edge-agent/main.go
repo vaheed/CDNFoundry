@@ -29,7 +29,7 @@ import (
 	"time"
 )
 
-const version = "1.1.0"
+const version = "1.2.0"
 
 type identity struct{ EdgeID, Certificate, PrivateKey, PublicKey string }
 type state struct {
@@ -796,7 +796,7 @@ func (c *client) activate(s state) error {
 }
 
 func (c *client) writeCellRuntimes(sequence uint64, pools map[string]map[string]any) error {
-	for cellName, poolName := range c.cellAssignments {
+	for cellName, poolName := range c.resolvedCellAssignments(pools) {
 		runtime := pools[poolName]
 		if runtime == nil {
 			runtime = map[string]any{"schema_version": 1, "sequence": sequence, "hosts": map[string]any{}, "certificates": map[string]any{}}
@@ -806,6 +806,35 @@ func (c *client) writeCellRuntimes(sequence uint64, pools map[string]map[string]
 		}
 	}
 	return nil
+}
+
+func (c *client) resolvedCellAssignments(pools map[string]map[string]any) map[string]string {
+	resolved := make(map[string]string, len(c.cellAssignments))
+	assigned := map[string]bool{}
+	emptyCells := []string{}
+	for cellName, poolName := range c.cellAssignments {
+		resolved[cellName] = poolName
+		if poolName == "" {
+			emptyCells = append(emptyCells, cellName)
+		} else {
+			assigned[poolName] = true
+		}
+	}
+	unassignedPools := []string{}
+	for poolName := range pools {
+		if !assigned[poolName] {
+			unassignedPools = append(unassignedPools, poolName)
+		}
+	}
+	sort.Strings(emptyCells)
+	sort.Strings(unassignedPools)
+	for index, poolName := range unassignedPools {
+		if index >= len(emptyCells) {
+			break
+		}
+		resolved[emptyCells[index]] = poolName
+	}
+	return resolved
 }
 
 func validCellName(name string) bool {

@@ -16,6 +16,7 @@ return new class extends Migration
         });
         Schema::table('edge_cells', function (Blueprint $table): void {
             $table->dropUnique(['edge_id', 'edge_pool_id']);
+            $table->foreignId('edge_pool_id')->nullable()->change();
             $table->unsignedSmallInteger('slot')->nullable()->after('edge_id');
             $table->unsignedSmallInteger('http_port')->nullable()->after('name');
             $table->unsignedSmallInteger('https_port')->nullable()->after('http_port');
@@ -25,6 +26,9 @@ return new class extends Migration
             $table->string('temporary_path', 255)->nullable()->after('cache_path');
             $table->json('resource_limits')->nullable()->after('temporary_path');
         });
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('ALTER TABLE edge_cells DROP CONSTRAINT IF EXISTS edge_cells_status_check');
+        }
 
         DB::table('edges')->orderBy('id')->get(['id', 'cell_slot_count'])->each(function ($edge): void {
             $existing = DB::table('edge_cells')->where('edge_id', $edge->id)->orderByRaw("CASE WHEN name = 'shared-default' THEN 0 WHEN name = 'quarantine-default' THEN 1 ELSE 2 END")->orderBy('id')->get();
@@ -47,16 +51,16 @@ return new class extends Migration
                 ]);
             }
         });
+        DB::table('edge_cells')->where('status', 'pending')->update(['status' => 'assigned']);
+        DB::table('edge_cells')->where('status', 'failed')->update(['status' => 'degraded']);
 
         Schema::table('edge_cells', function (Blueprint $table): void {
             $table->unsignedSmallInteger('slot')->nullable(false)->change();
-            $table->foreignId('edge_pool_id')->nullable()->change();
             $table->unique(['edge_id', 'slot']);
             $table->unique(['edge_id', 'edge_pool_id']);
         });
 
         if (DB::getDriverName() === 'pgsql') {
-            DB::statement('ALTER TABLE edge_cells DROP CONSTRAINT IF EXISTS edge_cells_status_check');
             DB::statement("ALTER TABLE edge_cells ADD CONSTRAINT edge_cells_status_check CHECK (status IN ('assigned', 'unassigned', 'ready', 'degraded', 'drained', 'stopped'))");
             DB::statement('ALTER TABLE edges ADD CONSTRAINT edges_cell_slot_count_check CHECK (cell_slot_count BETWEEN 1 AND 32)');
             DB::statement('ALTER TABLE edge_cells ADD CONSTRAINT edge_cells_slot_check CHECK (slot BETWEEN 1 AND 32)');
