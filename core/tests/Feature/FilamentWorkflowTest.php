@@ -138,6 +138,15 @@ class FilamentWorkflowTest extends TestCase
             'name' => $pool->name,
             'service_ipv4' => $edge->ipv4,
             'service_ipv6' => $edge->ipv6,
+            'capacity' => [
+                'cpu_usage' => 0.25,
+                'memory_usage' => 67108864,
+                'memory_limit' => 536870912,
+                'cache_usage' => 10485760,
+                'cache_limit' => 268435456,
+                'temporary_storage_usage' => 1048576,
+                'temporary_storage_limit' => 67108864,
+            ],
         ]);
         Filament::setCurrentPanel(Filament::getPanel('admin'));
         $this->actingAs($admin);
@@ -146,7 +155,11 @@ class FilamentWorkflowTest extends TestCase
             'pageClass' => EditEdge::class,
         ]);
 
-        $component()->assertSee('Awaiting agent enrollment')->assertSee('Awaiting heartbeat');
+        $component()->assertSee('Awaiting agent enrollment')
+            ->assertSee($pool->name)
+            ->assertSee('64.0 MiB / 512.0 MiB memory')
+            ->assertSee('10.0 MiB / 256.0 MiB cache')
+            ->assertSee('1.00 MiB / 64.0 MiB temporary');
         $component()->callTableAction('edit', $cell, [
             'service_ipv4' => '10.0.0.10',
             'service_ipv6' => '2001:db8::11',
