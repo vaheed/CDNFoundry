@@ -331,7 +331,6 @@ services:
     build:
       context: .
       dockerfile: docker/openresty/Dockerfile
-    ports: ["8081:8080", "8444:8443"]
     environment:
       EDGE_CELL_NAME: shared-default
       EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/shared-default.json
@@ -349,7 +348,7 @@ services:
     pids_limit: 128
     ulimits: { nofile: { soft: 65536, hard: 65536 } }
     sysctls: { net.ipv4.tcp_syncookies: "1" }
-    networks: [edge]
+    networks: [edge, gateway-shared-a]
     depends_on:
       dev-pki: { condition: service_completed_successfully }
       origin-http: { condition: service_started }
@@ -382,7 +381,7 @@ services:
     pids_limit: 96
     ulimits: { nofile: { soft: 65536, hard: 65536 } }
     sysctls: { net.ipv4.tcp_syncookies: "1" }
-    networks: [edge]
+    networks: [edge, gateway-quarantine-a]
     depends_on:
       dev-pki: { condition: service_completed_successfully }
       origin-http: { condition: service_started }
@@ -399,13 +398,18 @@ services:
       EDGE_BOOTSTRAP_TOKEN: ${CDNF_DEV_EDGE_A_BOOTSTRAP_TOKEN:-}
       EDGE_STATE_DIR: /var/lib/cdnfoundry/agent
       EDGE_RUNTIME_DIR: /var/lib/cdnfoundry/runtime
+      EDGE_GATEWAY_BINDINGS: >-
+        [{"address":"172.28.10.10","pool":"shared-default","http":"edge-a:8081","https":"edge-a:8444"},
+        {"address":"fd00:cd0f:10::10","pool":"shared-default","http":"edge-a:8081","https":"edge-a:8444"},
+        {"address":"172.28.11.10","pool":"quarantine-default","http":"edge-a-quarantine:8081","https":"edge-a-quarantine:8444"}]
+      EDGE_GATEWAY_STATUS_URL: http://edge-gateway-a:9105/metrics
       EDGE_CELL_STATUS_URLS: http://edge-a:9080/passive-failures,http://edge-a-quarantine:9080/passive-failures
       EDGE_STATUS_TOKEN: ${CDNF_DEV_EDGE_STATUS_TOKEN:-cdnf-dev-edge-status-only}
     volumes:
       - edge-a-agent-state:/var/lib/cdnfoundry/agent
       - edge-a-state:/var/lib/cdnfoundry/runtime
       - dev-pki:/run/dev-pki:ro
-    networks: [control, edge]
+    networks: [control, edge, gateway-status]
     depends_on:
       edge-control: { condition: service_healthy }
       edge-a: { condition: service_healthy }
@@ -417,11 +421,51 @@ services:
     cpus: 0.25
     pids_limit: 64
 
+  edge-gateway-a:
+    build: ./edge-gateway
+    profiles: [dev-edge]
+    environment:
+      GATEWAY_CONFIG_FILE: /var/lib/cdnfoundry/runtime/gateway.json
+      GATEWAY_STATE_DIR: /var/lib/cdnfoundry/gateway-state
+      GATEWAY_METRICS_ADDRESS: 0.0.0.0:9105
+      GATEWAY_MAX_CONNECTIONS: 4096
+    volumes:
+      - edge-a-state:/var/lib/cdnfoundry/runtime:ro
+      - edge-a-gateway-state:/var/lib/cdnfoundry/gateway-state
+    ports: ["8081:80", "8444:443"]
+    networks:
+      gateway-shared-a:
+        ipv4_address: 172.28.10.10
+        ipv6_address: fd00:cd0f:10::10
+      gateway-quarantine-a:
+        ipv4_address: 172.28.11.10
+      gateway-status: {}
+      telemetry: {}
+    depends_on:
+      edge-a: { condition: service_healthy }
+      edge-a-quarantine: { condition: service_started }
+      edge-gateway-a-state-init: { condition: service_completed_successfully }
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 96
+    ulimits: { nofile: { soft: 65536, hard: 65536 } }
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+
+  edge-gateway-a-state-init:
+    image: alpine:3.22
+    profiles: [dev-edge]
+    command: [chown, "10101:10101", /state]
+    volumes: [edge-a-gateway-state:/state]
+    restart: "no"
+
   edge-b:
     build:
       context: .
       dockerfile: docker/openresty/Dockerfile
-    ports: ["8082:8080", "8445:8443"]
     environment:
       EDGE_CELL_NAME: shared-default
       EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/shared-default.json
@@ -439,7 +483,7 @@ services:
     pids_limit: 128
     ulimits: { nofile: { soft: 65536, hard: 65536 } }
     sysctls: { net.ipv4.tcp_syncookies: "1" }
-    networks: [edge]
+    networks: [edge, gateway-shared-b]
     depends_on:
       dev-pki: { condition: service_completed_successfully }
       origin-http: { condition: service_started }
@@ -472,7 +516,7 @@ services:
     pids_limit: 96
     ulimits: { nofile: { soft: 65536, hard: 65536 } }
     sysctls: { net.ipv4.tcp_syncookies: "1" }
-    networks: [edge]
+    networks: [edge, gateway-quarantine-b]
     depends_on:
       dev-pki: { condition: service_completed_successfully }
       origin-http: { condition: service_started }
@@ -489,13 +533,17 @@ services:
       EDGE_BOOTSTRAP_TOKEN: ${CDNF_DEV_EDGE_B_BOOTSTRAP_TOKEN:-}
       EDGE_STATE_DIR: /var/lib/cdnfoundry/agent
       EDGE_RUNTIME_DIR: /var/lib/cdnfoundry/runtime
+      EDGE_GATEWAY_BINDINGS: >-
+        [{"address":"172.28.20.10","pool":"shared-default","http":"edge-b:8081","https":"edge-b:8444"},
+        {"address":"172.28.21.10","pool":"quarantine-default","http":"edge-b-quarantine:8081","https":"edge-b-quarantine:8444"}]
+      EDGE_GATEWAY_STATUS_URL: http://edge-gateway-b:9105/metrics
       EDGE_CELL_STATUS_URLS: http://edge-b:9080/passive-failures,http://edge-b-quarantine:9080/passive-failures
       EDGE_STATUS_TOKEN: ${CDNF_DEV_EDGE_STATUS_TOKEN:-cdnf-dev-edge-status-only}
     volumes:
       - edge-b-agent-state:/var/lib/cdnfoundry/agent
       - edge-b-state:/var/lib/cdnfoundry/runtime
       - dev-pki:/run/dev-pki:ro
-    networks: [control, edge]
+    networks: [control, edge, gateway-status]
     depends_on:
       edge-control: { condition: service_healthy }
       edge-b: { condition: service_healthy }
@@ -506,6 +554,46 @@ services:
     mem_limit: 128m
     cpus: 0.25
     pids_limit: 64
+
+  edge-gateway-b:
+    build: ./edge-gateway
+    profiles: [dev-edge]
+    environment:
+      GATEWAY_CONFIG_FILE: /var/lib/cdnfoundry/runtime/gateway.json
+      GATEWAY_STATE_DIR: /var/lib/cdnfoundry/gateway-state
+      GATEWAY_METRICS_ADDRESS: 0.0.0.0:9105
+      GATEWAY_MAX_CONNECTIONS: 4096
+    volumes:
+      - edge-b-state:/var/lib/cdnfoundry/runtime:ro
+      - edge-b-gateway-state:/var/lib/cdnfoundry/gateway-state
+    ports: ["8082:80", "8445:443"]
+    networks:
+      gateway-shared-b:
+        ipv4_address: 172.28.20.10
+      gateway-quarantine-b:
+        ipv4_address: 172.28.21.10
+      gateway-status: {}
+      telemetry: {}
+    depends_on:
+      edge-b: { condition: service_healthy }
+      edge-b-quarantine: { condition: service_started }
+      edge-gateway-b-state-init: { condition: service_completed_successfully }
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 96
+    ulimits: { nofile: { soft: 65536, hard: 65536 } }
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+
+  edge-gateway-b-state-init:
+    image: alpine:3.22
+    profiles: [dev-edge]
+    command: [chown, "10101:10101", /state]
+    volumes: [edge-b-gateway-state:/state]
+    restart: "no"
 
   poweradmin:
     image: poweradmin/poweradmin:4.3.3
@@ -554,6 +642,23 @@ networks:
   ingress: {}
   dns: {}
   edge: {}
+  gateway-shared-a:
+    internal: true
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.28.10.0/24
+        - subnet: fd00:cd0f:10::/64
+  gateway-quarantine-a:
+    internal: true
+    ipam: { config: [{ subnet: 172.28.11.0/24 }] }
+  gateway-shared-b:
+    internal: true
+    ipam: { config: [{ subnet: 172.28.20.0/24 }] }
+  gateway-quarantine-b:
+    internal: true
+    ipam: { config: [{ subnet: 172.28.21.0/24 }] }
+  gateway-status: { internal: true }
   telemetry: {}
 
 volumes:
@@ -570,5 +675,7 @@ volumes:
   dev-pki: {}
   edge-a-state: {}
   edge-a-agent-state: {}
+  edge-a-gateway-state: {}
   edge-b-state: {}
   edge-b-agent-state: {}
+  edge-b-gateway-state: {}

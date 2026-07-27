@@ -81,7 +81,7 @@ class SystemIdentityApiTest extends TestCase
         $this->assertSame(1, $operation->result['targets']);
     }
 
-    public function test_dns_identity_requires_both_ipv4_and_ipv6_glue(): void
+    public function test_dns_identity_validates_configured_address_families(): void
     {
         $admin = User::factory()->admin()->create();
         $payload = $this->validPayload();
@@ -91,6 +91,25 @@ class SystemIdentityApiTest extends TestCase
         $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['nameservers.0.ipv4', 'nameservers.0.ipv6']);
+    }
+
+    public function test_dns_identity_accepts_ipv4_only_nameserver_glue(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $payload = $this->validPayload();
+        $payload['nameservers'] = collect($payload['nameservers'])
+            ->map(fn (array $nameserver): array => [...$nameserver, 'ipv6' => null])
+            ->all();
+
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)
+            ->assertOk()
+            ->assertJsonPath('data.valid', true);
+
+        $settings = PlatformDnsSetting::query()->create(['id' => 1, ...$payload, 'revision' => 1]);
+        $glue = collect(PlatformDnsZone::render($settings))
+            ->whereIn('name', ['ns1.cdnf.test.', 'ns2.cdnf.test.']);
+
+        $this->assertSame(['A'], $glue->pluck('type')->unique()->values()->all());
     }
 
     public function test_dns_identity_update_requires_confirmation_bound_to_the_exact_preview(): void
@@ -141,6 +160,24 @@ class SystemIdentityApiTest extends TestCase
         $this->assertTrue($addresses->contains('203.0.113.40'));
         $this->assertTrue($addresses->contains('2001:db8::40'));
         $this->assertFalse($addresses->contains('203.0.113.41'));
+    }
+
+    public function test_platform_proxy_hostname_publishes_an_ipv4_only_ready_cell(): void
+    {
+        $settings = PlatformDnsSetting::query()->create(['id' => 1, ...$this->validPayload(), 'revision' => 1]);
+        $edge = Edge::query()->create([
+            'name' => 'ipv4-only-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
+            'ipv4' => '203.0.113.50', 'ipv6' => null, 'registered_at' => now(),
+            'last_heartbeat_at' => now(), 'capacity' => ['listener_ready' => true],
+        ]);
+        $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
+        $edge->cells()->create([
+            'edge_pool_id' => $pool->id, 'name' => $pool->name, 'status' => 'ready',
+            'service_ipv4' => $edge->ipv4, 'service_ipv6' => null,
+        ]);
+
+        $addressRows = collect(PlatformDnsZone::render($settings))->flatMap(fn (array $row): array => $row['records']);
+        $this->assertTrue($addressRows->pluck('content')->contains('203.0.113.50'));
     }
 
     public function test_domain_user_cannot_read_dns_identity_or_other_users_operation(): void

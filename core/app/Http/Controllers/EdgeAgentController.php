@@ -91,6 +91,16 @@ class EdgeAgentController extends Controller
         $data = $request->validate([
             'agent_version' => ['required', 'string', 'max:40'], 'listener_ready' => ['required', 'boolean'],
             'active_sequence' => ['required', 'integer', 'min:0'], 'cells' => ['required', 'array', 'max:32'],
+            'gateway' => ['sometimes', 'array', 'max:12'],
+            'gateway.ready' => ['required_with:gateway', 'boolean'],
+            'gateway.active_revision' => ['sometimes', 'integer', 'min:0'],
+            'gateway.routes' => ['sometimes', 'integer', 'between:0,200000'],
+            'gateway.listeners' => ['sometimes', 'integer', 'between:0,128'],
+            'gateway.connections_active' => ['sometimes', 'integer', 'min:0'],
+            'gateway.connections_accepted' => ['sometimes', 'integer', 'min:0'],
+            'gateway.connections_rejected' => ['sometimes', 'integer', 'min:0'],
+            'gateway.errors' => ['sometimes', 'integer', 'min:0'],
+            'gateway.candidate_rejections' => ['sometimes', 'integer', 'min:0'],
             'cells.*.name' => ['required', 'string', 'max:100', 'distinct'], 'cells.*.status' => ['required', 'in:ready,degraded,failed,drained'],
             'cells.*.capacity' => ['required', 'array', 'max:20'], 'noisy_domains' => ['sometimes', 'array', 'max:20'],
             'noisy_domains.*.domain_id' => ['required', 'integer', 'exists:domains,id'],
@@ -129,7 +139,10 @@ class EdgeAgentController extends Controller
             'last_heartbeat_at' => now(), 'agent_version' => $data['agent_version'],
             'active_sequence' => max($edge->active_sequence, $data['active_sequence']),
             'bootstrap_token_hash' => null, 'bootstrap_consumed_at' => null,
-            'capacity' => array_merge($edge->capacity ?? [], ['listener_ready' => $listenerReady, 'cells' => $data['cells'], 'noisy_domains' => $data['noisy_domains'] ?? []]),
+            'capacity' => array_merge($edge->capacity ?? [], [
+                'listener_ready' => $listenerReady, 'gateway' => $data['gateway'] ?? null,
+                'cells' => $data['cells'], 'noisy_domains' => $data['noisy_domains'] ?? [],
+            ]),
         ]);
         $isRoutable = $edge->enabled && ! $edge->drained && $listenerReady;
         $newCellRouting = $edge->cells()->orderBy('id')->get(['id', 'status', 'drained', 'service_ipv4', 'service_ipv6'])->toJson();

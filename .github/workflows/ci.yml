@@ -70,6 +70,7 @@ jobs:
           docker build --build-arg CORE_IMAGE=cdnfoundry/core:ci --target edge-control -t cdnfoundry/edge-control:ci -f docker/nginx/Dockerfile.production .
           docker build -t cdnfoundry/edge-runtime:ci -f docker/openresty/Dockerfile .
           docker build -t cdnfoundry/edge-agent:ci edge-agent
+          docker build -t cdnfoundry/edge-gateway:ci edge-gateway
           docker build -t cdnfoundry/mmdb-updater:ci docker/mmdb-updater
       - name: Smoke-test the read-only core image
         shell: bash
@@ -226,6 +227,7 @@ jobs:
           docker build --build-arg CORE_IMAGE=ghcr.io/vaheed/cdnfoundry-core:${RELEASE} --target edge-control -t ghcr.io/vaheed/cdnfoundry-edge-control:${RELEASE} -f docker/nginx/Dockerfile.production .
           docker build -t ghcr.io/vaheed/cdnfoundry-edge-runtime:${RELEASE} -f docker/openresty/Dockerfile .
           docker build -t ghcr.io/vaheed/cdnfoundry-edge-agent:${RELEASE} edge-agent
+          docker build -t ghcr.io/vaheed/cdnfoundry-edge-gateway:${RELEASE} edge-gateway
           docker build -t ghcr.io/vaheed/cdnfoundry-mmdb-updater:${RELEASE} docker/mmdb-updater
       - name: Push commit and channel tags
         env:
@@ -235,7 +237,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          images=(core web edge-control edge-runtime edge-agent mmdb-updater)
+          images=(core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater)
           aliases=()
 
           if [[ "${RELEASE_REF}" == "refs/heads/main" ]]; then

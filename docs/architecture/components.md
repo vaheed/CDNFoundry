@@ -55,6 +55,7 @@ cache policies. No normal domain change generates an Nginx server block or reloa
 | `prometheus` | Metrics and alert evaluation |
 | `alertmanager` | Alert routing |
 | `node-exporter` | Host resource and clock metrics |
+| Edge gateway | Binds configured service IPv4/IPv6 addresses and routes by destination plus validated Host/SNI; sends PROXY protocol version 2 to private cell listeners |
 
 Vector has separate 1 GiB disk buffers for edge and DNS sinks and drops newest
 events when full. Telemetry loss is visible but never blocks serving.

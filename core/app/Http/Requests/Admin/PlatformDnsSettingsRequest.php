@@ -19,7 +19,7 @@ class PlatformDnsSettingsRequest extends FormRequest
             'nameservers' => ['required', 'array', 'min:2', 'max:8'],
             'nameservers.*.hostname' => ['required', 'distinct', 'string', 'max:253', self::HOSTNAME],
             'nameservers.*.ipv4' => ['required', 'ipv4'],
-            'nameservers.*.ipv6' => ['required', 'ipv6'],
+            'nameservers.*.ipv6' => ['nullable', 'ipv6'],
             'soa_primary' => ['required', 'string', 'max:253', self::HOSTNAME],
             'soa_mailbox' => ['required', 'string', 'max:253', self::HOSTNAME],
             'soa_refresh' => ['required', 'integer', 'between:300,86400'],
@@ -111,6 +111,7 @@ class PlatformDnsSettingsRequest extends FormRequest
             if (isset($nameserver['hostname']) && is_string($nameserver['hostname'])) {
                 $input['nameservers'][$index]['hostname'] = mb_strtolower(rtrim(trim($nameserver['hostname']), '.'));
             }
+            $input['nameservers'][$index]['ipv6'] = filled($nameserver['ipv6'] ?? null) ? $nameserver['ipv6'] : null;
         }
         foreach ($input['cluster_targets'] ?? [] as $index => $target) {
             if (is_string($target)) {

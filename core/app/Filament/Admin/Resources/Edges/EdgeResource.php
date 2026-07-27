@@ -73,7 +73,24 @@ class EdgeResource extends Resource
                     false => 'danger',
                     default => 'gray',
                 }),
+            TextEntry::make('capacity.gateway.ready')->label('Gateway')->badge()
+                ->formatStateUsing(fn (mixed $state): string => match ($state) {
+                    true => 'Ready',
+                    false => 'Not ready',
+                    default => 'Awaiting heartbeat',
+                })
+                ->color(fn (mixed $state): string => match ($state) {
+                    true => 'success',
+                    false => 'danger',
+                    default => 'gray',
+                }),
             TextEntry::make('active_sequence')->label('Active configuration sequence'),
+            TextEntry::make('capacity.gateway.active_revision')->label('Gateway map revision')->placeholder('Gateway not reporting'),
+            TextEntry::make('capacity.gateway.listeners')->label('Gateway listeners')->placeholder('Gateway not reporting'),
+            TextEntry::make('capacity.gateway.routes')->label('Gateway routes')->placeholder('Gateway not reporting'),
+            TextEntry::make('capacity.gateway.connections_active')->label('Gateway active connections')->placeholder('Gateway not reporting'),
+            TextEntry::make('capacity.gateway.errors')->label('Gateway errors')->placeholder('Gateway not reporting'),
+            TextEntry::make('capacity.gateway.candidate_rejections')->label('Gateway rejected candidates')->placeholder('Gateway not reporting'),
             TextEntry::make('identity_certificate_expires_at')->label('Identity expires')->dateTime()->placeholder('Not enrolled'),
             TextEntry::make('capacity.last_rejection.reason')->label('Latest deployment rejection')->placeholder('None reported'),
         ]);

@@ -14,11 +14,11 @@ final class EdgeCellAddressData
     /** @return array{service_ipv4:string,service_ipv6?:string|null} */
     public static function validate(EdgeCell $cell, array $input): array
     {
-        $edge = $cell->edge()->firstOrFail();
+        $cell->edge()->firstOrFail();
         $input['service_ipv6'] = filled($input['service_ipv6'] ?? null) ? $input['service_ipv6'] : null;
         $data = Validator::make($input, [
             'service_ipv4' => ['required', 'ipv4', Rule::unique('edge_cells', 'service_ipv4')->ignore($cell)],
-            'service_ipv6' => [$edge->ipv6 === null ? 'nullable' : 'required', 'nullable', 'ipv6', Rule::unique('edge_cells', 'service_ipv6')->ignore($cell)],
+            'service_ipv6' => ['nullable', 'ipv6', Rule::unique('edge_cells', 'service_ipv6')->ignore($cell)],
         ])->validate();
 
         foreach (['service_ipv4', 'service_ipv6'] as $field) {

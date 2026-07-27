@@ -43,6 +43,24 @@ groups:
         labels: { severity: critical }
         annotations:
           summary: PowerDNS authoritative backend is unavailable
+      - alert: EdgeGatewayUnready
+        expr: cdnfoundry_edge_gateways_unready > 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: One or more enabled edge gateways are not ready
+      - alert: EdgeGatewayCandidateRejected
+        expr: increase(cdnfoundry_edge_gateway_candidate_rejections_total[10m]) > 0
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: An edge gateway rejected a routing-map candidate and retained its last valid map
+      - alert: EdgeGatewayErrors
+        expr: increase(cdnfoundry_edge_gateway_errors_total[5m]) > 0
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: An edge gateway is reporting bounded connection or listener errors
       - alert: DNSDistBackendUnavailable
         expr: dnsdist_server_status == 0
         for: 2m

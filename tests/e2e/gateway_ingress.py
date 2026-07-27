@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""Real gateway qualification. This does not automate a browser."""
+
+import json
+import pathlib
+import subprocess
+import tempfile
+import time
+
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+COMPOSE = ["docker", "compose", "--env-file", ".env.dev", "-f", "compose.dev.yml"]
+GATEWAY = "cdnfoundry-dev-edge-gateway-a-1"
+IPV4_ONLY_GATEWAY = "cdnfoundry-dev-edge-gateway-b-1"
+STATE_VOLUME = "cdnfoundry-dev_edge-a-state"
+IPV4_ONLY_STATE_VOLUME = "cdnfoundry-dev_edge-b-state"
+
+
+def run(*command: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(command, cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if check and result.returncode:
+        raise RuntimeError(f"{' '.join(command)} failed ({result.returncode}):\n{result.stdout}")
+    return result
+
+
+def metrics(container: str = GATEWAY) -> dict[str, int]:
+    output = run("docker", "exec", container, "wget", "-qO-", "http://127.0.0.1:9105/metrics").stdout
+    return {line.split()[0]: int(line.split()[1]) for line in output.splitlines() if len(line.split()) == 2}
+
+
+def runtime(volume: str = STATE_VOLUME) -> tuple[dict, dict]:
+    script = (
+        "import json;"
+        "print(json.dumps(json.load(open('/state/gateway.json'))));"
+        "print(json.dumps(json.load(open('/state/shared-default.json'))))"
+    )
+    output = run("docker", "run", "--rm", "-v", f"{volume}:/state:ro", "python:3.13-alpine", "python", "-c", script).stdout
+    gateway, cell = output.splitlines()
+    return json.loads(gateway), json.loads(cell)
+
+
+def curl(address: str, hostname: str, tls: bool = False, expect_success: bool = True, gateway: str = GATEWAY) -> str:
+    url = f"{'https' if tls else 'http'}://{hostname}/"
+    command = [
+        "docker", "run", "--rm", "--network", f"container:{gateway}", "curlimages/curl:8.16.0",
+        "--noproxy", "*", "--max-time", "10", "-sS", "-D", "-", "-o", "/dev/null",
+        "--resolve", f"{hostname}:{443 if tls else 80}:{'[' + address + ']' if ':' in address else address}",
+    ]
+    if tls:
+        command.append("-k")  # Routing qualification; strict certificate validation remains owner-run.
+    result = run(*command, url, check=False)
+    if expect_success and (result.returncode or "server: openresty" not in result.stdout.lower()):
+        raise RuntimeError(f"route {address}/{hostname} did not reach OpenResty:\n{result.stdout}")
+    if not expect_success and result.returncode == 0:
+        raise RuntimeError(f"unknown route {address}/{hostname} was accepted")
+    return result.stdout
+
+
+def isolated_last_valid_test() -> None:
+    with tempfile.TemporaryDirectory(prefix="cdnfoundry-gateway-") as temporary:
+        base = pathlib.Path(temporary)
+        config_path, state_path = base / "config", base / "state"
+        config_path.mkdir()
+        state_path.mkdir()
+        state_path.chmod(0o777)
+        candidate = {
+            "schema_version": 1,
+            "revision": 17,
+            "listeners": ["127.0.0.50:80", "127.0.0.50:443"],
+            "routes": [{
+                "address": "127.0.0.50", "hostname": "last-valid.example.test",
+                "http": "127.0.0.1:9", "https": "127.0.0.1:9",
+            }],
+        }
+        (config_path / "gateway.json").write_text(json.dumps(candidate))
+        container = "cdnfoundry-gateway-last-valid-e2e"
+        run(
+            "docker", "run", "-d", "--rm", "--name", container,
+            "--cap-drop", "ALL", "--cap-add", "NET_BIND_SERVICE",
+            "-v", f"{config_path}:/config", "-v", f"{state_path}:/state",
+            "-e", "GATEWAY_CONFIG_FILE=/config/gateway.json",
+            "-e", "GATEWAY_STATE_DIR=/state",
+            "-e", "GATEWAY_METRICS_ADDRESS=127.0.0.1:9105",
+            "cdnfoundry/edge-gateway:qualification",
+        )
+        try:
+            time.sleep(2)
+            before = metrics(container)
+            (config_path / "gateway.json").write_text('{"schema_version":1,"revision":18,"listeners":[],"routes":[]}')
+            time.sleep(2)
+            after = metrics(container)
+            if after["cdnfoundry_gateway_active_revision"] != 17:
+                raise RuntimeError("invalid candidate replaced the active gateway map")
+            if after["cdnfoundry_gateway_candidate_rejections_total"] <= before["cdnfoundry_gateway_candidate_rejections_total"]:
+                raise RuntimeError("invalid candidate rejection was not observable")
+            run("docker", "stop", container)
+            restart_container = container + "-restart"
+            run(
+                "docker", "run", "-d", "--rm", "--name", restart_container,
+                "--cap-drop", "ALL", "--cap-add", "NET_BIND_SERVICE",
+                "-v", f"{config_path}:/config:ro", "-v", f"{state_path}:/state",
+                "-e", "GATEWAY_CONFIG_FILE=/config/missing.json",
+                "-e", "GATEWAY_STATE_DIR=/state",
+                "-e", "GATEWAY_METRICS_ADDRESS=127.0.0.1:9105",
+                "cdnfoundry/edge-gateway:qualification",
+            )
+            time.sleep(2)
+            if metrics(restart_container)["cdnfoundry_gateway_active_revision"] != 17:
+                raise RuntimeError("gateway restart did not restore the last valid map")
+        finally:
+            run("docker", "stop", container, check=False)
+            run("docker", "stop", container + "-restart", check=False)
+
+
+def main() -> None:
+    gateway, cell = runtime()
+    hostname = next(
+        name for name, value in cell["hosts"].items()
+        if value.get("tls", {}).get("certificate_id")
+    )
+    addresses = {route["address"] for route in gateway["routes"] if route["hostname"] == hostname}
+    if not {"172.28.10.10", "fd00:cd0f:10::10"}.issubset(addresses):
+        raise RuntimeError(f"dual-stack route missing for {hostname}: {sorted(addresses)}")
+    revision = metrics()["cdnfoundry_gateway_active_revision"]
+    for address in ("172.28.10.10", "fd00:cd0f:10::10"):
+        curl(address, hostname)
+        curl(address, hostname, tls=True)
+        curl(address, "unknown-gateway.example.test", expect_success=False)
+    run(*COMPOSE, "restart", "edge-gateway-a")
+    time.sleep(2)
+    if metrics()["cdnfoundry_gateway_active_revision"] != revision:
+        raise RuntimeError("gateway restart changed the active revision")
+    curl("172.28.10.10", hostname)
+
+    ipv4_gateway, ipv4_cell = runtime(IPV4_ONLY_STATE_VOLUME)
+    ipv4_hostname = next(
+        name for name, value in ipv4_cell["hosts"].items()
+        if value.get("tls", {}).get("certificate_id")
+    )
+    ipv4_addresses = {route["address"] for route in ipv4_gateway["routes"] if route["hostname"] == ipv4_hostname}
+    if "172.28.20.10" not in ipv4_addresses or any(":" in address for address in ipv4_addresses):
+        raise RuntimeError(f"IPv4-only gateway unexpectedly required another family: {sorted(ipv4_addresses)}")
+    curl("172.28.20.10", ipv4_hostname, gateway=IPV4_ONLY_GATEWAY)
+    curl("172.28.20.10", ipv4_hostname, tls=True, gateway=IPV4_ONLY_GATEWAY)
+
+    isolated_last_valid_test()
+    print(json.dumps({
+        "status": "passed", "revision": revision, "hostname": hostname,
+        "families": ["IPv4", "IPv6"], "protocols": ["HTTP Host", "HTTPS SNI"],
+        "ipv4_only_gateway": {"hostname": ipv4_hostname, "addresses": sorted(ipv4_addresses)},
+        "metrics": metrics(),
+    }, indent=2))
+
+
+if __name__ == "__main__":
+    main()

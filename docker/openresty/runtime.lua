@@ -428,7 +428,7 @@ function M.access()
         end
         if not accepted then return reject(505) end
     end
-    if config.settings and config.settings.maintenance then
+    if config.settings and type(config.settings.maintenance) == "table" then
         ngx.status = 503; ngx.header["Content-Type"] = "text/plain"; ngx.say(config.settings.maintenance.body or "Service unavailable"); return ngx.exit(503)
     end
     local cache = config.cache or {}

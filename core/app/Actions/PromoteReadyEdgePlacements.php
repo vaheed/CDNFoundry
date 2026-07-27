@@ -28,8 +28,7 @@ class PromoteReadyEdgePlacements
                 $participants = $edges->filter(function (Edge $edge) use ($placement): bool {
                     $cell = $edge->cells()->where('edge_pool_id', $placement->target_pool_id)->first();
 
-                    return $cell !== null && ! $cell->drained && $cell->service_ipv4 !== null
-                        && ($edge->ipv6 === null || $cell->service_ipv6 !== null);
+                    return $cell !== null && ! $cell->drained && $cell->service_ipv4 !== null;
                 });
                 if ($participants->isEmpty()) {
                     return;

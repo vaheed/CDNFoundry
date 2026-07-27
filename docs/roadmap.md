@@ -51,7 +51,7 @@ Every phase must independently record:
 | Implementation | State, migrations, authorization, API, UI where needed, jobs, reconciliation, metrics, audit, and rollback |
 | Unit and feature tests | Happy path, permissions, validation, bounds, idempotency, and stable errors |
 | Real-runtime E2E | Real DNS, HTTP, HTTPS, TLS, cache, compression, WAF, restart, and failure behavior where applicable |
-| IPv4 and IPv6 | Both families pass whenever the phase handles addresses or traffic |
+| IPv4 and IPv6 | IPv4 always passes; IPv6 passes when configured, and an IPv4-only topology is qualified |
 | Scale | Dataset, topology, hardware, concurrency, result, saturation point, and accepted limit |
 | Failure and recovery | Retry, obsolete work, invalid candidate, dependency outage, restart, rollback, and last-valid state |
 | Isolation | Failure or load in one domain, pool, cell, edge, or component does not unnecessarily affect unrelated traffic |
@@ -72,7 +72,7 @@ public IPv4/IPv6 service pairs and route traffic to bounded OpenResty cells.
 
 **Implementation:**
 
-- Bind operator-configured IPv4 and IPv6 service addresses.
+- Bind operator-configured IPv4 service addresses and optional IPv6 service addresses.
 - Route HTTP by destination address and validated Host.
 - Route HTTPS by destination address and TLS SNI without terminating customer TLS.
 - Forward trusted client identity to cells through a fixed internal contract.
@@ -88,12 +88,12 @@ recorded.
 
 **Completion checklist:**
 
-- [ ] Real HTTP Host and HTTPS SNI traffic reaches the intended cell.
-- [ ] IPv4 and IPv6 pass.
-- [ ] Unknown and invalid traffic is rejected.
-- [ ] Invalid maps never replace active maps.
-- [ ] Restart restores or rebuilds the last valid map.
-- [ ] Existing baseline edge traffic remains functional during migration.
+- [x] Real HTTP Host and HTTPS SNI traffic reaches the intended cell.
+- [x] Dual-stack and IPv4-only topologies pass.
+- [x] Unknown and invalid traffic is rejected.
+- [x] Invalid maps never replace active maps.
+- [x] Restart restores or rebuilds the last valid map.
+- [x] Existing baseline edge traffic remains functional during migration.
 - [ ] Tests, scale, documentation, and manual qualification pass.
 
 ## Phase 2 — Bounded cell inventory

@@ -14,7 +14,7 @@ class NameserverController extends Controller
 
         return response()->json(['data' => collect($settings->nameservers)->map(fn (array $nameserver): array => [
             'hostname' => mb_strtolower(rtrim($nameserver['hostname'], '.')),
-            'ipv4' => $nameserver['ipv4'], 'ipv6' => $nameserver['ipv6'],
+            'ipv4' => $nameserver['ipv4'], 'ipv6' => $nameserver['ipv6'] ?? null,
         ])->values()]);
     }
 }
