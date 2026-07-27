@@ -1,674 +1,476 @@
 ---
 title: CDNFoundry next development roadmap
-description: Ordered post-baseline roadmap for the new edge, cache, origin-resilience, WAF, and fleet capabilities.
+description: Post-baseline roadmap for the new edge, cache, origin resilience, WAF, and fleet capabilities.
 ---
 
 # CDNFoundry next development roadmap
 
-## Current boundary
+## Starting point
 
-The original production platform roadmap is complete and is not repeated here.
-The existing Laravel control plane, authoritative DNS, Geo-DNS, proxy, TLS,
-baseline cache and purge, security controls, telemetry, analytics, backup, and
-operations behavior are the starting baseline for this roadmap.
+The original production roadmap is complete. The existing control plane,
+authoritative DNS, Geo-DNS, proxy, TLS, baseline cache and purge, security,
+telemetry, analytics, backup, and operations are the regression baseline.
 
-This document contains only the **new development work** agreed after completion
-of that baseline.
+This roadmap contains only the new work discussed after that baseline.
 
-Every new phase must:
+CDNFoundry remains a simple but solid private CDN. It must stay understandable,
+bounded, production-safe, and easy to operate. It is not intended to become a
+general cloud platform or a Cloudflare replacement.
 
-- extend the existing product without rewriting it;
-- remain deployable and testable when the phase is finished;
-- preserve all previously working behavior;
-- stay simple to develop and operate;
-- use bounded resources and explicit failure behavior;
-- include tests, scale evidence, documentation, and owner-run browser qualification.
+## Project boundaries
 
-## Product direction
+- Laravel and Filament remain the single control plane.
+- PostgreSQL remains the desired-state source of truth.
+- DNS and HTTP traffic never pass through Laravel.
+- The edge gateway only binds service addresses and routes by destination IP,
+  Host, and TLS SNI.
+- OpenResty cells own TLS, cache, compression, security, WAF, origin proxying,
+  and request telemetry.
+- Cell slots are bounded and created during edge installation.
+- The edge agent never receives unrestricted Docker access.
+- No default per-domain process, container, worker, timer, cache directory,
+  server block, or reload is allowed.
+- External effects remain asynchronous, revisioned, idempotent, coalesced,
+  acknowledged, and last-valid-state preserving.
+- No microservices, Kafka, Kubernetes requirement, CQRS, event sourcing,
+  GraphQL, custom RBAC, plugin runtime, reseller hierarchy, billing engine,
+  custom WAF language, or second dashboard.
+- Simple Anycast uses operator/provider routing. CDNFoundry does not become a
+  BGP controller.
+- DDoS readiness never claims upstream volumetric scrubbing after physical
+  capacity is saturated.
+- Roadmap phase numbers and lifecycle suffixes must not appear in production
+  code or filenames.
 
-CDNFoundry remains a small, solid private CDN for operators and ISPs. It is not
-trying to become Cloudflare, Fastly, Akamai, or a general cloud platform.
+## Required completion gate
 
-The next development cycle focuses on five practical outcomes:
-
-1. multiple isolated OpenResty cells on one edge;
-2. multiple public IPv4/IPv6 service pairs on the same edge;
-3. Geo-Unicast and Simple Anycast pool routing;
-4. stronger cache, compression, origin resilience, and managed WAF behavior;
-5. safe operation and upgrades of the expanded edge fleet.
-
-## Non-negotiable boundaries
-
-1. Laravel and Filament remain the single management/control plane.
-2. PostgreSQL remains the durable desired-state source of truth.
-3. DNS, HTTP, HTTPS, TLS selection, cache decisions, WAF decisions, and raw
-   telemetry never pass through Laravel.
-4. The edge gateway is a small data-plane router. It does not cache, terminate
-   customer TLS, run WAF logic, call Laravel, or query a database.
-5. OpenResty cells perform TLS, cache, security, WAF when enabled, origin proxy,
-   and request telemetry.
-6. Cell containers are created as bounded generic slots during edge installation.
-   The edge agent assigns and configures them; it does not receive unrestricted
-   Docker or containerd access.
-7. A domain does not receive a default container, process, worker, timer, cache
-   directory, server block, or reload.
-8. Pools may use many cells on one edge. A public IPv4/IPv6 pair belongs to a
-   pool endpoint, not necessarily to one cell.
-9. Simple Anycast uses operator/provider routing. CDNFoundry does not become a
-   BGP controller and does not require FRR, BIRD, or direct router access.
-10. External effects remain asynchronous, revisioned, idempotent, coalesced,
-    acknowledged, and last-valid-state preserving.
-11. No custom WAF language, arbitrary ModSecurity directives, user scripts,
-    plugin runtime, or downloaded runtime rules are introduced.
-12. No microservices, Kafka, Kubernetes requirement, CQRS, event sourcing,
-    GraphQL, custom RBAC, reseller hierarchy, billing engine, or second dashboard.
-13. No unlimited claims. Every scale result records topology, hardware,
-    concurrency, dataset, saturation point, and accepted limits.
-14. Development PostgreSQL and named Compose volumes remain persistent. Tests
-    use the repository's isolated test environment and never destructively reset
-    persistent development data.
-15. Roadmap phase names and numbers never appear in production class names,
-    filenames, routes, migrations, tables, or configuration keys.
-
-## Completion gate for every phase
-
-A phase is complete only when every applicable row is recorded independently.
+Every phase must independently record:
 
 | Gate | Required evidence |
 | --- | --- |
-| Implementation | Durable state, migrations, policies, API, UI where required, jobs, reconciliation, audit, metrics, and rollback behavior |
-| Unit and feature tests | Happy path, authorization, validation, bounds, idempotency, stable errors, and backward compatibility |
-| Real-runtime E2E | Real HTTP/HTTPS/DNS/cache/TLS/WAF/runtime behavior; mocks alone are insufficient |
-| IPv4 and IPv6 | Both families pass whenever the phase handles addressing or traffic |
-| Scale checkpoint | Dataset, topology, hardware, concurrency, measured result, saturation point, and accepted limit |
-| Failure and recovery | Restart, dependency outage, invalid candidate, retry, obsolete work, rollback, and last-valid state |
+| Implementation | State, migrations, authorization, API, UI where needed, jobs, reconciliation, metrics, audit, and rollback |
+| Unit and feature tests | Happy path, permissions, validation, bounds, idempotency, and stable errors |
+| Real-runtime E2E | Real DNS, HTTP, HTTPS, TLS, cache, compression, WAF, restart, and failure behavior where applicable |
+| IPv4 and IPv6 | Both families pass whenever the phase handles addresses or traffic |
+| Scale | Dataset, topology, hardware, concurrency, result, saturation point, and accepted limit |
+| Failure and recovery | Retry, obsolete work, invalid candidate, dependency outage, restart, rollback, and last-valid state |
 | Isolation | Failure or load in one domain, pool, cell, edge, or component does not unnecessarily affect unrelated traffic |
-| Observability | Metrics, logs, reason codes, alerts, health, capacity, and partial/degraded state |
-| Documentation | User/admin guide, API/OpenAPI, architecture, deployment, operations, troubleshooting, and runbooks |
-| Manual qualification | Owner-run checkpoints in `docs/manual-browser-qualification.md` |
-| Regression | Existing completed platform behavior remains functional |
-| Release decision | Passed, failed, blocked, or deliberately removed from scope |
+| Observability | Health, metrics, logs, alerts, capacity, degraded states, and stable reason codes |
+| Documentation | User, administrator, API/OpenAPI, architecture, deployment, operations, troubleshooting, and runbooks |
+| Manual qualification | Owner-run evidence from `docs/manual-browser-qualification.md` |
+| Regression | The completed baseline continues to work |
+| Release decision | Passed, failed, blocked, or removed from scope |
 
-A checkbox cannot be marked complete when the related test was not executed.
-Every phase must finish as a usable production increment; no phase may leave the
-active serving path dependent on unfinished work from a later phase.
+A phase is not complete when an applicable test was not executed. Every phase
+must finish as a usable production increment and must not depend on unfinished
+work from a later phase.
 
-# Committed development roadmap
+# Phase 1 — Edge gateway ingress
 
-## Phase 1 — Edge gateway ingress
-
-### Goal
-
-Introduce one minimal gateway on every edge so one server can bind multiple
+**Goal:** introduce one minimal gateway per edge so one server can bind several
 public IPv4/IPv6 service pairs and route traffic to bounded OpenResty cells.
 
-### Implementation
+**Implementation:**
 
-- Add one gateway process/container per edge.
-- Bind one or more operator-configured public IPv4 and IPv6 service addresses.
-- Route HTTP by destination address and validated `Host`.
+- Bind operator-configured IPv4 and IPv6 service addresses.
+- Route HTTP by destination address and validated Host.
 - Route HTTPS by destination address and TLS SNI without terminating customer TLS.
-- Forward the trusted client address to cells through a qualified PROXY protocol
-  or equivalent fixed internal contract.
-- Reject unknown destination addresses, hosts, and SNI names early.
-- Load a generated local routing map atomically.
-- Keep and restore the previous valid map after invalid configuration or restart.
-- Expose gateway readiness, active revision, listener state, connection totals,
-  routing failures, and per-endpoint health.
-- Keep the gateway free of cache, certificates, origin logic, WAF rules, Lua
-  business logic, and control-plane network calls.
+- Forward trusted client identity to cells through a fixed internal contract.
+- Reject unknown addresses, Host values, and SNI names before expensive work.
+- Activate generated routing maps atomically and retain the previous valid map.
+- Expose listener, revision, route, connection, error, and readiness metrics.
+- Keep cache, TLS certificates, WAF, origin logic, and control-plane calls out of
+  the gateway.
 
-### Scale checkpoint
+**Scale target:** at least 50,000 Host/SNI mappings and multiple dual-stack
+service pairs on one edge, with throughput, latency, CPU, memory, and saturation
+recorded.
 
-- At least 50,000 hostname/SNI mappings in one generated map.
-- Multiple IPv4 and IPv6 service pairs on one edge.
-- Measured HTTP and TLS pass-through throughput with gateway CPU, memory,
-  connections, latency, and saturation recorded.
+**Completion checklist:**
 
-### Completion checklist
+- [ ] Real HTTP Host and HTTPS SNI traffic reaches the intended cell.
+- [ ] IPv4 and IPv6 pass.
+- [ ] Unknown and invalid traffic is rejected.
+- [ ] Invalid maps never replace active maps.
+- [ ] Restart restores or rebuilds the last valid map.
+- [ ] Existing baseline edge traffic remains functional during migration.
+- [ ] Tests, scale, documentation, and manual qualification pass.
 
-- [ ] HTTP Host and HTTPS SNI route to the intended backend cell.
-- [ ] IPv4 and IPv6 listeners pass real traffic.
-- [ ] Unknown Host/SNI and unassigned destination addresses are rejected.
-- [ ] Real client address reaches the cell through the trusted internal contract.
-- [ ] Invalid or partial maps never replace the active map.
-- [ ] Gateway restart preserves or reconstructs the last valid routing state.
-- [ ] Gateway failure is visible and does not corrupt cell runtime state.
-- [ ] Existing direct edge behavior remains available during controlled migration.
-- [ ] Tests, scale evidence, metrics, alerts, docs, and manual qualification pass.
+# Phase 2 — Bounded cell inventory
 
-## Phase 2 — Bounded cell inventory and edge installation
+**Goal:** replace the fixed shared/quarantine assumption with a bounded set of
+generic OpenResty cell slots created during edge installation.
 
-### Goal
+**Implementation:**
 
-Replace the fixed shared/quarantine runtime assumption with a bounded inventory
-of generic OpenResty cell slots created during edge installation.
-
-### Implementation
-
-- Add an installation setting such as a bounded cell-slot count.
-- Generate/start named generic slots such as `cell-01` through `cell-N`.
-- Give every slot stable identity, internal ports, runtime path, cache path,
-  temporary path, status endpoint, and resource limits.
-- Allow unused slots to remain unassigned and idle or stopped according to a
-  documented installation policy.
-- Register the full static inventory with the edge agent.
-- Remove readiness hardcoding tied to `shared-default`.
+- Configure a bounded slot count such as `cell-01` through `cell-N`.
+- Give every slot stable identity, ports, runtime path, cache path, temporary
+  path, status endpoint, and resource limits.
+- Register assigned, unassigned, ready, degraded, drained, and stopped states.
+- Remove readiness logic tied to one hardcoded shared cell.
 - Let the agent configure, reload, drain, restart, and report existing slots.
-- Do not mount the Docker socket into the edge agent.
-- Keep agent resources separate from cell resource groups.
-- Support safe cell image compatibility and last-valid runtime state.
+- Keep agent resources separate from cell resources.
+- Do not mount the container-engine socket into the agent.
 
-### Scale checkpoint
+**Scale target:** qualify at least eight slots on one edge and record idle and
+active overhead per slot.
 
-- Qualify at least 8 cell slots on one edge.
-- Record idle overhead and active overhead per cell.
-- Prove one saturated or crashed cell does not terminate the agent, gateway, or
-  unrelated cells.
+**Completion checklist:**
 
-### Completion checklist
+- [ ] Fresh installation creates exactly the configured slots.
+- [ ] Every slot has unique identity, paths, ports, health, and limits.
+- [ ] One crashed or saturated cell does not stop the gateway, agent, or other cells.
+- [ ] Cell restart and rollback preserve unrelated traffic.
+- [ ] Cache, temporary, and log storage remain bounded.
+- [ ] Existing enrollment, mTLS, and snapshot recovery still pass.
+- [ ] Tests, scale, documentation, and manual qualification pass.
 
-- [ ] Fresh edge installation creates exactly the configured bounded slots.
-- [ ] Every slot has unique identity, paths, ports, health, and resource limits.
-- [ ] Agent reports assigned, unassigned, ready, degraded, drained, and stopped states.
-- [ ] Agent operates without unrestricted container-engine access.
-- [ ] Cell restart and image rollback preserve unrelated traffic.
-- [ ] Cache/temp/log storage cannot exceed configured quotas.
-- [ ] Existing edge enrollment, mTLS, rotation, and snapshot recovery still pass.
-- [ ] Tests, scale evidence, docs, and manual qualification pass.
+# Phase 3 — Multi-cell pools and stable placement
 
-## Phase 3 — Multi-cell pools and stable domain placement
+**Goal:** allow one pool to use several cells on the same edge while preserving
+cache locality and predictable isolation.
 
-### Goal
+**Implementation:**
 
-Allow one pool to use multiple cells on the same edge while preserving stable
-cache locality and predictable failure isolation.
-
-### Implementation
-
-- Support pool kinds:
-  - `shared` for unrelated normal domains;
-  - `reserved` for one customer's or workload group's domains;
-  - `dedicated` for one exceptional domain;
-  - `quarantine` for attacked or unstable domains.
-- Separate stable cell-slot identity from pool identity.
+- Support shared, reserved, dedicated, and quarantine pool kinds.
+- Separate stable cell identity from pool identity.
 - Add explicit edge participation and cell assignment per pool.
-- Allow multiple cells from one edge to belong to one pool.
-- Add minimum-ready-cell and capacity policy per pool/edge participation.
-- Place each normal domain on one stable active cell inside its pool by default.
-- Allow exceptional replicated placement only as an explicit bounded mode.
-- Move domains target-first: configure target, verify readiness, switch gateway,
-  then drain and remove source state.
-- Deliver artifacts only to active and target participating cells/edges.
-- Prevent one dedicated pool from accepting multiple domains.
-- Preserve previous placement and gateway state after failed migration.
+- Allow several cells from one edge in one pool.
+- Add minimum-ready-cell and capacity policies.
+- Place a normal domain on one stable cell per edge by default.
+- Keep replicated placement exceptional and bounded.
+- Move domains target-first, switch gateway routing, then drain the source.
+- Deliver artifacts only to participating and migration-target cells.
 
-### Scale checkpoint
+**Scale target:** at least 20,000 domains across several cells and a controlled
+burst of 10,000 placement-affecting changes without unnecessary reshuffling.
 
-- At least 20,000 domains distributed across multiple cells without unnecessary
-  reshuffling after adding a domain or a new cell.
-- Controlled burst of at least 10,000 placement-affecting changes with coalescing.
-- Record compiler time, artifact size, gateway-map activation time, and database
-  query behavior.
-
-### Completion checklist
+**Completion checklist:**
 
 - [ ] One shared pool uses at least three cells on one edge.
-- [ ] Domain placement remains stable across unrelated changes.
-- [ ] Reserved, dedicated, and quarantine constraints are enforced.
-- [ ] Failed target readiness leaves source placement active.
-- [ ] Successful movement drains and removes the old assignment safely.
-- [ ] Artifacts are not sent to non-participating edges or cells.
-- [ ] Pool readiness counts all required cells rather than one arbitrary cell.
-- [ ] Unrelated domain/cache traffic remains healthy during movement.
-- [ ] Tests, scale evidence, docs, and manual qualification pass.
+- [ ] Placement remains stable across unrelated changes.
+- [ ] Reserved, dedicated, and quarantine rules are enforced.
+- [ ] Failed target readiness keeps the source active.
+- [ ] Successful movement removes old state only after the target is serving.
+- [ ] Non-participating cells receive no artifacts.
+- [ ] Pool readiness evaluates all required cells.
+- [ ] Tests, scale, documentation, and manual qualification pass.
 
-## Phase 4 — Pool service endpoints and Geo-Unicast
+# Phase 4 — Pool service endpoints and Geo-Unicast
 
-### Goal
+**Goal:** support several public service IP pairs on one edge, with each pair
+owned by one pool endpoint backed by one or more cells.
 
-Support multiple public service IP pairs on one edge, with each pair serving one
-pool endpoint backed by one or more cells.
+**Implementation:**
 
-### Implementation
-
-- Add a pool endpoint per participating edge with:
-  - public IPv4;
-  - optional public IPv6;
-  - listener/gateway state;
-  - participating cells;
-  - routing mode `geo_unicast`;
-  - enabled, drained, withdrawn, and readiness state.
-- Allow one edge to expose, for example:
-  - one IPv4/IPv6 pair for three shared cells;
-  - another pair for one reserved customer pool;
-  - another pair for quarantine.
-- Publish only ready, non-withdrawn pool endpoints into system-managed DNS.
-- Preserve country, continent, and global fallback behavior.
+- Add per-edge pool endpoints with IPv4, optional IPv6, gateway state,
+  participating cells, and readiness.
+- Allow separate service pairs for shared, reserved, dedicated, and quarantine pools.
 - Keep management addresses separate from service endpoints.
-- Prevent duplicate/conflicting address ownership.
-- Reconcile gateway bindings, pool readiness, and DNS publication as one
-  revisioned workflow with last-valid state.
+- Publish only ready, non-withdrawn endpoints through system-managed DNS.
+- Preserve country, continent, and global Geo-DNS fallback behavior.
+- Prevent duplicate or conflicting address ownership.
+- Reconcile gateway bindings, pool readiness, and DNS publication through one
+  revisioned workflow.
 
-### Scale checkpoint
+**Scale target:** several pools and service pairs on each of at least two edges,
+with endpoint-health changes measured without rewriting every domain.
 
-- Multiple pools and service pairs on each of at least two edges.
-- Measured DNS publication and gateway reconciliation after endpoint health
-  changes without rewriting every domain.
+**Completion checklist:**
 
-### Completion checklist
+- [ ] Three shared cells serve one dual-stack pair.
+- [ ] A reserved pool serves a different pair on the same edge.
+- [ ] DNS publishes the correct ready endpoints.
+- [ ] Withdrawal affects only the intended pool.
+- [ ] IPv4-only, IPv6-only, and dual-stack endpoints pass.
+- [ ] Conflicts fail before activation.
+- [ ] Restart and reconciliation converge gateway, DNS, pool, and cell state.
+- [ ] Tests, scale, documentation, and manual qualification pass.
 
-- [ ] Three shared cells serve one IPv4/IPv6 pair on one edge.
-- [ ] A reserved customer pool serves a different pair on the same edge.
-- [ ] DNS returns the correct ready endpoint set for each pool.
-- [ ] Withdrawal of one endpoint does not change unrelated pools.
-- [ ] IPv4-only, IPv6-only, and dual-stack endpoints behave correctly.
-- [ ] Address conflicts and invalid bindings fail before activation.
-- [ ] Gateway, DNS, placement, and cell state converge after restart/reconcile.
-- [ ] Tests, scale evidence, docs, and manual qualification pass.
+# Phase 5 — Simple Anycast pools
 
-## Phase 5 — Simple Anycast pools
+**Goal:** allow selected pools to use one shared IPv4/IPv6 pair across several
+POPs while route advertisement remains owned by the network operator/provider.
 
-### Goal
+**Implementation:**
 
-Allow selected pools to use one shared IPv4/IPv6 pair across multiple POPs while
-keeping route announcement outside CDNFoundry.
+- Add `simple_anycast` routing mode beside Geo-Unicast.
+- Store one pool-level IPv4 and optional IPv6 pair.
+- Attach explicit POPs/edges and readiness requirements.
+- Bind the same pair on participating gateways.
+- Publish the shared pair for assigned domains.
+- Expose clear ready, degraded, and withdrawn signals.
+- Do not add FRR, BIRD, router credentials, arbitrary commands, or BGP control.
 
-### Implementation
+**Scale target:** at least two approved POPs using the same dual-stack service
+pair, tested from multiple external vantage points with controlled POP loss.
 
-- Add routing mode `simple_anycast` to eligible pools.
-- Store one pool-level IPv4 and optional IPv6 service pair.
-- Attach explicit participating POPs/edges and readiness requirements.
-- Bind the same service pair on every participating edge gateway.
-- Publish the same Anycast pair for domains assigned to the pool.
-- Expose a clear readiness/withdrawal signal for the operator or upstream routing
-  system.
-- Document that the network/provider owns BGP advertisement and withdrawal.
-- Do not add FRR, BIRD, router credentials, arbitrary routing commands, or a BGP
-  control plane to CDNFoundry.
-- Preserve Geo-Unicast pools on the same fleet.
+**Completion checklist:**
 
-### Scale and network checkpoint
+- [ ] One Anycast pool serves from multiple POPs.
+- [ ] Geo-Unicast and Anycast coexist on the same fleet.
+- [ ] POP failure does not corrupt another POP's local state.
+- [ ] External route withdrawal and restoration are recorded.
+- [ ] UI and docs clearly state that CDNFoundry does not announce BGP routes.
+- [ ] Uplink and upstream-scrubbing limitations remain explicit.
+- [ ] Tests, network evidence, documentation, and manual qualification pass.
 
-- At least two real or approved lab POPs using the same IPv4/IPv6 pair.
-- Traffic observations from multiple external vantage points.
-- Controlled POP loss and restoration with route behavior recorded by the
-  operator/provider.
-- Gateway and cell capacity limits recorded independently per POP.
+# Phase 6 — Cache v2
 
-### Completion checklist
+**Goal:** turn the baseline cache into a persistent, bounded, production-strength
+cell cache without a distributed cache or per-domain directories.
 
-- [ ] One Anycast pool uses the same service pair on multiple POPs.
-- [ ] Geo-Unicast and Anycast pools coexist on the same edges.
-- [ ] CDNFoundry exposes honest ready/degraded/withdrawn state.
-- [ ] POP failure does not corrupt another POP's local serving state.
-- [ ] External route withdrawal/restoration is qualified and documented.
-- [ ] UI/docs never claim CDNFoundry itself announces BGP routes.
-- [ ] Physical-uplink and upstream-scrubbing limitations remain explicit.
-- [ ] Tests, network evidence, docs, and manual qualification pass.
+**Implementation:**
 
-## Phase 6 — Cache v2 storage and cache-key policy
+- Use persistent per-cell cache volumes with explicit size, inactive time,
+  temporary quota, and minimum free space.
+- Add small, standard, large, and streaming pool profiles.
+- Keep stable domain-to-cell placement.
+- Add query policies: include all, ignore all, include selected, ignore selected.
+- Keep deterministic scheme, Host, path, query, and epoch behavior.
+- Add bounded TTL policies for approved status codes.
+- Add admission, object-size, low-disk, range, and variant protections.
+- Add stale-if-error, stale-while-revalidate, cache-only, and stale-only modes.
+- Preserve exact URL purge and epoch full purge.
 
-### Goal
+**Scale target:** mixed HIT/MISS traffic, quota pressure, restart persistence,
+purge fan-out, and high-cardinality abuse with throughput, latency, IOPS, CPU,
+memory, disk, and hit ratio recorded.
 
-Turn the existing basic cache into a persistent, bounded, production-strength
-cell cache without adding per-domain cache directories or a distributed cache.
+**Completion checklist:**
 
-### Implementation
+- [ ] Cache survives routine restart and remains rebuildable after loss.
+- [ ] Profiles enforce disk, temporary, object, and admission ceilings.
+- [ ] Query policies do not create unbounded variants.
+- [ ] TTL and stale behavior match policy.
+- [ ] Low disk and abuse bypass safely.
+- [ ] Purge remains durable across participating cells.
+- [ ] One domain cannot exhaust unrelated cache resources beyond accepted limits.
+- [ ] Tests, load evidence, documentation, and manual qualification pass.
 
-- Use persistent per-cell cache volumes with explicit maximum size, inactive
-  duration, temporary-storage quota, and minimum-free-space policy.
-- Add a small set of pool resource profiles such as `small`, `standard`, `large`,
-  and `streaming`.
-- Keep domain placement stable so a domain normally reaches one cell/cache on an
-  edge.
-- Add bounded cache-key query policies:
-  - include all parameters;
-  - ignore all parameters;
-  - include selected names;
-  - ignore selected names.
-- Preserve deterministic Host, path, scheme, query, and cache-epoch behavior.
-- Add bounded TTL policy for approved status codes such as 200/206, redirects,
-  and optional short negative caching.
-- Add cache admission protection:
-  - per-domain admission rate;
-  - cache-key and query-variant limits;
-  - maximum cacheable object size;
-  - optional minimum cacheable object size;
-  - low-disk bypass;
-  - range and high-cardinality protections.
-- Add explicit stale modes:
-  - off;
-  - stale-if-error;
-  - stale-while-revalidate;
-  - cache-only emergency;
-  - stale-only emergency.
-- Preserve epoch full purge and exact URL purge.
+# Phase 7 — Gzip and Brotli compression
 
-### Scale checkpoint
+**Goal:** reduce delivered bandwidth through safe compression integrated with
+Cache v2 and bounded by pool and cell resources.
 
-- Cache-hit and cache-miss load at declared object-size distributions.
-- Cache quota pressure, low-disk behavior, restart persistence, purge fan-out,
-  and high-cardinality abuse.
-- Record throughput, latency, disk IOPS, disk usage, memory, CPU, and hit ratio.
-
-### Completion checklist
-
-- [ ] Cache survives routine cell restart and remains rebuildable after loss.
-- [ ] Pool profiles enforce disk/temp/object/admission ceilings.
-- [ ] Query policies produce deterministic keys without unbounded variants.
-- [ ] TTL and status-code behavior match configured policy.
-- [ ] Stale modes behave correctly during origin failure.
-- [ ] Low disk and cache abuse bypass safely without filling the host.
-- [ ] URL/full purge remains durable and bounded across participating cells.
-- [ ] One domain cannot evict or fill unrelated cell caches beyond accepted limits.
-- [ ] Tests, load evidence, docs, and manual qualification pass.
-
-## Phase 7 — Gzip, Brotli, and compressed delivery
-
-### Goal
-
-Reduce customer bandwidth with safe response compression integrated with Cache
-v2 and bounded by cell/pool resources.
-
-### Implementation
+**Implementation:**
 
 - Store one canonical uncompressed cache object by default.
-- Request identity encoding from origins where required for deterministic cache
-  behavior.
-- Enable Gzip as the default broadly compatible compression method.
+- Request identity encoding from origins where required.
+- Enable Gzip as the normal default.
 - Add optional Brotli through one immutable, pinned, tested edge image/module.
-- Expose simple profiles only:
-  - `off`;
-  - `standard`;
-  - `maximum_savings` for reserved/dedicated pools.
-- Use a tested MIME-type allowlist and minimum response size.
-- Avoid recompressing JPEG, PNG, WebP, AVIF, video, archives, and other already
-  compressed formats.
-- Handle `Accept-Encoding`, `Vary`, ETag/revalidation, HEAD, 304, stale, purge,
-  and identity fallback correctly.
-- Disable or bound on-the-fly compression for range traffic and large responses.
-- Add per-cell compression concurrency, CPU-pressure fallback, and emergency
-  disable behavior.
-- Emit encoding, origin bytes, uncompressed bytes, served bytes, compression
-  ratio, profile, and fallback telemetry.
+- Expose only off, standard, and maximum-savings profiles.
+- Use a tested MIME allowlist and minimum response size.
+- Avoid recompressing images, video, archives, and other compressed formats.
+- Handle Accept-Encoding, Vary, ETag, HEAD, 304, stale, purge, and fallback.
+- Bound range traffic, large responses, concurrency, and CPU usage.
+- Add emergency disable and CPU-pressure fallback.
+- Record encoding, bytes, ratio, profile, and fallback telemetry.
 
-### Scale checkpoint
+**Scale target:** mixed identity, Gzip, and Brotli clients against HIT and MISS
+traffic, with bandwidth saved, throughput, latency, and CPU cost recorded.
 
-- Mixed identity/Gzip/Brotli clients against cache HIT and MISS traffic.
-- Compressible and non-compressible object distributions.
-- CPU saturation, concurrency limit, fallback, and large-response behavior.
-- Record bandwidth saved, latency, throughput, and CPU cost per profile.
+**Completion checklist:**
 
-### Completion checklist
+- [ ] Identity, Gzip, and Brotli decode to identical content.
+- [ ] One canonical object serves different encodings correctly.
+- [ ] Compressed and range content follows safe policy.
+- [ ] Vary, ETag, revalidation, stale, and purge remain correct.
+- [ ] Shared pools cannot select unsafe levels.
+- [ ] CPU pressure falls back without stopping traffic.
+- [ ] Compression analytics are accurate.
+- [ ] Tests, load evidence, documentation, and manual qualification pass.
 
-- [ ] Identity, Gzip, and Brotli responses decode to identical content.
-- [ ] One canonical cached object serves different client encodings correctly.
-- [ ] Already-compressed and range responses follow safe policy.
-- [ ] `Vary`, ETag, revalidation, stale, and purge behavior remain correct.
-- [ ] Shared pools cannot select unsafe compression levels.
-- [ ] CPU pressure falls back or disables compression without stopping traffic.
-- [ ] Compression telemetry and bandwidth-savings analytics are accurate.
-- [ ] Tests, load evidence, docs, and manual qualification pass.
+# Phase 8 — Primary and backup origin failover
 
-## Phase 8 — Primary and backup origin failover
+**Goal:** add one simple active-passive backup origin per proxied hostname.
 
-### Goal
-
-Remove the single-origin availability weakness with one simple active-passive
-backup origin per proxied hostname.
-
-### Implementation
+**Implementation:**
 
 - Support one primary and one optional backup origin.
-- Reuse the same strict origin-address, TLS, header, timeout, and loop validation.
-- Use bounded health checks and request-path failure evidence.
+- Reuse strict origin, TLS, timeout, header, and loop validation.
+- Add bounded health checks and request-path failure evidence.
 - Add failure threshold, recovery threshold, hold-down, and failback delay.
-- Keep active origin state local to cells and last-valid during control-plane loss.
-- Fail over without a Laravel request-path call.
-- Use stale/cache-only behavior before unnecessary origin retry storms.
-- Expose active origin, transition reason, timestamps, and health without secrets.
-- Do not add weighted balancing, traffic percentages, geographic origin steering,
-  service discovery, or arbitrary origin pools.
+- Keep active-origin state local to cells during control-plane loss.
+- Fail over without calling Laravel in the request path.
+- Prefer stale or cache-only behavior before retry storms.
+- Expose active origin and transition reason without secrets.
+- Do not add weighted, percentage, geographic, or arbitrary origin pools.
 
-### Scale checkpoint
+**Scale target:** controlled failover and recovery under concurrent HIT/MISS
+traffic, with transition time, origin pressure, errors, and isolation recorded.
 
-- Controlled primary failure and recovery under concurrent cache HIT/MISS traffic.
-- Record failover time, failback time, origin connection pressure, errors, and
-  unrelated-domain impact.
+**Completion checklist:**
 
-### Completion checklist
-
-- [ ] Healthy primary receives normal origin traffic.
-- [ ] Qualified primary failure moves traffic to backup within policy.
-- [ ] Recovery uses hysteresis and does not flap.
-- [ ] Both-origin failure follows stale/cache-only/maintenance policy.
-- [ ] Invalid backup configuration never replaces valid primary state.
-- [ ] Control-plane outage does not remove local failover behavior.
+- [ ] Healthy primary receives normal traffic.
+- [ ] Qualified failure moves traffic to backup.
+- [ ] Recovery does not flap.
+- [ ] Both-origin failure follows stale or maintenance policy.
+- [ ] Invalid backup state never replaces valid primary state.
+- [ ] Control-plane outage does not remove local failover.
 - [ ] One failing origin cannot exhaust unrelated origin budgets.
-- [ ] Tests, load evidence, docs, and manual qualification pass.
+- [ ] Tests, load evidence, documentation, and manual qualification pass.
 
-## Phase 9 — Managed OWASP CRS WAF
+# Phase 9 — Managed OWASP CRS WAF
 
-### Goal
+**Goal:** add optional managed application-signature protection without exposing
+a custom WAF language or raw ModSecurity configuration.
 
-Add optional managed application-signature protection without building a custom
-WAF language or exposing raw ModSecurity configuration.
+**Implementation:**
 
-### Implementation
+- Pin ModSecurity v3 and OWASP Core Rule Set releases.
+- Build an immutable WAF-capable OpenResty cell image/profile.
+- Support off, monitor, balanced, and strict profiles.
+- Map profiles to tested thresholds, paranoia levels, body limits, and blocking.
+- Prefer reserved, dedicated, or quarantine WAF-capable cells where isolation is needed.
+- Allow only bounded exclusions by approved dimensions, reason, owner, and expiry.
+- Reject arbitrary SecRule directives, customer rule uploads, runtime downloads,
+  and custom expression languages.
+- Add rule, score, action, processing-time, body-limit, and exclusion telemetry.
+- Roll new CRS/image versions through monitor-only canaries.
+- Preserve the previous image and ruleset after failure.
 
-- Use a pinned ModSecurity v3 and OWASP Core Rule Set release.
-- Build one immutable WAF-capable OpenResty cell image/profile.
-- Support simple domain/pool profiles:
-  - `off`;
-  - `monitor`;
-  - `balanced`;
-  - `strict`.
-- Map profiles to tested anomaly thresholds, paranoia levels, body-inspection
-  limits, and blocking behavior.
-- Prefer WAF-capable reserved, dedicated, or quarantine cells where isolation is
-  required; do not force WAF overhead onto every normal pool.
-- Support only bounded exclusions by approved dimensions such as rule ID,
-  hostname, path prefix, argument/header name, reason, owner, and expiry.
-- Never expose arbitrary `SecRule`, arbitrary directives, customer rule uploads,
-  runtime downloads, or custom expression languages.
-- Add detection/block reason, rule ID, anomaly score, processing time, body-limit,
-  exclusion, and profile telemetry with redaction.
-- Roll new CRS/image versions through monitor-only canaries before blocking.
-- Preserve the previous WAF image/ruleset and active traffic state on failure.
+**Scale target:** safe attack and false-positive corpora plus HIT/MISS load, with
+latency, CPU, memory, throughput, detection, false positives, and accepted limits recorded.
 
-### Scale and security checkpoint
+**Completion checklist:**
 
-- Safe laboratory test corpus for common SQL injection, XSS, traversal, protocol,
-  and evasion patterns.
-- False-positive corpus for representative applications.
-- Cache HIT/MISS traffic with WAF enabled and disabled.
-- Record latency, CPU, memory, request-body cost, throughput, detection accuracy,
-  false positives, and accepted limits.
+- [ ] Off, monitor, balanced, and strict behave as documented.
+- [ ] Monitor detects without blocking.
+- [ ] Blocking uses stable, privacy-safe reasons.
+- [ ] Exclusions are bounded, audited, and expiring.
+- [ ] Oversized or malformed bodies remain bounded.
+- [ ] Failed canaries keep the previous valid WAF runtime.
+- [ ] Non-WAF pools remain healthy during WAF load or failure.
+- [ ] Tests, security evidence, documentation, and manual qualification pass.
 
-### Completion checklist
+# Phase 10 — Observability and capacity control
 
-- [ ] Off, monitor, balanced, and strict profiles behave as documented.
-- [ ] Monitor records detections without blocking.
-- [ ] Blocking profiles return stable reasons and preserve privacy.
-- [ ] Bounded exclusions work, expire, audit, and cannot become arbitrary rules.
-- [ ] Oversized or malformed bodies fail according to policy without exhausting cells.
-- [ ] WAF failure/canary regression does not replace the previous valid runtime.
-- [ ] Unrelated non-WAF pools remain healthy during WAF load/failure.
-- [ ] Tests, security evidence, docs, and manual qualification pass.
+**Goal:** make gateway, endpoint, pool, cell, cache, compression, failover,
+Anycast, and WAF behavior operationally visible and capacity-manageable.
 
-## Phase 10 — Expanded telemetry, analytics, and capacity control
+**Implementation:**
 
-### Goal
-
-Make the new gateway, endpoint, pool, cell, cache, compression, failover, Anycast,
-and WAF behavior observable and capacity-manageable.
-
-### Implementation
-
-- Add bounded telemetry for:
-  - gateway listeners, maps, routes, connections, errors, and revisions;
-  - service endpoints and Anycast readiness;
-  - pool participation, minimum readiness, and placement transitions;
-  - cell CPU, memory, connections, cache disk/temp, admission, and saturation;
-  - compression encoding, ratios, bytes saved, concurrency, and fallback;
-  - origin health, active origin, failover/failback, and circuit state;
-  - WAF profile, anomaly score, rule category, processing time, and action.
-- Extend ClickHouse schemas and aggregates with bounded retention and query limits.
-- Update administrator and domain analytics only where the data is useful.
-- Add Prometheus alerts for stale maps, endpoint mismatch, cell exhaustion, cache
-  disk pressure, compression CPU pressure, origin failover, WAF errors, and
-  Anycast readiness disagreement.
+- Add bounded gateway, endpoint, pool, placement, cell, cache, compression,
+  origin, and WAF telemetry.
+- Extend ClickHouse schemas and aggregates with bounded retention and queries.
+- Add useful administrator and domain analytics without leaking unrelated data.
+- Add alerts for stale maps, endpoint mismatch, cell exhaustion, cache pressure,
+  compression pressure, origin failover, WAF errors, and Anycast disagreement.
 - Keep telemetry best-effort and outside serving decisions.
 
-### Scale checkpoint
+**Scale target:** at least 20,000 active proxied domains across several pools,
+cells, endpoints, and edges, including ClickHouse/Vector outage and recovery.
 
-- At least 20,000 active proxied domains across multiple pools, cells, endpoints,
-  and edges.
-- High-cardinality fields remain bounded or aggregated.
-- ClickHouse/Vector outage and backlog recovery under live traffic.
+**Completion checklist:**
 
-### Completion checklist
+- [ ] Every new component has healthy, degraded, and unavailable states.
+- [ ] Metrics identify pool, cell, edge, and revision.
+- [ ] Domain users cannot see unrelated data.
+- [ ] Raw logs remain bounded and redacted.
+- [ ] Telemetry outage never blocks serving.
+- [ ] Queries remain bounded at the qualification dataset.
+- [ ] Alerts link to actionable runbooks.
+- [ ] Tests, scale evidence, documentation, and manual qualification pass.
 
-- [ ] Every new serving component has healthy/degraded/unavailable state.
-- [ ] Metrics and logs identify the responsible pool, cell, edge, and revision.
-- [ ] Domain users cannot see unrelated pool/customer data.
-- [ ] Raw logs remain redacted, bounded, and directly delivered to ClickHouse.
-- [ ] Telemetry outage never blocks gateway/cell traffic.
-- [ ] Queries remain bounded and responsive at the qualification dataset.
-- [ ] Alerts and runbooks identify actionable recovery steps.
-- [ ] Tests, scale evidence, docs, and manual qualification pass.
+# Phase 11 — Bounded fleet rollout automation
 
-## Phase 11 — Bounded fleet rollout automation
+**Goal:** automate proven edge upgrades without introducing general remote
+execution or dynamic containers.
 
-### Goal
+**Implementation:**
 
-Automate proven manual upgrades when fleet size makes per-edge rollout
-inefficient, without adding general remote execution or dynamic containers.
-
-### Implementation
-
-- Manage immutable versions for gateway, edge agent, normal cell, and WAF cell.
+- Manage immutable gateway, agent, normal-cell, and WAF-cell versions.
 - Define compatibility ranges and a bounded mixed-version window.
-- Support explicit canary edges/POPs and rollout waves.
-- Pause automatically on health, error, readiness, revision, or capacity thresholds.
-- Roll back to the last compatible image/configuration.
-- Preserve fixed cell-slot topology; rollout automation does not create arbitrary
-  containers or run arbitrary commands.
-- Expose desired/current version, wave, progress, failure, pause, and rollback.
-- Audit every rollout decision and retain operator confirmation for destructive
-  or fleet-wide actions.
+- Support canary edges/POPs and rollout waves.
+- Pause on health, error, readiness, revision, or capacity thresholds.
+- Roll back to the last compatible image and configuration.
+- Preserve the fixed slot topology.
+- Expose desired/current version, wave, progress, pause, failure, and rollback.
+- Audit every rollout decision.
 
-### Scale checkpoint
+**Scale target:** multi-edge, multi-POP rollout with mixed normal and WAF cells,
+including failed canary, automatic pause, and rollback.
 
-- Multi-edge, multi-POP rollout with normal and WAF cells.
-- Mixed-version serving, controlled canary failure, automatic pause, and rollback.
-- Record rollout time, unavailable capacity, errors, and operator recovery steps.
+**Completion checklist:**
 
-### Completion checklist
+- [ ] Canary completes before later waves.
+- [ ] Failed canary pauses automatically.
+- [ ] Rollback restores the previous compatible runtime.
+- [ ] Traffic continues during the mixed-version window.
+- [ ] No arbitrary command execution or dynamic unbounded containers exist.
+- [ ] Version drift and incompatibility are visible.
+- [ ] Tests, recovery evidence, documentation, and manual qualification pass.
 
-- [ ] Canary completes before later waves start.
-- [ ] Failed canary pauses rollout automatically.
-- [ ] Rollback restores the prior compatible runtime without database restore.
-- [ ] Existing traffic continues through a bounded mixed-version window.
-- [ ] No arbitrary command execution or unbounded container creation exists.
-- [ ] Version drift and incompatible agents/cells are visible.
-- [ ] Tests, recovery evidence, docs, and manual qualification pass.
+# Phase 12 — Final production qualification
 
-## Phase 12 — Final production qualification for the new architecture
+**Goal:** prove the complete post-baseline architecture as one deployable,
+recoverable, simple, and solid product.
 
-### Goal
-
-Prove the complete post-baseline architecture works as one simple, solid,
-recoverable product.
-
-### Required topology
+**Required topology:**
 
 - At least two POPs/edges.
 - At least eight bounded cell slots per edge.
 - One shared pool using at least three cells per edge.
-- One reserved customer pool using a separate IPv4/IPv6 pair.
+- One reserved pool using a separate IPv4/IPv6 pair.
 - One quarantine pool.
-- Geo-Unicast service endpoints.
-- One Simple Anycast pool across both POPs where the operator can provide the
-  required routing environment.
-- Persistent Cache v2, Gzip, Brotli, primary/backup origins, and one managed WAF
-  pool/profile.
-- Real IPv4 and IPv6 clients/origins where available.
+- Geo-Unicast endpoints.
+- One Simple Anycast pool where an approved routing environment exists.
+- Persistent Cache v2, Gzip, Brotli, backup origin, and managed WAF.
+- Real IPv4 and IPv6 traffic where available.
 
-### Final qualification
+**Final checklist:**
 
-- Complete new-edge installation and registration from clean hosts.
-- Create and activate all pool types and endpoint modes.
-- Serve real HTTP/HTTPS through multiple service pairs on the same edge.
-- Verify stable domain placement, movement, drain, quarantine, and rollback.
-- Verify Geo-Unicast and Simple Anycast behavior from external vantage points.
-- Exercise Cache v2, persistent restart, purge, stale, quota pressure, Gzip, and Brotli.
-- Fail the primary origin and prove controlled backup failover/failback.
-- Exercise WAF monitor/block/exclusion/canary behavior with safe test traffic.
-- Stop Laravel, queues, Redis/Valkey, and ClickHouse while existing traffic continues.
-- Restart gateway, agent, cells, Vector, ClickHouse, DNSdist, and PowerDNS according
-  to their runbooks.
-- Apply invalid gateway/cell/WAF artifacts and verify previous valid state remains.
-- Saturate one cell within the approved lab and verify unrelated cells/pools continue.
-- Perform fleet canary upgrade and rollback.
-- Restore control-plane data on a clean replacement host and reconcile derived state.
-- Record measured limits, hardware, topology, RPO, RTO, throughput, latency,
-  saturation, known limitations, and owner browser evidence.
+- [ ] Clean edge installation and registration pass.
+- [ ] All pool kinds and endpoint modes pass.
+- [ ] Multiple service pairs work on one edge.
+- [ ] Placement, movement, drain, quarantine, and rollback pass.
+- [ ] Geo-Unicast and Anycast external checks pass.
+- [ ] Cache persistence, purge, stale, pressure, Gzip, and Brotli pass.
+- [ ] Origin failover and failback pass.
+- [ ] WAF monitor, block, exclusion, canary, and rollback pass.
+- [ ] Existing traffic continues through controlled control-plane and telemetry outages.
+- [ ] Invalid gateway, cell, and WAF candidates preserve previous valid state.
+- [ ] One saturated cell does not stop unrelated pools.
+- [ ] Fleet canary upgrade and rollback pass.
+- [ ] Clean-host control-plane restore and derived-state reconciliation pass.
+- [ ] All affected API, UI, architecture, deployment, operations, security,
+      troubleshooting, and runbook documentation is current.
+- [ ] Every completed test is linked and every unexecuted test is marked clearly.
+- [ ] Owner-run browser and real-traffic qualification is recorded.
+- [ ] Release notes state measured capabilities and limitations honestly.
 
-### Completion checklist
+# Future candidates
 
-- [ ] Every phase completion gate is passed and linked to evidence.
-- [ ] Existing completed baseline features pass the regression smoke suite.
-- [ ] All current API/OpenAPI, UI, deployment, architecture, security, operations,
-      troubleshooting, and runbook documentation is updated.
-- [ ] All tests clearly report passed, failed, blocked, and not executed results.
-- [ ] No unresolved critical/high failure remains.
-- [ ] The owner records the final manual/browser/real-traffic qualification.
-- [ ] The release notes state measured capabilities and limitations without
-      unsupported scale, Anycast, WAF, or DDoS claims.
+The following remain outside the committed roadmap until real demand justifies a
+separate bounded implementation and qualification contract:
 
-# Future candidates — not part of the committed phases
-
-These capabilities remain outside the committed roadmap until repeated customer
-or operator demand justifies a separate scope and qualification contract:
-
-- secondary ACME certificate authority;
-- DNSSEC signing and rollover lifecycle;
+- secondary ACME authority;
+- DNSSEC;
 - HTTP/3 and QUIC;
-- private outbound origin connector for non-public origins;
-- immutable/deletion-protected backup storage and warm control-plane standby;
-- long-retention analytics archive/export;
+- private origin connector;
+- immutable backup storage and warm control-plane standby;
+- long-retention analytics archive;
 - replicated placement for exceptional high-volume domains;
-- additional placement policies that preserve the bounded pool/cell model;
+- additional bounded placement policies;
 - origin shield or hierarchical cache.
-
-A candidate is admitted only when:
-
-- a real requirement exists;
-- the existing product cannot solve it safely;
-- operational and failure costs are understood;
-- it does not move traffic through Laravel;
-- it does not require rewriting the control plane or generic edge runtime;
-- it has bounded state, rollback, observability, tests, docs, and a release gate;
-- disabling it leaves the committed product functional.
 
 # Explicitly out of scope
 
-- Weighted origin balancing and percentage traffic splitting
-- General BGP/router management
-- Volumetric DDoS scrubbing guarantees
-- CAPTCHA, browser challenges, or bot-scoring platforms
-- Customer-written WAF rules or edge scripts
-- Serverless workers or plugin marketplaces
-- Object-storage product features
-- Per-domain containers/processes by default
-- Kubernetes as a deployment requirement
-- Billing, payment, reseller, organization, team, or custom-role systems
+- weighted or percentage origin balancing;
+- general BGP/router management;
+- volumetric DDoS scrubbing guarantees;
+- CAPTCHA, browser challenge, or bot-scoring platforms;
+- customer-written WAF rules or edge scripts;
+- serverless workers or plugin marketplaces;
+- object-storage product features;
+- per-domain containers or processes by default;
+- Kubernetes as a deployment requirement;
+- billing, reseller, organization, team, or custom-role systems.
 
 ## Final rule
 
-> Keep the completed platform intact. Add one bounded production capability per
-> phase. Keep the gateway simple, keep cells isolated, preserve last-valid state,
-> test real traffic and failure behavior, record scale honestly, update every
-> affected document, and never move DNS or HTTP traffic through Laravel.
+Keep the completed platform intact. Add one bounded production capability per
+phase. Keep the gateway simple, keep cells isolated, preserve last-valid state,
+test real traffic and failure behavior, record scale honestly, update every
+affected document, and never move DNS or HTTP traffic through Laravel.
