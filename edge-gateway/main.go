@@ -58,6 +58,7 @@ type gateway struct {
 	rejects    atomic.Uint64
 	mu         sync.Mutex
 	listeners  map[string]net.Listener
+	listen     func(network, address string) (net.Listener, error)
 	slots      chan struct{}
 }
 
@@ -209,7 +210,11 @@ func (g *gateway) prepareListeners(desired []string) (func(), func(), error) {
 		if g.listeners[address] != nil {
 			continue
 		}
-		listener, err := net.Listen("tcp", address)
+		listen := g.listen
+		if listen == nil {
+			listen = net.Listen
+		}
+		listener, err := listen("tcp", address)
 		if err != nil {
 			for _, item := range opened {
 				_ = item.Close()

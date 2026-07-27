@@ -29,17 +29,27 @@ func TestScaleSocketThroughput50000Mappings(t *testing.T) {
 
 	const mappings = 50000
 	candidate := config{
-		SchemaVersion: 1, Revision: 9002, Listeners: []string{"127.0.0.60:80"},
+		SchemaVersion: 1, Revision: 9002, Listeners: []string{"127.0.0.1:80"},
 		Routes: make([]route, 0, mappings),
 	}
 	for index := 0; index < mappings; index++ {
 		candidate.Routes = append(candidate.Routes, route{
-			Address: "127.0.0.60", Hostname: fmt.Sprintf("host-%05d.socket-scale.example.test", index),
+			Address: "127.0.0.1", Hostname: fmt.Sprintf("host-%05d.socket-scale.example.test", index),
 			HTTP: upstream.Addr().String(),
 		})
 	}
 	stateDir := t.TempDir()
-	g := &gateway{stateDir: stateDir, listeners: map[string]net.Listener{}}
+	var gatewayAddress string
+	g := &gateway{
+		stateDir: stateDir, listeners: map[string]net.Listener{},
+		listen: func(_, _ string) (net.Listener, error) {
+			listener, err := net.Listen("tcp4", "127.0.0.1:0")
+			if err == nil {
+				gatewayAddress = listener.Addr().String()
+			}
+			return listener, err
+		},
+	}
 	encoded, err := json.Marshal(candidate)
 	if err != nil {
 		t.Fatal(err)
@@ -51,7 +61,7 @@ func TestScaleSocketThroughput50000Mappings(t *testing.T) {
 
 	acceptedConcurrency := 0
 	for _, concurrency := range []int{16, 64, 128} {
-		result := runSocketLoad(t, concurrency, 200)
+		result := runSocketLoad(t, gatewayAddress, concurrency, 200)
 		t.Logf("socket_load mappings=%d concurrency=%d requests=%d seconds=%.3f requests_per_second=%.0f p50_ms=%.3f p95_ms=%.3f p99_ms=%.3f errors=%d",
 			mappings, concurrency, result.requests, result.duration.Seconds(), float64(result.requests)/result.duration.Seconds(),
 			result.percentile(50), result.percentile(95), result.percentile(99), result.errors)
@@ -82,7 +92,7 @@ func (result socketLoadResult) percentile(value int) float64 {
 	return float64(result.latency[(len(result.latency)-1)*value/100].Microseconds()) / 1000
 }
 
-func runSocketLoad(t *testing.T, concurrency, each int) socketLoadResult {
+func runSocketLoad(t *testing.T, gatewayAddress string, concurrency, each int) socketLoadResult {
 	t.Helper()
 	started := time.Now()
 	latencies := make(chan time.Duration, concurrency*each)
@@ -94,7 +104,7 @@ func runSocketLoad(t *testing.T, concurrency, each int) socketLoadResult {
 			defer wait.Done()
 			for request := 0; request < each; request++ {
 				began := time.Now()
-				connection, err := net.DialTimeout("tcp4", "127.0.0.60:80", 3*time.Second)
+				connection, err := net.DialTimeout("tcp4", gatewayAddress, 3*time.Second)
 				if err == nil {
 					host := (request + offset) % 50000
 					_, err = fmt.Fprintf(connection, "GET / HTTP/1.1\r\nHost: host-%05d.socket-scale.example.test\r\nConnection: close\r\n\r\n", host)
