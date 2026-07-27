@@ -40,11 +40,17 @@ heartbeat becomes degraded. An unassigned omitted slot is stopped. Gateway
 readiness is authoritative when the gateway is configured and is never tied to
 a hardcoded shared-cell name.
 
-Administrators may drain, undrain, or restart an existing assigned slot. The
+Administrators may drain, undrain, or restart an existing slot. The
 control plane commits desired state and queues one coalesced task; the agent
 calls only that slot's private authenticated control endpoint. Restart drains
 the runtime briefly and advances its restart generation without restarting the
 agent, gateway, or unrelated cells.
+
+Use **Reconcile cells** on a service pool when an existing edge is missing that
+pool's Phase 2 assignment. Reconciliation asynchronously claims one existing
+unassigned slot per missing edge and never creates another slot. Phase 2 allows
+at most one cell from a pool on each edge; assigning several cells from one edge
+to the same pool is Phase 3 work.
 
 ## Failure and recovery
 

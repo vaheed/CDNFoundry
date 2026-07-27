@@ -78,7 +78,6 @@ class EdgeOperationsController extends Controller
     public function cellAction(Request $request, EdgeCell $cell, string $action): JsonResponse
     {
         abort_unless(in_array($action, ['drain', 'undrain', 'restart'], true), 404);
-        abort_if($action !== 'drain' && $cell->service_ipv4 === null, 409, 'Configure the cell service addresses before making it available.');
         $task = DB::transaction(function () use ($action, $cell, $request): EdgeTask {
             if ($action !== 'restart') {
                 $cell->update(['drained' => $action === 'drain', ...($action === 'undrain' ? ['status' => $cell->edge_pool_id === null ? 'unassigned' : 'assigned'] : [])]);

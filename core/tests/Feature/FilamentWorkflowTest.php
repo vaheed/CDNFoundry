@@ -5,12 +5,14 @@ namespace Tests\Feature;
 use App\Enums\DomainLifecycleState;
 use App\Filament\Admin\Pages\Telemetry;
 use App\Filament\Admin\Resources\DnsClusters\Pages\ListDnsClusters;
+use App\Filament\Admin\Resources\EdgePools\Pages\ListEdgePools;
 use App\Filament\Admin\Resources\Edges\Pages\EditEdge;
 use App\Filament\Admin\Resources\Edges\Pages\ListEdges;
 use App\Filament\Admin\Resources\Edges\RelationManagers\CellsRelationManager;
 use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
 use App\Filament\Domain\Resources\Domains\RelationManagers\DnsRecordsRelationManager;
 use App\Jobs\BuildUsageRollups;
+use App\Jobs\ProvisionEdgePoolCells;
 use App\Jobs\ReconcileAllDnsZones;
 use App\Jobs\ReconcileAllEdgeDomains;
 use App\Jobs\ReconcileDnsZone;
@@ -280,6 +282,23 @@ class FilamentWorkflowTest extends TestCase
         Queue::assertPushed(ReconcileAllDnsZones::class);
         Queue::assertPushed(ReconcileAllEdgeDomains::class);
         Queue::assertPushed(BuildUsageRollups::class);
+    }
+
+    public function test_administrator_can_reconcile_a_pools_missing_cell_assignments(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(ListEdgePools::class)
+            ->callTableAction('reconcileCells', $pool)
+            ->assertHasNoFormErrors();
+
+        $operation = Operation::query()->where('type', 'edge.pool_provision')->firstOrFail();
+        $this->assertSame($pool->id, $operation->input['pool_id']);
+        Queue::assertPushed(ProvisionEdgePoolCells::class, fn (ProvisionEdgePoolCells $job): bool => $job->poolId === $pool->id && $job->operationId === $operation->id);
     }
 
     public function test_domain_dns_reconcile_action_reuses_the_policy_aware_endpoint(): void

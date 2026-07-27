@@ -308,7 +308,7 @@ class EdgeAgentController extends Controller
                 $action = substr($row->type, 5);
                 $cell->update(match ($action) {
                     'drain' => ['status' => 'drained', 'drained' => true],
-                    'undrain' => ['status' => 'pending', 'drained' => false],
+                    'undrain' => ['status' => $cell->edge_pool_id === null ? 'unassigned' : 'assigned', 'drained' => false],
                     default => [],
                 });
             }

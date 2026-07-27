@@ -23,7 +23,6 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 
 class CellsRelationManager extends RelationManager
 {
@@ -121,9 +120,6 @@ class CellsRelationManager extends RelationManager
 
     private static function queue(EdgeCell $cell, string $action): void
     {
-        if ($action !== 'drain' && $cell->service_ipv4 === null) {
-            throw ValidationException::withMessages(['service_ipv4' => 'Configure the cell service addresses before making it available.']);
-        }
         if ($action !== 'restart') {
             $cell->update(['drained' => $action === 'drain', ...($action === 'undrain' ? ['status' => $cell->edge_pool_id === null ? 'unassigned' : 'assigned'] : [])]);
         }

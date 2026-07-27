@@ -255,6 +255,19 @@ class EdgeProxyTest extends TestCase
         $this->assertTrue($cell->refresh()->drained);
         $this->actingAs($admin)->postJson("/api/admin/edge-cells/{$cell->id}/undrain")->assertAccepted();
         $this->assertFalse($cell->refresh()->drained);
+        $undrainTask = EdgeTask::query()->where('type', 'cell_undrain')->where('payload->cell_id', $cell->id)->firstOrFail();
+        $this->withHeaders($identity)->postJson("/edge/v1/tasks/{$undrainTask->id}/result", [
+            'status' => 'succeeded', 'result' => ['status' => 'completed'],
+        ])->assertOk();
+        $this->assertSame('assigned', $cell->refresh()->status);
+        $unassignedCell = Edge::query()->findOrFail($id)->cells()->whereNull('edge_pool_id')->firstOrFail();
+        $this->actingAs($admin)->postJson("/api/admin/edge-cells/{$unassignedCell->id}/drain")->assertAccepted();
+        $this->actingAs($admin)->postJson("/api/admin/edge-cells/{$unassignedCell->id}/undrain")->assertAccepted();
+        $unassignedTask = EdgeTask::query()->where('type', 'cell_undrain')->where('payload->cell_id', $unassignedCell->id)->firstOrFail();
+        $this->withHeaders($identity)->postJson("/edge/v1/tasks/{$unassignedTask->id}/result", [
+            'status' => 'succeeded', 'result' => ['status' => 'completed'],
+        ])->assertOk();
+        $this->assertSame('unassigned', $unassignedCell->refresh()->status);
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/deploy")->assertAccepted();
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/deploy")->assertAccepted();
         $this->assertSame(1, EdgeArtifact::query()->where('edge_id', $id)->where('domain_id', $domain->id)->count());
