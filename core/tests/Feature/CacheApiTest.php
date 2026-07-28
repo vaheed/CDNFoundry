@@ -8,6 +8,7 @@ use App\Models\Edge;
 use App\Models\EdgeRevision;
 use App\Models\EdgeTask;
 use App\Models\User;
+use App\Support\CachePolicy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -28,7 +29,7 @@ class CacheApiTest extends TestCase
         $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/cache", [...$this->settings(), 'bypass_cookie_names' => array_fill(0, 33, 'cookie')])
             ->assertUnprocessable()->assertJsonValidationErrors('bypass_cookie_names');
         $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/cache", $this->settings())
-            ->assertAccepted()->assertJsonPath('data.settings.include_query_string', true);
+            ->assertAccepted()->assertJsonPath('data.settings.query_policy', 'include_all');
 
         $this->assertSame(2, $domain->refresh()->revision);
         $this->assertDatabaseHas('audit_logs', ['action' => 'cache.settings_updated', 'subject_id' => (string) $domain->id]);
@@ -62,7 +63,7 @@ class CacheApiTest extends TestCase
             'https://example.test/app.css?b=2&a=1', 'http://example.test/logo.png', 'https://www.example.test/site.css',
         ]])->assertAccepted();
         $purge = CachePurge::query()->findOrFail($urls->json('data.id'));
-        $this->assertSame(['https|example.test|/app.css?b=2&a=1', 'http|example.test|/logo.png', 'https|www.example.test|/site.css'], $purge->cache_keys);
+        $this->assertSame(['https|example.test|/app.css?a=1&b=2', 'http|example.test|/logo.png', 'https|www.example.test|/site.css'], $purge->cache_keys);
         $this->assertSame(2, $domain->refresh()->cache_epoch);
 
         $task = EdgeTask::query()->where('cache_purge_id', $purge->id)->firstOrFail();
@@ -130,6 +131,29 @@ class CacheApiTest extends TestCase
         $this->assertSame(900, $domain->cache_settings['edge_ttl_seconds']);
         $this->assertSame(5, $domain->cache_epoch);
         $this->assertSame(3, $domain->revision);
+    }
+
+    public function test_query_ttl_stale_and_variant_policies_are_typed_and_bounded(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $settings = [...CachePolicy::defaults(),
+            'query_policy' => 'include_selected', 'query_parameters' => ['page', 'lang'],
+            'status_ttl_seconds' => ['200' => 600, '404' => 30], 'mode' => 'cache_only',
+            'admission_requests' => 2, 'maximum_variants_per_resource' => 8,
+        ];
+        $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/cache", $settings)
+            ->assertAccepted()->assertJsonPath('data.settings.mode', 'cache_only');
+
+        $domain->refresh();
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/cache/purge", [
+            'type' => 'urls', 'urls' => ['https://example.test/list?ignored=x&lang=fa&page=2'],
+        ])->assertAccepted();
+        $this->assertSame(['https|example.test|/list?lang=fa&page=2'], CachePurge::query()->latest()->firstOrFail()->cache_keys);
+
+        $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/cache", [...$settings, 'status_ttl_seconds' => ['418' => 60]])
+            ->assertUnprocessable()->assertJsonValidationErrors('status_ttl_seconds');
+        $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/cache", [...$settings, 'query_parameters' => array_fill(0, 33, 'q')])
+            ->assertUnprocessable()->assertJsonValidationErrors('query_parameters');
     }
 
     private function ownedDomain(): array

@@ -79,6 +79,7 @@ Additional expensive jobs are separate:
 
 ```sh
 make dev-scale-e2e
+make dev-cache-e2e
 make dev-phase8-recovery-e2e
 make dev-phase8-upgrade-e2e
 make dev-phase8-throughput-e2e

@@ -5,7 +5,6 @@ namespace App\Jobs;
 use App\Actions\PlanDomainEdgeCells;
 use App\Actions\PromoteReadyEdgePlacements;
 use App\Enums\DomainLifecycleState;
-use App\Http\Controllers\CacheController;
 use App\Models\Domain;
 use App\Models\DomainEdgeCell;
 use App\Models\DomainEdgePlacement;
@@ -16,6 +15,7 @@ use App\Models\EdgePoolEndpoint;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
 use App\Support\ArtifactSigner;
+use App\Support\CachePolicy;
 use App\Support\ManagedCertificateNames;
 use App\Support\PlatformSettings;
 use App\Support\SecurityConfig;
@@ -53,6 +53,7 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             ->where('input->domain_id', $domain->id)->latest()->first();
         $operation?->update(['status' => 'running', 'started_at' => now()]);
         $placement = null;
+        $targetPool = null;
         if ($records->isEmpty()) {
             DomainEdgePlacement::query()->where('domain_id', $domain->id)->delete();
             DomainEdgeCell::query()->where('domain_id', $domain->id)->delete();
@@ -127,7 +128,9 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             'schema_version' => 1, 'domain_id' => $domain->id, 'domain' => $domain->name,
             'revision' => $revision, 'settings' => $proxySettings,
             'cache' => [
-                ...($domain->cache_settings ?? CacheController::defaults()),
+                ...CachePolicy::normalize($domain->cache_settings),
+                'profile_name' => $targetPool === null ? 'standard' : $targetPool->cache_profile,
+                'profile' => $targetPool === null ? CachePolicy::profile('standard') : CachePolicy::profile($targetPool->cache_profile),
                 'epoch' => $domain->cache_epoch,
                 'development_mode_until' => $domain->cache_development_mode_until?->isFuture() ? $domain->cache_development_mode_until->timestamp : null,
             ],

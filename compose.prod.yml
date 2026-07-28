@@ -57,7 +57,6 @@ x-edge-cell: &edge-cell
     mmdb-updater: { condition: service_healthy }
   read_only: true
   tmpfs:
-    - /var/cache/nginx:rw,noexec,nosuid,size=256m
     - /var/lib/nginx/tmp:rw,noexec,nosuid,size=64m
     - /usr/local/openresty/nginx/logs:rw,noexec,nosuid,size=16m
   networks: [edge, telemetry]
@@ -321,6 +320,12 @@ services:
     <<: *edge-cell
     ports: ["127.0.0.1:18081:8081", "127.0.0.1:18444:8444", "127.0.0.1:19081:9080"]
     environment: { EDGE_CELL_NAME: cell-01, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-01.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    volumes:
+      - ${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro
+      - ${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro
+      - edge-state:/var/lib/cdnfoundry/runtime:ro
+      - mmdb:/mmdb:ro
+      - cell-01-cache:/var/cache/nginx
     networks:
       edge: { aliases: [edge] }
       telemetry: {}
@@ -329,6 +334,12 @@ services:
     <<: *edge-cell
     ports: ["127.0.0.1:18082:8081", "127.0.0.1:18445:8444", "127.0.0.1:19082:9080"]
     environment: { EDGE_CELL_NAME: cell-02, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-02.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    volumes:
+      - ${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro
+      - ${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro
+      - edge-state:/var/lib/cdnfoundry/runtime:ro
+      - mmdb:/mmdb:ro
+      - cell-02-cache:/var/cache/nginx
     networks:
       edge: { aliases: [edge-quarantine] }
       telemetry: {}
@@ -337,31 +348,37 @@ services:
     <<: *edge-cell
     ports: ["127.0.0.1:18083:8081", "127.0.0.1:18446:8444", "127.0.0.1:19083:9080"]
     environment: { EDGE_CELL_NAME: cell-03, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-03.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    volumes: [edge-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-03-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-04:
     <<: *edge-cell
     ports: ["127.0.0.1:18084:8081", "127.0.0.1:18447:8444", "127.0.0.1:19084:9080"]
     environment: { EDGE_CELL_NAME: cell-04, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-04.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    volumes: [edge-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-04-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-05:
     <<: *edge-cell
     ports: ["127.0.0.1:18085:8081", "127.0.0.1:18448:8444", "127.0.0.1:19085:9080"]
     environment: { EDGE_CELL_NAME: cell-05, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-05.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    volumes: [edge-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-05-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-06:
     <<: *edge-cell
     ports: ["127.0.0.1:18086:8081", "127.0.0.1:18449:8444", "127.0.0.1:19086:9080"]
     environment: { EDGE_CELL_NAME: cell-06, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-06.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    volumes: [edge-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-06-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-07:
     <<: *edge-cell
     ports: ["127.0.0.1:18087:8081", "127.0.0.1:18450:8444", "127.0.0.1:19087:9080"]
     environment: { EDGE_CELL_NAME: cell-07, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-07.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    volumes: [edge-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-07-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-08:
     <<: *edge-cell
     ports: ["127.0.0.1:18088:8081", "127.0.0.1:18451:8444", "127.0.0.1:19088:9080"]
     environment: { EDGE_CELL_NAME: cell-08, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-08.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    volumes: [edge-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-08-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   edge-agent:
     image: ghcr.io/vaheed/cdnfoundry-edge-agent:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
@@ -481,3 +498,11 @@ volumes:
   edge-agent-state: {}
   edge-gateway-state: {}
   mmdb: {}
+  cell-01-cache: {}
+  cell-02-cache: {}
+  cell-03-cache: {}
+  cell-04-cache: {}
+  cell-05-cache: {}
+  cell-06-cache: {}
+  cell-07-cache: {}
+  cell-08-cache: {}

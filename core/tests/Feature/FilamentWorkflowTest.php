@@ -210,7 +210,10 @@ class FilamentWorkflowTest extends TestCase
             ->callAction('cacheSettings', data: [
                 'enabled' => true, 'edge_ttl_seconds' => 600, 'browser_ttl_seconds' => 120,
                 'maximum_object_bytes' => 104857600, 'respect_origin_headers' => true,
-                'include_query_string' => true, 'bypass_cookie_names' => ['session_id'], 'stale_if_error_seconds' => 30,
+                'query_policy' => 'include_all', 'query_parameters' => [], 'bypass_cookie_names' => ['session_id'],
+                'status_ttl_seconds' => ['200' => 600, '404' => 30], 'admission_requests' => 2,
+                'stale_if_error_seconds' => 30, 'stale_while_revalidate_seconds' => 15,
+                'mode' => 'normal', 'maximum_variants_per_resource' => 16,
             ])->assertHasNoActionErrors();
         $this->assertSame(600, $domain->refresh()->cache_settings['edge_ttl_seconds']);
 

@@ -5,7 +5,6 @@ namespace App\Filament\Domain\Resources\Domains\Pages;
 use App\Actions\DispatchCachePurge;
 use App\Enums\DomainLifecycleState;
 use App\Filament\Domain\Resources\Domains\DomainResource;
-use App\Http\Controllers\CacheController;
 use App\Http\Controllers\DnsDeploymentController;
 use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\ImportDnsZone;
@@ -21,12 +20,14 @@ use App\Models\EdgePool;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
 use App\Support\BindZone;
+use App\Support\CachePolicy;
 use App\Support\DnsZoneImporter;
 use App\Support\ProxyRevisionRollback;
 use App\Support\SecurityConfig;
 use App\Support\UploadedCertificate;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
+use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
@@ -153,19 +154,33 @@ class ViewDomain extends ViewRecord
                 TextInput::make('edge_ttl_seconds')->label('Edge TTL (seconds)')->numeric()->minValue(0)->maxValue(31536000)->required(),
                 TextInput::make('browser_ttl_seconds')->label('Browser TTL (seconds)')->numeric()->minValue(0)->maxValue(31536000)->required(),
                 Select::make('maximum_object_bytes')->label('Maximum object size')->options([
-                    1048576 => '1 MiB', 10485760 => '10 MiB', 104857600 => '100 MiB',
+                    1048576 => '1 MiB', 10485760 => '10 MiB', 104857600 => '100 MiB', 536870912 => '512 MiB', 1073741824 => '1 GiB',
                 ])->required(),
                 Toggle::make('respect_origin_headers')->label('Respect origin cache headers')->required(),
-                Toggle::make('include_query_string')->label('Include query string in cache key')->required(),
+                Select::make('query_policy')->label('Query policy')->options([
+                    'include_all' => 'Include all', 'ignore_all' => 'Ignore all',
+                    'include_selected' => 'Include selected', 'ignore_selected' => 'Ignore selected',
+                ])->required(),
+                TagsInput::make('query_parameters')->label('Selected query parameter names')->rules(['array', 'max:32']),
                 TagsInput::make('bypass_cookie_names')->label('Bypass cookie names')->rules(['array', 'max:32']),
+                KeyValue::make('status_ttl_seconds')->label('Status TTLs')->keyLabel('Approved status')->valueLabel('TTL seconds')->reorderable(false),
+                TextInput::make('admission_requests')->label('Requests before admission')->numeric()->minValue(1)->maxValue(10)->required(),
                 TextInput::make('stale_if_error_seconds')->label('Stale-if-error (seconds)')->numeric()->minValue(0)->maxValue(86400)->required(),
-            ])->fillForm(fn (): array => $this->record->cache_settings ?? CacheController::defaults())
+                TextInput::make('stale_while_revalidate_seconds')->label('Stale-while-revalidate (seconds)')->numeric()->minValue(0)->maxValue(86400)->required(),
+                Select::make('mode')->options(['normal' => 'Normal', 'cache_only' => 'Cache only', 'stale_only' => 'Stale only'])->required(),
+                TextInput::make('maximum_variants_per_resource')->label('Maximum variants/resource/minute')->numeric()->minValue(1)->maxValue(128)->required(),
+            ])->fillForm(fn (): array => CachePolicy::normalize($this->record->cache_settings))
                 ->action(function (array $data): void {
                     $settings = [
                         'enabled' => (bool) $data['enabled'], 'edge_ttl_seconds' => (int) $data['edge_ttl_seconds'],
                         'browser_ttl_seconds' => (int) $data['browser_ttl_seconds'], 'maximum_object_bytes' => (int) $data['maximum_object_bytes'],
-                        'respect_origin_headers' => (bool) $data['respect_origin_headers'], 'include_query_string' => (bool) $data['include_query_string'],
-                        'bypass_cookie_names' => array_values($data['bypass_cookie_names'] ?? []), 'stale_if_error_seconds' => (int) $data['stale_if_error_seconds'],
+                        'respect_origin_headers' => (bool) $data['respect_origin_headers'], 'query_policy' => $data['query_policy'],
+                        'query_parameters' => array_values($data['query_parameters'] ?? []),
+                        'bypass_cookie_names' => array_values($data['bypass_cookie_names'] ?? []),
+                        'status_ttl_seconds' => $data['status_ttl_seconds'], 'admission_requests' => (int) $data['admission_requests'],
+                        'stale_if_error_seconds' => (int) $data['stale_if_error_seconds'],
+                        'stale_while_revalidate_seconds' => (int) $data['stale_while_revalidate_seconds'],
+                        'mode' => $data['mode'], 'maximum_variants_per_resource' => (int) $data['maximum_variants_per_resource'],
                     ];
                     DB::transaction(function () use ($settings): void {
                         $domain = $this->record->newQuery()->lockForUpdate()->findOrFail($this->record->id);

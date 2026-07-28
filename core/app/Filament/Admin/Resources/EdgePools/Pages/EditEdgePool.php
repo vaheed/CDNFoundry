@@ -41,7 +41,7 @@ class EditEdgePool extends EditRecord
         }
         AuditLog::record(auth()->user(), 'edge.pool_updated', $this->record, [], request()->ip());
         ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
-        if ($this->record->wasChanged(['minimum_ready_cells', 'replicas_per_edge', 'maximum_domains_per_cell'])) {
+        if ($this->record->wasChanged(['minimum_ready_cells', 'replicas_per_edge', 'maximum_domains_per_cell', 'cache_profile'])) {
             $operation = Operation::query()->create([
                 'actor_id' => auth()->id(), 'type' => 'edge.global_reconcile', 'status' => 'pending',
                 'input' => ['pool_id' => $this->record->id, 'reason' => 'pool_policy_changed'],

@@ -7,10 +7,13 @@ use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
 use App\Models\CachePurge;
 use App\Models\Domain;
+use App\Support\CachePolicy;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 class CacheController extends Controller
 {
@@ -24,7 +27,15 @@ class CacheController extends Controller
     public function update(Request $request, Domain $domain): JsonResponse
     {
         Gate::authorize('update', $domain);
-        $data = $request->validate($this->rules());
+        $input = [...CachePolicy::normalize($domain->cache_settings), ...$request->all()];
+        if (array_key_exists('include_query_string', $input)) {
+            $input['query_policy'] = $input['include_query_string'] ? 'include_all' : 'ignore_all';
+            unset($input['include_query_string']);
+        }
+        $data = Validator::make($input, $this->rules())->validate();
+        if (array_diff(array_keys($data['status_ttl_seconds']), array_keys(CachePolicy::DEFAULT_TTLS)) !== []) {
+            throw ValidationException::withMessages(['status_ttl_seconds' => 'TTL policy may contain only approved HTTP status codes.']);
+        }
         DB::transaction(function () use ($domain, $data, $request): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $locked->update(['cache_settings' => $data, 'revision' => $locked->revision + 1]);
@@ -89,12 +100,12 @@ class CacheController extends Controller
 
     public static function defaults(): array
     {
-        return ['enabled' => true, 'edge_ttl_seconds' => 3600, 'browser_ttl_seconds' => 300, 'maximum_object_bytes' => 104857600, 'respect_origin_headers' => true, 'include_query_string' => true, 'bypass_cookie_names' => [], 'stale_if_error_seconds' => 60];
+        return CachePolicy::defaults();
     }
 
     private function state(Domain $domain): array
     {
-        return ['settings' => $domain->cache_settings ?? self::defaults(), 'cache_epoch' => $domain->cache_epoch, 'development_mode_until' => $domain->cache_development_mode_until?->isFuture() ? $domain->cache_development_mode_until->toIso8601String() : null];
+        return ['settings' => CachePolicy::normalize($domain->cache_settings), 'cache_epoch' => $domain->cache_epoch, 'development_mode_until' => $domain->cache_development_mode_until?->isFuture() ? $domain->cache_development_mode_until->toIso8601String() : null];
     }
 
     private function purgeData(CachePurge $purge): array
@@ -106,6 +117,6 @@ class CacheController extends Controller
 
     private function rules(): array
     {
-        return ['enabled' => ['required', 'boolean'], 'edge_ttl_seconds' => ['required', 'integer', 'between:0,31536000'], 'browser_ttl_seconds' => ['required', 'integer', 'between:0,31536000'], 'maximum_object_bytes' => ['required', 'integer', 'in:1048576,10485760,104857600'], 'respect_origin_headers' => ['required', 'boolean'], 'include_query_string' => ['required', 'boolean'], 'bypass_cookie_names' => ['required', 'array', 'max:32'], 'bypass_cookie_names.*' => ['required', 'regex:/^[A-Za-z0-9_\-]{1,64}$/', 'distinct'], 'stale_if_error_seconds' => ['required', 'integer', 'between:0,86400']];
+        return CachePolicy::rules();
     }
 }

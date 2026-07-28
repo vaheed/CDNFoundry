@@ -505,7 +505,8 @@ def exercise_phase5_cache(token: str, domain_id: int, edges: list[dict], sequenc
         "stale_if_error_seconds": 30,
     }
     status, changed = call("PATCH", f"/api/domains/{domain_id}/cache", settings, token)
-    assert status == 202 and changed["data"]["settings"] == settings, changed
+    assert status == 202 and changed["data"]["settings"]["query_policy"] == "include_all", changed
+    assert all(changed["data"]["settings"][key] == value for key, value in settings.items() if key != "include_query_string"), changed
     for edge in edges:
         sequence, payload = latest_artifact(edge, domain_id, sequences[edge["id"]])
         assert payload["cache"]["edge_ttl_seconds"] == 120, payload["cache"]
@@ -557,7 +558,7 @@ def exercise_phase5_cache(token: str, domain_id: int, edges: list[dict], sequenc
         "urls": [f"https://{ZONE}/asset.css?b=2&a=1", f"http://www.{ZONE}/logo.png"],
     }, token)
     assert status == 202 and url_purge["data"]["url_count"] == 2, url_purge
-    expected_keys = [f"https|{ZONE}|/asset.css?b=2&a=1", f"http|www.{ZONE}|/logo.png"]
+    expected_keys = [f"https|{ZONE}|/asset.css?a=1&b=2", f"http|www.{ZONE}|/logo.png"]
     for edge in edges:
         task = pending_purge_task(edge, url_purge["data"]["id"])
         assert task["payload"]["cache_keys"] == expected_keys, task
@@ -698,6 +699,12 @@ def main() -> None:
         call("POST", f"/api/domains/{domain_id}/dns/records", {
             "type": "CAA", "name": "@", "content": "0 issue letsencrypt.org", "ttl": 60,
         }, token)
+        # The persistent development topology may contain other enabled shared
+        # pools from owner qualification. Select the pool this scenario
+        # provisioned endpoints and cells for instead of relying on implicit
+        # hash placement across unrelated persistent pools.
+        call("POST", f"/api/admin/domains/{domain_id}/move", {"pool_id": shared["id"]}, token)
+        call("POST", f"/api/domains/{domain_id}/deploy", {}, token)
 
         sequences: dict[str, int] = {}
         baseline_revision: int | None = None

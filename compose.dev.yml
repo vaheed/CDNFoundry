@@ -76,7 +76,6 @@ x-dev-cell: &dev-cell
     dockerfile: docker/openresty/Dockerfile
   profiles: [dev-edge]
   tmpfs:
-    - /var/cache/nginx:rw,noexec,nosuid,size=256m
     - /var/lib/nginx/tmp:rw,noexec,nosuid,size=64m
   mem_limit: 512m
   cpus: 0.5
@@ -369,8 +368,8 @@ services:
       - dev-pki:/run/edge:ro
       - edge-a-state:/var/lib/cdnfoundry/runtime:ro
       - mmdb:/mmdb:ro
+      - edge-a-cell-01-cache:/var/cache/nginx
     tmpfs:
-      - /var/cache/nginx:rw,noexec,nosuid,size=256m
       - /var/lib/nginx/tmp:rw,noexec,nosuid,size=64m
     mem_limit: 512m
     cpus: 1
@@ -402,8 +401,8 @@ services:
       - dev-pki:/run/edge:ro
       - edge-a-state:/var/lib/cdnfoundry/runtime:ro
       - mmdb:/mmdb:ro
+      - edge-a-cell-02-cache:/var/cache/nginx
     tmpfs:
-      - /var/cache/nginx:rw,noexec,nosuid,size=256m
       - /var/lib/nginx/tmp:rw,noexec,nosuid,size=64m
     mem_limit: 256m
     cpus: 0.5
@@ -420,27 +419,32 @@ services:
   edge-a-cell-03: &edge-a-extra-cell
     <<: *dev-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-03, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-03.json }
-    volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro]
+    volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-a-cell-03-cache:/var/cache/nginx]
 
   edge-a-cell-04:
     <<: *edge-a-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-04, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-04.json }
+    volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-a-cell-04-cache:/var/cache/nginx]
 
   edge-a-cell-05:
     <<: *edge-a-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-05, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-05.json }
+    volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-a-cell-05-cache:/var/cache/nginx]
 
   edge-a-cell-06:
     <<: *edge-a-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-06, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-06.json }
+    volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-a-cell-06-cache:/var/cache/nginx]
 
   edge-a-cell-07:
     <<: *edge-a-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-07, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-07.json }
+    volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-a-cell-07-cache:/var/cache/nginx]
 
   edge-a-cell-08:
     <<: *edge-a-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-08, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-08.json }
+    volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-a-cell-08-cache:/var/cache/nginx]
 
   edge-agent-a:
     build: ./edge-agent
@@ -536,8 +540,8 @@ services:
       - dev-pki:/run/edge:ro
       - edge-b-state:/var/lib/cdnfoundry/runtime:ro
       - mmdb:/mmdb:ro
+      - edge-b-cell-01-cache:/var/cache/nginx
     tmpfs:
-      - /var/cache/nginx:rw,noexec,nosuid,size=256m
       - /var/lib/nginx/tmp:rw,noexec,nosuid,size=64m
     mem_limit: 512m
     cpus: 1
@@ -569,8 +573,8 @@ services:
       - dev-pki:/run/edge:ro
       - edge-b-state:/var/lib/cdnfoundry/runtime:ro
       - mmdb:/mmdb:ro
+      - edge-b-cell-02-cache:/var/cache/nginx
     tmpfs:
-      - /var/cache/nginx:rw,noexec,nosuid,size=256m
       - /var/lib/nginx/tmp:rw,noexec,nosuid,size=64m
     mem_limit: 256m
     cpus: 0.5
@@ -587,27 +591,32 @@ services:
   edge-b-cell-03: &edge-b-extra-cell
     <<: *dev-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-03, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-03.json }
-    volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro]
+    volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-b-cell-03-cache:/var/cache/nginx]
 
   edge-b-cell-04:
     <<: *edge-b-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-04, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-04.json }
+    volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-b-cell-04-cache:/var/cache/nginx]
 
   edge-b-cell-05:
     <<: *edge-b-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-05, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-05.json }
+    volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-b-cell-05-cache:/var/cache/nginx]
 
   edge-b-cell-06:
     <<: *edge-b-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-06, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-06.json }
+    volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-b-cell-06-cache:/var/cache/nginx]
 
   edge-b-cell-07:
     <<: *edge-b-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-07, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-07.json }
+    volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-b-cell-07-cache:/var/cache/nginx]
 
   edge-b-cell-08:
     <<: *edge-b-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-08, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-08.json }
+    volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-b-cell-08-cache:/var/cache/nginx]
 
   edge-agent-b:
     build: ./edge-agent
@@ -772,3 +781,19 @@ volumes:
   edge-b-state: {}
   edge-b-agent-state: {}
   edge-b-gateway-state: {}
+  edge-a-cell-01-cache: {}
+  edge-a-cell-02-cache: {}
+  edge-a-cell-03-cache: {}
+  edge-a-cell-04-cache: {}
+  edge-a-cell-05-cache: {}
+  edge-a-cell-06-cache: {}
+  edge-a-cell-07-cache: {}
+  edge-a-cell-08-cache: {}
+  edge-b-cell-01-cache: {}
+  edge-b-cell-02-cache: {}
+  edge-b-cell-03-cache: {}
+  edge-b-cell-04-cache: {}
+  edge-b-cell-05-cache: {}
+  edge-b-cell-06-cache: {}
+  edge-b-cell-07-cache: {}
+  edge-b-cell-08-cache: {}

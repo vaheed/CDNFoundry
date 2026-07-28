@@ -41,6 +41,8 @@ class EdgePoolResource extends Resource
                 ->helperText('Creating a pool does not attach any edge or consume any cell. Assign both explicitly after creation.'),
             Select::make('kind')->options(['shared' => 'Shared', 'reserved' => 'Reserved', 'quarantine' => 'Quarantine', 'dedicated' => 'Dedicated'])->required()
                 ->helperText('Use Shared for normal Anycast service. Reserved is controlled capacity, Dedicated is exceptional single-tenant isolation, and Quarantine is only for risky traffic. Kind does not select addresses or edges.'),
+            Select::make('cache_profile')->label('Cache profile')->options(['small' => 'Small', 'standard' => 'Standard', 'large' => 'Large', 'streaming' => 'Streaming'])->required()->default('standard')
+                ->helperText('Sets bounded per-cell disk, temporary space, minimum-free, inactive, object, and admission ceilings. Changing it reconciles assigned domains.'),
             Select::make('routing_mode')->options(['geo_unicast' => 'Geo-Unicast', 'simple_anycast' => 'Simple Anycast'])->required()->default('geo_unicast')->live()
                 ->helperText('Simple Anycast only binds and publishes the shared pair. CDNFoundry never announces or withdraws BGP routes; the network operator/provider owns routing.'),
             TextInput::make('anycast_ipv4')->label('Anycast IPv4')->ipv4()->nullable()->visible(fn (Get $get): bool => $get('routing_mode') === 'simple_anycast')
@@ -66,6 +68,7 @@ class EdgePoolResource extends Resource
         return $table->columns([
             TextColumn::make('name')->searchable()->sortable(),
             TextColumn::make('kind')->badge(),
+            TextColumn::make('cache_profile')->label('Cache')->badge(),
             TextColumn::make('routing_mode')->label('Routing')->badge(),
             TextColumn::make('routing_status')->label('Route state')->state(fn (EdgePool $record): string => $record->routingStatus())->badge(),
             TextColumn::make('service_pair')->label('Service pair')->state(fn (EdgePool $record): ?string => $record->isSimpleAnycast()

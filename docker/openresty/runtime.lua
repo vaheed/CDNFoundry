@@ -322,8 +322,27 @@ local function request_header_size()
 end
 
 local function request_cache_key(domain, host, cache)
-    local request_uri = ngx.var.request_uri or "/"
-    if cache.include_query_string == false then request_uri = request_uri:match("^([^?]*)") or "/" end
+    local request_uri = ngx.var.uri or "/"
+    local query_policy = cache.query_policy or (cache.include_query_string == false and "ignore_all" or "include_all")
+    local selected = {}
+    for _, name in ipairs(cache.query_parameters or {}) do selected[name] = true end
+    local args = ngx.req.get_uri_args(128)
+    local names = {}
+    for name, _ in pairs(args) do
+        if query_policy == "include_all" or (query_policy == "include_selected" and selected[name])
+            or (query_policy == "ignore_selected" and not selected[name]) then names[#names + 1] = name end
+    end
+    table.sort(names)
+    local encoded = {}
+    for _, name in ipairs(names) do
+        local value = args[name]
+        local values = type(value) == "table" and value or {value}
+        table.sort(values, function(a, b) return tostring(a) < tostring(b) end)
+        for _, item in ipairs(values) do
+            encoded[#encoded + 1] = ngx.escape_uri(name) .. "=" .. ngx.escape_uri(item == true and "" or tostring(item))
+        end
+    end
+    if #encoded > 0 then request_uri = request_uri .. "?" .. table.concat(encoded, "&") end
     local base = (ngx.var.scheme or "http") .. "|" .. host .. "|" .. request_uri
     local dictionary = ngx.shared.runtime_limits
     local configured_epoch = tonumber(cache.epoch) or 1
@@ -331,13 +350,25 @@ local function request_cache_key(domain, host, cache)
     local epoch = math.max(configured_epoch, runtime_epoch)
     local generation = dictionary:get("cache:url:" .. ngx.md5(base)) or 0
     local ttl = math.max(0, math.min(31536000, tonumber(cache.edge_ttl_seconds) or 0))
+    local policy_query_parameters = {}
+    for _, name in ipairs(cache.query_parameters or {}) do policy_query_parameters[#policy_query_parameters + 1] = name end
+    table.sort(policy_query_parameters)
+    local status_ttls, policy_status_ttls = cache.status_ttl_seconds or {}, {}
+    for _, status in ipairs({"200", "203", "204", "206", "301", "302", "404"}) do
+        policy_status_ttls[#policy_status_ttls + 1] = status .. "=" .. tostring(status_ttls[status] or 0)
+    end
     local policy = table.concat({
         tostring(ttl), tostring(math.max(0, math.min(31536000, tonumber(cache.browser_ttl_seconds) or 0))),
         tostring(math.max(1024, math.min(1073741824, tonumber(cache.maximum_object_bytes) or 104857600))),
         cache.respect_origin_headers == false and "0" or "1",
         tostring(math.max(0, math.min(86400, tonumber(cache.stale_if_error_seconds) or 0))),
+        tostring(math.max(0, math.min(86400, tonumber(cache.stale_while_revalidate_seconds) or 0))),
+        query_policy, table.concat(policy_query_parameters, ","),
+        cache.mode or "normal", tostring(tonumber(cache.admission_requests) or 1),
+        tostring(tonumber(cache.maximum_variants_per_resource) or 32),
+        table.concat(policy_status_ttls, ","),
     }, ":")
-    return base .. "|e" .. epoch .. "|g" .. generation .. "|p" .. ngx.md5(policy), ttl
+    return base .. "|e" .. epoch .. "|g" .. generation .. "|p" .. ngx.md5(policy), ttl, base
 end
 
 local function cookie_bypassed(names)
@@ -432,7 +463,7 @@ function M.access()
         ngx.status = 503; ngx.header["Content-Type"] = "text/plain"; ngx.say(config.settings.maintenance.body or "Service unavailable"); return ngx.exit(503)
     end
     local cache = config.cache or {}
-    local cache_key, cache_ttl = request_cache_key(config.domain, host, cache)
+    local cache_key, cache_ttl, cache_resource = request_cache_key(config.domain, host, cache)
     local development_until = tonumber(cache.development_mode_until) or 0
     local cacheable = cache.enabled == true and cache_ttl > 0
         and (ngx.req.get_method() == "GET" or ngx.req.get_method() == "HEAD")
@@ -440,8 +471,22 @@ function M.access()
         and not cookie_bypassed(cache.bypass_cookie_names)
         and development_until <= ngx.time()
         and #cache_key <= (tonumber(limits.maximum_cache_key_length) or 4096)
+    local profile = cache.profile or {}
+    local profile_name = cache.profile_name or "standard"
+    if profile_name ~= "small" and profile_name ~= "standard" and profile_name ~= "large" and profile_name ~= "streaming" then
+        profile_name = "standard"
+    end
+    ngx.var.cdn_cache_zone = "cache_" .. profile_name
     local admissions = dictionary:incr("security:cache:" .. tostring(config.domain) .. ":" .. second, 1, 0, 2)
-    local admission_allowed = not admissions or admissions <= (tonumber(limits.cache_admissions_per_second) or 50)
+    local admission_hits = dictionary:incr("cache:admit:" .. ngx.md5(cache_key), 1, 0, 60)
+    local admission_allowed = (not admissions or admissions <= (tonumber(profile.admissions_per_second) or tonumber(limits.cache_admissions_per_second) or 50))
+        and (not admission_hits or admission_hits >= (tonumber(cache.admission_requests) or 1))
+    local variant_resource = "cache:variants:" .. ngx.md5(cache_resource)
+    if dictionary:add(variant_resource .. ":" .. ngx.md5(cache_key), true, 60) then
+        dictionary:incr(variant_resource, 1, 0, 60)
+    end
+    local variants = tonumber(dictionary:get(variant_resource)) or 0
+    if variants > (tonumber(cache.maximum_variants_per_resource) or 32) then admission_allowed = false end
     if #cache_key > (tonumber(limits.maximum_cache_key_length) or 4096) then ngx.var.cdn_security_reason = "cache_abuse_detected" end
     ngx.var.cdn_cache_key = cache_key
     ngx.var.cdn_cache_bypass = cacheable and "0" or "1"
@@ -450,13 +495,16 @@ function M.access()
     ngx.var.cdn_cache_browser_ttl = tostring(math.max(0, math.min(31536000, tonumber(cache.browser_ttl_seconds) or 0)))
     ngx.var.cdn_cache_max_object = tostring(math.max(1024, math.min(1073741824, tonumber(cache.maximum_object_bytes) or 104857600)))
     ngx.var.cdn_cache_stale = tostring(math.max(0, math.min(86400, tonumber(cache.stale_if_error_seconds) or 0)))
+    ngx.var.cdn_cache_swr = tostring(math.max(0, math.min(86400, tonumber(cache.stale_while_revalidate_seconds) or 0)))
+    ngx.var.cdn_cache_mode = cache.mode or "normal"
     ngx.var.cdn_cache_respect_origin = cache.respect_origin_headers == false and "0" or "1"
     local accept_encoding = (ngx.var.http_accept_encoding or ""):lower()
     if accept_encoding:find("gzip", 1, true) then ngx.req.set_header("Accept-Encoding", "gzip") else ngx.req.clear_header("Accept-Encoding") end
     local maximum = tonumber(cache.maximum_object_bytes) or 104857600
     if maximum <= 1048576 then return ngx.exec("@cache_1m") end
     if maximum <= 10485760 then return ngx.exec("@cache_10m") end
-    return ngx.exec("@cache_100m")
+    if maximum <= 104857600 then return ngx.exec("@cache_100m") end
+    return ngx.exec("@cache_1g")
 end
 
 function M.invalid_method()
@@ -473,7 +521,10 @@ function M.origin_access()
     local security = config.security or {}
     local limits = security.limits or {}
     local emergency = emergency_actions(dictionary)
-    if emergency.serve_cache_only or emergency.serve_stale_only then return security_reject(503, "edge_emergency_mode") end
+    local cache_mode = config.cache and config.cache.mode or "normal"
+    if emergency.serve_cache_only or emergency.serve_stale_only or cache_mode == "cache_only" or cache_mode == "stale_only" then
+        return security_reject(503, cache_mode == "normal" and "edge_emergency_mode" or "cache_mode_origin_disabled")
+    end
     local circuit_key = "security:origin:open:" .. tostring(config.domain)
     local open_until = tonumber(dictionary:get(circuit_key)) or 0
     if open_until > ngx.now() then return security_reject(503, "origin_circuit_open") end
@@ -530,7 +581,9 @@ function M.prepare_cache_response()
     local status = tonumber(ngx.status) or 0
     local headers = ngx.header
     local cache_control = cache_control_directives(headers["Cache-Control"])
-    local no_store = status ~= 200 or headers["Set-Cookie"] ~= nil
+    local status_ttls = cache.status_ttl_seconds or {["200"] = cache.edge_ttl_seconds or 0}
+    local status_ttl = tonumber(status_ttls[tostring(status)])
+    local no_store = status_ttl == nil or status_ttl <= 0 or headers["Set-Cookie"] ~= nil
         or cache_control["private"] ~= nil or cache_control["no-store"] ~= nil or cache_control["no-cache"] ~= nil
     local vary = headers["Vary"]
     if vary then
@@ -538,14 +591,15 @@ function M.prepare_cache_response()
         for token in tostring(vary):lower():gmatch("[^,%s]+") do tokens[token] = true; count = count + 1 end
         if #tostring(vary) > 256 or count > 4 or tokens["*"] or (count > 0 and not (count == 1 and tokens["accept-encoding"])) then no_store = true end
     end
-    local maximum = math.max(1048576, math.min(104857600, tonumber(cache.maximum_object_bytes) or 104857600))
+    local profile_maximum = tonumber(cache.profile and cache.profile.maximum_object_bytes) or 104857600
+    local maximum = math.max(1048576, math.min(1073741824, tonumber(cache.maximum_object_bytes) or 104857600, profile_maximum))
     local length = tonumber(headers["Content-Length"])
     if length and length > maximum then no_store = true end
     if no_store then
         headers["X-CDNFoundry-No-Store"] = "1"
         return
     end
-    local edge_ttl = math.max(0, math.min(31536000, tonumber(cache.edge_ttl_seconds) or 0))
+    local edge_ttl = math.max(0, math.min(31536000, status_ttl or tonumber(cache.edge_ttl_seconds) or 0))
     if cache.respect_origin_headers ~= false then
         local origin_ttl = tonumber(cache_control["s-maxage"] or cache_control["max-age"])
         if not origin_ttl and headers["Expires"] then
@@ -562,7 +616,10 @@ function M.prepare_cache_response()
     end
     local browser = math.max(0, math.min(31536000, tonumber(cache.browser_ttl_seconds) or 0))
     local stale = math.max(0, math.min(86400, tonumber(cache.stale_if_error_seconds) or 0))
-    headers["Cache-Control"] = "public, s-maxage=" .. edge_ttl .. ", max-age=" .. browser .. (stale > 0 and ", stale-if-error=" .. stale or "")
+    local swr = math.max(0, math.min(86400, tonumber(cache.stale_while_revalidate_seconds) or 0))
+    headers["Cache-Control"] = "public, s-maxage=" .. edge_ttl .. ", max-age=" .. browser
+        .. (stale > 0 and ", stale-if-error=" .. stale or "") .. (swr > 0 and ", stale-while-revalidate=" .. swr or "")
+    headers["X-Accel-Expires"] = tostring(edge_ttl)
 end
 
 function M.cache_status()

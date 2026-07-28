@@ -2,7 +2,6 @@
 
 namespace App\Actions;
 
-use App\Http\Controllers\CacheController;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
 use App\Models\CachePurge;
@@ -11,6 +10,7 @@ use App\Models\Edge;
 use App\Models\EdgeTask;
 use App\Models\User;
 use App\Support\CacheKey;
+use App\Support\CachePolicy;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -21,9 +21,9 @@ final class DispatchCachePurge
 
     public static function execute(Domain $domain, string $type, array $urls, User $actor, ?string $ipAddress): CachePurge
     {
-        $settings = $domain->cache_settings ?? CacheController::defaults();
+        $settings = CachePolicy::normalize($domain->cache_settings);
         $keys = $type === 'urls' ? collect($urls)
-            ->map(fn (string $url): string => CacheKey::fromUrl($domain, $url, $settings['include_query_string']))
+            ->map(fn (string $url): string => CacheKey::fromUrl($domain, $url, $settings['query_policy'], $settings['query_parameters']))
             ->unique()->values()->all() : null;
 
         $purge = DB::transaction(function () use ($domain, $type, $keys, $actor, $ipAddress): CachePurge {

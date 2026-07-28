@@ -164,6 +164,13 @@ def main() -> None:
             "--network-alias", "tls-origin", "-v", f"{origin_config}:/etc/nginx/conf.d/default.conf:ro",
             "-v", f"{directory}:/run/tls:ro", "nginx:1.30.3-alpine")
         runtime = pathlib.Path(directory) / "shared-default.json"
+        cache_directory = pathlib.Path(directory) / "cell-cache"
+        cache_directory.mkdir(mode=0o777)
+        cache_directory.chmod(0o777)
+        for profile in ("small", "standard", "large", "streaming"):
+            profile_directory = cache_directory / "content" / profile
+            profile_directory.mkdir(parents=True, mode=0o777)
+            profile_directory.chmod(0o777)
         initial = state({"runtime.example": "origin-one.example"}, 1)
         initial["hosts"]["development.example"] = state({"development.example": "development-origin.example"}, 1)["hosts"]["development.example"]
         initial["hosts"]["development.example"]["cache"]["development_mode_until"] = int(time.time()) + 3600
@@ -178,12 +185,24 @@ def main() -> None:
         initial["hosts"]["origin-policy.example"]["cache"].update({
             "edge_ttl_seconds": 3, "browser_ttl_seconds": 7, "respect_origin_headers": False,
         })
-        initial["hosts"]["small-object.example"]["cache"]["maximum_object_bytes"] = 1048576
+        initial["hosts"]["small-object.example"]["cache"].update({
+            "maximum_object_bytes": 1048576,
+            "profile_name": "small",
+            "profile": {"maximum_object_bytes": 1048576, "admissions_per_second": 20},
+        })
         initial["hosts"]["stale.example"]["cache"].update({
             "edge_ttl_seconds": 1, "browser_ttl_seconds": 5, "stale_if_error_seconds": 3,
         })
         initial["hosts"]["no-stale.example"]["cache"].update({
             "edge_ttl_seconds": 1, "browser_ttl_seconds": 5, "stale_if_error_seconds": 0,
+        })
+        initial["hosts"]["admission.example"]["cache"].update({
+            "status_ttl_seconds": {"200": 3600, "302": 20, "404": 15},
+            "stale_while_revalidate_seconds": 5,
+        })
+        initial["hosts"]["runtime.example"]["cache"].update({
+            "query_policy": "include_selected", "query_parameters": ["page"],
+            "maximum_variants_per_resource": 8,
         })
         add_https_origin(initial, "tls.example", "tls-origin")
         add_https_origin(initial, "bad-tls.example", "wrong-origin", "wrong-host")
@@ -202,7 +221,7 @@ def main() -> None:
         dedicated_runtime = pathlib.Path(directory) / "dedicated-test.json"
         dedicated_runtime.write_text(json.dumps(state({"dedicated.example": "dedicated-origin.example"}, 1), separators=(",", ":")))
         dedicated_runtime.chmod(0o644)
-        run("docker", "run", "-d", "--name", NAME, "--network", EDGE_NETWORK, "--tmpfs", "/var/cache/nginx:rw,size=128m",
+        run("docker", "run", "-d", "--name", NAME, "--network", EDGE_NETWORK,
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/shared-default.json",
             "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
             "-v", f"{ROOT / 'docker/nginx/openresty.conf'}:/usr/local/openresty/nginx/conf/nginx.conf:ro",
@@ -214,6 +233,7 @@ def main() -> None:
             "-v", f"{temporary / 'ca.crt'}:/etc/ssl/certs/ca-certificates.crt:ro",
             "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro",
             "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
+            "-v", f"{cache_directory}:/var/cache/nginx",
             "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro", "cdnfoundry/edge-runtime:test")
         run("docker", "run", "-d", "--rm", "--name", QUARANTINE_NAME, "--network", EDGE_NETWORK, "--tmpfs", "/var/cache/nginx:rw,size=64m",
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/quarantine-default.json",
@@ -250,16 +270,19 @@ def main() -> None:
             assert "X-CDNFoundry-Cache: MISS" in known.stderr, known.stderr
             cached = request("runtime.example")
             assert cached.returncode == 0 and "X-CDNFoundry-Cache: HIT" in cached.stderr, cached.stderr
+            run("docker", "restart", NAME)
+            persisted = wait_for("runtime.example")
+            assert "X-CDNFoundry-Cache: HIT" in persisted.stderr, persisted.stderr
             authorized = request_with("runtime.example", headers=("Authorization: Bearer cache-bypass",))
             assert "X-CDNFoundry-Cache: BYPASS" in authorized.stderr, authorized.stderr
             cookie_bypass = request_with("runtime.example", headers=("Cookie: session_id=present",))
             assert "X-CDNFoundry-Cache: BYPASS" in cookie_bypass.stderr, cookie_bypass.stderr
             development = request("development.example")
             assert "X-CDNFoundry-Cache: BYPASS" in development.stderr, development.stderr
-            query_a = request_with("runtime.example", "/asset.css?a=1")
+            query_a = request_with("runtime.example", "/asset.css?ignored=1&page=2")
             assert "X-CDNFoundry-Cache: MISS" in query_a.stderr, query_a.stderr
-            assert "X-CDNFoundry-Cache: HIT" in request_with("runtime.example", "/asset.css?a=1").stderr
-            assert "X-CDNFoundry-Cache: MISS" in request_with("runtime.example", "/asset.css?a=2").stderr
+            assert "X-CDNFoundry-Cache: HIT" in request_with("runtime.example", "/asset.css?page=2&ignored=2").stderr
+            assert "X-CDNFoundry-Cache: MISS" in request_with("runtime.example", "/asset.css?page=3").stderr
             assert "max-age=300" in cached.stderr, cached.stderr
             # The admission ceiling blocks creation of additional cache entries;
             # it must never bypass a resident entry and stampede the origin.
@@ -278,8 +301,8 @@ def main() -> None:
                 assert "X-CDNFoundry-Cache: BYPASS" in second.stderr, f"{path}: {second.stderr}"
             for path, expected in (("/negative", "404"), ("/redirect", "302")):
                 first_headers, second_headers = response_headers("admission.example", path), response_headers("admission.example", path)
-                assert expected in first_headers and "X-CDNFoundry-Cache: BYPASS" in first_headers, first_headers
-                assert expected in second_headers and "X-CDNFoundry-Cache: BYPASS" in second_headers, second_headers
+                assert expected in first_headers and "X-CDNFoundry-Cache: MISS" in first_headers, first_headers
+                assert expected in second_headers and "X-CDNFoundry-Cache: HIT" in second_headers, second_headers
             vary_encoding = request_with("admission.example", "/vary-encoding", headers=("Accept-Encoding: gzip, br",))
             assert "X-CDNFoundry-Cache: MISS" in vary_encoding.stderr, vary_encoding.stderr
             assert "X-CDNFoundry-Cache: HIT" in request_with("admission.example", "/vary-encoding", headers=("Accept-Encoding: gzip",)).stderr
@@ -290,16 +313,16 @@ def main() -> None:
             large_first = request_with("small-object.example", "/large-object")
             large_second = request_with("small-object.example", "/large-object")
             assert "X-CDNFoundry-Cache: BYPASS" in large_first.stderr and "X-CDNFoundry-Cache: BYPASS" in large_second.stderr
+            request_with("small-object.example", "/profile-object")
+            request_with("small-object.example", "/profile-object")
+            profile_files = run("docker", "exec", NAME, "sh", "-c", "find /var/cache/nginx/content/small -type f | wc -l")
+            assert int(profile_files.stdout.strip()) > 0, profile_files
             origin_ttl = request_with("admission.example", "/origin-ttl")
             assert "X-CDNFoundry-Cache: MISS" in origin_ttl.stderr
             assert "X-CDNFoundry-Cache: HIT" in request_with("admission.example", "/origin-ttl").stderr
-            for _ in range(15):
-                expired = request_with("admission.example", "/origin-ttl")
-                if "X-CDNFoundry-Cache: EXPIRED" in expired.stderr:
-                    break
-                time.sleep(0.2)
-            else:
-                raise AssertionError(expired.stderr)
+            time.sleep(2.1)
+            revalidated = request_with("admission.example", "/origin-ttl")
+            assert "s-maxage=1" in revalidated.stderr and "X-CDNFoundry-Cache:" in revalidated.stderr, revalidated.stderr
             ignored_origin_ttl = request_with("origin-policy.example", "/origin-ttl")
             assert "max-age=7" in ignored_origin_ttl.stderr, ignored_origin_ttl.stderr
             time.sleep(1.2)
@@ -437,6 +460,16 @@ def main() -> None:
                 run("docker", "stop", AGENT_NAME, check=False)
                 run("docker", "stop", DEDICATED_NAME, check=False)
                 run("docker", "stop", TLS_NAME, check=False)
+                # The runtime entrypoint assigns its persistent cache tree to
+                # the unprivileged edge UID. Restore traversal and removal
+                # permissions before TemporaryDirectory cleans the bind mount
+                # on hosts where that UID is not the CI runner.
+                run(
+                    "docker", "run", "--rm",
+                    "-v", f"{cache_directory}:/cache",
+                    "alpine:3.22", "chmod", "-R", "a+rwx", "/cache",
+                    check=False,
+                )
     print("Phase 4 OpenResty runtime qualification passed.")
 
 

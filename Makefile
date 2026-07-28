@@ -2,7 +2,7 @@ COMPOSE_DEV := docker compose -f compose.dev.yml
 COMPOSE_PROD := docker compose --env-file .env.prod -f compose.prod.yml
 COMPOSE_PROD_EXAMPLE := docker compose --env-file .env.prod.example -f compose.prod.yml
 
-.PHONY: dev-assets dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-gateway-e2e dev-phase7-e2e dev-phase8-e2e dev-phase8-recovery-e2e dev-phase8-upgrade-e2e dev-phase8-throughput-e2e dev-phase8-mmdb-e2e dev-scale-e2e dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check docs-dev docs-build docs-check
+.PHONY: dev-assets dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-gateway-e2e dev-cache-e2e dev-phase7-e2e dev-phase8-e2e dev-phase8-recovery-e2e dev-phase8-upgrade-e2e dev-phase8-throughput-e2e dev-phase8-mmdb-e2e dev-scale-e2e dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check docs-dev docs-build docs-check
 
 dev-assets:
 	docker build --target frontend-assets-export --output type=local,dest=./core/public/build ./core
@@ -47,6 +47,9 @@ dev-e2e:
 dev-gateway-e2e:
 	docker build -t cdnfoundry/edge-gateway:qualification edge-gateway
 	python3 tests/e2e/gateway_ingress.py
+
+dev-cache-e2e:
+	python3 tests/e2e/phase4_runtime.py
 
 dev-scale-e2e:
 	python3 tests/e2e/phase2_scale.py

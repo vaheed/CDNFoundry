@@ -60,6 +60,24 @@ Keep any valid active certificate. Maintenance cleans expired challenge state.
 
 Never scan or delete a cache volume for a normal full purge.
 
+### Cache pressure or volume loss
+
+1. Identify the affected cell, its pool profile, cache used/free bytes,
+   temporary usage, IOPS, admissions, evictions, and unrelated-cell health.
+2. If minimum free space is reached, keep traffic serving: new objects bypass
+   or older/inactive objects evict. Do not delete individual domain paths; none
+   exist.
+3. Reduce admission pressure or select a smaller object/variant policy. A pool
+   profile change is revisioned and reconciled asynchronously. Storage quota
+   changes remain an operator deployment action.
+4. For a corrupt/lost disposable cache volume, drain only that cell, replace
+   only its named volume, start it, verify last-valid runtime restoration, then
+   undrain. Content rebuilds from origins; PostgreSQL and purge epochs remain
+   authoritative.
+5. Escalate when temporary storage grows beyond its quota, resident HITs begin
+   bypassing, an unrelated cell is affected, or origin load exceeds its bounded
+   budget. Record the stable reason, revision, cache epoch, and time window.
+
 ## ClickHouse or Vector outage
 
 1. Confirm DNS and HTTP still serve.

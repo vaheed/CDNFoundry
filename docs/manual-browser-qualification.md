@@ -702,6 +702,80 @@ revisions, domain revisions, operation IDs, and UTC timestamps.
 | Regression | Passed | Full Laravel suite, Compose/OpenAPI/docs checks, edge-agent and edge-gateway Go test/build images, real cache and placement regression |
 | Release decision | Blocked | Owner-operated BGP and external vantage evidence is mandatory and cannot be executed by the coding agent |
 
+## Phase 6 — Persistent bounded cache
+
+Use a disposable proxied domain in a pool with at least two ready cells. Record
+the pool, placement, edge, cell, domain revision, cache epoch, storage quota,
+origin request counter, and all operation/task IDs.
+
+1. As administrator, open **Edge network → Service pools**, edit the disposable
+   pool, and verify **Cache profile** offers Small, Standard, Large, and
+   Streaming. Save Small. Expect one pool revision increment and one coalesced
+   global edge reconciliation. Confirm no new cell, process, directory, timer,
+   or container is created.
+2. Open the domain and choose **Cache → Cache settings**. Verify enabled, edge
+   and browser TTL, maximum object, origin-header policy, four query policies,
+   selected query names, bypass cookies, approved status TTL map, admission
+   count, stale-if-error, stale-while-revalidate, serving mode, and variant
+   ceiling. Save include-selected with `page` and `lang`, 200=`60`, 404=`15`,
+   admission=`2`, both stale windows=`10`, normal mode, and variants=`8`.
+   Expect `202`, a domain revision increment, audit row, and target-first
+   delivery to participating cells only.
+3. Attempt 33 query names, status `418`, admission `0` and `11`, variant `0`
+   and `129`, stale values above `86400`, and an object larger than 1 GiB.
+   Expect typed validation with no revision, artifact, task, or audit side
+   effect. Repeat one valid mutation with the same idempotency key and expect
+   the original response; reuse it with different input and expect conflict.
+4. Request `/asset?page=2&ignored=a&lang=fa` twice, then reorder the query and
+   change only `ignored`. Expect one MISS followed by HITs. Change `page` and
+   expect MISS. Switch to ignore-all and expect all query variants to share one
+   key. Confirm an exact URL purge uses the same normalized key.
+5. Request a cacheable 200 twice and expect MISS then HIT. Request a configured
+   404 twice and expect MISS then HIT for 15 seconds. Confirm an unapproved
+   status, authorization, configured cookie, Set-Cookie, private/no-store,
+   unsupported Vary, oversized object, and range request bypass or do not
+   store. Confirm the second request requirement prevents one-hit pollution.
+6. Generate more than eight query variants in one minute. Expect later variants
+   to bypass admission while an already-resident object remains a HIT. Drive
+   cache admissions above the Small profile ceiling and fill its quota/minimum
+   free reserve. Expect bounded bypass/eviction, no unbounded temporary growth,
+   and unrelated-domain traffic on the other cell to continue.
+7. Seed an object, restart its cell container normally, and request it again.
+   Expect HIT from the persistent per-cell volume. Replace only the disposable
+   cache volume and expect a safe MISS/rebuild without desired-state loss.
+   Confirm no other cell volume or cache object changed.
+8. Stop the origin after a one-second TTL. Within the configured windows expect
+   stale-while-revalidate or stale-if-error service and bounded origin attempts.
+   After expiry expect failure, not indefinite stale. Set Cache only, then
+   Stale only: resident content remains available and an origin-bound miss
+   returns 503 with `cache_mode_origin_disabled`. Restore Normal and the origin.
+9. Purge one URL and confirm durable per-edge tasks, acknowledgements, and a
+   MISS only for that key. Full purge and confirm one epoch increment, no disk
+   scan, and MISS across participating cells. Interrupt one delivery, retry the
+   same task, restart the agent, and confirm convergence without duplicate
+   epochs or loss of the previous valid artifact.
+10. Record mixed HIT/MISS load throughput, p50/p95/p99 latency, hit ratio, CPU,
+    memory, IOPS, disk used/free, temporary bytes, origin requests, purge
+    fan-out time, high-cardinality bypasses, saturation point, and accepted
+    limit. Run IPv4 and configured IPv6 traffic plus the documented IPv4-only
+    topology. Confirm telemetry failure never stops cache service.
+
+### Phase 6 completion gate
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| Implementation | Passed | Persistent per-cell volumes, four profiles, typed domain policy, deterministic keys, TTL/admission/object/range/variant bounds, stale modes, and durable purge |
+| Unit and feature tests | Passed | 194 isolated Laravel tests / 11,472 assertions plus Pint |
+| Real-runtime E2E | Passed | OpenResty runtime covers persistence, query normalization, status TTL, stale, bounds, purge, restart, invalid-candidate last-valid state, and isolation |
+| IPv4 and IPv6 | Partially passed; owner run pending | Cumulative DNS dual-stack passed; owner external cache traffic and IPv4-only evidence required |
+| Scale | Pending owner load run | Exact metrics and accepted saturation limit from step 10 |
+| Failure, recovery, and isolation | Partially passed; owner run pending | Automated restart, origin failure, last-valid, purge retry, and cell isolation passed; owner disk-pressure evidence remains |
+| Observability | Pending owner run | UI state, cell capacity, logs, metrics, alerts, and stable reason captures |
+| Documentation | Passed | Cache guide, API/reference, operations, troubleshooting, architecture, and this exact checklist |
+| Manual qualification | Pending owner run | Steps 1–10; coding agents do not run browser automation |
+| Regression | Passed | Full cumulative non-browser E2E passes foundation, dual-stack DNS, Geo-DNS, two-edge control plane through revision 14 with zero obsolete artifacts, mTLS, TLS, security, analytics outage recovery, operations recovery, and OpenResty cache runtime |
+| Release decision | Blocked | Owner browser, external load, and disk-pressure evidence remain mandatory |
+
 ## Failure record
 
 For every failed or blocked checkpoint, record:

@@ -39,7 +39,7 @@ Laravel is absent from this path.
 sequenceDiagram
     participant C as Client
     participant E as OpenResty cell
-    participant Cache as Shared bounded cache
+    participant Cache as Persistent per-cell bounded cache
     participant O as Validated origin
     participant V as Vector
     C->>E: HTTP/HTTPS request

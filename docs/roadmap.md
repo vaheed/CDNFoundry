@@ -276,19 +276,38 @@ memory, disk, and hit ratio recorded.
 
 **Completion checklist:**
 
-- [ ] Cache survives routine restart and remains rebuildable after loss.
-- [ ] Profiles enforce disk, temporary, object, and admission ceilings.
-- [ ] Query policies do not create unbounded variants.
-- [ ] TTL and stale behavior match policy.
-- [ ] Low disk and abuse bypass safely.
-- [ ] Purge remains durable across participating cells.
-- [ ] One domain cannot exhaust unrelated cache resources beyond accepted limits.
+- [x] Cache survives routine restart and remains rebuildable after loss.
+- [x] Profiles enforce disk, temporary, object, and admission ceilings.
+- [x] Query policies do not create unbounded variants.
+- [x] TTL and stale behavior match policy.
+- [x] Low disk and abuse bypass safely.
+- [x] Purge remains durable across participating cells.
+- [x] One domain cannot exhaust unrelated cache resources beyond accepted limits.
 - [ ] Tests, load evidence, documentation, and manual qualification pass.
+
+**Agent completion evidence (2026-07-28):** the cache-profile PostgreSQL
+migration applied in 51.93 ms. All 194 isolated Laravel tests / 11,472
+assertions, focused API/UI tests, Pint, Compose/OpenAPI/docs validation,
+the OpenResty image build, and the dedicated real cache runtime pass. Runtime
+evidence covers a persistent per-cell volume across container restart,
+deterministic selected-query keys, status TTLs, object/range/admission/variant
+bounds, stale expiry, exact/full purge, invalid-candidate last-valid state, and
+cell isolation. Four separately bounded cache zones enforce profile disk,
+inactive, minimum-free, object, and admission ceilings while request temporary
+storage remains a stricter per-cell filesystem quota. The cumulative
+non-browser E2E passes foundation, dual-stack DNS, Geo-DNS, the two-edge
+control plane through revision 14 with zero obsolete artifacts, mTLS, TLS,
+security, analytics outage recovery, operations recovery, and the real
+OpenResty cache runtime. The preservation-aware control-plane scenario now
+selects its own disposable pool explicitly instead of depending on hash
+placement across owner-created persistent pools. Owner browser, disk-pressure,
+mixed-load saturation, and external IPv6/IPv4-only evidence remain mandatory;
+the combined checkbox and release decision therefore remain blocked.
 
 ## Phase 7 — Gzip and Brotli compression
 
 **Goal:** reduce delivered bandwidth through safe compression integrated with
-Cache v2 and bounded by pool and cell resources.
+Cache and bounded by pool and cell resources.
 
 **Implementation:**
 
