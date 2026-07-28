@@ -71,16 +71,16 @@ class DnsRecordsRelationManager extends RelationManager
             Select::make('mode')
                 ->label(FilamentHelp::label('Mode', 'Geo-DNS answers directly. Proxied records send traffic through the domain\'s assigned service pool: the apex publishes managed A/AAAA answers, while subdomains publish a pool-specific CNAME.'))
                 ->options(function (Get $get): array {
-                $options = ['dns_only' => 'DNS only'];
-                if (in_array($get('type'), GeoDnsConfig::SUPPORTED_TYPES, true)) {
-                    $options['geo_dns'] = 'Geo-DNS';
-                }
-                if (in_array($get('type'), ['A', 'AAAA', 'CNAME'], true)) {
-                    $options['proxied'] = 'Proxied';
-                }
+                    $options = ['dns_only' => 'DNS only'];
+                    if (in_array($get('type'), GeoDnsConfig::SUPPORTED_TYPES, true)) {
+                        $options['geo_dns'] = 'Geo-DNS';
+                    }
+                    if (in_array($get('type'), ['A', 'AAAA', 'CNAME'], true)) {
+                        $options['proxied'] = 'Proxied';
+                    }
 
-                return $options;
-            })
+                    return $options;
+                })
                 ->default('dns_only')->required()->live()
                 ->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
                     if ($state !== 'proxied') {
@@ -148,6 +148,7 @@ class DnsRecordsRelationManager extends RelationManager
                     TagsInput::make('targets')->required()->nestedRecursiveRules(['string', 'max:4096']),
                 ])->columns(2),
             Repeater::make('geo_continents')->label(FilamentHelp::label('Continent overrides', 'Country overrides win over continent overrides. Each answer set is limited to 8 type-valid values.'))->maxItems(GeoDnsConfig::MAX_CONTINENTS)
+                ->addActionLabel('Add continent override')
                 ->visible(fn ($get): bool => $get('mode') === 'geo_dns')->schema([
                     Select::make('code')->options(array_combine(GeoDnsConfig::CONTINENTS, GeoDnsConfig::CONTINENTS))->required(),
                     TagsInput::make('targets')->required()->nestedRecursiveRules(['string', 'max:4096']),

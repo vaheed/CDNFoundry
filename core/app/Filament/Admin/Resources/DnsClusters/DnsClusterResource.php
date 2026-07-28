@@ -42,9 +42,10 @@ class DnsClusterResource extends Resource
             TextInput::make('server_id')->required()->default('localhost')->maxLength(100),
             Repeater::make('nameservers')
                 ->label(FilamentHelp::label('Nameservers', 'At least two authoritative nameservers are required for redundancy. These default to the System DNS identity nameservers.'))
+                ->addActionLabel('Add nameserver')
                 ->schema([
-                TextInput::make('hostname')->required()->maxLength(253),
-            ])->default(fn (): array => collect(PlatformDnsSetting::query()->find(1)?->nameservers ?? [])
+                    TextInput::make('hostname')->required()->maxLength(253),
+                ])->default(fn (): array => collect(PlatformDnsSetting::query()->find(1)?->nameservers ?? [])
                 ->map(fn (array $nameserver): array => ['hostname' => $nameserver['hostname']])->all())
                 ->minItems(2)->maxItems(8)->required(),
             TextInput::make('capacity_zones')->numeric()->required()->default(100000)->minValue(1)->maxValue(10000000),

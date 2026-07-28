@@ -206,5 +206,4 @@ class CellsRelationManager extends RelationManager
 
         return ($unit === 0 ? number_format($value, 0) : number_format($value, $value < 10 ? 2 : 1)).' '.$units[$unit];
     }
-
 }

@@ -40,22 +40,22 @@ class SecurityRulesRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table->columns([
-                TextColumn::make('priority')->label(FilamentHelp::label('Priority', 'Enabled rules are evaluated by ascending priority and then stable ID. First match wins; the default is allow.'))->sortable(), TextColumn::make('match_type')->label('Type')->badge(),
-                TextColumn::make('value')->searchable(), TextColumn::make('action')->badge(),
-                IconColumn::make('enabled')->boolean(), TextColumn::make('note')->limit(60)->placeholder('None'),
-            ])->headerActions([
-                CreateAction::make()->createAnother(false)->using(fn (array $data): SecurityRule => $this->createRule($data)),
-                Action::make('importPreview')->label('Import rules')->icon('heroicon-o-arrow-up-tray')->requiresConfirmation()
-                    ->modalHeading('Preview and commit security-rule import')
-                    ->modalDescription('Review every normalized row below. Confirming writes the whole bounded import in one desired revision.')
-                    ->schema([
-                        Toggle::make('replace_existing')->label('Replace existing rules')->default(false),
-                        Repeater::make('rules')->minItems(1)->maxItems(100)->schema($this->ruleFields())->columns(3)->required(),
-                    ])->action(fn (array $data) => $this->importRules($data)),
-            ])->recordActions([
-                EditAction::make()->using(fn (SecurityRule $record, array $data): SecurityRule => $this->updateRule($record, $data)),
-                DeleteAction::make()->using(fn (SecurityRule $record): bool => $this->deleteRule($record)),
-            ])->defaultSort('priority');
+            TextColumn::make('priority')->label(FilamentHelp::label('Priority', 'Enabled rules are evaluated by ascending priority and then stable ID. First match wins; the default is allow.'))->sortable(), TextColumn::make('match_type')->label('Type')->badge(),
+            TextColumn::make('value')->searchable(), TextColumn::make('action')->badge(),
+            IconColumn::make('enabled')->boolean(), TextColumn::make('note')->limit(60)->placeholder('None'),
+        ])->headerActions([
+            CreateAction::make()->createAnother(false)->using(fn (array $data): SecurityRule => $this->createRule($data)),
+            Action::make('importPreview')->label('Import rules')->icon('heroicon-o-arrow-up-tray')->requiresConfirmation()
+                ->modalHeading('Preview and commit security-rule import')
+                ->modalDescription('Review every normalized row below. Confirming writes the whole bounded import in one desired revision.')
+                ->schema([
+                    Toggle::make('replace_existing')->label('Replace existing rules')->default(false),
+                    Repeater::make('rules')->minItems(1)->maxItems(100)->schema($this->ruleFields())->columns(3)->required(),
+                ])->action(fn (array $data) => $this->importRules($data)),
+        ])->recordActions([
+            EditAction::make()->using(fn (SecurityRule $record, array $data): SecurityRule => $this->updateRule($record, $data)),
+            DeleteAction::make()->using(fn (SecurityRule $record): bool => $this->deleteRule($record)),
+        ])->defaultSort('priority');
     }
 
     private function ruleFields(): array

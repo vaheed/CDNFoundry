@@ -151,5 +151,4 @@ class EdgeResource extends Resource
         AuditLog::record(auth()->user(), $action, $edge, [], request()->ip());
         ReconcilePlatformDnsIdentity::dispatch()->afterCommit();
     }
-
 }
