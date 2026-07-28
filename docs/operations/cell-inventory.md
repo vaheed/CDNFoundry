@@ -21,8 +21,8 @@ failed installation, not elastic scaling.
 
 | Slot | HTTP | HTTPS | Status | Initial assignment |
 | --- | ---: | ---: | ---: | --- |
-| `cell-01` | 18081 | 18444 | 19081 | `shared-default` |
-| `cell-02` | 18082 | 18445 | 19082 | `quarantine-default` |
+| `cell-01` | 18081 | 18444 | 19081 | Unassigned |
+| `cell-02` | 18082 | 18445 | 19082 | Unassigned |
 | `cell-03`–`cell-08` | 18083–18088 | 18446–18451 | 19083–19088 | Unassigned |
 
 All host publications are loopback diagnostics. Customer traffic enters only
@@ -46,14 +46,12 @@ calls only that slot's private authenticated control endpoint. Restart drains
 the runtime briefly and advances its restart generation without restarting the
 agent, gateway, or unrelated cells.
 
-Use **Reconcile cells** on a service pool when an existing edge has no
-participating cell. Reconciliation asynchronously claims one existing
-unassigned slot per missing edge and never creates another slot. Additional
-cells are assigned from **Edge network → Edges → Cells → Assign service pool**;
-the administrator supplies the pool and public service addresses in one
-validated action. Automation can use
-`PUT /api/admin/edge-pools/{pool}/cells/{cell}`. Both paths persist desired state
-and queue bounded reconciliation rather than changing a runtime synchronously.
+Creating a service pool or an edge never assigns a slot. Assign every intended
+cell explicitly from **Edge network → Edges → Cells → Assign service pool**.
+Automation can use `PUT /api/admin/edge-pools/{pool}/cells/{cell}`. Assignment
+persists desired state and queues bounded reconciliation rather than changing a
+runtime synchronously. A pool may use one or several of an edge's slots, and it
+does not consume capacity on edges that the operator did not select.
 Removal fails while the cell owns an active or target domain placement or would
 violate the pool's minimum-ready policy.
 

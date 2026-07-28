@@ -2,13 +2,10 @@
 
 namespace App\Jobs;
 
-use App\Models\Edge;
-use App\Models\EdgePool;
 use App\Models\Operation;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Facades\DB;
 
 class ProvisionEdgePoolCells implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
@@ -25,50 +22,20 @@ class ProvisionEdgePoolCells implements ShouldBeUniqueUntilProcessing, ShouldQue
 
     public function handle(): void
     {
-        $pool = EdgePool::query()->findOrFail($this->poolId);
+        // Mixed-version deployments may still contain this previously queued job.
+        // Fail it closed so an upgrade can never create an implicit assignment.
         $operation = Operation::query()->findOrFail($this->operationId);
-        if ($operation->status === 'succeeded') {
+        if (in_array($operation->status, ['succeeded', 'failed'], true)) {
             return;
         }
-        $cursor = (string) ($operation->result['cursor'] ?? '');
-        $provisioned = (int) ($operation->result['cells_provisioned'] ?? 0);
-        $edges = Edge::query()->when($cursor !== '', fn ($query) => $query->where('id', '>', $cursor))
-            ->orderBy('id')->limit(250)->get();
-        $operation->update(['status' => 'running', 'started_at' => $operation->started_at ?? now(), 'attempts' => $operation->attempts + 1]);
-        foreach ($edges as $edge) {
-            $assigned = DB::transaction(function () use ($edge, $pool): bool {
-                if ($edge->cells()->where('edge_pool_id', $pool->id)->exists()) {
-                    return true;
-                }
-                $slot = $edge->cells()->whereNull('edge_pool_id')->orderBy('slot')->lockForUpdate()->first();
-                if ($slot === null) {
-                    return false;
-                }
-                $slot->update(['edge_pool_id' => $pool->id, 'status' => 'assigned']);
-
-                return true;
-            });
-            if (! $assigned) {
-                $operation->update([
-                    'status' => 'failed', 'error' => 'cell_slot_capacity_exhausted',
-                    'result' => ['pool_id' => $pool->id, 'cursor' => $cursor, 'cells_provisioned' => $provisioned, 'failed_edge_id' => $edge->id],
-                    'finished_at' => now(),
-                ]);
-
-                return;
-            }
-            $provisioned++;
-            $cursor = $edge->id;
-        }
-        $hasMore = $edges->count() === 250 && Edge::query()->where('id', '>', $cursor)->exists();
         $operation->update([
-            'status' => $hasMore ? 'running' : 'succeeded',
-            'result' => ['pool_id' => $pool->id, 'cursor' => $cursor, 'cells_provisioned' => $provisioned],
-            'error' => null, 'finished_at' => $hasMore ? null : now(),
+            'status' => 'failed',
+            'error' => 'automatic_cell_assignment_removed',
+            'result' => ['pool_id' => $this->poolId, 'cells_provisioned' => 0],
+            'started_at' => $operation->started_at ?? now(),
+            'finished_at' => now(),
+            'attempts' => $operation->attempts + 1,
         ]);
-        if ($hasMore) {
-            self::dispatch($pool->id, $operation->id);
-        }
     }
 
     public function uniqueId(): string

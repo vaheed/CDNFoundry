@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
 use App\Models\Edge;
-use App\Models\EdgePool;
 use App\Support\GeoVocabulary;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -32,12 +31,9 @@ class EdgeController extends Controller
         $token = Str::random(64);
         $edge = DB::transaction(function () use ($data, $token, $request): Edge {
             $edge = Edge::query()->create(array_merge($data, ['country_code' => strtoupper($data['country_code']), 'continent_code' => strtoupper($data['continent_code']), 'cell_slot_count' => $data['cell_slot_count'] ?? 8, 'bootstrap_token_hash' => hash('sha256', $token)]));
-            $pools = EdgePool::query()->where('enabled', true)->orderByRaw("CASE WHEN kind = 'shared' THEN 0 WHEN kind = 'quarantine' THEN 1 ELSE 2 END")->orderBy('id')->limit($edge->cell_slot_count)->get()->values();
             for ($slot = 1; $slot <= $edge->cell_slot_count; $slot++) {
-                $pool = $pools->get($slot - 1);
                 $edge->cells()->create([
-                    'slot' => $slot, 'edge_pool_id' => $pool?->id,
-                    'status' => $pool === null ? 'unassigned' : 'assigned',
+                    'slot' => $slot, 'edge_pool_id' => null, 'status' => 'unassigned',
                 ]);
             }
             AuditLog::record($request->user(), 'edge.created', $edge, [], $request->ip());

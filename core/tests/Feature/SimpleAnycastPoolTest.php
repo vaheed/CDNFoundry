@@ -3,10 +3,12 @@
 namespace Tests\Feature;
 
 use App\Http\Controllers\EdgeAgentController;
+use App\Jobs\ProvisionEdgePoolCells;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\Domain;
 use App\Models\Edge;
 use App\Models\EdgePool;
+use App\Models\Operation;
 use App\Models\PlatformDnsSetting;
 use App\Models\User;
 use App\Support\PlatformDnsZone;
@@ -34,9 +36,11 @@ class SimpleAnycastPoolTest extends TestCase
         $this->actingAs($user)->withHeader('Idempotency-Key', (string) Str::uuid())
             ->postJson('/api/admin/edge-pools', $payload)->assertForbidden();
         $response = $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
-            ->postJson('/api/admin/edge-pools', $payload)->assertAccepted();
-        $pool = EdgePool::query()->findOrFail($response->json('data.pool.id'));
+            ->postJson('/api/admin/edge-pools', $payload)->assertCreated();
+        $pool = EdgePool::query()->findOrFail($response->json('data.id'));
         $edge = $this->edge('anycast-pop-a', 'IR', 'AS');
+        $edge->cells()->create(['slot' => 1, 'status' => 'unassigned']);
+        $this->assertNull($edge->cells()->firstOrFail()->edge_pool_id);
 
         $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
             ->postJson("/api/admin/edge-pools/{$pool->id}/edges/{$edge->id}/endpoint", [])
@@ -45,6 +49,26 @@ class SimpleAnycastPoolTest extends TestCase
         $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
             ->postJson("/api/admin/edge-pools/{$pool->id}/edges/{$second->id}/endpoint", ['ipv4' => '1.1.1.1'])
             ->assertUnprocessable()->assertJsonValidationErrors('ipv4');
+    }
+
+    public function test_legacy_provisioning_job_fails_closed_without_assigning_a_cell(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $pool = EdgePool::query()->create(['name' => 'explicit-only', 'kind' => 'shared']);
+        $edge = $this->edge('legacy-job-pop', 'IR', 'AS');
+        $cell = $edge->cells()->create(['slot' => 1, 'status' => 'unassigned']);
+        $operation = Operation::query()->create([
+            'actor_id' => $admin->id,
+            'type' => 'edge.pool_provision',
+            'status' => 'pending',
+            'input' => ['pool_id' => $pool->id],
+        ]);
+
+        (new ProvisionEdgePoolCells($pool->id, $operation->id))->handle();
+
+        $this->assertNull($cell->refresh()->edge_pool_id);
+        $this->assertSame('failed', $operation->refresh()->status);
+        $this->assertSame('automatic_cell_assignment_removed', $operation->error);
     }
 
     public function test_two_pops_bind_one_pair_and_geo_unicast_coexists(): void

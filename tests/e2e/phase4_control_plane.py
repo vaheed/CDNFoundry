@@ -532,11 +532,11 @@ def exercise_simple_anycast(token: str, edges: list[dict]) -> None:
         "anycast_ipv4": "208.67.222.222", "anycast_ipv6": "2620:119:35::35",
         "minimum_ready_cells": 1, "replicas_per_edge": 1, "maximum_domains_per_cell": 20000,
     }, token)
-    pool = created["data"]["pool"]
-    wait_operation(token, created["data"]["operation_id"])
+    pool = created["data"]
     for edge in edges:
         _, detail = call("GET", f"/api/admin/edges/{edge['id']}", token=token)
-        cell = next(row for row in detail["data"]["cells"] if row["edge_pool_id"] == pool["id"])
+        cell = next(row for row in detail["data"]["cells"] if row["edge_pool_id"] is None)
+        call("PUT", f"/api/admin/edge-pools/{pool['id']}/cells/{cell['id']}", {}, token)
         edge["shared_cells"].append(cell["name"])
         call("POST", f"/api/admin/edge-pools/{pool['id']}/edges/{edge['id']}/endpoint", {}, token)
         heartbeat(edge, 0)
@@ -602,13 +602,15 @@ def main() -> None:
         for index, edge in enumerate(edges):
             _, detail = call("GET", f"/api/admin/edges/{edge['id']}", token=token)
             rows = detail["data"]["cells"]
-            shared_cells = [row for row in rows if row["edge_pool_id"] == shared["id"]]
-            for cell in [row for row in rows if row["edge_pool_id"] is None][:2]:
+            shared_cells = []
+            for cell in [row for row in rows if row["edge_pool_id"] is None][:3]:
                 call("PUT", f"/api/admin/edge-pools/{shared['id']}/cells/{cell['id']}", {}, token)
                 shared_cells.append(cell)
             assert len(shared_cells) == 3, shared_cells
             edge["shared_cells"] = [cell["name"] for cell in shared_cells]
-            edge["quarantine_cell"] = next(row["name"] for row in rows if row["edge_pool_id"] == quarantine["id"])
+            quarantine_cell = next(row for row in rows if row["edge_pool_id"] is None and row["id"] not in {cell["id"] for cell in shared_cells})
+            call("PUT", f"/api/admin/edge-pools/{quarantine['id']}/cells/{quarantine_cell['id']}", {}, token)
+            edge["quarantine_cell"] = quarantine_cell["name"]
             call("POST", f"/api/admin/edge-pools/{shared['id']}/edges/{edge['id']}/endpoint", {
                 "ipv4": f"198.51.100.{101 + index}",
                 "ipv6": f"2001:db8:40::{101 + index}",

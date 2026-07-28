@@ -20,16 +20,30 @@ advertise, steer, withdraw, restore, monitor, and record routing changes.
 
 ## Provision a pool
 
+The model is deliberately one-to-one: **one distinct Anycast IPv4/optional
+IPv6 pair equals one service pool**. Two different address pairs require two
+pools. Choose `shared` for normal CDN traffic. `reserved`, `dedicated`, and
+`quarantine` change workload isolation only; they do not change Anycast routing,
+select edges, or reserve cells automatically.
+
+Pool and edge creation consume no cells. Every cell and participating edge is
+an explicit operator choice. With eight slots on an edge, one pool may use any
+chosen number of those slots. More than eight pools may exist, but an eight-slot
+edge can participate in at most eight pools when each uses one cell. Pools that
+do not participate on that edge consume zero slots there.
+
 1. In **Edge network → Service pools**, create a bounded pool and select
-   **Simple Anycast**.
+   **Simple Anycast**. Creation only saves the disabled pool and address pair.
 2. Enter the approved public IPv4 address and, when routed, IPv6 address. At
    least one family is required. Private, special-purpose, management, existing
    Geo-Unicast, and other Anycast addresses are rejected.
-3. Assign at least the configured minimum ready cells on every intended edge.
-4. Under each participating edge's **Pool endpoints**, select the pool and
+3. Under each intended edge's **Pool endpoints**, select the pool and
    leave the endpoint IPv4 and IPv6 fields empty. Those fields are only for
    Geo-Unicast; the Anycast pair is inherited from the pool.
-5. Enable the pool after all intended participation records exist. Confirm the
+4. On each of those edges, use **Cells → Assign service pool** to assign at
+   least `minimum_ready_cells` slots to the pool. Assign more only when that
+   edge should give the pool more local capacity.
+5. Enable the pool after all intended endpoints and cell assignments exist. Confirm the
    same pair appears in each edge gateway candidate and becomes `ready` only
    after local gateway acknowledgement.
 6. Have the network operator advertise the approved prefix. Verify routes and
@@ -40,6 +54,9 @@ Routing mode cannot change while a pool is enabled or has endpoints. Withdraw
 and remove endpoint participation first. Pool address edits increment endpoint
 candidates and return them to `pending` until gateways acknowledge the new
 revision.
+
+There is no fleet-wide reconcile or automatic assignment step. Creating a new
+edge also leaves all of its slots unassigned.
 
 ## Signals and failure behavior
 

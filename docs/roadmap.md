@@ -238,12 +238,13 @@ pair, tested from multiple external vantage points with controlled POP loss.
 - [ ] Tests, network evidence, documentation, and manual qualification pass.
 
 **Agent completion evidence (2026-07-28):** the pool-owned address migration
-applied to persistent PostgreSQL in 83.82 ms. All 188 isolated Laravel tests /
-11,420 assertions, including 6 focused Anycast tests / 32 assertions,
+applied to persistent PostgreSQL in 83.82 ms. All 189 isolated Laravel tests /
+11,423 assertions, including 7 focused Anycast tests / 35 assertions,
 edge-agent and edge-gateway Go test/build images, Compose/OpenAPI/docs checks,
 and the real two-edge mTLS/PowerDNS control-plane test pass. The runtime test
 covered one shared dual-stack pair on two POPs, Geo-Unicast coexistence,
-controlled POP loss and degraded state, local-state isolation, DNS and gateway
+explicit zero-side-effect pool/edge creation, controlled POP loss and degraded
+state, local-state isolation, DNS and gateway
 withdrawal/restoration, forced-reconciliation recovery, and the existing cache
 and placement regression through revision 13 with zero obsolete artifacts.
 The exact evidence and owner handoff are in [Simple Anycast qualification](operations/simple-anycast-qualification.md).

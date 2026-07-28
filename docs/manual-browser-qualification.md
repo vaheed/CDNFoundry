@@ -621,14 +621,19 @@ revisions, domain revisions, operation IDs, and UTC timestamps.
 1. Sign in as administrator and open **Edge network → Service pools → New
    service pool**. Choose **Simple Anycast**. Confirm the helper text states
    that CDNFoundry binds and publishes addresses but does not announce or
-   withdraw BGP routes. Enter the approved IPv4 and optional IPv6 pair.
+   withdraw BGP routes. Confirm it also states that pool creation assigns no
+   edge or cell, one distinct pair belongs to one pool, and **Shared** is the
+   normal kind. Enter the approved IPv4 and optional IPv6 pair. After creation,
+   confirm every existing edge has exactly the same assignments as before and
+   no `edge.pool_provision` operation exists.
 2. Attempt an empty pair, private/special address, management address, existing
    Geo-Unicast address, and address owned by another Anycast pool. Expect
    field-level rejection, no pool/revision, and no gateway or DNS change.
-3. Assign the required ready cells on POP A and POP B. Under each edge's **Pool
-   endpoints**, select the Anycast pool and leave IPv4/IPv6 empty. Expect one
+3. Under each intended edge's **Pool endpoints**, select the Anycast pool and
+   leave IPv4/IPv6 empty. Then use **Cells → Assign service pool** to assign the
+   required slots on POP A and POP B. Expect one
    participation record per edge; entering a local address must fail because
-   the pair is pool-owned.
+   the pair is pool-owned. Confirm an unrelated edge consumes no slot.
 4. Enable the pool. Expect both gateways to receive the identical dual-stack
    pair, only their local assigned cells as targets, `pending` before local
    acknowledgement, and then pool route state `ready`. Unknown Host/SNI and
@@ -671,7 +676,7 @@ revisions, domain revisions, operation IDs, and UTC timestamps.
 | Gate | Result | Evidence |
 | --- | --- | --- |
 | Implementation | Passed | Pool-owned pair, explicit edge participation, shared gateway candidates, direct DNS publication, stable status reasons, authorization, audit, and last-valid reconciliation |
-| Unit and feature tests | Passed | 188 isolated Laravel tests / 11,420 assertions, including 6 focused Anycast tests / 32 assertions |
+| Unit and feature tests | Passed | 189 isolated Laravel tests / 11,423 assertions, including 7 focused Anycast tests / 35 assertions |
 | Real-runtime E2E | Passed | Two-edge mTLS gateway candidate and real PowerDNS withdrawal/restoration qualification; cache/placement regression reached revision 13 |
 | IPv4 and IPv6 | Passed | Dual-stack Anycast and Geo-Unicast runtime plus IPv4-only automated gateway/endpoint regression |
 | Scale and external network evidence | Pending owner run | Two approved POPs, at least three external vantage points, provider route evidence, load/saturation measurements |

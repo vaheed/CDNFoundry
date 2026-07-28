@@ -196,8 +196,11 @@ class EdgeProxyTest extends TestCase
             ->assertCreated();
         $id = $created->json('data.id');
         $slots = Edge::query()->findOrFail($id)->cells()->orderBy('slot')->get();
+        $this->assertSame(8, $slots->whereNull('edge_pool_id')->where('status', 'unassigned')->count(), 'Creating an edge must leave every cell explicit and unassigned.');
         $cell = $slots->first();
-        EdgePool::query()->where('kind', 'shared')->firstOrFail()->endpoints()->create([
+        $sharedPool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
+        $cell->update(['edge_pool_id' => $sharedPool->id, 'status' => 'assigned']);
+        $sharedPool->endpoints()->create([
             'edge_id' => $id,
             'ipv4' => '1.0.0.1',
         ]);
@@ -205,7 +208,7 @@ class EdgeProxyTest extends TestCase
         $this->assertSame(['cell-01', 'cell-02', 'cell-03', 'cell-04', 'cell-05', 'cell-06', 'cell-07', 'cell-08'], $slots->pluck('name')->all());
         $this->assertCount(8, $slots->pluck('runtime_path')->unique());
         $this->assertCount(8, $slots->pluck('http_port')->unique());
-        $this->assertSame(6, $slots->whereNull('edge_pool_id')->where('status', 'unassigned')->count());
+        $this->assertSame(7, $slots->whereNull('edge_pool_id')->where('status', 'unassigned')->count());
         $this->assertSame(536870912, $slots->first()->resource_limits['memory_bytes']);
         $this->actingAs($admin)->postJson('/api/admin/edges', ['name' => 'too-many-slots', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.19', 'cell_slot_count' => 33])->assertUnprocessable();
         $bootstrap = $created->json('data.bootstrap_token');
@@ -287,11 +290,13 @@ class EdgeProxyTest extends TestCase
         $this->assertNull($domain->dnsRecords()->find($extraRecord));
         $this->assertDatabaseHas('audit_logs', ['action' => 'proxy.revision_rolled_back', 'subject_id' => (string) $domain->id]);
 
-        $poolResponse = $this->actingAs($admin)->postJson('/api/admin/edge-pools', ['name' => 'dedicated-test', 'kind' => 'dedicated'])->assertAccepted();
-        $pool = $poolResponse->json('data.pool.id');
-        $dedicatedCell = Edge::query()->findOrFail($id)->cells()->where('edge_pool_id', $pool)->firstOrFail();
-        $this->assertSame(8, Edge::query()->findOrFail($id)->cells()->count(), 'Pool provisioning must assign an existing bounded slot.');
-        $this->assertSame(3, $dedicatedCell->slot);
+        $poolResponse = $this->actingAs($admin)->postJson('/api/admin/edge-pools', ['name' => 'dedicated-test', 'kind' => 'dedicated'])->assertCreated();
+        $pool = $poolResponse->json('data.id');
+        $this->assertSame(8, Edge::query()->findOrFail($id)->cells()->count());
+        $this->assertSame(7, Edge::query()->findOrFail($id)->cells()->whereNull('edge_pool_id')->count(), 'Creating a pool must not consume a cell.');
+        $dedicatedCell = Edge::query()->findOrFail($id)->cells()->whereNull('edge_pool_id')->orderBy('slot')->firstOrFail();
+        $this->actingAs($admin)->putJson("/api/admin/edge-pools/{$pool}/cells/{$dedicatedCell->id}", [])->assertAccepted();
+        $this->assertSame(2, $dedicatedCell->refresh()->slot);
         $this->actingAs($admin)->postJson("/api/admin/edge-pools/{$pool}/edges/{$id}/endpoint", [
             'ipv4' => '9.9.9.9',
         ])->assertAccepted();
@@ -307,7 +312,6 @@ class EdgeProxyTest extends TestCase
             'agent_version' => '1.0.0',
             'capacity' => ['listener_ready' => true],
         ]);
-        $sharedPool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
         $spectator->cells()->create([
             'edge_pool_id' => $sharedPool->id,
             'name' => $sharedPool->name,

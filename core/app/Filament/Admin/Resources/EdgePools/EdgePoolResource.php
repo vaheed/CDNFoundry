@@ -6,13 +6,11 @@ use App\Actions\DispatchEmergencyMode;
 use App\Filament\Admin\Resources\EdgePools\Pages\CreateEdgePool;
 use App\Filament\Admin\Resources\EdgePools\Pages\EditEdgePool;
 use App\Filament\Admin\Resources\EdgePools\Pages\ListEdgePools;
-use App\Jobs\ProvisionEdgePoolCells;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
 use App\Models\DomainEdgePlacement;
 use App\Models\EdgePool;
 use App\Models\EmergencyMode;
-use App\Models\Operation;
 use App\Models\PlatformDnsSetting;
 use App\Support\EdgeRoutingCompiler;
 use Filament\Actions\Action;
@@ -41,12 +39,13 @@ class EdgePoolResource extends Resource
     {
         return $schema->components([
             TextInput::make('name')->required()->maxLength(100)->unique(ignoreRecord: true)
-                ->helperText('Stable pool identity; participating cells retain their independent slot identities.'),
+                ->helperText('Creating a pool does not attach any edge or consume any cell. Assign both explicitly after creation.'),
             Select::make('kind')->options(['shared' => 'Shared', 'reserved' => 'Reserved', 'quarantine' => 'Quarantine', 'dedicated' => 'Dedicated'])->required()
-                ->helperText('Shared is the normal default. Quarantine isolates risky/noisy domains. Dedicated is an explicit exceptional allocation, never one per domain.'),
+                ->helperText('Use Shared for normal Anycast service. Reserved is controlled capacity, Dedicated is exceptional single-tenant isolation, and Quarantine is only for risky traffic. Kind does not select addresses or edges.'),
             Select::make('routing_mode')->options(['geo_unicast' => 'Geo-Unicast', 'simple_anycast' => 'Simple Anycast'])->required()->default('geo_unicast')->live()
                 ->helperText('Simple Anycast only binds and publishes the shared pair. CDNFoundry never announces or withdraws BGP routes; the network operator/provider owns routing.'),
-            TextInput::make('anycast_ipv4')->label('Anycast IPv4')->ipv4()->nullable()->visible(fn (Get $get): bool => $get('routing_mode') === 'simple_anycast'),
+            TextInput::make('anycast_ipv4')->label('Anycast IPv4')->ipv4()->nullable()->visible(fn (Get $get): bool => $get('routing_mode') === 'simple_anycast')
+                ->helperText('One distinct Anycast address pair belongs to one pool. Create a second pool only for a second distinct pair.'),
             TextInput::make('anycast_ipv6')->label('Anycast IPv6')->ipv6()->nullable()->visible(fn (Get $get): bool => $get('routing_mode') === 'simple_anycast')
                 ->helperText('At least one address is required. Every explicitly attached edge binds this same pair after local readiness is acknowledged.'),
             TextInput::make('minimum_ready_cells')->numeric()->minValue(1)->maxValue(32)->required()->default(1),
@@ -83,18 +82,6 @@ class EdgePoolResource extends Resource
             TextColumn::make('replicas_per_edge')->label('Replicas/edge'),
             TextColumn::make('updated_at')->since()->sortable(),
         ])->recordActions([
-            Action::make('reconcileCells')->label('Reconcile cells')->icon('heroicon-o-arrow-path')
-                ->requiresConfirmation()
-                ->action(function (EdgePool $record): void {
-                    $operation = Operation::query()->create([
-                        'actor_id' => auth()->id(), 'type' => 'edge.pool_provision', 'status' => 'pending',
-                        'input' => ['pool_id' => $record->id],
-                    ]);
-                    AuditLog::record(auth()->user(), 'edge.pool_provision_requested', $record, ['operation_id' => $operation->id], request()->ip());
-                    ProvisionEdgePoolCells::dispatch($record->id, $operation->id);
-                    Notification::make()->info()->title('Cell reconciliation queued')
-                        ->body("Operation {$operation->id} will assign one existing unassigned slot on each missing edge.")->send();
-                }),
             Action::make('enable')->visible(fn (EdgePool $record): bool => ! $record->enabled)->action(function (EdgePool $record): void {
                 $endpoints = $record->endpoints()->with('edge')->get();
                 $incomplete = $endpoints->isEmpty() || $endpoints->contains(fn ($endpoint): bool => (! $record->isSimpleAnycast() && ! filled($endpoint->ipv4) && ! filled($endpoint->ipv6))

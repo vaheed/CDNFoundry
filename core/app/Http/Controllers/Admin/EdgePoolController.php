@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\ProvisionEdgePoolCells;
 use App\Jobs\ReconcileAllEdgeDomains;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
@@ -87,19 +86,14 @@ class EdgePoolController extends Controller
         $data = [...$data, ...EdgePoolRoutingData::validate(array_merge(['routing_mode' => 'geo_unicast', 'anycast_ipv4' => null, 'anycast_ipv6' => null], $request->only(['routing_mode', 'anycast_ipv4', 'anycast_ipv6'])))];
         abort_if(($data['replicas_per_edge'] ?? 1) > 1 && ! in_array($data['kind'], ['reserved', 'dedicated'], true), 422, 'Replicated placement is limited to reserved and dedicated pools.');
         abort_if(EdgePool::query()->count() >= 32, 409, 'The deployment has reached the bounded 32-pool limit.');
-        [$pool, $operation] = DB::transaction(function () use ($data, $request): array {
+        $pool = DB::transaction(function () use ($data, $request): EdgePool {
             $pool = EdgePool::query()->create([...$data, 'enabled' => false]);
-            $operation = Operation::query()->create([
-                'actor_id' => $request->user()->id, 'type' => 'edge.pool_provision', 'status' => 'pending',
-                'input' => ['pool_id' => $pool->id],
-            ]);
             AuditLog::record($request->user(), 'edge.pool_created', $pool, ['kind' => $pool->kind], $request->ip());
 
-            return [$pool, $operation];
+            return $pool;
         });
-        ProvisionEdgePoolCells::dispatch($pool->id, $operation->id)->afterCommit();
 
-        return response()->json(['data' => ['pool' => $pool, 'operation_id' => $operation->id, 'status' => $operation->status]], 202);
+        return response()->json(['data' => $pool], 201);
     }
 
     public function update(Request $request, EdgePool $pool): JsonResponse
