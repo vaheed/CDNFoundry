@@ -148,7 +148,8 @@ In the administrator panel:
 2. register each DNS API cluster, test it, then enable it;
 3. create shared and quarantine pools if they are not present;
 4. create each edge row and copy its one-time UUID/token;
-5. set each cell's public service addresses.
+5. assign bounded cells to pools and create one public service endpoint pair for
+   each participating edge/pool; keep management addresses distinct.
 
 Put `EDGE_ID` and `EDGE_BOOTSTRAP_TOKEN` into the corresponding edge host, start
 or restart `edge-agent`, wait for registered identity and fresh ready cells,

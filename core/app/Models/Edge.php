@@ -21,6 +21,11 @@ class Edge extends Model
         return $this->hasMany(EdgeCell::class);
     }
 
+    public function poolEndpoints(): HasMany
+    {
+        return $this->hasMany(EdgePoolEndpoint::class);
+    }
+
     public function artifacts(): HasMany
     {
         return $this->hasMany(EdgeArtifact::class);

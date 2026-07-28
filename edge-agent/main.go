@@ -44,6 +44,8 @@ type ack struct {
 type client struct {
 	base, dir, runtimeDir, statusToken string
 	gatewayBindings                    string
+	gatewayBindingsConfigured          bool
+	gatewayRevision                    uint64
 	gatewayStatusURL                   string
 	derivedEnsured                     bool
 	statusURLs                         []string
@@ -70,6 +72,7 @@ func main() {
 		gatewayStatusURL: env("EDGE_GATEWAY_STATUS_URL", ""),
 		statusURLs:       splitNonempty(env("EDGE_CELL_STATUS_URLS", "")), http: &http.Client{Timeout: 15 * time.Second},
 	}
+	c.gatewayBindingsConfigured = c.gatewayBindings != ""
 	if err := json.Unmarshal([]byte(env("EDGE_CELL_ASSIGNMENTS", "{}")), &c.cellAssignments); err != nil || len(c.cellAssignments) > 32 {
 		fatal(errors.New("EDGE_CELL_ASSIGNMENTS must be an object with at most 32 slots"))
 	}
@@ -146,7 +149,7 @@ func (c *client) ensureDerivedRuntime(current state) error {
 		return err
 	}
 	if c.gatewayBindings != "" {
-		gateway, err := compileGateway(current.Sequence, pools, c.gatewayBindings)
+		gateway, err := compileGateway(c.gatewayActiveRevision(current.Sequence), pools, c.gatewayBindings)
 		if err != nil {
 			return err
 		}
@@ -598,6 +601,11 @@ func (c *client) configureMutualTLS() error {
 
 func (c *client) sync() error {
 	_ = c.flushAcks()
+	if !c.gatewayBindingsConfigured {
+		if err := c.refreshGatewayBindings(); err != nil {
+			return err
+		}
+	}
 	current, err := loadState(filepath.Join(c.dir, "active", "state.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return c.full()
@@ -659,6 +667,42 @@ func (c *client) sync() error {
 	c.queueAck(ack{Sequence: candidate.Sequence})
 	_ = c.flushAcks()
 	return c.heartbeat(candidate.Sequence)
+}
+
+func (c *client) refreshGatewayBindings() error {
+	var response struct {
+		Data struct {
+			Revision uint64           `json:"revision"`
+			Bindings []gatewayBinding `json:"bindings"`
+		} `json:"data"`
+	}
+	if err := c.request("GET", "/edge/v1/gateway/config", nil, &response, true); err != nil {
+		return err
+	}
+	c.gatewayRevision = response.Data.Revision
+	if len(response.Data.Bindings) == 0 {
+		if c.gatewayBindings != "[]" {
+			c.derivedEnsured = false
+		}
+		c.gatewayBindings = "[]"
+		return nil
+	}
+	raw, err := json.Marshal(response.Data.Bindings)
+	if err != nil {
+		return err
+	}
+	if c.gatewayBindings != string(raw) {
+		c.derivedEnsured = false
+	}
+	c.gatewayBindings = string(raw)
+	return nil
+}
+
+func (c *client) gatewayActiveRevision(sequence uint64) uint64 {
+	if c.gatewayRevision > sequence {
+		return c.gatewayRevision
+	}
+	return sequence
 }
 
 func (c *client) full() error {
@@ -783,7 +827,7 @@ func (c *client) activate(s state) error {
 			return c.rollbackActive(active, previous, err)
 		}
 		if c.gatewayBindings != "" {
-			gateway, err := compileGateway(s.Sequence, pools, c.gatewayBindings)
+			gateway, err := compileGateway(c.gatewayActiveRevision(s.Sequence), pools, c.gatewayBindings)
 			if err != nil {
 				return c.rollbackActive(active, previous, err)
 			}
@@ -1015,7 +1059,7 @@ type gatewayBinding struct {
 
 func compileGateway(sequence uint64, pools map[string]map[string]any, raw string) (map[string]any, error) {
 	var bindings []gatewayBinding
-	if len(raw) > 64<<10 || json.Unmarshal([]byte(raw), &bindings) != nil || len(bindings) == 0 || len(bindings) > 32 {
+	if len(raw) > 64<<10 || json.Unmarshal([]byte(raw), &bindings) != nil || len(bindings) > 32 {
 		return nil, errors.New("invalid gateway bindings")
 	}
 	listenerSet := map[string]bool{}
@@ -1099,7 +1143,7 @@ func (c *client) heartbeat(sequence uint64) error {
 	}
 	gateway := c.gatewayStatus()
 	if c.gatewayStatusURL != "" {
-		listenerReady = gateway["ready"] == true && gateway["active_revision"] == sequence
+		listenerReady = gateway["ready"] == true && gateway["active_revision"] == c.gatewayActiveRevision(sequence)
 	}
 	return c.request("POST", "/edge/v1/heartbeat", map[string]any{
 		"agent_version": version, "listener_ready": listenerReady, "active_sequence": sequence,

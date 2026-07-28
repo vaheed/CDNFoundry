@@ -311,13 +311,13 @@ def provision_edge(token: str, name: str, country: str, continent: str, ipv4: st
 
 def heartbeat(edge: dict, active_sequence: int, quarantine_ready: bool = False) -> None:
     cells = [{
-        "name": "cell-01",
+        "name": name,
         "status": "ready",
         "capacity": {"assigned_domain_count": 0, "active_connections": 0, "requests_per_second": 0},
-    }]
-    if quarantine_ready:
+    } for name in edge.get("shared_cells", ["cell-01"])]
+    if quarantine_ready and edge.get("quarantine_cell"):
         cells.append({
-            "name": "cell-02",
+            "name": edge["quarantine_cell"],
             "status": "ready",
             "capacity": {"assigned_domain_count": 0, "active_connections": 0, "requests_per_second": 0},
         })
@@ -326,6 +326,7 @@ def heartbeat(edge: dict, active_sequence: int, quarantine_ready: bool = False) 
         "listener_ready": True,
         "active_sequence": active_sequence,
         "cells": cells,
+        "gateway": {"ready": True, "active_revision": max(1000, active_sequence), "routes": 1, "listeners": 2},
     }, context=edge["context"])
 
 
@@ -543,21 +544,40 @@ def main() -> None:
         pools = pools_response["data"]["data"]
         shared = next(pool for pool in pools if pool["name"] == "shared-default")
         quarantine = next(pool for pool in pools if pool["name"] == "quarantine-default")
+        for index, edge in enumerate(edges):
+            _, detail = call("GET", f"/api/admin/edges/{edge['id']}", token=token)
+            rows = detail["data"]["cells"]
+            shared_cells = [row for row in rows if row["edge_pool_id"] == shared["id"]]
+            for cell in [row for row in rows if row["edge_pool_id"] is None][:2]:
+                call("PUT", f"/api/admin/edge-pools/{shared['id']}/cells/{cell['id']}", {}, token)
+                shared_cells.append(cell)
+            assert len(shared_cells) == 3, shared_cells
+            edge["shared_cells"] = [cell["name"] for cell in shared_cells]
+            edge["quarantine_cell"] = next(row["name"] for row in rows if row["edge_pool_id"] == quarantine["id"])
+            call("POST", f"/api/admin/edge-pools/{shared['id']}/edges/{edge['id']}/endpoint", {
+                "ipv4": f"198.51.100.{101 + index}",
+                "ipv6": f"2001:db8:40::{101 + index}",
+            }, token)
+            heartbeat(edge, 0)
+            heartbeat(edge, 0)
+            _, candidate = call("GET", "/edge/v1/gateway/config", context=edge["context"])
+            bindings = candidate["data"]["bindings"]
+            assert len(bindings) == 2 and all(len(binding["cells"]) >= 1 for binding in bindings), candidate
         shared_global = f"pool-{shared['id']}.global.all.proxy.cdnf.test"
-        wait_answers(shared_global, "A", {"203.0.113.101", "203.0.113.102"})
-        wait_answers(shared_global, "AAAA", {"2001:db8:4::101", "2001:db8:4::102"})
+        wait_answers(shared_global, "A", {"198.51.100.101", "198.51.100.102"})
+        wait_answers(shared_global, "AAAA", {"2001:db8:40::101", "2001:db8:40::102"})
 
         call("POST", f"/api/admin/edges/{edges[0]['id']}/drain", {}, token)
         deadline = time.monotonic() + 60
         drained_answers: set[str] = set()
         while time.monotonic() < deadline:
             drained_answers = set(dig(shared_global, "A"))
-            if "203.0.113.101" not in drained_answers and "203.0.113.102" in drained_answers:
+            if "198.51.100.101" not in drained_answers and "198.51.100.102" in drained_answers:
                 break
             time.sleep(0.5)
-        assert "203.0.113.101" not in drained_answers and "203.0.113.102" in drained_answers, drained_answers
+        assert "198.51.100.101" not in drained_answers and "198.51.100.102" in drained_answers, drained_answers
         call("POST", f"/api/admin/edges/{edges[0]['id']}/undrain", {}, token)
-        wait_answers(shared_global, "A", {"203.0.113.101", "203.0.113.102"})
+        wait_answers(shared_global, "A", {"198.51.100.101", "198.51.100.102"})
 
         _, created_domain = call("POST", "/api/domains", {"name": ZONE}, token)
         domain_id = created_domain["data"]["id"]
@@ -613,6 +633,11 @@ def main() -> None:
                 "service_ipv4": f"198.51.100.{101 + index}",
                 "service_ipv6": f"2001:db8:44::{101 + index}",
             }, token)
+            call("POST", f"/api/admin/edge-pools/{quarantine['id']}/edges/{edge['id']}/endpoint", {
+                "ipv4": f"9.9.9.{101 + index}",
+                "ipv6": f"2620:fe::{101 + index}",
+            }, token)
+            heartbeat(edge, sequences[edge["id"]], quarantine_ready=True)
             heartbeat(edge, sequences[edge["id"]], quarantine_ready=True)
 
         _, moved = call("POST", f"/api/admin/domains/{domain_id}/move", {"pool_id": quarantine["id"]}, token)
@@ -641,8 +666,8 @@ def main() -> None:
         wait_deployment(token, domain_id)
         assert dig(f"www.{ZONE}", "CNAME") == [f"pool-{quarantine['id']}.proxy.cdnf.test."]
         quarantine_global = f"pool-{quarantine['id']}.global.all.proxy.cdnf.test"
-        wait_answers(quarantine_global, "A", {"198.51.100.101", "198.51.100.102"})
-        wait_answers(quarantine_global, "AAAA", {"2001:db8:44::101", "2001:db8:44::102"})
+        wait_answers(quarantine_global, "A", {"9.9.9.101", "9.9.9.102"})
+        wait_answers(quarantine_global, "AAAA", {"2620:fe::101", "2620:fe::102"})
 
         artisan(
             f"App\\Models\\DomainEdgePlacement::query()->where('domain_id',{domain_id})->update(['drain_after'=>now()->subSecond()]);"

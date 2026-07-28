@@ -18,9 +18,9 @@ artifact. Failed validation records `failed` while preserving the active cell.
 ## Safe operations
 
 1. Pre-create bounded generic slots on each edge installation.
-2. Assign the intended slots to the pool and configure their service addresses.
-3. Add matching named cell targets to `EDGE_GATEWAY_BINDINGS` and restart the
-   agent only after validating the JSON offline.
+2. Assign the intended slots to the pool; cells retain private, stable ports.
+3. Create one [pool service endpoint](pool-service-endpoints.md) per participating
+   edge. The agent receives the matching named targets from desired state.
 4. Wait for every required cell and the gateway map to report ready.
 5. Move a domain. Observe `deploying`, then `draining`, then `active`.
 6. Remove a source assignment only after no active or target placement refers
@@ -29,7 +29,7 @@ artifact. Failed validation records `failed` while preserving the active cell.
 Capacity exhaustion uses `pool_cell_domain_capacity_exhausted`; missing replica
 capacity uses `pool_insufficient_participating_cells`. Neither condition
 withdraws a source. If a target stays unready, inspect cell heartbeat status,
-service addresses, artifact rejection, and gateway candidate-rejection metrics.
+endpoint readiness, artifact rejection, and gateway candidate-rejection metrics.
 Never clear the source runtime manually.
 
 Placement uses durable rows in PostgreSQL. Edge snapshots, per-cell runtime

@@ -14,6 +14,11 @@ class EdgePool extends Model
         return $this->hasMany(EdgeCell::class);
     }
 
+    public function endpoints(): HasMany
+    {
+        return $this->hasMany(EdgePoolEndpoint::class);
+    }
+
     public function isReady(): bool
     {
         $cells = $this->cells()->whereHas('edge', fn ($query) => $query->where('enabled', true)->where('drained', false))

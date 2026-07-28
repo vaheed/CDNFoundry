@@ -188,14 +188,25 @@ with endpoint-health changes measured without rewriting every domain.
 
 **Completion checklist:**
 
-- [ ] Three shared cells serve one dual-stack pair.
-- [ ] A reserved pool serves a different pair on the same edge.
-- [ ] DNS publishes the correct ready endpoints.
-- [ ] Withdrawal affects only the intended pool.
-- [ ] IPv4-only, IPv6-only, and dual-stack endpoints pass.
-- [ ] Conflicts fail before activation.
-- [ ] Restart and reconciliation converge gateway, DNS, pool, and cell state.
+- [x] Three shared cells serve one dual-stack pair.
+- [x] A reserved pool serves a different pair on the same edge.
+- [x] DNS publishes the correct ready endpoints.
+- [x] Withdrawal affects only the intended pool.
+- [x] IPv4-only, IPv6-only, and dual-stack endpoints pass.
+- [x] Conflicts fail before activation.
+- [x] Restart and reconciliation converge gateway, DNS, pool, and cell state.
 - [ ] Tests, scale, documentation, and manual qualification pass.
+
+**Agent completion evidence (2026-07-28):** the PostgreSQL expand migration
+applied in 151.20 ms; 180 isolated Laravel tests / 11,385 assertions, edge-agent
+Go tests and image build, Compose/OpenAPI/docs validation, and the two-edge real
+PowerDNS control-plane test pass. The runtime test covered a three-cell
+dual-stack pair, an isolated second-pool pair, withdrawal/restoration,
+Geo-Unicast publication, revision acknowledgement, placement migration, and
+zero obsolete artifacts. The existing 20,000-domain / 10,000-change dataset
+remains green. The combined checkbox remains open only because owner-run browser
+and external real-traffic qualification has not been executed by the coding
+agent.
 
 ## Phase 5 — Simple Anycast pools
 

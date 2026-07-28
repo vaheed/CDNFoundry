@@ -8,6 +8,7 @@ use App\Filament\Admin\Resources\Edges\Pages\EditEdge;
 use App\Filament\Admin\Resources\Edges\Pages\ListEdges;
 use App\Filament\Admin\Resources\Edges\Pages\ViewEdge;
 use App\Filament\Admin\Resources\Edges\RelationManagers\CellsRelationManager;
+use App\Filament\Admin\Resources\Edges\RelationManagers\PoolEndpointsRelationManager;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
 use App\Models\Edge;
@@ -154,7 +155,7 @@ class EdgeResource extends Resource
 
     public static function getRelations(): array
     {
-        return [CellsRelationManager::class];
+        return [PoolEndpointsRelationManager::class, CellsRelationManager::class];
     }
 
     public static function getPages(): array

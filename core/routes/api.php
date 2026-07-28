@@ -201,6 +201,9 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:account'])->group
         Route::post('/edge-pools/{pool}/disable', [EdgePoolController::class, 'disable'])->middleware('idempotent');
         Route::put('/edge-pools/{pool}/cells/{cell}', [EdgePoolController::class, 'assignCell'])->middleware('idempotent');
         Route::delete('/edge-pools/{pool}/cells/{cell}', [EdgePoolController::class, 'unassignCell'])->middleware('idempotent');
+        Route::post('/edge-pools/{pool}/edges/{edge}/endpoint', [EdgePoolController::class, 'storeEndpoint'])->middleware('idempotent');
+        Route::patch('/edge-pools/{pool}/endpoints/{endpoint}', [EdgePoolController::class, 'updateEndpoint'])->middleware('idempotent');
+        Route::delete('/edge-pools/{pool}/endpoints/{endpoint}', [EdgePoolController::class, 'destroyEndpoint'])->middleware('idempotent');
         Route::get('/edge-deployments', [EdgeOperationsController::class, 'deployments']);
         Route::get('/edge-routing', [EdgeOperationsController::class, 'routing']);
         Route::post('/edge-deployments/reconcile', [EdgeOperationsController::class, 'reconcile'])->middleware('idempotent');

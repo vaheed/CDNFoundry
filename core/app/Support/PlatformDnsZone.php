@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\EdgeCell;
 use App\Models\EdgePool;
+use App\Models\EdgePoolEndpoint;
 use App\Models\PlatformDnsSetting;
 
 final class PlatformDnsZone
@@ -39,6 +40,34 @@ final class PlatformDnsZone
         $proxy = rtrim($settings->proxy_hostname, '.').'.';
         $defaultSharedPool = EdgePool::query()->where('enabled', true)->where('withdrawn', false)->where('kind', 'shared')->orderBy('id')->first();
         foreach (EdgePool::query()->where('enabled', true)->where('withdrawn', false)->orderBy('id')->get() as $pool) {
+            $configuredEndpoints = EdgePoolEndpoint::query()->with(['edge', 'pool'])->where('edge_pool_id', $pool->id)->orderBy('edge_id')->get();
+            $endpoints = $configuredEndpoints->where('withdrawn', false)
+                ->filter(fn (EdgePoolEndpoint $endpoint): bool => $endpoint->isReady())->values();
+            if ($endpoints->isNotEmpty()) {
+                foreach (['A' => 'ipv4', 'AAAA' => 'ipv6'] as $family => $field) {
+                    $familyEndpoints = $endpoints->filter(fn (EdgePoolEndpoint $endpoint): bool => filled($endpoint->{$field}))->values();
+                    if ($familyEndpoints->isEmpty()) {
+                        continue;
+                    }
+                    foreach ($familyEndpoints->groupBy(fn (EdgePoolEndpoint $endpoint): string => $endpoint->edge->country_code)->sortKeys() as $code => $group) {
+                        self::pushAddresses($rows, EdgeRoutingCompiler::dataHostname($settings, $pool, 'country', $code).'.', $family, $group->pluck($field)->all(), $settings->default_ttl);
+                    }
+                    foreach ($familyEndpoints->groupBy(fn (EdgePoolEndpoint $endpoint): string => $endpoint->edge->continent_code)->sortKeys() as $code => $group) {
+                        self::pushAddresses($rows, EdgeRoutingCompiler::dataHostname($settings, $pool, 'continent', $code).'.', $family, $group->pluck($field)->all(), $settings->default_ttl);
+                    }
+                    self::pushAddresses($rows, EdgeRoutingCompiler::dataHostname($settings, $pool, 'global', 'all').'.', $family, $familyEndpoints->pluck($field)->all(), $settings->default_ttl);
+                    $content = EdgeRoutingCompiler::compileDatabaseLookup($settings, $pool, $family);
+                    $rows->push(['name' => EdgeRoutingCompiler::poolHostname($settings, $pool).'.', 'type' => 'LUA', 'ttl' => $settings->default_ttl, 'content' => $content]);
+                    if ($defaultSharedPool?->is($pool)) {
+                        $rows->push(['name' => $proxy, 'type' => 'LUA', 'ttl' => $settings->default_ttl, 'content' => $content]);
+                    }
+                }
+
+                continue;
+            }
+            if ($configuredEndpoints->isNotEmpty()) {
+                continue;
+            }
             $cells = EdgeCell::query()->with('edge')->where('edge_pool_id', $pool->id)
                 ->where('drained', false)->where('status', 'ready')
                 ->whereHas('edge', fn ($query) => $query->readyForTraffic())

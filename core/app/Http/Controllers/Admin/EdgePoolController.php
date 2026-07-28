@@ -12,7 +12,9 @@ use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
 use App\Models\EdgeCell;
 use App\Models\EdgePool;
+use App\Models\EdgePoolEndpoint;
 use App\Models\Operation;
+use App\Support\EdgePoolEndpointData;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -27,7 +29,49 @@ class EdgePoolController extends Controller
 
     public function show(EdgePool $pool): JsonResponse
     {
-        return response()->json(['data' => $pool]);
+        return response()->json(['data' => $pool->load(['endpoints.edge', 'endpoints.pool'])]);
+    }
+
+    public function storeEndpoint(Request $request, EdgePool $pool, Edge $edge): JsonResponse
+    {
+        abort_if($pool->endpoints()->where('edge_id', $edge->id)->exists(), 409, 'This pool already owns an endpoint on the edge.');
+        $data = EdgePoolEndpointData::validate($request->all());
+        $endpoint = DB::transaction(function () use ($request, $pool, $edge, $data): EdgePoolEndpoint {
+            $endpoint = $pool->endpoints()->create([...$data, 'edge_id' => $edge->id, 'revision' => 1, 'gateway_state' => 'pending', 'readiness_reason' => 'gateway_not_acknowledged']);
+            $pool->update(['revision' => $pool->revision + 1]);
+            AuditLog::record($request->user(), 'edge.pool_endpoint_created', $endpoint, ['edge_id' => $edge->id, 'pool_id' => $pool->id], $request->ip());
+
+            return $endpoint;
+        });
+        ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
+
+        return response()->json(['data' => $endpoint->load(['edge', 'pool'])], 202);
+    }
+
+    public function updateEndpoint(Request $request, EdgePool $pool, EdgePoolEndpoint $endpoint): JsonResponse
+    {
+        abort_unless($endpoint->edge_pool_id === $pool->id, 404);
+        $data = EdgePoolEndpointData::validate(array_merge($endpoint->only(['ipv4', 'ipv6', 'withdrawn']), $request->all()), $endpoint);
+        DB::transaction(function () use ($request, $endpoint, $data): void {
+            $endpoint->update([...$data, 'revision' => $endpoint->revision + 1, 'gateway_state' => 'pending', 'readiness_reason' => 'gateway_not_acknowledged']);
+            AuditLog::record($request->user(), 'edge.pool_endpoint_updated', $endpoint, ['revision' => $endpoint->revision], $request->ip());
+        });
+        ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
+
+        return response()->json(['data' => $endpoint->refresh()->load(['edge', 'pool'])], 202);
+    }
+
+    public function destroyEndpoint(Request $request, EdgePool $pool, EdgePoolEndpoint $endpoint): JsonResponse
+    {
+        abort_unless($endpoint->edge_pool_id === $pool->id, 404);
+        abort_unless($endpoint->withdrawn, 409, 'Withdraw the endpoint before deleting it.');
+        DB::transaction(function () use ($request, $endpoint): void {
+            AuditLog::record($request->user(), 'edge.pool_endpoint_deleted', $endpoint, [], $request->ip());
+            $endpoint->delete();
+        });
+        ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
+
+        return response()->json(null, 204);
     }
 
     public function store(Request $request): JsonResponse
@@ -118,9 +162,12 @@ class EdgePoolController extends Controller
     public function state(Request $request, EdgePool $pool, string $state): JsonResponse
     {
         if ($state === 'enable') {
-            $incomplete = Edge::query()->where('enabled', true)->get()->contains(fn (Edge $edge): bool => $edge->cells()->where('edge_pool_id', $pool->id)->whereNotNull('service_ipv4')->count() < $pool->minimum_ready_cells
-            );
-            abort_if($incomplete, 409, 'Every enabled edge requires an IPv4 service address before the pool can be enabled.');
+            $usesEndpoints = $pool->endpoints()->exists();
+            $incomplete = Edge::query()->where('enabled', true)->get()->contains(fn (Edge $edge): bool => ($usesEndpoints
+                ? ! $pool->endpoints()->where('edge_id', $edge->id)->where(fn ($query) => $query->whereNotNull('ipv4')->orWhereNotNull('ipv6'))->exists()
+                : $edge->cells()->where('edge_pool_id', $pool->id)->whereNotNull('service_ipv4')->count() < $pool->minimum_ready_cells)
+                || $edge->cells()->where('edge_pool_id', $pool->id)->count() < $pool->minimum_ready_cells);
+            abort_if($incomplete, 409, 'Every enabled edge requires a service endpoint and enough participating cells before the pool can be enabled.');
         } else {
             abort_if(DomainEdgePlacement::query()->where('active_pool_id', $pool->id)->orWhere('target_pool_id', $pool->id)->exists(), 409, 'A pool with active or target placements cannot be disabled.');
         }

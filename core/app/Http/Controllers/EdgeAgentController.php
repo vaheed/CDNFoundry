@@ -12,8 +12,10 @@ use App\Models\DomainEdgeCell;
 use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
 use App\Models\EdgeArtifact;
+use App\Models\EdgePoolEndpoint;
 use App\Models\EdgeTask;
 use App\Models\Operation;
+use App\Models\PlatformDnsSetting;
 use App\Models\SecurityEvent;
 use App\Support\ArtifactSigner;
 use App\Support\EdgeCertificateAuthority;
@@ -28,6 +30,24 @@ use RuntimeException;
 
 class EdgeAgentController extends Controller
 {
+    public function gatewayConfig(Request $request): JsonResponse
+    {
+        /** @var Edge $edge */
+        $edge = $request->attributes->get('edge');
+        $endpoints = $edge->poolEndpoints()->with('pool')->where('withdrawn', false)
+            ->whereHas('pool', fn ($query) => $query->where('enabled', true)->where('withdrawn', false))->orderBy('id')->get();
+        $bindings = $endpoints->flatMap(function (EdgePoolEndpoint $endpoint) use ($edge): array {
+            $cells = $edge->cells()->where('edge_pool_id', $endpoint->edge_pool_id)->where('drained', false)->where('status', 'ready')->orderBy('slot')->get();
+            $targets = $cells->map(fn ($cell): array => ['name' => $cell->name, 'http' => '127.0.0.1:'.$cell->http_port, 'https' => '127.0.0.1:'.$cell->https_port])->all();
+
+            return collect([$endpoint->ipv4, $endpoint->ipv6])->filter()->map(fn (string $address): array => ['address' => $address, 'pool' => $endpoint->pool->name, 'cells' => $targets])->all();
+        })->values();
+
+        $revision = max((int) $endpoints->max('revision'), (int) PlatformDnsSetting::query()->whereKey(1)->value('revision'));
+
+        return response()->json(['data' => ['revision' => $revision, 'bindings' => $bindings]]);
+    }
+
     public function register(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -126,7 +146,7 @@ class EdgeAgentController extends Controller
         if ($data['active_sequence'] > $latestIssuedSequence) {
             throw ValidationException::withMessages(['active_sequence' => 'The active sequence was not issued to this edge.']);
         }
-        $oldCellRouting = $edge->cells()->orderBy('id')->get(['id', 'status', 'drained', 'service_ipv4', 'service_ipv6'])->toJson();
+        $oldCellRouting = $edge->cells()->orderBy('id')->get(['id', 'status', 'drained'])->toJson();
         $wasRoutable = $edge->enabled && ! $edge->drained && $edge->last_heartbeat_at?->gte(now()->subSeconds(app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds')))
             && ($edge->capacity['listener_ready'] ?? false);
         foreach ($data['cells'] as $cell) {
@@ -135,7 +155,7 @@ class EdgeAgentController extends Controller
         $reportedNames = collect($data['cells'])->pluck('name');
         $edge->cells()->whereNotIn('name', $reportedNames)->whereNotNull('edge_pool_id')->update(['status' => 'degraded', 'capacity' => null]);
         $edge->cells()->whereNotIn('name', $reportedNames)->whereNull('edge_pool_id')->update(['status' => 'stopped', 'capacity' => null]);
-        $computedReady = $edge->cells()->whereNotNull('edge_pool_id')->where('drained', false)->where('status', 'ready')->whereNotNull('service_ipv4')->exists();
+        $computedReady = $edge->cells()->whereNotNull('edge_pool_id')->where('drained', false)->where('status', 'ready')->exists();
         $listenerReady = $data['listener_ready'] && $computedReady;
         $edge->update([
             'last_heartbeat_at' => now(), 'agent_version' => $data['agent_version'],
@@ -146,9 +166,28 @@ class EdgeAgentController extends Controller
                 'cells' => $data['cells'], 'noisy_domains' => $data['noisy_domains'] ?? [],
             ]),
         ]);
+        if (isset($data['gateway'])) {
+            $gatewayReady = (bool) ($data['gateway']['ready'] ?? false);
+            $gatewayRevision = (int) ($data['gateway']['active_revision'] ?? 0);
+            $edge->poolEndpoints()->each(function (EdgePoolEndpoint $endpoint) use ($gatewayReady, $gatewayRevision): void {
+                $endpoint->update([
+                    'gateway_state' => $gatewayReady && $gatewayRevision >= $endpoint->revision ? 'ready' : 'degraded',
+                    'gateway_revision' => max($endpoint->gateway_revision, $gatewayRevision),
+                    'gateway_acknowledged_at' => $gatewayReady ? now() : $endpoint->gateway_acknowledged_at,
+                    'readiness_reason' => $gatewayReady && $gatewayRevision >= $endpoint->revision ? 'ready' : 'gateway_not_acknowledged',
+                ]);
+            });
+        }
         $isRoutable = $edge->enabled && ! $edge->drained && $listenerReady;
-        $newCellRouting = $edge->cells()->orderBy('id')->get(['id', 'status', 'drained', 'service_ipv4', 'service_ipv6'])->toJson();
+        $newCellRouting = $edge->cells()->orderBy('id')->get(['id', 'status', 'drained'])->toJson();
         if ($wasRoutable !== $isRoutable || $oldCellRouting !== $newCellRouting) {
+            if ($oldCellRouting !== $newCellRouting) {
+                $edge->poolEndpoints()->update([
+                    'revision' => DB::raw('revision + 1'),
+                    'gateway_state' => 'pending',
+                    'readiness_reason' => 'gateway_not_acknowledged',
+                ]);
+            }
             ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
         }
         foreach ($data['passive_origins'] ?? [] as $failure) {

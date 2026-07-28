@@ -550,6 +550,63 @@ above. Until that row is Passed, the release decision remains **Blocked**.
 | Manual browser and real traffic | Pending owner run | Steps 1–10 with screenshots, operation/revision IDs, and HTTP/HTTPS evidence |
 | Release decision | Blocked | Owner-run evidence is mandatory |
 
+## Phase 4 — Pool service endpoints and Geo-Unicast
+
+Use two enrolled disposable edges. On the first edge assign three ready cells
+to a shared pool and one ready cell to a reserved pool. Use service addresses
+routed to the test gateways and distinct from every management address.
+
+1. Sign in as administrator and open **Edge network → Edges → View → Pool
+   endpoints**. Create a dual-stack endpoint for the shared pool. Enter its
+   service IPv4 and IPv6. Expect `pending`, desired revision `1`, and no DNS
+   publication before the gateway acknowledges it.
+2. On the same edge create a different endpoint for the reserved pool. Attempt
+   the shared IPv4, a management address, a private address, and an empty pair.
+   Expect field validation and no desired revision or gateway change. Save a
+   distinct valid pair.
+3. Configure the second edge with an IPv4-only shared endpoint. On a disposable
+   pool configure an IPv6-only endpoint. Expect all three family modes to save
+   without synthesizing a missing address.
+4. Set the shared pool minimum ready cells to `3`. Start all three cells and
+   inspect the endpoint table. Expect gateway `ready`, active revision equal to
+   or greater than desired revision, and readiness `ready`. Stop one cell;
+   expect `insufficient_ready_cells` and only that endpoint to leave DNS.
+5. Query the pool hostname from a country matching edge one, a continent-only
+   location, and an unknown location. For A and AAAA separately, expect country,
+   then continent, then global fallback and only ready endpoint addresses.
+6. Send HTTP Host and strict HTTPS SNI traffic to both endpoint pairs. Expect
+   the shared endpoint to distribute only across its three cells and the
+   reserved endpoint to reach only its assigned cell. Unknown Host/SNI and an
+   address/hostname conflict must be rejected before activation.
+7. Withdraw the shared endpoint on edge one. Expect only that edge/pool pair to
+   disappear; the reserved pair and edge-two shared pair continue. Restore it
+   and expect publication only after a new gateway acknowledgement.
+8. Restart the gateway and agent while sending traffic. Expect the prior valid
+   map to serve until the desired candidate validates, then gateway, DNS, pool,
+   and cell state converge to the same revision without a broad domain rewrite.
+9. Sign in as a domain user. Expect denial from endpoint CRUD, gateway candidate,
+   fleet readiness, and management-address data.
+10. Record topology, hardware, domain count, endpoint count, concurrent health
+    changes, DNS reconciliation duration, CPU/memory, saturation point, accepted
+    limit, revision IDs, and sanitized HTTP/HTTPS/DNS evidence for at least two
+    edges and several pools.
+
+### Phase 4 completion gate
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| Implementation | Passed | Revisioned edge/pool endpoints, unique address constraints, mTLS gateway candidate, readiness reasons, Geo-Unicast publication, API, and administrator UI |
+| Unit and feature tests | Passed | 180 isolated Laravel tests / 11,385 assertions; edge-agent Go test/build |
+| Real-runtime E2E | Passed | Two-edge mTLS control-plane and real PowerDNS test; placement migration reached revision 13 with zero obsolete artifacts |
+| IPv4 and IPv6 | Passed | Feature coverage for IPv4-only, IPv6-only, and dual-stack endpoints plus real dual-stack DNS publication |
+| Scale | Passed | Existing 20,000-domain / 10,000-change dataset plus bounded two-edge, two-pool endpoint reconciliation without a domain-wide rewrite |
+| Failure, recovery, and isolation | Passed | Conflict rejection, readiness-gated publication, isolated edge/pool withdrawal, restoration, and last-valid gateway/DNS regression |
+| Observability | Pending owner run | Endpoint state/reason and gateway revision screenshots plus runtime metrics |
+| Documentation | Passed | Endpoint operations, topology, configuration, troubleshooting, and exact owner checklist |
+| Manual browser and real traffic | Pending owner run | Steps 1–10 with screenshots, revisions, and traffic evidence |
+| Regression | Passed | Full Laravel suite, Compose/OpenAPI/docs checks, edge-agent build, cache-control regression, and prior placement scale dataset |
+| Release decision | Blocked | Owner-run evidence is mandatory |
+
 ## Failure record
 
 For every failed or blocked checkpoint, record:
