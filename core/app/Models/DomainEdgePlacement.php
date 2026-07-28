@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class DomainEdgePlacement extends Model
 {
@@ -27,5 +28,10 @@ class DomainEdgePlacement extends Model
     public function targetPool(): BelongsTo
     {
         return $this->belongsTo(EdgePool::class, 'target_pool_id');
+    }
+
+    public function cells(): HasMany
+    {
+        return $this->hasMany(DomainEdgeCell::class, 'domain_id', 'domain_id');
     }
 }

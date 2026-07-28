@@ -40,6 +40,19 @@ uses it when a candidate is absent or invalid at restart.
 ]
 ```
 
+For a multi-cell pool, replace the top-level `http` and `https` target with a
+bounded `cells` array. Each item has the stable `name`, `http`, and `https`
+target for that cell. The compiler uses each cell's assigned hostname set, so
+unrelated cells receive neither routes nor domain artifacts:
+
+```json
+[{"address":"192.0.2.10","pool":"shared-default","cells":[
+  {"name":"cell-01","http":"127.0.0.1:18081","https":"127.0.0.1:18444"},
+  {"name":"cell-03","http":"127.0.0.1:18083","https":"127.0.0.1:18446"},
+  {"name":"cell-04","http":"127.0.0.1:18084","https":"127.0.0.1:18447"}
+]}]
+```
+
 Every address must be assigned to the host. Each address/pool pair expands only
 to hostnames assigned by signed artifacts. Candidates are rejected for unknown
 pools, invalid addresses or targets, duplicate address/hostname pairs, more

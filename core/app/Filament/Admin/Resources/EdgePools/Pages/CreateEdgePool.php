@@ -9,6 +9,7 @@ use App\Models\EdgePool;
 use App\Models\Operation;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\ValidationException;
 
 class CreateEdgePool extends CreateRecord
 {
@@ -16,6 +17,9 @@ class CreateEdgePool extends CreateRecord
 
     protected function handleRecordCreation(array $data): Model
     {
+        if (($data['replicas_per_edge'] ?? 1) > 1 && ! in_array($data['kind'], ['reserved', 'dedicated'], true)) {
+            throw ValidationException::withMessages(['replicas_per_edge' => 'Replicated placement is limited to reserved and dedicated pools.']);
+        }
         abort_if(EdgePool::query()->count() >= 32, 409, 'The deployment has reached the bounded 32-pool limit.');
         $pool = EdgePool::query()->create([...$data, 'enabled' => false]);
         $operation = Operation::query()->create([

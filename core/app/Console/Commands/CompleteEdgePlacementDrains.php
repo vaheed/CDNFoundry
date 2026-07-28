@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
 use App\Models\Domain;
+use App\Models\DomainEdgeCell;
 use App\Models\DomainEdgePlacement;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -37,6 +38,13 @@ class CompleteEdgePlacementDrains extends Command
                     'state' => 'deploying',
                     'drain_after' => null,
                 ]);
+                DomainEdgeCell::query()->where('domain_id', $placement->domain_id)->where('state', 'draining')
+                    ->whereNotNull('target_cell_id')->update([
+                        'active_cell_id' => DB::raw('target_cell_id'), 'state' => 'deploying',
+                        'desired_revision' => $domain->revision, 'drain_after' => null,
+                    ]);
+                DomainEdgeCell::query()->where('domain_id', $placement->domain_id)->where('state', 'draining')
+                    ->whereNull('target_cell_id')->delete();
                 AuditLog::record(null, 'edge.placement_source_retirement_started', $placement, [
                     'source_pool_id' => $source,
                     'target_pool_id' => $target,

@@ -2,10 +2,12 @@
 
 namespace App\Jobs;
 
+use App\Actions\PlanDomainEdgeCells;
 use App\Actions\PromoteReadyEdgePlacements;
 use App\Enums\DomainLifecycleState;
 use App\Http\Controllers\CacheController;
 use App\Models\Domain;
+use App\Models\DomainEdgeCell;
 use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
 use App\Models\EdgeArtifact;
@@ -53,6 +55,7 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
         $placement = null;
         if ($records->isEmpty()) {
             DomainEdgePlacement::query()->where('domain_id', $domain->id)->delete();
+            DomainEdgeCell::query()->where('domain_id', $domain->id)->delete();
         } else {
             $pools = EdgePool::query()->where('enabled', true)->where('kind', 'shared')->orderBy('id')->get();
             if ($pools->isEmpty()) {
@@ -99,6 +102,11 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
         $poolNames = $placement === null ? [] : EdgePool::query()
             ->whereIn('id', array_values(array_filter([$placement->active_pool_id, $placement->target_pool_id])))
             ->orderBy('name')->pluck('name')->all();
+
+        if ($placement !== null) {
+            $targetPool = EdgePool::query()->findOrFail($placement->target_pool_id ?? $placement->active_pool_id);
+            PlanDomainEdgeCells::execute($domain, $placement, $targetPool);
+        }
 
         $blockedAddresses = Edge::query()->pluck('ipv4')->merge(Edge::query()->pluck('ipv6'))
             ->merge(EdgeCell::query()->pluck('service_ipv4'))->merge(EdgeCell::query()->pluck('service_ipv6'))
@@ -149,8 +157,15 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             throw new \RuntimeException('The domain edge artifact exceeds the configured per-domain byte limit.');
         }
         $checksum = hash('sha256', $canonical);
-        $activeEdges = Edge::query()->where('enabled', true)->whereNull('identity_revoked_at')->get();
-        $published = DB::transaction(function () use ($activeEdges, $checksum, $domain, $operation, $records, $revision, $snapshot): bool {
+        $activeEdgesQuery = Edge::query()->where('enabled', true)->whereNull('identity_revoked_at');
+        $hasCellPlacements = ! $records->isEmpty() && DomainEdgeCell::query()->where('domain_id', $domain->id)->exists();
+        if ($hasCellPlacements) {
+            $deliveryEdgeIds = DomainEdgeCell::query()->where('domain_id', $domain->id)->pluck('edge_id')
+                ->merge(EdgeArtifact::query()->where('domain_id', $domain->id)->pluck('edge_id'))->unique();
+            $activeEdgesQuery->whereIn('id', $deliveryEdgeIds);
+        }
+        $activeEdges = $activeEdgesQuery->get();
+        $published = DB::transaction(function () use ($activeEdges, $checksum, $domain, $hasCellPlacements, $operation, $records, $revision, $snapshot): bool {
             $currentDomain = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             if ($currentDomain->revision !== $revision) {
                 return false;
@@ -159,11 +174,19 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
                 'snapshot' => $snapshot, 'checksum' => $checksum, 'status' => 'validated', 'created_by' => $operation?->actor_id,
             ]);
             foreach ($activeEdges as $edge) {
-                $payload = $records->isEmpty() ? ['domain' => $domain->name, 'revision' => $revision] : $snapshot;
+                $cellNames = $hasCellPlacements ? DomainEdgeCell::query()->where('domain_id', $domain->id)->where('edge_id', $edge->id)
+                    ->with(['activeCell:id,name', 'targetCell:id,name'])->get()
+                    ->flatMap(fn (DomainEdgeCell $row) => [$row->activeCell?->name, $row->targetCell?->name])
+                    ->filter()->unique()->sort()->values()->all() : [];
+                $tombstone = $records->isEmpty() || ($hasCellPlacements && $cellNames === []);
+                $payload = $tombstone ? ['domain' => $domain->name, 'revision' => $revision] : [
+                    ...$snapshot,
+                    ...($hasCellPlacements ? ['cells' => $cellNames] : []),
+                ];
                 $artifactChecksum = hash('sha256', ArtifactSigner::encode($payload));
                 EdgeArtifact::query()->firstOrCreate([
                     'edge_id' => $edge->id, 'domain_id' => $domain->id, 'revision' => $revision,
-                    'kind' => $records->isEmpty() ? 'tombstone' : 'domain', 'checksum' => $artifactChecksum,
+                    'kind' => $tombstone ? 'tombstone' : 'domain', 'checksum' => $artifactChecksum,
                 ], ['payload' => $payload, 'signature' => ArtifactSigner::sign($artifactChecksum)]);
             }
 

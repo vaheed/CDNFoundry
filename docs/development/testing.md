@@ -8,7 +8,9 @@ description: Run CDNFoundry unit, feature, contract, real-runtime, and scale qua
 Run `python3 tests/e2e/gateway_ingress.py` for the non-browser gateway runtime
 qualification. It requires the development edge profile and the locally built
 `cdnfoundry/edge-gateway:qualification` image. Coding agents must not run the separate
-manual browser checklist.
+manual browser checklist. The same job creates a disposable three-backend
+shared-pool topology and verifies that three Host routes reach three distinct
+cells while an unrelated hostname is rejected.
 
 Run `python3 tests/e2e/cell_inventory.py` for the eight-slot non-browser cell
 inventory, isolation, restart, storage-bound, and idle/active overhead
@@ -35,8 +37,9 @@ fails closed when those effective values are absent. Never run
 PostgreSQL.
 
 The suite covers policies, validation, idempotency, lifecycle, DNS, Geo-DNS,
-edge proxy, TLS, cache, security, analytics, operations, UI rendering contracts,
-and OpenAPI drift.
+edge proxy, stable multi-cell placement (including a 20,000-domain / 10,000-change
+in-memory scale dataset), TLS, cache, security, analytics, operations, UI
+rendering contracts, and OpenAPI drift.
 
 ## Go agent
 

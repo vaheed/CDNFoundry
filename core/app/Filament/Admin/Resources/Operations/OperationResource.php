@@ -46,7 +46,10 @@ class OperationResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('id')->label('Operation ID')->copyable()->searchable()->limit(12)->tooltip(fn (Operation $record): string => $record->id),
+                TextColumn::make('id')->label('Operation ID')->copyable()
+                    ->copyableState(fn (Operation $record): string => $record->id)
+                    ->copyMessage('Full operation ID copied')
+                    ->searchable()->limit(12)->tooltip(fn (Operation $record): string => $record->id),
                 TextColumn::make('type')->formatStateUsing(fn (string $state): string => self::TYPES[$state] ?? $state)->description(fn (Operation $record): string => $record->type)->searchable()->sortable()->wrap(),
                 TextColumn::make('status')->badge()->sortable(),
                 TextColumn::make('actor.email')->label('Requested by')->placeholder('System')->searchable()->sortable()->toggleable(),

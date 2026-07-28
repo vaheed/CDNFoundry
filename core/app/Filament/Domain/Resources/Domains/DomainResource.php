@@ -94,6 +94,12 @@ class DomainResource extends Resource
                     TextEntry::make('edgePlacement.state')->label('Placement state')->badge()->placeholder('Not placed'),
                     TextEntry::make('edgePlacement.activePool.name')->label('Active service pool')->placeholder('None'),
                     TextEntry::make('edgePlacement.targetPool.name')->label('Target service pool')->placeholder('None'),
+                    TextEntry::make('active_cell_assignments')->label('Active cells by edge')
+                        ->state(fn (Domain $record): array => self::cellAssignments($record, 'activeCell'))
+                        ->listWithLineBreaks()->placeholder('None')->columnSpanFull(),
+                    TextEntry::make('target_cell_assignments')->label('Target cells by edge')
+                        ->state(fn (Domain $record): array => self::cellAssignments($record, 'targetCell'))
+                        ->listWithLineBreaks()->placeholder('None')->columnSpanFull(),
                     TextEntry::make('service_pool_dns_target')->label('Service-pool DNS target')
                         ->state(function (Domain $record): ?string {
                             $placement = $record->edgePlacement()->with(['activePool', 'targetPool'])->first();
@@ -195,6 +201,19 @@ class DomainResource extends Resource
     {
         return Operation::query()->where('type', 'domain.nameservers_verify')
             ->where('input->domain_id', $domain->id)->latest()->first();
+    }
+
+    private static function cellAssignments(Domain $domain, string $relation): array
+    {
+        return $domain->edgeCells()->with(['edge:id,name', $relation.':id,name'])->orderBy('edge_id')->orderBy('replica')->get()
+            ->filter(fn ($placement): bool => $placement->{$relation} !== null)
+            ->map(fn ($placement): string => sprintf(
+                '%s · replica %d · %s · %s',
+                $placement->edge->name,
+                $placement->replica,
+                $placement->{$relation}->name,
+                $placement->state,
+            ))->all();
     }
 
     private static function proxySettingsSummary(mixed $settings): string

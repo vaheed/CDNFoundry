@@ -115,6 +115,62 @@ def isolated_last_valid_test() -> None:
             run("docker", "stop", container + "-restart", check=False)
 
 
+def multi_cell_pool_test() -> None:
+    network = "cdnfoundry-multi-cell-e2e"
+    gateway = "cdnfoundry-multi-cell-gateway-e2e"
+    backends = [f"cdnfoundry-multi-cell-{slot}-e2e" for slot in range(1, 4)]
+    run("docker", "network", "create", network)
+    try:
+        with tempfile.TemporaryDirectory(prefix="cdnfoundry-multi-cell-gateway-") as temporary:
+            base = pathlib.Path(temporary)
+            base.chmod(0o755)
+            for slot, backend in enumerate(backends, 1):
+                config = base / f"cell-{slot:02d}.conf"
+                config.write_text(
+                    "events {} http { server { listen 8080 proxy_protocol; "
+                    f"location / {{ return 200 'cell-{slot:02d}'; }} }} }}"
+                )
+                run("docker", "run", "-d", "--rm", "--name", backend, "--network", network,
+                    "-v", f"{config}:/etc/nginx/nginx.conf:ro", "nginx:1.29-alpine")
+            state = base / "state"
+            state.mkdir()
+            state.chmod(0o777)
+            candidate = {
+                "schema_version": 1, "revision": 23,
+                "listeners": ["127.0.0.50:80"],
+                "routes": [{
+                    "address": "127.0.0.50", "hostname": f"domain-{slot}.example.test",
+                    "http": f"{backend}:8080", "https": f"{backend}:8080",
+                } for slot, backend in enumerate(backends, 1)],
+            }
+            (base / "gateway.json").write_text(json.dumps(candidate))
+            run("docker", "run", "-d", "--rm", "--name", gateway, "--network", network,
+                "--cap-drop", "ALL", "--cap-add", "NET_BIND_SERVICE",
+                "-v", f"{base}:/config:ro", "-v", f"{state}:/state",
+                "-e", "GATEWAY_CONFIG_FILE=/config/gateway.json",
+                "-e", "GATEWAY_STATE_DIR=/state",
+                "-e", "GATEWAY_METRICS_ADDRESS=127.0.0.1:9105",
+                "cdnfoundry/edge-gateway:qualification")
+            time.sleep(2)
+            for slot in range(1, 4):
+                hostname = f"domain-{slot}.example.test"
+                response = run("docker", "run", "--rm", "--network", f"container:{gateway}",
+                    "curlimages/curl:8.16.0", "--noproxy", "*", "-fsS", "--max-time", "5",
+                    "-H", f"Host: {hostname}", "http://127.0.0.50/").stdout.strip()
+                if response != f"cell-{slot:02d}":
+                    raise RuntimeError(f"{hostname} reached {response!r}, expected cell-{slot:02d}")
+            unknown = run("docker", "run", "--rm", "--network", f"container:{gateway}",
+                "curlimages/curl:8.16.0", "--noproxy", "*", "-fsS", "--max-time", "5",
+                "-H", "Host: unrelated.example.test", "http://127.0.0.50/", check=False)
+            if unknown.returncode == 0:
+                raise RuntimeError("non-participating hostname reached a multi-cell pool")
+    finally:
+        run("docker", "stop", gateway, check=False)
+        for backend in backends:
+            run("docker", "stop", backend, check=False)
+        run("docker", "network", "rm", network, check=False)
+
+
 def main() -> None:
     gateway, cell = runtime()
     hostname = next(
@@ -155,6 +211,7 @@ def main() -> None:
         curl("172.28.20.10", ipv4_hostname, tls=True, gateway=IPV4_ONLY_GATEWAY, tls_ca=ca_path)
 
     isolated_last_valid_test()
+    multi_cell_pool_test()
     print(json.dumps({
         "status": "passed", "revision": revision, "hostname": hostname,
         "families": ["IPv4", "IPv6"], "protocols": ["HTTP Host", "HTTPS SNI"],

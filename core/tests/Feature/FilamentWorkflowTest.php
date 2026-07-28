@@ -5,10 +5,12 @@ namespace Tests\Feature;
 use App\Enums\DomainLifecycleState;
 use App\Filament\Admin\Pages\Telemetry;
 use App\Filament\Admin\Resources\DnsClusters\Pages\ListDnsClusters;
+use App\Filament\Admin\Resources\EdgePools\Pages\EditEdgePool as EditServicePool;
 use App\Filament\Admin\Resources\EdgePools\Pages\ListEdgePools;
 use App\Filament\Admin\Resources\Edges\Pages\EditEdge;
 use App\Filament\Admin\Resources\Edges\Pages\ListEdges;
 use App\Filament\Admin\Resources\Edges\RelationManagers\CellsRelationManager;
+use App\Filament\Admin\Resources\Operations\Pages\ListOperations;
 use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
 use App\Filament\Domain\Resources\Domains\RelationManagers\DnsRecordsRelationManager;
 use App\Jobs\BuildUsageRollups;
@@ -18,6 +20,8 @@ use App\Jobs\ReconcileAllEdgeDomains;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\Domain;
+use App\Models\DomainEdgeCell;
+use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
 use App\Models\EdgeArtifact;
 use App\Models\EdgeCell;
@@ -34,6 +38,33 @@ use Tests\TestCase;
 class FilamentWorkflowTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_pool_policy_form_limits_replication_and_queues_reconciliation(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        $shared = EdgePool::query()->where('kind', 'shared')->firstOrFail();
+        $reserved = EdgePool::query()->create([
+            'name' => 'ui-policy', 'kind' => 'reserved', 'enabled' => true,
+            'minimum_ready_cells' => 1, 'replicas_per_edge' => 1, 'maximum_domains_per_cell' => 100,
+        ]);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(EditServicePool::class, ['record' => $shared->id])
+            ->fillForm(['replicas_per_edge' => 2])
+            ->call('save')
+            ->assertHasFormErrors(['replicas_per_edge']);
+
+        Livewire::test(EditServicePool::class, ['record' => $reserved->id])
+            ->fillForm(['minimum_ready_cells' => 2, 'replicas_per_edge' => 2, 'maximum_domains_per_cell' => 80])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $operation = Operation::query()->where('type', 'edge.global_reconcile')->latest('created_at')->firstOrFail();
+        $this->assertSame(['pool_id' => $reserved->id, 'reason' => 'pool_policy_changed'], $operation->input);
+        Queue::assertPushed(ReconcileAllEdgeDomains::class, fn (ReconcileAllEdgeDomains $job): bool => $job->operationId === $operation->id);
+    }
 
     public function test_geo_cname_without_a_continent_saves_and_owner_conflicts_are_visible(): void
     {
@@ -282,6 +313,118 @@ class FilamentWorkflowTest extends TestCase
         Queue::assertPushed(ReconcileAllDnsZones::class);
         Queue::assertPushed(ReconcileAllEdgeDomains::class);
         Queue::assertPushed(BuildUsageRollups::class);
+    }
+
+    public function test_domain_delivery_status_lists_active_and_target_cells_by_edge(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $domain = Domain::query()->create(['name' => 'cells-ui.example.test', 'display_name' => 'Cells UI', 'revision' => 4]);
+        $source = EdgePool::query()->where('kind', 'shared')->firstOrFail();
+        $target = EdgePool::query()->where('kind', 'quarantine')->firstOrFail();
+        $edge = Edge::query()->create(['name' => 'cells-ui-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'ipv4' => '203.0.113.70']);
+        $activeCell = $edge->cells()->create(['slot' => 1, 'edge_pool_id' => $source->id, 'status' => 'ready', 'service_ipv4' => '203.0.113.70']);
+        $targetCell = $edge->cells()->create(['slot' => 2, 'edge_pool_id' => $target->id, 'status' => 'ready', 'service_ipv4' => '203.0.113.71']);
+        DomainEdgePlacement::query()->create(['domain_id' => $domain->id, 'active_pool_id' => $source->id, 'target_pool_id' => $target->id, 'desired_revision' => 4, 'state' => 'deploying']);
+        DomainEdgeCell::query()->create([
+            'domain_id' => $domain->id, 'edge_id' => $edge->id, 'replica' => 1,
+            'active_cell_id' => $activeCell->id, 'target_cell_id' => $targetCell->id,
+            'desired_revision' => 4, 'state' => 'deploying',
+        ]);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->assertSee('Active cells by edge')->assertSee('Target cells by edge')
+            ->assertSee('cells-ui-edge · replica 1 · cell-01 · deploying')
+            ->assertSee('cells-ui-edge · replica 1 · cell-02 · deploying');
+    }
+
+    public function test_administrator_can_assign_a_free_cell_from_the_edge_screen(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        $pool = EdgePool::query()->create(['name' => 'ui-cell-target', 'kind' => 'reserved', 'enabled' => false]);
+        $edge = Edge::query()->create(['name' => 'ui-free-cell-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'ipv4' => '203.0.113.80']);
+        $cell = $edge->cells()->create(['slot' => 2, 'status' => 'unassigned']);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        $component = fn () => Livewire::test(CellsRelationManager::class, [
+            'ownerRecord' => $edge,
+            'pageClass' => EditEdge::class,
+        ]);
+        $component()->callTableAction('assignPool', $cell, [
+            'edge_pool_id' => $pool->id,
+            'service_ipv4' => '10.0.0.10',
+            'service_ipv6' => null,
+        ])->assertHasFormErrors(['service_ipv4']);
+        $this->assertNull($cell->refresh()->edge_pool_id);
+
+        $component()->callTableAction('assignPool', $cell, [
+            'edge_pool_id' => $pool->id,
+            'service_ipv4' => '8.8.4.4',
+            'service_ipv6' => null,
+        ])->assertHasNoFormErrors();
+
+        $this->assertDatabaseHas('edge_cells', [
+            'id' => $cell->id, 'edge_pool_id' => $pool->id, 'status' => 'assigned',
+            'service_ipv4' => '8.8.4.4', 'service_ipv6' => null,
+        ]);
+        $operation = Operation::query()->where('type', 'edge.global_reconcile')->firstOrFail();
+        $this->assertSame(['pool_id' => $pool->id, 'cell_id' => $cell->id], $operation->input);
+        Queue::assertPushed(ReconcileAllEdgeDomains::class, fn (ReconcileAllEdgeDomains $job): bool => $job->operationId === $operation->id);
+    }
+
+    public function test_administrator_can_move_a_domain_to_another_service_pool(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        $domain = Domain::query()->create(['name' => 'move-ui.example.test', 'display_name' => 'Move UI', 'revision' => 5]);
+        $domain->dnsRecords()->create(DnsRecordData::validate([
+            'type' => 'A', 'name' => 'www', 'content' => '192.0.2.25', 'ttl' => 300, 'mode' => 'proxied',
+            'origin' => [
+                'host' => '8.8.8.8', 'port' => 80, 'scheme' => 'http', 'host_header' => 'www.move-ui.example.test',
+                'sni' => null, 'verify_tls' => false, 'connect_timeout_ms' => 2000, 'response_timeout_ms' => 30000,
+                'retry_count' => 0, 'websocket' => false, 'health_check' => null,
+            ],
+        ], $domain->name));
+        $source = EdgePool::query()->where('kind', 'shared')->firstOrFail();
+        $target = EdgePool::query()->create(['name' => 'move-ui-target', 'kind' => 'reserved', 'enabled' => true]);
+        DomainEdgePlacement::query()->create([
+            'domain_id' => $domain->id, 'active_pool_id' => $source->id,
+            'desired_revision' => $domain->revision, 'state' => 'active',
+        ]);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->callAction('moveEdgePool', data: ['pool_id' => $target->id])
+            ->assertHasNoActionErrors();
+
+        $this->assertDatabaseHas('domain_edge_placements', [
+            'domain_id' => $domain->id, 'active_pool_id' => $source->id, 'target_pool_id' => $target->id,
+            'desired_revision' => 6, 'state' => 'deploying',
+        ]);
+        $operation = Operation::query()->where('type', 'edge.domain_reconcile')->firstOrFail();
+        $this->assertSame(['domain_id' => $domain->id], $operation->input);
+        Queue::assertPushed(ReconcileEdgeDomain::class, fn (ReconcileEdgeDomain $job): bool => $job->domainId === $domain->id);
+    }
+
+    public function test_operation_copy_control_contains_the_complete_identifier(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $operation = Operation::query()->create([
+            'actor_id' => $admin->id, 'type' => 'edge.global_reconcile', 'status' => 'pending', 'input' => [],
+        ]);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        $html = Livewire::test(ListOperations::class)->html();
+
+        $this->assertMatchesRegularExpression(
+            '/navigator\\.clipboard\\.writeText\\([^)]*'.preg_quote($operation->id, '/').'/s',
+            html_entity_decode($html),
+        );
     }
 
     public function test_administrator_can_reconcile_a_pools_missing_cell_assignments(): void

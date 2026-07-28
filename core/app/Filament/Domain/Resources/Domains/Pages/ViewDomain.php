@@ -300,17 +300,35 @@ class ViewDomain extends ViewRecord
                     ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
                 }),
             Action::make('moveEdgePool')->label('Move service pool')->icon('heroicon-o-arrows-right-left')->schema([
-                Select::make('pool_id')->label('Target pool')->options(fn (): array => EdgePool::query()->where('enabled', true)->orderBy('name')->pluck('name', 'id')->all())->required(),
+                Select::make('pool_id')->label('Target pool')->options(function (): array {
+                    $placement = DomainEdgePlacement::query()->where('domain_id', $this->record->id)->first();
+
+                    return EdgePool::query()->where('enabled', true)->where('withdrawn', false)
+                        ->whereNotIn('id', array_values(array_filter([$placement?->target_pool_id, $placement?->active_pool_id])))
+                        ->orderBy('name')->pluck('name', 'id')->all();
+                })->required(),
             ])->visible(fn (): bool => auth()->user()?->isAdmin() === true && $this->record->dnsRecords()->where('mode', 'proxied')->exists())
                 ->action(function (array $data): void {
-                    DB::transaction(function () use ($data): void {
+                    [$operation, $pool, $domain] = DB::transaction(function () use ($data): array {
                         $domain = $this->record->newQuery()->lockForUpdate()->findOrFail($this->record->id);
+                        $pool = EdgePool::query()->whereKey($data['pool_id'])->where('enabled', true)->where('withdrawn', false)->lockForUpdate()->firstOrFail();
+                        $placement = DomainEdgePlacement::query()->where('domain_id', $domain->id)->lockForUpdate()->first();
+                        abort_if(in_array($pool->id, [$placement?->active_pool_id, $placement?->target_pool_id], true), 422, 'Select a different service pool.');
+                        if ($pool->kind === 'dedicated') {
+                            abort_if(DomainEdgePlacement::query()->where('domain_id', '!=', $domain->id)
+                                ->where(fn ($query) => $query->where('active_pool_id', $pool->id)->orWhere('target_pool_id', $pool->id))->exists(), 409, 'A dedicated pool can be assigned to only one domain.');
+                        }
                         $domain->update(['revision' => $domain->revision + 1]);
-                        DomainEdgePlacement::query()->updateOrCreate(['domain_id' => $domain->id], ['target_pool_id' => $data['pool_id'], 'desired_revision' => $domain->revision, 'state' => 'deploying', 'last_error' => null]);
-                        AuditLog::record(auth()->user(), 'edge.domain_move_requested', $domain, ['target_pool_id' => $data['pool_id'], 'revision' => $domain->revision], request()->ip());
+                        DomainEdgePlacement::query()->updateOrCreate(['domain_id' => $domain->id], ['target_pool_id' => $pool->id, 'desired_revision' => $domain->revision, 'state' => 'deploying', 'drain_after' => null, 'last_error' => null]);
+                        AuditLog::record(auth()->user(), 'edge.domain_move_requested', $domain, ['target_pool_id' => $pool->id, 'revision' => $domain->revision], request()->ip());
+                        $operation = Operation::coalesceDomain('edge.domain_reconcile', $domain->id, auth()->id());
+
+                        return [$operation, $pool, $domain];
                     });
-                    Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
                     ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
+                    $this->record->refresh();
+                    Notification::make()->success()->title('Service pool move queued')
+                        ->body("Operation {$operation->id} is moving {$domain->name} to {$pool->name} at revision {$domain->revision}. The source remains active until target readiness is acknowledged.")->send();
                 }),
             Action::make('verifyNameservers')->label('Verify nameservers')->icon('heroicon-o-shield-check')
                 ->visible(fn (): bool => $this->record->nameservers_verified_at === null && $this->record->lifecycle_state !== DomainLifecycleState::Deprovisioning)

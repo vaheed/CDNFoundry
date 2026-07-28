@@ -147,14 +147,24 @@ burst of 10,000 placement-affecting changes without unnecessary reshuffling.
 
 **Completion checklist:**
 
-- [ ] One shared pool uses at least three cells on one edge.
-- [ ] Placement remains stable across unrelated changes.
-- [ ] Reserved, dedicated, and quarantine rules are enforced.
-- [ ] Failed target readiness keeps the source active.
-- [ ] Successful movement removes old state only after the target is serving.
-- [ ] Non-participating cells receive no artifacts.
-- [ ] Pool readiness evaluates all required cells.
+- [x] One shared pool uses at least three cells on one edge.
+- [x] Placement remains stable across unrelated changes.
+- [x] Reserved, dedicated, and quarantine rules are enforced.
+- [x] Failed target readiness keeps the source active.
+- [x] Successful movement removes old state only after the target is serving.
+- [x] Non-participating cells receive no artifacts.
+- [x] Pool readiness evaluates all required cells.
 - [ ] Tests, scale, documentation, and manual qualification pass.
+
+**Agent completion evidence (2026-07-28):** implementation, the PostgreSQL
+expand migration, 177 isolated Laravel tests / 11,369 assertions, edge-agent Go
+tests and image build, OpenAPI generation, the 20,000-domain / 10,000-change
+stability dataset, and the real gateway three-cell routing/isolation test pass.
+Strict IPv4/IPv6 HTTP and HTTPS, IPv4-only, invalid-candidate, restart, and
+last-valid gateway regression also pass on x86_64, 32 vCPU, 15.6 GiB RAM, Docker
+29.1.3. Documentation and the exact owner checklist are current. The final
+combined checkbox remains open only because browser/manual real-traffic
+qualification is owner-run and has not been executed by the coding agent.
 
 ## Phase 4 — Pool service endpoints and Geo-Unicast
 

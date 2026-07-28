@@ -21,6 +21,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -40,9 +41,18 @@ class EdgePoolResource extends Resource
     {
         return $schema->components([
             TextInput::make('name')->required()->maxLength(100)->unique(ignoreRecord: true)
-                ->helperText('Stable runtime name shared by one equivalent OpenResty cell at each participating edge.'),
-            Select::make('kind')->options(['shared' => 'Shared', 'quarantine' => 'Quarantine', 'dedicated' => 'Dedicated'])->required()
+                ->helperText('Stable pool identity; participating cells retain their independent slot identities.'),
+            Select::make('kind')->options(['shared' => 'Shared', 'reserved' => 'Reserved', 'quarantine' => 'Quarantine', 'dedicated' => 'Dedicated'])->required()
                 ->helperText('Shared is the normal default. Quarantine isolates risky/noisy domains. Dedicated is an explicit exceptional allocation, never one per domain.'),
+            TextInput::make('minimum_ready_cells')->numeric()->minValue(1)->maxValue(32)->required()->default(1),
+            TextInput::make('replicas_per_edge')->numeric()->minValue(1)->maxValue(3)->required()->default(1)
+                ->rule(fn (Get $get) => function (string $attribute, mixed $value, \Closure $fail) use ($get): void {
+                    if ((int) $value > 1 && ! in_array($get('kind'), ['reserved', 'dedicated'], true)) {
+                        $fail('Replicated placement is limited to reserved and dedicated pools.');
+                    }
+                })
+                ->helperText('Normal placement is one stable cell per edge. Replication is bounded and only valid for reserved or dedicated pools.'),
+            TextInput::make('maximum_domains_per_cell')->numeric()->minValue(1)->maxValue(100000)->required()->default(20000),
         ]);
     }
 
@@ -60,6 +70,8 @@ class EdgePoolResource extends Resource
                 ->copyable()->placeholder('Configure System DNS identity')->wrap(),
             TextColumn::make('revision')->sortable(),
             TextColumn::make('cells_count')->counts('cells')->label('Edge cells'),
+            TextColumn::make('minimum_ready_cells')->label('Min ready'),
+            TextColumn::make('replicas_per_edge')->label('Replicas/edge'),
             TextColumn::make('updated_at')->since()->sortable(),
         ])->recordActions([
             Action::make('reconcileCells')->label('Reconcile cells')->icon('heroicon-o-arrow-path')

@@ -83,7 +83,7 @@ The Compose file fixes `APP_ENV=production`, `APP_DEBUG=false`,
 | `PDNS_API_KEY` | DNS | Private PowerDNS API credential |
 | `DNS_BIND_V4` | DNS | DNSdist IPv4 publication; default `0.0.0.0` |
 | `PDNS_CA_CERTIFICATE` | control worker | Trust anchor for HTTPS PowerDNS API gateways |
-| `EDGE_GATEWAY_BINDINGS` | edge agent | Bounded JSON array of service address, pool, and private cell targets |
+| `EDGE_GATEWAY_BINDINGS` | edge agent | Bounded JSON array of service address, pool, and either one legacy target or up to 32 named private cell targets |
 | `EDGE_GATEWAY_STATUS_URL` | edge agent | Gateway metrics URL used for heartbeat readiness |
 | `EDGE_GATEWAY_METRICS_ADDRESS` | edge gateway | Restricted metrics listener; production default `0.0.0.0:9105` |
 | `EDGE_GATEWAY_MAX_CONNECTIONS` | edge gateway | Global accepted-connection bound, `128`–`65536` (default `8192`) |

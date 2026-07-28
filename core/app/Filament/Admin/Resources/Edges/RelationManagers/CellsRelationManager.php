@@ -3,11 +3,14 @@
 namespace App\Filament\Admin\Resources\Edges\RelationManagers;
 
 use App\Actions\DispatchEmergencyMode;
+use App\Jobs\ReconcileAllEdgeDomains;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
 use App\Models\EdgeCell;
+use App\Models\EdgePool;
 use App\Models\EdgeTask;
 use App\Models\EmergencyMode;
+use App\Models\Operation;
 use App\Support\EdgeCellAddressData;
 use App\Support\NetworkAddress;
 use App\Support\PlatformSettings;
@@ -22,6 +25,7 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class CellsRelationManager extends RelationManager
@@ -92,7 +96,51 @@ class CellsRelationManager extends RelationManager
                 TextColumn::make('runtime_path')->label('Runtime path')->toggleable(isToggledHiddenByDefault: true),
                 IconColumn::make('drained')->boolean(),
             ])->recordActions([
-                EditAction::make()->mutateDataUsing(fn (array $data, EdgeCell $record): array => EdgeCellAddressData::validate($record, $data))
+                Action::make('assignPool')->label('Assign service pool')->icon('heroicon-o-link')
+                    ->visible(fn (EdgeCell $record): bool => $record->edge_pool_id === null)
+                    ->schema([
+                        Select::make('edge_pool_id')->label('Service pool')
+                            ->options(fn (): array => EdgePool::query()->where('withdrawn', false)->orderBy('name')->pluck('name', 'id')->all())
+                            ->required()->searchable()->preload(),
+                        TextInput::make('service_ipv4')->label('Public service IPv4')->ipv4()->required()
+                            ->rule(fn () => function (string $attribute, mixed $value, \Closure $fail): void {
+                                if (NetworkAddress::isUnsafe((string) $value)) {
+                                    $fail('The cell service address must be public unicast.');
+                                }
+                            }),
+                        TextInput::make('service_ipv6')->label('Public service IPv6')->ipv6()->nullable()
+                            ->rule(fn () => function (string $attribute, mixed $value, \Closure $fail): void {
+                                if (filled($value) && NetworkAddress::isUnsafe((string) $value)) {
+                                    $fail('The cell service address must be public unicast.');
+                                }
+                            }),
+                    ])->action(function (EdgeCell $record, array $data): void {
+                        [$cell, $pool, $operation] = DB::transaction(function () use ($data, $record): array {
+                            $cell = EdgeCell::query()->lockForUpdate()->findOrFail($record->id);
+                            abort_if($cell->edge_pool_id !== null, 409, 'The cell has already been assigned to a service pool.');
+                            abort_if($cell->drained, 409, 'A drained cell cannot participate in a service pool.');
+                            $pool = EdgePool::query()->whereKey($data['edge_pool_id'])->where('withdrawn', false)->lockForUpdate()->firstOrFail();
+                            $cell->update(['edge_pool_id' => $pool->id, 'status' => 'assigned']);
+                            $addresses = EdgeCellAddressData::validate($cell, $data);
+                            $cell->update($addresses);
+                            $pool->update(['revision' => $pool->revision + 1]);
+                            $operation = Operation::query()->create([
+                                'actor_id' => auth()->id(), 'type' => 'edge.global_reconcile', 'status' => 'pending',
+                                'input' => ['pool_id' => $pool->id, 'cell_id' => $cell->id],
+                            ]);
+                            AuditLog::record(auth()->user(), 'edge.pool_cell_assigned', $cell, [
+                                'pool_id' => $pool->id, 'operation_id' => $operation->id,
+                            ], request()->ip());
+
+                            return [$cell, $pool, $operation];
+                        });
+                        ReconcileAllEdgeDomains::dispatch($operation->id)->afterCommit();
+                        ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
+                        Notification::make()->success()->title('Cell assigned to service pool')
+                            ->body("Operation {$operation->id} is reconciling {$pool->name}; configure changes are targeted to {$cell->name}.")->send();
+                    }),
+                EditAction::make()->visible(fn (EdgeCell $record): bool => $record->edge_pool_id !== null)
+                    ->mutateDataUsing(fn (array $data, EdgeCell $record): array => EdgeCellAddressData::validate($record, $data))
                     ->after(function (EdgeCell $record): void {
                         AuditLog::record(auth()->user(), 'edge.cell_addresses_updated', $record, [], request()->ip());
                         ReconcilePlatformDnsIdentity::dispatchForRoutingChange();

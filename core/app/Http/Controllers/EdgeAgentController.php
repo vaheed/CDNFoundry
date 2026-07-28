@@ -8,6 +8,7 @@ use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\CachePurge;
 use App\Models\DnsRecord;
 use App\Models\Domain;
+use App\Models\DomainEdgeCell;
 use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
 use App\Models\EdgeArtifact;
@@ -257,6 +258,9 @@ class EdgeAgentController extends Controller
             $message = $data['reason'].(filled($data['details'] ?? null) ? ': '.$data['details'] : '');
             DomainEdgePlacement::query()->where('domain_id', $artifact->domain_id)
                 ->where('desired_revision', $artifact->revision)->whereNotNull('target_pool_id')
+                ->update(['state' => 'failed', 'last_error' => mb_substr($message, 0, 4000)]);
+            DomainEdgeCell::query()->where('domain_id', $artifact->domain_id)->where('edge_id', $edge->id)
+                ->where('desired_revision', $artifact->revision)->whereNotNull('target_cell_id')
                 ->update(['state' => 'failed', 'last_error' => mb_substr($message, 0, 4000)]);
             Operation::query()->where('type', 'edge.domain_reconcile')->whereIn('status', ['pending', 'running'])
                 ->where('input->domain_id', $artifact->domain_id)

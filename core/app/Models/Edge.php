@@ -26,6 +26,11 @@ class Edge extends Model
         return $this->hasMany(EdgeArtifact::class);
     }
 
+    public function domainCells(): HasMany
+    {
+        return $this->hasMany(DomainEdgeCell::class);
+    }
+
     public function tasks(): HasMany
     {
         return $this->hasMany(EdgeTask::class);

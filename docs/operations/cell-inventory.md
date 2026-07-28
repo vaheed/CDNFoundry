@@ -46,16 +46,25 @@ calls only that slot's private authenticated control endpoint. Restart drains
 the runtime briefly and advances its restart generation without restarting the
 agent, gateway, or unrelated cells.
 
-Use **Reconcile cells** on a service pool when an existing edge is missing that
-pool's Phase 2 assignment. Reconciliation asynchronously claims one existing
-unassigned slot per missing edge and never creates another slot. Phase 2 allows
-at most one cell from a pool on each edge; assigning several cells from one edge
-to the same pool is Phase 3 work.
+Use **Reconcile cells** on a service pool when an existing edge has no
+participating cell. Reconciliation asynchronously claims one existing
+unassigned slot per missing edge and never creates another slot. Additional
+cells are assigned from **Edge network → Edges → Cells → Assign service pool**;
+the administrator supplies the pool and public service addresses in one
+validated action. Automation can use
+`PUT /api/admin/edge-pools/{pool}/cells/{cell}`. Both paths persist desired state
+and queue bounded reconciliation rather than changing a runtime synchronously.
+Removal fails while the cell owns an active or target domain placement or would
+violate the pool's minimum-ready policy.
 
 ## Failure and recovery
 
 - A stopped or saturated slot leaves the gateway, agent, and other slot cgroups
   running. Routes targeting it fail in isolation.
+- Deploying placements older than five minutes are requeued in bounded batches.
+  This repairs interrupted upgrades and missing per-cell state without
+  replacing the active route before the target is acknowledged. Draining has
+  its own bounded completion command.
 - Invalid signed state or an invalid slot mapping never replaces the agent's
   previous active state.
 - Agent restart reconstructs every assigned and empty unassigned slot file from

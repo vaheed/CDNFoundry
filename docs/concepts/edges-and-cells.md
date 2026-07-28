@@ -8,7 +8,7 @@ description: Understand CDNFoundry edge enrollment, runtime cells, placement, an
 ```mermaid
 flowchart TB
     Domain["Domain desired state"] --> Placement["Stable placement"]
-    Placement --> Pool["shared, quarantine, or dedicated pool"]
+    Placement --> Pool["shared, reserved, dedicated, or quarantine pool"]
     Pool --> EdgeA["Edge A"]
     Pool --> EdgeB["Edge B"]
     EdgeA --> SharedA["cell-01 assigned to shared"]
@@ -20,7 +20,7 @@ flowchart TB
 ```
 
 An edge is one enrolled agent identity and host. A pool is a stable service
-class: `shared`, `quarantine`, or exceptional `dedicated`. A cell slot is a
+class: `shared`, `reserved`, exceptional `dedicated`, or `quarantine`. A cell slot is a
 bounded OpenResty runtime with stable identity independent of its optional pool
 assignment.
 
@@ -72,8 +72,15 @@ events.
 
 ## Placement
 
+A pool explicitly participates on an edge through one or more assigned cells.
+Normal domains have one durable, rendezvous-hashed cell assignment per
+participating edge. Adding an unrelated domain or cell preserves existing
+assignments and cache locality. Reserved and dedicated pools may opt into two
+or three replicas per edge; shared and quarantine pools remain single-copy.
+Every pool also bounds domains per cell and declares a minimum ready-cell count.
+
 A domain has one active pool and may have one target pool during movement.
-Target cells receive and acknowledge the current revision first. DNS then
+Only its active and target cells receive its signed artifact. Target cells receive and acknowledge the current revision first. DNS then
 publishes the target; the source remains active for the configured drain
 interval. This avoids withdrawing the only valid route.
 

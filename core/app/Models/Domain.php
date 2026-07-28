@@ -36,6 +36,11 @@ class Domain extends Model
         return $this->hasOne(DomainEdgePlacement::class);
     }
 
+    public function edgeCells(): HasMany
+    {
+        return $this->hasMany(DomainEdgeCell::class);
+    }
+
     public function tlsCertificates(): HasMany
     {
         return $this->hasMany(TlsCertificate::class);

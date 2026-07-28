@@ -134,6 +134,34 @@ func TestRuntimeAssignsSupplementalCertificatesPerHostname(t *testing.T) {
 	}
 }
 
+func TestRuntimeTargetsOnlySelectedCellsWithinOnePool(t *testing.T) {
+	domain := json.RawMessage(`{"domain":"example.test","domain_id":7,"revision":2,"pools":["shared-default"],"cells":["cell-02"],"settings":{"enabled":true},"cache":{},"tls":{"mode":"disabled"},"hostnames":[{"hostname":"www.example.test","origin":{"host":"origin.example"}}]}`)
+	_, runtimes, err := compileRuntime(state{Sequence: 9, Domains: map[string]json.RawMessage{"7": domain}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &client{runtimeDir: t.TempDir(), cellAssignments: map[string]string{"cell-01": "shared-default", "cell-02": "shared-default", "cell-03": "shared-default"}}
+	if err := c.writeCellRuntimes(9, runtimes); err != nil {
+		t.Fatal(err)
+	}
+	for _, cell := range []string{"cell-01", "cell-02", "cell-03"} {
+		body, err := os.ReadFile(filepath.Join(c.runtimeDir, cell+".json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var runtime struct {
+			Hosts map[string]any `json:"hosts"`
+		}
+		if json.Unmarshal(body, &runtime) != nil {
+			t.Fatalf("invalid runtime for %s", cell)
+		}
+		present := runtime.Hosts["www.example.test"] != nil
+		if present != (cell == "cell-02") {
+			t.Fatalf("domain targeting leaked to %s: %#v", cell, runtime.Hosts)
+		}
+	}
+}
+
 func TestCompileGatewayRoutesByAddressAndPool(t *testing.T) {
 	pools := map[string]map[string]any{
 		"shared-default": {

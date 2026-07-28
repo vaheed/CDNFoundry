@@ -16,6 +16,7 @@ Schedule::command('model:prune', ['--model' => IdempotencyKey::class])->hourly()
 Schedule::command('dns:deprovision-due')->everyMinute()->withoutOverlapping();
 Schedule::command('domains:finalize-deprovisioning')->everyMinute()->withoutOverlapping();
 Schedule::command('edge:complete-placement-drains')->everyMinute()->withoutOverlapping();
+Schedule::command('edge:reconcile-stale-placements')->everyMinute()->withoutOverlapping();
 Schedule::command('edge:dispatch-origin-checks')->everyMinute()->withoutOverlapping();
 Schedule::command('edge:prune-revisions')->dailyAt('02:30')->withoutOverlapping();
 Schedule::job(new ReconcilePlatformDnsIdentity)->everyMinute()->withoutOverlapping();

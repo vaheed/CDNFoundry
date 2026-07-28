@@ -797,7 +797,10 @@ func (c *client) activate(s state) error {
 
 func (c *client) writeCellRuntimes(sequence uint64, pools map[string]map[string]any) error {
 	for cellName, poolName := range c.resolvedCellAssignments(pools) {
-		runtime := pools[poolName]
+		runtime := pools[cellName]
+		if runtime == nil {
+			runtime = pools[poolName]
+		}
 		if runtime == nil {
 			runtime = map[string]any{"schema_version": 1, "sequence": sequence, "hosts": map[string]any{}, "certificates": map[string]any{}}
 		}
@@ -822,7 +825,7 @@ func (c *client) resolvedCellAssignments(pools map[string]map[string]any) map[st
 	}
 	unassignedPools := []string{}
 	for poolName := range pools {
-		if !assigned[poolName] {
+		if !assigned[poolName] && !validCellName(poolName) {
 			unassignedPools = append(unassignedPools, poolName)
 		}
 	}
@@ -858,6 +861,8 @@ func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) 
 	poolHosts := map[string]map[string]any{}
 	certificates := map[string]any{}
 	poolCertificates := map[string]map[string]any{}
+	cellHosts := map[string]map[string]any{}
+	cellCertificates := map[string]map[string]any{}
 	for _, raw := range s.Domains {
 		var domain struct {
 			Domain    string         `json:"domain"`
@@ -868,6 +873,7 @@ func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) 
 			Security  map[string]any `json:"security"`
 			TLS       map[string]any `json:"tls"`
 			Pools     []string       `json:"pools"`
+			Cells     []string       `json:"cells"`
 			Hostnames []struct {
 				Hostname         string         `json:"hostname"`
 				Origin           map[string]any `json:"origin"`
@@ -936,9 +942,28 @@ func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) 
 			}
 			compiled := map[string]any{"domain": domain.Domain, "domain_id": domain.DomainID, "revision": domain.Revision, "settings": domain.Settings, "cache": domain.Cache, "security": domain.Security, "tls": hostTLS, "origin": host.Origin}
 			hosts[name] = compiled
+			for _, cell := range domain.Cells {
+				if !validCellName(cell) {
+					return nil, nil, errors.New("invalid runtime cell name")
+				}
+				if cellHosts[cell] == nil {
+					cellHosts[cell] = map[string]any{}
+					cellCertificates[cell] = map[string]any{}
+				}
+				if cellHosts[cell][name] != nil {
+					return nil, nil, errors.New("duplicate runtime cell hostname")
+				}
+				cellHosts[cell][name] = compiled
+				if hostCertificateID != "" {
+					cellCertificates[cell][hostCertificateID] = certificates[hostCertificateID]
+				}
+			}
 			for _, pool := range domain.Pools {
 				if !validPoolName(pool) {
 					return nil, nil, errors.New("invalid runtime pool name")
+				}
+				if len(domain.Cells) > 0 {
+					continue
 				}
 				if poolHosts[pool] == nil {
 					poolHosts[pool] = map[string]any{}
@@ -957,6 +982,9 @@ func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) 
 	pools := map[string]map[string]any{}
 	for name, assigned := range poolHosts {
 		pools[name] = map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": assigned, "certificates": poolCertificates[name]}
+	}
+	for name, assigned := range cellHosts {
+		pools[name] = map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": assigned, "certificates": cellCertificates[name]}
 	}
 	return map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": hosts, "certificates": certificates}, pools, nil
 }
@@ -978,6 +1006,11 @@ type gatewayBinding struct {
 	Pool    string `json:"pool"`
 	HTTP    string `json:"http"`
 	HTTPS   string `json:"https"`
+	Cells   []struct {
+		Name  string `json:"name"`
+		HTTP  string `json:"http"`
+		HTTPS string `json:"https"`
+	} `json:"cells"`
 }
 
 func compileGateway(sequence uint64, pools map[string]map[string]any, raw string) (map[string]any, error) {
@@ -992,32 +1025,60 @@ func compileGateway(sequence uint64, pools map[string]map[string]any, raw string
 		address := net.ParseIP(binding.Address)
 		poolRuntime := pools[binding.Pool]
 		hosts, _ := poolRuntime["hosts"].(map[string]any)
-		if address == nil || !validPoolName(binding.Pool) || hosts == nil || binding.HTTP == "" || binding.HTTPS == "" {
+		if address == nil || !validPoolName(binding.Pool) || len(binding.Cells) > 32 {
 			return nil, errors.New("invalid gateway binding")
 		}
-		for _, target := range []string{binding.HTTP, binding.HTTPS} {
-			host, port, err := net.SplitHostPort(target)
-			value, _ := strconv.Atoi(port)
-			if err != nil || value < 1 || value > 65535 || net.ParseIP(host) == nil && !validPoolName(host) {
-				return nil, errors.New("invalid gateway target")
+		targets := []struct {
+			name, http, https string
+			hosts             map[string]any
+		}{}
+		if len(binding.Cells) == 0 {
+			if hosts == nil || binding.HTTP == "" || binding.HTTPS == "" {
+				return nil, errors.New("invalid gateway binding")
+			}
+			targets = append(targets, struct {
+				name, http, https string
+				hosts             map[string]any
+			}{binding.Pool, binding.HTTP, binding.HTTPS, hosts})
+		} else {
+			for _, cell := range binding.Cells {
+				cellHosts, _ := pools[cell.Name]["hosts"].(map[string]any)
+				if !validCellName(cell.Name) || cellHosts == nil {
+					return nil, errors.New("invalid gateway cell binding")
+				}
+				targets = append(targets, struct {
+					name, http, https string
+					hosts             map[string]any
+				}{cell.Name, cell.HTTP, cell.HTTPS, cellHosts})
+			}
+		}
+		for _, target := range targets {
+			for _, endpoint := range []string{target.http, target.https} {
+				host, port, err := net.SplitHostPort(endpoint)
+				value, _ := strconv.Atoi(port)
+				if err != nil || value < 1 || value > 65535 || net.ParseIP(host) == nil && !validPoolName(host) {
+					return nil, errors.New("invalid gateway target")
+				}
 			}
 		}
 		listenerSet[net.JoinHostPort(address.String(), "80")] = true
 		listenerSet[net.JoinHostPort(address.String(), "443")] = true
-		names := make([]string, 0, len(hosts))
-		for name := range hosts {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			key := address.String() + "|" + name
-			if routeSet[key] {
-				return nil, errors.New("duplicate gateway address and hostname")
+		for _, target := range targets {
+			names := make([]string, 0, len(target.hosts))
+			for name := range target.hosts {
+				names = append(names, name)
 			}
-			routeSet[key] = true
-			routes = append(routes, map[string]any{
-				"address": address.String(), "hostname": name, "http": binding.HTTP, "https": binding.HTTPS,
-			})
+			sort.Strings(names)
+			for _, name := range names {
+				key := address.String() + "|" + name
+				if routeSet[key] {
+					return nil, errors.New("duplicate gateway address and hostname")
+				}
+				routeSet[key] = true
+				routes = append(routes, map[string]any{
+					"address": address.String(), "hostname": name, "http": target.http, "https": target.https, "cell": target.name,
+				})
+			}
 		}
 	}
 	listeners := make([]string, 0, len(listenerSet))
