@@ -37,8 +37,6 @@ class CreateEdge extends CreateRecord
                     'cache_path' => "/var/cache/cdnfoundry/{$name}", 'temporary_path' => "/var/lib/cdnfoundry/tmp/{$name}",
                     'resource_limits' => ['memory_bytes' => 536870912, 'cpu_millis' => 500, 'pids' => 128, 'cache_bytes' => 268435456, 'temporary_bytes' => 67108864, 'log_bytes' => 16777216],
                     'status' => $pool === null ? 'unassigned' : 'assigned',
-                    'service_ipv4' => $pool?->kind === 'shared' ? $edge->ipv4 : null,
-                    'service_ipv6' => $pool?->kind === 'shared' ? $edge->ipv6 : null,
                 ]);
             }
             AuditLog::record(auth()->user(), 'edge.created', $edge, [], request()->ip());

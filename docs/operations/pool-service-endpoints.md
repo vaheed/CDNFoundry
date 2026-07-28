@@ -6,7 +6,9 @@ description: Operate revisioned public endpoint pairs backed by bounded cells.
 # Pool service endpoints and Geo-Unicast
 
 An edge/pool endpoint owns one public IPv4 address, one public IPv6 address, or
-one of each. The addresses are distinct from the edge management addresses.
+one of each. An edge management address is optional, may be private, and is
+used for operator inventory/management rather than public traffic. Management
+addresses cannot be reused as service endpoint addresses.
 Several cells assigned to the same pool and edge are private gateway targets;
 they do not own additional public addresses.
 
@@ -25,10 +27,17 @@ acknowledged the endpoint revision. Country answers fall back to continent and
 then global answers. IPv4 and IPv6 are evaluated independently, so IPv4-only,
 IPv6-only, and dual-stack endpoints are valid.
 
-Withdrawing one endpoint removes only that edge/pool pair. Pool withdrawal
+**Temporarily remove from traffic** keeps the endpoint row but removes only that
+edge/pool pair from gateway candidates and DNS. Turning it off restores the
+pair after a fresh gateway acknowledgement. Pool emergency withdrawal
 removes every endpoint for that pool but does not alter other pools on the same
 edge. DNS reconciliation is coalesced and retains the last valid PowerDNS zone
 if rendering or activation fails.
+
+To remove one address family, edit the endpoint and clear IPv4 or IPv6; at
+least one family must remain. To delete the endpoint completely, first enable
+**Temporarily remove from traffic**, wait for withdrawal if traffic is live,
+then use **Delete**. Deleting an endpoint does not unassign its cells.
 
 ## Recovery
 

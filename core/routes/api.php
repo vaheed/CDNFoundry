@@ -209,7 +209,6 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:account'])->group
         Route::post('/edge-deployments/reconcile', [EdgeOperationsController::class, 'reconcile'])->middleware('idempotent');
         Route::get('/edge-cells', [EdgeOperationsController::class, 'cells']);
         Route::get('/edge-cells/{cell}', [EdgeOperationsController::class, 'cell']);
-        Route::patch('/edge-cells/{cell}', [EdgeOperationsController::class, 'updateCell'])->middleware('idempotent');
         Route::post('/edge-cells/{cell}/drain', [EdgeOperationsController::class, 'drainCell'])->middleware('idempotent');
         Route::post('/edge-cells/{cell}/undrain', [EdgeOperationsController::class, 'undrainCell'])->middleware('idempotent');
         Route::post('/edge-cells/{cell}/restart', [EdgeOperationsController::class, 'restartCell'])->middleware('idempotent');

@@ -197,8 +197,9 @@ with endpoint-health changes measured without rewriting every domain.
 - [x] Restart and reconciliation converge gateway, DNS, pool, and cell state.
 - [ ] Tests, scale, documentation, and manual qualification pass.
 
-**Agent completion evidence (2026-07-28):** the PostgreSQL expand migration
-applied in 151.20 ms; 180 isolated Laravel tests / 11,385 assertions, edge-agent
+**Agent completion evidence (2026-07-28):** the PostgreSQL endpoint migration
+and strict management-address cleanup applied, most recently in 54.32 ms; 182
+isolated Laravel tests / 11,388 assertions, edge-agent
 Go tests and image build, Compose/OpenAPI/docs validation, and the two-edge real
 PowerDNS control-plane test pass. The runtime test covered a three-cell
 dual-stack pair, an isolated second-pool pair, withdrawal/restoration,

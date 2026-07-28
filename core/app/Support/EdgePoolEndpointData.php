@@ -23,7 +23,7 @@ final class EdgePoolEndpointData
             }
             foreach (['ipv4', 'ipv6'] as $field) {
                 $address = $input[$field] ?? null;
-                if ($address && (NetworkAddress::isUnsafe($address) || Edge::query()->where('ipv4', $address)->orWhere('ipv6', $address)->exists())) {
+                if ($address && (NetworkAddress::isUnsafe($address) || Edge::query()->where('management_ipv4', $address)->orWhere('management_ipv6', $address)->exists())) {
                     $validator->errors()->add($field, 'The endpoint must use a public unicast address distinct from management addresses.');
                 }
             }

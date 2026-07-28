@@ -129,6 +129,10 @@ class EdgePoolController extends Controller
 
     public function assignCell(Request $request, EdgePool $pool, EdgeCell $cell): JsonResponse
     {
+        $request->validate([
+            'service_ipv4' => ['prohibited'],
+            'service_ipv6' => ['prohibited'],
+        ]);
         abort_if($cell->edge_pool_id !== null && $cell->edge_pool_id !== $pool->id, 409, 'The cell is already assigned to another pool.');
         abort_if($cell->drained, 409, 'A drained cell cannot participate in a pool.');
         [$operation] = DB::transaction(function () use ($request, $pool, $cell): array {
@@ -150,7 +154,7 @@ class EdgePoolController extends Controller
         abort_if(DomainEdgeCell::query()->where(fn ($query) => $query->where('active_cell_id', $cell->id)->orWhere('target_cell_id', $cell->id))->exists(), 409, 'Move all domain placements away from the cell before unassigning it.');
         abort_if($pool->cells()->where('edge_id', $cell->edge_id)->where('id', '!=', $cell->id)->count() < $pool->minimum_ready_cells, 409, 'The assignment is required by the pool minimum-ready-cell policy on this edge.');
         DB::transaction(function () use ($request, $pool, $cell): void {
-            $cell->update(['edge_pool_id' => null, 'status' => 'unassigned', 'service_ipv4' => null, 'service_ipv6' => null]);
+            $cell->update(['edge_pool_id' => null, 'status' => 'unassigned']);
             $pool->update(['revision' => $pool->revision + 1]);
             AuditLog::record($request->user(), 'edge.pool_cell_unassigned', $cell, ['pool_id' => $pool->id], $request->ip());
         });
@@ -162,10 +166,7 @@ class EdgePoolController extends Controller
     public function state(Request $request, EdgePool $pool, string $state): JsonResponse
     {
         if ($state === 'enable') {
-            $usesEndpoints = $pool->endpoints()->exists();
-            $incomplete = Edge::query()->where('enabled', true)->get()->contains(fn (Edge $edge): bool => ($usesEndpoints
-                ? ! $pool->endpoints()->where('edge_id', $edge->id)->where(fn ($query) => $query->whereNotNull('ipv4')->orWhereNotNull('ipv6'))->exists()
-                : $edge->cells()->where('edge_pool_id', $pool->id)->whereNotNull('service_ipv4')->count() < $pool->minimum_ready_cells)
+            $incomplete = Edge::query()->where('enabled', true)->get()->contains(fn (Edge $edge): bool => ! $pool->endpoints()->where('edge_id', $edge->id)->where(fn ($query) => $query->whereNotNull('ipv4')->orWhereNotNull('ipv6'))->exists()
                 || $edge->cells()->where('edge_pool_id', $pool->id)->count() < $pool->minimum_ready_cells);
             abort_if($incomplete, 409, 'Every enabled edge requires a service endpoint and enough participating cells before the pool can be enabled.');
         } else {

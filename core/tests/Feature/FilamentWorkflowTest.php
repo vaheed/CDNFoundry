@@ -157,20 +157,18 @@ class FilamentWorkflowTest extends TestCase
         $component()->callTableAction('create', null, $invalid)->assertHasFormErrors(['origin.host']);
     }
 
-    public function test_cells_show_enrollment_state_and_use_the_same_address_rules_as_the_api(): void
+    public function test_cells_show_enrollment_state_without_public_address_fields(): void
     {
         $admin = User::factory()->admin()->create();
         $edge = Edge::query()->create([
             'name' => 'edge-ui', 'country_code' => 'IR', 'continent_code' => 'AS',
-            'ipv4' => '203.0.113.10', 'ipv6' => '2001:db8::10',
+            'management_ipv4' => '203.0.113.10', 'management_ipv6' => '2001:db8::10',
         ]);
         $pool = EdgePool::query()->where('kind', 'shared')->orderBy('id')->firstOrFail();
         $cell = EdgeCell::query()->create([
             'edge_id' => $edge->id,
             'edge_pool_id' => $pool->id,
             'name' => $pool->name,
-            'service_ipv4' => $edge->ipv4,
-            'service_ipv6' => $edge->ipv6,
             'capacity' => [
                 'cpu_usage' => 0.25,
                 'memory_usage' => 67108864,
@@ -193,19 +191,8 @@ class FilamentWorkflowTest extends TestCase
             ->assertSee('64.0 MiB / 512.0 MiB memory')
             ->assertSee('10.0 MiB / 256.0 MiB cache')
             ->assertSee('1.00 MiB / 64.0 MiB temporary');
-        $component()->callTableAction('edit', $cell, [
-            'service_ipv4' => '10.0.0.10',
-            'service_ipv6' => '2001:db8::11',
-        ])->assertHasFormErrors(['service_ipv4']);
-        $component()->callTableAction('edit', $cell, [
-            'service_ipv4' => '203.0.113.11',
-            'service_ipv6' => '2001:db8::11',
-        ])->assertHasNoFormErrors();
-
         $this->assertDatabaseHas('edge_cells', [
             'id' => $cell->id,
-            'service_ipv4' => '203.0.113.11',
-            'service_ipv6' => '2001:db8::11',
         ]);
     }
 
@@ -270,7 +257,7 @@ class FilamentWorkflowTest extends TestCase
         ]);
         $edge = Edge::query()->create([
             'name' => 'disable-ui-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
-            'ipv4' => '203.0.113.44',
+            'management_ipv4' => '203.0.113.44',
         ]);
         EdgeArtifact::query()->create([
             'edge_id' => $edge->id, 'domain_id' => $domain->id, 'revision' => 4, 'kind' => 'domain',
@@ -321,9 +308,9 @@ class FilamentWorkflowTest extends TestCase
         $domain = Domain::query()->create(['name' => 'cells-ui.example.test', 'display_name' => 'Cells UI', 'revision' => 4]);
         $source = EdgePool::query()->where('kind', 'shared')->firstOrFail();
         $target = EdgePool::query()->where('kind', 'quarantine')->firstOrFail();
-        $edge = Edge::query()->create(['name' => 'cells-ui-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'ipv4' => '203.0.113.70']);
-        $activeCell = $edge->cells()->create(['slot' => 1, 'edge_pool_id' => $source->id, 'status' => 'ready', 'service_ipv4' => '203.0.113.70']);
-        $targetCell = $edge->cells()->create(['slot' => 2, 'edge_pool_id' => $target->id, 'status' => 'ready', 'service_ipv4' => '203.0.113.71']);
+        $edge = Edge::query()->create(['name' => 'cells-ui-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.70']);
+        $activeCell = $edge->cells()->create(['slot' => 1, 'edge_pool_id' => $source->id, 'status' => 'assigned']);
+        $targetCell = $edge->cells()->create(['slot' => 2, 'edge_pool_id' => $target->id, 'status' => 'assigned']);
         DomainEdgePlacement::query()->create(['domain_id' => $domain->id, 'active_pool_id' => $source->id, 'target_pool_id' => $target->id, 'desired_revision' => 4, 'state' => 'deploying']);
         DomainEdgeCell::query()->create([
             'domain_id' => $domain->id, 'edge_id' => $edge->id, 'replica' => 1,
@@ -344,7 +331,7 @@ class FilamentWorkflowTest extends TestCase
         Queue::fake();
         $admin = User::factory()->admin()->create();
         $pool = EdgePool::query()->create(['name' => 'ui-cell-target', 'kind' => 'reserved', 'enabled' => false]);
-        $edge = Edge::query()->create(['name' => 'ui-free-cell-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'ipv4' => '203.0.113.80']);
+        $edge = Edge::query()->create(['name' => 'ui-free-cell-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.80']);
         $cell = $edge->cells()->create(['slot' => 2, 'status' => 'unassigned']);
         Filament::setCurrentPanel(Filament::getPanel('admin'));
         $this->actingAs($admin);
@@ -355,20 +342,10 @@ class FilamentWorkflowTest extends TestCase
         ]);
         $component()->callTableAction('assignPool', $cell, [
             'edge_pool_id' => $pool->id,
-            'service_ipv4' => '10.0.0.10',
-            'service_ipv6' => null,
-        ])->assertHasFormErrors(['service_ipv4']);
-        $this->assertNull($cell->refresh()->edge_pool_id);
-
-        $component()->callTableAction('assignPool', $cell, [
-            'edge_pool_id' => $pool->id,
-            'service_ipv4' => '8.8.4.4',
-            'service_ipv6' => null,
         ])->assertHasNoFormErrors();
 
         $this->assertDatabaseHas('edge_cells', [
             'id' => $cell->id, 'edge_pool_id' => $pool->id, 'status' => 'assigned',
-            'service_ipv4' => '8.8.4.4', 'service_ipv6' => null,
         ]);
         $operation = Operation::query()->where('type', 'edge.global_reconcile')->firstOrFail();
         $this->assertSame(['pool_id' => $pool->id, 'cell_id' => $cell->id], $operation->input);

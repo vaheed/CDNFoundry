@@ -64,7 +64,7 @@ class EdgePoolResource extends Resource
             TextColumn::make('name')->searchable()->sortable(),
             TextColumn::make('kind')->badge(),
             IconColumn::make('enabled')->boolean(),
-            IconColumn::make('withdrawn')->boolean(),
+            IconColumn::make('withdrawn')->label('Emergency withdrawal')->boolean(),
             TextColumn::make('routing_target')->label('DNS routing target')
                 ->state(fn (EdgePool $record): ?string => $settings === null ? null : EdgeRoutingCompiler::poolHostname($settings, $record))
                 ->copyable()->placeholder('Configure System DNS identity')->wrap(),
@@ -87,9 +87,10 @@ class EdgePoolResource extends Resource
                         ->body("Operation {$operation->id} will assign one existing unassigned slot on each missing edge.")->send();
                 }),
             Action::make('enable')->visible(fn (EdgePool $record): bool => ! $record->enabled)->action(function (EdgePool $record): void {
-                $incomplete = $record->cells()->whereHas('edge', fn ($query) => $query->where('enabled', true))->whereNull('service_ipv4')->exists();
+                $incomplete = $record->cells()->whereHas('edge', fn ($query) => $query->where('enabled', true))->exists()
+                    && $record->endpoints()->count() < $record->cells()->distinct('edge_id')->count('edge_id');
                 if ($incomplete) {
-                    Notification::make()->danger()->title('Configure every enabled edge cell service address first')->send();
+                    Notification::make()->danger()->title('Create one pool endpoint on every participating edge first')->send();
 
                     return;
                 }

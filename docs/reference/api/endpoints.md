@@ -146,7 +146,6 @@ for authentication, pagination, response, and retry behaviour.
 | `POST` | `/admin/edge-cells/{cell}/restart` | Required | Supported | `post.admin.edge-cells.cell.restart` |
 | `POST` | `/admin/edge-cells/{cell}/undrain` | Required | Supported | `post.admin.edge-cells.cell.undrain` |
 | `GET` | `/admin/edge-cells/{cell}` | Required | No | `get.admin.edge-cells.cell` |
-| `PATCH` | `/admin/edge-cells/{cell}` | Required | Supported | `patch.admin.edge-cells.cell` |
 | `GET` | `/admin/edge-cells` | Required | No | `get.admin.edge-cells` |
 | `POST` | `/admin/edge-deployments/reconcile` | Required | Supported | `post.admin.edge-deployments.reconcile` |
 | `GET` | `/admin/edge-deployments` | Required | No | `get.admin.edge-deployments` |

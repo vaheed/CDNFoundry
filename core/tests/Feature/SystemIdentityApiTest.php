@@ -130,23 +130,23 @@ class SystemIdentityApiTest extends TestCase
         $settings = PlatformDnsSetting::query()->create(['id' => 1, ...$this->validPayload(), 'revision' => 1]);
         $ready = Edge::query()->create([
             'name' => 'ready-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
-            'ipv4' => '203.0.113.40', 'ipv6' => '2001:db8::40', 'registered_at' => now(),
+            'management_ipv4' => '203.0.113.40', 'management_ipv6' => '2001:db8::40', 'registered_at' => now(),
             'last_heartbeat_at' => now(), 'capacity' => ['listener_ready' => true],
         ]);
         $unready = Edge::query()->create([
             'name' => 'unready-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
-            'ipv4' => '203.0.113.41', 'ipv6' => '2001:db8::41', 'registered_at' => now(),
+            'management_ipv4' => '203.0.113.41', 'management_ipv6' => '2001:db8::41', 'registered_at' => now(),
             'last_heartbeat_at' => now(), 'capacity' => ['listener_ready' => false],
         ]);
         $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
         $ready->cells()->create([
             'edge_pool_id' => $pool->id, 'name' => $pool->name, 'status' => 'ready',
-            'service_ipv4' => $ready->ipv4, 'service_ipv6' => $ready->ipv6,
         ]);
         $unready->cells()->create([
             'edge_pool_id' => $pool->id, 'name' => $pool->name, 'status' => 'ready',
-            'service_ipv4' => $unready->ipv4, 'service_ipv6' => $unready->ipv6,
         ]);
+        $pool->endpoints()->create(['edge_id' => $ready->id, 'ipv4' => '8.8.8.8', 'ipv6' => '2606:4700:4700::1111', 'revision' => 1, 'gateway_revision' => 1, 'gateway_state' => 'ready']);
+        $pool->endpoints()->create(['edge_id' => $unready->id, 'ipv4' => '8.8.4.4', 'ipv6' => '2606:4700:4700::1001', 'revision' => 1, 'gateway_revision' => 1, 'gateway_state' => 'ready']);
 
         $proxyRows = collect(PlatformDnsZone::render($settings))->where('name', 'proxy.cdnf.test.');
         $this->assertSame(['LUA'], $proxyRows->pluck('type')->unique()->values()->all());
@@ -157,9 +157,9 @@ class SystemIdentityApiTest extends TestCase
         $this->assertStringContainsString('pickhashed', $content);
         $addressRows = collect(PlatformDnsZone::render($settings))->flatMap(fn (array $row): array => $row['records']);
         $addresses = $addressRows->pluck('content');
-        $this->assertTrue($addresses->contains('203.0.113.40'));
-        $this->assertTrue($addresses->contains('2001:db8::40'));
-        $this->assertFalse($addresses->contains('203.0.113.41'));
+        $this->assertTrue($addresses->contains('8.8.8.8'));
+        $this->assertTrue($addresses->contains('2606:4700:4700::1111'));
+        $this->assertFalse($addresses->contains('8.8.4.4'));
     }
 
     public function test_platform_proxy_hostname_publishes_an_ipv4_only_ready_cell(): void
@@ -167,17 +167,17 @@ class SystemIdentityApiTest extends TestCase
         $settings = PlatformDnsSetting::query()->create(['id' => 1, ...$this->validPayload(), 'revision' => 1]);
         $edge = Edge::query()->create([
             'name' => 'ipv4-only-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
-            'ipv4' => '203.0.113.50', 'ipv6' => null, 'registered_at' => now(),
+            'management_ipv4' => '203.0.113.50', 'management_ipv6' => null, 'registered_at' => now(),
             'last_heartbeat_at' => now(), 'capacity' => ['listener_ready' => true],
         ]);
         $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
         $edge->cells()->create([
             'edge_pool_id' => $pool->id, 'name' => $pool->name, 'status' => 'ready',
-            'service_ipv4' => $edge->ipv4, 'service_ipv6' => null,
         ]);
+        $pool->endpoints()->create(['edge_id' => $edge->id, 'ipv4' => '8.8.8.8', 'revision' => 1, 'gateway_revision' => 1, 'gateway_state' => 'ready']);
 
         $addressRows = collect(PlatformDnsZone::render($settings))->flatMap(fn (array $row): array => $row['records']);
-        $this->assertTrue($addressRows->pluck('content')->contains('203.0.113.50'));
+        $this->assertTrue($addressRows->pluck('content')->contains('8.8.8.8'));
     }
 
     public function test_domain_user_cannot_read_dns_identity_or_other_users_operation(): void

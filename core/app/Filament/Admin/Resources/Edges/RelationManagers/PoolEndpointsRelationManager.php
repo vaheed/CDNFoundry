@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\EdgePoolEndpoint;
 use App\Support\EdgePoolEndpointData;
 use Filament\Actions\CreateAction;
+use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -29,7 +30,8 @@ class PoolEndpointsRelationManager extends RelationManager
             TextInput::make('ipv4')->label('Service IPv4')->ipv4()->nullable(),
             TextInput::make('ipv6')->label('Service IPv6')->ipv6()->nullable()
                 ->helperText('Configure IPv4, IPv6, or both. Management addresses are not valid service endpoints.'),
-            Toggle::make('withdrawn')->helperText('Withdraw only this edge/pool endpoint from gateway candidates and DNS.'),
+            Toggle::make('withdrawn')->label('Temporarily remove from traffic')
+                ->helperText('Keeps this endpoint saved but removes it from this edge gateway and DNS after reconciliation. Turn it off to restore traffic.'),
         ]);
     }
 
@@ -43,13 +45,17 @@ class PoolEndpointsRelationManager extends RelationManager
             TextColumn::make('readiness')->state(fn (EdgePoolEndpoint $record): string => $record->readinessReason())->badge(),
             TextColumn::make('revision')->label('Desired revision'),
             TextColumn::make('gateway_revision')->label('Active revision'),
-            IconColumn::make('withdrawn')->boolean(),
+            IconColumn::make('withdrawn')->label('Temporarily removed')->boolean(),
         ])->headerActions([
             CreateAction::make()->mutateDataUsing(fn (array $data): array => [...EdgePoolEndpointData::validate($data), 'revision' => 1, 'gateway_state' => 'pending', 'readiness_reason' => 'gateway_not_acknowledged'])
                 ->after(fn (EdgePoolEndpoint $record) => self::changed($record, 'edge.pool_endpoint_created')),
         ])->recordActions([
             EditAction::make()->mutateDataUsing(fn (array $data, EdgePoolEndpoint $record): array => [...EdgePoolEndpointData::validate($data, $record), 'revision' => $record->revision + 1, 'gateway_state' => 'pending', 'readiness_reason' => 'gateway_not_acknowledged'])
                 ->after(fn (EdgePoolEndpoint $record) => self::changed($record, 'edge.pool_endpoint_updated')),
+            DeleteAction::make()->visible(fn (EdgePoolEndpoint $record): bool => $record->withdrawn)
+                ->requiresConfirmation()
+                ->before(fn (EdgePoolEndpoint $record) => AuditLog::record(auth()->user(), 'edge.pool_endpoint_deleted', $record, [], request()->ip()))
+                ->after(fn () => ReconcilePlatformDnsIdentity::dispatchForRoutingChange()),
         ]);
     }
 

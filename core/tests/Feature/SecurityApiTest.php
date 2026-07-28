@@ -164,9 +164,9 @@ class SecurityApiTest extends TestCase
     public function test_emergency_modes_are_bounded_async_idempotent_and_expire(): void
     {
         $admin = User::factory()->admin()->create();
-        $edge = Edge::query()->create(['name' => 'security-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'ipv4' => '203.0.113.10', 'enabled' => true]);
+        $edge = Edge::query()->create(['name' => 'security-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.10', 'enabled' => true]);
         $shared = EdgePool::query()->where('kind', 'shared')->firstOrFail();
-        $cell = $edge->cells()->create(['edge_pool_id' => $shared->id, 'name' => $shared->name, 'status' => 'ready', 'service_ipv4' => '203.0.113.11']);
+        $cell = $edge->cells()->create(['slot' => 1, 'edge_pool_id' => $shared->id, 'status' => 'ready']);
         $headers = ['Idempotency-Key' => (string) Str::uuid()];
         $response = $this->actingAs($admin)->withHeaders($headers)->postJson("/api/admin/edge-cells/{$cell->id}/emergency-mode", [
             'actions' => ['allow_get_head_only', 'disable_origin_retries'], 'duration_minutes' => 10,

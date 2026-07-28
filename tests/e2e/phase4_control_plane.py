@@ -278,8 +278,8 @@ def provision_edge(token: str, name: str, country: str, continent: str, ipv4: st
         "name": name,
         "country_code": country,
         "continent_code": continent,
-        "ipv4": ipv4,
-        "ipv6": ipv6,
+        "management_ipv4": ipv4,
+        "management_ipv6": ipv6,
     }, token)
     edge = created["data"]
     key = directory / f"{name}.key"
@@ -627,12 +627,6 @@ def main() -> None:
         exercise_phase5_cache(token, domain_id, edges, sequences, baseline_revision)
 
         for index, edge in enumerate(edges):
-            _, detail = call("GET", f"/api/admin/edges/{edge['id']}", token=token)
-            cell = next(row for row in detail["data"]["cells"] if row["edge_pool_id"] == quarantine["id"])
-            call("PATCH", f"/api/admin/edge-cells/{cell['id']}", {
-                "service_ipv4": f"198.51.100.{101 + index}",
-                "service_ipv6": f"2001:db8:44::{101 + index}",
-            }, token)
             call("POST", f"/api/admin/edge-pools/{quarantine['id']}/edges/{edge['id']}/endpoint", {
                 "ipv4": f"9.9.9.{101 + index}",
                 "ipv6": f"2620:fe::{101 + index}",

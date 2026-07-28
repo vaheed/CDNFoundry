@@ -53,7 +53,7 @@ class OperationsApiTest extends TestCase
             $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
             $edge = Edge::query()->create([
                 'id' => (string) Str::uuid(), 'name' => 'health-edge', 'country_code' => 'US', 'continent_code' => 'NA',
-                'ipv4' => '192.0.2.80', 'ipv6' => '2001:db8::80', 'enabled' => true, 'drained' => false,
+                'management_ipv4' => '192.0.2.80', 'management_ipv6' => '2001:db8::80', 'enabled' => true, 'drained' => false,
                 'registered_at' => now(), 'last_heartbeat_at' => now(), 'agent_version' => '1.1.0',
                 'capacity' => ['listener_ready' => false, 'last_rejection' => ['reason' => 'candidate_validation_failed']],
             ]);

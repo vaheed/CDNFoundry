@@ -501,10 +501,9 @@ for this checklist.
    per edge, maximum domains per cell, revision, and total participating cells.
 2. Set minimum ready cells to `3`, replicas per edge to `1`, and a test-safe
    capacity. Open **Edge network → Edges**, edit the disposable edge, and use
-   **Assign service pool** on three free cells. Supply the shared pool and each
-   cell's public service IPv4 plus optional IPv6. Expect validation to reject a
-   private address, then expect one operation per valid assignment and stable
-   cell names/paths.
+   **Assign service pool** on three free cells. Select only the shared pool;
+   there are no address fields on a cell. Expect one operation per assignment
+   and stable cell names, ports, and runtime paths.
 3. Attempt replicas `2` on shared and quarantine pools. Expect validation
    failure. On a reserved disposable pool, expect `2` or `3` to save; values
    above `3` must fail. Confirm dedicated placement cannot serve a second
@@ -581,12 +580,16 @@ routed to the test gateways and distinct from every management address.
 7. Withdraw the shared endpoint on edge one. Expect only that edge/pool pair to
    disappear; the reserved pair and edge-two shared pair continue. Restore it
    and expect publication only after a new gateway acknowledgement.
-8. Restart the gateway and agent while sending traffic. Expect the prior valid
+8. Edit a disposable dual-stack endpoint and clear IPv6. Expect IPv4 to remain
+   and IPv6 to disappear after acknowledgement. Clearing the last address must
+   fail. Turn on **Temporarily remove from traffic**, then delete the endpoint;
+   expect the saved endpoint to disappear while its cells remain assigned.
+9. Restart the gateway and agent while sending traffic. Expect the prior valid
    map to serve until the desired candidate validates, then gateway, DNS, pool,
    and cell state converge to the same revision without a broad domain rewrite.
-9. Sign in as a domain user. Expect denial from endpoint CRUD, gateway candidate,
+10. Sign in as a domain user. Expect denial from endpoint CRUD, gateway candidate,
    fleet readiness, and management-address data.
-10. Record topology, hardware, domain count, endpoint count, concurrent health
+11. Record topology, hardware, domain count, endpoint count, concurrent health
     changes, DNS reconciliation duration, CPU/memory, saturation point, accepted
     limit, revision IDs, and sanitized HTTP/HTTPS/DNS evidence for at least two
     edges and several pools.
@@ -596,14 +599,14 @@ routed to the test gateways and distinct from every management address.
 | Gate | Result | Evidence |
 | --- | --- | --- |
 | Implementation | Passed | Revisioned edge/pool endpoints, unique address constraints, mTLS gateway candidate, readiness reasons, Geo-Unicast publication, API, and administrator UI |
-| Unit and feature tests | Passed | 180 isolated Laravel tests / 11,385 assertions; edge-agent Go test/build |
+| Unit and feature tests | Passed | 182 isolated Laravel tests / 11,388 assertions; edge-agent Go test/build |
 | Real-runtime E2E | Passed | Two-edge mTLS control-plane and real PowerDNS test; placement migration reached revision 13 with zero obsolete artifacts |
 | IPv4 and IPv6 | Passed | Feature coverage for IPv4-only, IPv6-only, and dual-stack endpoints plus real dual-stack DNS publication |
 | Scale | Passed | Existing 20,000-domain / 10,000-change dataset plus bounded two-edge, two-pool endpoint reconciliation without a domain-wide rewrite |
 | Failure, recovery, and isolation | Passed | Conflict rejection, readiness-gated publication, isolated edge/pool withdrawal, restoration, and last-valid gateway/DNS regression |
 | Observability | Pending owner run | Endpoint state/reason and gateway revision screenshots plus runtime metrics |
 | Documentation | Passed | Endpoint operations, topology, configuration, troubleshooting, and exact owner checklist |
-| Manual browser and real traffic | Pending owner run | Steps 1–10 with screenshots, revisions, and traffic evidence |
+| Manual browser and real traffic | Pending owner run | Steps 1–11 with screenshots, revisions, and traffic evidence |
 | Regression | Passed | Full Laravel suite, Compose/OpenAPI/docs checks, edge-agent build, cache-control regression, and prior placement scale dataset |
 | Release decision | Blocked | Owner-run evidence is mandatory |
 

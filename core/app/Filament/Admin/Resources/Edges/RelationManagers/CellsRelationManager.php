@@ -11,11 +11,8 @@ use App\Models\EdgePool;
 use App\Models\EdgeTask;
 use App\Models\EmergencyMode;
 use App\Models\Operation;
-use App\Support\EdgeCellAddressData;
-use App\Support\NetworkAddress;
 use App\Support\PlatformSettings;
 use Filament\Actions\Action;
-use Filament\Actions\EditAction;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -38,21 +35,6 @@ class CellsRelationManager extends RelationManager
             Select::make('edge_pool_id')->label('Service pool assignment')->relationship('pool', 'name')
                 ->placeholder('Unassigned')->disabled()->dehydrated(false)
                 ->helperText('Assignments are managed through service-pool provisioning so every participating edge changes asynchronously and consistently.'),
-            TextInput::make('service_ipv4')->label('Public service IPv4')->ipv4()->required()
-                ->rule(fn () => function (string $attribute, mixed $value, \Closure $fail): void {
-                    if (NetworkAddress::isUnsafe((string) $value)) {
-                        $fail('The cell service address must be public unicast.');
-                    }
-                })
-                ->helperText('Address advertised for this pool cell. It must be public, unique, and routed to this runtime listener.'),
-            TextInput::make('service_ipv6')->label('Public service IPv6')->ipv6()
-                ->helperText('Optional. Leave empty for an IPv4-only service endpoint.')
-                ->rule(fn () => function (string $attribute, mixed $value, \Closure $fail): void {
-                    if (filled($value) && NetworkAddress::isUnsafe((string) $value)) {
-                        $fail('The cell service address must be public unicast.');
-                    }
-                })
-                ->helperText('Required when the edge is dual-stack. Non-default pools need addresses distinct from edge management addresses.'),
         ]);
     }
 
@@ -72,8 +54,6 @@ class CellsRelationManager extends RelationManager
                         $state === 'degraded' => 'warning',
                         default => 'info',
                     }),
-                TextColumn::make('service_ipv4')->label('Service addresses')->placeholder('Not configured')
-                    ->description(fn (EdgeCell $record): string => $record->service_ipv6 ?? 'IPv6 not configured'),
                 TextColumn::make('capacity.active_revision')->label('Runtime')->placeholder('Awaiting heartbeat')
                     ->description(fn (EdgeCell $record): string => filled(data_get($record->capacity, 'openresty_version'))
                         ? 'OpenResty '.data_get($record->capacity, 'openresty_version')
@@ -102,18 +82,6 @@ class CellsRelationManager extends RelationManager
                         Select::make('edge_pool_id')->label('Service pool')
                             ->options(fn (): array => EdgePool::query()->where('withdrawn', false)->orderBy('name')->pluck('name', 'id')->all())
                             ->required()->searchable()->preload(),
-                        TextInput::make('service_ipv4')->label('Public service IPv4')->ipv4()->required()
-                            ->rule(fn () => function (string $attribute, mixed $value, \Closure $fail): void {
-                                if (NetworkAddress::isUnsafe((string) $value)) {
-                                    $fail('The cell service address must be public unicast.');
-                                }
-                            }),
-                        TextInput::make('service_ipv6')->label('Public service IPv6')->ipv6()->nullable()
-                            ->rule(fn () => function (string $attribute, mixed $value, \Closure $fail): void {
-                                if (filled($value) && NetworkAddress::isUnsafe((string) $value)) {
-                                    $fail('The cell service address must be public unicast.');
-                                }
-                            }),
                     ])->action(function (EdgeCell $record, array $data): void {
                         [$cell, $pool, $operation] = DB::transaction(function () use ($data, $record): array {
                             $cell = EdgeCell::query()->lockForUpdate()->findOrFail($record->id);
@@ -121,8 +89,6 @@ class CellsRelationManager extends RelationManager
                             abort_if($cell->drained, 409, 'A drained cell cannot participate in a service pool.');
                             $pool = EdgePool::query()->whereKey($data['edge_pool_id'])->where('withdrawn', false)->lockForUpdate()->firstOrFail();
                             $cell->update(['edge_pool_id' => $pool->id, 'status' => 'assigned']);
-                            $addresses = EdgeCellAddressData::validate($cell, $data);
-                            $cell->update($addresses);
                             $pool->update(['revision' => $pool->revision + 1]);
                             $operation = Operation::query()->create([
                                 'actor_id' => auth()->id(), 'type' => 'edge.global_reconcile', 'status' => 'pending',
@@ -138,14 +104,6 @@ class CellsRelationManager extends RelationManager
                         ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
                         Notification::make()->success()->title('Cell assigned to service pool')
                             ->body("Operation {$operation->id} is reconciling {$pool->name}; configure changes are targeted to {$cell->name}.")->send();
-                    }),
-                EditAction::make()->visible(fn (EdgeCell $record): bool => $record->edge_pool_id !== null)
-                    ->mutateDataUsing(fn (array $data, EdgeCell $record): array => EdgeCellAddressData::validate($record, $data))
-                    ->after(function (EdgeCell $record): void {
-                        AuditLog::record(auth()->user(), 'edge.cell_addresses_updated', $record, [], request()->ip());
-                        ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
-                        Notification::make()->success()->title('Cell addresses saved')
-                            ->body('PostgreSQL desired state was updated and DNS routing reconciliation was queued.')->send();
                     }),
                 Action::make('drain')->requiresConfirmation()->visible(fn (EdgeCell $record): bool => ! $record->drained)->action(fn (EdgeCell $record) => self::queue($record, 'drain')),
                 Action::make('undrain')->visible(fn (EdgeCell $record): bool => $record->drained)->action(fn (EdgeCell $record) => self::queue($record, 'undrain')),

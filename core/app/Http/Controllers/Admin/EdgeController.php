@@ -8,7 +8,6 @@ use App\Models\AuditLog;
 use App\Models\Edge;
 use App\Models\EdgePool;
 use App\Support\GeoVocabulary;
-use App\Support\NetworkAddress;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -29,8 +28,7 @@ class EdgeController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $data = $request->validate(['name' => ['required', 'string', 'max:100', 'unique:edges'], 'country_code' => ['required', Rule::in(GeoVocabulary::countries())], 'continent_code' => ['required', Rule::in(GeoVocabulary::CONTINENTS)], 'ipv4' => ['required', 'ipv4', 'unique:edges'], 'ipv6' => ['nullable', 'ipv6', 'unique:edges'], 'cell_slot_count' => ['sometimes', 'integer', 'between:1,32']]);
-        abort_if(NetworkAddress::isUnsafe($data['ipv4']) || (isset($data['ipv6']) && NetworkAddress::isUnsafe($data['ipv6'])), 422, 'Edge addresses must be public unicast service addresses.');
+        $data = $request->validate(['name' => ['required', 'string', 'max:100', 'unique:edges'], 'country_code' => ['required', Rule::in(GeoVocabulary::countries())], 'continent_code' => ['required', Rule::in(GeoVocabulary::CONTINENTS)], 'management_ipv4' => ['nullable', 'ipv4', 'unique:edges'], 'management_ipv6' => ['nullable', 'ipv6', 'unique:edges'], 'ipv4' => ['prohibited'], 'ipv6' => ['prohibited'], 'cell_slot_count' => ['sometimes', 'integer', 'between:1,32']]);
         $token = Str::random(64);
         $edge = DB::transaction(function () use ($data, $token, $request): Edge {
             $edge = Edge::query()->create(array_merge($data, ['country_code' => strtoupper($data['country_code']), 'continent_code' => strtoupper($data['continent_code']), 'cell_slot_count' => $data['cell_slot_count'] ?? 8, 'bootstrap_token_hash' => hash('sha256', $token)]));
@@ -40,8 +38,6 @@ class EdgeController extends Controller
                 $edge->cells()->create([
                     'slot' => $slot, 'edge_pool_id' => $pool?->id,
                     'status' => $pool === null ? 'unassigned' : 'assigned',
-                    'service_ipv4' => $pool?->kind === 'shared' ? $edge->ipv4 : null,
-                    'service_ipv6' => $pool?->kind === 'shared' ? $edge->ipv6 : null,
                 ]);
             }
             AuditLog::record($request->user(), 'edge.created', $edge, [], $request->ip());
@@ -58,25 +54,17 @@ class EdgeController extends Controller
             'name' => ['sometimes', 'string', 'max:100', Rule::unique('edges')->ignore($edge)],
             'country_code' => ['sometimes', Rule::in(GeoVocabulary::countries())],
             'continent_code' => ['sometimes', Rule::in(GeoVocabulary::CONTINENTS)],
-            'ipv4' => ['sometimes', 'ipv4', Rule::unique('edges')->ignore($edge)],
-            'ipv6' => ['sometimes', 'nullable', 'ipv6', Rule::unique('edges')->ignore($edge)],
+            'management_ipv4' => ['sometimes', 'nullable', 'ipv4', Rule::unique('edges')->ignore($edge)],
+            'management_ipv6' => ['sometimes', 'nullable', 'ipv6', Rule::unique('edges')->ignore($edge)],
+            'ipv4' => ['prohibited'],
+            'ipv6' => ['prohibited'],
         ]);
-        foreach (array_filter([$data['ipv4'] ?? null, $data['ipv6'] ?? null]) as $address) {
-            abort_if(NetworkAddress::isUnsafe($address), 422, 'Edge addresses must be public unicast service addresses.');
-        }
         DB::transaction(function () use ($request, $edge, $data): void {
-            $oldIpv4 = $edge->ipv4;
-            $oldIpv6 = $edge->ipv6;
             $edge->update([
                 ...$data,
                 ...(isset($data['country_code']) ? ['country_code' => strtoupper($data['country_code'])] : []),
                 ...(isset($data['continent_code']) ? ['continent_code' => strtoupper($data['continent_code'])] : []),
             ]);
-            $defaultSharedId = EdgePool::query()->where('enabled', true)->where('kind', 'shared')->orderBy('id')->value('id');
-            if ($defaultSharedId !== null) {
-                $edge->cells()->where('edge_pool_id', $defaultSharedId)->where('service_ipv4', $oldIpv4)->update(['service_ipv4' => $edge->ipv4]);
-                $edge->cells()->where('edge_pool_id', $defaultSharedId)->where(fn ($query) => $oldIpv6 === null ? $query->whereNull('service_ipv6') : $query->where('service_ipv6', $oldIpv6))->update(['service_ipv6' => $edge->ipv6]);
-            }
             AuditLog::record($request->user(), 'edge.updated', $edge, ['fields' => array_keys($data)], $request->ip());
         });
         ReconcilePlatformDnsIdentity::dispatchForRoutingChange();

@@ -17,14 +17,12 @@ final class PlanDomainEdgeCells
     public static function execute(Domain $domain, DomainEdgePlacement $placement, EdgePool $target): Collection
     {
         $target->refresh();
-        $usesEndpoints = $target->endpoints()->exists();
         $edges = Edge::query()->where('enabled', true)->where('drained', false)->whereNull('identity_revoked_at')->orderBy('id')->get();
         $planned = collect();
 
         foreach ($edges as $edge) {
             $candidates = $edge->cells()->where('edge_pool_id', $target->id)->where('drained', false)
-                ->when($usesEndpoints, fn ($query) => $query->whereHas('edge.poolEndpoints', fn ($endpoints) => $endpoints->where('edge_pool_id', $target->id)),
-                    fn ($query) => $query->whereNotNull('service_ipv4'))
+                ->whereHas('edge.poolEndpoints', fn ($endpoints) => $endpoints->where('edge_pool_id', $target->id))
                 ->whereNotIn('status', ['degraded', 'drained', 'stopped'])->orderBy('id')->get();
             if ($candidates->isEmpty()) {
                 DomainEdgeCell::query()->where('domain_id', $domain->id)->where('edge_id', $edge->id)

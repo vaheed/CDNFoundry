@@ -3,7 +3,6 @@
 namespace App\Support;
 
 use App\Models\Edge;
-use App\Models\EdgeCell;
 use App\Models\EdgePoolEndpoint;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
@@ -106,8 +105,7 @@ final class OriginData
         if (! filter_var($address, FILTER_VALIDATE_IP)) {
             return true;
         }
-        if (Edge::query()->where('ipv4', $address)->orWhere('ipv6', $address)->exists()
-            || EdgeCell::query()->where('service_ipv4', $address)->orWhere('service_ipv6', $address)->exists()
+        if (Edge::query()->where('management_ipv4', $address)->orWhere('management_ipv6', $address)->exists()
             || EdgePoolEndpoint::query()->where('ipv4', $address)->orWhere('ipv6', $address)->exists()
             || in_array($address, app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_addresses'), true)) {
             return true;

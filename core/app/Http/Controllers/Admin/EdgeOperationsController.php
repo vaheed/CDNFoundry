@@ -14,7 +14,6 @@ use App\Models\EdgeCell;
 use App\Models\EdgePool;
 use App\Models\EdgeTask;
 use App\Models\Operation;
-use App\Support\EdgeCellAddressData;
 use App\Support\PlatformSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -61,18 +60,6 @@ class EdgeOperationsController extends Controller
     public function cell(EdgeCell $cell): JsonResponse
     {
         return response()->json(['data' => $cell->load(['edge', 'pool'])]);
-    }
-
-    public function updateCell(Request $request, EdgeCell $cell): JsonResponse
-    {
-        $data = EdgeCellAddressData::validate($cell, $request->all());
-        DB::transaction(function () use ($request, $cell, $data): void {
-            $cell->update($data);
-            AuditLog::record($request->user(), 'edge.cell_addresses_updated', $cell, ['fields' => array_keys($data)], $request->ip());
-        });
-        ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
-
-        return response()->json(['data' => $cell->refresh()->load(['edge', 'pool'])]);
     }
 
     public function cellAction(Request $request, EdgeCell $cell, string $action): JsonResponse

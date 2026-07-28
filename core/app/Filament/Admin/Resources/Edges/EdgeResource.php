@@ -14,7 +14,6 @@ use App\Models\AuditLog;
 use App\Models\Edge;
 use App\Models\EmergencyMode;
 use App\Support\GeoVocabulary;
-use App\Support\NetworkAddress;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
@@ -46,18 +45,10 @@ class EdgeResource extends Resource
                 ->helperText('Bounded OpenResty slots created during edge installation. This cannot be changed after creation.'),
             Select::make('country_code')->label('Country')->options(array_combine(GeoVocabulary::countries(), GeoVocabulary::countries()))->searchable()->required(),
             Select::make('continent_code')->label('Continent')->options(array_combine(GeoVocabulary::CONTINENTS, GeoVocabulary::CONTINENTS))->required(),
-            TextInput::make('ipv4')->label('IPv4')->ipv4()->required()->unique(ignoreRecord: true)
-                ->rule(fn () => function (string $attribute, mixed $value, \Closure $fail): void {
-                    if (NetworkAddress::isUnsafe((string) $value)) {
-                        $fail('The edge address must be public unicast.');
-                    }
-                }),
-            TextInput::make('ipv6')->label('IPv6')->ipv6()->unique(ignoreRecord: true)
-                ->rule(fn () => function (string $attribute, mixed $value, \Closure $fail): void {
-                    if (filled($value) && NetworkAddress::isUnsafe((string) $value)) {
-                        $fail('The edge address must be public unicast.');
-                    }
-                }),
+            TextInput::make('management_ipv4')->label('Management IPv4')->ipv4()->nullable()->unique(ignoreRecord: true)
+                ->helperText('Optional operator access address. It is never bound by the gateway or published in customer DNS.'),
+            TextInput::make('management_ipv6')->label('Management IPv6')->ipv6()->nullable()->unique(ignoreRecord: true)
+                ->helperText('Optional operator access address. Public traffic addresses belong only to pool endpoints.'),
         ]);
     }
 
@@ -106,8 +97,8 @@ class EdgeResource extends Resource
         return $table->columns([
             TextColumn::make('name')->searchable()->sortable(),
             TextColumn::make('country_code')->label('Location')->formatStateUsing(fn (string $state, Edge $record): string => $state.' / '.$record->continent_code),
-            TextColumn::make('ipv4')->label('IPv4'),
-            TextColumn::make('ipv6')->label('IPv6')->placeholder('None'),
+            TextColumn::make('management_ipv4')->label('Management IPv4')->placeholder('None'),
+            TextColumn::make('management_ipv6')->label('Management IPv6')->placeholder('None'),
             IconColumn::make('enabled')->boolean(),
             IconColumn::make('drained')->boolean(),
             TextColumn::make('last_heartbeat_at')->label('Heartbeat')->since()->placeholder('Never')->sortable(),

@@ -2,7 +2,6 @@
 
 namespace App\Support;
 
-use App\Models\EdgeCell;
 use App\Models\EdgePool;
 use App\Models\EdgePoolEndpoint;
 use App\Models\PlatformDnsSetting;
@@ -64,31 +63,6 @@ final class PlatformDnsZone
                 }
 
                 continue;
-            }
-            if ($configuredEndpoints->isNotEmpty()) {
-                continue;
-            }
-            $cells = EdgeCell::query()->with('edge')->where('edge_pool_id', $pool->id)
-                ->where('drained', false)->where('status', 'ready')
-                ->whereHas('edge', fn ($query) => $query->readyForTraffic())
-                ->orderBy('edge_id')->get();
-            foreach (['A' => 'service_ipv4', 'AAAA' => 'service_ipv6'] as $family => $field) {
-                $familyCells = $cells->filter(fn (EdgeCell $cell): bool => filled($cell->{$field}))->values();
-                if ($familyCells->isEmpty()) {
-                    continue;
-                }
-                foreach ($familyCells->groupBy(fn (EdgeCell $cell): string => $cell->edge->country_code)->sortKeys() as $code => $group) {
-                    self::pushAddresses($rows, EdgeRoutingCompiler::dataHostname($settings, $pool, 'country', $code).'.', $family, $group->pluck($field)->all(), $settings->default_ttl);
-                }
-                foreach ($familyCells->groupBy(fn (EdgeCell $cell): string => $cell->edge->continent_code)->sortKeys() as $code => $group) {
-                    self::pushAddresses($rows, EdgeRoutingCompiler::dataHostname($settings, $pool, 'continent', $code).'.', $family, $group->pluck($field)->all(), $settings->default_ttl);
-                }
-                self::pushAddresses($rows, EdgeRoutingCompiler::dataHostname($settings, $pool, 'global', 'all').'.', $family, $familyCells->pluck($field)->all(), $settings->default_ttl);
-                $content = EdgeRoutingCompiler::compileDatabaseLookup($settings, $pool, $family);
-                $rows->push(['name' => EdgeRoutingCompiler::poolHostname($settings, $pool).'.', 'type' => 'LUA', 'ttl' => $settings->default_ttl, 'content' => $content]);
-                if ($defaultSharedPool?->is($pool)) {
-                    $rows->push(['name' => $proxy, 'type' => 'LUA', 'ttl' => $settings->default_ttl, 'content' => $content]);
-                }
             }
         }
 

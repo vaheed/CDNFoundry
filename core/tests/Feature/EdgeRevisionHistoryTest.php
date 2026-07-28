@@ -50,7 +50,7 @@ class EdgeRevisionHistoryTest extends TestCase
             'name' => 'revision-history-edge',
             'country_code' => 'IR',
             'continent_code' => 'AS',
-            'ipv4' => '203.0.113.40',
+            'management_ipv4' => '203.0.113.40',
         ]);
         foreach (range(1, 20) as $revision) {
             $createdAt = $revision === 3 ? now()->subHours(12) : now()->subDays(2);

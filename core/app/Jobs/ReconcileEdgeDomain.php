@@ -11,8 +11,8 @@ use App\Models\DomainEdgeCell;
 use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
 use App\Models\EdgeArtifact;
-use App\Models\EdgeCell;
 use App\Models\EdgePool;
+use App\Models\EdgePoolEndpoint;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
 use App\Support\ArtifactSigner;
@@ -108,8 +108,8 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             PlanDomainEdgeCells::execute($domain, $placement, $targetPool);
         }
 
-        $blockedAddresses = Edge::query()->pluck('ipv4')->merge(Edge::query()->pluck('ipv6'))
-            ->merge(EdgeCell::query()->pluck('service_ipv4'))->merge(EdgeCell::query()->pluck('service_ipv6'))
+        $blockedAddresses = Edge::query()->pluck('management_ipv4')->merge(Edge::query()->pluck('management_ipv6'))
+            ->merge(EdgePoolEndpoint::query()->pluck('ipv4'))->merge(EdgePoolEndpoint::query()->pluck('ipv6'))
             ->filter()->merge(app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_addresses'))->unique()->values()->all();
         $proxySettings = is_array($domain->proxy_settings) ? $domain->proxy_settings : self::defaults();
         $proxySettings['enabled'] = $domain->lifecycle_state === DomainLifecycleState::Active

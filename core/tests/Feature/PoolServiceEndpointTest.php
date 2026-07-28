@@ -85,9 +85,57 @@ class PoolServiceEndpointTest extends TestCase
         $this->assertSame(['cell-01', 'cell-02', 'cell-03'], collect($payload['bindings'][0]['cells'])->pluck('name')->all());
     }
 
+    public function test_endpoint_address_families_can_be_removed_and_withdrawn_endpoint_can_be_deleted(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
+        $edge = $this->edge('removable-endpoint', '10.20.30.40');
+        $endpoint = $pool->endpoints()->create([
+            'edge_id' => $edge->id,
+            'ipv4' => '8.8.4.4',
+            'ipv6' => '2606:4700:4700::1111',
+        ]);
+        $url = "/api/admin/edge-pools/{$pool->id}/endpoints/{$endpoint->id}";
+
+        $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->patchJson($url, ['ipv6' => null])->assertAccepted()
+            ->assertJsonPath('data.ipv4', '8.8.4.4')->assertJsonPath('data.ipv6', null);
+        $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->patchJson($url, ['ipv4' => null])->assertUnprocessable()->assertJsonValidationErrors('ipv4');
+        $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->deleteJson($url)->assertConflict();
+        $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->patchJson($url, ['withdrawn' => true])->assertAccepted();
+        $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->deleteJson($url)->assertNoContent();
+        $this->assertDatabaseMissing('edge_pool_endpoints', ['id' => $endpoint->id]);
+    }
+
+    public function test_edge_management_addresses_are_optional_private_and_distinct_from_service_endpoints(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $withoutManagement = $this->actingAs($admin)->postJson('/api/admin/edges', [
+            'name' => 'no-management-address', 'country_code' => 'IR', 'continent_code' => 'AS',
+        ])->assertCreated();
+        $privateManagement = $this->actingAs($admin)->postJson('/api/admin/edges', [
+            'name' => 'private-management-address', 'country_code' => 'DE', 'continent_code' => 'EU',
+            'management_ipv4' => '10.20.30.40',
+        ])->assertCreated();
+        $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
+
+        $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->postJson("/api/admin/edge-pools/{$pool->id}/edges/{$privateManagement->json('data.id')}/endpoint", ['ipv4' => '10.20.30.40'])
+            ->assertUnprocessable()->assertJsonValidationErrors('ipv4');
+        $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())->postJson('/api/admin/edges', [
+            'name' => 'legacy-edge-address', 'country_code' => 'IR', 'continent_code' => 'AS', 'ipv4' => '8.8.8.8',
+        ])->assertUnprocessable()->assertJsonValidationErrors('ipv4');
+        $this->assertNull($withoutManagement->json('data.management_ipv4'));
+    }
+
     private function edge(string $name, string $management): Edge
     {
-        return Edge::query()->create(['name' => $name, 'country_code' => 'IR', 'continent_code' => 'AS', 'ipv4' => $management,
+        return Edge::query()->create(['name' => $name, 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => $management,
             'enabled' => true, 'registered_at' => now(), 'last_heartbeat_at' => now(), 'capacity' => ['listener_ready' => true]]);
     }
 
