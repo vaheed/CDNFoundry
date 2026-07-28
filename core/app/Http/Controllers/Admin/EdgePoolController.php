@@ -160,13 +160,11 @@ class EdgePoolController extends Controller
         ]);
         abort_if($cell->edge_pool_id !== null && $cell->edge_pool_id !== $pool->id, 409, 'The cell is already assigned to another pool.');
         abort_if($cell->drained, 409, 'A drained cell cannot participate in a pool.');
-        abort_if($cell->edge->registered_at !== null && blank(data_get($cell->capacity, 'openresty_version')), 409, 'This cell runtime is not installed or has not reported ready. Start the cell before assigning a service pool.');
         [$operation] = DB::transaction(function () use ($request, $pool, $cell): array {
             $pool = EdgePool::query()->lockForUpdate()->findOrFail($pool->id);
             $cell = EdgeCell::query()->lockForUpdate()->findOrFail($cell->id);
             abort_if($cell->edge_pool_id !== null && $cell->edge_pool_id !== $pool->id, 409, 'The cell is already assigned to another pool.');
             abort_if($cell->drained, 409, 'A drained cell cannot participate in a pool.');
-            abort_if($cell->edge->registered_at !== null && blank(data_get($cell->capacity, 'openresty_version')), 409, 'This cell runtime is not installed or has not reported ready. Start the cell before assigning a service pool.');
             $cell->update(['edge_pool_id' => $pool->id, 'status' => $cell->status === 'ready' ? 'ready' : 'assigned']);
             if ($pool->isSimpleAnycast()) {
                 $endpoint = $pool->endpoints()->firstOrCreate(['edge_id' => $cell->edge_id], [

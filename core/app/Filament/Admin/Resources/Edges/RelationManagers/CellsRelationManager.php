@@ -84,7 +84,6 @@ class CellsRelationManager extends RelationManager
                             $cell = EdgeCell::query()->lockForUpdate()->findOrFail($record->id);
                             abort_if($cell->edge_pool_id !== null, 409, 'The cell has already been assigned to a service pool.');
                             abort_if($cell->drained, 409, 'A drained cell cannot participate in a service pool.');
-                            abort_if($cell->edge->registered_at !== null && blank(data_get($cell->capacity, 'openresty_version')), 409, 'This cell runtime is not installed or has not reported ready. Start the cell before assigning a service pool.');
                             $pool = EdgePool::query()->whereKey($data['edge_pool_id'])->where('withdrawn', false)->lockForUpdate()->firstOrFail();
                             $cell->update(['edge_pool_id' => $pool->id, 'status' => 'assigned']);
                             if ($pool->isSimpleAnycast()) {
