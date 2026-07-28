@@ -44,10 +44,11 @@ apex cannot use CNAME, so its A and AAAA answers are compiled from listener-read
 cells in the assigned pool. Existing non-address apex records such as MX and TXT
 remain valid.
 
-Every participating cell needs a unique public IPv4 address and may have IPv6.
-The platform DNS zone advertises only enabled, fresh, non-drained, ready
-listeners. The target placement activates before the source begins its drain
-window.
+Every participating edge/pool pair needs one public endpoint with IPv4, IPv6,
+or both. Several private cells may serve that endpoint; cells do not own public
+addresses. The platform DNS zone advertises only enabled, fresh, non-drained,
+ready endpoints whose gateway revision is acknowledged. The target placement
+activates before the source begins its drain window.
 
 ::: caution Disable is not deletion
 Disabling preserves last-valid state for the configured delay. Final removal

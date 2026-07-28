@@ -27,6 +27,22 @@ The helper creates ECDSA P-256 CAs and server certificates, sets certificate
 files mode `0644` and keys `0600`, verifies the chains, and refuses to overwrite
 an existing output directory.
 
+## Which address belongs in a certificate?
+
+There are two different identities in the edge-control mTLS connection:
+
+- The **edge-control server certificate** must contain the DNS hostname from
+  `EDGE_CONTROL_URL`. Add an IP SAN only when agents connect to a literal IP
+  address instead of that hostname. This is the control host address, not an
+  edge management or pool endpoint address.
+- The **edge-agent client certificate** is created during enrollment from the
+  agent's CSR. Its common name is the administrator-created edge UUID. It does
+  not contain a management IP or service endpoint IP.
+
+Management addresses may be absent or private. Pool endpoint addresses are
+customer traffic listeners. Neither is required for agent enrollment, task
+polling, heartbeats, or artifact acknowledgement.
+
 ## Distribution
 
 - The control core needs the identity CA certificate and restricted private key.

@@ -3,6 +3,7 @@ set -eu
 
 usage() {
     echo "Usage: $0 OUTPUT_DIRECTORY CONTROL_HOSTNAME RUNTIME_HOSTNAME [CONTROL_IP] [RUNTIME_IP] [DNS_API_HOSTNAME ...]" >&2
+    echo "CONTROL_IP and RUNTIME_IP add optional server-certificate IP SANs; pass empty strings when clients use DNS hostnames. They are not edge management addresses." >&2
     exit 2
 }
 
@@ -86,3 +87,4 @@ done
 openssl verify -CAfile "$output_directory/edge-server-ca.crt" "$@"
 echo "Certificates created in $output_directory (valid for 3650 days)."
 echo "Protect and back up both CA keys; copy only edge-server-ca.crt to edge hosts."
+echo "Edge-agent client certificates are enrolled separately with the edge UUID and require no IP SAN."

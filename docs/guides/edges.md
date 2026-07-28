@@ -52,18 +52,23 @@ Create an edge with:
 
 - unique name;
 - ISO country code and continent code;
-- unique public IPv4;
-- optional unique public IPv6.
+- optional unique management IPv4;
+- optional unique management IPv6.
+
+Management addresses may be private. They are operator inventory and are not
+used by the edge-control connection or bound by the customer gateway. The
+agent initiates control traffic outbound to `EDGE_CONTROL_URL`.
 
 The create response exposes an edge UUID and bootstrap token once. Store them
 only long enough to enroll the agent.
 
-## Cell addresses
+## Pool service endpoints
 
-Each cell has a unique service IPv4 and may have a unique service IPv6. Address
-edits are desired state until the agent reports the cell. A cell is routable
-only when its edge is enabled, not drained, freshly heartbeating, and the cell
-is ready and not drained.
+Cells do not own public addresses. Assign one or more bounded cells to a pool,
+then create one pool endpoint on the edge with public IPv4, IPv6, or both. The
+gateway binds those endpoint addresses and routes them to the pool's assigned
+cells after agent acknowledgement. Endpoint addresses cannot equal management
+addresses.
 
 ## Agent environment
 

@@ -38,7 +38,7 @@ flowchart TB
     Laravel --> Valkey
     Horizon --> Valkey
     Horizon -->|"versioned reconciliation"| PowerDNS
-    Horizon -->|"signed artifacts"| Agent
+    Agent -->|"outbound mTLS: pull artifacts/tasks, acknowledge"| Laravel
     DNSdist -.-> Vector
     Shared -.-> Vector
 ```

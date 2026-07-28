@@ -94,12 +94,18 @@ See [Desired state](../concepts/desired-state.md) for failure behaviour.
 ## Edge enrollment and sync
 
 1. An administrator creates the edge and receives a one-time token.
-2. The agent creates a private key and CSR.
+2. The agent opens an outbound connection to `EDGE_CONTROL_URL`, creates a
+   private key, and submits a CSR whose common name is the edge UUID.
 3. Edge control validates the token and signs a short-lived identity certificate.
 4. Later requests require that certificate and its serial.
-5. The agent fetches the manifest or a full recovery snapshot.
+5. The agent polls for tasks and fetches the manifest or a full recovery snapshot.
 6. It verifies, compiles, atomically activates, then acknowledges.
 7. Heartbeats report sequence, listener readiness, cell capacity, origin health, and bounded security summaries.
+
+Laravel and its workers never initiate a connection to an edge host. They
+commit desired state, artifacts, and durable tasks; the agent pulls them over
+its outbound control connection and posts results. Therefore an edge does not
+need an inbound management address for control delivery.
 
 ## Managed TLS
 

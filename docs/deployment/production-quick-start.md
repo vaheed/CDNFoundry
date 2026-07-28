@@ -245,8 +245,8 @@ sudo /opt/cdnfoundry/scripts/generate-production-certificates.sh \
   /etc/cdnfoundry/pki \
   edge-control.ops.example.com \
   proxy.example.net \
-  198.51.100.10 \
-  198.51.100.20 \
+  "" \
+  "" \
   dns-api-1.ops.example.com \
   dns-api-2.ops.example.com
 
@@ -439,8 +439,13 @@ Only now delegate `example.net` to `ns1.example.net` and `ns2.example.net`.
 
 ## Step 9: create and enroll each edge
 
-In **Edge network → Edges**, create one edge per host with its real location,
-public IPv4, and optional IPv6. Copy the UUID and one-time bootstrap token.
+In **Edge network → Edges**, create one edge per host with its real location.
+Management IPv4/IPv6 are optional inventory fields; use them only for operator
+access or monitoring. They are not pool endpoints and are not used by mTLS.
+Copy the UUID and one-time bootstrap token.
+
+The edge agent needs outbound DNS and TCP access to the hostname and port in
+`EDGE_CONTROL_URL`. The control plane does not need inbound access to the edge.
 
 Add them to that edge's `.env.prod`:
 

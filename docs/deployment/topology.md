@@ -85,7 +85,7 @@ scripts/generate-production-certificates.sh \
   /secure/cdnfoundry-pki \
   edge-control.ops.example.com \
   edge-runtime.ops.example.com \
-  198.51.100.10 \
+  "" \
   "" \
   dns-api-1.ops.example.com \
   dns-api-2.ops.example.com
