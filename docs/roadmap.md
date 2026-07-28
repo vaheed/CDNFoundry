@@ -252,7 +252,7 @@ External provider route withdrawal/restoration, multi-vantage traffic, load,
 and browser evidence remain owner-run, so the final combined checkbox and
 release decision remain blocked.
 
-## Phase 6 — Cache 
+## Phase 6 — Cache
 
 **Goal:** turn the baseline cache into a persistent, bounded, production-strength
 cell cache without a distributed cache or per-domain directories.
