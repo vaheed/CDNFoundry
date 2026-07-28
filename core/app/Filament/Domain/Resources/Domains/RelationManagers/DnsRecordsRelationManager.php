@@ -17,6 +17,7 @@ use App\Models\PlatformDnsSetting;
 use App\Support\DnsRecordData;
 use App\Support\DnsZoneValidator;
 use App\Support\EdgeRoutingCompiler;
+use App\Support\FilamentHelp;
 use App\Support\GeoDnsConfig;
 use App\Support\GeoIpClassifier;
 use App\Support\OriginData;
@@ -67,7 +68,9 @@ class DnsRecordsRelationManager extends RelationManager
                     $set('mode', 'dns_only');
                 }
             }),
-            Select::make('mode')->options(function (Get $get): array {
+            Select::make('mode')
+                ->label(FilamentHelp::label('Mode', 'Geo-DNS answers directly. Proxied records send traffic through the domain\'s assigned service pool: the apex publishes managed A/AAAA answers, while subdomains publish a pool-specific CNAME.'))
+                ->options(function (Get $get): array {
                 $options = ['dns_only' => 'DNS only'];
                 if (in_array($get('type'), GeoDnsConfig::SUPPORTED_TYPES, true)) {
                     $options['geo_dns'] = 'Geo-DNS';
@@ -90,9 +93,10 @@ class DnsRecordsRelationManager extends RelationManager
                     if (blank($get('origin.sni'))) {
                         $set('origin.sni', $hostname);
                     }
-                })
-                ->helperText('Geo-DNS answers directly. Proxied records send traffic through the domain\'s assigned service pool: the apex publishes managed A/AAAA answers, while subdomains publish a pool-specific CNAME.'),
-            TextInput::make('name')->required()->default('@')->maxLength(253)->live(onBlur: true)
+                }),
+            TextInput::make('name')
+                ->label(fn (Get $get): string|\Illuminate\Support\HtmlString => FilamentHelp::label('Name', $this->recordNameHelp($get)))
+                ->required()->default('@')->maxLength(253)->live(onBlur: true)
                 ->afterStateUpdated(function (?string $state, ?string $old, Get $get, Set $set): void {
                     $hostname = $this->ownerHostname((string) $state);
                     $oldHostname = $this->ownerHostname((string) $old);
@@ -102,22 +106,10 @@ class DnsRecordsRelationManager extends RelationManager
                     if (blank($get('origin.sni')) || $get('origin.sni') === $oldHostname) {
                         $set('origin.sni', $hostname);
                     }
-                })
-                ->helperText(function (Get $get): ?string {
-                    if ($get('mode') === 'proxied') {
-                        return $this->ownerHostname((string) $get('name')) === $this->getOwnerRecord()->name
-                            ? 'Apex proxy: edit or remove any existing apex A, AAAA, or CNAME first. MX, TXT, CAA, and other non-routing apex records may remain.'
-                            : 'Subdomain proxy: this becomes a pool-specific CNAME and must be the only record at this hostname.';
-                    }
-
-                    return $get('type') === 'CNAME'
-                        ? 'A CNAME must be the only DNS record at this hostname. Use a new hostname if another record already exists there.'
-                        : null;
                 }),
             TextInput::make('content')->required(fn ($get): bool => $get('mode') === 'dns_only')->maxLength(4096)
                 ->visible(fn ($get): bool => $get('mode') === 'dns_only'),
-            TextInput::make('origin.host')->label('Origin server hostname or IP')->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied')
-                ->helperText('For cPanel/shared hosting, enter the server hostname or dedicated origin IP. Do not enter an address that routes back to this CDN.'),
+            TextInput::make('origin.host')->label(FilamentHelp::label('Origin server hostname or IP', 'For cPanel/shared hosting, enter the server hostname or dedicated origin IP. Do not enter an address that routes back to this CDN.'))->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
             Select::make('origin.scheme')->options(['https' => 'HTTPS', 'http' => 'HTTP'])->default('https')->live()->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied')
                 ->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
                     if ($state === 'https') {
@@ -132,9 +124,8 @@ class DnsRecordsRelationManager extends RelationManager
                         $set('origin.sni', null);
                     }
                 }),
-            TextInput::make('origin.port')->numeric()->default(443)->disabled()->dehydrated()
-                ->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied')
-                ->helperText('Managed by the scheme: HTTP uses 80 and HTTPS uses 443. Advanced custom ports remain available through the API.'),
+            TextInput::make('origin.port')->label(FilamentHelp::label('Origin port', 'Managed by the scheme: HTTP uses 80 and HTTPS uses 443. Advanced custom ports remain available through the API.'))->numeric()->default(443)->disabled()->dehydrated()
+                ->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
             TextInput::make('origin.host_header')->label('Origin Host header')->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
             TextInput::make('origin.sni')->label('TLS SNI')->required(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.scheme') === 'https' && (bool) $get('origin.verify_tls'))
                 ->visible(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.scheme') === 'https'),
@@ -156,11 +147,11 @@ class DnsRecordsRelationManager extends RelationManager
                     Select::make('code')->options(array_combine(GeoDnsConfig::countryCodes(), GeoDnsConfig::countryCodes()))->searchable()->required(),
                     TagsInput::make('targets')->required()->nestedRecursiveRules(['string', 'max:4096']),
                 ])->columns(2),
-            Repeater::make('geo_continents')->label('Continent overrides')->maxItems(GeoDnsConfig::MAX_CONTINENTS)
+            Repeater::make('geo_continents')->label(FilamentHelp::label('Continent overrides', 'Country overrides win over continent overrides. Each answer set is limited to 8 type-valid values.'))->maxItems(GeoDnsConfig::MAX_CONTINENTS)
                 ->visible(fn ($get): bool => $get('mode') === 'geo_dns')->schema([
                     Select::make('code')->options(array_combine(GeoDnsConfig::CONTINENTS, GeoDnsConfig::CONTINENTS))->required(),
                     TagsInput::make('targets')->required()->nestedRecursiveRules(['string', 'max:4096']),
-                ])->columns(2)->helperText('Country overrides win over continent overrides. Each answer set is limited to 8 type-valid values.'),
+                ])->columns(2),
             TextInput::make('ttl')->numeric()->required()->default(300)->minValue(30)->maxValue(2147483647),
             TextInput::make('priority')->numeric()->default(0)->minValue(0)->maxValue(65535)->visible(fn ($get): bool => in_array($get('type'), ['MX', 'SRV'], true)),
             TextInput::make('weight')->numeric()->default(0)->minValue(0)->maxValue(65535)->visible(fn ($get): bool => $get('type') === 'SRV'),
@@ -339,6 +330,19 @@ class DnsRecordsRelationManager extends RelationManager
         } catch (\InvalidArgumentException) {
             return $this->getOwnerRecord()->name;
         }
+    }
+
+    private function recordNameHelp(Get $get): ?string
+    {
+        if ($get('mode') === 'proxied') {
+            return $this->ownerHostname((string) $get('name')) === $this->getOwnerRecord()->name
+                ? 'Apex proxy: edit or remove any existing apex A, AAAA, or CNAME first. MX, TXT, CAA, and other non-routing apex records may remain.'
+                : 'Subdomain proxy: this becomes a pool-specific CNAME and must be the only record at this hostname.';
+        }
+
+        return $get('type') === 'CNAME'
+            ? 'A CNAME must be the only DNS record at this hostname. Use a new hostname if another record already exists there.'
+            : null;
     }
 
     private function hydrateGeoForm(array $data, DnsRecord $record): array

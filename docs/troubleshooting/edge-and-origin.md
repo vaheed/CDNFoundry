@@ -23,6 +23,20 @@ Check the agent container, client certificate expiry/serial, edge-control
 availability, queue/network reachability, and persistent state permissions.
 Do not make the edge routable by editing its timestamp.
 
+The administrator edge status and Cells/Endpoints tables refresh every five
+seconds. A healthy agent normally updates its heartbeat on that cadence. If the
+timestamp remains fixed, inspect the agent log for the stable HTTP error. In
+particular, `active_sequence was not issued to this edge` means the agent's
+local active state is ahead of both the edge's durable acknowledged sequence
+and retained artifacts; do not reset the sequence or delete agent state. Restore
+the matching control-plane database or intentionally reconcile/replace the edge
+identity and state as one recovery operation.
+
+`heartbeat_stale` is the primary loss-of-contact reason.
+`gateway_not_ready` is evaluated only after heartbeat freshness and means the
+fresh snapshot did not contain a ready gateway/listener. Fix the first reason
+shown rather than restarting unrelated containers.
+
 ## Artifact is rejected
 
 Inspect the agent's bounded rejection reason:

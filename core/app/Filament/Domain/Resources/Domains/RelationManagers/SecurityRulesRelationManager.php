@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Models\Operation;
 use App\Models\SecurityRule;
+use App\Support\FilamentHelp;
 use App\Support\SecurityConfig;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
@@ -38,9 +39,8 @@ class SecurityRulesRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
-        return $table->description('Enabled rules are evaluated by ascending priority and then stable ID. First match wins; the default is allow.')
-            ->columns([
-                TextColumn::make('priority')->sortable(), TextColumn::make('match_type')->label('Type')->badge(),
+        return $table->columns([
+                TextColumn::make('priority')->label(FilamentHelp::label('Priority', 'Enabled rules are evaluated by ascending priority and then stable ID. First match wins; the default is allow.'))->sortable(), TextColumn::make('match_type')->label('Type')->badge(),
                 TextColumn::make('value')->searchable(), TextColumn::make('action')->badge(),
                 IconColumn::make('enabled')->boolean(), TextColumn::make('note')->limit(60)->placeholder('None'),
             ])->headerActions([
@@ -62,8 +62,7 @@ class SecurityRulesRelationManager extends RelationManager
     {
         return [
             Select::make('match_type')->label('Type')->options(['ip' => 'IP address', 'cidr' => 'CIDR network', 'country' => 'Country', 'continent' => 'Continent'])->required()->live(),
-            TextInput::make('value')->required()->maxLength(128)
-                ->helperText('IPv4/IPv6, CIDR, ISO country code, or continent code according to the selected type.'),
+            TextInput::make('value')->label(FilamentHelp::label('Value', 'IPv4/IPv6, CIDR, ISO country code, or continent code according to the selected type.'))->required()->maxLength(128),
             Select::make('action')->options(['allow' => 'Allow', 'block' => 'Block'])->required(),
             TextInput::make('priority')->numeric()->default(100)->minValue(-1000000)->maxValue(1000000)->required(),
             Toggle::make('enabled')->default(true), TextInput::make('note')->maxLength(250),

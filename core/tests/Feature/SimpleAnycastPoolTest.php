@@ -17,6 +17,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class SimpleAnycastPoolTest extends TestCase
@@ -184,6 +185,28 @@ class SimpleAnycastPoolTest extends TestCase
 
         $this->assertSame('ready', $endpoint->refresh()->gateway_state);
         Queue::assertPushed(ReconcilePlatformDnsIdentity::class);
+    }
+
+    public function test_heartbeat_accepts_durable_acknowledged_sequence_after_artifact_retention(): void
+    {
+        Queue::fake();
+        $edge = $this->edge('retained-sequence-pop', 'IR', 'AS');
+        $edge->update(['active_sequence' => 42]);
+        $edge->cells()->create(['slot' => 1, 'status' => 'unassigned']);
+        $payload = [
+            'agent_version' => '1.2.0', 'listener_ready' => false, 'active_sequence' => 42,
+            'cells' => [['name' => 'cell-01', 'status' => 'stopped', 'capacity' => ['active_connections' => 0]]],
+        ];
+        $request = Request::create('/edge/v1/heartbeat', 'POST', $payload);
+        $request->attributes->set('edge', $edge);
+
+        $this->assertSame(200, app(EdgeAgentController::class)->heartbeat($request)->getStatusCode());
+        $this->assertNotNull($edge->refresh()->last_heartbeat_at);
+
+        $future = Request::create('/edge/v1/heartbeat', 'POST', [...$payload, 'active_sequence' => 43]);
+        $future->attributes->set('edge', $edge);
+        $this->expectException(ValidationException::class);
+        app(EdgeAgentController::class)->heartbeat($future);
     }
 
     public function test_anycast_apex_follows_readiness_gated_pool_hostname(): void

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Admin\Pages;
 
+use App\Support\FilamentHelp;
 use App\Support\PlatformSettings as SettingsRegistry;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\TagsInput;
@@ -37,7 +38,7 @@ class PlatformSettings extends Page
         $sections = collect($settings->definitions())->map(function (array $definition, string $group): Section {
             $fields = collect($definition['fields'])->map(fn (array $field, string $key) => $this->field("{$group}.{$key}", $field))->all();
 
-            return Section::make($definition['label'])->description($definition['description'])->schema($fields)->columns(2);
+            return Section::make(FilamentHelp::label($definition['label'], $definition['description']))->schema($fields)->columns(2);
         })->values()->all();
 
         return $schema->statePath('data')->components($sections);
@@ -65,10 +66,10 @@ class PlatformSettings extends Page
         $help = $field['description'].' Default: '.$default.'.';
 
         return match ($field['type']) {
-            'boolean' => Toggle::make($name)->label($field['label'])->helperText($help),
-            'cidr_list', 'ip_list' => TagsInput::make($name)->label($field['label'])->helperText($help),
-            'choice_list' => CheckboxList::make($name)->label($field['label'])->options($field['options'])->helperText($help)->columns(2),
-            default => TextInput::make($name)->label($field['label'])->integer()->required()->helperText($help),
+            'boolean' => Toggle::make($name)->label(FilamentHelp::label($field['label'], $help)),
+            'cidr_list', 'ip_list' => TagsInput::make($name)->label(FilamentHelp::label($field['label'], $help)),
+            'choice_list' => CheckboxList::make($name)->label(FilamentHelp::label($field['label'], $help))->options($field['options'])->columns(2),
+            default => TextInput::make($name)->label(FilamentHelp::label($field['label'], $help))->integer()->required(),
         };
     }
 }

@@ -7,6 +7,7 @@ use App\Filament\Admin\Resources\DnsClusters\Pages\EditDnsCluster;
 use App\Filament\Admin\Resources\DnsClusters\Pages\ListDnsClusters;
 use App\Models\DnsCluster;
 use App\Models\PlatformDnsSetting;
+use App\Support\FilamentHelp;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Textarea;
@@ -33,17 +34,19 @@ class DnsClusterResource extends Resource
         return $schema->components([
             TextInput::make('name')->required()->maxLength(100)->unique(ignoreRecord: true),
             TextInput::make('location')->required()->maxLength(100),
-            Toggle::make('enabled')->default(false)->disabled(fn (?DnsCluster $record): bool => $record === null || $record->last_health_status !== 'healthy')
-                ->helperText('A new cluster stays disabled until its asynchronous connection test succeeds.'),
+            Toggle::make('enabled')
+                ->label(FilamentHelp::label('Enabled', 'A new cluster stays disabled until its asynchronous connection test succeeds.'))
+                ->default(false)->disabled(fn (?DnsCluster $record): bool => $record === null || $record->last_health_status !== 'healthy'),
             TextInput::make('api_url')->url()->required()->maxLength(500),
             TextInput::make('api_key')->password()->revealable()->required(fn (string $operation): bool => $operation === 'create')->dehydrated(fn (?string $state): bool => filled($state))->minLength(8),
             TextInput::make('server_id')->required()->default('localhost')->maxLength(100),
-            Repeater::make('nameservers')->schema([
+            Repeater::make('nameservers')
+                ->label(FilamentHelp::label('Nameservers', 'At least two authoritative nameservers are required for redundancy. These default to the System DNS identity nameservers.'))
+                ->schema([
                 TextInput::make('hostname')->required()->maxLength(253),
             ])->default(fn (): array => collect(PlatformDnsSetting::query()->find(1)?->nameservers ?? [])
                 ->map(fn (array $nameserver): array => ['hostname' => $nameserver['hostname']])->all())
-                ->minItems(2)->maxItems(8)->required()
-                ->helperText('At least two authoritative nameservers are required for redundancy. These default to the System DNS identity nameservers.'),
+                ->minItems(2)->maxItems(8)->required(),
             TextInput::make('capacity_zones')->numeric()->required()->default(100000)->minValue(1)->maxValue(10000000),
             Textarea::make('operational_notes')->maxLength(4000),
         ]);

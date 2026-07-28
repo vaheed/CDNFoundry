@@ -23,6 +23,11 @@ Inspect Vector transform errors, discarded-event counters, disk-buffer bytes,
 delivery errors, and ClickHouse insert errors. Events dropped after the buffer
 fills cannot be reconstructed.
 
+The administrator telemetry page aggregates labeled Vector Prometheus series:
+buffer bytes/events are current gauges, while discarded events and component
+errors are lifetime counters since Vector started. An available collector shows
+zero values explicitly instead of an empty panel.
+
 ## DNS events have domain ID zero
 
 The dnstap fallback does not map question names to Laravel domain IDs and stores
@@ -35,6 +40,12 @@ Confirm scheduler heartbeat, `usage:finalize`, the `bulk_maintenance` lane,
 ClickHouse availability, and the latest finalized `usage_rollups.interval_end`.
 The component becomes degraded when no finalized interval exists or lag exceeds
 three hours.
+
+The live 24-hour analytics range intentionally includes the newest
+`finalization_delay_minutes` window. The blue **Live window included** label is
+informational, not degraded health. Rows in **Finalized usage** are separate,
+stable PostgreSQL rollups and the page shows only the latest five finalized
+intervals.
 
 ## Client address looks truncated
 

@@ -52,13 +52,21 @@ class Analytics extends Page
 
             return ['domain' => $domain, 'available' => true, 'meta' => $store->metadata($range), 'summary' => $summary, 'views' => $views, 'logs' => $logs, 'usage' => $this->recentUsage($domain)];
         } catch (Throwable) {
-            return ['domain' => $domain, 'available' => false, 'summary' => [], 'views' => [], 'logs' => [], 'usage' => $this->recentUsage($domain), 'meta' => ['from' => $range['from']->toIso8601String(), 'to' => $range['to']->toIso8601String(), 'partial' => true]];
+            return [
+                'domain' => $domain, 'available' => false, 'summary' => [], 'views' => [], 'logs' => [],
+                'usage' => $this->recentUsage($domain),
+                'meta' => [
+                    'from' => $range['from']->toIso8601String(), 'to' => $range['to']->toIso8601String(),
+                    'partial' => true,
+                    'finalization_delay_minutes' => app(\App\Support\PlatformSettings::class)->integer('telemetry', 'finalization_delay_minutes'),
+                ],
+            ];
         }
     }
 
     private function recentUsage(Domain $domain): array
     {
-        return UsageRollup::query()->whereBelongsTo($domain)->latest('interval_start')->limit(20)->get()
+        return UsageRollup::query()->whereBelongsTo($domain)->where('status', 'finalized')->latest('interval_start')->limit(5)->get()
             ->map(fn (UsageRollup $row): array => [
                 'interval' => $row->interval_start->toIso8601String(),
                 'requests' => $row->requests,

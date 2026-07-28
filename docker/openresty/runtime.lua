@@ -757,17 +757,25 @@ function M.passive_failures()
         if raw_limit ~= "max" then memory_limit = tonumber(raw_limit) end
         memory_limit_file:close()
     end
-    local cpu_usage = 0
+    local cpu_usage_usec = 0
     local cpu_file = io.open("/sys/fs/cgroup/cpu.stat", "r")
     if cpu_file then
         for line in cpu_file:lines() do
             local usage = line:match("^usage_usec%s+(%d+)$")
-            if usage then cpu_usage = tonumber(usage) or 0; break end
+            if usage then cpu_usage_usec = tonumber(usage) or 0; break end
         end
         cpu_file:close()
     end
     local cache_free = ngx.shared.runtime_limits:free_space()
     local now = ngx.time()
+    local previous_cpu_usage = ngx.shared.runtime_limits:get("capacity:cpu_usage_usec")
+    local previous_cpu_time = ngx.shared.runtime_limits:get("capacity:cpu_sample_time")
+    local cpu_usage = 0
+    if previous_cpu_usage and previous_cpu_time and now > previous_cpu_time and cpu_usage_usec >= previous_cpu_usage then
+        cpu_usage = ((cpu_usage_usec - previous_cpu_usage) / ((now - previous_cpu_time) * 1000000)) * 100
+    end
+    ngx.shared.runtime_limits:set("capacity:cpu_usage_usec", cpu_usage_usec)
+    ngx.shared.runtime_limits:set("capacity:cpu_sample_time", now)
     local requests_per_second = (ngx.shared.runtime_limits:get("capacity:requests:" .. now) or 0)
         + (ngx.shared.runtime_limits:get("capacity:requests:" .. (now - 1)) or 0)
     ngx.header["Content-Type"] = "application/json"

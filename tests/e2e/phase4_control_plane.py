@@ -352,7 +352,7 @@ def provision_edge(token: str, name: str, country: str, continent: str, ipv4: st
     artisan(
         "App\\Models\\Edge::query()->whereKey(" + quote(edge["id"]) + ")->update(["
         f"'registered_at'=>now(),'identity_certificate_serial'=>{quote(serial.upper())},"
-        "'identity_certificate_expires_at'=>now()->addDay(),'identity_revoked_at'=>null,'bootstrap_token_hash'=>null,'agent_version'=>'1.0.0']);"
+        "'identity_certificate_expires_at'=>now()->addDay(),'identity_revoked_at'=>null,'bootstrap_token_hash'=>null,'agent_version'=>'1.2.0']);"
     )
     return {**edge, "context": {
         "directory": str(directory),
@@ -374,7 +374,7 @@ def heartbeat(edge: dict, active_sequence: int, quarantine_ready: bool = False) 
             "capacity": {"assigned_domain_count": 0, "active_connections": 0, "requests_per_second": 0},
         })
     call("POST", "/edge/v1/heartbeat", {
-        "agent_version": "1.0.0",
+        "agent_version": "1.2.0",
         "listener_ready": True,
         "active_sequence": active_sequence,
         "cells": cells,

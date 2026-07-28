@@ -115,6 +115,12 @@ associated labels, useful validation at the affected field, readable tables,
 safe confirmation for destructive actions, no horizontal page overflow, no
 missing assets, and no unexpected browser-console errors.
 
+Where a field, entry, table heading, or section heading has optional
+explanatory help, hover the title and focus it with the keyboard. Expect the
+same short tooltip with no separate help icon and no persistent help paragraph.
+Validation errors, warnings, confirmation text, degraded-state reasons, and
+live operational evidence must remain visible without hovering.
+
 ## Completed-baseline regression
 
 The baseline remains part of every post-baseline release. Record one result for
@@ -209,19 +215,33 @@ feature.
    assigned-domain aggregates and logs with bounded ranges and masked client
    addresses.
 2. As administrator, open **Observe → Telemetry**. Expect component freshness,
-   bounded/redacted data, and no secrets.
-3. Open **Operations**. Inspect pending, succeeded, and failed examples. Expect
+   bounded/redacted data, and no secrets. Expect the blue **Live window
+   included** label to explain that only the configured newest window is
+   provisional, not that delivery is degraded. Expect **Finalized usage** to
+   show no more than five rows and every shown row to be **Finalized**.
+3. In **Vector buffer and delivery**, expect explicit human-readable
+   **Buffered data**, **Buffered events**, **Discarded events**, and
+   **Delivery / component errors** values. An available Vector with zero
+   backlog/errors must show zero values rather than an empty panel. Generate a
+   controlled buffer/recovery event and expect the current gauges to recover;
+   do not expect lifetime error counters to reset before Vector restarts.
+4. Open the administrator dashboard and inspect **Component health**. For each
+   degraded/unavailable component, expect its bounded counts/timestamps and a
+   component-specific **How to fix** direction. Leave the page open for 35
+   seconds and expect the evidence to refresh without a browser reload. Resolve
+   one controlled failure and expect only its component to recover.
+5. Open **Operations**. Inspect pending, succeeded, and failed examples. Expect
    operation ID, type, requester, status, attempts, timestamps/duration, and a
    bounded error. Use the copy control and paste into a plain-text field; expect
    the complete UUID rather than the shortened table label. Retry only a
    supported disposable failure and expect no duplicate active work.
-4. Open **Platform settings**. Save one reversible non-runtime value and restore
+6. Open **Platform settings**. Save one reversible non-runtime value and restore
    it. Expect typed validation and audit history. Do not change a production
    secret.
-5. Stop telemetry only in the controlled environment. Expect a visible
+7. Stop telemetry only in the controlled environment. Expect a visible
    degraded state while DNS and edge traffic continue. Restore telemetry and
    record bounded buffer recovery.
-6. Refresh, sign out, sign in, and restart the affected non-database service.
+8. Refresh, sign out, sign in, and restart the affected non-database service.
    Expect PostgreSQL desired state and the previous valid runtime state to
    remain intact.
 
@@ -274,11 +294,25 @@ exact mapping before the run:
 6. Sign in as a domain user and directly request the edge and service-pool
    administrator URLs. Expect denial with no fleet addresses, revisions,
    capacity, or failure details disclosed.
-7. On each edge detail page, expect **Gateway** = **Ready**, **Gateway map
+7. On each edge detail page, expect **Gateway process** = **Ready**, **Gateway map
    revision** equal to **Active configuration sequence**, and visible **Gateway
    listeners**, **Gateway routes**, **Gateway active connections**, **Gateway
    errors**, and **Gateway rejected candidates**. Record every value. If any
    field is absent or the revision differs, mark this checkpoint **Failed**.
+8. Leave one edge detail page open for at least 15 seconds. Expect **Last
+   heartbeat** and the Cells/Endpoints readiness data to refresh without a
+   browser reload. Restart only that edge agent container. Expect the heartbeat
+   to become stale after the configured threshold and then recover within two
+   successful five-second polls. Confirm the page remains a compact value grid
+   without explanatory paragraphs below the fields.
+9. Hover over every live edge field label and focus each label with the
+   keyboard. Expect a short tooltip without an extra help icon or any layout
+   change. Confirm the **Traffic listener** and **Gateway process**
+   tooltips distinguish listener convergence from gateway process readiness.
+   Confirm **Active configuration sequence** and **Gateway map revision**
+   tooltips say these monotonic identities must not be reset. Confirm **Gateway
+   routes** explains that it is the current destination-address plus Host/SNI
+   protocol-map count, not a lifetime counter.
 
 ### HTTP routing
 
@@ -440,6 +474,8 @@ uses eight slots.
 
 1. Record every cell's status, active revision, assigned domain count, active
    connections, CPU, memory, cache, temporary storage, and last restart.
+   Expect CPU as a percentage, and memory/cache/temporary values in human-readable
+   binary units rather than raw counters.
 2. Drain `cell-02`. Expect one pending operation/task, then **Drained** only for
    that slot. Repeat the action with the same idempotency key through the API;
    expect the same operation and no duplicate task.
@@ -629,7 +665,8 @@ route collectors, edge IDs, cell IDs, pool/endpoint revisions, gateway active
 revisions, domain revisions, operation IDs, and UTC timestamps.
 
 1. Sign in as administrator and open **Edge network → Service pools → New
-   service pool**. Choose **Simple Anycast**. Confirm the helper text states
+   service pool**. Choose **Simple Anycast**. Hover or focus the relevant field
+   labels and confirm the tooltips state
    that CDNFoundry binds and publishes addresses but does not announce or
    withdraw BGP routes. Confirm it also states that pool creation assigns no
    edge or cell, one distinct pair belongs to one pool, and **Shared** is the

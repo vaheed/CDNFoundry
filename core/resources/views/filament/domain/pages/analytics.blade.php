@@ -35,8 +35,11 @@
             <x-filament::section :heading="'Analytics for ' . $state['domain']->name" :description="($state['meta']['from'] ?? '') . ' through ' . ($state['meta']['to'] ?? '') . ' · UTC · bytes · milliseconds · no sampling'" icon="heroicon-o-chart-bar-square">
                 <div class="flex flex-wrap gap-3">
                     <x-ui.status-pill :tone="$state['available'] ? 'success' : 'danger'">ClickHouse {{ $state['available'] ? 'available' : 'unavailable' }}</x-ui.status-pill>
-                    <x-ui.status-pill :tone="($state['meta']['partial'] ?? true) ? 'warning' : 'success'">{{ ($state['meta']['partial'] ?? true) ? 'Partial / provisional' : 'Finalized' }}</x-ui.status-pill>
+                    <x-ui.status-pill :tone="($state['meta']['partial'] ?? true) ? 'info' : 'success'">{{ ($state['meta']['partial'] ?? true) ? 'Live window included' : 'Fully finalized range' }}</x-ui.status-pill>
                 </div>
+                @if ($state['meta']['partial'] ?? true)
+                    <p class="cdn-row-meta mt-3">The latest {{ $state['meta']['finalization_delay_minutes'] ?? 15 }} minutes are provisional so current traffic is visible. Finalized usage remains separate below.</p>
+                @endif
                 @if (!$state['available'])
                     <x-ui.empty-state class="mt-4" title="Analytics unavailable" description="DNS and edge serving continue normally; finalized PostgreSQL usage remains available below." />
                 @endif
@@ -106,7 +109,7 @@
                 </x-filament::section>
             @endif
 
-            <x-filament::section heading="Finalized usage" description="Stable PostgreSQL rollups for reconciliation. Latest 20 intervals." icon="heroicon-o-document-chart-bar">
+            <x-filament::section heading="Finalized usage" description="Stable PostgreSQL rollups for reconciliation. Latest 5 finalized intervals." icon="heroicon-o-document-chart-bar">
                 <div class="mb-4">
                     <x-filament::button tag="a" icon="heroicon-o-arrow-down-tray" :href="route('app.analytics.usage.csv', $state['domain'])">Usage CSV export</x-filament::button>
                 </div>

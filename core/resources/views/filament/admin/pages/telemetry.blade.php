@@ -12,12 +12,15 @@
     @endphp
 
     <div class="cdn-dashboard">
-        <x-filament::section heading="Telemetry status" :description="($state['meta']['from'] ?? '') . ' through ' . ($state['meta']['to'] ?? '') . ' · UTC · bytes · milliseconds · no sampling'" icon="heroicon-o-signal">
+        <x-filament::section heading="Telemetry status" :description="'Live 24-hour analytics · UTC · bytes · milliseconds · no sampling. Data through ' . ($state['meta']['finalized_until'] ?? 'the finalization boundary') . ' is finalized.'" icon="heroicon-o-signal">
             <div class="flex flex-wrap gap-3">
                 <x-ui.status-pill :tone="$state['available'] ? 'success' : 'danger'">ClickHouse {{ $state['available'] ? 'available' : 'unavailable' }}</x-ui.status-pill>
                 <x-ui.status-pill :tone="$state['buffer']['available'] ? 'success' : 'warning'">Vector metrics {{ $state['buffer']['available'] ? 'available' : 'unavailable' }}</x-ui.status-pill>
-                <x-ui.status-pill :tone="($state['meta']['partial'] ?? true) ? 'warning' : 'success'">{{ ($state['meta']['partial'] ?? true) ? 'Partial / provisional' : 'Finalized' }}</x-ui.status-pill>
+                <x-ui.status-pill :tone="($state['meta']['partial'] ?? true) ? 'info' : 'success'">{{ ($state['meta']['partial'] ?? true) ? 'Live window included' : 'Fully finalized range' }}</x-ui.status-pill>
             </div>
+            @if ($state['meta']['partial'] ?? true)
+                <p class="cdn-row-meta mt-3">Normal: the latest {{ $state['meta']['finalization_delay_minutes'] ?? 15 }} minutes remain provisional so this page can include current traffic. This is not a delivery warning; finalized usage is listed separately below.</p>
+            @endif
             @if (!$state['available'])
                 <x-ui.empty-state class="mt-4" title="Analytics unavailable" description="Traffic serving is independent and remains active. Finalized PostgreSQL usage is still shown below." />
             @endif
@@ -86,15 +89,25 @@
         @endif
 
         <div class="cdn-dashboard-columns">
-            <x-filament::section heading="Vector buffer and delivery" description="Non-zero discarded events or delivery errors require operator review." icon="heroicon-o-circle-stack">
+            <x-filament::section heading="Vector buffer and delivery" description="Current collector backlog plus lifetime delivery counters. Zero discarded events and errors is healthy." icon="heroicon-o-circle-stack">
                 <div class="cdn-queue-list">
                     @forelse ($state['buffer']['metrics'] as $metric => $value)
                         @php
                             $problem = (str_contains($metric, 'discarded') || str_contains($metric, 'errors')) && (float) $value > 0;
+                            $metricLabel = match ($metric) {
+                                'vector_buffer_byte_size' => 'Buffered data',
+                                'vector_buffer_events' => 'Buffered events',
+                                'vector_component_discarded_events_total' => 'Discarded events',
+                                'vector_component_errors_total' => 'Delivery / component errors',
+                                default => str($metric)->after('vector_')->replace('_', ' ')->headline(),
+                            };
+                            $metricValue = $metric === 'vector_buffer_byte_size'
+                                ? $formatBytes($value)
+                                : number_format((float) $value, 0);
                         @endphp
                         <div class="cdn-queue-row">
-                            <div class="min-w-0"><div class="cdn-row-title">{{ str($metric)->after('vector_')->replace('_', ' ')->headline() }}</div><div class="cdn-row-meta"><code>{{ $metric }}</code></div></div>
-                            <span class="cdn-status-pill" data-tone="{{ $problem ? 'danger' : 'success' }}">{{ is_numeric($value) ? number_format((float) $value, 0) : $value }}</span>
+                            <div class="min-w-0"><div class="cdn-row-title">{{ $metricLabel }}</div><div class="cdn-row-meta"><code>{{ $metric }}</code></div></div>
+                            <span class="cdn-status-pill" data-tone="{{ $problem ? 'danger' : 'success' }}">{{ $metricValue }}</span>
                         </div>
                     @empty
                         <x-ui.empty-state title="Vector metrics unavailable" description="Serving remains independent; inspect the collector when metrics should be present." />
@@ -102,7 +115,7 @@
                 </div>
             </x-filament::section>
 
-            <x-filament::section heading="Finalized usage" description="Stable PostgreSQL rollups for external reconciliation. Latest 20 intervals." icon="heroicon-o-document-chart-bar">
+            <x-filament::section heading="Finalized usage" description="Stable PostgreSQL rollups for external reconciliation. Latest 5 finalized intervals." icon="heroicon-o-document-chart-bar">
                 <div class="mb-4">
                     <x-filament::button tag="a" icon="heroicon-o-arrow-down-tray" :href="route('admin.telemetry.usage.csv')">Global usage CSV</x-filament::button>
                 </div>

@@ -1,5 +1,5 @@
 <x-filament-panels::page>
-    <div class="cdn-dashboard">
+    <div class="cdn-dashboard" wire:poll.30s>
         <div class="cdn-stat-grid">
             @foreach ($this->summary as $stat)
                 <x-ui.stat-card :label="$stat['label']" :value="number_format($stat['value'])" :description="$stat['description']" :tone="$stat['tone']" :href="$stat['url']" />
@@ -11,7 +11,14 @@
                 <div class="cdn-queue-list">
                     @foreach ($this->componentState as $healthState)
                         <div class="cdn-queue-row">
-                            <div><div class="cdn-row-title">{{ $healthState['name'] }}</div><div class="cdn-row-meta">Checked {{ $healthState['checked_at'] }}</div></div>
+                            <div class="min-w-0">
+                                <div class="cdn-row-title">{{ $healthState['name'] }}</div>
+                                <div class="cdn-row-meta">{{ $healthState['summary'] }}</div>
+                                @if ($healthState['status'] !== 'healthy')
+                                    <div class="cdn-row-meta mt-1"><strong>How to fix:</strong> {{ $healthState['guidance'] }}</div>
+                                @endif
+                                <div class="cdn-row-meta mt-1">Checked {{ $healthState['checked_at'] }}</div>
+                            </div>
                             <x-ui.status-pill :tone="$healthState['status'] === 'healthy' ? 'success' : ($healthState['status'] === 'degraded' ? 'warning' : 'danger')">{{ str($healthState['status'])->headline() }}</x-ui.status-pill>
                         </div>
                     @endforeach

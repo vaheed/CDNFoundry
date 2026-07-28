@@ -42,6 +42,14 @@ stat cards, empty states, data tables, form actions, and list rows. Keep
 business validation in controllers/support types and mirror bounds in Filament
 forms for usability.
 
+Use `App\Support\FilamentHelp::label()` for optional explanatory copy on
+Filament fields, entries, table headings, and section headings. The rendered
+label is the help target: pointer hover and keyboard focus reveal the tooltip,
+without a separate help icon or persistent paragraph. Keep validation errors,
+warnings, destructive-action confirmations, degraded-state reasons, live
+measurements, and other operational evidence visible because they are state,
+not optional help.
+
 ## Qualification
 
 Feature tests render panel routes, scope resources, confirm shared themes and

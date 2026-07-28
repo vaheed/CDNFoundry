@@ -87,8 +87,22 @@ or operator bindings and let reconciliation render a candidate.
 `/metrics` exposes readiness, active revision, listener and route counts,
 connections, bounded errors, activations, and candidate rejections. The agent
 reports this bounded snapshot in its heartbeat and the administrator edge page
-displays it. Readiness is false when the gateway is unavailable or its revision
-differs from the active agent sequence.
+displays it and refreshes live runtime state every five seconds. Readiness is
+false when the gateway is unavailable or its revision differs from the active
+agent sequence.
+
+The active configuration sequence and gateway map revision are monotonic
+identities, not retained configurations or allocated resources. They can safely
+grow to millions; do not reset them daily or weekly. Resetting would remove the
+ordering used to reject stale candidates and acknowledgements. PostgreSQL
+artifact retention may remove old payload rows without reusing or resetting
+their sequence values.
+
+`Gateway routes` is the size of the current in-memory routing map. One hostname
+may contribute an HTTP and an HTTPS route for each service address on which it
+is available. It is not a lifetime counter. Inspect desired hostname placement
+in the domain and cell views; inspect the generated map only through bounded
+gateway metrics and qualification tooling, never by editing the derived file.
 
 - Unknown or malformed Host/SNI: close before dialing a cell.
 - Unknown destination/name pair: close before dialing a cell.
@@ -97,6 +111,13 @@ differs from the active agent sequence.
 - Control-plane outage: continue from local active state.
 - Gateway restart: load a valid candidate or `last-valid.json`.
 - Agent restart: rebuild derived files from durable signed local state.
+
+If the gateway process is ready but an endpoint says `gateway_not_ready`, first
+confirm the edge heartbeat is fresh. A stale panel snapshot can be distinguished
+from a real outage because the live status section refreshes every five seconds.
+For a real failure, compare gateway readiness and revision with the agent's
+active sequence, then inspect the agent log for a rejected heartbeat or
+candidate.
 
 Logs contain the listener and a bounded reason, never bodies, maps,
 certificates, customer content, or secrets.

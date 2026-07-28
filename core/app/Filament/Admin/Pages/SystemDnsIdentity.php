@@ -7,6 +7,7 @@ use App\Jobs\ApplyPlatformDnsSettings;
 use App\Models\AuditLog;
 use App\Models\Operation;
 use App\Models\PlatformDnsSetting;
+use App\Support\FilamentHelp;
 use App\Support\PlatformDnsConfirmation;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\TagsInput;
@@ -52,8 +53,9 @@ class SystemDnsIdentity extends Page
     public function form(Schema $schema): Schema
     {
         return $schema->statePath('data')->components([
-            TextInput::make('platform_domain')->required()->maxLength(253)->live(onBlur: true)
-                ->helperText('Enter the public platform domain; standard DNS identity fields will be filled automatically.')
+            TextInput::make('platform_domain')
+                ->label(FilamentHelp::label('Platform domain', 'Enter the public platform domain; standard DNS identity fields will be filled automatically.'))
+                ->required()->maxLength(253)->live(onBlur: true)
                 ->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
                     $domain = mb_strtolower(rtrim(trim((string) $state), '.'));
                     if ($domain === '') {
@@ -80,8 +82,7 @@ class SystemDnsIdentity extends Page
             Repeater::make('nameservers')->minItems(2)->maxItems(8)->schema([
                 TextInput::make('hostname')->required()->maxLength(253),
                 TextInput::make('ipv4')->required()->ipv4(),
-                TextInput::make('ipv6')->ipv6()
-                    ->helperText('Optional. Leave empty for IPv4-only authoritative DNS.'),
+                TextInput::make('ipv6')->label(FilamentHelp::label('IPv6', 'Optional. Leave empty for IPv4-only authoritative DNS.'))->ipv6(),
             ])->columns(3),
             TextInput::make('soa_primary')->required()->maxLength(253),
             TextInput::make('soa_mailbox')->required()->maxLength(253),

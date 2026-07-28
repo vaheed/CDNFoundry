@@ -14,6 +14,7 @@ use App\Models\EdgeRevision;
 use App\Models\Operation;
 use App\Models\PlatformDnsSetting;
 use App\Support\EdgeRoutingCompiler;
+use App\Support\FilamentHelp;
 use App\Support\SecurityConfig;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\TextInput;
@@ -60,8 +61,7 @@ class DomainResource extends Resource
     public static function infolist(Schema $schema): Schema
     {
         return $schema->columns(1)->components([
-            Section::make('Domain status')
-                ->description('Identity, lifecycle, and authoritative delegation state.')
+            Section::make(FilamentHelp::label('Domain status', 'Identity, lifecycle, and authoritative delegation state.'))
                 ->icon('heroicon-o-globe-alt')
                 ->schema([
                     TextEntry::make('name')->label('Canonical domain')->copyable(),
@@ -81,8 +81,7 @@ class DomainResource extends Resource
                             : self::latestNameserverVerification($record)?->error)
                         ->placeholder('None')->columnSpanFull(),
                 ])->columns(['default' => 1, 'md' => 2, 'xl' => 3]),
-            Section::make('Edge delivery')
-                ->description('A service pool is the bounded set of equivalent OpenResty cells and public addresses serving this domain. Normal domains use the shared pool; quarantine and dedicated pools provide deliberate isolation.')
+            Section::make(FilamentHelp::label('Edge delivery', 'A service pool is the bounded set of equivalent OpenResty cells and public addresses serving this domain. Normal domains use the shared pool; quarantine and dedicated pools provide deliberate isolation.'))
                 ->icon('heroicon-o-cloud')
                 ->schema([
                     TextEntry::make('proxy_hostnames')->label('Proxied hostnames')
@@ -117,8 +116,7 @@ class DomainResource extends Resource
                         ->columnSpanFull(),
                     TextEntry::make('edgePlacement.last_error')->label('Last deployment failure')->placeholder('None')->columnSpanFull(),
                 ])->columns(['default' => 1, 'md' => 2, 'xl' => 3]),
-            Section::make('Authoritative DNS deployment')
-                ->description('Per-cluster deployment acknowledgements and failures.')
+            Section::make(FilamentHelp::label('Authoritative DNS deployment', 'Per-cluster deployment acknowledgements and failures.'))
                 ->icon('heroicon-o-server-stack')
                 ->schema([
                     TextEntry::make('dnsDeployments.status')->label('Deployment states')->badge()->placeholder('Not deployed'),
@@ -134,16 +132,14 @@ class DomainResource extends Resource
                         ->listWithLineBreaks()->placeholder('Not deployed'),
                     TextEntry::make('dnsDeployments.last_error')->label('Deployment errors')->placeholder('None'),
                 ])->columns(['default' => 1, 'md' => 3])->collapsible(),
-            Section::make('Cache')
-                ->description('Desired cache policy, epoch-based invalidation, and temporary development bypass.')
+            Section::make(FilamentHelp::label('Cache', 'Desired cache policy, epoch-based invalidation, and temporary development bypass.'))
                 ->icon('heroicon-o-circle-stack')
                 ->schema([
                     TextEntry::make('cache_policy')->label('Policy')->state(fn (Domain $record): string => self::cacheSettingsSummary($record)),
                     TextEntry::make('cache_epoch')->label('Full-purge epoch'),
                     TextEntry::make('cache_development_mode_until')->label('Development mode until')->dateTime()->placeholder('Off'),
                 ])->columns(['default' => 1, 'md' => 3]),
-            Section::make('TLS')
-                ->description('Serving mode and the currently selected validated certificate. Private keys are never displayed.')
+            Section::make(FilamentHelp::label('TLS', 'Serving mode and the currently selected validated certificate. Private keys are never displayed.'))
                 ->icon('heroicon-o-lock-closed')
                 ->schema([
                     TextEntry::make('tls_mode')->label('Mode')->badge(),
@@ -156,8 +152,7 @@ class DomainResource extends Resource
                     TextEntry::make('latestTlsOrder.names')->label('Requested names')->listWithLineBreaks()->placeholder('None'),
                     TextEntry::make('latestTlsOrder.last_error')->label('ACME failure')->placeholder('None')->columnSpanFull(),
                 ])->columns(['default' => 1, 'md' => 2, 'xl' => 3]),
-            Section::make('Security and DDoS readiness')
-                ->description('Local edge enforcement with bounded platform ceilings. This is readiness and isolation, not volumetric upstream scrubbing.')
+            Section::make(FilamentHelp::label('Security and DDoS readiness', 'Local edge enforcement with bounded platform ceilings. This is readiness and isolation, not volumetric upstream scrubbing.'))
                 ->icon('heroicon-o-shield-check')
                 ->schema([
                     TextEntry::make('security_profile')->label('Configured profile')->state(fn (Domain $record): string => ($record->security_settings ?? SecurityConfig::defaults())['profile'])->badge(),

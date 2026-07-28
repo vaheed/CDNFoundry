@@ -44,6 +44,12 @@ States are `healthy`, `degraded`, or `unavailable`. Only loss of the control
 database or queue backend makes overall state `unavailable`; other failures
 degrade the control plane while serving may continue.
 
+The administrator dashboard shows the bounded evidence for every component and
+a component-specific **How to fix** direction for non-healthy states. It
+refreshes every 30 seconds. A degraded aggregate is not a request to restart the
+whole platform: follow the named component, its counts/timestamps, and the
+narrow runbook while preserving unrelated serving paths.
+
 ## Prometheus metrics
 
 The control endpoint exposes component status, queue depth/age, failed

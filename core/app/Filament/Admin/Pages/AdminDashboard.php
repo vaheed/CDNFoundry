@@ -101,10 +101,65 @@ class AdminDashboard extends Dashboard
     public function getComponentStateProperty(): array
     {
         try {
-            return collect(app(SystemHealth::class)->components())->map(fn (array $state, string $name): array => ['name' => str($name)->replace('_', ' ')->headline()->toString(), ...$state])->values()->all();
+            return collect(app(SystemHealth::class)->components())->map(fn (array $state, string $name): array => [
+                'key' => $name,
+                'name' => str($name)->replace('_', ' ')->headline()->toString(),
+                ...$state,
+                'summary' => $this->healthDetails($state['details'] ?? []),
+                'guidance' => $this->healthGuidance($name),
+            ])->values()->all();
         } catch (Throwable) {
-            return [['name' => 'Operational health', 'status' => 'unavailable', 'checked_at' => now()->toIso8601String(), 'details' => []]];
+            return [[
+                'key' => 'operational_health', 'name' => 'Operational health', 'status' => 'unavailable',
+                'checked_at' => now()->toIso8601String(), 'details' => [], 'summary' => 'Health checks could not be loaded.',
+                'guidance' => 'Check the control application logs and database connectivity.',
+            ]];
         }
+    }
+
+    private function healthDetails(array $details): string
+    {
+        if ($details === []) {
+            return 'No additional details reported.';
+        }
+
+        return collect($details)->map(function (mixed $value, string $key): string {
+            $label = str($key)->replace('_', ' ')->headline();
+            $formatted = match (true) {
+                is_bool($value) => $value ? 'yes' : 'no',
+                $value === null => 'not available',
+                is_float($value) => number_format($value, 2),
+                is_int($value) => number_format($value),
+                default => (string) $value,
+            };
+
+            return "{$label}: {$formatted}";
+        })->implode(' · ');
+    }
+
+    private function healthGuidance(string $component): string
+    {
+        return match ($component) {
+            'control_database' => 'Check PostgreSQL health, credentials, and the private control network.',
+            'queue_backend' => 'Check Valkey health and control-plane connectivity.',
+            'queue_workers' => 'Start or restart Horizon and confirm every bounded queue lane has a running supervisor.',
+            'scheduler' => 'Confirm the scheduler container is running every minute and can write its cache heartbeat.',
+            'clickhouse' => 'Check ClickHouse health and follow the telemetry outage runbook.',
+            'vector' => 'Check Vector health, sources, disk buffers, and ClickHouse delivery.',
+            'host_clock' => 'Check Prometheus node time metrics and synchronize hosts with NTP.',
+            'mmdb' => 'Run the MMDB updater and verify the database file is readable and current.',
+            'edges', 'edge_listeners', 'edge_cells', 'service_pools' => 'Open Edge network, inspect the named edge/pool, then verify heartbeat, gateway, and assigned cell readiness.',
+            'edge_configuration', 'edge_placements' => 'Inspect failed operations and deployment rejections, then reconcile only the affected domain or edge.',
+            'edge_capacity' => 'Add capacity or drain/move workloads from cells at or above 80% of a reported limit.',
+            'emergency_modes' => 'Review active emergency controls and intentionally withdrawn pools; remove them only after the incident is resolved.',
+            'authoritative_dns', 'dns_deployments' => 'Check DNS cluster health and failed/pending deployments while preserving the previous valid zone.',
+            'tls' => 'Review failed orders and certificates inside the expiry alert window.',
+            'runtime_tasks', 'purges' => 'Review failed edge tasks or purges and retry after correcting the bounded failure reason.',
+            'usage' => 'Check the scheduler, usage finalizer, bulk-maintenance queue, and ClickHouse availability.',
+            'operations' => 'Open Operations, inspect failed rows, and retry only after correcting their stable failure reason.',
+            'backups' => 'Run and verify a current backup, including keys and externally stored TLS material.',
+            default => 'Inspect the component details and the corresponding operations runbook.',
+        };
     }
 
     private function queueAge(?int $pushedAt, int $depth): string

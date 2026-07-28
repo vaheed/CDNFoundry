@@ -10,6 +10,7 @@ use App\Models\EdgeCell;
 use App\Models\EdgePool;
 use App\Models\EdgeTask;
 use App\Models\Operation;
+use App\Support\FilamentHelp;
 use App\Support\PlatformSettings;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -29,15 +30,15 @@ class CellsRelationManager extends RelationManager
     public function form(Schema $schema): Schema
     {
         return $schema->components([
-            Select::make('edge_pool_id')->label('Service pool assignment')->relationship('pool', 'name')
-                ->placeholder('Unassigned')->disabled()->dehydrated(false)
-                ->helperText('Use the cell row actions to assign or unassign its service pool.'),
+            Select::make('edge_pool_id')->label(FilamentHelp::label('Service pool assignment', 'Use the cell row actions to assign or unassign its service pool.'))->relationship('pool', 'name')
+                ->placeholder('Unassigned')->disabled()->dehydrated(false),
         ]);
     }
 
     public function table(Table $table): Table
     {
-        return $table->description(fn (): string => $this->edgeReadinessDescription())
+        return $table->poll('5s')
+            ->description(fn (): ?string => $this->edgeReadinessDescription())
             ->columns([
                 TextColumn::make('name')->label('Cell')->searchable(),
                 TextColumn::make('slot')->label('Slot')->sortable(),
@@ -60,7 +61,7 @@ class CellsRelationManager extends RelationManager
                         ? data_get($record->capacity, 'active_connections').' active connections'
                         : 'Connections not reported'),
                 TextColumn::make('capacity.cpu_usage')->label('Resources')->placeholder('Awaiting heartbeat')
-                    ->formatStateUsing(fn (mixed $state): string => is_numeric($state) ? number_format((float) $state, 2).' CPU' : (string) $state)
+                    ->formatStateUsing(fn (mixed $state): string => is_numeric($state) ? number_format(max(0, (float) $state), 1).'% CPU' : 'CPU use not reported')
                     ->description(fn (EdgeCell $record): string => filled(data_get($record->capacity, 'memory_usage'))
                         ? self::formatBytes(data_get($record->capacity, 'memory_usage')).' / '.self::formatBytes(data_get($record->capacity, 'memory_limit', data_get($record->resource_limits, 'memory_bytes'))).' memory'
                         : 'Memory use not reported'),
@@ -172,7 +173,7 @@ class CellsRelationManager extends RelationManager
             ->send();
     }
 
-    private function edgeReadinessDescription(): string
+    private function edgeReadinessDescription(): ?string
     {
         $edge = $this->getOwnerRecord();
         if ($edge->registered_at === null) {
@@ -186,7 +187,7 @@ class CellsRelationManager extends RelationManager
             return 'The last agent heartbeat is stale. Desired changes remain saved and tasks wait for reconnection.';
         }
 
-        return 'Agent connected. Capacity values come from the latest authenticated runtime heartbeat.';
+        return null;
     }
 
     private static function formatBytes(mixed $bytes): string
@@ -205,4 +206,5 @@ class CellsRelationManager extends RelationManager
 
         return ($unit === 0 ? number_format($value, 0) : number_format($value, $value < 10 ? 2 : 1)).' '.$units[$unit];
     }
+
 }

@@ -142,7 +142,10 @@ class EdgeAgentController extends Controller
                 throw ValidationException::withMessages(["cells.$index.name" => 'The cell is not assigned to this edge.']);
             }
         }
-        $latestIssuedSequence = (int) $edge->artifacts()->max('sequence');
+        // Artifact retention may remove an already acknowledged row. The edge's
+        // durable active sequence remains valid evidence, while values beyond
+        // both durable acknowledgement and retained issued artifacts are not.
+        $latestIssuedSequence = max((int) $edge->active_sequence, (int) $edge->artifacts()->max('sequence'));
         if ($data['active_sequence'] > $latestIssuedSequence) {
             throw ValidationException::withMessages(['active_sequence' => 'The active sequence was not issued to this edge.']);
         }

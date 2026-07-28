@@ -11,6 +11,7 @@ use App\Filament\Admin\Resources\Edges\RelationManagers\PoolEndpointsRelationMan
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
 use App\Models\Edge;
+use App\Support\FilamentHelp;
 use App\Support\GeoVocabulary;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
@@ -20,6 +21,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -38,54 +40,57 @@ class EdgeResource extends Resource
     {
         return $schema->components([
             TextInput::make('name')->required()->maxLength(100)->unique(ignoreRecord: true),
-            TextInput::make('cell_slot_count')->label('Cell slots')->numeric()->integer()->required()->minValue(1)->maxValue(32)->default(8)->disabledOn('edit')
-                ->helperText('Bounded OpenResty slots created during edge installation. This cannot be changed after creation.'),
+            TextInput::make('cell_slot_count')->label(FilamentHelp::label('Cell slots', 'Bounded OpenResty slots created during edge installation. This cannot be changed after creation.'))->numeric()->integer()->required()->minValue(1)->maxValue(32)->default(8)->disabledOn('edit'),
             Select::make('country_code')->label('Country')->options(array_combine(GeoVocabulary::countries(), GeoVocabulary::countries()))->searchable()->required(),
             Select::make('continent_code')->label('Continent')->options(array_combine(GeoVocabulary::CONTINENTS, GeoVocabulary::CONTINENTS))->required(),
-            TextInput::make('management_ipv4')->label('Management IPv4')->ipv4()->nullable()->unique(ignoreRecord: true)
-                ->helperText('Optional operator access address. It is never bound by the gateway or published in customer DNS.'),
-            TextInput::make('management_ipv6')->label('Management IPv6')->ipv6()->nullable()->unique(ignoreRecord: true)
-                ->helperText('Optional operator access address. Public traffic addresses belong only to pool endpoints.'),
+            TextInput::make('management_ipv4')->label(FilamentHelp::label('Management IPv4', 'Optional operator access address. It is never bound by the gateway or published in customer DNS.'))->ipv4()->nullable()->unique(ignoreRecord: true),
+            TextInput::make('management_ipv6')->label(FilamentHelp::label('Management IPv6', 'Optional operator access address. Public traffic addresses belong only to pool endpoints.'))->ipv6()->nullable()->unique(ignoreRecord: true),
         ]);
     }
 
     public static function infolist(Schema $schema): Schema
     {
         return $schema->components([
-            TextEntry::make('registered_at')->label('Enrolled at')->dateTime()->placeholder('Awaiting agent enrollment'),
-            TextEntry::make('last_heartbeat_at')->label('Last heartbeat')->since()->placeholder('No heartbeat received'),
-            TextEntry::make('agent_version')->label('Agent version')->placeholder('Available after enrollment'),
-            TextEntry::make('capacity.listener_ready')->label('Traffic listener')->badge()
-                ->formatStateUsing(fn (mixed $state): string => match ($state) {
-                    true => 'Ready',
-                    false => 'Not ready',
-                    default => 'Awaiting heartbeat',
-                })
-                ->color(fn (mixed $state): string => match ($state) {
-                    true => 'success',
-                    false => 'danger',
-                    default => 'gray',
-                }),
-            TextEntry::make('capacity.gateway.ready')->label('Gateway')->badge()
-                ->formatStateUsing(fn (mixed $state): string => match ($state) {
-                    true => 'Ready',
-                    false => 'Not ready',
-                    default => 'Awaiting heartbeat',
-                })
-                ->color(fn (mixed $state): string => match ($state) {
-                    true => 'success',
-                    false => 'danger',
-                    default => 'gray',
-                }),
-            TextEntry::make('active_sequence')->label('Active configuration sequence'),
-            TextEntry::make('capacity.gateway.active_revision')->label('Gateway map revision')->placeholder('Gateway not reporting'),
-            TextEntry::make('capacity.gateway.listeners')->label('Gateway listeners')->placeholder('Gateway not reporting'),
-            TextEntry::make('capacity.gateway.routes')->label('Gateway routes')->placeholder('Gateway not reporting'),
-            TextEntry::make('capacity.gateway.connections_active')->label('Gateway active connections')->placeholder('Gateway not reporting'),
-            TextEntry::make('capacity.gateway.errors')->label('Gateway errors')->placeholder('Gateway not reporting'),
-            TextEntry::make('capacity.gateway.candidate_rejections')->label('Gateway rejected candidates')->placeholder('Gateway not reporting'),
-            TextEntry::make('identity_certificate_expires_at')->label('Identity expires')->dateTime()->placeholder('Not enrolled'),
-            TextEntry::make('capacity.last_rejection.reason')->label('Latest deployment rejection')->placeholder('None reported'),
+            Section::make('Live edge status')
+                ->columnSpanFull()
+                ->poll('5s')
+                ->columns(['default' => 1, 'md' => 2, 'xl' => 4])
+                ->schema([
+                    TextEntry::make('registered_at')->label(FilamentHelp::label('Enrolled at', 'When this edge agent completed its first authenticated enrollment.'))->dateTime()->placeholder('Awaiting agent enrollment'),
+                    TextEntry::make('last_heartbeat_at')->label(FilamentHelp::label('Last heartbeat', 'Expected every 5 seconds. The value refreshes automatically and becomes stale after the configured threshold.'))->since()->placeholder('No heartbeat received'),
+                    TextEntry::make('agent_version')->label(FilamentHelp::label('Agent version', 'Software version reported by the running edge agent.'))->placeholder('Available after enrollment'),
+                    TextEntry::make('capacity.listener_ready')->label(FilamentHelp::label('Traffic listener', 'Ready only when the gateway revision matches and at least one assigned cell is ready.'))->badge()
+                        ->formatStateUsing(fn (mixed $state): string => match ($state) {
+                            true => 'Ready',
+                            false => 'Not ready',
+                            default => 'Awaiting heartbeat',
+                        })
+                        ->color(fn (mixed $state): string => match ($state) {
+                            true => 'success',
+                            false => 'danger',
+                            default => 'gray',
+                        }),
+                    TextEntry::make('capacity.gateway.ready')->label(FilamentHelp::label('Gateway process', 'The gateway has validated and activated a complete routing map.'))->badge()
+                        ->formatStateUsing(fn (mixed $state): string => match ($state) {
+                            true => 'Ready',
+                            false => 'Not ready',
+                            default => 'Awaiting heartbeat',
+                        })
+                        ->color(fn (mixed $state): string => match ($state) {
+                            true => 'success',
+                            false => 'danger',
+                            default => 'gray',
+                        }),
+                    TextEntry::make('active_sequence')->label(FilamentHelp::label('Active configuration sequence', 'Monotonic deployment identity. It is safe to grow and must not be reset.')),
+                    TextEntry::make('capacity.gateway.active_revision')->label(FilamentHelp::label('Gateway map revision', 'Must match the active configuration sequence after convergence.'))->placeholder('Gateway not reporting'),
+                    TextEntry::make('capacity.gateway.listeners')->label(FilamentHelp::label('Gateway listeners', 'Current bound HTTP and HTTPS service sockets.'))->placeholder('Gateway not reporting'),
+                    TextEntry::make('capacity.gateway.routes')->label(FilamentHelp::label('Gateway routes', 'Current destination-address plus Host/SNI protocol mappings, not historical rows.'))->placeholder('Gateway not reporting'),
+                    TextEntry::make('capacity.gateway.connections_active')->label(FilamentHelp::label('Gateway active connections', 'Client connections currently open through this edge gateway.'))->placeholder('Gateway not reporting'),
+                    TextEntry::make('capacity.gateway.errors')->label(FilamentHelp::label('Gateway errors', 'Bounded gateway error counter reported by the running process.'))->placeholder('Gateway not reporting'),
+                    TextEntry::make('capacity.gateway.candidate_rejections')->label(FilamentHelp::label('Gateway rejected candidates', 'Configuration candidates rejected before activation because validation failed.'))->placeholder('Gateway not reporting'),
+                    TextEntry::make('identity_certificate_expires_at')->label(FilamentHelp::label('Identity expires', 'Expiry time of the certificate used to authenticate this edge to the control plane.'))->dateTime()->placeholder('Not enrolled'),
+                    TextEntry::make('capacity.last_rejection.reason')->label(FilamentHelp::label('Latest deployment rejection', 'Most recent reason a runtime configuration could not be activated.'))->placeholder('None reported'),
+                ]),
         ]);
     }
 
@@ -146,4 +151,5 @@ class EdgeResource extends Resource
         AuditLog::record(auth()->user(), $action, $edge, [], request()->ip());
         ReconcilePlatformDnsIdentity::dispatch()->afterCommit();
     }
+
 }

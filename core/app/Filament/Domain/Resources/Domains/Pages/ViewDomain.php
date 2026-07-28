@@ -22,6 +22,7 @@ use App\Models\Operation;
 use App\Support\BindZone;
 use App\Support\CachePolicy;
 use App\Support\DnsZoneImporter;
+use App\Support\FilamentHelp;
 use App\Support\ProxyRevisionRollback;
 use App\Support\SecurityConfig;
 use App\Support\UploadedCertificate;
@@ -257,8 +258,9 @@ class ViewDomain extends ViewRecord
                     ->send();
             }),
             Action::make('securitySettings')->label('Security profile and limits')->icon('heroicon-o-shield-check')->schema([
-                Select::make('profile')->options(SecurityConfig::profileOptions())->required()->live()
-                    ->helperText(fn (Get $get): string => SecurityConfig::profileDescription((string) $get('profile')))
+                Select::make('profile')
+                    ->label(fn (Get $get): string|\Illuminate\Support\HtmlString => FilamentHelp::label('Profile', SecurityConfig::profileDescription((string) $get('profile'))))
+                    ->options(SecurityConfig::profileOptions())->required()->live()
                     ->afterStateUpdated(function (?string $state, Set $set): void {
                         if ($state === null || $state === SecurityConfig::MANUAL_PROFILE) {
                             return;
@@ -272,7 +274,7 @@ class ViewDomain extends ViewRecord
                     'automatic_with_admin_notification' => 'Automatic restriction with administrator notification',
                 ])->required(),
                 TagsInput::make('allowed_methods')->label('Allowed methods')->suggestions(config('security.allowed_methods'))->required()->nestedRecursiveRules(['in:'.implode(',', config('security.allowed_methods'))]),
-                TagsInput::make('trusted_proxy_cidrs')->label('Trusted L4 proxy CIDRs')->helperText('Leave empty unless requests arrive only through an approved balancer that overwrites X-Forwarded-For.'),
+                TagsInput::make('trusted_proxy_cidrs')->label(FilamentHelp::label('Trusted L4 proxy CIDRs', 'Leave empty unless requests arrive only through an approved balancer that overwrites X-Forwarded-For.')),
                 ...collect(array_keys(config('security.profiles.standard')))->map(fn (string $field): TextInput => TextInput::make("limits.$field")
                     ->label(str($field)->replace('_', ' ')->title()->toString())->numeric()
                     ->minValue($field === 'origin_retry_limit' ? 0 : 1)

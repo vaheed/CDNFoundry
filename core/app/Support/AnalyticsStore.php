@@ -126,7 +126,12 @@ final class AnalyticsStore
         $delay = app(PlatformSettings::class)->integer('telemetry', 'finalization_delay_minutes');
         $finalizedUntil = CarbonImmutable::now('UTC')->subMinutes($delay);
 
-        return ['from' => $range['from']->toIso8601String(), 'to' => $range['to']->toIso8601String(), 'timezone' => 'UTC', 'units' => ['bandwidth' => 'bytes', 'latency' => 'milliseconds'], 'finalized_until' => $finalizedUntil->toIso8601String(), 'partial' => $range['to']->isAfter($finalizedUntil), 'sampling' => 'none'];
+        return [
+            'from' => $range['from']->toIso8601String(), 'to' => $range['to']->toIso8601String(), 'timezone' => 'UTC',
+            'units' => ['bandwidth' => 'bytes', 'latency' => 'milliseconds'],
+            'finalized_until' => $finalizedUntil->toIso8601String(), 'finalization_delay_minutes' => $delay,
+            'partial' => $range['to']->isAfter($finalizedUntil), 'sampling' => 'none',
+        ];
     }
 
     private function query(string $sql, array $parameters): array

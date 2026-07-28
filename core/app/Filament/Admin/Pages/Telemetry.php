@@ -68,7 +68,11 @@ class Telemetry extends Page
         $rawRange = ['from' => $to->subHour(), 'to' => $to, 'raw' => true];
         $state = [
             'available' => false,
-            'meta' => ['from' => $range['from']->toIso8601String(), 'to' => $range['to']->toIso8601String(), 'partial' => true],
+            'meta' => [
+                'from' => $range['from']->toIso8601String(), 'to' => $range['to']->toIso8601String(),
+                'partial' => true,
+                'finalization_delay_minutes' => app(\App\Support\PlatformSettings::class)->integer('telemetry', 'finalization_delay_minutes'),
+            ],
             'summary' => [],
             'traffic' => [],
             'dns' => [],
@@ -94,7 +98,7 @@ class Telemetry extends Page
 
     private function recentUsage(): array
     {
-        return UsageRollup::query()->with('domain:id,name')->latest('interval_start')->limit(20)->get()
+        return UsageRollup::query()->with('domain:id,name')->where('status', 'finalized')->latest('interval_start')->limit(5)->get()
             ->map(fn (UsageRollup $row): array => [
                 'domain' => $row->domain?->name ?? "Domain #{$row->domain_id}",
                 'interval' => $row->interval_start->toIso8601String(),
@@ -109,9 +113,18 @@ class Telemetry extends Page
     {
         try {
             $metrics = Http::connectTimeout(1)->timeout(2)->get('http://vector:9598/metrics')->throw()->body();
-            preg_match_all('/^(vector_buffer_[a-z_]+|vector_component_(?:discarded_events_total|errors_total))[^ ]* ([0-9.e+-]+)$/m', $metrics, $matches, PREG_SET_ORDER);
+            preg_match_all('/^(vector_buffer_(?:byte_size|events)|vector_component_(?:discarded_events_total|errors_total))(?:\{[^}]*\})?\s+([0-9.eE+-]+)(?:\s+\d+)?$/m', $metrics, $matches, PREG_SET_ORDER);
+            $values = [
+                'vector_buffer_byte_size' => 0.0,
+                'vector_buffer_events' => 0.0,
+                'vector_component_discarded_events_total' => 0.0,
+                'vector_component_errors_total' => 0.0,
+            ];
+            foreach ($matches as $match) {
+                $values[$match[1]] += (float) $match[2];
+            }
 
-            return ['available' => true, 'metrics' => collect($matches)->mapWithKeys(fn (array $match): array => [$match[1] => $match[2]])->all()];
+            return ['available' => true, 'metrics' => $values];
         } catch (Throwable) {
             return ['available' => false, 'metrics' => []];
         }
