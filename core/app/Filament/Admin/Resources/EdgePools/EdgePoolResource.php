@@ -14,7 +14,6 @@ use App\Models\EmergencyMode;
 use App\Models\PlatformDnsSetting;
 use App\Support\EdgeRoutingCompiler;
 use Filament\Actions\Action;
-use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
@@ -112,6 +111,7 @@ class EdgePoolResource extends Resource
                         $record->cells()->exists() => 'Unassign every cell before deleting this pool.',
                         $record->endpoints()->exists() => 'Remove every Geo-Unicast endpoint before deleting this pool.',
                         DomainEdgePlacement::query()->where('active_pool_id', $record->id)->orWhere('target_pool_id', $record->id)->exists() => 'Move every domain away from this pool before deleting it.',
+                        EmergencyMode::query()->where('target_type', 'pool')->where('target_id', (string) $record->id)->where('active', true)->exists() => 'End maintenance before deleting this pool.',
                         default => null,
                     };
                     if ($blockedBy !== null) {
@@ -133,19 +133,22 @@ class EdgePoolResource extends Resource
                 AuditLog::record(auth()->user(), 'edge.pool_restored', $record, ['revision' => $record->revision], request()->ip());
                 ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
             }),
-            Action::make('emergencyMode')->label('Emergency')->color('danger')->requiresConfirmation()
-                ->visible(fn (EdgePool $record): bool => ! EmergencyMode::query()->where('target_type', 'pool')->where('target_id', (string) $record->id)->where('active', true)->exists())
+            Action::make('maintenance')->label('Maintenance')->color('warning')->requiresConfirmation()
+                ->visible(fn (EdgePool $record): bool => $record->enabled && ! $record->withdrawn
+                    && ! EmergencyMode::query()->where('target_type', 'pool')->where('target_id', (string) $record->id)->where('active', true)->exists())
                 ->schema([
-                    CheckboxList::make('actions')->options(array_combine(config('security.emergency_actions'), config('security.emergency_actions')))->required()->minItems(1),
-                    TextInput::make('duration_minutes')->numeric()->minValue(1)->maxValue(config('security.emergency_duration_minutes_maximum')),
+                    TextInput::make('duration_minutes')->label('Automatic expiry (minutes)')->numeric()->default(30)->minValue(1)->maxValue(config('security.emergency_duration_minutes_maximum'))->required(),
                 ])->action(function (EdgePool $record, array $data): void {
-                    [$mode, $operation] = DispatchEmergencyMode::activate('pool', (string) $record->id, $data['actions'], filled($data['duration_minutes'] ?? null) ? (int) $data['duration_minutes'] : null, auth()->user());
-                    AuditLog::record(auth()->user(), 'security.emergency_activated', $record, ['mode_id' => $mode->id], request()->ip());
-                    Notification::make()->warning()->title('Pool emergency mode queued')->body("Operation {$operation->id} targets the equivalent cell on each edge.")->send();
+                    [$mode, $operation] = DispatchEmergencyMode::activate('pool', (string) $record->id, ['return_maintenance_response'], (int) $data['duration_minutes'], auth()->user());
+                    AuditLog::record(auth()->user(), 'security.pool_maintenance_started', $record, ['mode_id' => $mode->id, 'expires_at' => $mode->expires_at], request()->ip());
+                    Notification::make()->warning()->title('Pool maintenance queued')->body("Operation {$operation->id} will return HTTP 503 from this pool's cells until the control is cleared or expires.")->send();
                 }),
-            Action::make('clearEmergency')->label('Clear emergency')->color('success')->requiresConfirmation()
+            Action::make('endMaintenance')->label('End maintenance')->color('success')->requiresConfirmation()
                 ->visible(fn (EdgePool $record): bool => EmergencyMode::query()->where('target_type', 'pool')->where('target_id', (string) $record->id)->where('active', true)->exists())
-                ->action(fn (EdgePool $record) => DispatchEmergencyMode::deactivateTarget('pool', (string) $record->id, auth()->user())),
+                ->action(function (EdgePool $record): void {
+                    $operation = DispatchEmergencyMode::deactivateTarget('pool', (string) $record->id, auth()->user());
+                    AuditLog::record(auth()->user(), 'security.pool_maintenance_ended', $record, ['operation_id' => $operation->id], request()->ip());
+                }),
         ])->defaultSort('name');
     }
 

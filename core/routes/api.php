@@ -216,13 +216,11 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:account'])->group
         Route::get('/domains/{domain}/isolation', [EdgeOperationsController::class, 'isolation']);
         Route::patch('/domains/{domain}/isolation', [EdgeOperationsController::class, 'move'])->middleware('idempotent');
         Route::post('/domains/{domain}/move', [EdgeOperationsController::class, 'move'])->middleware('idempotent');
-        Route::post('/domains/{domain}/restrict', [SecurityOperationsController::class, 'restrict'])->middleware('idempotent');
+        Route::post('/domains/{domain}/protect', [SecurityOperationsController::class, 'protect'])->middleware('idempotent');
         Route::post('/domains/{domain}/quarantine', [SecurityOperationsController::class, 'quarantine'])->middleware('idempotent');
-        Route::post('/domains/{domain}/release', [SecurityOperationsController::class, 'release'])->middleware('idempotent');
-        Route::post('/edges/{edge}/emergency-mode', [SecurityOperationsController::class, 'edgeEmergency'])->middleware('idempotent');
-        Route::delete('/edges/{edge}/emergency-mode', [SecurityOperationsController::class, 'clearEdgeEmergency'])->middleware('idempotent');
-        Route::post('/edge-cells/{cell}/emergency-mode', [SecurityOperationsController::class, 'cellEmergency'])->middleware('idempotent');
-        Route::delete('/edge-cells/{cell}/emergency-mode', [SecurityOperationsController::class, 'clearCellEmergency'])->middleware('idempotent');
+        Route::post('/domains/{domain}/return-to-normal', [SecurityOperationsController::class, 'returnToNormal'])->middleware('idempotent');
+        Route::post('/edge-pools/{pool}/maintenance', [SecurityOperationsController::class, 'startPoolMaintenance'])->middleware('idempotent');
+        Route::delete('/edge-pools/{pool}/maintenance', [SecurityOperationsController::class, 'endPoolMaintenance'])->middleware('idempotent');
         Route::post('/edge-pools/{pool}/withdraw', [SecurityOperationsController::class, 'withdraw'])->middleware('idempotent');
         Route::post('/edge-pools/{pool}/restore', [SecurityOperationsController::class, 'restore'])->middleware('idempotent');
     });

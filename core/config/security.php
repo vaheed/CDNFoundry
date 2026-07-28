@@ -6,11 +6,7 @@ return [
     'trusted_proxy_cidrs_maximum' => 32,
     'emergency_duration_minutes_maximum' => 1440,
     'allowed_methods' => ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    'emergency_actions' => [
-        'reject_unknown_hosts', 'disable_request_bodies', 'allow_get_head_only', 'reduce_keepalive',
-        'reduce_origin_concurrency', 'disable_origin_retries', 'serve_cache_only', 'serve_stale_only',
-        'return_maintenance_response', 'quarantine_domain', 'withdraw_service_ip_from_dns',
-    ],
+    'emergency_actions' => ['return_maintenance_response'],
     'profiles' => [
         'standard' => [
             'requests_per_second' => 100, 'request_burst' => 200,

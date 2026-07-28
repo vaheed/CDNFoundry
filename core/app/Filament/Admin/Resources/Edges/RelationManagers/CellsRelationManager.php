@@ -2,20 +2,16 @@
 
 namespace App\Filament\Admin\Resources\Edges\RelationManagers;
 
-use App\Actions\DispatchEmergencyMode;
 use App\Jobs\ReconcileAllEdgeDomains;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
 use App\Models\EdgeCell;
 use App\Models\EdgePool;
 use App\Models\EdgeTask;
-use App\Models\EmergencyMode;
 use App\Models\Operation;
 use App\Support\PlatformSettings;
 use Filament\Actions\Action;
-use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
@@ -120,19 +116,6 @@ class CellsRelationManager extends RelationManager
                 Action::make('drain')->requiresConfirmation()->visible(fn (EdgeCell $record): bool => ! $record->drained)->action(fn (EdgeCell $record) => self::queue($record, 'drain')),
                 Action::make('undrain')->visible(fn (EdgeCell $record): bool => $record->drained)->action(fn (EdgeCell $record) => self::queue($record, 'undrain')),
                 Action::make('restart')->color('warning')->requiresConfirmation()->action(fn (EdgeCell $record) => self::queue($record, 'restart')),
-                Action::make('emergencyMode')->label('Emergency')->color('danger')->requiresConfirmation()
-                    ->visible(fn (EdgeCell $record): bool => ! EmergencyMode::query()->where('target_type', 'cell')->where('target_id', (string) $record->id)->where('active', true)->exists())
-                    ->schema([
-                        CheckboxList::make('actions')->options(array_combine(config('security.emergency_actions'), config('security.emergency_actions')))->required()->minItems(1),
-                        TextInput::make('duration_minutes')->numeric()->minValue(1)->maxValue(config('security.emergency_duration_minutes_maximum')),
-                    ])->action(function (EdgeCell $record, array $data): void {
-                        [$mode, $operation] = DispatchEmergencyMode::activate('cell', (string) $record->id, $data['actions'], filled($data['duration_minutes'] ?? null) ? (int) $data['duration_minutes'] : null, auth()->user());
-                        AuditLog::record(auth()->user(), 'security.emergency_activated', $record, ['mode_id' => $mode->id], request()->ip());
-                        Notification::make()->warning()->title('Cell emergency mode queued')->body("Operation {$operation->id} targets only {$record->name}.")->send();
-                    }),
-                Action::make('clearEmergency')->label('Clear emergency')->color('success')->requiresConfirmation()
-                    ->visible(fn (EdgeCell $record): bool => EmergencyMode::query()->where('target_type', 'cell')->where('target_id', (string) $record->id)->where('active', true)->exists())
-                    ->action(fn (EdgeCell $record) => DispatchEmergencyMode::deactivateTarget('cell', (string) $record->id, auth()->user())),
             ]);
     }
 

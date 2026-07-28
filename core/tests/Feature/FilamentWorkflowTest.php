@@ -244,6 +244,33 @@ class FilamentWorkflowTest extends TestCase
         Queue::assertPushed(ReconcileEdgeDomain::class, fn (ReconcileEdgeDomain $job): bool => $job->domainId === $domain->id);
     }
 
+    public function test_domain_maintenance_is_a_clear_reversible_action(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        $domain = Domain::query()->create(['name' => 'maintenance-ui.example.test', 'display_name' => 'Maintenance UI', 'revision' => 1]);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->assertSee('Start maintenance')
+            ->assertSee('Protect domain')
+            ->assertDontSee('Restrict domain')
+            ->callAction('startMaintenance', data: ['body' => 'Planned maintenance'])
+            ->assertHasNoActionErrors();
+
+        $this->assertSame(['status' => 503, 'body' => 'Planned maintenance'], $domain->refresh()->proxy_settings['maintenance']);
+
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->assertSee('End maintenance')
+            ->callAction('endMaintenance')
+            ->assertHasNoActionErrors();
+
+        $this->assertNull($domain->refresh()->proxy_settings['maintenance']);
+        $this->assertSame(3, $domain->revision);
+        Queue::assertPushed(ReconcileEdgeDomain::class, 1);
+    }
+
     public function test_disabling_from_the_domain_panel_automatically_queues_edge_reconciliation(): void
     {
         Queue::fake();

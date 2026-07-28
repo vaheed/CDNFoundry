@@ -136,7 +136,7 @@ class SecurityApiTest extends TestCase
         $this->assertSame(100, $domain->securityRules()->count());
     }
 
-    public function test_admin_restriction_quarantine_release_and_failed_target_preserve_active_placement(): void
+    public function test_admin_protection_quarantine_recovery_and_failed_target_preserve_active_placement(): void
     {
         Queue::fake();
         [, $domain] = $this->ownedDomain(true);
@@ -145,7 +145,7 @@ class SecurityApiTest extends TestCase
         $quarantine = EdgePool::query()->where('kind', 'quarantine')->firstOrFail();
         DomainEdgePlacement::query()->create(['domain_id' => $domain->id, 'active_pool_id' => $shared->id, 'desired_revision' => $domain->revision, 'state' => 'active']);
 
-        $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/restrict", ['reason' => 'request spike'])
+        $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/protect", ['reason' => 'request spike'])
             ->assertAccepted()->assertJsonPath('data.state', 'restricted');
         $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/quarantine", ['reason' => 'continued spike'])
             ->assertAccepted()->assertJsonPath('data.target_pool_id', $quarantine->id);
@@ -156,28 +156,28 @@ class SecurityApiTest extends TestCase
         $placement->update(['state' => 'failed', 'last_error' => 'candidate_validation_failed']);
         $this->assertSame($shared->id, $placement->refresh()->active_pool_id);
 
-        $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/release", [])->assertAccepted()
+        $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/return-to-normal", [])->assertAccepted()
             ->assertJsonPath('data.state', 'recovering')->assertJsonPath('data.target_pool_id', $shared->id);
         $this->assertDatabaseHas('security_events', ['domain_id' => $domain->id, 'reason_code' => 'domain_quarantined']);
     }
 
-    public function test_emergency_modes_are_bounded_async_idempotent_and_expire(): void
+    public function test_pool_maintenance_is_bounded_async_idempotent_and_expires(): void
     {
         $admin = User::factory()->admin()->create();
         $edge = Edge::query()->create(['name' => 'security-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.10', 'enabled' => true]);
         $shared = EdgePool::query()->where('kind', 'shared')->firstOrFail();
         $cell = $edge->cells()->create(['slot' => 1, 'edge_pool_id' => $shared->id, 'status' => 'ready']);
         $headers = ['Idempotency-Key' => (string) Str::uuid()];
-        $response = $this->actingAs($admin)->withHeaders($headers)->postJson("/api/admin/edge-cells/{$cell->id}/emergency-mode", [
-            'actions' => ['allow_get_head_only', 'disable_origin_retries'], 'duration_minutes' => 10,
+        $response = $this->actingAs($admin)->withHeaders($headers)->postJson("/api/admin/edge-pools/{$shared->id}/maintenance", [
+            'duration_minutes' => 10,
         ])->assertAccepted();
-        $this->actingAs($admin)->withHeaders($headers)->postJson("/api/admin/edge-cells/{$cell->id}/emergency-mode", [
-            'actions' => ['allow_get_head_only', 'disable_origin_retries'], 'duration_minutes' => 10,
-        ])->assertAccepted()->assertJsonPath('data.emergency_mode_id', $response->json('data.emergency_mode_id'));
+        $this->actingAs($admin)->withHeaders($headers)->postJson("/api/admin/edge-pools/{$shared->id}/maintenance", [
+            'duration_minutes' => 10,
+        ])->assertAccepted()->assertJsonPath('data.maintenance_id', $response->json('data.maintenance_id'));
         $this->assertSame(1, EmergencyMode::query()->count());
         $task = EdgeTask::query()->where('type', 'emergency_mode')->firstOrFail();
         $this->assertSame([$cell->name], $task->payload['cell_names']);
-        $this->assertLessThanOrEqual(11, count($task->payload['actions']));
+        $this->assertSame(['return_maintenance_response'], $task->payload['actions']);
 
         EmergencyMode::query()->firstOrFail()->update(['expires_at' => now()->subMinute()]);
         $this->artisan('security:reconcile-readiness')->assertSuccessful();

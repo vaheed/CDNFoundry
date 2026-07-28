@@ -12,6 +12,7 @@ use App\Models\Edge;
 use App\Models\EdgeCell;
 use App\Models\EdgePool;
 use App\Models\EdgePoolEndpoint;
+use App\Models\EmergencyMode;
 use App\Models\Operation;
 use App\Support\EdgePoolEndpointData;
 use App\Support\EdgePoolRoutingData;
@@ -142,6 +143,7 @@ class EdgePoolController extends Controller
         abort_if($pool->cells()->exists(), 409, 'Unassign every cell before deleting the service pool.');
         abort_if($pool->endpoints()->exists(), 409, 'Remove every Geo-Unicast endpoint before deleting the service pool.');
         abort_if(DomainEdgePlacement::query()->where('active_pool_id', $pool->id)->orWhere('target_pool_id', $pool->id)->exists(), 409, 'Move every domain away from the service pool before deleting it.');
+        abort_if(EmergencyMode::query()->where('target_type', 'pool')->where('target_id', (string) $pool->id)->where('active', true)->exists(), 409, 'End maintenance before deleting the service pool.');
         DB::transaction(function () use ($request, $pool): void {
             AuditLog::record($request->user(), 'edge.pool_deleted', $pool, ['kind' => $pool->kind], $request->ip());
             $pool->delete();

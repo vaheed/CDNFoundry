@@ -32,7 +32,7 @@ The system reports:
 - MMDB presence, readability, size, and age;
 - enabled/fresh edges and listener readiness;
 - cell, service-pool, artifact, placement, and capacity health;
-- active emergency modes and withdrawn pools;
+- active pool maintenance controls and withdrawn pools;
 - DNS clusters and deployments;
 - TLS expiry and failed orders;
 - purge and runtime-task failures;

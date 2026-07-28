@@ -71,12 +71,18 @@ Never scan or delete a cache volume for a normal full purge.
 
 ## Security incident
 
-1. Identify the domain, edge, cell, or pool and reason codes.
-2. Apply the smallest bounded emergency action with an expiry where possible.
-3. For a noisy domain, move target-first to quarantine.
-4. Withdraw a service IP only when its pool cannot safely serve.
-5. Confirm unrelated cells and domains remain healthy.
-6. Clear controls explicitly and observe `recovering` before `normal`.
+1. Identify the smallest affected scope and its reason codes.
+2. For one domain, use **Protect domain**, **Start maintenance**, or
+   **Quarantine domain**. Quarantine moves target-first to the quarantine pool.
+3. For one unhealthy cell or edge, use **Drain**; restart only the affected
+   cell when required.
+4. Use pool **Maintenance** only when every domain on that pool should return
+   HTTP 503. It requires an automatic expiry.
+5. Use pool **Withdraw** only when the whole pool must leave gateway and DNS
+   publication. Coordinate BGP separately with the network provider.
+6. Confirm unrelated cells, pools, and domains remain healthy.
+7. Recover with **Return to normal**, **End maintenance**, **Undrain**, or
+   **Restore**, and observe domain `recovering` before `normal`.
 
 Volumetric saturation requires upstream provider or network mitigation.
 

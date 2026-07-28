@@ -16,6 +16,14 @@ class DispatchEmergencyMode
 {
     public static function activate(string $targetType, string $targetId, array $actions, ?int $durationMinutes, User $actor): array
     {
+        abort_unless(
+            $targetType === 'pool'
+            && $actions === ['return_maintenance_response']
+            && $durationMinutes !== null,
+            422,
+            'Only time-bounded service-pool maintenance can be activated.',
+        );
+
         return DB::transaction(function () use ($actions, $actor, $durationMinutes, $targetId, $targetType): array {
             abort_if(EmergencyMode::query()->where('target_type', $targetType)->where('target_id', $targetId)->where('active', true)->exists(), 409, 'This target already has an active emergency mode. Clear it before applying another.');
             $mode = EmergencyMode::query()->create([

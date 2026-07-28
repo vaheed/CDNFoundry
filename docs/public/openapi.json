@@ -1058,6 +1058,71 @@
                 }
             }
         },
+        "/admin/domains/{domain}/protect": {
+            "post": {
+                "operationId": "post.admin.domains.domain.protect",
+                "tags": [
+                    "Administrator"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "maxProperties": 100,
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
         "/admin/domains/{domain}/quarantine": {
             "post": {
                 "operationId": "post.admin.domains.domain.quarantine",
@@ -1123,74 +1188,9 @@
                 }
             }
         },
-        "/admin/domains/{domain}/release": {
+        "/admin/domains/{domain}/return-to-normal": {
             "post": {
-                "operationId": "post.admin.domains.domain.release",
-                "tags": [
-                    "Administrator"
-                ],
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "domain",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer",
-                            "minimum": 1
-                        }
-                    },
-                    {
-                        "$ref": "#/components/parameters/IdempotencyKey"
-                    }
-                ],
-                "requestBody": {
-                    "required": false,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "maxProperties": 100,
-                                "additionalProperties": true
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "$ref": "#/components/responses/Success"
-                    },
-                    "201": {
-                        "$ref": "#/components/responses/Created"
-                    },
-                    "202": {
-                        "$ref": "#/components/responses/Accepted"
-                    },
-                    "204": {
-                        "description": "The mutation completed with no response body."
-                    },
-                    "401": {
-                        "$ref": "#/components/responses/StableError"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/StableError"
-                    },
-                    "409": {
-                        "$ref": "#/components/responses/StableError"
-                    },
-                    "422": {
-                        "$ref": "#/components/responses/ValidationError"
-                    }
-                }
-            }
-        },
-        "/admin/domains/{domain}/restrict": {
-            "post": {
-                "operationId": "post.admin.domains.domain.restrict",
+                "operationId": "post.admin.domains.domain.return-to-normal",
                 "tags": [
                     "Administrator"
                 ],
@@ -1483,122 +1483,6 @@
         "/admin/edge-cells/{cell}/drain": {
             "post": {
                 "operationId": "post.admin.edge-cells.cell.drain",
-                "tags": [
-                    "Administrator"
-                ],
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "cell",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer",
-                            "minimum": 1
-                        }
-                    },
-                    {
-                        "$ref": "#/components/parameters/IdempotencyKey"
-                    }
-                ],
-                "requestBody": {
-                    "required": false,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "maxProperties": 100,
-                                "additionalProperties": true
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "$ref": "#/components/responses/Success"
-                    },
-                    "201": {
-                        "$ref": "#/components/responses/Created"
-                    },
-                    "202": {
-                        "$ref": "#/components/responses/Accepted"
-                    },
-                    "204": {
-                        "description": "The mutation completed with no response body."
-                    },
-                    "401": {
-                        "$ref": "#/components/responses/StableError"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/StableError"
-                    },
-                    "409": {
-                        "$ref": "#/components/responses/StableError"
-                    },
-                    "422": {
-                        "$ref": "#/components/responses/ValidationError"
-                    }
-                }
-            }
-        },
-        "/admin/edge-cells/{cell}/emergency-mode": {
-            "delete": {
-                "operationId": "delete.admin.edge-cells.cell.emergency-mode",
-                "tags": [
-                    "Administrator"
-                ],
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "cell",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer",
-                            "minimum": 1
-                        }
-                    },
-                    {
-                        "$ref": "#/components/parameters/IdempotencyKey"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "$ref": "#/components/responses/Success"
-                    },
-                    "201": {
-                        "$ref": "#/components/responses/Created"
-                    },
-                    "202": {
-                        "$ref": "#/components/responses/Accepted"
-                    },
-                    "204": {
-                        "description": "The mutation completed with no response body."
-                    },
-                    "401": {
-                        "$ref": "#/components/responses/StableError"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/StableError"
-                    },
-                    "409": {
-                        "$ref": "#/components/responses/StableError"
-                    },
-                    "422": {
-                        "$ref": "#/components/responses/ValidationError"
-                    }
-                }
-            },
-            "post": {
-                "operationId": "post.admin.edge-cells.cell.emergency-mode",
                 "tags": [
                     "Administrator"
                 ],
@@ -2580,6 +2464,122 @@
                 }
             }
         },
+        "/admin/edge-pools/{pool}/maintenance": {
+            "delete": {
+                "operationId": "delete.admin.edge-pools.pool.maintenance",
+                "tags": [
+                    "Administrator"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "pool",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "post.admin.edge-pools.pool.maintenance",
+                "tags": [
+                    "Administrator"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "pool",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "maxProperties": 100,
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
         "/admin/edge-pools/{pool}/restore": {
             "post": {
                 "operationId": "post.admin.edge-pools.pool.restore",
@@ -3034,122 +3034,6 @@
         "/admin/edges/{edge}/drain": {
             "post": {
                 "operationId": "post.admin.edges.edge.drain",
-                "tags": [
-                    "Administrator"
-                ],
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "edge",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "string",
-                            "format": "uuid"
-                        }
-                    },
-                    {
-                        "$ref": "#/components/parameters/IdempotencyKey"
-                    }
-                ],
-                "requestBody": {
-                    "required": false,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "maxProperties": 100,
-                                "additionalProperties": true
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "$ref": "#/components/responses/Success"
-                    },
-                    "201": {
-                        "$ref": "#/components/responses/Created"
-                    },
-                    "202": {
-                        "$ref": "#/components/responses/Accepted"
-                    },
-                    "204": {
-                        "description": "The mutation completed with no response body."
-                    },
-                    "401": {
-                        "$ref": "#/components/responses/StableError"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/StableError"
-                    },
-                    "409": {
-                        "$ref": "#/components/responses/StableError"
-                    },
-                    "422": {
-                        "$ref": "#/components/responses/ValidationError"
-                    }
-                }
-            }
-        },
-        "/admin/edges/{edge}/emergency-mode": {
-            "delete": {
-                "operationId": "delete.admin.edges.edge.emergency-mode",
-                "tags": [
-                    "Administrator"
-                ],
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "edge",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "string",
-                            "format": "uuid"
-                        }
-                    },
-                    {
-                        "$ref": "#/components/parameters/IdempotencyKey"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "$ref": "#/components/responses/Success"
-                    },
-                    "201": {
-                        "$ref": "#/components/responses/Created"
-                    },
-                    "202": {
-                        "$ref": "#/components/responses/Accepted"
-                    },
-                    "204": {
-                        "description": "The mutation completed with no response body."
-                    },
-                    "401": {
-                        "$ref": "#/components/responses/StableError"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/StableError"
-                    },
-                    "409": {
-                        "$ref": "#/components/responses/StableError"
-                    },
-                    "422": {
-                        "$ref": "#/components/responses/ValidationError"
-                    }
-                }
-            },
-            "post": {
-                "operationId": "post.admin.edges.edge.emergency-mode",
                 "tags": [
                     "Administrator"
                 ],

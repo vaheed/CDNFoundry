@@ -214,17 +214,13 @@ class ViewDomain extends ViewRecord
                 Toggle::make('redirect_https')->label('Redirect HTTP to HTTPS')->default(false)->required(),
                 Select::make('http_versions')->label('Allowed HTTP versions')->multiple()->options(['1.1' => 'HTTP/1.1', '2' => 'HTTP/2'])->required()->maxItems(2),
                 TextInput::make('retry_count')->label('Origin retry count')->numeric()->default(0)->minValue(0)->maxValue(2)->required(),
-                Toggle::make('maintenance_enabled')->label('Maintenance mode')->live(),
-                TextInput::make('maintenance_body')->label('Maintenance response')->maxLength(4096)->visible(fn ($get): bool => (bool) $get('maintenance_enabled')),
             ])->fillForm(function (): array {
-                $settings = is_array($this->record->proxy_settings) ? $this->record->proxy_settings : ReconcileEdgeDomain::defaults();
-
-                return [...$settings, 'maintenance_enabled' => $settings['maintenance'] !== null, 'maintenance_body' => $settings['maintenance']['body'] ?? 'Service temporarily unavailable'];
+                return is_array($this->record->proxy_settings) ? $this->record->proxy_settings : ReconcileEdgeDomain::defaults();
             })->action(function (array $data): void {
                 $settings = [
                     'enabled' => (bool) $data['enabled'], 'redirect_https' => (bool) $data['redirect_https'],
                     'http_versions' => array_values($data['http_versions']), 'retry_count' => (int) $data['retry_count'],
-                    'maintenance' => $data['maintenance_enabled'] ? ['status' => 503, 'body' => $data['maintenance_body']] : null,
+                    'maintenance' => $this->record->proxy_settings['maintenance'] ?? null,
                 ];
                 DB::transaction(function () use ($settings): void {
                     $domain = $this->record->newQuery()->lockForUpdate()->findOrFail($this->record->id);
@@ -280,13 +276,20 @@ class ViewDomain extends ViewRecord
                     ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
                     Notification::make()->success()->title('Security profile saved')->body('The bounded policy is queued in the normal signed edge revision.')->send();
                 }),
-            Action::make('restrictSecurity')->label('Restrict domain')->color('warning')->requiresConfirmation()
+            Action::make('startMaintenance')->label('Start maintenance')->color('warning')->requiresConfirmation()->schema([
+                TextInput::make('body')->label('503 response message')->default('Service temporarily unavailable')->maxLength(4096)->required(),
+            ])->visible(fn (): bool => ! is_array($this->record->proxy_settings['maintenance'] ?? null))
+                ->action(fn (array $data) => $this->changeMaintenance((string) $data['body'])),
+            Action::make('endMaintenance')->label('End maintenance')->color('success')->requiresConfirmation()
+                ->visible(fn (): bool => is_array($this->record->proxy_settings['maintenance'] ?? null))
+                ->action(fn () => $this->changeMaintenance(null)),
+            Action::make('protectSecurity')->label('Protect domain')->color('warning')->requiresConfirmation()
                 ->visible(fn (): bool => auth()->user()?->isAdmin() === true && ! in_array($this->record->security_state, ['restricted', 'quarantined'], true))
                 ->action(fn () => $this->changeSecurityState('restricted', null)),
             Action::make('quarantineSecurity')->label('Quarantine domain')->color('danger')->requiresConfirmation()
                 ->visible(fn (): bool => auth()->user()?->isAdmin() === true && $this->record->security_state !== 'quarantined' && $this->record->dnsRecords()->where('mode', 'proxied')->exists())
                 ->action(fn () => $this->changeSecurityState('quarantined', EdgePool::query()->where('enabled', true)->where('withdrawn', false)->where('kind', 'quarantine')->orderBy('id')->firstOrFail())),
-            Action::make('releaseSecurity')->label('Release domain')->color('success')->requiresConfirmation()
+            Action::make('returnSecurityToNormal')->label('Return to normal')->color('success')->requiresConfirmation()
                 ->visible(fn (): bool => auth()->user()?->isAdmin() === true && in_array($this->record->security_state, ['restricted', 'quarantined'], true))
                 ->action(fn () => $this->changeSecurityState('recovering', EdgePool::query()->where('enabled', true)->where('withdrawn', false)->where('kind', 'shared')->orderBy('id')->firstOrFail())),
             Action::make('rollbackProxy')->label('Rollback proxy revision')->color('warning')->requiresConfirmation()->schema([
@@ -445,7 +448,7 @@ class ViewDomain extends ViewRecord
                 ->icon('heroicon-o-lock-closed')
                 ->color('gray')
                 ->button(),
-            ActionGroup::make($group(['securitySettings', 'restrictSecurity', 'quarantineSecurity', 'releaseSecurity']))
+            ActionGroup::make($group(['securitySettings', 'startMaintenance', 'endMaintenance', 'protectSecurity', 'quarantineSecurity', 'returnSecurityToNormal']))
                 ->label('Security')
                 ->icon('heroicon-o-shield-check')
                 ->color('warning')
@@ -473,5 +476,27 @@ class ViewDomain extends ViewRecord
         $operation = Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
         ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
         Notification::make()->warning()->title('Security state queued')->body("{$state} is deploying as operation {$operation->id}; placement changes activate the target before draining the source.")->send();
+    }
+
+    private function changeMaintenance(?string $body): void
+    {
+        DB::transaction(function () use ($body): void {
+            $domain = $this->record->newQuery()->lockForUpdate()->findOrFail($this->record->id);
+            $settings = is_array($domain->proxy_settings) ? $domain->proxy_settings : ReconcileEdgeDomain::defaults();
+            $settings['maintenance'] = $body === null ? null : ['status' => 503, 'body' => $body];
+            $domain->update(['proxy_settings' => $settings, 'revision' => $domain->revision + 1]);
+            AuditLog::record(
+                auth()->user(),
+                $body === null ? 'proxy.maintenance_ended' : 'proxy.maintenance_started',
+                $domain,
+                ['revision' => $domain->revision],
+                request()->ip(),
+            );
+        });
+        $operation = Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
+        ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
+        Notification::make()->title($body === null ? 'Maintenance ending' : 'Maintenance starting')
+            ->body("Operation {$operation->id} is deploying the change without reloading the edge.")
+            ->color($body === null ? 'success' : 'warning')->send();
     }
 }

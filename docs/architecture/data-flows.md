@@ -59,7 +59,7 @@ sequenceDiagram
 1. DNS returns a listener-ready pool address.
 2. The client connects to the assigned OpenResty cell.
 3. OpenResty rejects unknown hosts and selects the certificate from runtime data.
-4. Lua resolves the trusted client address, applies emergency controls, ordered security rules, profile ceilings, cache policy, and origin policy.
+4. Lua resolves the trusted client address, applies pool/domain maintenance, ordered security rules, profile ceilings, cache policy, and origin policy.
 5. A cache hit returns locally; a miss uses the explicitly configured origin.
 6. Access telemetry goes directly to Vector.
 

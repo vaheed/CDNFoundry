@@ -1,21 +1,21 @@
 ---
 title: Security and DDoS readiness
-description: Configure ordered rules, bounded profiles, readiness states, quarantine, and emergency controls.
+description: Configure ordered rules, bounded profiles, readiness states, quarantine, and simple incident controls.
 ---
 
 # Security and DDoS readiness
 
 ```mermaid
 flowchart TD
-    Request["Incoming request"] --> Emergency{"Emergency mode?"}
-    Emergency -- Restrict --> Decision["Bounded emergency decision"]
-    Emergency -- Normal --> Client["Resolve trusted client IP"]
+    Request["Incoming request"] --> Maintenance{"Maintenance?"}
+    Maintenance -- Yes --> Response["Return bounded HTTP 503"]
+    Maintenance -- No --> Client["Resolve trusted client IP"]
     Client --> Rules["Ordered allow/block rules"]
     Rules --> Profile["Profile ceilings"]
     Profile --> Limits["Rate, concurrency, connection limits"]
     Limits --> Method["Method and request bounds"]
     Method --> Serve["Cache or origin"]
-    Decision --> Event["Reason + telemetry"]
+    Response --> Event["Reason + telemetry"]
     Serve --> Event
 ```
 
@@ -25,7 +25,7 @@ flowchart TD
 | Ordered rules | Deterministic IP/CIDR/country/continent allow or block |
 | Profiles | Fixed presets or bounded manual values |
 | Readiness | Remove stale, drained, failed, or overloaded targets |
-| Emergency controls | Persisted, audited, expiring actions |
+| Incident controls | Explicit domain, pool, cell, and edge actions |
 
 ::: warning Not volumetric scrubbing
 Upstream transit controls and provider scrubbing remain necessary for attacks
@@ -66,26 +66,28 @@ reconciliation expires controls and advances quiet recovery.
 Target-first quarantine uses the normal placement protocol: deliver to the
 quarantine pool, publish its addresses, then drain the shared source.
 
-## Emergency controls
+## Simple incident controls
 
-Administrators can apply expiring or explicitly permanent controls to an edge,
-cell, domain, or pool. Supported actions are:
+There is no generic emergency-action picker. Each scope has only controls with
+clear runtime behavior:
 
-- reject unknown hosts;
-- disable request bodies;
-- allow only GET and HEAD;
-- reduce keepalive;
-- reduce origin concurrency;
-- disable origin retries;
-- serve cache only;
-- serve stale only;
-- return a maintenance response;
-- quarantine a domain;
-- withdraw a service IP from DNS.
+| Scope | Control | Effect |
+| --- | --- | --- |
+| Domain | Protect | Applies stricter bounded security state without moving the domain |
+| Domain | Quarantine | Deploys the domain target-first to the quarantine pool |
+| Domain | Start maintenance | Returns the configured HTTP 503 only for that domain |
+| Edge | Drain | Stops new placement/traffic eligibility for that edge |
+| Cell | Drain / Restart | Removes one cell from readiness or restarts that cell |
+| Pool | Maintenance | Returns HTTP 503 from cells assigned to that pool until its required expiry |
+| Pool | Withdraw | Removes that pool from gateway/DNS publication; it does not control BGP |
 
-Controls are persisted in PostgreSQL, delivered as durable edge tasks, stored by
-the agent, and enforced in OpenResty shared state. Clearing a control uses a
-separate idempotent task.
+Use **Return to normal**, **End maintenance**, **Undrain**, **Restore**, or the
+matching inverse action to recover. Pool maintenance is persisted in
+PostgreSQL, delivered as durable per-edge tasks only to assigned cells, audited,
+and automatically expires. Domain maintenance is part of the normal signed
+domain revision and therefore retains the previous valid edge snapshot on a
+failed deployment.
 
-Pool withdrawal removes its addresses through DNS reconciliation. It is an
-emergency tool, not an alternative to safe placement.
+`quarantine_domain` was formerly exposed as a pool/edge flag but had no domain
+identity and could not perform a placement change. It is no longer selectable.
+Quarantine is now only the explicit domain action above.

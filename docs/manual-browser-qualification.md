@@ -189,7 +189,17 @@ feature.
    the active bounded profile and test one disposable IPv4 rule and one IPv6
    rule. Expect stable allow/block behavior and removal without unrelated
    traffic impact.
-7. Keep the healthy comparison domain active throughout. Expect no change in
+7. Open **Security** on the disposable domain. Start maintenance with a unique
+   response message and expect HTTP 503 only for that domain; end maintenance
+   and expect normal service. Use **Protect domain**, then **Return to normal**,
+   and confirm the security state and operation are visible. If a quarantine
+   pool is ready, use **Quarantine domain** and confirm target-first placement
+   moves only that domain before returning it to normal.
+8. On a disposable service pool, choose **Maintenance**, enter an automatic
+   expiry, and expect HTTP 503 only from cells assigned to that pool. Confirm
+   edge and cell screens have concrete **Drain**, **Undrain**, and **Restart**
+   controls and no generic emergency-action picker. End pool maintenance.
+9. Keep the healthy comparison domain active throughout. Expect no change in
    its DNS, TLS, cache, origin, or security behavior.
 
 ### Telemetry, operations, and recovery visibility

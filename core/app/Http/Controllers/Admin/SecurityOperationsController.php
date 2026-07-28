@@ -9,19 +9,16 @@ use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Models\DomainEdgePlacement;
-use App\Models\Edge;
-use App\Models\EdgeCell;
 use App\Models\EdgePool;
 use App\Models\Operation;
 use App\Models\SecurityEvent;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 
 class SecurityOperationsController extends Controller
 {
-    public function restrict(Request $request, Domain $domain): JsonResponse
+    public function protect(Request $request, Domain $domain): JsonResponse
     {
         return $this->state($request, $domain, 'restricted');
     }
@@ -34,31 +31,46 @@ class SecurityOperationsController extends Controller
         return $this->state($request, $domain, 'quarantined', $pool);
     }
 
-    public function release(Request $request, Domain $domain): JsonResponse
+    public function returnToNormal(Request $request, Domain $domain): JsonResponse
     {
         $pool = EdgePool::query()->where('enabled', true)->where('withdrawn', false)->where('kind', 'shared')->orderBy('id')->firstOrFail();
 
         return $this->state($request, $domain, 'recovering', $pool);
     }
 
-    public function edgeEmergency(Request $request, Edge $edge): JsonResponse
+    public function startPoolMaintenance(Request $request, EdgePool $pool): JsonResponse
     {
-        return $this->emergency($request, 'edge', $edge->id, $edge);
+        abort_unless($pool->enabled && ! $pool->withdrawn, 409, 'Only an enabled serving pool can enter maintenance.');
+        $data = $request->validate([
+            'duration_minutes' => ['required', 'integer', 'between:1,'.config('security.emergency_duration_minutes_maximum')],
+        ]);
+        [$mode, $operation] = DispatchEmergencyMode::activate(
+            'pool',
+            (string) $pool->id,
+            ['return_maintenance_response'],
+            (int) $data['duration_minutes'],
+            $request->user(),
+        );
+        AuditLog::record($request->user(), 'security.pool_maintenance_started', $pool, [
+            'mode_id' => $mode->id,
+            'expires_at' => $mode->expires_at?->toIso8601String(),
+        ], $request->ip());
+
+        return response()->json(['data' => [
+            'operation_id' => $operation->id,
+            'maintenance_id' => $mode->id,
+            'expires_at' => $mode->expires_at,
+        ]], 202);
     }
 
-    public function clearEdgeEmergency(Request $request, Edge $edge): JsonResponse
+    public function endPoolMaintenance(Request $request, EdgePool $pool): JsonResponse
     {
-        return $this->clearEmergency($request, 'edge', $edge->id, $edge);
-    }
+        $operation = DispatchEmergencyMode::deactivateTarget('pool', (string) $pool->id, $request->user());
+        AuditLog::record($request->user(), 'security.pool_maintenance_ended', $pool, [
+            'operation_id' => $operation->id,
+        ], $request->ip());
 
-    public function cellEmergency(Request $request, EdgeCell $cell): JsonResponse
-    {
-        return $this->emergency($request, 'cell', (string) $cell->id, $cell);
-    }
-
-    public function clearCellEmergency(Request $request, EdgeCell $cell): JsonResponse
-    {
-        return $this->clearEmergency($request, 'cell', (string) $cell->id, $cell);
+        return response()->json(['data' => ['operation_id' => $operation->id]], 202);
     }
 
     public function withdraw(Request $request, EdgePool $pool): JsonResponse
@@ -110,26 +122,5 @@ class SecurityOperationsController extends Controller
         ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
 
         return response()->json(['data' => ['operation_id' => $operation->id, 'state' => $state, 'target_pool_id' => $pool?->id]], 202);
-    }
-
-    private function emergency(Request $request, string $type, string $id, object $subject): JsonResponse
-    {
-        $data = $request->validate([
-            'actions' => ['required', 'array', 'min:1', 'max:11'],
-            'actions.*' => ['required', 'string', 'distinct', Rule::in(config('security.emergency_actions'))],
-            'duration_minutes' => ['nullable', 'integer', 'between:1,'.config('security.emergency_duration_minutes_maximum')],
-        ]);
-        [$mode, $operation] = DispatchEmergencyMode::activate($type, $id, $data['actions'], $data['duration_minutes'] ?? null, $request->user());
-        AuditLog::record($request->user(), 'security.emergency_activated', $subject, ['mode_id' => $mode->id, 'actions' => $mode->actions, 'expires_at' => $mode->expires_at?->toIso8601String()], $request->ip());
-
-        return response()->json(['data' => ['operation_id' => $operation->id, 'emergency_mode_id' => $mode->id, 'expires_at' => $mode->expires_at]], 202);
-    }
-
-    private function clearEmergency(Request $request, string $type, string $id, object $subject): JsonResponse
-    {
-        $operation = DispatchEmergencyMode::deactivateTarget($type, $id, $request->user());
-        AuditLog::record($request->user(), 'security.emergency_deactivated', $subject, ['operation_id' => $operation->id], $request->ip());
-
-        return response()->json(['data' => ['operation_id' => $operation->id]], 202);
     }
 }
