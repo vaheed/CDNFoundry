@@ -236,6 +236,23 @@ def qualify_ingestion_and_queries(domain_id: int, user: str, stranger: str, admi
         "rcode": "NOERROR", "client_ip": "2001:db8:1234:5678::1", "dns_cluster": "dns-phase7",
         "country": "IR", "continent": "AS", "outcome": "answer", "query": "must-not-survive",
     })
+    # Vector's disk buffer can retain the final event until another event reaches
+    # the same sink even after the configured batch timeout. Distinct out-of-scope
+    # companions make both isolated sink assertions deterministic without
+    # duplicating the events whose identity and redaction are under test.
+    vector_event(8686, {
+        "occurred_at": iso(event_time + dt.timedelta(seconds=2)), "event_id": str(uuid.uuid4()),
+        "domain_id": 0, "hostname": "flush.phase7.test", "method": "GET", "path": "/flush",
+        "status": 204, "bytes_in": 0, "bytes_out": 0, "cache_status": "BYPASS",
+        "client_ip": "192.0.2.1", "edge_id": "edge-phase7", "event_type": "qualification",
+    })
+    vector_event(8687, {
+        "occurred_at": iso(event_time + dt.timedelta(seconds=3)), "event_id": str(uuid.uuid4()),
+        "domain_id": 0, "zone": "flush.phase7.test", "qname": "flush.phase7.test",
+        "qtype": "A", "rcode": "NOERROR", "client_ip": "192.0.2.1",
+        "dns_cluster": "dns-phase7", "country": "ZZ", "continent": "ZZ",
+        "outcome": "qualification",
+    })
     wait_for_clickhouse(lambda value: value == "1", f"SELECT count() FROM cdnf.edge_events WHERE event_id=toUUID('{edge_id}')")
     wait_for_clickhouse(lambda value: value == "1", f"SELECT count() FROM cdnf.dns_events WHERE event_id=toUUID('{dns_id}')")
 
