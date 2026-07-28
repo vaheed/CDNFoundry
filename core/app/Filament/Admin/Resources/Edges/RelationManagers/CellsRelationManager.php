@@ -5,6 +5,7 @@ namespace App\Filament\Admin\Resources\Edges\RelationManagers;
 use App\Jobs\ReconcileAllEdgeDomains;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
+use App\Models\DomainEdgeCell;
 use App\Models\EdgeCell;
 use App\Models\EdgePool;
 use App\Models\EdgeTask;
@@ -30,7 +31,7 @@ class CellsRelationManager extends RelationManager
         return $schema->components([
             Select::make('edge_pool_id')->label('Service pool assignment')->relationship('pool', 'name')
                 ->placeholder('Unassigned')->disabled()->dehydrated(false)
-                ->helperText('Assignments are managed through service-pool provisioning so every participating edge changes asynchronously and consistently.'),
+                ->helperText('Use the cell row actions to assign or unassign its service pool.'),
         ]);
     }
 
@@ -112,6 +113,32 @@ class CellsRelationManager extends RelationManager
                             ->body($pool->isSimpleAnycast()
                                 ? "{$cell->name} and its edge participation now inherit {$pool->name}'s Anycast pair. Operation {$operation->id} is reconciling runtime state."
                                 : "Operation {$operation->id} is reconciling {$pool->name}; configure its Geo-Unicast endpoint on this edge.")->send();
+                    }),
+                Action::make('unassignPool')->label('Unassign service pool')->icon('heroicon-o-link-slash')->color('warning')->requiresConfirmation()
+                    ->visible(fn (EdgeCell $record): bool => $record->edge_pool_id !== null)
+                    ->action(function (EdgeCell $record): void {
+                        [$cell, $pool] = DB::transaction(function () use ($record): array {
+                            $cell = EdgeCell::query()->lockForUpdate()->findOrFail($record->id);
+                            $pool = EdgePool::query()->lockForUpdate()->findOrFail($cell->edge_pool_id);
+                            abort_if(DomainEdgeCell::query()->where(fn ($query) => $query->where('active_cell_id', $cell->id)->orWhere('target_cell_id', $cell->id))->exists(), 409, 'Move all domain placements away from this cell before unassigning it.');
+                            abort_if($pool->enabled && $pool->cells()->where('edge_id', $cell->edge_id)->where('id', '!=', $cell->id)->count() < $pool->minimum_ready_cells, 409, 'Disable the pool before removing a cell required by its minimum-ready policy.');
+
+                            $cell->update(['edge_pool_id' => null, 'status' => 'unassigned']);
+                            if ($pool->isSimpleAnycast() && ! $pool->cells()->where('edge_id', $cell->edge_id)->exists()) {
+                                $endpoint = $pool->endpoints()->where('edge_id', $cell->edge_id)->first();
+                                if ($endpoint !== null) {
+                                    AuditLog::record(auth()->user(), 'edge.pool_endpoint_deleted', $endpoint, ['source' => 'last_cell_unassigned'], request()->ip());
+                                    $endpoint->delete();
+                                }
+                            }
+                            $pool->update(['revision' => $pool->revision + 1]);
+                            AuditLog::record(auth()->user(), 'edge.pool_cell_unassigned', $cell, ['pool_id' => $pool->id], request()->ip());
+
+                            return [$cell, $pool];
+                        });
+                        ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
+                        Notification::make()->success()->title('Service pool unassigned')
+                            ->body("{$cell->name} is now free. You can delete {$pool->name} after unassigning its remaining cells and removing active domain placements.")->send();
                     }),
                 Action::make('drain')->requiresConfirmation()->visible(fn (EdgeCell $record): bool => ! $record->drained)->action(fn (EdgeCell $record) => self::queue($record, 'drain')),
                 Action::make('undrain')->visible(fn (EdgeCell $record): bool => $record->drained)->action(fn (EdgeCell $record) => self::queue($record, 'undrain')),

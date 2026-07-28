@@ -378,6 +378,31 @@ class FilamentWorkflowTest extends TestCase
         Queue::assertPushed(ReconcileAllEdgeDomains::class, fn (ReconcileAllEdgeDomains $job): bool => $job->operationId === $operation->id);
     }
 
+    public function test_administrator_can_unassign_a_pool_from_an_edge_cell(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $pool = EdgePool::query()->create([
+            'name' => 'ui-cell-remove', 'kind' => 'shared', 'routing_mode' => 'simple_anycast',
+            'anycast_ipv4' => '198.51.100.80', 'enabled' => false,
+        ]);
+        $edge = Edge::query()->create(['name' => 'ui-remove-cell-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.81']);
+        $cell = $edge->cells()->create(['slot' => 3, 'edge_pool_id' => $pool->id, 'status' => 'assigned']);
+        $pool->endpoints()->create(['edge_id' => $edge->id, 'revision' => 1, 'gateway_state' => 'pending']);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(CellsRelationManager::class, [
+            'ownerRecord' => $edge,
+            'pageClass' => EditEdge::class,
+        ])->assertSee('Unassign service pool')
+            ->callTableAction('unassignPool', $cell)
+            ->assertHasNoActionErrors();
+
+        $this->assertDatabaseHas('edge_cells', ['id' => $cell->id, 'edge_pool_id' => null, 'status' => 'unassigned']);
+        $this->assertDatabaseMissing('edge_pool_endpoints', ['edge_id' => $edge->id, 'edge_pool_id' => $pool->id]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'edge.pool_cell_unassigned']);
+    }
+
     public function test_administrator_can_move_a_domain_to_another_service_pool(): void
     {
         Queue::fake();
