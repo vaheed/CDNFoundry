@@ -7,7 +7,9 @@ use App\Jobs\ReconcileAllEdgeDomains;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
 use App\Models\Operation;
+use App\Support\EdgePoolRoutingData;
 use Filament\Resources\Pages\EditRecord;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class EditEdgePool extends EditRecord
@@ -16,6 +18,11 @@ class EditEdgePool extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
+        $routing = EdgePoolRoutingData::validate($data, $this->record, true);
+        if (($routing['routing_mode'] ?? $this->record->routing_mode) !== $this->record->routing_mode && ($this->record->enabled || $this->record->endpoints()->exists())) {
+            throw ValidationException::withMessages(['routing_mode' => 'Disable the pool and remove its endpoints before changing routing mode.']);
+        }
+        $data = [...$data, ...$routing];
         if (($data['replicas_per_edge'] ?? $this->record->replicas_per_edge) > 1 && ! in_array($this->record->kind, ['reserved', 'dedicated'], true)) {
             throw ValidationException::withMessages(['replicas_per_edge' => 'Replicated placement is limited to reserved and dedicated pools.']);
         }
@@ -29,6 +36,9 @@ class EditEdgePool extends EditRecord
 
     protected function afterSave(): void
     {
+        if ($this->record->wasChanged(['routing_mode', 'anycast_ipv4', 'anycast_ipv6'])) {
+            $this->record->endpoints()->update(['revision' => DB::raw('revision + 1'), 'gateway_state' => 'pending', 'readiness_reason' => 'gateway_not_acknowledged']);
+        }
         AuditLog::record(auth()->user(), 'edge.pool_updated', $this->record, [], request()->ip());
         ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
         if ($this->record->wasChanged(['minimum_ready_cells', 'replicas_per_edge', 'maximum_domains_per_cell'])) {

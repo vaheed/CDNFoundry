@@ -59,4 +59,11 @@ class EdgePoolEndpoint extends Model
     {
         return $this->readinessReason() === 'ready';
     }
+
+    public function effectiveAddress(string $family): ?string
+    {
+        $field = $family === 'ipv6' ? 'ipv6' : 'ipv4';
+
+        return $this->pool->isSimpleAnycast() ? $this->pool->{'anycast_'.$field} : $this->{$field};
+    }
 }

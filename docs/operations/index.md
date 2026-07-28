@@ -7,6 +7,10 @@ description: Operate health, reconciliation, backups, incidents, and capacity fo
 
 See [Edge gateway ingress](gateway-ingress.md) for service-address binding,
 Host/SNI routing, migration, last-valid recovery, metrics, and scale evidence.
+See [Pool service endpoints](pool-service-endpoints.md) for Geo-Unicast and
+[Simple Anycast pools](simple-anycast.md) for operator-routed shared POP pairs.
+The [Simple Anycast qualification](simple-anycast-qualification.md) records
+agent evidence and the remaining owner-operated release gate.
 
 The administrator dashboard and `/api/admin/system/components` expose dependency,
 queue, scheduler, backup, MMDB, TLS, runtime-task, and edge-capacity state.

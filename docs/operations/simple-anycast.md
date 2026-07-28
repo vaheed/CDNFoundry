@@ -1,0 +1,64 @@
+---
+title: Simple Anycast pools
+description: Operate pool-owned service pairs without giving CDNFoundry control of BGP.
+---
+
+# Simple Anycast pools
+
+Simple Anycast lets an approved service pool use one public IPv4 address and
+optional IPv6 address across several explicitly attached edges or POPs. The
+pool owns the pair in PostgreSQL. Each edge endpoint is only a participation,
+readiness, revision, and withdrawal record; it does not duplicate the pair.
+
+::: danger CDNFoundry is not a BGP controller
+CDNFoundry binds the service addresses on ready gateways and publishes them in
+authoritative DNS. It never installs FRR or BIRD, stores router credentials,
+runs arbitrary network commands, announces a prefix, or withdraws a BGP route.
+The network operator or provider must approve the prefix and independently
+advertise, steer, withdraw, restore, monitor, and record routing changes.
+:::
+
+## Provision a pool
+
+1. In **Edge network → Service pools**, create a bounded pool and select
+   **Simple Anycast**.
+2. Enter the approved public IPv4 address and, when routed, IPv6 address. At
+   least one family is required. Private, special-purpose, management, existing
+   Geo-Unicast, and other Anycast addresses are rejected.
+3. Assign at least the configured minimum ready cells on every intended edge.
+4. Under each participating edge's **Pool endpoints**, select the pool and
+   leave the endpoint IPv4 and IPv6 fields empty. Those fields are only for
+   Geo-Unicast; the Anycast pair is inherited from the pool.
+5. Enable the pool after all intended participation records exist. Confirm the
+   same pair appears in each edge gateway candidate and becomes `ready` only
+   after local gateway acknowledgement.
+6. Have the network operator advertise the approved prefix. Verify routes and
+   real HTTP/HTTPS traffic from independent external vantage points before
+   assigning production domains.
+
+Routing mode cannot change while a pool is enabled or has endpoints. Withdraw
+and remove endpoint participation first. Pool address edits increment endpoint
+candidates and return them to `pending` until gateways acknowledge the new
+revision.
+
+## Signals and failure behavior
+
+`ready` means every attached endpoint is locally ready. `degraded` means at
+least one is ready and at least one attached POP is not. `withdrawn` means the
+pool is disabled/withdrawn or no attached endpoint is ready. DNS publishes the
+pair while at least one endpoint remains ready, so one POP failure does not
+rewrite the pair or corrupt another POP's local state.
+
+CDNFoundry withdrawal removes gateway candidates and DNS publication; it does
+not withdraw the external route. Coordinate this with the operator/provider,
+record timestamps and route evidence, then verify withdrawal and restoration
+from multiple external networks. Never infer BGP health solely from the
+control-plane `ready` signal.
+
+## Capacity and DDoS boundary
+
+Anycast can distribute reachable traffic only while routes, transit, uplinks,
+gateway capacity, and healthy cells remain available. CDNFoundry provides no
+upstream volumetric scrubbing and cannot protect an already saturated physical
+uplink. Set provider alerts and accepted saturation thresholds, retain
+Geo-Unicast comparison traffic, and rehearse provider-operated withdrawal.

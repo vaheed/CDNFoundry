@@ -40,7 +40,7 @@ class EdgeAgentController extends Controller
             $cells = $edge->cells()->where('edge_pool_id', $endpoint->edge_pool_id)->where('drained', false)->where('status', 'ready')->orderBy('slot')->get();
             $targets = $cells->map(fn ($cell): array => ['name' => $cell->name, 'http' => '127.0.0.1:'.$cell->http_port, 'https' => '127.0.0.1:'.$cell->https_port])->all();
 
-            return collect([$endpoint->ipv4, $endpoint->ipv6])->filter()->map(fn (string $address): array => ['address' => $address, 'pool' => $endpoint->pool->name, 'cells' => $targets])->all();
+            return collect([$endpoint->effectiveAddress('ipv4'), $endpoint->effectiveAddress('ipv6')])->filter()->map(fn (string $address): array => ['address' => $address, 'pool' => $endpoint->pool->name, 'cells' => $targets])->all();
         })->values();
 
         $revision = max((int) $endpoints->max('revision'), (int) PlatformDnsSetting::query()->whereKey(1)->value('revision'));
@@ -166,21 +166,27 @@ class EdgeAgentController extends Controller
                 'cells' => $data['cells'], 'noisy_domains' => $data['noisy_domains'] ?? [],
             ]),
         ]);
+        $endpointRoutingChanged = false;
         if (isset($data['gateway'])) {
             $gatewayReady = (bool) ($data['gateway']['ready'] ?? false);
             $gatewayRevision = (int) ($data['gateway']['active_revision'] ?? 0);
-            $edge->poolEndpoints()->each(function (EdgePoolEndpoint $endpoint) use ($gatewayReady, $gatewayRevision): void {
+            $edge->poolEndpoints()->each(function (EdgePoolEndpoint $endpoint) use (&$endpointRoutingChanged, $gatewayReady, $gatewayRevision): void {
+                $previousState = $endpoint->gateway_state;
+                $previousRevision = $endpoint->gateway_revision;
                 $endpoint->update([
                     'gateway_state' => $gatewayReady && $gatewayRevision >= $endpoint->revision ? 'ready' : 'degraded',
                     'gateway_revision' => max($endpoint->gateway_revision, $gatewayRevision),
                     'gateway_acknowledged_at' => $gatewayReady ? now() : $endpoint->gateway_acknowledged_at,
                     'readiness_reason' => $gatewayReady && $gatewayRevision >= $endpoint->revision ? 'ready' : 'gateway_not_acknowledged',
                 ]);
+                $endpointRoutingChanged = $endpointRoutingChanged
+                    || $previousState !== $endpoint->gateway_state
+                    || $previousRevision !== $endpoint->gateway_revision;
             });
         }
         $isRoutable = $edge->enabled && ! $edge->drained && $listenerReady;
         $newCellRouting = $edge->cells()->orderBy('id')->get(['id', 'status', 'drained'])->toJson();
-        if ($wasRoutable !== $isRoutable || $oldCellRouting !== $newCellRouting) {
+        if ($wasRoutable !== $isRoutable || $oldCellRouting !== $newCellRouting || $endpointRoutingChanged) {
             if ($oldCellRouting !== $newCellRouting) {
                 $edge->poolEndpoints()->update([
                     'revision' => DB::raw('revision + 1'),

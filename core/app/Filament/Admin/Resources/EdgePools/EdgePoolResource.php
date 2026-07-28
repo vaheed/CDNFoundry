@@ -44,6 +44,11 @@ class EdgePoolResource extends Resource
                 ->helperText('Stable pool identity; participating cells retain their independent slot identities.'),
             Select::make('kind')->options(['shared' => 'Shared', 'reserved' => 'Reserved', 'quarantine' => 'Quarantine', 'dedicated' => 'Dedicated'])->required()
                 ->helperText('Shared is the normal default. Quarantine isolates risky/noisy domains. Dedicated is an explicit exceptional allocation, never one per domain.'),
+            Select::make('routing_mode')->options(['geo_unicast' => 'Geo-Unicast', 'simple_anycast' => 'Simple Anycast'])->required()->default('geo_unicast')->live()
+                ->helperText('Simple Anycast only binds and publishes the shared pair. CDNFoundry never announces or withdraws BGP routes; the network operator/provider owns routing.'),
+            TextInput::make('anycast_ipv4')->label('Anycast IPv4')->ipv4()->nullable()->visible(fn (Get $get): bool => $get('routing_mode') === 'simple_anycast'),
+            TextInput::make('anycast_ipv6')->label('Anycast IPv6')->ipv6()->nullable()->visible(fn (Get $get): bool => $get('routing_mode') === 'simple_anycast')
+                ->helperText('At least one address is required. Every explicitly attached edge binds this same pair after local readiness is acknowledged.'),
             TextInput::make('minimum_ready_cells')->numeric()->minValue(1)->maxValue(32)->required()->default(1),
             TextInput::make('replicas_per_edge')->numeric()->minValue(1)->maxValue(3)->required()->default(1)
                 ->rule(fn (Get $get) => function (string $attribute, mixed $value, \Closure $fail) use ($get): void {
@@ -63,6 +68,10 @@ class EdgePoolResource extends Resource
         return $table->columns([
             TextColumn::make('name')->searchable()->sortable(),
             TextColumn::make('kind')->badge(),
+            TextColumn::make('routing_mode')->label('Routing')->badge(),
+            TextColumn::make('routing_status')->label('Route state')->state(fn (EdgePool $record): string => $record->routingStatus())->badge(),
+            TextColumn::make('service_pair')->label('Service pair')->state(fn (EdgePool $record): ?string => $record->isSimpleAnycast()
+                ? collect([$record->anycast_ipv4, $record->anycast_ipv6])->filter()->join(' / ') : null)->placeholder('Per-edge Geo-Unicast')->wrap(),
             IconColumn::make('enabled')->boolean(),
             IconColumn::make('withdrawn')->label('Emergency withdrawal')->boolean(),
             TextColumn::make('routing_target')->label('DNS routing target')
@@ -87,10 +96,11 @@ class EdgePoolResource extends Resource
                         ->body("Operation {$operation->id} will assign one existing unassigned slot on each missing edge.")->send();
                 }),
             Action::make('enable')->visible(fn (EdgePool $record): bool => ! $record->enabled)->action(function (EdgePool $record): void {
-                $incomplete = $record->cells()->whereHas('edge', fn ($query) => $query->where('enabled', true))->exists()
-                    && $record->endpoints()->count() < $record->cells()->distinct('edge_id')->count('edge_id');
+                $endpoints = $record->endpoints()->with('edge')->get();
+                $incomplete = $endpoints->isEmpty() || $endpoints->contains(fn ($endpoint): bool => (! $record->isSimpleAnycast() && ! filled($endpoint->ipv4) && ! filled($endpoint->ipv6))
+                    || $endpoint->edge->cells()->where('edge_pool_id', $record->id)->count() < $record->minimum_ready_cells);
                 if ($incomplete) {
-                    Notification::make()->danger()->title('Create one pool endpoint on every participating edge first')->send();
+                    Notification::make()->danger()->title('Attach intended edges and satisfy their minimum cell readiness first')->send();
 
                     return;
                 }

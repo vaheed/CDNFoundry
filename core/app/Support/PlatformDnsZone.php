@@ -43,6 +43,19 @@ final class PlatformDnsZone
             $endpoints = $configuredEndpoints->where('withdrawn', false)
                 ->filter(fn (EdgePoolEndpoint $endpoint): bool => $endpoint->isReady())->values();
             if ($endpoints->isNotEmpty()) {
+                if ($pool->isSimpleAnycast()) {
+                    foreach (['A' => 'anycast_ipv4', 'AAAA' => 'anycast_ipv6'] as $family => $field) {
+                        if (! filled($pool->{$field})) {
+                            continue;
+                        }
+                        $rows->push(['name' => EdgeRoutingCompiler::poolHostname($settings, $pool).'.', 'type' => $family, 'ttl' => $settings->default_ttl, 'content' => $pool->{$field}]);
+                        if ($defaultSharedPool?->is($pool)) {
+                            $rows->push(['name' => $proxy, 'type' => $family, 'ttl' => $settings->default_ttl, 'content' => $pool->{$field}]);
+                        }
+                    }
+
+                    continue;
+                }
                 foreach (['A' => 'ipv4', 'AAAA' => 'ipv6'] as $family => $field) {
                     $familyEndpoints = $endpoints->filter(fn (EdgePoolEndpoint $endpoint): bool => filled($endpoint->{$field}))->values();
                     if ($familyEndpoints->isEmpty()) {

@@ -5,6 +5,9 @@ description: Operate revisioned public endpoint pairs backed by bounded cells.
 
 # Pool service endpoints and Geo-Unicast
 
+For one pool-owned pair shared across explicitly attached POPs, use
+[Simple Anycast pools](simple-anycast.md).
+
 An edge/pool endpoint owns one public IPv4 address, one public IPv6 address, or
 one of each. An edge management address is optional, may be private, and is
 used for operator inventory/management rather than public traffic. Management

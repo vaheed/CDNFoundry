@@ -16,7 +16,8 @@ erDiagram
     DNS_CLUSTERS ||--o{ DNS_DEPLOYMENTS : receives
     DOMAINS ||--o{ EDGE_REVISIONS : versions
     DOMAINS ||--o{ DOMAIN_EDGE_PLACEMENTS : placed
-    EDGE_POOLS ||--o{ EDGES : groups
+    EDGE_POOLS ||--o{ EDGE_POOL_ENDPOINTS : participates
+    EDGES ||--o{ EDGE_POOL_ENDPOINTS : attaches
     EDGES ||--o{ EDGE_CELLS : runs
     EDGE_REVISIONS ||--o{ EDGE_ARTIFACTS : renders
     EDGES ||--o{ EDGE_TASKS : executes
@@ -34,7 +35,7 @@ erDiagram
 | Audit and request safety | `audit_logs`, `idempotency_keys`, `operations` |
 | Domains | `domains`, `domain_name_tombstones` |
 | DNS | `dns_records`, `dns_clusters`, `dns_deployments`, `platform_dns_settings`, `platform_dns_deployments` |
-| Edge | `edge_pools`, `edges`, `edge_cells`, `domain_edge_placements`, `edge_revisions`, `edge_artifacts`, `edge_tasks` |
+| Edge | `edge_pools` (kind, routing mode, optional pool-owned Anycast pair), `edge_pool_endpoints` (explicit per-edge participation/readiness and Geo-Unicast pairs), `edges`, `edge_cells`, `domain_edge_placements`, `edge_revisions`, `edge_artifacts`, `edge_tasks` |
 | Cache | domain cache fields and `cache_purges` linked to edge tasks |
 | TLS | `tls_certificates`, `tls_orders`, `acme_accounts`, `acme_challenges` |
 | Security | domain security state, `security_rules`, `security_events`, `emergency_modes` |
@@ -51,6 +52,10 @@ Database constraints protect unique domain names, edge identities and
 addresses, pool/cell relationships, logical DNS records, monotonic per-domain
 edge revisions, artifact content identity, active deployment relationships,
 cache purge task delivery, and usage intervals.
+
+Simple Anycast address ownership is unique at the pool level and mutually
+exclusive with Geo-Unicast endpoint addresses. Endpoint rows remain explicit
+so one POP can degrade or withdraw without mutating another POP's local state.
 
 JSON and JSONB columns are not arbitrary extension bags. Controllers and support
 types validate proxy, origin, Geo-DNS, cache, security, operation, capacity, and

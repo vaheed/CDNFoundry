@@ -70,6 +70,11 @@ gateway binds those endpoint addresses and routes them to the pool's assigned
 cells after agent acknowledgement. Endpoint addresses cannot equal management
 addresses.
 
+For a Simple Anycast pool, configure the approved pair once on the pool and
+create addressless participation endpoints on each intended edge. CDNFoundry
+binds and publishes the pair but never announces or withdraws BGP routes. See
+the [Simple Anycast runbook](../operations/simple-anycast.md).
+
 ## Agent environment
 
 The production profile supplies:

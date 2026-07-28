@@ -32,4 +32,22 @@ class EdgePool extends Model
     {
         return ['enabled' => 'boolean', 'withdrawn' => 'boolean', 'minimum_ready_cells' => 'integer', 'replicas_per_edge' => 'integer', 'maximum_domains_per_cell' => 'integer'];
     }
+
+    public function isSimpleAnycast(): bool
+    {
+        return $this->routing_mode === 'simple_anycast';
+    }
+
+    public function routingStatus(): string
+    {
+        if ($this->withdrawn || ! $this->enabled) {
+            return 'withdrawn';
+        }
+        $endpoints = $this->endpoints()->with(['edge', 'pool'])->get();
+        if ($endpoints->isEmpty() || $endpoints->every(fn (EdgePoolEndpoint $endpoint): bool => ! $endpoint->isReady())) {
+            return 'withdrawn';
+        }
+
+        return $endpoints->every(fn (EdgePoolEndpoint $endpoint): bool => $endpoint->isReady()) ? 'ready' : 'degraded';
+    }
 }

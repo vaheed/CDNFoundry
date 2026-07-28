@@ -24,6 +24,13 @@ final class EdgeRoutingCompiler
 
     public static function compileDatabaseLookup(PlatformDnsSetting $settings, EdgePool $pool, string $family): string
     {
+        if ($pool->isSimpleAnycast()) {
+            $type = $family === 'AAAA' ? 'AAAA' : 'A';
+            $target = self::poolHostname($settings, $pool).'.';
+
+            return $type.' "return dblookup(\''.$target.'\',pdns.'.$type.')"';
+        }
+
         $type = $family === 'AAAA' ? 'AAAA' : 'A';
         $country = self::dataHostname($settings, $pool, 'country', "'..string.lower(cc)..'");
         $continent = self::dataHostname($settings, $pool, 'continent', "'..string.lower(cn)..'");

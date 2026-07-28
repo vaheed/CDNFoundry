@@ -90,6 +90,16 @@ def artisan(expression: str) -> None:
     )
 
 
+def runtime_artisan(expression: str) -> None:
+    subprocess.run(
+        ["docker", "compose", "-f", COMPOSE, "exec", "-T", "horizon", "php", "artisan", "tinker", f"--execute={expression}"],
+        cwd=ROOT,
+        check=True,
+        timeout=45,
+        stdout=subprocess.DEVNULL,
+    )
+
+
 def quote(value: str) -> str:
     return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
@@ -516,6 +526,51 @@ def exercise_phase5_cache(token: str, domain_id: int, edges: list[dict], sequenc
     print("phase5_cache_control_plane_e2e=passed propagation=acked rollback=acked purge_retry=2 idempotency=replayed")
 
 
+def exercise_simple_anycast(token: str, edges: list[dict]) -> None:
+    _, created = call("POST", "/api/admin/edge-pools", {
+        "name": f"anycast-{RUN}", "kind": "reserved", "routing_mode": "simple_anycast",
+        "anycast_ipv4": "208.67.222.222", "anycast_ipv6": "2620:119:35::35",
+        "minimum_ready_cells": 1, "replicas_per_edge": 1, "maximum_domains_per_cell": 20000,
+    }, token)
+    pool = created["data"]["pool"]
+    wait_operation(token, created["data"]["operation_id"])
+    for edge in edges:
+        _, detail = call("GET", f"/api/admin/edges/{edge['id']}", token=token)
+        cell = next(row for row in detail["data"]["cells"] if row["edge_pool_id"] == pool["id"])
+        edge["shared_cells"].append(cell["name"])
+        call("POST", f"/api/admin/edge-pools/{pool['id']}/edges/{edge['id']}/endpoint", {}, token)
+        heartbeat(edge, 0)
+
+    call("POST", f"/api/admin/edge-pools/{pool['id']}/enable", {}, token)
+    for edge in edges:
+        heartbeat(edge, 0)
+        _, candidate = call("GET", "/edge/v1/gateway/config", context=edge["context"])
+        addresses = {binding["address"] for binding in candidate["data"]["bindings"] if binding["pool"] == pool["name"]}
+        assert addresses == {"208.67.222.222", "2620:119:35::35"}, candidate
+
+    hostname = f"pool-{pool['id']}.proxy.cdnf.test"
+    _, status = call("GET", f"/api/admin/edge-pools/{pool['id']}", token=token)
+    assert status["data"]["routing_status"] == "ready", status
+    runtime_artisan("Illuminate\\Support\\Facades\\Bus::dispatchSync(new App\\Jobs\\ReconcilePlatformDnsIdentity());")
+    wait_platform_deployment(token)
+    wait_answers(hostname, "A", {"208.67.222.222"})
+    wait_answers(hostname, "AAAA", {"2620:119:35::35"})
+    call("POST", f"/api/admin/edges/{edges[0]['id']}/drain", {}, token)
+    wait_answers(hostname, "A", {"208.67.222.222"})
+    _, status = call("GET", f"/api/admin/edge-pools/{pool['id']}", token=token)
+    assert status["data"]["routing_status"] == "degraded", status
+    call("POST", f"/api/admin/edges/{edges[0]['id']}/undrain", {}, token)
+    call("POST", f"/api/admin/edge-pools/{pool['id']}/withdraw", {}, token)
+    runtime_artisan("Illuminate\\Support\\Facades\\Bus::dispatchSync(new App\\Jobs\\ReconcilePlatformDnsIdentity());")
+    wait_platform_deployment(token)
+    assert dig(hostname, "A") == [] and dig(hostname, "AAAA") == [], hostname
+    call("POST", f"/api/admin/edge-pools/{pool['id']}/restore", {}, token)
+    runtime_artisan("Illuminate\\Support\\Facades\\Bus::dispatchSync(new App\\Jobs\\ReconcilePlatformDnsIdentity());")
+    wait_platform_deployment(token)
+    wait_answers(hostname, "A", {"208.67.222.222"})
+    print("simple_anycast_e2e=passed pops=2 pair=dual-stack coexistence=geo-unicast pop_loss=isolated route_withdrawal=operator-recorded")
+
+
 def main() -> None:
     artisan(
         "App\\Models\\User::query()->create(["
@@ -566,6 +621,7 @@ def main() -> None:
         shared_global = f"pool-{shared['id']}.global.all.proxy.cdnf.test"
         wait_answers(shared_global, "A", {"198.51.100.101", "198.51.100.102"})
         wait_answers(shared_global, "AAAA", {"2001:db8:40::101", "2001:db8:40::102"})
+        exercise_simple_anycast(token, edges)
 
         call("POST", f"/api/admin/edges/{edges[0]['id']}/drain", {}, token)
         deadline = time.monotonic() + 60
@@ -702,6 +758,8 @@ if __name__ == "__main__":
                 "foreach(App\\Models\\DnsCluster::all() as $c){try{app(App\\Support\\PowerDnsClient::class)->deleteZone($c,$d->name);}catch(Throwable $e){}}"
                 "$d->forceDelete();}"
                 "App\\Models\\Edge::query()->whereIn('name',[" + ",".join(quote(name) for name in EDGE_NAMES) + "])->delete();"
+                "$p=App\\Models\\EdgePool::query()->where('name'," + quote(f"anycast-{RUN}") + ")->first();"
+                "if($p){App\\Models\\EdgeCell::query()->where('edge_pool_id',$p->id)->update(['edge_pool_id'=>null,'status'=>'unassigned']);$p->delete();}"
                 "App\\Models\\User::query()->where('email'," + quote(EMAIL) + ")->delete();"
                 "App\\Jobs\\ReconcilePlatformDnsIdentity::dispatch();"
             )

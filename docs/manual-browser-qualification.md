@@ -610,6 +610,78 @@ routed to the test gateways and distinct from every management address.
 | Regression | Passed | Full Laravel suite, Compose/OpenAPI/docs checks, edge-agent build, cache-control regression, and prior placement scale dataset |
 | Release decision | Blocked | Owner-run evidence is mandatory |
 
+## Phase 5 — Simple Anycast pools
+
+Use two provider-approved POPs with the same routed IPv4 and, where available,
+IPv6 service pair. Keep one Geo-Unicast pool and hostname active as an
+unrelated comparison. Record provider ticket/change ID, prefix ownership,
+route collectors, edge IDs, cell IDs, pool/endpoint revisions, gateway active
+revisions, domain revisions, operation IDs, and UTC timestamps.
+
+1. Sign in as administrator and open **Edge network → Service pools → New
+   service pool**. Choose **Simple Anycast**. Confirm the helper text states
+   that CDNFoundry binds and publishes addresses but does not announce or
+   withdraw BGP routes. Enter the approved IPv4 and optional IPv6 pair.
+2. Attempt an empty pair, private/special address, management address, existing
+   Geo-Unicast address, and address owned by another Anycast pool. Expect
+   field-level rejection, no pool/revision, and no gateway or DNS change.
+3. Assign the required ready cells on POP A and POP B. Under each edge's **Pool
+   endpoints**, select the Anycast pool and leave IPv4/IPv6 empty. Expect one
+   participation record per edge; entering a local address must fail because
+   the pair is pool-owned.
+4. Enable the pool. Expect both gateways to receive the identical dual-stack
+   pair, only their local assigned cells as targets, `pending` before local
+   acknowledgement, and then pool route state `ready`. Unknown Host/SNI and
+   conflicting address candidates must preserve the previous valid map.
+5. Query the pool target and a disposable assigned domain through DNSdist over
+   UDP/TCP from each supported family. Expect exactly the shared pair without
+   country/continent data records. Confirm the comparison Geo-Unicast hostname
+   still uses country, continent, then global fallback.
+6. From at least three independent external vantage points (including one IPv6
+   vantage when configured), record route origin/path, selected POP, HTTP Host,
+   strict HTTPS SNI/certificate, origin marker, status, and latency. Expect the
+   provider route—not CDNFoundry—to select a healthy POP.
+7. Stop or drain POP A's participating cell/gateway without changing POP B.
+   Expect pool `degraded`, POP B's candidate/revision and traffic unchanged,
+   and DNS to retain the pair while POP B remains ready. Record route behavior
+   from all vantage points and confirm unrelated Geo-Unicast traffic continues.
+8. Through the network operator/provider workflow, withdraw the route at POP A
+   and record ticket/change ID, exact request/effective timestamps, route
+   collector evidence, traffic convergence, and accepted loss window. Restore
+   it and record the same evidence. CDNFoundry must issue no router command and
+   store no router credential.
+9. Use the CDNFoundry pool **Withdraw** action. Expect gateway candidates and
+   authoritative DNS publication to withdraw while the external route remains
+   operator-owned. Coordinate provider withdrawal if required. Restore the
+   pool, acknowledge both gateways, and expect publication and traffic only
+   after local readiness returns.
+10. Restart one agent and gateway. Inject one invalid candidate. Expect the
+    previous valid map to serve, the other POP to remain unchanged, and the
+    restarted POP to converge from desired state with clear reason/revision.
+11. Record topology, provider, hardware, two-POP concurrent traffic, throughput,
+    latency, CPU, memory, connection count, uplink utilization, saturation
+    point, and accepted limit. Confirm the UI/runbook explicitly says Anycast
+    is not upstream volumetric scrubbing and cannot protect a saturated uplink.
+12. Sign in as a domain user. Expect only assigned-domain routing visibility
+    and denial from pool pair, endpoint participation, edge candidate,
+    readiness, and fleet capacity administration.
+
+### Phase 5 completion gate
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| Implementation | Passed | Pool-owned pair, explicit edge participation, shared gateway candidates, direct DNS publication, stable status reasons, authorization, audit, and last-valid reconciliation |
+| Unit and feature tests | Passed | 188 isolated Laravel tests / 11,420 assertions, including 6 focused Anycast tests / 32 assertions |
+| Real-runtime E2E | Passed | Two-edge mTLS gateway candidate and real PowerDNS withdrawal/restoration qualification; cache/placement regression reached revision 13 |
+| IPv4 and IPv6 | Passed | Dual-stack Anycast and Geo-Unicast runtime plus IPv4-only automated gateway/endpoint regression |
+| Scale and external network evidence | Pending owner run | Two approved POPs, at least three external vantage points, provider route evidence, load/saturation measurements |
+| Failure, recovery, and isolation | Partially passed; owner network run pending | Controlled POP loss, gateway acknowledgement race recovery, unrelated POP state, invalid-candidate/last-valid regression passed; provider route withdrawal/restoration is owner-run |
+| Observability | Pending owner run | Ready/degraded/withdrawn UI, gateway revisions/reasons, route collectors, metrics, logs, alerts |
+| Documentation | Passed | Administrator UI guidance, operations runbook, architecture/troubleshooting links, exact owner checklist |
+| Manual browser and real traffic | Pending owner run | Steps 1–12 with screenshots, revisions, provider evidence, and traffic captures |
+| Regression | Passed | Full Laravel suite, Compose/OpenAPI/docs checks, edge-agent and edge-gateway Go test/build images, real cache and placement regression |
+| Release decision | Blocked | Owner-operated BGP and external vantage evidence is mandatory and cannot be executed by the coding agent |
+
 ## Failure record
 
 For every failed or blocked checkpoint, record:

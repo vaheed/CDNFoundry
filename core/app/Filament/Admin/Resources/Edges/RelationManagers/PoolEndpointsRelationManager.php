@@ -4,6 +4,7 @@ namespace App\Filament\Admin\Resources\Edges\RelationManagers;
 
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
+use App\Models\EdgePool;
 use App\Models\EdgePoolEndpoint;
 use App\Support\EdgePoolEndpointData;
 use Filament\Actions\CreateAction;
@@ -26,7 +27,7 @@ class PoolEndpointsRelationManager extends RelationManager
     {
         return $schema->components([
             Select::make('edge_pool_id')->relationship('pool', 'name')->label('Service pool')->required()
-                ->helperText('One endpoint per pool is allowed on an edge.'),
+                ->helperText('One endpoint per pool is allowed on an edge. Simple Anycast endpoints inherit their pool-level pair; leave both address fields empty.'),
             TextInput::make('ipv4')->label('Service IPv4')->ipv4()->nullable(),
             TextInput::make('ipv6')->label('Service IPv6')->ipv6()->nullable()
                 ->helperText('Configure IPv4, IPv6, or both. Management addresses are not valid service endpoints.'),
@@ -47,7 +48,7 @@ class PoolEndpointsRelationManager extends RelationManager
             TextColumn::make('gateway_revision')->label('Active revision'),
             IconColumn::make('withdrawn')->label('Temporarily removed')->boolean(),
         ])->headerActions([
-            CreateAction::make()->mutateDataUsing(fn (array $data): array => [...EdgePoolEndpointData::validate($data), 'revision' => 1, 'gateway_state' => 'pending', 'readiness_reason' => 'gateway_not_acknowledged'])
+            CreateAction::make()->mutateDataUsing(fn (array $data): array => [...EdgePoolEndpointData::validate($data, null, EdgePool::query()->findOrFail($data['edge_pool_id'])), 'edge_pool_id' => $data['edge_pool_id'], 'revision' => 1, 'gateway_state' => 'pending', 'readiness_reason' => 'gateway_not_acknowledged'])
                 ->after(fn (EdgePoolEndpoint $record) => self::changed($record, 'edge.pool_endpoint_created')),
         ])->recordActions([
             EditAction::make()->mutateDataUsing(fn (array $data, EdgePoolEndpoint $record): array => [...EdgePoolEndpointData::validate($data, $record), 'revision' => $record->revision + 1, 'gateway_state' => 'pending', 'readiness_reason' => 'gateway_not_acknowledged'])

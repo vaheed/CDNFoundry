@@ -107,6 +107,16 @@ commit desired state, artifacts, and durable tasks; the agent pulls them over
 its outbound control connection and posts results. Therefore an edge does not
 need an inbound management address for control delivery.
 
+## Pool routing
+
+Geo-Unicast stores a distinct address pair on each edge/pool endpoint and
+renders country, continent, and global fallback data. Simple Anycast stores one
+pair on the pool; every attached ready edge receives the same binding and DNS
+publishes that pair while any endpoint remains ready. The operator/provider is
+outside this activation flow and exclusively owns BGP advertisement,
+withdrawal, and route evidence. CDNFoundry has no router credential or command
+path.
+
 ## Managed TLS
 
 ```mermaid

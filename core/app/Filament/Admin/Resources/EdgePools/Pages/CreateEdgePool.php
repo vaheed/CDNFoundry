@@ -7,6 +7,7 @@ use App\Jobs\ProvisionEdgePoolCells;
 use App\Models\AuditLog;
 use App\Models\EdgePool;
 use App\Models\Operation;
+use App\Support\EdgePoolRoutingData;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Validation\ValidationException;
@@ -17,6 +18,7 @@ class CreateEdgePool extends CreateRecord
 
     protected function handleRecordCreation(array $data): Model
     {
+        $data = [...$data, ...EdgePoolRoutingData::validate($data)];
         if (($data['replicas_per_edge'] ?? 1) > 1 && ! in_array($data['kind'], ['reserved', 'dedicated'], true)) {
             throw ValidationException::withMessages(['replicas_per_edge' => 'Replicated placement is limited to reserved and dedicated pools.']);
         }

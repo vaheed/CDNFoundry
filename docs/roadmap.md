@@ -229,13 +229,27 @@ pair, tested from multiple external vantage points with controlled POP loss.
 
 **Completion checklist:**
 
-- [ ] One Anycast pool serves from multiple POPs.
-- [ ] Geo-Unicast and Anycast coexist on the same fleet.
-- [ ] POP failure does not corrupt another POP's local state.
+- [x] One Anycast pool serves from multiple POPs.
+- [x] Geo-Unicast and Anycast coexist on the same fleet.
+- [x] POP failure does not corrupt another POP's local state.
 - [ ] External route withdrawal and restoration are recorded.
-- [ ] UI and docs clearly state that CDNFoundry does not announce BGP routes.
-- [ ] Uplink and upstream-scrubbing limitations remain explicit.
+- [x] UI and docs clearly state that CDNFoundry does not announce BGP routes.
+- [x] Uplink and upstream-scrubbing limitations remain explicit.
 - [ ] Tests, network evidence, documentation, and manual qualification pass.
+
+**Agent completion evidence (2026-07-28):** the pool-owned address migration
+applied to persistent PostgreSQL in 83.82 ms. All 188 isolated Laravel tests /
+11,420 assertions, including 6 focused Anycast tests / 32 assertions,
+edge-agent and edge-gateway Go test/build images, Compose/OpenAPI/docs checks,
+and the real two-edge mTLS/PowerDNS control-plane test pass. The runtime test
+covered one shared dual-stack pair on two POPs, Geo-Unicast coexistence,
+controlled POP loss and degraded state, local-state isolation, DNS and gateway
+withdrawal/restoration, forced-reconciliation recovery, and the existing cache
+and placement regression through revision 13 with zero obsolete artifacts.
+The exact evidence and owner handoff are in [Simple Anycast qualification](operations/simple-anycast-qualification.md).
+External provider route withdrawal/restoration, multi-vantage traffic, load,
+and browser evidence remain owner-run, so the final combined checkbox and
+release decision remain blocked.
 
 ## Phase 6 — Cache v2
 
