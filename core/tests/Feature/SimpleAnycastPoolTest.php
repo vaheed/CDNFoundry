@@ -39,16 +39,42 @@ class SimpleAnycastPoolTest extends TestCase
             ->postJson('/api/admin/edge-pools', $payload)->assertCreated();
         $pool = EdgePool::query()->findOrFail($response->json('data.id'));
         $edge = $this->edge('anycast-pop-a', 'IR', 'AS');
-        $edge->cells()->create(['slot' => 1, 'status' => 'unassigned']);
-        $this->assertNull($edge->cells()->firstOrFail()->edge_pool_id);
+        $cell = $edge->cells()->create(['slot' => 1, 'status' => 'unassigned']);
+        $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->putJson("/api/admin/edge-pools/{$pool->id}/cells/{$cell->id}", [])
+            ->assertAccepted();
+        $endpoint = $pool->endpoints()->where('edge_id', $edge->id)->firstOrFail();
+        $this->assertNull($endpoint->ipv4);
+        $this->assertNull($endpoint->ipv6);
+        $this->assertSame('8.8.8.8', $endpoint->effectiveAddress('ipv4'));
+        $this->assertSame('2606:4700:4700::1111', $endpoint->effectiveAddress('ipv6'));
 
         $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
             ->postJson("/api/admin/edge-pools/{$pool->id}/edges/{$edge->id}/endpoint", [])
-            ->assertAccepted()->assertJsonPath('data.ipv4', null)->assertJsonPath('data.ipv6', null);
+            ->assertConflict();
         $second = $this->edge('anycast-pop-b', 'DE', 'EU');
         $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
             ->postJson("/api/admin/edge-pools/{$pool->id}/edges/{$second->id}/endpoint", ['ipv4' => '1.1.1.1'])
-            ->assertUnprocessable()->assertJsonValidationErrors('ipv4');
+            ->assertConflict();
+    }
+
+    public function test_disabled_empty_pool_can_be_deleted_after_last_anycast_cell_is_unassigned(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $pool = EdgePool::query()->create([
+            'name' => 'temporary-anycast', 'kind' => 'shared', 'routing_mode' => 'simple_anycast',
+            'anycast_ipv4' => '8.8.4.4', 'enabled' => false,
+        ]);
+        $edge = $this->edge('temporary-pop', 'IR', 'AS');
+        $cell = $edge->cells()->create(['slot' => 1, 'status' => 'unassigned']);
+        $this->actingAs($admin)->putJson("/api/admin/edge-pools/{$pool->id}/cells/{$cell->id}", [])->assertAccepted();
+
+        $this->actingAs($admin)->deleteJson("/api/admin/edge-pools/{$pool->id}")->assertConflict();
+        $this->actingAs($admin)->deleteJson("/api/admin/edge-pools/{$pool->id}/cells/{$cell->id}")->assertNoContent();
+
+        $this->assertFalse($pool->endpoints()->exists());
+        $this->actingAs($admin)->deleteJson("/api/admin/edge-pools/{$pool->id}")->assertNoContent();
+        $this->assertDatabaseMissing('edge_pools', ['id' => $pool->id]);
     }
 
     public function test_legacy_provisioning_job_fails_closed_without_assigning_a_cell(): void

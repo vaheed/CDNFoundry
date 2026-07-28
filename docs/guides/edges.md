@@ -75,9 +75,11 @@ to this or any other edge; all participation is an explicit administrator
 choice.
 
 For a Simple Anycast pool, configure the approved pair once on the pool and
-create addressless participation endpoints on each intended edge. CDNFoundry
-binds and publishes the pair but never announces or withdraws BGP routes. See
-the [Simple Anycast runbook](../operations/simple-anycast.md).
+assign its first cell on each intended edge. CDNFoundry automatically creates
+that edge's addressless participation record, binds and publishes the inherited
+pair, but never announces or withdraws BGP routes. Manual endpoint creation is
+only for Geo-Unicast. See the
+[Simple Anycast runbook](../operations/simple-anycast.md).
 
 ## Agent environment
 

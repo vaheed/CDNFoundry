@@ -100,6 +100,36 @@ def runtime_artisan(expression: str) -> None:
     )
 
 
+def wait_runtime_queue_idle(timeout: int = 30) -> None:
+    keys = (
+        "laravel-database-queues:runtime",
+        "laravel-database-queues:runtime:reserved",
+        "laravel-database-queues:runtime:delayed",
+    )
+    deadline = time.monotonic() + timeout
+    idle_observations = 0
+    while time.monotonic() < deadline:
+        result = subprocess.run(
+            ["docker", "compose", "-f", COMPOSE, "exec", "-T", "redis", "redis-cli", "--raw", "EVAL",
+             "return {redis.call('llen',KEYS[1]),redis.call('zcard',KEYS[2]),redis.call('zcard',KEYS[3])}", "3", *keys],
+            cwd=ROOT, check=True, capture_output=True, text=True, timeout=10,
+        )
+        depths = [int(value) for value in result.stdout.splitlines() if value.strip()]
+        idle_observations = idle_observations + 1 if depths == [0, 0, 0] else 0
+        if idle_observations >= 2:
+            return
+        time.sleep(0.5)
+    raise AssertionError("runtime queue did not become idle")
+
+
+def reconcile_platform_dns() -> None:
+    wait_runtime_queue_idle()
+    runtime_artisan(
+        "$job = new App\\Jobs\\ReconcilePlatformDnsIdentity(); "
+        "$job->handle(app(App\\Support\\PowerDnsClient::class));"
+    )
+
+
 def quote(value: str) -> str:
     return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
@@ -158,6 +188,18 @@ def wait_answers(owner: str, record_type: str, expected: set[str], timeout: int 
             return answers
         time.sleep(0.5)
     raise AssertionError(f"{owner} {record_type} did not contain {expected}; got {answers}")
+
+
+def reconcile_until_answers(owner: str, expected: dict[str, set[str]], timeout: int = 90) -> None:
+    deadline = time.monotonic() + timeout
+    answers: dict[str, list[str]] = {}
+    while time.monotonic() < deadline:
+        reconcile_platform_dns()
+        answers = {record_type: dig(owner, record_type) for record_type in expected}
+        if all(set(rows) == expected[record_type] for record_type, rows in answers.items()):
+            return
+        time.sleep(1)
+    raise AssertionError(f"{owner} DNS did not converge to {expected}; got {answers}")
 
 
 def wait_deployment(token: str, domain_id: int, timeout: int = 60) -> None:
@@ -538,7 +580,6 @@ def exercise_simple_anycast(token: str, edges: list[dict]) -> None:
         cell = next(row for row in detail["data"]["cells"] if row["edge_pool_id"] is None)
         call("PUT", f"/api/admin/edge-pools/{pool['id']}/cells/{cell['id']}", {}, token)
         edge["shared_cells"].append(cell["name"])
-        call("POST", f"/api/admin/edge-pools/{pool['id']}/edges/{edge['id']}/endpoint", {}, token)
         heartbeat(edge, 0)
 
     call("POST", f"/api/admin/edge-pools/{pool['id']}/enable", {}, token)
@@ -551,23 +592,18 @@ def exercise_simple_anycast(token: str, edges: list[dict]) -> None:
     hostname = f"pool-{pool['id']}.proxy.cdnf.test"
     _, status = call("GET", f"/api/admin/edge-pools/{pool['id']}", token=token)
     assert status["data"]["routing_status"] == "ready", status
-    runtime_artisan("Illuminate\\Support\\Facades\\Bus::dispatchSync(new App\\Jobs\\ReconcilePlatformDnsIdentity());")
-    wait_platform_deployment(token)
-    wait_answers(hostname, "A", {"208.67.222.222"})
-    wait_answers(hostname, "AAAA", {"2620:119:35::35"})
+    reconcile_until_answers(hostname, {
+        "A": {"208.67.222.222"}, "AAAA": {"2620:119:35::35"},
+    })
     call("POST", f"/api/admin/edges/{edges[0]['id']}/drain", {}, token)
     wait_answers(hostname, "A", {"208.67.222.222"})
     _, status = call("GET", f"/api/admin/edge-pools/{pool['id']}", token=token)
     assert status["data"]["routing_status"] == "degraded", status
     call("POST", f"/api/admin/edges/{edges[0]['id']}/undrain", {}, token)
     call("POST", f"/api/admin/edge-pools/{pool['id']}/withdraw", {}, token)
-    runtime_artisan("Illuminate\\Support\\Facades\\Bus::dispatchSync(new App\\Jobs\\ReconcilePlatformDnsIdentity());")
-    wait_platform_deployment(token)
-    assert dig(hostname, "A") == [] and dig(hostname, "AAAA") == [], hostname
+    reconcile_until_answers(hostname, {"A": set(), "AAAA": set()})
     call("POST", f"/api/admin/edge-pools/{pool['id']}/restore", {}, token)
-    runtime_artisan("Illuminate\\Support\\Facades\\Bus::dispatchSync(new App\\Jobs\\ReconcilePlatformDnsIdentity());")
-    wait_platform_deployment(token)
-    wait_answers(hostname, "A", {"208.67.222.222"})
+    reconcile_until_answers(hostname, {"A": {"208.67.222.222"}})
     print("simple_anycast_e2e=passed pops=2 pair=dual-stack coexistence=geo-unicast pop_loss=isolated route_withdrawal=operator-recorded")
 
 

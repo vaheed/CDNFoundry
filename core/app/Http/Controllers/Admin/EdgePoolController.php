@@ -36,6 +36,7 @@ class EdgePoolController extends Controller
 
     public function storeEndpoint(Request $request, EdgePool $pool, Edge $edge): JsonResponse
     {
+        abort_if($pool->isSimpleAnycast(), 409, 'Simple Anycast participation is created automatically when its first cell is assigned to this edge.');
         abort_if($pool->endpoints()->where('edge_id', $edge->id)->exists(), 409, 'This pool already owns an endpoint on the edge.');
         $data = EdgePoolEndpointData::validate($request->all(), null, $pool);
         $endpoint = DB::transaction(function () use ($request, $pool, $edge, $data): EdgePoolEndpoint {
@@ -53,6 +54,7 @@ class EdgePoolController extends Controller
     public function updateEndpoint(Request $request, EdgePool $pool, EdgePoolEndpoint $endpoint): JsonResponse
     {
         abort_unless($endpoint->edge_pool_id === $pool->id, 404);
+        abort_if($pool->isSimpleAnycast(), 409, 'Simple Anycast participation is managed by cell assignment.');
         $data = EdgePoolEndpointData::validate(array_merge($endpoint->only(['ipv4', 'ipv6', 'withdrawn']), $request->all()), $endpoint, $pool);
         DB::transaction(function () use ($request, $endpoint, $data): void {
             $endpoint->update([...$data, 'revision' => $endpoint->revision + 1, 'gateway_state' => 'pending', 'readiness_reason' => 'gateway_not_acknowledged']);
@@ -66,6 +68,7 @@ class EdgePoolController extends Controller
     public function destroyEndpoint(Request $request, EdgePool $pool, EdgePoolEndpoint $endpoint): JsonResponse
     {
         abort_unless($endpoint->edge_pool_id === $pool->id, 404);
+        abort_if($pool->isSimpleAnycast(), 409, 'Unassign the final Anycast cell on this edge to remove its participation.');
         abort_unless($endpoint->withdrawn, 409, 'Withdraw the endpoint before deleting it.');
         DB::transaction(function () use ($request, $endpoint): void {
             AuditLog::record($request->user(), 'edge.pool_endpoint_deleted', $endpoint, [], $request->ip());
@@ -133,6 +136,20 @@ class EdgePoolController extends Controller
         return response()->json(['data' => $pool->refresh()]);
     }
 
+    public function destroy(Request $request, EdgePool $pool): JsonResponse
+    {
+        abort_if($pool->enabled, 409, 'Disable the service pool before deleting it.');
+        abort_if($pool->cells()->exists(), 409, 'Unassign every cell before deleting the service pool.');
+        abort_if($pool->endpoints()->exists(), 409, 'Remove every Geo-Unicast endpoint before deleting the service pool.');
+        abort_if(DomainEdgePlacement::query()->where('active_pool_id', $pool->id)->orWhere('target_pool_id', $pool->id)->exists(), 409, 'Move every domain away from the service pool before deleting it.');
+        DB::transaction(function () use ($request, $pool): void {
+            AuditLog::record($request->user(), 'edge.pool_deleted', $pool, ['kind' => $pool->kind], $request->ip());
+            $pool->delete();
+        });
+
+        return response()->json(null, 204);
+    }
+
     public function assignCell(Request $request, EdgePool $pool, EdgeCell $cell): JsonResponse
     {
         $request->validate([
@@ -142,7 +159,21 @@ class EdgePoolController extends Controller
         abort_if($cell->edge_pool_id !== null && $cell->edge_pool_id !== $pool->id, 409, 'The cell is already assigned to another pool.');
         abort_if($cell->drained, 409, 'A drained cell cannot participate in a pool.');
         [$operation] = DB::transaction(function () use ($request, $pool, $cell): array {
+            $pool = EdgePool::query()->lockForUpdate()->findOrFail($pool->id);
+            $cell = EdgeCell::query()->lockForUpdate()->findOrFail($cell->id);
+            abort_if($cell->edge_pool_id !== null && $cell->edge_pool_id !== $pool->id, 409, 'The cell is already assigned to another pool.');
+            abort_if($cell->drained, 409, 'A drained cell cannot participate in a pool.');
             $cell->update(['edge_pool_id' => $pool->id, 'status' => $cell->status === 'ready' ? 'ready' : 'assigned']);
+            if ($pool->isSimpleAnycast()) {
+                $endpoint = $pool->endpoints()->firstOrCreate(['edge_id' => $cell->edge_id], [
+                    'revision' => 1, 'gateway_state' => 'pending', 'readiness_reason' => 'gateway_not_acknowledged',
+                ]);
+                if ($endpoint->wasRecentlyCreated) {
+                    AuditLog::record($request->user(), 'edge.pool_endpoint_created', $endpoint, [
+                        'edge_id' => $cell->edge_id, 'pool_id' => $pool->id, 'source' => 'cell_assignment',
+                    ], $request->ip());
+                }
+            }
             $pool->update(['revision' => $pool->revision + 1]);
             $operation = Operation::query()->create(['actor_id' => $request->user()->id, 'type' => 'edge.global_reconcile', 'status' => 'pending', 'input' => ['pool_id' => $pool->id, 'cell_id' => $cell->id]]);
             AuditLog::record($request->user(), 'edge.pool_cell_assigned', $cell, ['pool_id' => $pool->id, 'operation_id' => $operation->id], $request->ip());
@@ -150,6 +181,7 @@ class EdgePoolController extends Controller
             return [$operation];
         });
         ReconcileAllEdgeDomains::dispatch($operation->id)->afterCommit();
+        ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
 
         return response()->json(['data' => ['operation_id' => $operation->id, 'cell_id' => $cell->id, 'pool_id' => $pool->id]], 202);
     }
@@ -158,9 +190,19 @@ class EdgePoolController extends Controller
     {
         abort_unless($cell->edge_pool_id === $pool->id, 404);
         abort_if(DomainEdgeCell::query()->where(fn ($query) => $query->where('active_cell_id', $cell->id)->orWhere('target_cell_id', $cell->id))->exists(), 409, 'Move all domain placements away from the cell before unassigning it.');
-        abort_if($pool->cells()->where('edge_id', $cell->edge_id)->where('id', '!=', $cell->id)->count() < $pool->minimum_ready_cells, 409, 'The assignment is required by the pool minimum-ready-cell policy on this edge.');
+        abort_if($pool->enabled && $pool->cells()->where('edge_id', $cell->edge_id)->where('id', '!=', $cell->id)->count() < $pool->minimum_ready_cells, 409, 'Disable the pool before removing a cell required by its minimum-ready policy.');
         DB::transaction(function () use ($request, $pool, $cell): void {
+            $pool = EdgePool::query()->lockForUpdate()->findOrFail($pool->id);
+            $cell = EdgeCell::query()->lockForUpdate()->findOrFail($cell->id);
+            abort_unless($cell->edge_pool_id === $pool->id, 404);
             $cell->update(['edge_pool_id' => null, 'status' => 'unassigned']);
+            if ($pool->isSimpleAnycast() && ! $pool->cells()->where('edge_id', $cell->edge_id)->exists()) {
+                $endpoint = $pool->endpoints()->where('edge_id', $cell->edge_id)->first();
+                if ($endpoint !== null) {
+                    AuditLog::record($request->user(), 'edge.pool_endpoint_deleted', $endpoint, ['source' => 'last_cell_unassigned'], $request->ip());
+                    $endpoint->delete();
+                }
+            }
             $pool->update(['revision' => $pool->revision + 1]);
             AuditLog::record($request->user(), 'edge.pool_cell_unassigned', $cell, ['pool_id' => $pool->id], $request->ip());
         });

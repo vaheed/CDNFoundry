@@ -105,6 +105,24 @@ class EdgePoolResource extends Resource
                 AuditLog::record(auth()->user(), 'edge.pool_disabled', $record, ['revision' => $record->revision], request()->ip());
                 ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
             }),
+            Action::make('delete')->label('Delete')->icon('heroicon-o-trash')->color('danger')->requiresConfirmation()
+                ->visible(fn (EdgePool $record): bool => ! $record->enabled)
+                ->action(function (EdgePool $record): void {
+                    $blockedBy = match (true) {
+                        $record->cells()->exists() => 'Unassign every cell before deleting this pool.',
+                        $record->endpoints()->exists() => 'Remove every Geo-Unicast endpoint before deleting this pool.',
+                        DomainEdgePlacement::query()->where('active_pool_id', $record->id)->orWhere('target_pool_id', $record->id)->exists() => 'Move every domain away from this pool before deleting it.',
+                        default => null,
+                    };
+                    if ($blockedBy !== null) {
+                        Notification::make()->danger()->title('Service pool cannot be deleted')->body($blockedBy)->send();
+
+                        return;
+                    }
+                    AuditLog::record(auth()->user(), 'edge.pool_deleted', $record, ['kind' => $record->kind], request()->ip());
+                    $record->delete();
+                    Notification::make()->success()->title('Service pool deleted')->send();
+                }),
             Action::make('withdraw')->color('danger')->requiresConfirmation()->visible(fn (EdgePool $record): bool => ! $record->withdrawn)->action(function (EdgePool $record): void {
                 $record->update(['withdrawn' => true, 'revision' => $record->revision + 1]);
                 AuditLog::record(auth()->user(), 'edge.pool_withdrawn', $record, ['revision' => $record->revision], request()->ip());

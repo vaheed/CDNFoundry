@@ -158,6 +158,7 @@ for authentication, pagination, response, and retry behaviour.
 | `PATCH` | `/admin/edge-pools/{pool}/endpoints/{endpoint}` | Required | Supported | `patch.admin.edge-pools.pool.endpoints.endpoint` |
 | `POST` | `/admin/edge-pools/{pool}/restore` | Required | Supported | `post.admin.edge-pools.pool.restore` |
 | `POST` | `/admin/edge-pools/{pool}/withdraw` | Required | Supported | `post.admin.edge-pools.pool.withdraw` |
+| `DELETE` | `/admin/edge-pools/{pool}` | Required | Supported | `delete.admin.edge-pools.pool` |
 | `GET` | `/admin/edge-pools/{pool}` | Required | No | `get.admin.edge-pools.pool` |
 | `PATCH` | `/admin/edge-pools/{pool}` | Required | Supported | `patch.admin.edge-pools.pool` |
 | `GET` | `/admin/edge-pools` | Required | No | `get.admin.edge-pools` |

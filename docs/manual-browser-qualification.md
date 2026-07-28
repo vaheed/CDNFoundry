@@ -629,11 +629,11 @@ revisions, domain revisions, operation IDs, and UTC timestamps.
 2. Attempt an empty pair, private/special address, management address, existing
    Geo-Unicast address, and address owned by another Anycast pool. Expect
    field-level rejection, no pool/revision, and no gateway or DNS change.
-3. Under each intended edge's **Pool endpoints**, select the Anycast pool and
-   leave IPv4/IPv6 empty. Then use **Cells → Assign service pool** to assign the
-   required slots on POP A and POP B. Expect one
-   participation record per edge; entering a local address must fail because
-   the pair is pool-owned. Confirm an unrelated edge consumes no slot.
+3. Use **Cells → Assign service pool** to assign the required slots on POP A
+   and POP B. Expect the first assignment to create one participation record
+   automatically on that edge with the inherited pair. Additional cells reuse
+   it. Confirm the endpoint creation form lists only Geo-Unicast pools, and an
+   unrelated edge consumes no slot and gains no participation record.
 4. Enable the pool. Expect both gateways to receive the identical dual-stack
    pair, only their local assigned cells as targets, `pending` before local
    acknowledgement, and then pool route state `ready`. Unknown Host/SNI and
@@ -670,20 +670,25 @@ revisions, domain revisions, operation IDs, and UTC timestamps.
 12. Sign in as a domain user. Expect only assigned-domain routing visibility
     and denial from pool pair, endpoint participation, edge candidate,
     readiness, and fleet capacity administration.
+13. Create a disposable disabled pool and confirm **Delete** is available.
+    Assign a cell and expect deletion to be blocked. For Anycast, unassign the
+    final cell and expect its automatic participation record to disappear;
+    then delete the empty pool. Expect an audit row and no effect on other
+    pools, cells, endpoints, DNS, or gateway candidates.
 
 ### Phase 5 completion gate
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
 | Implementation | Passed | Pool-owned pair, explicit edge participation, shared gateway candidates, direct DNS publication, stable status reasons, authorization, audit, and last-valid reconciliation |
-| Unit and feature tests | Passed | 189 isolated Laravel tests / 11,423 assertions, including 7 focused Anycast tests / 35 assertions |
+| Unit and feature tests | Passed | 191 isolated Laravel tests / 11,437 assertions, including 8 focused Anycast tests / 44 assertions |
 | Real-runtime E2E | Passed | Two-edge mTLS gateway candidate and real PowerDNS withdrawal/restoration qualification; cache/placement regression reached revision 13 |
 | IPv4 and IPv6 | Passed | Dual-stack Anycast and Geo-Unicast runtime plus IPv4-only automated gateway/endpoint regression |
 | Scale and external network evidence | Pending owner run | Two approved POPs, at least three external vantage points, provider route evidence, load/saturation measurements |
 | Failure, recovery, and isolation | Partially passed; owner network run pending | Controlled POP loss, gateway acknowledgement race recovery, unrelated POP state, invalid-candidate/last-valid regression passed; provider route withdrawal/restoration is owner-run |
 | Observability | Pending owner run | Ready/degraded/withdrawn UI, gateway revisions/reasons, route collectors, metrics, logs, alerts |
 | Documentation | Passed | Administrator UI guidance, operations runbook, architecture/troubleshooting links, exact owner checklist |
-| Manual browser and real traffic | Pending owner run | Steps 1–12 with screenshots, revisions, provider evidence, and traffic captures |
+| Manual browser and real traffic | Pending owner run | Steps 1–13 with screenshots, revisions, provider evidence, and traffic captures |
 | Regression | Passed | Full Laravel suite, Compose/OpenAPI/docs checks, edge-agent and edge-gateway Go test/build images, real cache and placement regression |
 | Release decision | Blocked | Owner-operated BGP and external vantage evidence is mandatory and cannot be executed by the coding agent |
 

@@ -37,12 +37,13 @@ do not participate on that edge consume zero slots there.
 2. Enter the approved public IPv4 address and, when routed, IPv6 address. At
    least one family is required. Private, special-purpose, management, existing
    Geo-Unicast, and other Anycast addresses are rejected.
-3. Under each intended edge's **Pool endpoints**, select the pool and
-   leave the endpoint IPv4 and IPv6 fields empty. Those fields are only for
-   Geo-Unicast; the Anycast pair is inherited from the pool.
-4. On each of those edges, use **Cells → Assign service pool** to assign at
+3. On each intended edge, use **Cells → Assign service pool** to assign at
    least `minimum_ready_cells` slots to the pool. Assign more only when that
-   edge should give the pool more local capacity.
+   edge should give the pool more local capacity. Assigning the first cell
+   automatically creates that edge's participation and inherits the pool pair;
+   there is no Anycast endpoint form.
+4. Confirm the automatically created participation row shows the pool's IPv4
+   and optional IPv6 pair. Additional cells on the same edge reuse that row.
 5. Enable the pool after all intended endpoints and cell assignments exist. Confirm the
    same pair appears in each edge gateway candidate and becomes `ready` only
    after local gateway acknowledgement.
@@ -56,7 +57,13 @@ candidates and return them to `pending` until gateways acknowledge the new
 revision.
 
 There is no fleet-wide reconcile or automatic assignment step. Creating a new
-edge also leaves all of its slots unassigned.
+edge also leaves all of its slots unassigned. Automation is limited to the
+selected edge: assigning its first Anycast cell creates participation, and
+unassigning its final cell while the pool is disabled removes participation.
+
+To delete a pool, disable it, move away every domain, and unassign every cell.
+For Geo-Unicast, also withdraw and remove its manual endpoints. The guarded
+**Delete** action then removes the empty pool.
 
 ## Signals and failure behavior
 

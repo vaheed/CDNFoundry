@@ -89,6 +89,16 @@ class CellsRelationManager extends RelationManager
                             abort_if($cell->drained, 409, 'A drained cell cannot participate in a service pool.');
                             $pool = EdgePool::query()->whereKey($data['edge_pool_id'])->where('withdrawn', false)->lockForUpdate()->firstOrFail();
                             $cell->update(['edge_pool_id' => $pool->id, 'status' => 'assigned']);
+                            if ($pool->isSimpleAnycast()) {
+                                $endpoint = $pool->endpoints()->firstOrCreate(['edge_id' => $cell->edge_id], [
+                                    'revision' => 1, 'gateway_state' => 'pending', 'readiness_reason' => 'gateway_not_acknowledged',
+                                ]);
+                                if ($endpoint->wasRecentlyCreated) {
+                                    AuditLog::record(auth()->user(), 'edge.pool_endpoint_created', $endpoint, [
+                                        'edge_id' => $cell->edge_id, 'pool_id' => $pool->id, 'source' => 'cell_assignment',
+                                    ], request()->ip());
+                                }
+                            }
                             $pool->update(['revision' => $pool->revision + 1]);
                             $operation = Operation::query()->create([
                                 'actor_id' => auth()->id(), 'type' => 'edge.global_reconcile', 'status' => 'pending',
@@ -103,7 +113,9 @@ class CellsRelationManager extends RelationManager
                         ReconcileAllEdgeDomains::dispatch($operation->id)->afterCommit();
                         ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
                         Notification::make()->success()->title('Cell assigned to service pool')
-                            ->body("Operation {$operation->id} is reconciling {$pool->name}; configure changes are targeted to {$cell->name}.")->send();
+                            ->body($pool->isSimpleAnycast()
+                                ? "{$cell->name} and its edge participation now inherit {$pool->name}'s Anycast pair. Operation {$operation->id} is reconciling runtime state."
+                                : "Operation {$operation->id} is reconciling {$pool->name}; configure its Geo-Unicast endpoint on this edge.")->send();
                     }),
                 Action::make('drain')->requiresConfirmation()->visible(fn (EdgeCell $record): bool => ! $record->drained)->action(fn (EdgeCell $record) => self::queue($record, 'drain')),
                 Action::make('undrain')->visible(fn (EdgeCell $record): bool => $record->drained)->action(fn (EdgeCell $record) => self::queue($record, 'undrain')),

@@ -197,6 +197,7 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:account'])->group
         Route::post('/edge-pools', [EdgePoolController::class, 'store'])->middleware('idempotent');
         Route::get('/edge-pools/{pool}', [EdgePoolController::class, 'show']);
         Route::patch('/edge-pools/{pool}', [EdgePoolController::class, 'update'])->middleware('idempotent');
+        Route::delete('/edge-pools/{pool}', [EdgePoolController::class, 'destroy'])->middleware('idempotent');
         Route::post('/edge-pools/{pool}/enable', [EdgePoolController::class, 'enable'])->middleware('idempotent');
         Route::post('/edge-pools/{pool}/disable', [EdgePoolController::class, 'disable'])->middleware('idempotent');
         Route::put('/edge-pools/{pool}/cells/{cell}', [EdgePoolController::class, 'assignCell'])->middleware('idempotent');

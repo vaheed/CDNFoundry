@@ -413,6 +413,21 @@ class FilamentWorkflowTest extends TestCase
         $this->assertDatabaseMissing('operations', ['type' => 'edge.pool_provision']);
     }
 
+    public function test_administrator_can_delete_an_empty_disabled_service_pool(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $pool = EdgePool::query()->create(['name' => 'ui-delete-pool', 'kind' => 'shared', 'enabled' => false]);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(ListEdgePools::class)
+            ->callTableAction('delete', $pool)
+            ->assertHasNoFormErrors();
+
+        $this->assertDatabaseMissing('edge_pools', ['id' => $pool->id]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'edge.pool_deleted', 'subject_id' => (string) $pool->id]);
+    }
+
     public function test_domain_dns_reconcile_action_reuses_the_policy_aware_endpoint(): void
     {
         Queue::fake();
