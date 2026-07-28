@@ -41,7 +41,8 @@ def main() -> None:
         try:
             run("docker", "exec", NAME, "nginx", "-t")
             common = ("docker", "run", "--rm", "--network", f"container:{NAME}", "-v", f"{directory}:/tls:ro",
-                "curlimages/curl:8.16.0", "-sS", "--resolve", "edge-control:8443:127.0.0.1", "--cacert", "/tls/ca.crt")
+                "curlimages/curl:8.16.0", "-sS", "--retry", "20", "--retry-connrefused", "--retry-delay", "1",
+                "--resolve", "edge-control:8443:127.0.0.1", "--cacert", "/tls/ca.crt")
             unauthenticated = run(*common, "-o", "/dev/null", "-w", "%{http_code}", "https://edge-control:8443/mtls-health")
             assert unauthenticated.stdout == "401", unauthenticated.stdout
             authenticated = run(*common, "--cert", "/tls/client.crt", "--key", "/tls/client.key",

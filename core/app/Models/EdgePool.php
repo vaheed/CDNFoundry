@@ -40,12 +40,15 @@ class EdgePool extends Model
 
     public function routingStatus(): string
     {
-        if ($this->withdrawn || ! $this->enabled) {
+        if ($this->withdrawn) {
             return 'withdrawn';
+        }
+        if (! $this->enabled) {
+            return 'disabled';
         }
         $endpoints = $this->endpoints()->with(['edge', 'pool'])->get();
         if ($endpoints->isEmpty() || $endpoints->every(fn (EdgePoolEndpoint $endpoint): bool => ! $endpoint->isReady())) {
-            return 'withdrawn';
+            return 'unavailable';
         }
 
         return $endpoints->every(fn (EdgePoolEndpoint $endpoint): bool => $endpoint->isReady()) ? 'ready' : 'degraded';

@@ -33,8 +33,11 @@ class EdgePoolEndpoint extends Model
 
     public function readinessReason(): string
     {
-        if ($this->withdrawn || $this->pool->withdrawn || ! $this->pool->enabled) {
+        if ($this->withdrawn || $this->pool->withdrawn) {
             return 'withdrawn';
+        }
+        if (! $this->pool->enabled) {
+            return 'pool_disabled';
         }
         if (! $this->edge->enabled || $this->edge->drained) {
             return 'edge_unavailable';

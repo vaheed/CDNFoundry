@@ -66,6 +66,35 @@ x-core: &core
   networks: [control, telemetry]
   restart: unless-stopped
 
+x-dev-cell-env: &dev-cell-env
+  EDGE_STATUS_TOKEN: ${CDNF_DEV_EDGE_STATUS_TOKEN:-cdnf-dev-edge-status-only}
+  GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb
+
+x-dev-cell: &dev-cell
+  build:
+    context: .
+    dockerfile: docker/openresty/Dockerfile
+  profiles: [dev-edge]
+  tmpfs:
+    - /var/cache/nginx:rw,noexec,nosuid,size=256m
+    - /var/lib/nginx/tmp:rw,noexec,nosuid,size=64m
+  mem_limit: 512m
+  cpus: 0.5
+  pids_limit: 128
+  ulimits: { nofile: { soft: 65536, hard: 65536 } }
+  sysctls: { net.ipv4.tcp_syncookies: "1" }
+  networks: [edge]
+  depends_on:
+    dev-pki: { condition: service_completed_successfully }
+    origin-http: { condition: service_started }
+    mmdb-updater: { condition: service_healthy }
+  restart: unless-stopped
+  healthcheck:
+    test: [CMD, wget, -qO-, http://127.0.0.1:8080/healthz]
+    interval: 10s
+    timeout: 3s
+    retries: 10
+
 services:
   dev-pki:
     build:
@@ -388,6 +417,31 @@ services:
       mmdb-updater: { condition: service_healthy }
     restart: unless-stopped
 
+  edge-a-cell-03: &edge-a-extra-cell
+    <<: *dev-cell
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-03, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-03.json }
+    volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro]
+
+  edge-a-cell-04:
+    <<: *edge-a-extra-cell
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-04, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-04.json }
+
+  edge-a-cell-05:
+    <<: *edge-a-extra-cell
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-05, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-05.json }
+
+  edge-a-cell-06:
+    <<: *edge-a-extra-cell
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-06, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-06.json }
+
+  edge-a-cell-07:
+    <<: *edge-a-extra-cell
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-07, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-07.json }
+
+  edge-a-cell-08:
+    <<: *edge-a-extra-cell
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-08, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-08.json }
+
   edge-agent-a:
     build: ./edge-agent
     profiles: [dev-edge]
@@ -403,8 +457,8 @@ services:
         {"address":"fd00:cd0f:10::10","pool":"shared-default","http":"edge-a:8081","https":"edge-a:8444"},
         {"address":"172.28.11.10","pool":"quarantine-default","http":"edge-a-quarantine:8081","https":"edge-a-quarantine:8444"}]
       EDGE_GATEWAY_STATUS_URL: http://edge-gateway-a:9105/metrics
-      EDGE_CELL_ASSIGNMENTS: '{"cell-01":"shared-default","cell-02":"quarantine-default"}'
-      EDGE_CELL_STATUS_URLS: http://edge-a:9080/passive-failures,http://edge-a-quarantine:9080/passive-failures
+      EDGE_CELL_ASSIGNMENTS: '{"cell-01":"shared-default","cell-02":"quarantine-default","cell-03":"","cell-04":"","cell-05":"","cell-06":"","cell-07":"","cell-08":""}'
+      EDGE_CELL_STATUS_URLS: http://edge-a:9080/passive-failures,http://edge-a-quarantine:9080/passive-failures,http://edge-a-cell-03:9080/passive-failures,http://edge-a-cell-04:9080/passive-failures,http://edge-a-cell-05:9080/passive-failures,http://edge-a-cell-06:9080/passive-failures,http://edge-a-cell-07:9080/passive-failures,http://edge-a-cell-08:9080/passive-failures
       EDGE_STATUS_TOKEN: ${CDNF_DEV_EDGE_STATUS_TOKEN:-cdnf-dev-edge-status-only}
     volumes:
       - edge-a-agent-state:/var/lib/cdnfoundry/agent
@@ -415,6 +469,12 @@ services:
       edge-control: { condition: service_healthy }
       edge-a: { condition: service_healthy }
       edge-a-quarantine: { condition: service_started }
+      edge-a-cell-03: { condition: service_healthy }
+      edge-a-cell-04: { condition: service_healthy }
+      edge-a-cell-05: { condition: service_healthy }
+      edge-a-cell-06: { condition: service_healthy }
+      edge-a-cell-07: { condition: service_healthy }
+      edge-a-cell-08: { condition: service_healthy }
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
@@ -524,6 +584,31 @@ services:
       mmdb-updater: { condition: service_healthy }
     restart: unless-stopped
 
+  edge-b-cell-03: &edge-b-extra-cell
+    <<: *dev-cell
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-03, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-03.json }
+    volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro]
+
+  edge-b-cell-04:
+    <<: *edge-b-extra-cell
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-04, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-04.json }
+
+  edge-b-cell-05:
+    <<: *edge-b-extra-cell
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-05, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-05.json }
+
+  edge-b-cell-06:
+    <<: *edge-b-extra-cell
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-06, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-06.json }
+
+  edge-b-cell-07:
+    <<: *edge-b-extra-cell
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-07, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-07.json }
+
+  edge-b-cell-08:
+    <<: *edge-b-extra-cell
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-08, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-08.json }
+
   edge-agent-b:
     build: ./edge-agent
     profiles: [dev-edge]
@@ -538,8 +623,8 @@ services:
         [{"address":"172.28.20.10","pool":"shared-default","http":"edge-b:8081","https":"edge-b:8444"},
         {"address":"172.28.21.10","pool":"quarantine-default","http":"edge-b-quarantine:8081","https":"edge-b-quarantine:8444"}]
       EDGE_GATEWAY_STATUS_URL: http://edge-gateway-b:9105/metrics
-      EDGE_CELL_ASSIGNMENTS: '{"cell-01":"shared-default","cell-02":"quarantine-default"}'
-      EDGE_CELL_STATUS_URLS: http://edge-b:9080/passive-failures,http://edge-b-quarantine:9080/passive-failures
+      EDGE_CELL_ASSIGNMENTS: '{"cell-01":"shared-default","cell-02":"quarantine-default","cell-03":"","cell-04":"","cell-05":"","cell-06":"","cell-07":"","cell-08":""}'
+      EDGE_CELL_STATUS_URLS: http://edge-b:9080/passive-failures,http://edge-b-quarantine:9080/passive-failures,http://edge-b-cell-03:9080/passive-failures,http://edge-b-cell-04:9080/passive-failures,http://edge-b-cell-05:9080/passive-failures,http://edge-b-cell-06:9080/passive-failures,http://edge-b-cell-07:9080/passive-failures,http://edge-b-cell-08:9080/passive-failures
       EDGE_STATUS_TOKEN: ${CDNF_DEV_EDGE_STATUS_TOKEN:-cdnf-dev-edge-status-only}
     volumes:
       - edge-b-agent-state:/var/lib/cdnfoundry/agent
@@ -550,6 +635,12 @@ services:
       edge-control: { condition: service_healthy }
       edge-b: { condition: service_healthy }
       edge-b-quarantine: { condition: service_started }
+      edge-b-cell-03: { condition: service_healthy }
+      edge-b-cell-04: { condition: service_healthy }
+      edge-b-cell-05: { condition: service_healthy }
+      edge-b-cell-06: { condition: service_healthy }
+      edge-b-cell-07: { condition: service_healthy }
+      edge-b-cell-08: { condition: service_healthy }
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]

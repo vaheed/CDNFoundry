@@ -140,6 +140,9 @@ class SimpleAnycastPoolTest extends TestCase
         $request->attributes->set('edge', $first->edge);
         $this->assertSame('8.8.4.4', app(EdgeAgentController::class)->gatewayConfig($request)->getData(true)['data']['bindings'][0]['address']);
 
+        $first->edge->update(['drained' => true]);
+        $this->assertSame('unavailable', $pool->routingStatus());
+
         $pool->update(['withdrawn' => true]);
         $this->assertSame('withdrawn', $pool->routingStatus());
         $this->assertFalse(collect(PlatformDnsZone::render($this->settings()))->flatMap(fn (array $row): array => $row['records'])->pluck('content')->contains('8.8.4.4'));
