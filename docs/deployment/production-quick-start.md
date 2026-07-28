@@ -245,8 +245,6 @@ sudo /opt/cdnfoundry/scripts/generate-production-certificates.sh \
   /etc/cdnfoundry/pki \
   edge-control.ops.example.com \
   proxy.example.net \
-  "" \
-  "" \
   dns-api-1.ops.example.com \
   dns-api-2.ops.example.com
 

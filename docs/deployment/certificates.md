@@ -32,9 +32,9 @@ an existing output directory.
 There are two different identities in the edge-control mTLS connection:
 
 - The **edge-control server certificate** must contain the DNS hostname from
-  `EDGE_CONTROL_URL`. Add an IP SAN only when agents connect to a literal IP
-  address instead of that hostname. This is the control host address, not an
-  edge management or pool endpoint address.
+  `EDGE_CONTROL_URL`. CDNFoundry requires a hostname here; publish it in
+  operator DNS instead of configuring agents with a literal IP. This hostname
+  belongs to the control service, not an edge management or pool endpoint.
 - The **edge-agent client certificate** is created during enrollment from the
   agent's CSR. Its common name is the administrator-created edge UUID. It does
   not contain a management IP or service endpoint IP.

@@ -2,8 +2,7 @@
 set -eu
 
 usage() {
-    echo "Usage: $0 OUTPUT_DIRECTORY CONTROL_HOSTNAME RUNTIME_HOSTNAME [CONTROL_IP] [RUNTIME_IP] [DNS_API_HOSTNAME ...]" >&2
-    echo "CONTROL_IP and RUNTIME_IP add optional server-certificate IP SANs; pass empty strings when clients use DNS hostnames. They are not edge management addresses." >&2
+    echo "Usage: $0 OUTPUT_DIRECTORY CONTROL_HOSTNAME RUNTIME_HOSTNAME [DNS_API_HOSTNAME ...]" >&2
     exit 2
 }
 
@@ -13,10 +12,6 @@ output_directory=$1
 control_hostname=$2
 runtime_hostname=$3
 shift 3
-control_ip=${1:-}
-[ "$#" -eq 0 ] || shift
-runtime_ip=${1:-}
-[ "$#" -eq 0 ] || shift
 
 command -v openssl >/dev/null 2>&1 || { echo "openssl is required" >&2; exit 1; }
 [ ! -e "$output_directory" ] || { echo "Refusing to overwrite existing directory: $output_directory" >&2; exit 1; }
@@ -24,12 +19,8 @@ command -v openssl >/dev/null 2>&1 || { echo "openssl is required" >&2; exit 1; 
 umask 077
 mkdir -p "$output_directory"
 
-add_ip_san() {
-    [ -z "$1" ] || printf ',IP:%s' "$1"
-}
-
-control_san="DNS:$control_hostname$(add_ip_san "$control_ip")"
-runtime_san="DNS:$runtime_hostname$(add_ip_san "$runtime_ip")"
+control_san="DNS:$control_hostname"
+runtime_san="DNS:$runtime_hostname"
 
 issue_ca() {
     name=$1
