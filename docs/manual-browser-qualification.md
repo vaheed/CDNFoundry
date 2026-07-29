@@ -220,7 +220,8 @@ feature.
    provisional, not that delivery is degraded. Expect **Finalized usage** to
    show no more than five rows and every shown row to be **Finalized**.
 3. In **Compression savings**, expect identity delivery to retain its
-   **Identity** label and description. Expect five rows initially with
+   **Identity** label with **Uncompressed response** beneath it, never a
+   compression-profile name. Expect five rows initially with
    **Show more**/**Show fewer** controls. **Encoding / profile** and
    **Fallback** remain left-aligned while numeric columns remain right-aligned
    without page overflow. In

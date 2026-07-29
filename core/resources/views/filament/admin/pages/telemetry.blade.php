@@ -71,6 +71,9 @@
                         @php
                             $encoding = strtolower((string) ($row['encoding'] ?? 'identity'));
                             $encodingLabel = strtoupper($encoding);
+                            $profileLabel = $encoding === 'identity'
+                                ? 'Uncompressed response'
+                                : str($row['profile'] ?? 'off')->replace('_', ' ')->headline()->toString();
                             $fallback = (string) ($row['fallback'] ?? 'none');
                             $fallbackLabel = match ($fallback) {
                                 'client_identity' => 'Client requested uncompressed',
@@ -82,7 +85,7 @@
                             };
                         @endphp
                         <tr>
-                            <td class="px-3 py-2 text-left"><div class="font-medium">{{ $encodingLabel }}</div><div class="text-xs text-gray-500">{{ str($row['profile'] ?? 'off')->replace('_', ' ')->headline() }}</div></td>
+                            <td class="px-3 py-2 text-left"><div class="font-medium">{{ $encodingLabel }}</div><div class="text-xs text-gray-500">{{ $profileLabel }}</div></td>
                             <td class="px-3 py-2 text-left">{{ $fallbackLabel }}</td>
                             <td class="px-3 py-2 text-right tabular-nums">{{ number_format((int) ($row['requests'] ?? 0)) }}</td>
                             <td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes($row['delivered_bytes'] ?? 0) }}</td>
