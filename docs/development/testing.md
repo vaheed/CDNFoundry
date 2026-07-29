@@ -16,9 +16,9 @@ Run `python3 tests/e2e/cell_inventory.py` for the eight-slot non-browser cell
 inventory, isolation, restart, storage-bound, and idle/active overhead
 qualification.
 
-Run `python3 tests/e2e/phase9_waf.py` for the real pinned-image managed-WAF
-corpus. It verifies off/monitor/balanced/strict behavior, malformed and
-oversized bodies, literal expiry-aware exclusions, privacy-safe telemetry,
+Run `make dev-phase9-e2e` to build the pinned image and execute the real
+managed-WAF corpus. It verifies off/monitor/balanced/strict behavior, malformed
+and oversized bodies, literal expiry-aware exclusions, privacy-safe telemetry,
 concurrent blocking load, and non-WAF-host isolation.
 
 ::: danger Database guard

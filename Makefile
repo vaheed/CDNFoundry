@@ -2,7 +2,7 @@ COMPOSE_DEV := docker compose -f compose.dev.yml
 COMPOSE_PROD := docker compose --env-file .env.prod -f compose.prod.yml
 COMPOSE_PROD_EXAMPLE := docker compose --env-file .env.prod.example -f compose.prod.yml
 
-.PHONY: dev-assets dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-gateway-e2e dev-cache-e2e dev-compression-e2e dev-origin-failover-e2e dev-phase7-e2e dev-phase8-e2e dev-phase8-recovery-e2e dev-phase8-upgrade-e2e dev-phase8-throughput-e2e dev-phase8-mmdb-e2e dev-scale-e2e dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check docs-dev docs-build docs-check
+.PHONY: dev-assets dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-waf-image dev-phase9-e2e dev-gateway-e2e dev-cache-e2e dev-compression-e2e dev-origin-failover-e2e dev-phase7-e2e dev-phase8-e2e dev-phase8-recovery-e2e dev-phase8-upgrade-e2e dev-phase8-throughput-e2e dev-phase8-mmdb-e2e dev-scale-e2e dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check docs-dev docs-build docs-check
 
 dev-assets:
 	docker build --target frontend-assets-export --output type=local,dest=./core/public/build ./core
@@ -32,7 +32,7 @@ dev-pdns-migrate:
 dev-test: dev-assets
 	$(COMPOSE_DEV) run --rm -e APP_ENV=testing -e APP_CONFIG_CACHE=/tmp/cdnfoundry-test-config.php -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: -e CACHE_STORE=array -e QUEUE_CONNECTION=sync core php artisan test
 
-dev-e2e:
+dev-e2e: dev-waf-image
 	python3 tests/e2e/e2e.py
 	python3 tests/e2e/phase2_dns.py
 	python3 tests/e2e/phase3_geo_dns.py
@@ -45,6 +45,12 @@ dev-e2e:
 	python3 tests/e2e/phase9_waf.py
 	python3 tests/e2e/origin_failover.py
 	python3 tests/e2e/phase4_runtime.py
+
+dev-waf-image:
+	docker build -f docker/openresty/Dockerfile -t cdnfoundry/edge-runtime:phase9-qualification .
+
+dev-phase9-e2e: dev-waf-image
+	python3 tests/e2e/phase9_waf.py
 
 dev-gateway-e2e:
 	docker build -t cdnfoundry/edge-gateway:qualification edge-gateway
