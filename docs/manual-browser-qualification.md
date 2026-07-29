@@ -1055,7 +1055,7 @@ IDs, revisions, operation IDs, corpus versions, and sanitized measurements.
 | Gate | Result | Evidence |
 | --- | --- | --- |
 | Implementation | Passed | Bounded component state, revision/dimension metrics, capacity ratios, drift, alerts, scoped analytics, redaction, retention, and best-effort telemetry |
-| Unit and feature tests | Passed | 214 isolated Laravel tests / 11,610 assertions cover scoped analytics, bounded queries, redaction, outage behavior, health states, metrics authorization, and fleet behavior |
+| Unit and feature tests | Passed | 214 isolated Laravel tests / 11,617 assertions cover scoped analytics, bounded queries, redaction, outage behavior, health states, metrics authorization, and fleet behavior |
 | Real-runtime E2E | Passed | Real Vector-to-ClickHouse analytics, privacy, usage, 20,000-domain bounded query, outage, buffer, and recovery qualification |
 | IPv4 and IPv6 | Pending owner run | External traffic evidence in steps 4–5 |
 | Scale | Pending owner run | Exact 20,000-domain query and outage measurements |
@@ -1104,7 +1104,7 @@ one healthy comparison edge, and two compatible immutable releases.
 | Observability | Pending owner run | Version/wave/drift/audit/alert capture |
 | Documentation | Passed | Fleet operations, runbooks, API/OpenAPI, roadmap, and exact checklist |
 | Manual qualification | Pending owner run | Steps 1–7 |
-| Regression | Passed | 214 isolated Laravel tests / 11,610 assertions, Go agent suite, OpenAPI, Compose, docs, and Phase 10 real telemetry qualification |
+| Regression | Passed | 214 isolated Laravel tests / 11,617 assertions, Go agent suite, OpenAPI, Compose, docs, and Phase 10 real telemetry qualification |
 | Release decision | Blocked | Owner browser, installer, mixed-traffic, failure, and rollback evidence remain mandatory |
 
 ## Failure record

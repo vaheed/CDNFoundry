@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\Domain;
+use App\Models\DomainEdgeCell;
 use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
 use App\Models\EdgeArtifact;
@@ -236,19 +237,43 @@ class EdgeProxyTest extends TestCase
         $this->assertSame(4, Edge::query()->findOrFail($id)->capacity['gateway']['listeners']);
 
         [$user, $domain] = $this->ownedDomain();
+        DomainEdgePlacement::query()->create([
+            'domain_id' => $domain->id, 'target_pool_id' => $sharedPool->id,
+            'desired_revision' => $domain->revision, 'state' => 'deploying',
+        ]);
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $this->record('edge-loop', '203.0.113.10'))->assertUnprocessable();
         $record = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $this->record('www', '8.8.8.8'))->assertCreated()->json('data.id');
-        $artifact = EdgeArtifact::query()->where('edge_id', $id)->firstOrFail();
+        $artifact = EdgeArtifact::query()->where('edge_id', $id)->where('domain_id', $domain->id)->latest('sequence')->firstOrFail();
         $this->assertTrue(sodium_crypto_sign_verify_detached(hex2bin($artifact->signature), $artifact->checksum, hex2bin($registered->json('data.signing_public_key'))));
         $this->withHeaders($identity)->getJson("/edge/v1/config/artifacts/{$artifact->checksum}")->assertOk()
             ->assertJsonPath('encoded_payload', base64_encode(ArtifactSigner::encode($artifact->payload)));
-        $this->withHeaders($identity)->getJson('/edge/v1/config/manifest?cursor=0')->assertOk()->assertJsonPath('data.0.checksum', $artifact->checksum);
+        $this->withHeaders($identity)->getJson('/edge/v1/config/manifest?cursor=0')->assertOk()
+            ->assertJsonFragment(['checksum' => $artifact->checksum]);
         $full = $this->withHeaders($identity)->getJson('/edge/v1/config/full')->assertOk()
             ->assertJsonPath('data.artifact_count', 1)->assertJsonPath('encoding', 'gzip');
         $snapshot = json_decode(gzdecode(base64_decode($full->json('encoded_snapshot'), true)), true, flags: JSON_THROW_ON_ERROR);
         $this->assertSame($domain->refresh()->revision, $snapshot['artifacts'][0]['revision']);
         $this->assertTrue(sodium_crypto_sign_verify_detached(hex2bin($full->json('signature')), $full->json('checksum'), hex2bin($full->json('signing_public_key'))));
         $this->withHeaders($identity)->postJson('/edge/v1/config/applied', ['sequence' => $artifact->sequence + 100])->assertUnprocessable();
+        // Keep the readiness evidence independent of runner speed. Production
+        // agents heartbeat every five seconds while downloading and validating
+        // artifacts; placement promotion must still fail closed on stale state.
+        $this->withHeaders($identity)->postJson('/edge/v1/heartbeat', [
+            'agent_version' => '1.0.0', 'listener_ready' => true, 'active_sequence' => 0,
+            'cells' => [['name' => 'cell-01', 'status' => 'ready', 'capacity' => ['active_connections' => 0, 'memory_usage' => 0]]],
+        ])->assertOk();
+        $this->assertTrue(Edge::query()->readyForTraffic()->whereKey($id)->exists());
+        $this->assertTrue($sharedPool->fresh()->isReady());
+        $placement = DomainEdgePlacement::query()->where('domain_id', $domain->id)->firstOrFail();
+        $this->assertSame($domain->revision, $placement->desired_revision);
+        $this->assertSame($domain->revision, $artifact->revision);
+        $this->assertSame($sharedPool->id, $placement->target_pool_id);
+        $this->assertSame(
+            $sharedPool->replicas_per_edge,
+            DomainEdgeCell::query()->where('domain_id', $domain->id)->where('edge_id', $id)
+                ->where('desired_revision', $domain->revision)->whereNotNull('target_cell_id')
+                ->whereHas('targetCell', fn ($query) => $query->where('status', 'ready')->where('drained', false))->count(),
+        );
         $this->withHeaders($identity)->postJson('/edge/v1/config/applied', ['sequence' => $artifact->sequence])->assertOk();
         $this->assertDatabaseHas('domain_edge_placements', ['domain_id' => $domain->id, 'state' => 'active', 'desired_revision' => $domain->revision]);
         $this->assertSame($domain->revision, $domain->refresh()->active_edge_revision);
