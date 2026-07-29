@@ -62,13 +62,12 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
         } else {
             $requiresWaf = $domain->waf_profile !== 'off';
             $pools = EdgePool::query()->where('enabled', true)
-                ->when($requiresWaf, fn ($query) => $query->where('waf_capable', true)
-                    ->whereIn('waf_canary_state', $domain->waf_profile === 'monitor' ? ['monitoring', 'passed'] : ['passed']))
+                ->when($requiresWaf, fn ($query) => $query->where('waf_capable', true))
                 ->orderByRaw("CASE kind WHEN 'reserved' THEN 0 WHEN 'dedicated' THEN 1 WHEN 'quarantine' THEN 2 ELSE 3 END")
                 ->orderBy('id')->get();
             if ($pools->isEmpty()) {
                 throw new \RuntimeException($requiresWaf
-                    ? 'No enabled WAF-capable pool has the required monitor-only canary state.'
+                    ? 'No enabled WAF-capable pool exists.'
                     : 'No enabled edge pool exists.');
             }
             DomainEdgePlacement::query()->firstOrCreate(['domain_id' => $domain->id], ['desired_revision' => $revision]);

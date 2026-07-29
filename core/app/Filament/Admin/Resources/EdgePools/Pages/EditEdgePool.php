@@ -19,7 +19,6 @@ class EditEdgePool extends EditRecord
     protected function mutateFormDataBeforeSave(array $data): array
     {
         $data['waf_runtime_version'] = ($data['waf_capable'] ?? false) ? config('security.waf.ruleset') : null;
-        $data['waf_canary_state'] = ($data['waf_capable'] ?? false) ? 'passed' : 'not_required';
         $routing = EdgePoolRoutingData::validate($data, $this->record, true);
         if (($routing['routing_mode'] ?? $this->record->routing_mode) !== $this->record->routing_mode && ($this->record->enabled || $this->record->endpoints()->exists())) {
             throw ValidationException::withMessages(['routing_mode' => 'Disable the pool and remove its endpoints before changing routing mode.']);
@@ -43,7 +42,7 @@ class EditEdgePool extends EditRecord
         }
         AuditLog::record(auth()->user(), 'edge.pool_updated', $this->record, [], request()->ip());
         ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
-        if ($this->record->wasChanged(['minimum_ready_cells', 'replicas_per_edge', 'maximum_domains_per_cell', 'cache_profile', 'compression_profile', 'waf_capable', 'waf_runtime_version', 'waf_canary_state'])) {
+        if ($this->record->wasChanged(['minimum_ready_cells', 'replicas_per_edge', 'maximum_domains_per_cell', 'cache_profile', 'compression_profile', 'waf_capable', 'waf_runtime_version'])) {
             $operation = Operation::query()->create([
                 'actor_id' => auth()->id(), 'type' => 'edge.global_reconcile', 'status' => 'pending',
                 'input' => ['pool_id' => $this->record->id, 'reason' => 'pool_policy_changed'],

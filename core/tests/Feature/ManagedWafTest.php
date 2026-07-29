@@ -67,18 +67,15 @@ class ManagedWafTest extends TestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'waf.exclusion_created']);
     }
 
-    public function test_pool_canary_gates_blocking_profiles_and_preserves_non_waf_defaults(): void
+    public function test_pool_capability_accepts_all_managed_profiles_without_canary_state(): void
     {
         $admin = User::factory()->admin()->create();
         $shared = EdgePool::query()->where('kind', 'shared')->firstOrFail();
         $this->assertFalse($shared->waf_capable);
         $this->actingAs($admin)->patchJson("/api/admin/edge-pools/{$shared->id}", [
-            'waf_capable' => true, 'waf_canary_state' => 'passed',
-        ])->assertUnprocessable();
-        $this->actingAs($admin)->patchJson("/api/admin/edge-pools/{$shared->id}", [
-            'waf_capable' => true, 'waf_runtime_version' => 'sha256:test', 'waf_canary_state' => 'monitoring',
+            'waf_capable' => true, 'waf_runtime_version' => 'sha256:test',
         ])->assertAccepted();
-        $this->assertSame('monitoring', $shared->refresh()->waf_canary_state);
+        $this->assertTrue($shared->refresh()->waf_capable);
 
         $this->assertFalse(ManagedWaf::profile('monitor')['blocking']);
         $this->assertTrue(ManagedWaf::profile('balanced')['blocking']);

@@ -415,8 +415,8 @@ a custom WAF language or raw ModSecurity configuration.
 - Reject arbitrary SecRule directives, customer rule uploads, runtime downloads,
   and custom expression languages.
 - Add rule, score, action, processing-time, body-limit, and exclusion telemetry.
-- Roll new CRS/image versions through monitor-only canaries.
-- Preserve the previous image and ruleset after failure.
+- Roll new CRS/image versions through the normal bounded edge release process.
+- Preserve the previous image and ruleset after release failure.
 
 **Scale target:** safe attack and false-positive corpora plus HIT/MISS load, with
 latency, CPU, memory, throughput, detection, false positives, and accepted limits recorded.
@@ -428,15 +428,15 @@ latency, CPU, memory, throughput, detection, false positives, and accepted limit
 - [x] Blocking uses stable, privacy-safe reasons.
 - [x] Exclusions are bounded, audited, and expiring.
 - [x] Oversized or malformed bodies remain bounded.
-- [x] Failed canaries keep the previous valid WAF runtime.
+- [x] Failed edge releases keep the previous valid WAF runtime.
 - [x] Non-WAF pools remain healthy during WAF load or failure.
 - [ ] Tests, security evidence, documentation, and manual qualification pass.
 
 **Agent completion evidence (2026-07-29):** the control plane stores one fixed
 managed profile and bounded, owned, expiring literal exclusions in PostgreSQL,
 increments the domain revision transactionally, audits mutations, coalesces
-reconciliation, and admits blocking profiles only to WAF-capable pools whose
-immutable runtime canary passed. Signed artifacts carry deterministic profile,
+reconciliation, and admits enabled profiles only to WAF-capable pools running
+the pinned immutable runtime. Signed artifacts carry deterministic profile,
 threshold, body-limit, ruleset, and exclusion data; failed or ineligible
 candidates preserve the previous active placement and artifact. The edge image
 pins ModSecurity 3.0.14, connector 1.0.4, and CRS 4.26.0, disables raw
@@ -559,7 +559,7 @@ recoverable, simple, and solid product.
 - [ ] Geo-Unicast and Anycast external checks pass.
 - [ ] Cache persistence, purge, stale, pressure, Gzip, and Brotli pass.
 - [ ] Origin failover and failback pass.
-- [ ] WAF monitor, block, exclusion, canary, and rollback pass.
+- [ ] WAF monitor, block, exclusion, and rollback pass.
 - [ ] Existing traffic continues through controlled control-plane and telemetry outages.
 - [ ] Invalid gateway, cell, and WAF candidates preserve previous valid state.
 - [ ] One saturated cell does not stop unrelated pools.

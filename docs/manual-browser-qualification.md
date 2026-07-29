@@ -965,26 +965,26 @@ stoppable and must pass the normal public-destination safety policy.
 ## Phase 9 — Managed OWASP CRS WAF
 
 Use disposable off, monitor, balanced, and strict domains, one WAF-capable
-candidate pool, one passed prior WAF pool/image, and one non-WAF comparison
-pool. Record image digests, ModSecurity/connector/CRS versions, pool and cell
+pool, and one non-WAF comparison pool. Record image digests,
+ModSecurity/connector/CRS versions, pool and cell
 IDs, revisions, operation IDs, corpus versions, and sanitized measurements.
 
 1. As administrator, open **Edge network → Service pools**. On the candidate
-   canary pool first and complete the bounded fleet canary. On the production
    pool enable **Offer managed WAF protection** and confirm **Managed WAF
-   release** is filled automatically. Expect no version or canary field and one
+   release** is filled automatically. Expect no version, readiness, or canary
+   field and one
    audited bounded global reconciliation. Existing domains must keep their
    individual WAF choices.
 2. As the assigned domain user, open the domain and choose **Security → Managed
-   **Web application firewall (WAF)**. Exercise Off, Observe, Recommended, and
+   Web application firewall (WAF)**. Exercise Off, Observe, Recommended, and
    High sensitivity. Expect one revision and asynchronous operation per effective
    change. Arbitrary configuration, `SecRule`, rule upload, wildcard, and
    expression inputs must not exist and API attempts must fail.
-3. With the canary still **Monitoring**, expect Monitor to place on it but
-   Balanced/Strict to remain on the previous valid runtime with a visible
-   operation failure. Run the approved benign and attack corpora, HIT/MISS
-   load, and body corpus. After evidence passes, mark the exact digest
-   **Passed**, retry, and expect target-first activation.
+3. Run the approved benign and attack corpora against all four profiles. Expect
+   Off to remain uninspected, Observe to report without blocking, and
+   Recommended/High sensitivity to block according to their fixed thresholds.
+   Run HIT/MISS load and the body corpus. A failed runtime update must preserve
+   the previous active image and artifact.
 4. Send benign traffic through all four profiles. Expect the same origin/cache
    result. Send approved XSS, SQL injection, traversal, and command-injection
    samples. Off serves; Monitor detects and serves; Balanced and Strict return
@@ -1019,7 +1019,7 @@ IDs, revisions, operation IDs, corpus versions, and sanitized measurements.
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| Implementation | Passed | Fixed profiles, WAF-aware placement, canary gate, bounded owned exclusions, pinned immutable image, signed artifacts, stable reasons, and bounded telemetry |
+| Implementation | Passed | Fixed profiles, WAF-aware placement, bounded owned exclusions, pinned immutable image, signed artifacts, stable reasons, and bounded telemetry |
 | Unit and feature tests | Passed | 210 isolated Laravel tests / 11,595 assertions cover WAF policy/API/idempotency/authorization/audit/artifact/pool behavior; Pint passes 318 files |
 | Real-runtime E2E | Passed | Pinned image builds and validates; off/monitor/balanced/strict, XSS/SQLi, malformed/oversized bodies, exclusion, 48 attack plus 48 healthy concurrent requests, stable reasons, privacy, and non-WAF isolation pass |
 | IPv4 and IPv6 | Pending owner run | Step 10 external evidence |

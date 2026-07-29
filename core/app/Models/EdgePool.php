@@ -9,6 +9,9 @@ class EdgePool extends Model
 {
     protected $guarded = [];
 
+    // Retained only for mixed-version database compatibility during contract.
+    protected $hidden = ['waf_canary_state'];
+
     public function cells(): HasMany
     {
         return $this->hasMany(EdgeCell::class);

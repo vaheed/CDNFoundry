@@ -21,7 +21,6 @@ use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Utilities\Get;
-use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -51,12 +50,8 @@ class EdgePoolResource extends Resource
                 }),
             Toggle::make('waf_capable')
                 ->label(FilamentHelp::label('Offer managed WAF protection', 'Enable this only when the pool cells run the already-qualified CDNFoundry WAF image. This does not enable WAF for every domain.'))
-                ->helperText('After this is enabled, each domain independently chooses Off, Observe, Recommended, or High sensitivity. Test new WAF releases through a small fleet canary before changing this production pool.')
-                ->default(false)->live()
-                ->afterStateUpdated(function (bool $state, Set $set): void {
-                    $set('waf_runtime_version', $state ? config('security.waf.ruleset') : null);
-                    $set('waf_canary_state', $state ? 'passed' : 'not_required');
-                }),
+                ->helperText('After this is enabled, each domain independently chooses Off, Observe, Recommended, or High sensitivity.')
+                ->default(false)->live(),
             TextInput::make('waf_runtime_version')
                 ->label(FilamentHelp::label('Managed WAF release', 'Filled automatically from the pinned CDNFoundry image. Operators do not need to find or type a version.'))
                 ->readOnly()->dehydrated()
@@ -84,12 +79,7 @@ class EdgePoolResource extends Resource
             TextColumn::make('kind')->badge(),
             TextColumn::make('cache_profile')->label('Cache')->badge(),
             TextColumn::make('compression_profile')->label('Compression')->badge(),
-            TextColumn::make('waf_canary_state')->label('Managed WAF')->badge()->formatStateUsing(fn (string $state, EdgePool $record): string => ! $record->waf_capable ? 'Not offered' : match ($state) {
-                'monitoring' => 'Canary only',
-                'passed' => 'Available',
-                'failed' => 'Unavailable',
-                default => 'Not configured',
-            }),
+            IconColumn::make('waf_capable')->label('Managed WAF')->boolean(),
             TextColumn::make('routing_mode')->label('Routing')->badge(),
             TextColumn::make('routing_status')->label('Route state')->state(fn (EdgePool $record): string => $record->routingStatus())->badge(),
             TextColumn::make('service_pair')->label('Service pair')->state(fn (EdgePool $record): ?string => $record->isSimpleAnycast()
