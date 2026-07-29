@@ -219,10 +219,11 @@ feature.
    included** label to explain that only the configured newest window is
    provisional, not that delivery is degraded. Expect **Finalized usage** to
    show no more than five rows and every shown row to be **Finalized**.
-3. In **Compression savings**, expect uncompressed delivery to be labeled
-   **Uncompressed**, not **Identity**. Expect **Encoding / profile** and
-   **Fallback** to remain left-aligned while numeric columns remain
-   right-aligned without page overflow. In
+3. In **Compression savings**, expect identity delivery to retain its
+   **Identity** label and description. Expect five rows initially with
+   **Show more**/**Show fewer** controls. **Encoding / profile** and
+   **Fallback** remain left-aligned while numeric columns remain right-aligned
+   without page overflow. In
    **Recent logs**, expect five rows per stream, **Edge requests** to contain
    generated edge traffic, and **Show more**/**Show fewer** to expand and
    collapse a stream without reloading the page.

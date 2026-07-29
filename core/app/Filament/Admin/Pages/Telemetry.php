@@ -21,6 +21,8 @@ class Telemetry extends Page
     /** @var array<string, int> */
     public array $logLimits = [];
 
+    public int $compressionLimit = 5;
+
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-presentation-chart-line';
 
     protected static ?string $navigationLabel = 'Telemetry and usage';
@@ -80,7 +82,7 @@ class Telemetry extends Page
             'summary' => [],
             'traffic' => [],
             'dns' => [],
-            'compression' => [],
+            'compression' => ['items' => [], 'has_more' => false, 'expanded' => false],
             'logs' => ['errors' => [], 'security' => [], 'requests' => []],
             'buffer' => $this->bufferStatus(),
             'usage' => $this->recentUsage(),
@@ -90,7 +92,12 @@ class Telemetry extends Page
             $state['summary'] = $store->summary(null, $range);
             $state['traffic'] = $store->aggregate(null, $range, 'traffic');
             $state['dns'] = $store->aggregate(null, $range, 'dns');
-            $state['compression'] = $store->aggregate(null, $rawRange, 'compression');
+            $compression = $store->aggregate(null, $rawRange, 'compression');
+            $state['compression'] = [
+                'items' => array_slice($compression, 0, $this->compressionLimit),
+                'has_more' => count($compression) > $this->compressionLimit,
+                'expanded' => $this->compressionLimit > 5,
+            ];
             foreach (array_keys($state['logs']) as $stream) {
                 $result = $store->logs(null, $rawRange, $stream, null);
                 $limit = $this->logLimits[$stream] ?? 5;
@@ -112,6 +119,16 @@ class Telemetry extends Page
     {
         abort_unless(in_array($stream, ['errors', 'security', 'requests'], true), 404);
         $this->logLimits[$stream] = min(100, ($this->logLimits[$stream] ?? 5) + 20);
+    }
+
+    public function showMoreCompression(): void
+    {
+        $this->compressionLimit = min(1000, $this->compressionLimit + 20);
+    }
+
+    public function showFewerCompression(): void
+    {
+        $this->compressionLimit = 5;
     }
 
     public function showFewerLogs(string $stream): void

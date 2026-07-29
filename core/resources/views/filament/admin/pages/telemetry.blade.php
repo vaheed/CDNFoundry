@@ -64,13 +64,13 @@
                 </x-filament::section>
             </div>
 
-            <x-filament::section heading="Compression savings" description="Unsampled uncompressed, Gzip, and Brotli delivery from the last hour. Saved bytes compare delivered size with the estimated original response size." icon="heroicon-o-arrows-pointing-in">
+            <x-filament::section heading="Compression savings" description="Unsampled identity, Gzip, and Brotli delivery from the last hour. Identity estimates derive from the recorded filter ratio." icon="heroicon-o-arrows-pointing-in">
                 <x-ui.data-table class="[&_.cdn-data-table]:min-w-[48rem]">
                     <x-slot:header><tr><th class="text-left">Encoding / profile</th><th class="text-left">Fallback</th><th class="text-right">Requests</th><th class="text-right">Delivered</th><th class="text-right">Saved</th><th class="text-right">Savings</th></tr></x-slot:header>
-                    @forelse ($state['compression'] as $row)
+                    @forelse ($state['compression']['items'] as $row)
                         @php
                             $encoding = strtolower((string) ($row['encoding'] ?? 'identity'));
-                            $encodingLabel = $encoding === 'identity' ? 'Uncompressed' : strtoupper($encoding);
+                            $encodingLabel = strtoupper($encoding);
                             $fallback = (string) ($row['fallback'] ?? 'none');
                             $fallbackLabel = match ($fallback) {
                                 'client_identity' => 'Client requested uncompressed',
@@ -93,6 +93,16 @@
                         <tr><td colspan="6" class="px-3 py-6 text-center text-gray-500">No compression events were recorded in the last hour.</td></tr>
                     @endforelse
                 </x-ui.data-table>
+                @if ($state['compression']['has_more'] || $state['compression']['expanded'])
+                    <div class="mt-3 flex justify-end gap-2">
+                        @if ($state['compression']['has_more'])
+                            <x-filament::button size="sm" color="gray" icon="heroicon-o-chevron-down" wire:click="showMoreCompression">Show more</x-filament::button>
+                        @endif
+                        @if ($state['compression']['expanded'])
+                            <x-filament::button size="sm" color="gray" icon="heroicon-o-chevron-up" wire:click="showFewerCompression">Show fewer</x-filament::button>
+                        @endif
+                    </div>
+                @endif
             </x-filament::section>
 
             <x-filament::section heading="Recent logs" description="Masked, bounded previews from the last hour. Five rows per stream until expanded." icon="heroicon-o-document-magnifying-glass">
