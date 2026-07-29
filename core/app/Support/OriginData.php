@@ -11,6 +11,52 @@ final class OriginData
 {
     public static function validate(array $input): array
     {
+        $origin = self::validateEndpoint($input);
+        $validator = Validator::make($input, [
+            'backup' => ['sometimes', 'nullable', 'array'],
+            'failover' => ['sometimes', 'nullable', 'array'],
+            'failover.failure_threshold' => ['required_with:backup', 'integer', 'between:1,20'],
+            'failover.recovery_threshold' => ['required_with:backup', 'integer', 'between:1,20'],
+            'failover.hold_down_seconds' => ['required_with:backup', 'integer', 'between:5,3600'],
+            'failover.failback_delay_seconds' => ['required_with:backup', 'integer', 'between:5,86400'],
+        ]);
+        $validator->after(function ($validator) use ($input, $origin): void {
+            if (is_array($input['backup'] ?? null)) {
+                try {
+                    $backup = self::validateEndpoint($input['backup']);
+                    if ($backup['scheme'] === $origin['scheme'] && $backup['host'] === $origin['host'] && $backup['port'] === $origin['port']) {
+                        $validator->errors()->add('backup.host', 'The backup origin must use a different endpoint than the primary origin.');
+                    }
+                } catch (ValidationException $exception) {
+                    foreach ($exception->errors() as $field => $messages) {
+                        foreach ($messages as $message) {
+                            $validator->errors()->add('backup.'.$field, $message);
+                        }
+                    }
+                }
+            }
+        });
+        if ($validator->fails()) {
+            throw new ValidationException($validator);
+        }
+        if (is_array($input['backup'] ?? null)) {
+            $origin['backup'] = self::validateEndpoint($input['backup']);
+            $origin['failover'] = [
+                'failure_threshold' => (int) $input['failover']['failure_threshold'],
+                'recovery_threshold' => (int) $input['failover']['recovery_threshold'],
+                'hold_down_seconds' => (int) $input['failover']['hold_down_seconds'],
+                'failback_delay_seconds' => (int) $input['failover']['failback_delay_seconds'],
+            ];
+        } else {
+            $origin['backup'] = null;
+            $origin['failover'] = null;
+        }
+
+        return $origin;
+    }
+
+    private static function validateEndpoint(array $input): array
+    {
         $validator = Validator::make($input, [
             'host' => ['required', 'string', 'max:253'],
             'port' => ['required', 'integer', 'between:1,65535'],

@@ -149,9 +149,15 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             'pools' => $poolNames,
             'hostnames' => $records->map(function ($record) use ($blockedAddresses, $tlsCertificates): array {
                 $origin = $record->origin;
-                $origin['private_allowlist'] = app(PlatformSettings::class)->get('origin_safety', 'private_origin_allowlist');
-                $origin['blocked_networks'] = app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_networks');
-                $origin['blocked_addresses'] = $blockedAddresses;
+                $safety = [
+                    'private_allowlist' => app(PlatformSettings::class)->get('origin_safety', 'private_origin_allowlist'),
+                    'blocked_networks' => app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_networks'),
+                    'blocked_addresses' => $blockedAddresses,
+                ];
+                $origin = [...$origin, ...$safety];
+                if (is_array($origin['backup'] ?? null)) {
+                    $origin['backup'] = [...$origin['backup'], ...$safety];
+                }
 
                 $certificate = $tlsCertificates->first(fn ($candidate): bool => ManagedCertificateNames::coveredBy($record->name, $candidate->names));
 

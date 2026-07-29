@@ -881,6 +881,73 @@ and operation IDs.
 | Regression | Passed | Foundation, DNS, Geo-DNS, two-edge control plane through revision 14 with zero obsolete artifacts, mTLS, TLS, security, analytics outage recovery, operations recovery, and compression/cache runtime |
 | Release decision | Blocked | Owner browser, external load, CPU saturation, and external IPv4/IPv6 evidence remain mandatory |
 
+## Phase 8 — Primary and backup origin failover
+
+Use one disposable proxied hostname with distinguishable primary and backup
+responses, one cacheable one-second object, and one unrelated proxied hostname.
+Record the domain/revision, pool/cell, origin request counters, transition
+headers, operation IDs, and timestamps. The two origins must be independently
+stoppable and must pass the normal public-destination safety policy.
+
+1. As the domain owner, open the proxied record in **DNS records**. Enable
+   **Backup origin** and enter backup hostname/IP, scheme, Host header, TLS SNI
+   and verification, connect/response timeouts, failure threshold, recovery
+   threshold, hold-down, and failback delay. Save. Expect one desired revision,
+   one coalesced asynchronous deployment, and no new process, container,
+   server block, cache directory, worker, or timer.
+2. Enter loopback, link-local, metadata, platform-listener, proxy-loop, invalid
+   TLS, identical-primary, and out-of-range policy values. Expect field-level
+   rejection with no revision, artifact, audit success, or runtime change.
+   Confirm an unassigned domain user cannot view or mutate either origin.
+3. Choose **Test origin**, then **Test backup**. Expect separate asynchronous
+   operation IDs and bounded results from selected ready edges. Confirm the
+   result contains status/latency but does not disclose credentials or private
+   keys.
+4. Request uncached paths while both origins are healthy. Expect the primary
+   marker and `X-CDNFoundry-Origin: primary`. Confirm analytics stores
+   `origin_role=primary` and a bounded transition reason.
+5. Stop the primary and send concurrent MISS traffic. Before the configured
+   failure threshold expect bounded failures; afterward expect the backup
+   marker, `X-CDNFoundry-Origin: backup`, and
+   `primary_failure_threshold`. Record transition time, origin pressure,
+   errors, CPU, memory, and p50/p95/p99 latency.
+6. Keep the primary unavailable past the hold-down and verify traffic remains
+   stable on backup. Disconnect Laravel/Redis from the cell network and repeat
+   requests. Expect local failover to continue without a control-plane call.
+7. Restore primary. Before failback delay expect backup. After the delay expect
+   primary probes and only return to stable primary after the recovery
+   threshold. Interrupt recovery once and confirm the success count resets
+   rather than flapping.
+8. Seed the one-second cache object, then stop both origins after it expires.
+   Within stale-if-error expect `STALE`; after the stale window expect a bounded
+   upstream or configured maintenance failure. Confirm attempts do not form a
+   retry storm.
+9. While both origins fail, load the unrelated hostname and a second cell.
+   Expect normal origin connection budgets, latency, and service. Inject an
+   invalid backup artifact and confirm the prior valid primary/backup state
+   remains active.
+10. Run controlled HIT/MISS failover and recovery load over external IPv4 and
+    configured IPv6, plus the documented IPv4-only topology. Record hardware,
+    concurrency, throughput, transition time, p50/p95/p99, primary/backup
+    pressure, errors, stale responses, CPU, memory, saturation point, and the
+    accepted operating limit.
+
+### Phase 8 completion gate
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| Implementation | Passed | One validated backup, bounded policy, revisioned artifacts, local cell state, role-specific tests, stale precedence, diagnostics, and telemetry |
+| Unit and feature tests | Passed | 205 isolated Laravel tests / 11,537 assertions cover authorization, validation, idempotency conflict, atomic preservation, IPv4/IPv6 artifact, and safety envelopes; Pint passes 311 files |
+| Real-runtime E2E | Passed | Primary, threshold failover, 24 concurrent backup requests, hold-down, delayed threshold recovery, dual failure stale, bounded error, and unrelated-host isolation |
+| IPv4 and IPv6 | Partially passed; owner run pending | IPv4 and IPv6 backup state compiles; owner external traffic and IPv4-only topology evidence required |
+| Scale | Pending owner load run | Exact measurements and accepted saturation limit from steps 5 and 10 |
+| Failure, recovery, and isolation | Partially passed; owner run pending | Automated local transitions, stale, bounded failure, and unrelated-host isolation passed; owner control-plane partition and external saturation remain |
+| Observability | Partially passed; owner run pending | Runtime headers, authenticated active-role status, and a real backup/primary-failure Vector-to-ClickHouse event passed; owner UI and alert captures remain |
+| Documentation | Passed | Origin guide, telemetry, upgrade instructions, roadmap evidence, and this exact checklist |
+| Manual qualification | Pending owner run | Steps 1–10; coding agents do not run browser automation |
+| Regression | Passed | Full isolated suite, cumulative foundation/DNS/Geo-DNS/control-plane/mTLS/TLS/security/analytics/operations E2E, established and Phase 8 OpenResty runtime, Compose, OpenAPI, Vector, and docs checks |
+| Release decision | Blocked | Owner browser, external load/saturation, control-plane partition, and external IPv4/IPv6 evidence remain mandatory |
+
 ## Failure record
 
 For every failed or blocked checkpoint, record:

@@ -138,6 +138,39 @@ class DnsRecordsRelationManager extends RelationManager
             Toggle::make('origin.health_check.enabled')->label('Enable scheduled origin health check')->default(false)->visible(fn ($get): bool => $get('mode') === 'proxied'),
             TextInput::make('origin.health_check.path')->label('Health-check path')->default('/')->maxLength(1024)->visible(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.health_check.enabled')),
             TextInput::make('origin.health_check.interval_seconds')->label('Health-check interval (seconds)')->numeric()->default(300)->minValue(60)->maxValue(86400)->visible(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.health_check.enabled')),
+            Toggle::make('origin.backup_enabled')->label('Enable backup origin')->default(false)->live()->visible(fn ($get): bool => $get('mode') === 'proxied'),
+            TextInput::make('origin.backup.host')->label('Backup server hostname or IP')->required(fn ($get): bool => (bool) $get('origin.backup_enabled'))
+                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
+            Select::make('origin.backup.scheme')->label('Backup scheme')->options(['https' => 'HTTPS', 'http' => 'HTTP'])->default('https')->live()
+                ->required(fn ($get): bool => (bool) $get('origin.backup_enabled'))->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled'))
+                ->afterStateUpdated(function (?string $state, Set $set): void {
+                    $set('origin.backup.port', $state === 'http' ? 80 : 443);
+                    $set('origin.backup.verify_tls', $state !== 'http');
+                    if ($state === 'http') {
+                        $set('origin.backup.sni', null);
+                    }
+                }),
+            TextInput::make('origin.backup.port')->label('Backup port')->numeric()->default(443)->disabled()->dehydrated()
+                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
+            TextInput::make('origin.backup.host_header')->label('Backup Host header')->required(fn ($get): bool => (bool) $get('origin.backup_enabled'))
+                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
+            TextInput::make('origin.backup.sni')->label('Backup TLS SNI')
+                ->required(fn ($get): bool => (bool) $get('origin.backup_enabled') && $get('origin.backup.scheme') === 'https' && (bool) $get('origin.backup.verify_tls'))
+                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled') && $get('origin.backup.scheme') === 'https'),
+            Toggle::make('origin.backup.verify_tls')->label('Verify backup TLS')->default(true)
+                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled') && $get('origin.backup.scheme') === 'https'),
+            TextInput::make('origin.backup.connect_timeout_ms')->label('Backup connect timeout (ms)')->numeric()->default(2000)->minValue(100)->maxValue(10000)
+                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
+            TextInput::make('origin.backup.response_timeout_ms')->label('Backup response timeout (ms)')->numeric()->default(30000)->minValue(500)->maxValue(60000)
+                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
+            TextInput::make('origin.failover.failure_threshold')->label('Failures before failover')->numeric()->default(3)->minValue(1)->maxValue(20)
+                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
+            TextInput::make('origin.failover.recovery_threshold')->label('Successes before failback')->numeric()->default(2)->minValue(1)->maxValue(20)
+                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
+            TextInput::make('origin.failover.hold_down_seconds')->label('Minimum backup hold-down (seconds)')->numeric()->default(30)->minValue(5)->maxValue(3600)
+                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
+            TextInput::make('origin.failover.failback_delay_seconds')->label('Primary failback delay (seconds)')->numeric()->default(60)->minValue(5)->maxValue(86400)
+                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
             TagsInput::make('geo_default')->label('Default answers')
                 ->visible(fn ($get): bool => $get('mode') === 'geo_dns')
                 ->required(fn ($get): bool => $get('mode') === 'geo_dns')
@@ -187,6 +220,19 @@ class DnsRecordsRelationManager extends RelationManager
                     DispatchOriginTest::dispatch($operation->id)->afterCommit();
                     Notification::make()->info()->title('Origin test queued')->body("Operation {$operation->id} will run on qualified edges.")->send();
                 }),
+            Action::make('testBackupOrigin')->label('Test backup')->icon('heroicon-o-signal')
+                ->visible(fn (DnsRecord $record): bool => $record->mode === 'proxied' && is_array($record->origin['backup'] ?? null))
+                ->action(function (DnsRecord $record): void {
+                    $operation = Operation::query()->create([
+                        'id' => (string) Str::uuid(), 'type' => 'edge.origin_test', 'status' => 'pending', 'actor_id' => auth()->id(),
+                        'input' => [
+                            'domain_id' => $record->domain_id, 'record_id' => $record->id, 'origin_role' => 'backup',
+                            'addresses' => OriginData::resolveAndValidate($record->origin['backup']['host']), 'edge_ids' => [],
+                        ],
+                    ]);
+                    DispatchOriginTest::dispatch($operation->id)->afterCommit();
+                    Notification::make()->info()->title('Backup origin test queued')->body("Operation {$operation->id} will run on qualified edges.")->send();
+                }),
             Action::make('previewGeo')->label('Preview')->visible(fn (DnsRecord $record): bool => $record->mode === 'geo_dns')
                 ->schema([TextInput::make('ip')->ip()->required()])
                 ->action(function (DnsRecord $record, array $data): void {
@@ -195,7 +241,7 @@ class DnsRecordsRelationManager extends RelationManager
                     Notification::make()->info()->title('Geo-DNS preview')
                         ->body(sprintf('%s / %s → %s. Runtime uses trusted ECS, otherwise the recursive resolver.', $geo['country'] ?? 'unknown', $geo['continent'] ?? 'unknown', implode(', ', $targets)))->send();
                 }),
-            EditAction::make()->mutateRecordDataUsing(fn (array $data, DnsRecord $record): array => $this->hydrateGeoForm($data, $record))
+            EditAction::make()->mutateRecordDataUsing(fn (array $data, DnsRecord $record): array => $this->hydrateOriginForm($this->hydrateGeoForm($data, $record), $record))
                 ->visible(fn (DnsRecord $record): bool => $record->type !== 'NS' || auth()->user()?->isAdmin() === true)->using(function (DnsRecord $record, array $data): DnsRecord {
                     return $this->updateRecord($record, $data);
                 }),
@@ -374,8 +420,30 @@ class DnsRecordsRelationManager extends RelationManager
         if (! (bool) data_get($input, 'origin.health_check.enabled', false)) {
             $input['origin']['health_check'] = null;
         }
+        if (! (bool) data_get($input, 'origin.backup_enabled', false)) {
+            $input['origin']['backup'] = null;
+            $input['origin']['failover'] = null;
+        } else {
+            $backup = &$input['origin']['backup'];
+            $backup['port'] = ($backup['scheme'] ?? 'https') === 'http' ? 80 : 443;
+            $backup['verify_tls'] = ($backup['scheme'] ?? 'https') !== 'http' && (bool) ($backup['verify_tls'] ?? true);
+            $backup['sni'] = ($backup['scheme'] ?? 'https') === 'http' ? null : ($backup['sni'] ?? null);
+            $backup['retry_count'] = 0;
+            $backup['websocket'] = (bool) ($input['origin']['websocket'] ?? false);
+            $backup['health_check'] = null;
+        }
+        unset($input['origin']['backup_enabled']);
 
         return $input;
+    }
+
+    private function hydrateOriginForm(array $data, DnsRecord $record): array
+    {
+        if ($record->mode === 'proxied') {
+            $data['origin']['backup_enabled'] = is_array($record->origin['backup'] ?? null);
+        }
+
+        return $data;
     }
 
     private function assertZoneValidForForm(Collection $rows, string $zone): void

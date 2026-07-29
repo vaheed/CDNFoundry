@@ -50,6 +50,9 @@ transforms:
       .cache_status = slice!(to_string(.cache_status) ?? "unknown", 0, 24)
       .origin_latency_ms = to_int(.origin_latency_ms) ?? null
       .origin_error = slice!(replace(to_string(.origin_error) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 256)
+      .origin_role = slice!(to_string(.origin_role) ?? "primary", 0, 8)
+      if .origin_role != "backup" { .origin_role = "primary" }
+      .origin_transition = slice!(to_string(.origin_transition) ?? "none", 0, 32)
       .tls_error = slice!(replace(to_string(.tls_error) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 256)
       .security_action = slice!(to_string(.security_action) ?? "allow", 0, 24)
       .security_reason = slice!(to_string(.security_reason) ?? "", 0, 64)

@@ -23,6 +23,8 @@ and reported through Vector metrics.
 | `cache_status` | low-cardinality string, 24 characters |
 | `origin_latency_ms` | nullable unsigned integer |
 | `origin_error`, `tls_error` | bounded strings, 256 characters |
+| `origin_role` | `primary` or `backup` |
+| `origin_transition` | stable reason, 32 characters |
 | `security_action` | low-cardinality string, 24 characters |
 | `security_reason` | low-cardinality string, 64 characters |
 | `edge_id` | low-cardinality string, 64 characters |

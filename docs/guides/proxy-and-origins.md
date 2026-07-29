@@ -8,7 +8,7 @@ description: Configure proxied hostnames, origin safety, forwarding, health chec
 | Concern | Implemented contract |
 | --- | --- |
 | Eligible records | Proxied A, AAAA, and CNAME only |
-| Origin cardinality | Exactly one validated origin per hostname |
+| Origin cardinality | One primary and at most one active-passive backup per hostname |
 | Runtime | Shared data-driven OpenResty cell |
 | Safety | Revalidate resolution before connection |
 | Failure | Last-valid edge revision remains active |
@@ -23,8 +23,11 @@ flowchart LR
     Cache -- No --> Resolve["Resolve explicit origin"]
     Resolve --> Safe{"Safe public target?"}
     Safe -- No --> Fail["Fail closed"]
-    Safe -- Yes --> Origin["Bounded origin request"]
-    Origin --> Return
+    Safe -- Yes --> Origin{"Locally active origin"}
+    Origin --> Primary["Bounded primary request"]
+    Origin --> Backup["Bounded backup request"]
+    Primary --> Return
+    Backup --> Return
 ```
 
 ::: warning Private origins are not implemented
@@ -32,9 +35,10 @@ Do not weaken safety checks to reach RFC1918, loopback, link-local, metadata,
 platform-service, or proxy-loop destinations.
 :::
 
-A proxied hostname uses one DNS record and one explicit origin. Only `A`,
-`AAAA`, and `CNAME` records can use `proxied` mode. Their DNS `content` becomes
-platform-managed; do not treat it as the origin.
+A proxied hostname uses one DNS record, one required primary origin, and at
+most one optional backup. Only `A`, `AAAA`, and `CNAME` records can use
+`proxied` mode. Their DNS `content` becomes platform-managed; do not treat it
+as an origin.
 
 ## Origin fields
 
@@ -51,10 +55,37 @@ platform-managed; do not treat it as the origin.
 | `retry_count` | 0–2 |
 | `websocket` | Permit WebSocket upgrade |
 | `health_check` | Optional path and 60–86,400 second interval |
+| `backup` | Optional origin with the same destination, TLS, header, and timeout validation |
+| `failover.failure_threshold` | 1–20 consecutive primary failures |
+| `failover.recovery_threshold` | 1–20 consecutive primary recovery successes |
+| `failover.hold_down_seconds` | 5–3,600 seconds |
+| `failover.failback_delay_seconds` | 5–86,400 seconds |
 
 The control plane resolves and validates the destination before saving. The edge
 agent resolves and validates again immediately before an origin test or runtime
 connection.
+
+## Active-passive failover
+
+Failover is local to each OpenResty cell and never calls Laravel in the request
+path. A cell normally selects primary. Consecutive connection, timeout, or 5xx
+evidence activates backup after `failure_threshold`. The cell keeps backup
+active for the greater of hold-down and failback delay, then requires
+`recovery_threshold` successful primary requests before returning to primary.
+This deliberately permits cells to transition at slightly different times
+according to their own bounded evidence.
+
+`X-CDNFoundry-Origin` reports `primary` or `backup`.
+`X-CDNFoundry-Origin-Transition` reports `none`,
+`primary_failure_threshold`, `backup_failure`, or
+`primary_recovery_threshold`. The authenticated cell status response also
+lists active role, reason, and failback time without destination secrets.
+Vector stores the role and reason with request events.
+
+When both origins fail, the configured cache stale window applies before a
+bounded upstream failure is returned. Cache-only, stale-only, and maintenance
+policies retain their existing precedence. Failover never creates a weighted,
+percentage, geographic, or arbitrary origin pool.
 
 ## Destination safety
 
@@ -75,8 +106,9 @@ settings are revisioned and delivered as signed artifacts.
 
 ## Origin tests
 
-`POST .../origin/test` is rate limited and asynchronous. A runtime task resolves
-the destination, connects with bounded timeouts, does not follow redirects, and
+`POST .../origin/test` is rate limited and asynchronous. Set `origin_role` to
+`primary` (the default) or `backup`. A runtime task resolves the selected
+destination, connects with bounded timeouts, does not follow redirects, and
 records status, address, latency, HTTP status, or a stable failure reason.
 Scheduled health checks run only when explicitly enabled and are dispatched in
 batches of at most 100 per minute.

@@ -48,9 +48,16 @@ class DispatchOriginTest implements ShouldQueue
             $exists = EdgeTask::query()->where('edge_id', $edge->id)->where('type', 'origin_test')
                 ->where('payload->operation_id', $operation->id)->exists();
             if (! $exists) {
+                $role = $operation->input['origin_role'] ?? 'primary';
+                $origin = $role === 'backup' ? ($record->origin['backup'] ?? null) : $record->origin;
+                if (! is_array($origin)) {
+                    $operation->update(['status' => 'failed', 'error' => 'The selected origin no longer exists.', 'finished_at' => now()]);
+
+                    return;
+                }
                 EdgeTask::query()->create(['id' => (string) Str::uuid(), 'edge_id' => $edge->id, 'type' => 'origin_test', 'status' => 'pending', 'payload' => [
                     'operation_id' => $operation->id, 'domain_id' => $record->domain_id, 'record_id' => $record->id,
-                    'origin' => $record->origin, 'addresses' => $operation->input['addresses'],
+                    'origin_role' => $role, 'origin' => $origin, 'addresses' => $operation->input['addresses'],
                     'private_allowlist' => app(PlatformSettings::class)->get('origin_safety', 'private_origin_allowlist'),
                     'blocked_networks' => app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_networks'),
                 ]]);

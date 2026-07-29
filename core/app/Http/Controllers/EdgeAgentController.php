@@ -345,7 +345,11 @@ class EdgeAgentController extends Controller
             'result.failure_reason' => ['nullable', 'string', 'max:100'],
         ];
         $data = $request->validate($rules);
-        $result = array_merge($data['result'], ['edge_id' => $edge->id, 'reported_at' => now()->toIso8601String()]);
+        $result = array_merge($data['result'], [
+            'edge_id' => $edge->id,
+            ...($row->type === 'origin_test' ? ['origin_role' => $row->payload['origin_role'] ?? 'primary'] : []),
+            'reported_at' => now()->toIso8601String(),
+        ]);
         $attempts = $row->attempts + 1;
         $retryPurge = $row->type === 'cache_purge' && $data['status'] === 'failed' && $attempts < 5;
         $row->update([

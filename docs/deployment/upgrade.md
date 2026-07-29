@@ -27,8 +27,11 @@ For additive migrations and compatible agents:
 
 1. run `make prod-pull`;
 2. run `make prod-migrate`;
-3. when upgrading to compression telemetry, apply
+3. apply the additive ClickHouse telemetry migrations that are newer than the
+   deployed release, including
    `docker/clickhouse/migrations/2026_07_29_add_compression_telemetry.sql`
+   and
+   `docker/clickhouse/migrations/2026_07_29_add_origin_failover_telemetry.sql`,
    with `clickhouse-client --multiquery` before replacing Vector;
 4. canary one control web process;
 5. replace Horizon workers gracefully with `php artisan horizon:terminate`;

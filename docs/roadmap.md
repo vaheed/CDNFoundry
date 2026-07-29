@@ -373,14 +373,31 @@ traffic, with transition time, origin pressure, errors, and isolation recorded.
 
 **Completion checklist:**
 
-- [ ] Healthy primary receives normal traffic.
-- [ ] Qualified failure moves traffic to backup.
-- [ ] Recovery does not flap.
-- [ ] Both-origin failure follows stale or maintenance policy.
-- [ ] Invalid backup state never replaces valid primary state.
-- [ ] Control-plane outage does not remove local failover.
-- [ ] One failing origin cannot exhaust unrelated origin budgets.
+- [x] Healthy primary receives normal traffic.
+- [x] Qualified failure moves traffic to backup.
+- [x] Recovery does not flap.
+- [x] Both-origin failure follows stale or maintenance policy.
+- [x] Invalid backup state never replaces valid primary state.
+- [x] Control-plane outage does not remove local failover.
+- [x] One failing origin cannot exhaust unrelated origin budgets.
 - [ ] Tests, load evidence, documentation, and manual qualification pass.
+
+**Agent completion evidence (2026-07-29):** one optional backup and bounded
+failure, recovery, hold-down, and failback policy are stored in the existing
+revisioned origin JSON, validated through the same IPv4/IPv6 destination and
+TLS policy, exposed in Filament and the policy-aware API, and compiled
+deterministically into signed cell artifacts. Real OpenResty qualification
+covers healthy primary traffic, transition within five seconds, 24 concurrent
+backup requests, delayed thresholded recovery, both-origin stale service,
+bounded failure, local operation without a control-plane request, and
+unrelated-host isolation. Isolated Laravel coverage verifies permission,
+validation, idempotency conflict, atomic preservation, and equal safety
+envelopes. All 205 isolated Laravel tests / 11,537 assertions, Pint, Compose,
+OpenAPI, docs, Vector validation, cumulative non-browser E2E, and a real
+backup-transition Vector-to-ClickHouse event pass. Owner browser, external
+load/saturation, and external IPv4/IPv6
+evidence remain mandatory, so the combined checkbox and release decision
+remain blocked.
 
 ## Phase 9 — Managed OWASP CRS WAF
 
@@ -487,7 +504,7 @@ recoverable, simple, and solid product.
 - One quarantine pool.
 - Geo-Unicast endpoints.
 - One Simple Anycast pool where an approved routing environment exists.
-- Persistent Cache v2, Gzip, Brotli, backup origin, and managed WAF.
+- Persistent Cache, Gzip, Brotli, backup origin, and managed WAF.
 - Real IPv4 and IPv6 traffic where available.
 
 **Final checklist:**

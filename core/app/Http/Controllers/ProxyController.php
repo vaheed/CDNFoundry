@@ -64,6 +64,9 @@ class ProxyController extends Controller
         abort_unless($record->mode === 'proxied', 409, 'The DNS record is not proxied.');
         $origin = OriginData::validate($request->all());
         OriginData::resolveAndValidate($origin['host']);
+        if (is_array($origin['backup'] ?? null)) {
+            OriginData::resolveAndValidate($origin['backup']['host']);
+        }
         DB::transaction(function () use ($domain, $record, $origin, $request): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             DnsRecord::query()->where('domain_id', $locked->id)->findOrFail($record->id)->update(['origin' => $origin, 'content' => $origin['host'], 'content_hash' => hash('sha256', json_encode($origin, JSON_THROW_ON_ERROR))]);
@@ -79,10 +82,17 @@ class ProxyController extends Controller
         $this->record($domain, $record);
         Gate::authorize('update', $domain);
         abort_unless($record->mode === 'proxied', 409, 'The DNS record is not proxied.');
-        $addresses = OriginData::resolveAndValidate($record->origin['host']);
-        $selected = $request->validate(['edge_ids' => ['sometimes', 'array', 'max:20'], 'edge_ids.*' => ['uuid', 'distinct', 'exists:edges,id']]);
+        $selected = $request->validate([
+            'edge_ids' => ['sometimes', 'array', 'max:20'], 'edge_ids.*' => ['uuid', 'distinct', 'exists:edges,id'],
+            'origin_role' => ['sometimes', 'in:primary,backup'],
+        ]);
+        $role = $selected['origin_role'] ?? 'primary';
+        abort_if($role === 'backup' && ! is_array($record->origin['backup'] ?? null), 422, 'This hostname has no backup origin.');
+        $testedOrigin = $role === 'backup' ? $record->origin['backup'] : $record->origin;
+        $addresses = OriginData::resolveAndValidate($testedOrigin['host']);
         $operation = Operation::query()->create(['id' => (string) Str::uuid(), 'type' => 'edge.origin_test', 'status' => 'pending', 'actor_id' => $request->user()->id, 'input' => [
-            'domain_id' => $domain->id, 'record_id' => $record->id, 'addresses' => $addresses, 'edge_ids' => $selected['edge_ids'] ?? [],
+            'domain_id' => $domain->id, 'record_id' => $record->id, 'origin_role' => $role,
+            'addresses' => $addresses, 'edge_ids' => $selected['edge_ids'] ?? [],
         ]]);
         DispatchOriginTest::dispatch($operation->id)->afterCommit();
 

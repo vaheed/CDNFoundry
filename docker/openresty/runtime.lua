@@ -565,10 +565,22 @@ function M.origin_access()
     if emergency.serve_cache_only or emergency.serve_stale_only or cache_mode == "cache_only" or cache_mode == "stale_only" then
         return security_reject(503, cache_mode == "normal" and "edge_emergency_mode" or "cache_mode_origin_disabled")
     end
-    local circuit_key = "security:origin:open:" .. tostring(config.domain)
-    local open_until = tonumber(dictionary:get(circuit_key)) or 0
-    if open_until > ngx.now() then return security_reject(503, "origin_circuit_open") end
-    local origin_key = "security:origin:connections:" .. tostring(config.domain)
+    local primary = config.origin
+    local failover = primary.backup and primary.failover or nil
+    local state_key = "origin:failover:" .. host
+    local active_role = failover and (dictionary:get(state_key .. ":active") or "primary") or "primary"
+    local now = ngx.now()
+    local failback_at = tonumber(dictionary:get(state_key .. ":failback_at")) or 0
+    local role = active_role
+    if failover and active_role == "backup" and now >= failback_at then role = "primary" end
+    local origin = role == "backup" and primary.backup or primary
+    local transition = failover and (dictionary:get(state_key .. ":reason") or "none") or "none"
+    if not failover then
+        local circuit_key = "security:origin:open:" .. tostring(config.domain)
+        local open_until = tonumber(dictionary:get(circuit_key)) or 0
+        if open_until > now then return security_reject(503, "origin_circuit_open") end
+    end
+    local origin_key = "security:origin:connections:" .. tostring(config.domain) .. ":" .. role
     local active = dictionary:incr(origin_key, 1, 0)
     if active and active > (tonumber(limits.origin_max_connections) or 128) then
         dictionary:incr(origin_key, -1, 0)
@@ -576,10 +588,12 @@ function M.origin_access()
     end
     ngx.ctx.origin_connection_key = origin_key
     ngx.ctx.origin_domain = tostring(config.domain)
+    ngx.ctx.origin_hostname = host
+    ngx.ctx.origin_role = role
+    ngx.ctx.origin_failover = failover
     ngx.ctx.origin_failure_threshold = tonumber(limits.origin_failure_threshold) or 10
     ngx.ctx.origin_recovery_timeout = tonumber(limits.origin_recovery_timeout) or 30
     dictionary:incr("capacity:origin_connections", 1, 0)
-    local origin = config.origin
     local address, err = resolve(origin.host, origin.private_allowlist, origin.blocked_networks, origin.blocked_addresses)
     if not address then
         ngx.log(ngx.WARN, "origin rejected: ", err)
@@ -602,6 +616,10 @@ function M.origin_access()
     ngx.var.origin_response_timeout = tostring(math.min((tonumber(limits.origin_read_timeout) or 30) * 1000, math.max(500, math.min(60000, tonumber(origin.response_timeout_ms) or 5000))))
     local retry_limit = emergency.disable_origin_retries and 0 or (tonumber(limits.origin_retry_limit) or 0)
     ngx.var.origin_retry_count = tostring(math.max(0, math.min(retry_limit, tonumber(origin.retry_count) or tonumber(config.settings and config.settings.retry_count) or 0)))
+    ngx.var.cdn_origin_role = role
+    ngx.var.cdn_origin_transition = transition
+    ngx.header["X-CDNFoundry-Origin"] = role
+    ngx.header["X-CDNFoundry-Origin-Transition"] = transition
     if origin.websocket == true and (ngx.var.http_upgrade or ""):lower() == "websocket" then
         ngx.var.origin_connection = "upgrade"
         ngx.var.origin_upgrade = "websocket"
@@ -713,7 +731,10 @@ end
 
 function M.record_passive_failure()
     local status = tonumber((ngx.var.upstream_status or ""):match("%d+"))
-    if status and status < 500 then return end
+    if status and status < 500 then
+        M.origin_done()
+        return
+    end
     local host = (ngx.var.host or ""):lower():gsub("%.$", "")
     local config = state.hosts[host]
     if not config then return end
@@ -721,6 +742,7 @@ function M.record_passive_failure()
     dictionary:incr("passive:" .. host, 1, 0)
     dictionary:set("passive-status:" .. host, status or 0)
     dictionary:set("passive-time:" .. host, ngx.time())
+    M.origin_done()
 end
 
 function M.finish()
@@ -738,24 +760,62 @@ end
 
 function M.origin_done()
     local dictionary = ngx.shared.runtime_limits
-    if ngx.ctx.origin_connection_key then
-        local current = dictionary:incr(ngx.ctx.origin_connection_key, -1, 0)
-        if current and current <= 0 then dictionary:delete(ngx.ctx.origin_connection_key) end
+    local host = (ngx.var.host or ""):lower():gsub("%.$", "")
+    local config = state.hosts[host]
+    local role = (ngx.var.cdn_origin_role ~= "" and ngx.var.cdn_origin_role) or ngx.ctx.origin_role or "primary"
+    local domain = config and tostring(config.domain) or ngx.ctx.origin_domain
+    local connection_key = ngx.ctx.origin_connection_key
+        or (domain and ("security:origin:connections:" .. domain .. ":" .. role))
+    if connection_key then
+        local current = dictionary:incr(connection_key, -1, 0)
+        if current and current <= 0 then dictionary:delete(connection_key) end
         dictionary:incr("capacity:origin_connections", -1, 0)
     end
-    local domain = ngx.ctx.origin_domain
     if not domain then return end
     local status = tonumber((ngx.var.upstream_status or ""):match("%d+")) or tonumber(ngx.status) or 0
-    local failure_key = "security:origin:failures:" .. domain
-    if status >= 500 or status == 0 then
-        local failures = dictionary:incr(failure_key, 1, 0, math.max(2, ngx.ctx.origin_recovery_timeout or 30))
-        if failures and failures >= (ngx.ctx.origin_failure_threshold or 10) then
-            dictionary:set("security:origin:open:" .. domain, ngx.now() + (ngx.ctx.origin_recovery_timeout or 30), ngx.ctx.origin_recovery_timeout or 30)
+    local failed = status >= 500 or status == 0
+    local failover = (config and config.origin and config.origin.backup and config.origin.failover) or ngx.ctx.origin_failover
+    if failover and host ~= "" then
+        local prefix = "origin:failover:" .. host
+        local failures_key = prefix .. ":" .. role .. ":failures"
+        local recovery_key = prefix .. ":primary:recoveries"
+        local ttl = math.max(10, math.min(86400, tonumber(failover.failback_delay_seconds) or 60) * 2)
+        if failed then
+            dictionary:delete(recovery_key)
+            local failures = dictionary:incr(failures_key, 1, 0, ttl)
+            if role == "primary" and failures and failures >= math.max(1, math.min(20, tonumber(failover.failure_threshold) or 3)) then
+                local now = ngx.now()
+                local delay = math.max(
+                    math.max(5, math.min(3600, tonumber(failover.hold_down_seconds) or 30)),
+                    math.max(5, math.min(86400, tonumber(failover.failback_delay_seconds) or 60))
+                )
+                dictionary:set(prefix .. ":active", "backup")
+                dictionary:set(prefix .. ":failback_at", now + delay)
+                dictionary:set(prefix .. ":reason", "primary_failure_threshold")
+                dictionary:delete(failures_key)
+            elseif role == "backup" then
+                dictionary:set(prefix .. ":reason", "backup_failure")
+            end
+        else
+            dictionary:delete(failures_key)
+            if role == "primary" and dictionary:get(prefix .. ":active") == "backup" then
+                local recoveries = dictionary:incr(recovery_key, 1, 0, ttl)
+                if recoveries and recoveries >= math.max(1, math.min(20, tonumber(failover.recovery_threshold) or 2)) then
+                    dictionary:set(prefix .. ":active", "primary")
+                    dictionary:set(prefix .. ":reason", "primary_recovery_threshold")
+                    dictionary:delete(prefix .. ":failback_at")
+                    dictionary:delete(recovery_key)
+                end
+            elseif role == "primary" then
+                dictionary:set(prefix .. ":active", "primary")
+                dictionary:set(prefix .. ":reason", "none")
+            end
         end
-    else
-        dictionary:delete(failure_key)
-        dictionary:delete("security:origin:open:" .. domain)
+        return
     end
+    -- Primary-only hosts retain their established upstream failure semantics.
+    -- Their connection counter is still released above.
+    return
 end
 
 function M.origin_failure()
@@ -797,7 +857,19 @@ function M.passive_failures()
     end
     table.sort(security_events, function(a, b) return a.count > b.count end)
     local assigned = 0
-    for _ in pairs(state.hosts) do assigned = assigned + 1 end
+    local origins = {}
+    for hostname, config in pairs(state.hosts) do
+        assigned = assigned + 1
+        if config.origin and config.origin.backup and #origins < 100 then
+            local prefix = "origin:failover:" .. hostname
+            origins[#origins + 1] = {
+                hostname = hostname,
+                active = ngx.shared.runtime_limits:get(prefix .. ":active") or "primary",
+                reason = ngx.shared.runtime_limits:get(prefix .. ":reason") or "none",
+                failback_at = ngx.shared.runtime_limits:get(prefix .. ":failback_at"),
+            }
+        end
+    end
     local memory_usage = 0
     local memory_file = io.open("/sys/fs/cgroup/memory.current", "r")
     if memory_file then
@@ -836,6 +908,7 @@ function M.passive_failures()
     local drained = ngx.shared.runtime_limits:get("control:drained") == true
     ngx.say(cjson.encode({
         data = #failures == 0 and cjson.empty_array or failures,
+        origins = #origins == 0 and cjson.empty_array or origins,
         security = #security_events == 0 and cjson.empty_array or security_events,
         cell = {
             name = os.getenv("EDGE_CELL_NAME") or "unknown",

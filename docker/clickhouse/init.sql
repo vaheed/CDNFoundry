@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS cdnf.edge_events
     cache_status LowCardinality(String),
     origin_latency_ms Nullable(UInt32),
     origin_error String,
+    origin_role LowCardinality(String) DEFAULT 'primary',
+    origin_transition LowCardinality(String) DEFAULT 'none',
     tls_error String,
     security_action LowCardinality(String),
     security_reason LowCardinality(String),

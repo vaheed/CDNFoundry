@@ -74,6 +74,9 @@ final class DnsRecordData
         $origin = $mode === 'proxied' ? OriginData::validate($input['origin']) : null;
         if ($origin !== null) {
             OriginData::resolveAndValidate($origin['host']);
+            if (is_array($origin['backup'] ?? null)) {
+                OriginData::resolveAndValidate($origin['backup']['host']);
+            }
         }
         $content = $mode === 'geo_dns' ? $geo['default'][0] : ($mode === 'proxied' ? $origin['host'] : self::normalizeContent($type, (string) $input['content'], $zone));
 
@@ -81,7 +84,7 @@ final class DnsRecordData
             'type' => $type,
             'name' => self::normalizeOwner((string) $input['name'], $zone),
             'content' => $content,
-            'content_hash' => hash('sha256', $mode === 'geo_dns' ? json_encode($geo, JSON_THROW_ON_ERROR) : $content),
+            'content_hash' => hash('sha256', $mode === 'geo_dns' ? json_encode($geo, JSON_THROW_ON_ERROR) : ($mode === 'proxied' ? json_encode($origin, JSON_THROW_ON_ERROR) : $content)),
             'ttl' => (int) $input['ttl'],
             'priority' => (int) ($input['priority'] ?? 0),
             'weight' => (int) ($input['weight'] ?? 0),
