@@ -13,6 +13,7 @@ use App\Models\AuditLog;
 use App\Models\Edge;
 use App\Support\FilamentHelp;
 use App\Support\GeoVocabulary;
+use App\Support\RuntimeVersions;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
@@ -151,7 +152,7 @@ class EdgeResource extends Resource
             return $empty;
         }
 
-        return collect(\App\Support\RuntimeVersions::COMPONENTS)
+        return collect(RuntimeVersions::COMPONENTS)
             ->map(fn (string $component): string => str_replace('_', ' ', $component).': '.($versions[$component] ?? 'Not reported'))
             ->implode("\n");
     }
