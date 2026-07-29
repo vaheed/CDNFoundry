@@ -390,8 +390,8 @@ services:
       EDGE_BOOTSTRAP_TOKEN: ${EDGE_BOOTSTRAP_TOKEN:-}
       EDGE_STATE_DIR: /var/lib/cdnfoundry/agent
       EDGE_RUNTIME_DIR: /var/lib/cdnfoundry/runtime
-      EDGE_GATEWAY_BINDINGS: ${EDGE_GATEWAY_BINDINGS:?EDGE_GATEWAY_BINDINGS is required}
       EDGE_GATEWAY_STATUS_URL: ${EDGE_GATEWAY_STATUS_URL:-http://host-gateway:9105/metrics}
+      EDGE_RUNTIME_VERSIONS: ${EDGE_RUNTIME_VERSIONS:-{}}
       EDGE_CELL_ASSIGNMENTS: '{"cell-01":"shared-default","cell-02":"quarantine-default","cell-03":"","cell-04":"","cell-05":"","cell-06":"","cell-07":"","cell-08":""}'
       EDGE_CELL_STATUS_URLS: http://cell-01:9080/passive-failures,http://cell-02:9080/passive-failures,http://cell-03:9080/passive-failures,http://cell-04:9080/passive-failures,http://cell-05:9080/passive-failures,http://cell-06:9080/passive-failures,http://cell-07:9080/passive-failures,http://cell-08:9080/passive-failures
       EDGE_STATUS_TOKEN: ${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}

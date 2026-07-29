@@ -107,6 +107,13 @@ class FilamentPanelAccessTest extends TestCase
             'management_ipv4' => '203.0.113.80',
             'registered_at' => now(),
             'last_heartbeat_at' => now(),
+            'runtime_versions_reported_at' => now(),
+            'runtime_versions' => [
+                'gateway' => 'registry.example/gateway@sha256:'.str_repeat('a', 64),
+                'agent' => 'registry.example/agent@sha256:'.str_repeat('b', 64),
+                'normal_cell' => 'registry.example/runtime@sha256:'.str_repeat('c', 64),
+                'waf_cell' => 'registry.example/runtime@sha256:'.str_repeat('d', 64),
+            ],
             'active_sequence' => 42,
             'capacity' => [
                 'listener_ready' => true,
@@ -127,7 +134,15 @@ class FilamentPanelAccessTest extends TestCase
             ->assertSee('Gateway map revision')
             ->assertSee('Gateway listeners')
             ->assertSee('Gateway routes')
-            ->assertSee('Gateway rejected candidates');
+            ->assertSee('Gateway rejected candidates')
+            ->assertSee('Current runtime versions')
+            ->assertSee('registry.example/gateway@sha256:'.str_repeat('a', 64))
+            ->assertSee('No rollout pending');
+        $this->actingAs($admin)->get('/admin/edges')
+            ->assertOk()
+            ->assertSee('Version report')
+            ->assertSee('Version drift')
+            ->assertSee('Aligned');
         $this->actingAs($user)->get("/admin/edges/{$edge->id}")->assertForbidden();
     }
 

@@ -93,10 +93,6 @@ def main() -> None:
         runtime_file = temporary / "runtime.json"
         runtime_file.write_text(json.dumps(runtime, separators=(",", ":")))
         runtime_file.chmod(0o644)
-        cache = temporary / "cache"
-        for profile in ("small", "standard", "large", "streaming"):
-            (cache / "content" / profile).mkdir(parents=True, mode=0o777)
-            (cache / "content" / profile).chmod(0o777)
         run("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
             "-subj", "/CN=failover.test", "-keyout", str(temporary / "tls.key"), "-out", str(temporary / "tls.crt"))
         for path in (temporary / "tls.key", temporary / "tls.crt"):
@@ -113,7 +109,8 @@ def main() -> None:
             "-v", f"{runtime_file}:/var/lib/cdnfoundry/runtime/active.json:ro",
             "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro",
             "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
-            "-v", f"{cache}:/var/cache/nginx", "cdnfoundry/edge-runtime:test")
+            "--tmpfs", "/var/cache/nginx:rw,noexec,nosuid,size=64m,mode=0777",
+            "cdnfoundry/edge-runtime:test")
         try:
             run("docker", "exec", CELL, "openresty", "-t")
             healthy = request("failover.example")

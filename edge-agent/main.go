@@ -51,6 +51,8 @@ type client struct {
 	derivedEnsured                     bool
 	statusURLs                         []string
 	cellAssignments                    map[string]string
+	cellTargets                        map[string]cellTarget
+	gatewayAddresses                   []string
 	http                               *http.Client
 	id                                 identity
 }
@@ -76,6 +78,22 @@ func main() {
 	c.gatewayBindingsConfigured = c.gatewayBindings != ""
 	if err := json.Unmarshal([]byte(env("EDGE_CELL_ASSIGNMENTS", "{}")), &c.cellAssignments); err != nil || len(c.cellAssignments) > 32 {
 		fatal(errors.New("EDGE_CELL_ASSIGNMENTS must be an object with at most 32 slots"))
+	}
+	if err := json.Unmarshal([]byte(env("EDGE_CELL_TARGETS", "{}")), &c.cellTargets); err != nil || len(c.cellTargets) > 32 {
+		fatal(errors.New("EDGE_CELL_TARGETS must be an object with at most 32 slots"))
+	}
+	for cellName, target := range c.cellTargets {
+		if !validCellName(cellName) || !validGatewayEndpoint(target.HTTP) || !validGatewayEndpoint(target.HTTPS) {
+			fatal(errors.New("EDGE_CELL_TARGETS contains an invalid slot or endpoint"))
+		}
+	}
+	if err := json.Unmarshal([]byte(env("EDGE_GATEWAY_ADDRESSES", "[]")), &c.gatewayAddresses); err != nil || len(c.gatewayAddresses) > 2 {
+		fatal(errors.New("EDGE_GATEWAY_ADDRESSES must be an array with at most two IP addresses"))
+	}
+	for _, address := range c.gatewayAddresses {
+		if net.ParseIP(address) == nil {
+			fatal(errors.New("EDGE_GATEWAY_ADDRESSES contains an invalid IP address"))
+		}
 	}
 	for cellName, poolName := range c.cellAssignments {
 		if !validCellName(cellName) || poolName != "" && !validPoolName(poolName) {
@@ -725,6 +743,8 @@ func (c *client) refreshGatewayBindings() error {
 	if err := c.request("GET", "/edge/v1/gateway/config", nil, &response, true); err != nil {
 		return err
 	}
+	rewriteGatewayTargets(response.Data.Bindings, c.cellTargets)
+	response.Data.Bindings = rewriteGatewayAddresses(response.Data.Bindings, c.gatewayAddresses)
 	c.gatewayRevision = response.Data.Revision
 	if len(response.Data.Bindings) == 0 {
 		if c.gatewayBindings != "[]" {
@@ -742,6 +762,39 @@ func (c *client) refreshGatewayBindings() error {
 	}
 	c.gatewayBindings = string(raw)
 	return nil
+}
+
+func rewriteGatewayAddresses(bindings []gatewayBinding, addresses []string) []gatewayBinding {
+	if len(addresses) == 0 {
+		return bindings
+	}
+	rewritten := make([]gatewayBinding, 0, len(bindings)*len(addresses))
+	seenPools := map[string]bool{}
+	for _, binding := range bindings {
+		if seenPools[binding.Pool] {
+			continue
+		}
+		seenPools[binding.Pool] = true
+		for _, address := range addresses {
+			candidate := binding
+			candidate.Address = address
+			rewritten = append(rewritten, candidate)
+		}
+	}
+	return rewritten
+}
+
+func rewriteGatewayTargets(bindings []gatewayBinding, targets map[string]cellTarget) {
+	for bindingIndex := range bindings {
+		for cellIndex := range bindings[bindingIndex].Cells {
+			cell := &bindings[bindingIndex].Cells[cellIndex]
+			target, configured := targets[cell.Name]
+			if !configured {
+				continue
+			}
+			cell.HTTP, cell.HTTPS = target.HTTP, target.HTTPS
+		}
+	}
 }
 
 func (c *client) gatewayActiveRevision(sequence uint64) uint64 {
@@ -1103,6 +1156,18 @@ type gatewayBinding struct {
 	} `json:"cells"`
 }
 
+type cellTarget struct {
+	HTTP  string `json:"http"`
+	HTTPS string `json:"https"`
+}
+
+func validGatewayEndpoint(endpoint string) bool {
+	host, port, err := net.SplitHostPort(endpoint)
+	value, conversionError := strconv.Atoi(port)
+	return err == nil && conversionError == nil && value >= 1 && value <= 65535 &&
+		(net.ParseIP(host) != nil || validPoolName(host))
+}
+
 func compileGateway(sequence uint64, pools map[string]map[string]any, raw string) (map[string]any, error) {
 	var bindings []gatewayBinding
 	if len(raw) > 64<<10 || json.Unmarshal([]byte(raw), &bindings) != nil || len(bindings) > 32 {
@@ -1144,9 +1209,7 @@ func compileGateway(sequence uint64, pools map[string]map[string]any, raw string
 		}
 		for _, target := range targets {
 			for _, endpoint := range []string{target.http, target.https} {
-				host, port, err := net.SplitHostPort(endpoint)
-				value, _ := strconv.Atoi(port)
-				if err != nil || value < 1 || value > 65535 || net.ParseIP(host) == nil && !validPoolName(host) {
+				if !validGatewayEndpoint(endpoint) {
 					return nil, errors.New("invalid gateway target")
 				}
 			}

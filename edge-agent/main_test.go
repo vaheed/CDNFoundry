@@ -189,6 +189,46 @@ func TestCompileGatewayRoutesByAddressAndPool(t *testing.T) {
 	}
 }
 
+func TestRewriteGatewayTargetsUsesBoundedDevelopmentEndpoints(t *testing.T) {
+	bindings := []gatewayBinding{{
+		Address: "192.0.2.10",
+		Pool:    "shared-default",
+		Cells: []struct {
+			Name  string `json:"name"`
+			HTTP  string `json:"http"`
+			HTTPS string `json:"https"`
+		}{
+			{Name: "cell-01", HTTP: "127.0.0.1:18081", HTTPS: "127.0.0.1:18444"},
+			{Name: "cell-02", HTTP: "127.0.0.1:18082", HTTPS: "127.0.0.1:18445"},
+		},
+	}}
+	rewriteGatewayTargets(bindings, map[string]cellTarget{
+		"cell-01": {HTTP: "edge-a:8081", HTTPS: "edge-a:8444"},
+	})
+	if bindings[0].Cells[0].HTTP != "edge-a:8081" || bindings[0].Cells[0].HTTPS != "edge-a:8444" {
+		t.Fatalf("development target was not rewritten: %#v", bindings[0].Cells[0])
+	}
+	if bindings[0].Cells[1].HTTP != "127.0.0.1:18082" {
+		t.Fatalf("unconfigured target was rewritten: %#v", bindings[0].Cells[1])
+	}
+}
+
+func TestRewriteGatewayAddressesUsesBoundedDevelopmentListeners(t *testing.T) {
+	bindings := []gatewayBinding{
+		{Address: "192.0.2.10", Pool: "shared-default"},
+		{Address: "2001:db8::10", Pool: "shared-default"},
+		{Address: "192.0.2.11", Pool: "quarantine-default"},
+	}
+	rewritten := rewriteGatewayAddresses(bindings, []string{"172.28.10.10", "fd00:cd0f:10::10"})
+	if len(rewritten) != 4 {
+		t.Fatalf("expected two addresses for each pool, got %#v", rewritten)
+	}
+	if rewritten[0].Address != "172.28.10.10" || rewritten[1].Address != "fd00:cd0f:10::10" ||
+		rewritten[2].Pool != "quarantine-default" {
+		t.Fatalf("development listeners were not rewritten: %#v", rewritten)
+	}
+}
+
 func TestCompileGatewayRejectsUnknownPoolDuplicateAndBounds(t *testing.T) {
 	pools := map[string]map[string]any{"shared": {"hosts": map[string]any{"a.example.test": map[string]any{}}}}
 	for _, raw := range []string{

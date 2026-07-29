@@ -21,7 +21,15 @@ those artifacts, combines them with operator-owned service bindings, and writes
 one immutable routing table. It writes `last-valid.json` before activation and
 uses it when a candidate is absent or invalid at restart.
 
-`EDGE_GATEWAY_BINDINGS` is a JSON array with at most 32 entries:
+The agent fetches the bounded, revisioned bindings generated from ready pool
+endpoints and participating cells over its mTLS control connection. Production
+cells use their loopback ports. Containerized development may set
+`EDGE_CELL_TARGETS`, a bounded cell-name-to-HTTP/HTTPS-endpoint map, to replace
+targets with private container DNS names and ports.
+
+`EDGE_GATEWAY_BINDINGS` remains an emergency rollout override. When set, its
+static JSON is authoritative and dynamic endpoint changes are intentionally
+ignored. Its shape is a JSON array with at most 32 entries:
 
 ```json
 [
@@ -71,7 +79,9 @@ the edge agent and monitoring source. Set `EDGE_GATEWAY_MAX_CONNECTIONS` from
 the qualified host ceiling; invalid or out-of-range values use 8,192.
 
 1. Assign every service IPv4/IPv6 address to the host.
-2. Set `EDGE_GATEWAY_BINDINGS` with explicit pools and private cell targets.
+2. Confirm every ready endpoint and participating cell appears in the
+   agent-fetched gateway candidate. Do not set the static override during
+   normal operation.
 3. Start the agent, cells, state initializer, and gateway. Require gateway
    readiness and a map revision equal to the agent sequence.
 4. Probe every configured address/Host and address/SNI combination. Run IPv6
