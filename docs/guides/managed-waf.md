@@ -9,19 +9,20 @@ description: Operate fixed profiles, bounded exclusions, canaries, and rollback.
 
 There are only two everyday decisions:
 
-1. **Administrator, once per service pool:** turn on **Offer managed WAF
-   protection**, test it, then mark it **Ready for blocking**. CDNFoundry fills
-   the pinned release automatically.
+1. **Administrator, once per service pool:** after the WAF image passes a small
+   fleet canary rollout, turn on **Offer managed WAF protection**. CDNFoundry
+   fills the qualified pinned release automatically.
 2. **Domain owner, per domain:** choose **Web application firewall (WAF)** and
    select Off, Observe, Recommended, or High sensitivity.
 
 The pool answers “where can WAF run?” The domain setting answers “what should
 WAF do for this website?” A domain using Recommended or High sensitivity waits
-for a pool marked Ready for blocking; CDNFoundry does not silently place it on
-an untested or non-WAF runtime.
+for a pool offering the qualified WAF runtime; CDNFoundry does not silently
+place it on an untested or non-WAF runtime.
 
-**Apply incident protection** is separate. It temporarily tightens request and
-connection limits during an active incident. It does not turn WAF on.
+**Under Attack mode** is separate. It temporarily tightens request and
+connection limits during an active incident. It does not turn WAF on or change
+the chosen WAF profile.
 
 CDNFoundry pins ModSecurity v3.0.14, its Nginx connector v1.0.4, and OWASP CRS
 v4.26.0 in the immutable OpenResty image. Cells do not download rules at
@@ -40,12 +41,15 @@ and rule text are never returned or placed in CDNFoundry telemetry.
 
 ## Enable a profile
 
-Prepare a pool whose cells use the immutable WAF image. In **Service pools**,
-enable **Offer managed WAF protection**. CDNFoundry displays the release it
-already pinned; do not type an image version. Leave **WAF readiness** at
-**Testing — detect only**. After normal requests work and approved attack
-samples appear in events, change it to **Ready for blocking**. If testing fails,
-choose **Failed — keep previous runtime**.
+First test a new immutable WAF image on a small canary edge/pool through the
+bounded fleet rollout. Do not use a production pool containing thousands of
+domains as the canary.
+
+After that rollout passes, open the production pool and enable **Offer managed
+WAF protection**. CDNFoundry displays the release it already pinned; there is
+no version or canary field to fill. Enabling capacity does not turn WAF on for
+all domains and does not revise all domain policies. Each domain remains Off
+until its owner chooses another level.
 
 On the domain page choose **Web application firewall (WAF)**. Start with
 **Observe**. Check security events for expected detections and false positives,
@@ -66,10 +70,9 @@ deploy one revision. Expired exclusions are omitted from the next artifact.
 
 ## Testing failure and rollback
 
-Set a failing pool's **WAF readiness** to **Failed — keep previous runtime**.
-Placement will not select it. Preserve the prior image and ruleset; restore it,
-confirm **Ready for blocking**, and reconcile. Candidate validation or
-acknowledgement failure leaves the active cell and signed artifact unchanged.
+If a fleet canary fails, the rollout pauses and the production pool keeps its
+previous qualified image. Candidate validation or acknowledgement failure
+leaves the active cell and signed artifact unchanged.
 
 Telemetry contains only profile, numeric rule ID, anomaly score, action,
 processing microseconds, body-limit outcome, and numeric exclusion ID.

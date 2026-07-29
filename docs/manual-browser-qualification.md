@@ -198,7 +198,7 @@ feature.
    traffic impact.
 7. Open **Security** on the disposable domain. Start maintenance with a unique
    response message and expect HTTP 503 only for that domain; end maintenance
-   and expect normal service. Use **Apply incident protection**, then **Return to normal**,
+   and expect normal service. Use **Enable Under Attack mode**, then **Return to normal**,
    and confirm the security state and operation are visible. If a quarantine
    pool is ready, use **Quarantine domain** and confirm target-first placement
    moves only that domain before returning it to normal.
@@ -970,10 +970,11 @@ pool. Record image digests, ModSecurity/connector/CRS versions, pool and cell
 IDs, revisions, operation IDs, corpus versions, and sanitized measurements.
 
 1. As administrator, open **Edge network → Service pools**. On the candidate
+   canary pool first and complete the bounded fleet canary. On the production
    pool enable **Offer managed WAF protection** and confirm **Managed WAF
-   release** is filled automatically. Leave **WAF readiness** at **Testing —
-   detect only**. Expect one audited bounded global reconciliation. After the
-   test corpus passes, choose **Ready for blocking**.
+   release** is filled automatically. Expect no version or canary field and one
+   audited bounded global reconciliation. Existing domains must keep their
+   individual WAF choices.
 2. As the assigned domain user, open the domain and choose **Security → Managed
    **Web application firewall (WAF)**. Exercise Off, Observe, Recommended, and
    High sensitivity. Expect one revision and asynchronous operation per effective

@@ -65,7 +65,7 @@ class FilamentWorkflowTest extends TestCase
         Queue::assertPushed(ReconcileAllEdgeDomains::class, fn (ReconcileAllEdgeDomains $job): bool => $job->operationId === $operation->id);
     }
 
-    public function test_managed_waf_pool_workflow_fills_release_and_uses_plain_readiness_labels(): void
+    public function test_managed_waf_pool_workflow_uses_the_qualified_release_without_per_pool_canary_input(): void
     {
         Queue::fake();
         $admin = User::factory()->admin()->create();
@@ -75,15 +75,15 @@ class FilamentWorkflowTest extends TestCase
 
         Livewire::test(EditServicePool::class, ['record' => $pool->id])
             ->assertSee('Offer managed WAF protection')
+            ->assertDontSee('WAF readiness')
             ->fillForm(['waf_capable' => true, 'waf_runtime_version' => 'operator-should-not-type-this', 'waf_canary_state' => 'monitoring'])
-            ->assertSee('WAF readiness')
             ->call('save')
             ->assertHasNoFormErrors();
 
         $pool->refresh();
         $this->assertTrue($pool->waf_capable);
         $this->assertSame(config('security.waf.ruleset'), $pool->waf_runtime_version);
-        $this->assertSame('monitoring', $pool->waf_canary_state);
+        $this->assertSame('passed', $pool->waf_canary_state);
     }
 
     public function test_geo_cname_without_a_continent_saves_and_owner_conflicts_are_visible(): void
@@ -277,7 +277,7 @@ class FilamentWorkflowTest extends TestCase
 
         Livewire::test(ViewDomain::class, ['record' => $domain->id])
             ->assertSee('Start maintenance')
-            ->assertSee('Apply incident protection')
+            ->assertSee('Enable Under Attack mode')
             ->assertSee('Web application firewall')
             ->assertDontSee('Restrict domain')
             ->callAction('startMaintenance', data: ['body' => 'Planned maintenance'])

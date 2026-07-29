@@ -322,9 +322,9 @@ class ViewDomain extends ViewRecord
             Action::make('endMaintenance')->label('End maintenance')->color('success')->requiresConfirmation()
                 ->visible(fn (): bool => is_array($this->record->proxy_settings['maintenance'] ?? null))
                 ->action(fn () => $this->changeMaintenance(null)),
-            Action::make('protectSecurity')->label('Apply incident protection')->color('warning')->requiresConfirmation()
-                ->modalHeading('Apply temporary incident protection?')
-                ->modalDescription('This tightens rate and connection limits for an active incident. It does not enable WAF attack signatures and does not move the domain.')
+            Action::make('protectSecurity')->label('Enable Under Attack mode')->color('warning')->requiresConfirmation()
+                ->modalHeading('Enable Under Attack mode?')
+                ->modalDescription('Use this temporary mode during an active attack. It tightens rate and connection limits, but does not change the domain WAF profile or move the domain.')
                 ->visible(fn (): bool => auth()->user()?->isAdmin() === true && ! in_array($this->record->security_state, ['restricted', 'quarantined'], true))
                 ->action(fn () => $this->changeSecurityState('restricted', null)),
             Action::make('quarantineSecurity')->label('Quarantine domain')->color('danger')->requiresConfirmation()

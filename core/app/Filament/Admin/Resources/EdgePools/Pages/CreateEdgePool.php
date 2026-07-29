@@ -17,7 +17,7 @@ class CreateEdgePool extends CreateRecord
     protected function handleRecordCreation(array $data): Model
     {
         $data['waf_runtime_version'] = ($data['waf_capable'] ?? false) ? config('security.waf.ruleset') : null;
-        $data['waf_canary_state'] = ($data['waf_capable'] ?? false) ? ($data['waf_canary_state'] ?? 'monitoring') : 'not_required';
+        $data['waf_canary_state'] = ($data['waf_capable'] ?? false) ? 'passed' : 'not_required';
         $data = [...$data, ...EdgePoolRoutingData::validate($data)];
         if (($data['replicas_per_edge'] ?? 1) > 1 && ! in_array($data['kind'], ['reserved', 'dedicated'], true)) {
             throw ValidationException::withMessages(['replicas_per_edge' => 'Replicated placement is limited to reserved and dedicated pools.']);

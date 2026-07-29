@@ -50,27 +50,17 @@ class EdgePoolResource extends Resource
                     }
                 }),
             Toggle::make('waf_capable')
-                ->label(FilamentHelp::label('Offer managed WAF protection', 'Enable this only on pools whose cells use the CDNFoundry WAF image. Domain owners can then choose Observe, Recommended, or High sensitivity.'))
-                ->helperText('Normal workflow: enable this, leave readiness at Testing, verify safe traffic, then change readiness to Ready for blocking.')
+                ->label(FilamentHelp::label('Offer managed WAF protection', 'Enable this only when the pool cells run the already-qualified CDNFoundry WAF image. This does not enable WAF for every domain.'))
+                ->helperText('After this is enabled, each domain independently chooses Off, Observe, Recommended, or High sensitivity. Test new WAF releases through a small fleet canary before changing this production pool.')
                 ->default(false)->live()
                 ->afterStateUpdated(function (bool $state, Set $set): void {
                     $set('waf_runtime_version', $state ? config('security.waf.ruleset') : null);
-                    $set('waf_canary_state', $state ? 'monitoring' : 'not_required');
+                    $set('waf_canary_state', $state ? 'passed' : 'not_required');
                 }),
             TextInput::make('waf_runtime_version')
                 ->label(FilamentHelp::label('Managed WAF release', 'Filled automatically from the pinned CDNFoundry image. Operators do not need to find or type a version.'))
                 ->readOnly()->dehydrated()
                 ->maxLength(80)->nullable()->visible(fn (Get $get): bool => (bool) $get('waf_capable'))->required(fn (Get $get): bool => (bool) $get('waf_capable')),
-            Select::make('waf_canary_state')
-                ->label(FilamentHelp::label('WAF readiness', 'Testing detects attacks without allowing blocking domains onto this pool. Ready for blocking means your test traffic passed. Failed keeps the previous working runtime.'))
-                ->helperText('Choose Ready for blocking only after Observe mode shows expected detections and normal requests still work.')
-                ->options(['monitoring' => 'Testing — detect only', 'passed' => 'Ready for blocking', 'failed' => 'Failed — keep previous runtime'])
-                ->visible(fn (Get $get): bool => (bool) $get('waf_capable'))->required()->default('not_required')
-                ->rule(fn (Get $get) => function (string $attribute, mixed $value, \Closure $fail) use ($get): void {
-                    if ($value === 'passed' && ! $get('waf_capable')) {
-                        $fail('Only a WAF-capable pool can pass its WAF canary.');
-                    }
-                }),
             Select::make('routing_mode')->label(FilamentHelp::label('Routing mode', 'Simple Anycast only binds and publishes the shared pair. CDNFoundry never announces or withdraws BGP routes; the network operator/provider owns routing.'))->options(['geo_unicast' => 'Geo-Unicast', 'simple_anycast' => 'Simple Anycast'])->required()->default('geo_unicast')->live(),
             TextInput::make('anycast_ipv4')->label(FilamentHelp::label('Anycast IPv4', 'One distinct Anycast address pair belongs to one pool. Create a second pool only for a second distinct pair.'))->ipv4()->nullable()->visible(fn (Get $get): bool => $get('routing_mode') === 'simple_anycast'),
             TextInput::make('anycast_ipv6')->label(FilamentHelp::label('Anycast IPv6', 'At least one address is required. Every explicitly attached edge binds this same pair after local readiness is acknowledged.'))->ipv6()->nullable()->visible(fn (Get $get): bool => $get('routing_mode') === 'simple_anycast'),
@@ -95,9 +85,9 @@ class EdgePoolResource extends Resource
             TextColumn::make('cache_profile')->label('Cache')->badge(),
             TextColumn::make('compression_profile')->label('Compression')->badge(),
             TextColumn::make('waf_canary_state')->label('Managed WAF')->badge()->formatStateUsing(fn (string $state, EdgePool $record): string => ! $record->waf_capable ? 'Not offered' : match ($state) {
-                'monitoring' => 'Testing',
-                'passed' => 'Ready for blocking',
-                'failed' => 'Failed',
+                'monitoring' => 'Canary only',
+                'passed' => 'Available',
+                'failed' => 'Unavailable',
                 default => 'Not configured',
             }),
             TextColumn::make('routing_mode')->label('Routing')->badge(),
