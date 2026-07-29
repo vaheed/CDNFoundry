@@ -115,3 +115,7 @@ filesystem, CPU, memory, and PID limit. Cache loss is safe because content is
 derived from origins and desired policy; restart preserves content, while
 volume replacement rebuilds it on demand. Exhaustion in one cell does not scan
 or delete another cell's storage.
+
+Delivery compression does not vary the cache key. The cell requests identity
+from the origin and stores one canonical object, then applies the pool's
+bounded [compression profile](compression.md) after HIT, MISS, or stale lookup.

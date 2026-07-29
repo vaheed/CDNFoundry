@@ -44,6 +44,7 @@ class Analytics extends Page
                 'Top URLs (last hour)' => $store->topUrls($domain, $rawRange),
                 'Origin health and latency' => $store->aggregate($domain, $range, 'origin'),
                 'Edge distribution' => $store->aggregate($domain, $range, 'edges'),
+                'Compression savings (last hour)' => $store->aggregate($domain, $rawRange, 'compression'),
                 'DNS activity' => $store->aggregate($domain, $range, 'dns'),
             ];
             $logs = [];

@@ -16,6 +16,7 @@ use App\Models\EdgeRevision;
 use App\Models\Operation;
 use App\Support\ArtifactSigner;
 use App\Support\CachePolicy;
+use App\Support\CompressionPolicy;
 use App\Support\ManagedCertificateNames;
 use App\Support\PlatformSettings;
 use App\Support\SecurityConfig;
@@ -133,6 +134,10 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
                 'profile' => $targetPool === null ? CachePolicy::profile('standard') : CachePolicy::profile($targetPool->cache_profile),
                 'epoch' => $domain->cache_epoch,
                 'development_mode_until' => $domain->cache_development_mode_until?->isFuture() ? $domain->cache_development_mode_until->timestamp : null,
+            ],
+            'compression' => [
+                'profile_name' => $targetPool === null ? 'standard' : $targetPool->compression_profile,
+                ...CompressionPolicy::profile($targetPool === null ? 'standard' : $targetPool->compression_profile),
             ],
             'security' => SecurityConfig::compile($domain),
             'tls' => [

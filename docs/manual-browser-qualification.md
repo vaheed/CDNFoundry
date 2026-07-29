@@ -813,6 +813,74 @@ origin request counter, and all operation/task IDs.
 | Regression | Passed | Full cumulative non-browser E2E passes foundation, dual-stack DNS, Geo-DNS, two-edge control plane through revision 14 with zero obsolete artifacts, mTLS, TLS, security, analytics outage recovery, operations recovery, and OpenResty cache runtime |
 | Release decision | Blocked | Owner browser, external load, and disk-pressure evidence remain mandatory |
 
+## Phase 7 — Gzip and Brotli compression
+
+Use a disposable proxied domain in a ready shared pool and a second domain in
+a ready reserved or dedicated pool. Serve a text/JSON object larger than 1 KiB,
+an image, a 12 MiB text object, a range-capable object, an ETag response, and a
+one-second cacheable response that can be served stale. Record pool/domain
+revisions, cell identity, cache status, encoding, byte counts, CPU, latency,
+and operation IDs.
+
+1. As administrator, open **Edge network → Service pools**, edit the shared
+   pool, and confirm **Compression profile** offers Off, Standard, and Maximum
+   savings with explanatory help. Select Maximum savings and expect field-level
+   rejection with no revision, artifact, audit, or task. Save Standard and
+   expect one pool revision plus one coalesced asynchronous reconciliation.
+2. Edit the reserved/dedicated pool, select Maximum savings, and save. Expect
+   `202`, an operation ID, revisioned artifacts only for participating cells,
+   acknowledgement before success, and no new process, container, timer,
+   server block, or cache directory.
+3. Request the same eligible object with `Accept-Encoding: identity`, `gzip`,
+   and `br`. Decode each and compare hashes. Expect identical content, Gzip for
+   Standard, Brotli preference for Maximum savings, `Vary: Accept-Encoding`,
+   and one MISS followed by HITs without extra cache objects.
+4. Repeat with quality values, unsupported encodings, HEAD, conditional
+   `If-None-Match`, and origin 304 revalidation. Expect correct identity
+   fallback, no body for HEAD/304, stable validators, and no representation
+   corruption.
+5. Request the image, archive, sub-1-KiB response, 12 MiB response, and byte
+   range. Expect identity; the range must remain 206 with correct
+   `Content-Range`. Confirm ordinary cache, stale-if-error, exact purge, epoch
+   purge, and origin-header behavior remains unchanged.
+6. Drive more than 16 concurrent eligible responses on the maximum-savings
+   cell and more than 32 on Standard. Expect excess work to receive identity
+   with `cpu_pressure_identity`, while every response succeeds and unrelated
+   domains/cells retain normal latency and encoding.
+7. Set `EDGE_COMPRESSION_DISABLED=1` on one canary cell and replace only that
+   cell. Expect identity plus `emergency_disabled` without a serving outage.
+   Remove it and expect configured encoding to resume. Then save pool profile
+   Off and verify the durable asynchronous fleet-wide path.
+8. Open **Observe → Analytics and logs** as administrator and domain user.
+   Query no more than 24 hours. Compare request captures with encoding,
+   delivered bytes, identity estimate, bytes saved, ratio, profile, and
+   fallback. Expect accurate totals and domain-user isolation. Stop ClickHouse
+   briefly and confirm traffic continues while analytics reports unavailable.
+9. Run mixed identity/Gzip/Brotli HIT/MISS load over IPv4 and configured IPv6,
+   plus the documented IPv4-only topology. Record dataset, hardware,
+   concurrency, throughput, p50/p95/p99 latency, bytes saved, CPU, memory,
+   saturation point, fallback count, and accepted limit.
+10. Restart the cell and inject an invalid runtime artifact. Expect the prior
+    valid compression/cache policy to keep serving. Restore desired state,
+    confirm convergence and telemetry, and run the cumulative non-browser
+    regression.
+
+### Phase 7 completion gate
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| Implementation | Passed | Pool policy, PostgreSQL constraints, revisioned artifacts, canonical identity cache, pinned Brotli image, bounded filters, pressure/emergency fallback, telemetry, authorization, audit, and last-valid delivery |
+| Unit and feature tests | Passed | 200 isolated Laravel tests / 11,507 assertions, including policy/API/artifact/analytics coverage, plus Pint |
+| Real-runtime E2E | Passed | Identity/Gzip/Brotli content, canonical HIT, range, pressure/emergency fallback, restart, stale, purge, invalid candidate, and real Vector/ClickHouse analytics |
+| IPv4 and IPv6 | Partially passed; owner run pending | Local IPv4/IPv6 listener and cumulative dual-stack DNS passed; owner external compression traffic and IPv4-only evidence required |
+| Scale | Pending owner load run | Exact measurements from step 9 |
+| Failure, recovery, and isolation | Partially passed; owner run pending | Automated pressure, emergency, restart, invalid-candidate, telemetry outage, and unrelated-cell checks passed; owner saturation remains |
+| Observability | Partially passed; owner run pending | Real encoding/bytes/ratio/profile/fallback events and analytics passed; owner UI/alert capture remains |
+| Documentation | Passed | Compression guide, cache/analytics/telemetry/upgrade references, and this exact checklist |
+| Manual qualification | Pending owner run | Steps 1–10; coding agents do not run browser automation |
+| Regression | Passed | Foundation, DNS, Geo-DNS, two-edge control plane through revision 14 with zero obsolete artifacts, mTLS, TLS, security, analytics outage recovery, operations recovery, and compression/cache runtime |
+| Release decision | Blocked | Owner browser, external load, CPU saturation, and external IPv4/IPv6 evidence remain mandatory |
+
 ## Failure record
 
 For every failed or blocked checkpoint, record:

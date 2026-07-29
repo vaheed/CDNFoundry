@@ -77,6 +77,7 @@ class Telemetry extends Page
             'summary' => [],
             'traffic' => [],
             'dns' => [],
+            'compression' => [],
             'logs' => ['errors' => [], 'security' => [], 'edges' => []],
             'buffer' => $this->bufferStatus(),
             'usage' => $this->recentUsage(),
@@ -86,6 +87,7 @@ class Telemetry extends Page
             $state['summary'] = $store->summary(null, $range);
             $state['traffic'] = $store->aggregate(null, $range, 'traffic');
             $state['dns'] = $store->aggregate(null, $range, 'dns');
+            $state['compression'] = $store->aggregate(null, $rawRange, 'compression');
             foreach (array_keys($state['logs']) as $stream) {
                 $state['logs'][$stream] = array_slice($store->logs(null, $rawRange, $stream, null)['items'], 0, 10);
             }

@@ -14,6 +14,7 @@ use App\Models\EdgePool;
 use App\Models\EdgePoolEndpoint;
 use App\Models\EmergencyMode;
 use App\Models\Operation;
+use App\Support\CompressionPolicy;
 use App\Support\EdgePoolEndpointData;
 use App\Support\EdgePoolRoutingData;
 use Illuminate\Http\JsonResponse;
@@ -86,9 +87,12 @@ class EdgePoolController extends Controller
             'name' => ['required', 'string', 'max:100', 'unique:edge_pools'], 'kind' => ['required', 'in:shared,reserved,quarantine,dedicated'],
             'minimum_ready_cells' => ['sometimes', 'integer', 'between:1,32'], 'replicas_per_edge' => ['sometimes', 'integer', 'between:1,3'],
             'maximum_domains_per_cell' => ['sometimes', 'integer', 'between:1,100000'],
+            'cache_profile' => ['sometimes', 'in:small,standard,large,streaming'],
+            'compression_profile' => ['sometimes', 'in:off,standard,maximum_savings'],
         ]);
         $data = [...$data, ...EdgePoolRoutingData::validate(array_merge(['routing_mode' => 'geo_unicast', 'anycast_ipv4' => null, 'anycast_ipv6' => null], $request->only(['routing_mode', 'anycast_ipv4', 'anycast_ipv6'])))];
         abort_if(($data['replicas_per_edge'] ?? 1) > 1 && ! in_array($data['kind'], ['reserved', 'dedicated'], true), 422, 'Replicated placement is limited to reserved and dedicated pools.');
+        abort_unless(CompressionPolicy::allowedForKind($data['compression_profile'] ?? 'standard', $data['kind']), 422, 'Maximum-savings compression is limited to reserved and dedicated pools.');
         abort_if(EdgePool::query()->count() >= 32, 409, 'The deployment has reached the bounded 32-pool limit.');
         $pool = DB::transaction(function () use ($data, $request): EdgePool {
             $pool = EdgePool::query()->create([...$data, 'enabled' => false]);
@@ -106,6 +110,8 @@ class EdgePoolController extends Controller
             'name' => ['sometimes', 'string', 'max:100', Rule::unique('edge_pools')->ignore($pool)],
             'minimum_ready_cells' => ['sometimes', 'integer', 'between:1,32'], 'replicas_per_edge' => ['sometimes', 'integer', 'between:1,3'],
             'maximum_domains_per_cell' => ['sometimes', 'integer', 'between:1,100000'],
+            'cache_profile' => ['sometimes', 'in:small,standard,large,streaming'],
+            'compression_profile' => ['sometimes', 'in:off,standard,maximum_savings'],
         ]);
         $routing = EdgePoolRoutingData::validate($request->only(['routing_mode', 'anycast_ipv4', 'anycast_ipv6']), $pool, true);
         $data = [...$data, ...$routing];
@@ -113,8 +119,9 @@ class EdgePoolController extends Controller
             abort_if($pool->enabled || $pool->endpoints()->exists(), 409, 'Disable the pool and remove its endpoints before changing routing mode.');
         }
         abort_if(isset($data['replicas_per_edge']) && $data['replicas_per_edge'] > 1 && ! in_array($pool->kind, ['reserved', 'dedicated'], true), 422, 'Replicated placement is limited to reserved and dedicated pools.');
+        abort_unless(CompressionPolicy::allowedForKind($data['compression_profile'] ?? $pool->compression_profile, $pool->kind), 422, 'Maximum-savings compression is limited to reserved and dedicated pools.');
         abort_if(isset($data['name']) && $data['name'] !== $pool->name && $pool->cells()->exists(), 409, 'Pool runtime names are immutable after cells have been provisioned.');
-        $placementPolicyChanged = array_intersect(array_keys($data), ['minimum_ready_cells', 'replicas_per_edge', 'maximum_domains_per_cell']) !== [];
+        $placementPolicyChanged = array_intersect(array_keys($data), ['minimum_ready_cells', 'replicas_per_edge', 'maximum_domains_per_cell', 'cache_profile', 'compression_profile']) !== [];
         $operation = DB::transaction(function () use ($pool, $data, $placementPolicyChanged, $request): ?Operation {
             $pool->update([...$data, 'revision' => $pool->revision + 1]);
             if (array_intersect(array_keys($data), ['routing_mode', 'anycast_ipv4', 'anycast_ipv6']) !== []) {

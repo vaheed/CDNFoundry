@@ -31,6 +31,10 @@ and reported through Vector metrics.
 | `user_agent` | 256 characters |
 | `referrer` | 512 characters |
 | `event_type` | low-cardinality string, 32 characters |
+| `compression_encoding` | `identity`, `gzip`, or `br` |
+| `compression_ratio` | float clamped to 1–100,000 |
+| `compression_profile` | low-cardinality string, 24 characters |
+| `compression_fallback` | stable reason, 32 characters |
 
 ## DNS events
 

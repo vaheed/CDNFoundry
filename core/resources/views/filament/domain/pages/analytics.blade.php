@@ -8,7 +8,7 @@
 
             return number_format($bytes / (1024 ** $index), $index === 0 ? 0 : 1) . ' ' . $units[$index];
         };
-        $dimensions = ['bucket', 'status', 'cache_status', 'country', 'hostname', 'path', 'edge_id', 'qtype'];
+        $dimensions = ['bucket', 'status', 'cache_status', 'country', 'hostname', 'path', 'edge_id', 'encoding', 'qtype'];
         $formatMetric = function (string $key, mixed $value) use ($formatBytes): string {
             if (str_starts_with($key, 'bytes')) return $formatBytes($value);
             if (str_contains($key, 'latency')) return number_format((float) $value, 1) . ' ms';
@@ -72,6 +72,7 @@
                                         $title = $dimension ? ($row[$dimension] ?? 'Unknown') : 'Summary';
                                         if ($dimension === 'country') $title = ($row['country'] ?? 'ZZ') . ' · ' . ($row['continent'] ?? 'Unknown');
                                         if ($dimension === 'qtype') $title = ($row['qtype'] ?? 'Unknown') . ' · ' . ($row['rcode'] ?? 'Unknown');
+                                        if ($dimension === 'encoding') $title = strtoupper($row['encoding'] ?? 'identity') . ' · ' . str($row['profile'] ?? 'off')->replace('_', ' ')->headline();
                                         $metrics = collect($row)->except(array_filter([$dimension, 'continent', 'rcode']))->map(fn ($value, $key) => str($key)->replace('_', ' ')->headline() . ': ' . $formatMetric($key, $value))->implode(' · ');
                                     @endphp
                                     <div class="cdn-activity-row">

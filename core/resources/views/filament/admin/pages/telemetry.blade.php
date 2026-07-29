@@ -64,6 +64,24 @@
                 </x-filament::section>
             </div>
 
+            <x-filament::section heading="Compression savings" description="Unsampled identity, Gzip, and Brotli delivery from the last hour. Identity estimates derive from the recorded filter ratio." icon="heroicon-o-arrows-pointing-in">
+                <x-ui.data-table caption="Global compression delivery">
+                    <x-slot:header><tr><th>Encoding / profile</th><th>Fallback</th><th class="text-right">Requests</th><th class="text-right">Delivered</th><th class="text-right">Saved</th><th class="text-right">Savings</th></tr></x-slot:header>
+                    @forelse ($state['compression'] as $row)
+                        <tr>
+                            <td class="px-3 py-2"><div class="font-medium">{{ strtoupper($row['encoding'] ?? 'identity') }}</div><div class="text-xs text-gray-500">{{ str($row['profile'] ?? 'off')->replace('_', ' ')->headline() }}</div></td>
+                            <td class="px-3 py-2">{{ str($row['fallback'] ?? 'none')->replace('_', ' ')->headline() }}</td>
+                            <td class="px-3 py-2 text-right tabular-nums">{{ number_format((int) ($row['requests'] ?? 0)) }}</td>
+                            <td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes($row['delivered_bytes'] ?? 0) }}</td>
+                            <td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes($row['bytes_saved'] ?? 0) }}</td>
+                            <td class="px-3 py-2 text-right tabular-nums">{{ number_format(((float) ($row['savings_ratio'] ?? 0)) * 100, 1) }}%</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="6" class="px-3 py-6 text-center text-gray-500">No compression events were recorded in the last hour.</td></tr>
+                    @endforelse
+                </x-ui.data-table>
+            </x-filament::section>
+
             <x-filament::section heading="Recent logs" description="Masked, bounded previews from the last hour. Up to 10 rows per stream." icon="heroicon-o-document-magnifying-glass">
                 <div class="grid gap-5 xl:grid-cols-3">
                     @foreach ($state['logs'] as $stream => $rows)

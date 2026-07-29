@@ -23,7 +23,11 @@ CREATE TABLE IF NOT EXISTS cdnf.edge_events
     continent LowCardinality(String),
     user_agent String,
     referrer String,
-    event_type LowCardinality(String) DEFAULT 'request'
+    event_type LowCardinality(String) DEFAULT 'request',
+    compression_encoding LowCardinality(String) DEFAULT 'identity',
+    compression_ratio Float32 DEFAULT 1,
+    compression_profile LowCardinality(String) DEFAULT 'off',
+    compression_fallback LowCardinality(String) DEFAULT 'none'
 )
 ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(occurred_at)

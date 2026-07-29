@@ -41,6 +41,12 @@ class EdgePoolResource extends Resource
             TextInput::make('name')->label(FilamentHelp::label('Name', 'Creating a pool does not attach any edge or consume any cell. Assign both explicitly after creation.'))->required()->maxLength(100)->unique(ignoreRecord: true),
             Select::make('kind')->label(FilamentHelp::label('Kind', 'Use Shared for normal Anycast service. Reserved is controlled capacity, Dedicated is exceptional single-tenant isolation, and Quarantine is only for risky traffic. Kind does not select addresses or edges.'))->options(['shared' => 'Shared', 'reserved' => 'Reserved', 'quarantine' => 'Quarantine', 'dedicated' => 'Dedicated'])->required(),
             Select::make('cache_profile')->label(FilamentHelp::label('Cache profile', 'Sets bounded per-cell disk, temporary space, minimum-free, inactive, object, and admission ceilings. Changing it reconciles assigned domains.'))->options(['small' => 'Small', 'standard' => 'Standard', 'large' => 'Large', 'streaming' => 'Streaming'])->required()->default('standard'),
+            Select::make('compression_profile')->label(FilamentHelp::label('Compression profile', 'Standard safely delivers Gzip. Maximum savings also enables Brotli with a lower concurrency ceiling and is limited to reserved or dedicated pools.'))->options(['off' => 'Off', 'standard' => 'Standard', 'maximum_savings' => 'Maximum savings'])->required()->default('standard')
+                ->rule(fn (Get $get) => function (string $attribute, mixed $value, \Closure $fail) use ($get): void {
+                    if ($value === 'maximum_savings' && ! in_array($get('kind'), ['reserved', 'dedicated'], true)) {
+                        $fail('Maximum-savings compression is limited to reserved and dedicated pools.');
+                    }
+                }),
             Select::make('routing_mode')->label(FilamentHelp::label('Routing mode', 'Simple Anycast only binds and publishes the shared pair. CDNFoundry never announces or withdraws BGP routes; the network operator/provider owns routing.'))->options(['geo_unicast' => 'Geo-Unicast', 'simple_anycast' => 'Simple Anycast'])->required()->default('geo_unicast')->live(),
             TextInput::make('anycast_ipv4')->label(FilamentHelp::label('Anycast IPv4', 'One distinct Anycast address pair belongs to one pool. Create a second pool only for a second distinct pair.'))->ipv4()->nullable()->visible(fn (Get $get): bool => $get('routing_mode') === 'simple_anycast'),
             TextInput::make('anycast_ipv6')->label(FilamentHelp::label('Anycast IPv6', 'At least one address is required. Every explicitly attached edge binds this same pair after local readiness is acknowledged.'))->ipv6()->nullable()->visible(fn (Get $get): bool => $get('routing_mode') === 'simple_anycast'),
@@ -63,6 +69,7 @@ class EdgePoolResource extends Resource
             TextColumn::make('name')->searchable()->sortable(),
             TextColumn::make('kind')->badge(),
             TextColumn::make('cache_profile')->label('Cache')->badge(),
+            TextColumn::make('compression_profile')->label('Compression')->badge(),
             TextColumn::make('routing_mode')->label('Routing')->badge(),
             TextColumn::make('routing_status')->label('Route state')->state(fn (EdgePool $record): string => $record->routingStatus())->badge(),
             TextColumn::make('service_pair')->label('Service pair')->state(fn (EdgePool $record): ?string => $record->isSimpleAnycast()

@@ -328,14 +328,29 @@ traffic, with bandwidth saved, throughput, latency, and CPU cost recorded.
 
 **Completion checklist:**
 
-- [ ] Identity, Gzip, and Brotli decode to identical content.
-- [ ] One canonical object serves different encodings correctly.
-- [ ] Compressed and range content follows safe policy.
-- [ ] Vary, ETag, revalidation, stale, and purge remain correct.
-- [ ] Shared pools cannot select unsafe levels.
-- [ ] CPU pressure falls back without stopping traffic.
-- [ ] Compression analytics are accurate.
+- [x] Identity, Gzip, and Brotli decode to identical content.
+- [x] One canonical object serves different encodings correctly.
+- [x] Compressed and range content follows safe policy.
+- [x] Vary, ETag, revalidation, stale, and purge remain correct.
+- [x] Shared pools cannot select unsafe levels.
+- [x] CPU pressure falls back without stopping traffic.
+- [x] Compression analytics are accurate.
 - [ ] Tests, load evidence, documentation, and manual qualification pass.
+
+**Agent completion evidence (2026-07-29):** the additive PostgreSQL migration
+applied to persistent development state in 50.77 ms and the additive
+ClickHouse telemetry migration applied without resetting either volume. All
+200 isolated Laravel tests / 11,507 assertions, Pint, the pinned OpenResty plus
+`ngx_brotli` image build, Vector validation, Compose/OpenAPI/docs checks, and
+the real OpenResty runtime pass. Runtime evidence covers identical
+identity/Gzip/Brotli content, one canonical HIT object, MIME/size/range bounds,
+CPU-pressure and emergency identity fallback, restart, stale, purge,
+invalid-candidate last-valid behavior, IPv6, and cell isolation. Real Vector
+and ClickHouse qualification covers scoped encoding, delivered/identity bytes,
+ratio, profile, fallback, privacy, outage recovery, and a 20,000-row analytics
+dataset. Owner browser, external mixed-client load/saturation, and external
+IPv4/IPv6 evidence remain mandatory, so the combined checkbox and release
+decision remain blocked.
 
 ## Phase 8 — Primary and backup origin failover
 

@@ -18,8 +18,15 @@ class AnalyticsController extends Controller
 
     public function view(Request $request, string $view, AnalyticsStore $store): JsonResponse
     {
-        $range = $store->range($request);
+        $range = $store->range($request, $view === 'compression');
 
         return response()->json(['data' => $store->aggregate(null, $range, $view), 'meta' => $store->metadata($range)]);
+    }
+
+    public function compression(Request $request, AnalyticsStore $store): JsonResponse
+    {
+        $range = $store->range($request, true);
+
+        return response()->json(['data' => $store->aggregate(null, $range, 'compression'), 'meta' => $store->metadata($range)]);
     }
 }

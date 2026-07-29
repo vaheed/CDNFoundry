@@ -27,14 +27,18 @@ For additive migrations and compatible agents:
 
 1. run `make prod-pull`;
 2. run `make prod-migrate`;
-3. canary one control web process;
-4. replace Horizon workers gracefully with `php artisan horizon:terminate`;
-5. replace the scheduler;
-6. run `make prod-pdns-migrate` before PowerDNS code that needs it;
-7. canary one DNS target and verify UDP/TCP answers;
-8. canary one edge agent and cell;
-9. verify artifact compatibility, acknowledgement, HTTP/HTTPS, cache, TLS, and telemetry;
-10. continue one failure domain at a time.
+3. when upgrading to compression telemetry, apply
+   `docker/clickhouse/migrations/2026_07_29_add_compression_telemetry.sql`
+   with `clickhouse-client --multiquery` before replacing Vector;
+4. canary one control web process;
+5. replace Horizon workers gracefully with `php artisan horizon:terminate`;
+6. replace the scheduler;
+7. run `make prod-pdns-migrate` before PowerDNS code that needs it;
+8. canary one DNS target and verify UDP/TCP answers;
+9. canary one edge agent and cell;
+10. verify artifact compatibility, acknowledgement, HTTP/HTTPS, cache,
+    compression, TLS, and telemetry;
+11. continue one failure domain at a time.
 
 Nginx/OpenResty services receive `SIGQUIT` and bounded stop grace. Do not force
 remove healthy listeners during routine rollout.

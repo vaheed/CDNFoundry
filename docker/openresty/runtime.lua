@@ -380,6 +380,47 @@ local function cookie_bypassed(names)
     return false
 end
 
+local function accepts_encoding(raw, encoding)
+    for item in (raw or ""):lower():gmatch("[^,]+") do
+        local name = item:match("^%s*([%w%*%-]+)")
+        local quality = item:match(";%s*q%s*=%s*([%d%.]+)")
+        if (name == encoding or name == "*") and (not quality or (tonumber(quality) or 0) > 0) then return true end
+    end
+    return false
+end
+
+local function prepare_compression(config, emergency)
+    local policy = config.compression or {}
+    local profile = policy.profile_name or "standard"
+    if profile ~= "off" and profile ~= "standard" and profile ~= "maximum_savings" then profile = "off" end
+    ngx.var.cdn_compression_profile = profile
+    local maximum_active = math.max(0, math.min(64, tonumber(policy.maximum_active_requests) or 0))
+    local active_key = "compression:active"
+    local active = ngx.shared.runtime_limits:incr(active_key, 1, 0)
+    ngx.var.cdn_compression_connection_key = active_key
+    local disabled = os.getenv("EDGE_COMPRESSION_DISABLED") == "1" or emergency.disable_compression
+    local pressure = maximum_active == 0 or (active and active > maximum_active)
+        or (tonumber(ngx.var.connections_active) or 0) > 2048
+    local raw = ngx.var.http_accept_encoding or ""
+    if disabled or profile == "off" or ngx.var.http_range then
+        ngx.req.clear_header("Accept-Encoding")
+        ngx.var.cdn_compression_fallback = disabled and "emergency_disabled"
+            or (ngx.var.http_range and "range_identity" or "profile_off")
+    elseif pressure then
+        ngx.req.clear_header("Accept-Encoding")
+        ngx.var.cdn_compression_fallback = "cpu_pressure_identity"
+        ngx.shared.runtime_limits:incr("compression:fallbacks", 1, 0)
+    elseif profile == "maximum_savings" and policy.brotli == true and accepts_encoding(raw, "br") then
+        ngx.req.set_header("Accept-Encoding", "br")
+    elseif policy.gzip == true and accepts_encoding(raw, "gzip") then
+        ngx.req.set_header("Accept-Encoding", "gzip")
+        if profile == "maximum_savings" then ngx.var.cdn_compression_fallback = "client_gzip" end
+    else
+        ngx.req.clear_header("Accept-Encoding")
+        ngx.var.cdn_compression_fallback = "client_identity"
+    end
+end
+
 function M.access()
     local dictionary = ngx.shared.runtime_limits
     dictionary:incr("capacity:requests:" .. ngx.time(), 1, 0, 2)
@@ -463,6 +504,7 @@ function M.access()
         ngx.status = 503; ngx.header["Content-Type"] = "text/plain"; ngx.say(config.settings.maintenance.body or "Service unavailable"); return ngx.exit(503)
     end
     local cache = config.cache or {}
+    prepare_compression(config, emergency)
     local cache_key, cache_ttl, cache_resource = request_cache_key(config.domain, host, cache)
     local development_until = tonumber(cache.development_mode_until) or 0
     local cacheable = cache.enabled == true and cache_ttl > 0
@@ -498,8 +540,6 @@ function M.access()
     ngx.var.cdn_cache_swr = tostring(math.max(0, math.min(86400, tonumber(cache.stale_while_revalidate_seconds) or 0)))
     ngx.var.cdn_cache_mode = cache.mode or "normal"
     ngx.var.cdn_cache_respect_origin = cache.respect_origin_headers == false and "0" or "1"
-    local accept_encoding = (ngx.var.http_accept_encoding or ""):lower()
-    if accept_encoding:find("gzip", 1, true) then ngx.req.set_header("Accept-Encoding", "gzip") else ngx.req.clear_header("Accept-Encoding") end
     local maximum = tonumber(cache.maximum_object_bytes) or 104857600
     if maximum <= 1048576 then return ngx.exec("@cache_1m") end
     if maximum <= 10485760 then return ngx.exec("@cache_10m") end
@@ -629,6 +669,19 @@ function M.cache_status()
         and "BYPASS" or (ngx.var.upstream_cache_status or "MISS")
 end
 
+function M.compression_response()
+    local host = (ngx.var.host or ""):lower():gsub("%.$", "")
+    local config = state.hosts[host]
+    local policy = config and config.compression or {}
+    local length = tonumber(ngx.header["Content-Length"])
+    local maximum = math.max(0, math.min(10485760, tonumber(policy.maximum_bytes) or 0))
+    if maximum == 0 or (length and length > maximum) or ngx.status == 206 or ngx.header["Content-Range"] then
+        ngx.req.clear_header("Accept-Encoding")
+        ngx.var.cdn_compression_fallback = (ngx.status == 206 or ngx.header["Content-Range"])
+            and "range_identity" or "response_too_large"
+    end
+end
+
 cache_control_directives = function(raw)
     local directives = {}
     for part in (raw or ""):lower():gmatch("[^,]+") do
@@ -674,6 +727,7 @@ function M.finish()
     for _, key in ipairs({
         ngx.var.cdn_security_client_connection_key,
         ngx.var.cdn_security_domain_connection_key,
+        ngx.var.cdn_compression_connection_key,
     }) do
         if key and key ~= "" then
             local current = ngx.shared.runtime_limits:incr(key, -1, 0)
@@ -823,11 +877,11 @@ function M.control()
         return ngx.exit(400)
     end
     if command.action == "emergency_mode" then
-        if type(command.active) ~= "boolean" or type(command.actions) ~= "table" or #command.actions > 11
+        if type(command.active) ~= "boolean" or type(command.actions) ~= "table" or #command.actions > 12
             or (command.expires_at ~= nil and (type(command.expires_at) ~= "number" or command.expires_at <= ngx.time())) then return ngx.exit(400) end
         local supported = {reject_unknown_hosts=true,disable_request_bodies=true,allow_get_head_only=true,reduce_keepalive=true,
             reduce_origin_concurrency=true,disable_origin_retries=true,serve_cache_only=true,serve_stale_only=true,
-            return_maintenance_response=true,quarantine_domain=true,withdraw_service_ip_from_dns=true}
+            return_maintenance_response=true,quarantine_domain=true,withdraw_service_ip_from_dns=true,disable_compression=true}
         for _, action in ipairs(command.actions) do if not supported[action] then return ngx.exit(400) end end
     end
     if command.action == "cache_purge" then

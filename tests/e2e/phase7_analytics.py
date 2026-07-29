@@ -228,7 +228,8 @@ def qualify_ingestion_and_queries(domain_id: int, user: str, stranger: str, admi
         "bytes_in": 17, "bytes_out": 1700, "cache_status": "MISS", "origin_latency_ms": 12,
         "origin_error": "timeout", "security_action": "block", "security_reason": "rate_limit",
         "client_ip": "192.0.2.123", "country": "IR", "continent": "AS", "edge_id": "edge-phase7",
-        "event_type": "request",
+        "event_type": "request", "compression_encoding": "gzip", "compression_ratio": 2,
+        "compression_profile": "standard", "compression_fallback": "none",
     })
     vector_event(8687, {
         "occurred_at": iso(event_time + dt.timedelta(seconds=1)), "event_id": dns_id,
@@ -269,9 +270,14 @@ def qualify_ingestion_and_queries(domain_id: int, user: str, stranger: str, admi
     _, summary = api("GET", f"/api/domains/{domain_id}/analytics/summary?{query}", token=user)
     assert int(summary["data"]["requests"]) >= 1 and int(summary["data"]["dns_queries"]) >= 1, summary
     assert summary["meta"]["units"] == {"bandwidth": "bytes", "latency": "milliseconds"}, summary
-    for view in ("timeseries", "status-codes", "cache", "countries", "hostnames", "top-urls", "origin", "edges", "dns"):
+    for view in ("timeseries", "status-codes", "cache", "countries", "hostnames", "top-urls", "origin", "edges", "compression", "dns"):
         _, result = api("GET", f"/api/domains/{domain_id}/analytics/{view}?{query}", token=user)
         assert isinstance(result["data"], list), (view, result)
+        if view == "compression":
+            gzip_rows = [row for row in result["data"] if row.get("encoding") == "gzip"]
+            assert gzip_rows, result
+            gzip = gzip_rows[0]
+            assert int(gzip["delivered_bytes"]) == 1700 and int(gzip["bytes_saved"]) == 1700, gzip
     for stream in ("requests", "dns", "errors", "security"):
         _, result = api("GET", f"/api/domains/{domain_id}/logs/{stream}?{query}", token=user)
         assert result["data"], (stream, result)
@@ -281,7 +287,7 @@ def qualify_ingestion_and_queries(domain_id: int, user: str, stranger: str, admi
     assert dns_log["data"][0]["client_ip"] == "2001:db8:1234::/48", dns_log
     _, global_summary = api("GET", f"/api/admin/analytics/summary?{query}", token=admin)
     assert int(global_summary["data"]["requests"]) >= 1, global_summary
-    for path in ("/api/admin/analytics/traffic", "/api/admin/analytics/dns", "/api/admin/logs/errors", "/api/admin/logs/security"):
+    for path in ("/api/admin/analytics/traffic", "/api/admin/analytics/compression", "/api/admin/analytics/dns", "/api/admin/logs/errors", "/api/admin/logs/security"):
         _, result = api("GET", f"{path}?{query}", token=admin)
         assert "data" in result, (path, result)
     expect_error(403, "GET", f"/api/admin/analytics/summary?{query}", token=user)
@@ -340,12 +346,16 @@ def qualify_outage(domain_id: int, user: str) -> None:
     # A collector restart is safe for serving and also qualifies durable buffer
     # recovery instead of relying on process memory from before the outage.
     restart_vector()
-    wait_for_clickhouse(lambda value: value == "1", f"SELECT count() FROM cdnf.edge_events WHERE event_id=toUUID('{buffered_id}')", timeout=90)
+    # The disk sink is at-least-once across an interrupted acknowledgement, so
+    # recovery requires presence rather than an unsafe exactly-once claim.
+    wait_for_clickhouse(lambda value: int(value or "0") >= 1, f"SELECT count() FROM cdnf.edge_events WHERE event_id=toUUID('{buffered_id}')", timeout=90)
 
 
 def qualify_scale(admin: str) -> None:
     clickhouse(
-        "INSERT INTO cdnf.edge_events SELECT now64(3)-number%3600, generateUUIDv4(), "
+        "INSERT INTO cdnf.edge_events (occurred_at,event_id,domain_id,hostname,method,path,status,bytes_in,bytes_out,"
+        "cache_status,origin_latency_ms,origin_error,tls_error,security_action,security_reason,edge_id,client_ip,"
+        "country,continent,user_agent,referrer,event_type) SELECT now64(3)-number%3600, generateUUIDv4(), "
         "toUInt64(900000000+number), 'scale.phase7.test', 'GET', '/scale', 200, 0, 1, 'HIT', 0, '', '', '', '', "
         "'edge-scale', '192.0.2.1', 'ZZ', 'ZZ', '', '', 'request' FROM numbers(20000)"
     )

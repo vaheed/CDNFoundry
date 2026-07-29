@@ -49,10 +49,12 @@ The `/app/analytics` page and domain API expose:
 - top URL paths;
 - origin health;
 - edge distribution;
+- compression encoding, delivered/identity bytes, savings ratio, profile, and fallback;
 - DNS query aggregates.
 
 Aggregate queries accept at most 90 days. Raw request, DNS, error, and security
-logs accept at most 24 hours and use opaque cursor pagination.
+logs and the unsampled compression view accept at most 24 hours. Logs use
+opaque cursor pagination.
 
 Responses label units, requested range, finalization state, and partial data.
 ClickHouse failure returns HTTP 503 with `code=analytics_unavailable`. Filament

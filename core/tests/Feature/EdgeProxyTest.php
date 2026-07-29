@@ -117,6 +117,11 @@ class EdgeProxyTest extends TestCase
         $this->assertSame('1.1.1.1', $domain->dnsRecords()->find($second)->origin['host']);
         $this->assertDatabaseHas('domain_edge_placements', ['domain_id' => $domain->id, 'state' => 'deploying']);
         $this->assertSame(2, EdgeRevision::query()->where('domain_id', $domain->id)->count());
+        $compression = EdgeRevision::query()->where('domain_id', $domain->id)->latest('revision')->firstOrFail()->snapshot['compression'];
+        $this->assertSame('standard', $compression['profile_name']);
+        $this->assertTrue($compression['gzip']);
+        $this->assertFalse($compression['brotli']);
+        $this->assertSame(32, $compression['maximum_active_requests']);
         $this->assertDatabaseHas('operations', ['type' => 'edge.domain_reconcile', 'actor_id' => $user->id, 'status' => 'running']);
 
         $this->actingAs($user)->putJson("/api/domains/{$domain->id}/dns/records/$first/origin", array_merge($this->origin('9.9.9.9'), ['host' => '127.0.0.1']))->assertUnprocessable();

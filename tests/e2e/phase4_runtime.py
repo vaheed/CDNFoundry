@@ -15,6 +15,7 @@ QUARANTINE_NAME = "cdnf-phase4-quarantine-e2e"
 AGENT_NAME = "cdnf-phase4-agent-e2e"
 DEDICATED_NAME = "cdnf-phase4-dedicated-e2e"
 GRACEFUL_CLIENT_NAME = "cdnf-phase4-graceful-client-e2e"
+COMPRESSION_CLIENT_NAME = "cdnf-compression-pressure-client-e2e"
 EDGE_NETWORK = os.environ.get(
     "CDNF_EDGE_NETWORK",
     f"{os.environ.get('COMPOSE_PROJECT_NAME', 'cdnfoundry-dev')}_edge",
@@ -35,6 +36,10 @@ def state(hosts: dict[str, str], sequence: int) -> dict:
             "maximum_object_bytes": 104857600, "respect_origin_headers": True,
             "include_query_string": True, "bypass_cookie_names": ["session_id"],
             "stale_if_error_seconds": 60, "epoch": 1, "development_mode_until": None,
+        }, "compression": {
+            "profile_name": "standard", "gzip": True, "brotli": False,
+            "minimum_bytes": 1024, "maximum_bytes": 10485760,
+            "maximum_active_requests": 32,
         }, "origin": {
             "host": "origin-http", "port": 80, "scheme": "http", "host_header": origin_host,
             "sni": None, "verify_tls": False, "connect_timeout_ms": 1000,
@@ -129,12 +134,29 @@ def cache_purge(task_id: str, purge_type: str, keys: list[str], container: str =
     return json.loads(response.stdout)["data"]
 
 
+def compression_emergency(task_id: str, active: bool) -> dict:
+    payload = {
+        "task_id": task_id, "action": "emergency_mode", "active": active,
+        "actions": ["disable_compression"] if active else [],
+    }
+    if active:
+        payload["expires_at"] = int(time.time()) + 60
+    response = run(
+        "docker", "exec", NAME, "wget", "-q", "-O-",
+        "--header=X-Edge-Status-Token: runtime-test-token",
+        "--header=Content-Type: application/json",
+        f"--post-data={json.dumps(payload, separators=(',', ':'))}",
+        "http://127.0.0.1:9080/control",
+    )
+    return json.loads(response.stdout)["data"]
+
+
 def worker_children(container: str, master: str) -> str:
     return run("docker", "exec", container, "cat", f"/proc/{master}/task/{master}/children").stdout.strip()
 
 
 def main() -> None:
-    run("docker", "compose", "-f", "compose.dev.yml", "up", "-d", "origin-http")
+    run("docker", "compose", "-f", "compose.dev.yml", "up", "-d", "--force-recreate", "origin-http")
     run("docker", "build", "-t", "cdnfoundry/edge-agent:test", "edge-agent")
     run("docker", "build", "-f", "docker/openresty/Dockerfile", "-t", "cdnfoundry/edge-runtime:test", ".")
     with tempfile.TemporaryDirectory(prefix="cdnf-phase4-") as directory:
@@ -204,6 +226,10 @@ def main() -> None:
             "query_policy": "include_selected", "query_parameters": ["page"],
             "maximum_variants_per_resource": 8,
         })
+        initial["hosts"]["compression.example"] = state({"compression.example": "compression-origin.example"}, 1)["hosts"]["compression.example"]
+        initial["hosts"]["compression.example"]["compression"].update({
+            "profile_name": "maximum_savings", "brotli": True, "maximum_active_requests": 1,
+        })
         add_https_origin(initial, "tls.example", "tls-origin")
         add_https_origin(initial, "bad-tls.example", "wrong-origin", "wrong-host")
         initial["hosts"]["blocked.example"] = initial["hosts"]["runtime.example"] | {
@@ -270,6 +296,61 @@ def main() -> None:
             assert "X-CDNFoundry-Cache: MISS" in known.stderr, known.stderr
             cached = request("runtime.example")
             assert cached.returncode == 0 and "X-CDNFoundry-Cache: HIT" in cached.stderr, cached.stderr
+            identity_headers = run(
+                "docker", "run", "--rm", "--network", f"container:{NAME}", "curlimages/curl:8.16.0",
+                "-sS", "-D", "-", "-o", "/dev/null", "-H", "Host: compression.example",
+                "-H", "Accept-Encoding: identity", "http://127.0.0.1:8080/compressible",
+            ).stdout
+            assert "X-CDNFoundry-Cache: MISS" in identity_headers and "Content-Encoding:" not in identity_headers, identity_headers
+            identity_body = run(
+                "docker", "run", "--rm", "--network", f"container:{NAME}", "curlimages/curl:8.16.0",
+                "-sS", "-H", "Host: compression.example", "-H", "Accept-Encoding: identity",
+                "http://127.0.0.1:8080/compressible",
+            ).stdout
+            for encoding in ("gzip", "br"):
+                encoded_headers = run(
+                    "docker", "run", "--rm", "--network", f"container:{NAME}", "curlimages/curl:8.16.0",
+                    "-sS", "-D", "-", "-o", "/dev/null", "-H", "Host: compression.example",
+                    "-H", f"Accept-Encoding: {encoding}", "http://127.0.0.1:8080/compressible",
+                ).stdout
+                assert f"Content-Encoding: {encoding}" in encoded_headers, encoded_headers
+                assert "X-CDNFoundry-Cache: HIT" in encoded_headers, encoded_headers
+                encoded_body = run(
+                    "docker", "run", "--rm", "--network", f"container:{NAME}", "curlimages/curl:8.16.0",
+                    "-sS", "--compressed", "-H", "Host: compression.example",
+                    "-H", f"Accept-Encoding: {encoding}", "http://127.0.0.1:8080/compressible",
+                ).stdout
+                assert encoded_body == identity_body, f"{encoding} decoded body differs from identity"
+            ranged_compressed = run(
+                "docker", "run", "--rm", "--network", f"container:{NAME}", "curlimages/curl:8.16.0",
+                "-sS", "-D", "-", "-o", "/dev/null", "-H", "Host: compression.example",
+                "-H", "Accept-Encoding: br, gzip", "-H", "Range: bytes=0-127",
+                "http://127.0.0.1:8080/compressible",
+            ).stdout
+            assert "206 Partial Content" in ranged_compressed and "Content-Encoding:" not in ranged_compressed, ranged_compressed
+            pressure_client = subprocess.Popen([
+                "docker", "run", "--rm", "--name", COMPRESSION_CLIENT_NAME,
+                "--network", f"container:{NAME}", "curlimages/curl:8.16.0",
+                "-fsS", "-o", "/dev/null", "-H", "Host: compression.example",
+                "-H", "Accept-Encoding: br", "http://127.0.0.1:8080/graceful",
+            ], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            time.sleep(0.75)
+            pressure_headers = run(
+                "docker", "run", "--rm", "--network", f"container:{NAME}", "curlimages/curl:8.16.0",
+                "-sS", "-D", "-", "-o", "/dev/null", "-H", "Host: compression.example",
+                "-H", "Accept-Encoding: br", "http://127.0.0.1:8080/compressible",
+            ).stdout
+            assert "200 OK" in pressure_headers and "Content-Encoding:" not in pressure_headers, pressure_headers
+            pressure_client.terminate()
+            pressure_client.communicate(timeout=10)
+            assert compression_emergency("compression-emergency-on", True)["accepted"] is True
+            emergency_headers = run(
+                "docker", "run", "--rm", "--network", f"container:{NAME}", "curlimages/curl:8.16.0",
+                "-sS", "-D", "-", "-o", "/dev/null", "-H", "Host: compression.example",
+                "-H", "Accept-Encoding: br", "http://127.0.0.1:8080/compressible",
+            ).stdout
+            assert "200 OK" in emergency_headers and "Content-Encoding:" not in emergency_headers, emergency_headers
+            assert compression_emergency("compression-emergency-off", False)["accepted"] is True
             run("docker", "restart", NAME)
             persisted = wait_for("runtime.example")
             assert "X-CDNFoundry-Cache: HIT" in persisted.stderr, persisted.stderr
@@ -455,6 +536,7 @@ def main() -> None:
         finally:
             if os.environ.get("CDNF_KEEP_FAILED_RUNTIME") != "1":
                 run("docker", "rm", "-f", GRACEFUL_CLIENT_NAME, check=False)
+                run("docker", "rm", "-f", COMPRESSION_CLIENT_NAME, check=False)
                 run("docker", "rm", "-f", NAME, check=False)
                 run("docker", "stop", QUARANTINE_NAME, check=False)
                 run("docker", "stop", AGENT_NAME, check=False)

@@ -60,6 +60,16 @@ transforms:
       .user_agent = slice!(replace(to_string(.user_agent) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 256)
       .referrer = slice!(replace(to_string(.referrer) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 512)
       .event_type = slice!(to_string(.event_type) ?? "request", 0, 32)
+      .compression_encoding = slice!(downcase(to_string(.compression_encoding) ?? "identity"), 0, 16)
+      if .compression_encoding != "gzip" && .compression_encoding != "br" {
+        .compression_encoding = "identity"
+      }
+      .compression_ratio = to_float(.compression_ratio) ?? 1.0
+      if .compression_ratio < 1.0 || .compression_ratio > 100000.0 {
+        .compression_ratio = 1.0
+      }
+      .compression_profile = slice!(to_string(.compression_profile) ?? "off", 0, 24)
+      .compression_fallback = slice!(to_string(.compression_fallback) ?? "none", 0, 32)
       del(.authorization); del(.cookie); del(.cookies); del(.request_body); del(.body); del(.query)
   safe_dns_events:
     type: remap

@@ -27,6 +27,7 @@ for authentication, pagination, response, and retry behaviour.
 | `POST` | `/auth/logout` | Required | Supported | `post.auth.logout` |
 | `POST` | `/domains/{domain}/activate` | Required | Supported | `post.domains.domain.activate` |
 | `GET` | `/domains/{domain}/analytics/cache` | Required | No | `get.domains.domain.analytics.cache` |
+| `GET` | `/domains/{domain}/analytics/compression` | Required | No | `get.domains.domain.analytics.compression` |
 | `GET` | `/domains/{domain}/analytics/countries` | Required | No | `get.domains.domain.analytics.countries` |
 | `GET` | `/domains/{domain}/analytics/dns` | Required | No | `get.domains.domain.analytics.dns` |
 | `GET` | `/domains/{domain}/analytics/edges` | Required | No | `get.domains.domain.analytics.edges` |
@@ -111,6 +112,7 @@ for authentication, pagination, response, and retry behaviour.
 
 | Method | Path | Bearer auth | Idempotency key | Operation ID |
 | --- | --- | --- | --- | --- |
+| `GET` | `/admin/analytics/compression` | Required | No | `get.admin.analytics.compression` |
 | `GET` | `/admin/analytics/dns` | Required | No | `get.admin.analytics.dns` |
 | `GET` | `/admin/analytics/summary` | Required | No | `get.admin.analytics.summary` |
 | `GET` | `/admin/analytics/traffic` | Required | No | `get.admin.analytics.traffic` |

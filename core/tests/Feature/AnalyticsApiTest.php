@@ -55,6 +55,24 @@ class AnalyticsApiTest extends TestCase
         Http::assertSent(fn ($request): bool => str_contains($request->body(), 'LIMIT 101') && str_contains($request->body(), 'event_type = \'request\''));
     }
 
+    public function test_compression_analytics_are_domain_scoped_raw_and_bounded(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        Http::fake([config('services.clickhouse.url').'*' => Http::response(json_encode([
+            'encoding' => 'gzip', 'profile' => 'standard', 'fallback' => 'none',
+            'requests' => 2, 'delivered_bytes' => 1000, 'identity_bytes' => 2000,
+            'bytes_saved' => 1000, 'savings_ratio' => 0.5,
+        ]))]);
+
+        $this->actingAs($user)->getJson("/api/domains/{$domain->id}/analytics/compression")
+            ->assertOk()->assertJsonPath('data.0.encoding', 'gzip')->assertJsonPath('data.0.bytes_saved', 1000);
+        Http::assertSent(fn ($request): bool => str_contains($request->body(), 'compression_encoding AS encoding')
+            && str_contains($request->body(), 'occurred_at >=') && str_contains($request->body(), 'domain_id = {domain_id:UInt64}'));
+
+        $this->actingAs($user)->getJson("/api/domains/{$domain->id}/analytics/compression?from=2026-07-01T00:00:00Z&to=2026-07-03T00:00:00Z")
+            ->assertUnprocessable()->assertJsonValidationErrors('from');
+    }
+
     public function test_clickhouse_failure_is_explicit_and_does_not_touch_serving_state(): void
     {
         [$user, $domain] = $this->ownedDomain();
@@ -126,11 +144,11 @@ class AnalyticsApiTest extends TestCase
 
         $this->actingAs($user)->get("/app/analytics?domain={$domain->id}")->assertOk()
             ->assertSee($domain->name)->assertSee('Live window included')->assertSee('bytes')->assertSee('milliseconds')
-            ->assertSee('Request and bandwidth timeseries')->assertSee('DNS activity')->assertSee('Recent logs')->assertSee('Usage CSV export')
+            ->assertSee('Request and bandwidth timeseries')->assertSee('Compression savings (last hour)')->assertSee('DNS activity')->assertSee('Recent logs')->assertSee('Usage CSV export')
             ->assertDontSee("/api/domains/{$domain->id}/logs", false);
         $this->actingAs($admin)->get('/admin/telemetry')->assertOk()
             ->assertSee('Global traffic')->assertSee('Vector metrics available')->assertSee('Live window included')
-            ->assertSee('Buffered data')->assertSee('42 B')->assertSee('Recent logs')->assertSee('Global usage CSV')
+            ->assertSee('Buffered data')->assertSee('42 B')->assertSee('Compression savings')->assertSee('Recent logs')->assertSee('Global usage CSV')
             ->assertDontSee('/api/admin/logs', false);
 
     }

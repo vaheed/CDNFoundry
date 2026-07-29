@@ -55,6 +55,7 @@ final class AnalyticsStore
             'hostnames' => ['hostname, sum(requests) AS requests, sum(bytes_out) AS bytes_out', 'hostname', 'sum(requests) DESC, hostname', 'edge_hourly'],
             'origin' => ['sum(origin_errors) AS errors, sum(origin_latency_sum) AS latency_sum_ms, sum(origin_latency_samples) AS latency_samples, if(latency_samples = 0, 0, latency_sum_ms / latency_samples) AS average_latency_ms', '', 'errors DESC', 'edge_hourly'],
             'edges' => ['edge_id, sum(requests) AS requests, sum(bytes_out) AS bytes_out', 'edge_id', 'sum(requests) DESC, edge_id', 'edge_hourly'],
+            'compression' => ['compression_encoding AS encoding, compression_profile AS profile, compression_fallback AS fallback, count() AS requests, sum(bytes_out) AS delivered_bytes, round(sum(bytes_out * compression_ratio)) AS identity_bytes, greatest(identity_bytes - delivered_bytes, 0) AS bytes_saved, if(identity_bytes = 0, 0, round(bytes_saved / identity_bytes, 6)) AS savings_ratio', 'encoding, profile, fallback', 'bytes_saved DESC, encoding, profile, fallback', 'edge_events'],
             'dns' => ['qtype, rcode, sum(queries) AS queries', 'qtype, rcode', 'sum(queries) DESC, qtype, rcode', 'dns_hourly'],
             default => throw ValidationException::withMessages(['view' => 'The analytics view is invalid.']),
         };
@@ -63,7 +64,9 @@ final class AnalyticsStore
         }
         $groupSql = $group === '' ? '' : " GROUP BY {$group}";
 
-        return $this->query("SELECT {$select} FROM cdnf.{$table} WHERE {$scope} AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64}{$groupSql} ORDER BY {$order} LIMIT 1000", $parameters);
+        $timeColumn = $table === 'edge_events' ? 'occurred_at' : 'interval_start';
+
+        return $this->query("SELECT {$select} FROM cdnf.{$table} WHERE {$scope} AND {$timeColumn} >= {from:DateTime64} AND {$timeColumn} < {to:DateTime64}{$groupSql} ORDER BY {$order} LIMIT 1000", $parameters);
     }
 
     public function topUrls(Domain $domain, array $range): array
@@ -90,7 +93,7 @@ final class AnalyticsStore
                 'requests' => "event_type = 'request'",
                 default => throw ValidationException::withMessages(['stream' => 'The log stream is invalid.']),
             };
-            $rows = $this->query("SELECT occurred_at, event_id, domain_id, hostname, method, path, status, bytes_in, bytes_out, cache_status, origin_latency_ms, origin_error, tls_error, security_action, security_reason, edge_id, client_ip, country, continent, event_type FROM cdnf.edge_events WHERE {$scope} AND occurred_at >= {from:DateTime64} AND occurred_at < {to:DateTime64} AND {$cursorSql} AND ({$filter}) ORDER BY occurred_at DESC, event_id DESC LIMIT 101", $parameters);
+            $rows = $this->query("SELECT occurred_at, event_id, domain_id, hostname, method, path, status, bytes_in, bytes_out, cache_status, origin_latency_ms, origin_error, tls_error, security_action, security_reason, edge_id, client_ip, country, continent, event_type, compression_encoding, compression_ratio, compression_profile, compression_fallback FROM cdnf.edge_events WHERE {$scope} AND occurred_at >= {from:DateTime64} AND occurred_at < {to:DateTime64} AND {$cursorSql} AND ({$filter}) ORDER BY occurred_at DESC, event_id DESC LIMIT 101", $parameters);
         }
         $hasMore = count($rows) > 100;
         $rows = array_slice($rows, 0, 100);

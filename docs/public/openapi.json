@@ -10,6 +10,30 @@
         }
     ],
     "paths": {
+        "/admin/analytics/compression": {
+            "get": {
+                "operationId": "get.admin.analytics.compression",
+                "tags": [
+                    "Administrator"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    }
+                }
+            }
+        },
         "/admin/analytics/dns": {
             "get": {
                 "operationId": "get.admin.analytics.dns",
@@ -5035,6 +5059,41 @@
         "/domains/{domain}/analytics/cache": {
             "get": {
                 "operationId": "get.domains.domain.analytics.cache",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    }
+                }
+            }
+        },
+        "/domains/{domain}/analytics/compression": {
+            "get": {
+                "operationId": "get.domains.domain.analytics.compression",
                 "tags": [
                     "Account"
                 ],
