@@ -73,7 +73,7 @@ class PoolServiceEndpointTest extends TestCase
         $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
         $edge = $this->edge('gateway-candidate', '203.0.113.30');
         foreach ([1, 2, 3] as $slot) {
-            $edge->cells()->create(['slot' => $slot, 'edge_pool_id' => $pool->id, 'status' => 'ready']);
+            $edge->cells()->create(['slot' => $slot, 'edge_pool_id' => $pool->id, 'status' => $slot === 3 ? 'degraded' : 'ready']);
         }
         $endpoint = $pool->endpoints()->create(['edge_id' => $edge->id, 'ipv4' => '8.8.8.8', 'ipv6' => '2606:4700:4700::1111', 'revision' => 7]);
         $settings = $this->settings();

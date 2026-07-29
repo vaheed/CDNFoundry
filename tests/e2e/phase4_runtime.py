@@ -530,7 +530,21 @@ def main() -> None:
                 "-fsS", "-o", "/dev/null", "-H", "Host: runtime.example",
                 "http://127.0.0.1:8080/graceful",
             ], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            time.sleep(0.75)
+            connection_deadline = time.monotonic() + 10
+            while time.monotonic() < connection_deadline:
+                connected = run(
+                    "docker", "exec", NAME, "sh", "-c",
+                    "awk '$2 ~ /:1F90$/ && $4 == \"01\" { found=1 } END { exit !found }' /proc/net/tcp /proc/net/tcp6",
+                    check=False,
+                )
+                if connected.returncode == 0:
+                    break
+                if graceful_client.poll() is not None:
+                    break
+                time.sleep(0.1)
+            else:
+                connected = subprocess.CompletedProcess([], 1)
+            assert connected.returncode == 0, "graceful request did not connect before shutdown"
             run("docker", "kill", "--signal=QUIT", NAME)
             _, graceful_error = graceful_client.communicate(timeout=15)
             assert graceful_client.returncode == 0, graceful_error

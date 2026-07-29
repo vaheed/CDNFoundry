@@ -584,6 +584,22 @@ silently skipped. The production qualification runbook, honest capability
 limits, and exact Phase 12 owner checklist are current. Final checklist boxes
 remain open until the current report and owner evidence pass on one commit.
 
+**Agent qualification evidence (2026-07-29):** contracts, isolated application
+tests (216 tests / 11,634 assertions), Go formatting/vet/tests/builds, strict
+dual-stack gateway behavior, eight-cell inventory, and the uninterrupted
+cumulative runtime suite pass. The bounded dataset passed with 500,000 zones,
+1,000,000 records, and 50,000 changes. Clean-host recovery passed with a 18.326
+second RPO and 41.431 second RTO; mixed-version rollback passed from agent 1.1.0
+to 1.2.0 and 39 to 48 migrations without restoring the database; measured
+single-cell HTTP/HTTPS throughput and MMDB last-valid retention passed. The run
+also removed three qualification hazards: synthetic agents now remain fresh
+while acknowledging placement artifacts, graceful shutdown waits for an
+observed connection instead of a timing guess, and upgrade qualification
+selects a real distinct ancestor release. Gateway desired state now retains
+assigned non-drained cells during health degradation, preventing an empty-map
+recovery deadlock in development and production. Owner-operated evidence is
+still mandatory before any final checklist box or release decision is passed.
+
 ## Future candidates
 
 The following remain outside the committed roadmap until real demand justifies a

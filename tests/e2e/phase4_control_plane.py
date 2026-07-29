@@ -412,8 +412,9 @@ def latest_artifact(
     )
 
 
-def acknowledge(edge: dict, sequence: int) -> None:
+def acknowledge(edge: dict, sequence: int, quarantine_ready: bool = False) -> None:
     call("POST", "/edge/v1/config/applied", {"sequence": sequence}, context=edge["context"])
+    heartbeat(edge, sequence, quarantine_ready=quarantine_ready)
 
 
 def converge_placement_artifacts(
@@ -452,9 +453,24 @@ def converge_placement_artifacts(
             revision = int(payload["revision"])
             assert set(payload["pools"]) == expected_pools, payload
             sequences[edge_id] = sequence
-            acknowledge(edge, sequence)
+            acknowledge(
+                edge,
+                sequence,
+                quarantine_ready="quarantine-default" in expected_pools,
+            )
             applied_revisions[edge_id] = revision
             errors.pop(edge_id, None)
+
+        # A real agent keeps reporting readiness while it downloads and
+        # acknowledges placement artifacts. Preserve that contract in this
+        # direct control-plane qualification so a busy persistent database
+        # cannot make the synthetic edges stale before promotion runs.
+        for edge in edges:
+            heartbeat(
+                edge,
+                sequences[edge["id"]],
+                quarantine_ready="quarantine-default" in expected_pools,
+            )
 
         _, response = call("GET", f"/api/admin/domains/{domain_id}/isolation", token=token)
         placement = response["data"]

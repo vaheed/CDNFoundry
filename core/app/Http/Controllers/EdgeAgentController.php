@@ -39,7 +39,7 @@ class EdgeAgentController extends Controller
         $endpoints = $edge->poolEndpoints()->with('pool')->where('withdrawn', false)
             ->whereHas('pool', fn ($query) => $query->where('enabled', true)->where('withdrawn', false))->orderBy('id')->get();
         $bindings = $endpoints->flatMap(function (EdgePoolEndpoint $endpoint) use ($edge): array {
-            $cells = $edge->cells()->where('edge_pool_id', $endpoint->edge_pool_id)->where('drained', false)->where('status', 'ready')->orderBy('slot')->get();
+            $cells = $edge->cells()->where('edge_pool_id', $endpoint->edge_pool_id)->where('drained', false)->orderBy('slot')->get();
             $targets = $cells->map(fn ($cell): array => ['name' => $cell->name, 'http' => '127.0.0.1:'.$cell->http_port, 'https' => '127.0.0.1:'.$cell->https_port])->all();
 
             return collect([$endpoint->effectiveAddress('ipv4'), $endpoint->effectiveAddress('ipv6')])->filter()->map(fn (string $address): array => ['address' => $address, 'pool' => $endpoint->pool->name, 'cells' => $targets])->all();

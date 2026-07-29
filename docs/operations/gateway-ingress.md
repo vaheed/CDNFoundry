@@ -109,6 +109,11 @@ ordering used to reject stale candidates and acknowledgements. PostgreSQL
 artifact retention may remove old payload rows without reusing or resetting
 their sequence values.
 
+Gateway candidates retain every assigned, non-drained fixed cell even when its
+latest health report is degraded. Health affects traffic readiness and
+placement decisions, but it never turns desired state into an empty invalid
+binding or prevents the agent from reporting recovery.
+
 `Gateway routes` is the size of the current in-memory routing map. One hostname
 may contribute an HTTP and an HTTPS route for each service address on which it
 is available. It is not a lifetime counter. Inspect desired hostname placement

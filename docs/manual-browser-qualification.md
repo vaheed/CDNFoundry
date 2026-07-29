@@ -1170,15 +1170,15 @@ comparison route.
 | Gate | Result | Evidence |
 | --- | --- | --- |
 | Implementation | Passed | One bounded report joins contracts, application/Go suites, real runtime, scale, recovery, upgrade, and explicit owner evidence without silently skipping checks |
-| Unit and feature tests | Pending current run | `application` result in the final report |
-| Real-runtime E2E | Pending current run | `gateway`, `cells`, `runtime`, `recovery`, `upgrade`, and `geo-provider` results |
+| Unit and feature tests | Passed | 216 isolated Laravel tests / 11,634 assertions; application result passed |
+| Real-runtime E2E | Passed locally | Gateway, cells, uninterrupted cumulative runtime, recovery, upgrade, throughput, and GeoIP provider checks passed |
 | IPv4 and IPv6 | Pending owner run | Steps 3, 5, and 15 |
-| Scale | Pending owner run | Steps 11 and 15, including hardware and accepted saturation |
-| Failure, recovery, and isolation | Pending owner run | Steps 4 and 6–13 |
+| Scale | Local bound passed; pending owner run | 500,000 zones, 1,000,000 records, and 50,000 changes passed; Steps 11 and 15 still require external hardware and accepted saturation |
+| Failure, recovery, and isolation | Local checks passed; pending owner run | Last-valid runtime, origin failover, clean-host recovery, upgrade rollback, and MMDB outage passed; Steps 4 and 6–13 still require owner evidence |
 | Observability | Pending owner run | Steps 5 and 8–14 |
 | Documentation | Passed | Production qualification, testing, operations index, roadmap evidence, and this exact checklist |
 | Manual qualification | Pending owner run | Steps 1–15; coding agents do not run browser automation |
-| Regression | Pending current run | `contracts`, `application`, `go-runtime`, and `runtime` results |
+| Regression | Passed | Contracts, application, Go runtime, gateway, cells, scale, recovery, upgrade, throughput, MMDB, and cumulative runtime results |
 | Release decision | Blocked | Owner public dual-stack, Anycast, external load, fleet installer, and browser evidence are mandatory |
 
 ## Failure record

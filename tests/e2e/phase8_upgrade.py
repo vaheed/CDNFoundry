@@ -69,9 +69,31 @@ def source_version(source: pathlib.Path) -> str:
     return match.group(1)
 
 
+def prior_release(current_version: str) -> tuple[str, str]:
+    override = os.environ.get("CDNF_UPGRADE_PRIOR_REF")
+    candidates = [override] if override else run(
+        "git", "rev-list", "--first-parent", "HEAD", "--", "edge-agent/main.go",
+    ).stdout.splitlines()
+    for candidate in candidates:
+        if not candidate:
+            continue
+        resolved = run("git", "rev-parse", "--verify", f"{candidate}^{{commit}}", check=False)
+        if resolved.returncode != 0:
+            continue
+        sha = resolved.stdout.strip()
+        if run("git", "merge-base", "--is-ancestor", sha, "HEAD", check=False).returncode != 0:
+            continue
+        source = run("git", "show", f"{sha}:edge-agent/main.go", check=False)
+        match = re.search(r'const version = "([^"]+)"', source.stdout)
+        if source.returncode == 0 and match and match.group(1) != current_version:
+            return sha, match.group(1)
+    requirement = "CDNF_UPGRADE_PRIOR_REF must identify an ancestor with a distinct edge-agent version" if override else "no prior distinct edge-agent release exists in first-parent history"
+    raise RuntimeError(requirement)
+
+
 def main() -> None:
-    prior_sha = run("git", "rev-parse", "HEAD").stdout.strip()
     current_version = source_version(ROOT)
+    prior_sha, expected_prior_version = prior_release(current_version)
     with tempfile.TemporaryDirectory(prefix="cdnfoundry-phase8-upgrade-") as temp_name:
         temp = pathlib.Path(temp_name)
         archive = temp / "prior.tar"
@@ -81,8 +103,8 @@ def main() -> None:
         with tarfile.open(archive) as source:
             source.extractall(prior, filter="data")
         prior_version = source_version(prior)
-        if prior_version == current_version:
-            raise AssertionError("the canary requires distinct prior/current edge-agent versions")
+        if prior_version != expected_prior_version:
+            raise AssertionError((prior_version, expected_prior_version))
 
         run("docker", "build", "--target", "production", "-t", PRIOR_CORE, str(prior / "core"))
         run("docker", "build", "--target", "production", "-t", CURRENT_CORE, str(ROOT / "core"))
