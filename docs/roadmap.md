@@ -340,7 +340,7 @@ traffic, with bandwidth saved, throughput, latency, and CPU cost recorded.
 **Agent completion evidence (2026-07-29):** the additive PostgreSQL migration
 applied to persistent development state in 50.77 ms and the additive
 ClickHouse telemetry migration applied without resetting either volume. All
-200 isolated Laravel tests / 11,507 assertions, Pint, the pinned OpenResty plus
+201 isolated Laravel tests / 11,513 assertions, Pint, the pinned OpenResty plus
 `ngx_brotli` image build, Vector validation, Compose/OpenAPI/docs checks, and
 the real OpenResty runtime pass. Runtime evidence covers identical
 identity/Gzip/Brotli content, one canonical HIT object, MIME/size/range bounds,

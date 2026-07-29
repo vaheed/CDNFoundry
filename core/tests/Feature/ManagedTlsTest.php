@@ -7,6 +7,7 @@ use App\Enums\UserType;
 use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\IssueManagedCertificate;
 use App\Jobs\ReconcileDnsZone;
+use App\Models\AcmeAccount;
 use App\Models\DnsCluster;
 use App\Models\DnsDeployment;
 use App\Models\Domain;
@@ -26,6 +27,52 @@ use Tests\TestCase;
 class ManagedTlsTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_acme_jwk_left_pads_short_p256_coordinates(): void
+    {
+        config()->set('services.acme.enabled', true);
+        config()->set('services.acme.contact_email', 'admin@example.test');
+        config()->set('services.acme.directory_url', 'https://acme.test/directory');
+        AcmeAccount::query()->create([
+            'directory_url' => 'https://acme.test/directory',
+            'contact_email' => 'admin@example.test',
+            'private_key_ciphertext' => <<<'PEM'
+-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQge3srW6PnbyQqZeu9
+aD5msjmJVB5iRCGBKjh98v3+8PuhRANCAAR7i/QTNdPNQiqYjcEJYJun41iXKPw7
+FokvF9cyhH/WfwCNKy3Sb/n0fUrQdhkX3I9WBgLnS3bd5K+tAzcNDigs
+-----END PRIVATE KEY-----
+PEM,
+        ]);
+        $accountRequest = null;
+        Http::fake(function (Request $request) use (&$accountRequest) {
+            if ($request->url() === 'https://acme.test/directory') {
+                return Http::response([
+                    'newNonce' => 'https://acme.test/nonce',
+                    'newAccount' => 'https://acme.test/account',
+                    'newOrder' => 'https://acme.test/new-order',
+                ]);
+            }
+            if ($request->url() === 'https://acme.test/nonce') {
+                return Http::response('', 200, ['Replay-Nonce' => 'test-nonce']);
+            }
+            if ($request->url() === 'https://acme.test/account') {
+                $accountRequest = $request;
+
+                return Http::response(['status' => 'valid'], 201, ['Location' => 'https://acme.test/accounts/1']);
+            }
+
+            return Http::response(['detail' => 'unexpected '.$request->url()], 500);
+        });
+
+        app(AcmeClient::class)->account();
+
+        $this->assertInstanceOf(Request::class, $accountRequest);
+        $jws = json_decode($accountRequest->body(), true, flags: JSON_THROW_ON_ERROR);
+        $protected = json_decode($this->decodeBase64Url($jws['protected']), true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame(32, strlen($this->decodeBase64Url($protected['jwk']['x'])));
+        $this->assertSame(32, strlen($this->decodeBase64Url($protected['jwk']['y'])));
+    }
 
     public function test_dns_only_and_unverified_domains_do_not_create_orders(): void
     {
@@ -262,5 +309,13 @@ class ManagedTlsTest extends TestCase
         openssl_x509_export($certificate, $pem);
 
         return $pem;
+    }
+
+    private function decodeBase64Url(string $value): string
+    {
+        $decoded = base64_decode(strtr($value, '-_', '+/').str_repeat('=', (4 - strlen($value) % 4) % 4), true);
+        $this->assertNotFalse($decoded);
+
+        return $decoded;
     }
 }

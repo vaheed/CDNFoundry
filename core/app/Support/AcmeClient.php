@@ -196,12 +196,26 @@ final class AcmeClient
             throw new RuntimeException('The stored ACME account key is invalid.');
         }
 
-        return ['crv' => 'P-256', 'kty' => 'EC', 'x' => $this->base64Url($details['ec']['x']), 'y' => $this->base64Url($details['ec']['y'])];
+        return [
+            'crv' => 'P-256',
+            'kty' => 'EC',
+            'x' => $this->base64Url($this->p256Coordinate($details['ec']['x'])),
+            'y' => $this->base64Url($this->p256Coordinate($details['ec']['y'])),
+        ];
     }
 
     private function thumbprint(AcmeAccount $account): string
     {
         return $this->base64Url(hash('sha256', json_encode($this->jwk($account), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES), true));
+    }
+
+    private function p256Coordinate(string $coordinate): string
+    {
+        if ($coordinate === '' || strlen($coordinate) > 32) {
+            throw new RuntimeException('The stored ACME account key has an invalid P-256 coordinate.');
+        }
+
+        return str_pad($coordinate, 32, "\0", STR_PAD_LEFT);
     }
 
     private function newPrivateKey(): string

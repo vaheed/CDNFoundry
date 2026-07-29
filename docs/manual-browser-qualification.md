@@ -870,7 +870,7 @@ and operation IDs.
 | Gate | Result | Evidence |
 | --- | --- | --- |
 | Implementation | Passed | Pool policy, PostgreSQL constraints, revisioned artifacts, canonical identity cache, pinned Brotli image, bounded filters, pressure/emergency fallback, telemetry, authorization, audit, and last-valid delivery |
-| Unit and feature tests | Passed | 200 isolated Laravel tests / 11,507 assertions, including policy/API/artifact/analytics coverage, plus Pint |
+| Unit and feature tests | Passed | 201 isolated Laravel tests / 11,513 assertions, including policy/API/artifact/analytics and ACME JWK coordinate coverage, plus Pint |
 | Real-runtime E2E | Passed | Identity/Gzip/Brotli content, canonical HIT, range, pressure/emergency fallback, restart, stale, purge, invalid candidate, and real Vector/ClickHouse analytics |
 | IPv4 and IPv6 | Partially passed; owner run pending | Local IPv4/IPv6 listener and cumulative dual-stack DNS passed; owner external compression traffic and IPv4-only evidence required |
 | Scale | Pending owner load run | Exact measurements from step 9 |
