@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\UsageController;
 use App\Models\Domain;
 use App\Models\UsageRollup;
 use App\Support\AnalyticsStore;
+use App\Support\PlatformSettings;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DateTimePicker;
@@ -71,7 +72,7 @@ class Telemetry extends Page
             'meta' => [
                 'from' => $range['from']->toIso8601String(), 'to' => $range['to']->toIso8601String(),
                 'partial' => true,
-                'finalization_delay_minutes' => app(\App\Support\PlatformSettings::class)->integer('telemetry', 'finalization_delay_minutes'),
+                'finalization_delay_minutes' => app(PlatformSettings::class)->integer('telemetry', 'finalization_delay_minutes'),
             ],
             'summary' => [],
             'traffic' => [],
