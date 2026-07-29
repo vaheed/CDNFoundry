@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\DomainLifecycleState;
+use App\Filament\Admin\Pages\Telemetry;
 use App\Jobs\BuildUsageRollups;
 use App\Models\Domain;
 use App\Models\UsageRollup;
@@ -17,6 +18,17 @@ use Tests\TestCase;
 class AnalyticsApiTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_global_traffic_expands_from_twelve_to_the_full_day(): void
+    {
+        $page = new Telemetry;
+
+        $this->assertSame(12, $page->trafficLimit);
+        $page->showMoreTraffic();
+        $this->assertSame(24, $page->trafficLimit);
+        $page->showFewerTraffic();
+        $this->assertSame(12, $page->trafficLimit);
+    }
 
     public function test_domain_analytics_are_scoped_bounded_and_label_partial_data(): void
     {

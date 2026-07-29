@@ -23,6 +23,8 @@ class Telemetry extends Page
 
     public int $compressionLimit = 5;
 
+    public int $trafficLimit = 12;
+
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-presentation-chart-line';
 
     protected static ?string $navigationLabel = 'Telemetry and usage';
@@ -80,7 +82,7 @@ class Telemetry extends Page
                 'finalization_delay_minutes' => app(PlatformSettings::class)->integer('telemetry', 'finalization_delay_minutes'),
             ],
             'summary' => [],
-            'traffic' => [],
+            'traffic' => ['items' => [], 'has_more' => false, 'expanded' => false],
             'dns' => [],
             'compression' => ['items' => [], 'has_more' => false, 'expanded' => false],
             'logs' => ['errors' => [], 'security' => [], 'requests' => []],
@@ -90,7 +92,12 @@ class Telemetry extends Page
         try {
             $state['meta'] = $store->metadata($range);
             $state['summary'] = $store->summary(null, $range);
-            $state['traffic'] = $store->aggregate(null, $range, 'traffic');
+            $traffic = $store->aggregate(null, $range, 'traffic');
+            $state['traffic'] = [
+                'items' => array_slice($traffic, 0, $this->trafficLimit),
+                'has_more' => count($traffic) > $this->trafficLimit,
+                'expanded' => $this->trafficLimit > 12,
+            ];
             $state['dns'] = $store->aggregate(null, $range, 'dns');
             $compression = $store->aggregate(null, $rawRange, 'compression');
             $state['compression'] = [
@@ -124,6 +131,16 @@ class Telemetry extends Page
     public function showMoreCompression(): void
     {
         $this->compressionLimit = min(1000, $this->compressionLimit + 20);
+    }
+
+    public function showMoreTraffic(): void
+    {
+        $this->trafficLimit = 24;
+    }
+
+    public function showFewerTraffic(): void
+    {
+        $this->trafficLimit = 12;
     }
 
     public function showFewerCompression(): void

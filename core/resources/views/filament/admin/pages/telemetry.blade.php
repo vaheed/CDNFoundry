@@ -44,12 +44,22 @@
                 <x-filament::section heading="Global traffic" description="Hourly request and transfer totals for the last 24 hours." icon="heroicon-o-chart-bar">
                     <x-ui.data-table caption="Global hourly traffic">
                         <x-slot:header><tr><th>UTC hour</th><th class="text-right">Requests</th><th class="text-right">Transfer</th></tr></x-slot:header>
-                                @forelse ($state['traffic'] as $row)
+                                @forelse ($state['traffic']['items'] as $row)
                                     <tr><td class="px-3 py-2 whitespace-nowrap">{{ $row['bucket'] ?? 'Unknown' }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format((int) ($row['requests'] ?? 0)) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes(((int) ($row['bytes_in'] ?? 0)) + ((int) ($row['bytes_out'] ?? 0))) }}</td></tr>
                                 @empty
                                     <tr><td colspan="3" class="px-3 py-6 text-center text-gray-500">No traffic was recorded in this range.</td></tr>
                                 @endforelse
                     </x-ui.data-table>
+                    @if ($state['traffic']['has_more'] || $state['traffic']['expanded'])
+                        <div class="mt-3 flex justify-end gap-2">
+                            @if ($state['traffic']['has_more'])
+                                <x-filament::button size="sm" color="gray" icon="heroicon-o-chevron-down" wire:click="showMoreTraffic">Show more</x-filament::button>
+                            @endif
+                            @if ($state['traffic']['expanded'])
+                                <x-filament::button size="sm" color="gray" icon="heroicon-o-chevron-up" wire:click="showFewerTraffic">Show fewer</x-filament::button>
+                            @endif
+                        </div>
+                    @endif
                 </x-filament::section>
 
                 <x-filament::section heading="Global DNS" description="Authoritative queries grouped by type and response code." icon="heroicon-o-globe-alt">
