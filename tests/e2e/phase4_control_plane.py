@@ -508,6 +508,8 @@ def exercise_phase5_cache(token: str, domain_id: int, edges: list[dict], sequenc
     assert status == 202 and changed["data"]["settings"]["query_policy"] == "include_all", changed
     assert all(changed["data"]["settings"][key] == value for key, value in settings.items() if key != "include_query_string"), changed
     for edge in edges:
+        heartbeat(edge, sequences[edge["id"]])
+    for edge in edges:
         sequence, payload = latest_artifact(edge, domain_id, sequences[edge["id"]])
         assert payload["cache"]["edge_ttl_seconds"] == 120, payload["cache"]
         assert payload["cache"]["bypass_cookie_names"] == ["session_id"], payload["cache"]
@@ -517,6 +519,8 @@ def exercise_phase5_cache(token: str, domain_id: int, edges: list[dict], sequenc
 
     call("POST", f"/api/domains/{domain_id}/rollback", {"revision": baseline_revision}, token)
     rollback_epochs: set[int] = set()
+    for edge in edges:
+        heartbeat(edge, sequences[edge["id"]])
     for edge in edges:
         sequence, payload = latest_artifact(edge, domain_id, sequences[edge["id"]])
         assert payload["cache"]["edge_ttl_seconds"] == 3600, payload["cache"]
@@ -546,6 +550,8 @@ def exercise_phase5_cache(token: str, domain_id: int, edges: list[dict], sequenc
     attempts = sql_value(f"SELECT attempts FROM edge_tasks WHERE id='{retried['id']}'")
     assert attempts == "2", attempts
 
+    for edge in edges:
+        heartbeat(edge, sequences[edge["id"]])
     for edge in edges:
         sequence, payload = latest_artifact(edge, domain_id, sequences[edge["id"]])
         assert int(payload["cache"]["epoch"]) == int(first["data"]["cache_epoch"]), payload["cache"]
