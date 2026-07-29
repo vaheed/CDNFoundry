@@ -64,7 +64,7 @@
                 </x-filament::section>
             </div>
 
-            <x-filament::section heading="Compression savings" description="Unsampled identity, Gzip, and Brotli delivery from the last hour. Identity estimates derive from the recorded filter ratio." icon="heroicon-o-arrows-pointing-in">
+            <x-filament::section heading="Compression savings" description="Last-hour delivery by encoding. Identity means the response was sent without compression; Fallback explains why compression was skipped." icon="heroicon-o-arrows-pointing-in">
                 <x-ui.data-table class="[&_.cdn-data-table]:min-w-[48rem]">
                     <x-slot:header><tr><th class="text-left">Encoding / profile</th><th class="text-left">Fallback</th><th class="text-right">Requests</th><th class="text-right">Delivered</th><th class="text-right">Saved</th><th class="text-right">Savings</th></tr></x-slot:header>
                     @forelse ($state['compression']['items'] as $row)
@@ -72,15 +72,17 @@
                             $encoding = strtolower((string) ($row['encoding'] ?? 'identity'));
                             $encodingLabel = strtoupper($encoding);
                             $profileLabel = $encoding === 'identity'
-                                ? 'Uncompressed response'
+                                ? 'No content encoding'
                                 : str($row['profile'] ?? 'off')->replace('_', ' ')->headline()->toString();
                             $fallback = (string) ($row['fallback'] ?? 'none');
                             $fallbackLabel = match ($fallback) {
                                 'client_identity' => 'Client requested uncompressed',
-                                'cpu_pressure_identity' => 'CPU pressure',
-                                'emergency_disabled' => 'Compression disabled',
-                                'range_identity' => 'Range response',
-                                'none', '' => 'None',
+                                'cpu_pressure_identity' => 'Skipped to protect CPU capacity',
+                                'emergency_disabled' => 'Skipped: compression disabled',
+                                'range_identity' => 'Skipped: partial range response',
+                                'none', '' => $encoding === 'identity'
+                                    ? 'Normal: not eligible or below size limit'
+                                    : 'Not needed',
                                 default => str($fallback)->replace('_', ' ')->headline()->toString(),
                             };
                         @endphp
