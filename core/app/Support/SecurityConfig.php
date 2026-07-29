@@ -35,20 +35,20 @@ final class SecurityConfig
     public static function profileOptions(): array
     {
         return [
-            'standard' => 'Standard — balanced recommended defaults',
-            'protected' => 'Protected — stricter recommended defaults',
-            'quarantine' => 'Quarantine — strictest recommended defaults',
-            self::MANUAL_PROFILE => 'Manual — custom limits',
+            'standard' => 'Normal traffic — recommended limits',
+            'protected' => 'Elevated risk — tighter rate and connection limits',
+            'quarantine' => 'Isolation — strictest rate and connection limits',
+            self::MANUAL_PROFILE => 'Advanced — custom limits',
         ];
     }
 
     public static function profileDescription(string $profile): string
     {
         return match ($profile) {
-            'protected' => 'Recommended for traffic under elevated risk. Its displayed limits are fixed.',
-            'quarantine' => 'Recommended for isolating high-risk traffic. Its displayed limits are fixed.',
-            self::MANUAL_PROFILE => 'Edit one custom set of limits. Values cannot exceed the platform safety ceilings.',
-            default => 'Recommended for normal traffic. Its displayed limits are fixed.',
+            'protected' => 'Tighter rate and connection limits for traffic under elevated risk. This is not WAF attack inspection.',
+            'quarantine' => 'The strictest limits for isolated high-risk traffic. This is not WAF attack inspection.',
+            self::MANUAL_PROFILE => 'Advanced: edit one custom set of limits up to the platform safety ceilings.',
+            default => 'Recommended rate and connection limits for normal traffic. This is separate from WAF.',
         };
     }
 

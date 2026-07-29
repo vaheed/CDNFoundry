@@ -486,7 +486,7 @@ gateway, endpoint, placement, cell, cache, compression, origin, and managed WAF
 runtime. Prometheus identifies the bounded edge/pool/cell/endpoint/revision
 dimensions, cell resource ratios, endpoint mismatch, version drift, and paused
 rollouts. Alerts link to exact recovery runbooks and telemetry remains outside
-serving decisions. All 214 isolated Laravel tests / 11,617 assertions, the Go
+serving decisions. All 215 isolated Laravel tests / 11,625 assertions, the Go
 agent suite, OpenAPI/Compose/docs checks, and real Vector-to-ClickHouse
 analytics/privacy/20,000-domain/outage/recovery qualification pass. The
 combined checkbox remains open for owner alert, browser, external load, and

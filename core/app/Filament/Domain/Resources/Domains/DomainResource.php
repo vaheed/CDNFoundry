@@ -159,7 +159,14 @@ class DomainResource extends Resource
                     TextEntry::make('security_profile')->label('Configured profile')->state(fn (Domain $record): string => ($record->security_settings ?? SecurityConfig::defaults())['profile'])->badge(),
                     TextEntry::make('security_state')->label('Operational state')->badge(),
                     TextEntry::make('security_state_changed_at')->label('State changed')->dateTime()->placeholder('Never'),
-                    TextEntry::make('waf_profile')->label('Managed WAF')->badge(),
+                    TextEntry::make('waf_profile')->label(FilamentHelp::label('Web application firewall', 'Attack-signature inspection. Off does not inspect, Observe reports without blocking, Recommended blocks common attacks, and High sensitivity blocks more aggressively.'))->badge()
+                        ->formatStateUsing(fn (string $state): string => match ($state) {
+                            'off' => 'Off',
+                            'monitor' => 'Observe',
+                            'balanced' => 'Recommended',
+                            'strict' => 'High sensitivity',
+                            default => $state,
+                        }),
                     TextEntry::make('security_rules_count')->label('Rules')->state(fn (Domain $record): int => $record->securityRules()->count()),
                     TextEntry::make('security_limits_summary')->label('Effective request/origin limits')->state(function (Domain $record): string {
                         $compiled = SecurityConfig::compile($record);

@@ -294,15 +294,26 @@ class ViewDomain extends ViewRecord
                     ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
                     Notification::make()->success()->title('Security profile saved')->body('The bounded policy is queued in the normal signed edge revision.')->send();
                 }),
-            Action::make('wafProfile')->label('Managed WAF profile')->icon('heroicon-o-shield-exclamation')->schema([
-                Select::make('profile')->options([
-                    'off' => 'Off', 'monitor' => 'Monitor only', 'balanced' => 'Balanced blocking', 'strict' => 'Strict blocking',
-                ])->helperText('Fixed OWASP CRS profiles only. Blocking requires a WAF-capable pool with a passed monitor-only canary.')->required(),
-            ])->fillForm(fn (): array => ['profile' => $this->record->waf_profile])
+            Action::make('wafProfile')->label('Web application firewall (WAF)')->icon('heroicon-o-shield-exclamation')
+                ->modalHeading('Choose web application firewall protection')
+                ->modalDescription('WAF inspects web requests for common application attacks. It is separate from rate limits and emergency incident protection.')
+                ->schema([
+                    Select::make('profile')->label('Protection level')->options([
+                        'off' => 'Off — no attack inspection',
+                        'monitor' => 'Observe — report attacks but allow requests',
+                        'balanced' => 'Recommended — block common attacks',
+                        'strict' => 'High sensitivity — stronger blocking, more false-positive risk',
+                    ])->helperText('Start with Observe. After checking security events, choose Recommended. Use High sensitivity only after application testing.')->required(),
+                ])->fillForm(fn (): array => ['profile' => $this->record->waf_profile])
                 ->action(function (array $data): void {
                     app(WafController::class)->update(request()->merge(['profile' => $data['profile']]), $this->record);
                     $this->record->refresh();
-                    Notification::make()->success()->title('Managed WAF change queued')->body('The previous valid runtime remains active until a qualified WAF target acknowledges the signed revision.')->send();
+                    Notification::make()->success()->title('WAF protection change queued')->body(match ($data['profile']) {
+                        'off' => 'Attack inspection will be turned off after the edge accepts this revision.',
+                        'monitor' => 'Observe mode will report likely attacks without blocking requests.',
+                        'balanced' => 'Recommended protection will block common web attacks.',
+                        'strict' => 'High-sensitivity protection will block more aggressively; watch for false positives.',
+                    })->send();
                 }),
             Action::make('startMaintenance')->label('Start maintenance')->color('warning')->requiresConfirmation()->schema([
                 TextInput::make('body')->label('503 response message')->default('Service temporarily unavailable')->maxLength(4096)->required(),
@@ -311,7 +322,9 @@ class ViewDomain extends ViewRecord
             Action::make('endMaintenance')->label('End maintenance')->color('success')->requiresConfirmation()
                 ->visible(fn (): bool => is_array($this->record->proxy_settings['maintenance'] ?? null))
                 ->action(fn () => $this->changeMaintenance(null)),
-            Action::make('protectSecurity')->label('Protect domain')->color('warning')->requiresConfirmation()
+            Action::make('protectSecurity')->label('Apply incident protection')->color('warning')->requiresConfirmation()
+                ->modalHeading('Apply temporary incident protection?')
+                ->modalDescription('This tightens rate and connection limits for an active incident. It does not enable WAF attack signatures and does not move the domain.')
                 ->visible(fn (): bool => auth()->user()?->isAdmin() === true && ! in_array($this->record->security_state, ['restricted', 'quarantined'], true))
                 ->action(fn () => $this->changeSecurityState('restricted', null)),
             Action::make('quarantineSecurity')->label('Quarantine domain')->color('danger')->requiresConfirmation()

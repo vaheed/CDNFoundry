@@ -198,7 +198,7 @@ feature.
    traffic impact.
 7. Open **Security** on the disposable domain. Start maintenance with a unique
    response message and expect HTTP 503 only for that domain; end maintenance
-   and expect normal service. Use **Protect domain**, then **Return to normal**,
+   and expect normal service. Use **Apply incident protection**, then **Return to normal**,
    and confirm the security state and operation are visible. If a quarantine
    pool is ready, use **Quarantine domain** and confirm target-first placement
    moves only that domain before returning it to normal.
@@ -970,12 +970,13 @@ pool. Record image digests, ModSecurity/connector/CRS versions, pool and cell
 IDs, revisions, operation IDs, corpus versions, and sanitized measurements.
 
 1. As administrator, open **Edge network → Service pools**. On the candidate
-   pool enable **WAF-capable runtime**, enter its immutable digest/version, and
-   choose **Monitoring**. Expect one audited bounded global reconciliation.
-   Attempt **Passed** without capability/version and expect field rejection.
+   pool enable **Offer managed WAF protection** and confirm **Managed WAF
+   release** is filled automatically. Leave **WAF readiness** at **Testing —
+   detect only**. Expect one audited bounded global reconciliation. After the
+   test corpus passes, choose **Ready for blocking**.
 2. As the assigned domain user, open the domain and choose **Security → Managed
-   WAF profile**. Exercise Off, Monitor only, Balanced blocking, and Strict
-   blocking. Expect one revision and asynchronous operation per effective
+   **Web application firewall (WAF)**. Exercise Off, Observe, Recommended, and
+   High sensitivity. Expect one revision and asynchronous operation per effective
    change. Arbitrary configuration, `SecRule`, rule upload, wildcard, and
    expression inputs must not exist and API attempts must fail.
 3. With the canary still **Monitoring**, expect Monitor to place on it but
@@ -1055,7 +1056,7 @@ IDs, revisions, operation IDs, corpus versions, and sanitized measurements.
 | Gate | Result | Evidence |
 | --- | --- | --- |
 | Implementation | Passed | Bounded component state, revision/dimension metrics, capacity ratios, drift, alerts, scoped analytics, redaction, retention, and best-effort telemetry |
-| Unit and feature tests | Passed | 214 isolated Laravel tests / 11,617 assertions cover scoped analytics, bounded queries, redaction, outage behavior, health states, metrics authorization, and fleet behavior |
+| Unit and feature tests | Passed | 215 isolated Laravel tests / 11,625 assertions cover scoped analytics, bounded queries, redaction, outage behavior, health states, metrics authorization, fleet behavior, and the simplified WAF operator workflow |
 | Real-runtime E2E | Passed | Real Vector-to-ClickHouse analytics, privacy, usage, 20,000-domain bounded query, outage, buffer, and recovery qualification |
 | IPv4 and IPv6 | Pending owner run | External traffic evidence in steps 4–5 |
 | Scale | Pending owner run | Exact 20,000-domain query and outage measurements |
@@ -1104,7 +1105,7 @@ one healthy comparison edge, and two compatible immutable releases.
 | Observability | Pending owner run | Version/wave/drift/audit/alert capture |
 | Documentation | Passed | Fleet operations, runbooks, API/OpenAPI, roadmap, and exact checklist |
 | Manual qualification | Pending owner run | Steps 1–7 |
-| Regression | Passed | 214 isolated Laravel tests / 11,617 assertions, Go agent suite, OpenAPI, Compose, docs, and Phase 10 real telemetry qualification |
+| Regression | Passed | 215 isolated Laravel tests / 11,625 assertions, Go agent suite, OpenAPI, Compose, docs, and Phase 10 real telemetry qualification |
 | Release decision | Blocked | Owner browser, installer, mixed-traffic, failure, and rollback evidence remain mandatory |
 
 ## Failure record

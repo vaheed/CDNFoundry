@@ -65,6 +65,27 @@ class FilamentWorkflowTest extends TestCase
         Queue::assertPushed(ReconcileAllEdgeDomains::class, fn (ReconcileAllEdgeDomains $job): bool => $job->operationId === $operation->id);
     }
 
+    public function test_managed_waf_pool_workflow_fills_release_and_uses_plain_readiness_labels(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(EditServicePool::class, ['record' => $pool->id])
+            ->assertSee('Offer managed WAF protection')
+            ->fillForm(['waf_capable' => true, 'waf_runtime_version' => 'operator-should-not-type-this', 'waf_canary_state' => 'monitoring'])
+            ->assertSee('WAF readiness')
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $pool->refresh();
+        $this->assertTrue($pool->waf_capable);
+        $this->assertSame(config('security.waf.ruleset'), $pool->waf_runtime_version);
+        $this->assertSame('monitoring', $pool->waf_canary_state);
+    }
+
     public function test_geo_cname_without_a_continent_saves_and_owner_conflicts_are_visible(): void
     {
         $admin = User::factory()->admin()->create();
@@ -239,8 +260,7 @@ class FilamentWorkflowTest extends TestCase
             ->assertSet('mountedActions.0.data.limits.requests_per_second', 50)
             ->assertSet('mountedActions.0.data.limits.origin_retry_limit', 1)
             ->callMountedAction()
-            ->assertHasNoActionErrors()
-            ->assertSee('protected');
+            ->assertHasNoActionErrors();
 
         $this->assertSame('protected', $domain->refresh()->security_settings['profile']);
         $this->assertSame(2, $domain->revision);
@@ -257,7 +277,8 @@ class FilamentWorkflowTest extends TestCase
 
         Livewire::test(ViewDomain::class, ['record' => $domain->id])
             ->assertSee('Start maintenance')
-            ->assertSee('Protect domain')
+            ->assertSee('Apply incident protection')
+            ->assertSee('Web application firewall')
             ->assertDontSee('Restrict domain')
             ->callAction('startMaintenance', data: ['body' => 'Planned maintenance'])
             ->assertHasNoActionErrors();

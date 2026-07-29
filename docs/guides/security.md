@@ -73,13 +73,18 @@ clear runtime behavior:
 
 | Scope | Control | Effect |
 | --- | --- | --- |
-| Domain | Protect | Applies stricter bounded security state without moving the domain |
+| Domain | Apply incident protection | Temporarily tightens bounded request and connection limits without moving the domain or enabling WAF |
 | Domain | Quarantine | Deploys the domain target-first to the quarantine pool |
 | Domain | Start maintenance | Returns the configured HTTP 503 only for that domain |
 | Edge | Drain | Stops new placement/traffic eligibility for that edge |
 | Cell | Drain / Restart | Removes one cell from readiness or restarts that cell |
 | Pool | Maintenance | Returns HTTP 503 from cells assigned to that pool until its required expiry |
 | Pool | Withdraw | Removes that pool from gateway/DNS publication; it does not control BGP |
+
+Web application firewall profiles are independent from incident protection.
+WAF detects common application attacks continuously according to the domain's
+Off, Observe, Recommended, or High sensitivity choice. Incident protection is
+an administrator response to active abusive load. See [Managed WAF](managed-waf.md).
 
 Use **Return to normal**, **End maintenance**, **Undrain**, **Restore**, or the
 matching inverse action to recover. Pool maintenance is persisted in

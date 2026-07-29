@@ -119,7 +119,7 @@ Never scan or delete a cache volume for a normal full purge.
 ## Security incident
 
 1. Identify the smallest affected scope and its reason codes.
-2. For one domain, use **Protect domain**, **Start maintenance**, or
+2. For one domain, use **Apply incident protection**, **Start maintenance**, or
    **Quarantine domain**. Quarantine moves target-first to the quarantine pool.
 3. For one unhealthy cell or edge, use **Drain**; restart only the affected
    cell when required.
