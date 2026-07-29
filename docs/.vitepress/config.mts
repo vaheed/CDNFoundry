@@ -238,7 +238,8 @@ export default withMermaid(defineConfig({
             { text: 'Monitoring', link: '/operations/monitoring' },
             { text: 'Backup and recovery', link: '/operations/backup-and-recovery' },
             { text: 'Incident runbooks', link: '/operations/runbooks' },
-            { text: 'Scaling', link: '/operations/scaling' }
+            { text: 'Scaling', link: '/operations/scaling' },
+            { text: 'Production qualification', link: '/operations/production-qualification' }
           ]
         }
       ],

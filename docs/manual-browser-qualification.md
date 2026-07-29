@@ -21,12 +21,8 @@ The original roadmap is the completed regression baseline. The
 covers:
 
 1. a focused browser and real-traffic regression of that baseline; and
-2. implemented post-baseline Phases 1–11, with **Phase 11 — Bounded fleet
-   rollout automation** as the current roadmap phase.
-
-Post-baseline Phase 12 is intentionally absent. Add its exact browser and
-operator checkpoints only when their implementation becomes current. Do not
-invent future menus, forms, fields, or actions.
+2. implemented post-baseline Phases 1–12, with **Phase 12 — Final production
+   qualification** as the current roadmap phase.
 
 ## Qualification record
 
@@ -1108,6 +1104,82 @@ one healthy comparison edge, and two compatible immutable releases.
 | Manual qualification | Pending owner run | Steps 1–7 |
 | Regression | Passed | 215 isolated Laravel tests / 11,625 assertions, Go agent suite, OpenAPI, Compose, docs, and Phase 10 real telemetry qualification |
 | Release decision | Blocked | Owner browser, installer, mixed-traffic, failure, and rollback evidence remain mandatory |
+
+## Phase 12 — Final production qualification
+
+Use the same commit for the automated report and this owner run. Use at least
+two POPs/edges, exactly eight installed slots per edge, a three-cell-per-edge
+shared pool, separate dual-stack reserved and quarantine endpoints,
+Geo-Unicast, approved Simple Anycast routing, persistent cache, both
+compression algorithms, two origins, managed WAF, and one healthy unrelated
+comparison route.
+
+1. Follow the clean installation procedure on a disposable edge in each POP.
+   Register both through **Edge network → Edges**, inspect all eight cells on
+   each edge, and confirm management addresses are not service endpoints.
+2. Open the shared, reserved, dedicated, and quarantine pools and their
+   endpoints. Confirm distinct service pairs, pool kind, endpoint mode,
+   participating cells, readiness, current revision, and no artifacts on
+   non-participating cells.
+3. Send real HTTP and HTTPS traffic over IPv4 and IPv6 to every service pair.
+   Confirm Host/SNI routing, certificates, origin marker, trusted client
+   identity, and rejection of unknown address, Host, and SNI values.
+4. Move a domain target-first, fail target readiness, retry, drain its source,
+   quarantine it, and roll it back. Confirm uninterrupted comparison traffic
+   and no source removal before the target is active.
+5. From independent networks check Geo-Unicast selection. In the approved
+   routing environment announce the Simple Anycast pair from both POPs, fail
+   and withdraw one POP, restore it, and record convergence, traffic ownership,
+   health disagreement, and route-policy evidence.
+6. Prime cache, restart the serving cell, verify persisted HITs, perform URL
+   purge and epoch-based full purge, serve stale during bounded origin failure,
+   fill to the storage pressure threshold, and confirm admission/recovery
+   bounds. Verify Gzip, Brotli, identity fallback, `Vary`, and no double
+   compression.
+7. Fail the primary origin, verify bounded backup failover, restore it, and
+   verify controlled failback without unsafe retries or request-body replay.
+8. Exercise managed WAF off, monitor, balanced, and strict profiles; one
+   expiry-bound owned exclusion; block and monitor telemetry; an invalid
+   candidate; and rollback. Confirm no sensitive body or exclusion value leaks.
+9. Keep DNS, HTTP, HTTPS, cache, and comparison traffic running while stopping
+   the control plane and then Vector/ClickHouse. Confirm serving continuity,
+   bounded buffering, visible degradation, and recovery.
+10. Submit invalid gateway, normal-cell, and WAF-cell candidates. Confirm each
+    stable reason, unchanged active checksum/revision, last-valid traffic, and
+    successful later reconciliation.
+11. Saturate one cell to its documented CPU, memory, connection, and temporary
+    storage bounds. Confirm unrelated cells and pools continue and record the
+    first saturation point and recovery time.
+12. Perform a fleet canary upgrade through the fixed-purpose installer. Fail
+    its readiness gate, confirm pause and no later wave, then roll back and
+    confirm compatible digests, fixed slots, continuous traffic, and audit.
+13. On a clean replacement control host restore the encrypted backup with the
+    complete recovery secret set. Recreate queues, reconcile DNS, edge, TLS,
+    purge, and usage derived state, then repeat DNS and edge traffic checks.
+14. Inspect the administrator dashboard, **Observe → Telemetry**, pools,
+    endpoints, edges/cells, operations, audits, analytics, alerts, and linked
+    runbooks at desktop and narrow widths. As assigned, unassigned, disabled,
+    and administrator users, confirm policy scope and stable errors.
+15. Run `make dev-production-qualification` with paths to all five sanitized
+    owner evidence files. Link the resulting JSON report and logs. Confirm its
+    release decision is `passed`; any `failed` or `not_run` result blocks the
+    release.
+
+### Phase 12 completion gate
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| Implementation | Passed | One bounded report joins contracts, application/Go suites, real runtime, scale, recovery, upgrade, and explicit owner evidence without silently skipping checks |
+| Unit and feature tests | Pending current run | `application` result in the final report |
+| Real-runtime E2E | Pending current run | `gateway`, `cells`, `runtime`, `recovery`, `upgrade`, and `geo-provider` results |
+| IPv4 and IPv6 | Pending owner run | Steps 3, 5, and 15 |
+| Scale | Pending owner run | Steps 11 and 15, including hardware and accepted saturation |
+| Failure, recovery, and isolation | Pending owner run | Steps 4 and 6–13 |
+| Observability | Pending owner run | Steps 5 and 8–14 |
+| Documentation | Passed | Production qualification, testing, operations index, roadmap evidence, and this exact checklist |
+| Manual qualification | Pending owner run | Steps 1–15; coding agents do not run browser automation |
+| Regression | Pending current run | `contracts`, `application`, `go-runtime`, and `runtime` results |
+| Release decision | Blocked | Owner public dual-stack, Anycast, external load, fleet installer, and browser evidence are mandatory |
 
 ## Failure record
 

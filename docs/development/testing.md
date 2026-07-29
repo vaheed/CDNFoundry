@@ -94,6 +94,16 @@ make dev-phase8-mmdb-e2e
 These may create disposable containers and temporary files, but must not remove
 repository named volumes or inspect rendered UI.
 
+## Final production qualification
+
+Run `make dev-production-qualification` to execute the bounded final
+non-browser suite and write a machine-readable report plus per-check logs under
+`storage/qualification/`. The command returns nonzero when a check fails or
+when required owner-operated public traffic, Anycast, external load, fleet
+installer, or browser evidence is absent. See
+[Production qualification](../operations/production-qualification.md) for the
+required topology, evidence variables, failure exercises, and release decision.
+
 ## Static and contract checks
 
 ```sh

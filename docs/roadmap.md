@@ -571,6 +571,19 @@ recoverable, simple, and solid product.
 - [ ] Owner-run browser and real-traffic qualification is recorded.
 - [ ] Release notes state measured capabilities and limitations honestly.
 
+**Agent implementation evidence (2026-07-29):** the final qualification now has
+one bounded non-browser runner that records per-check logs, commit and host
+metadata, failures, deliberately unexecuted checks, and a stable passed/failed/
+blocked release decision. It joins current contracts, isolated application and
+Go suites, gateway/cell/runtime regression, the bounded scale dataset,
+clean-replacement recovery and derived-state reconstruction, upgrade
+compatibility, throughput, and GeoIP provider failure. Public dual-stack,
+approved Anycast routing, external saturation, the fixed-purpose fleet
+installer, and browser evidence remain explicitly owner-operated and cannot be
+silently skipped. The production qualification runbook, honest capability
+limits, and exact Phase 12 owner checklist are current. Final checklist boxes
+remain open until the current report and owner evidence pass on one commit.
+
 ## Future candidates
 
 The following remain outside the committed roadmap until real demand justifies a

@@ -31,11 +31,35 @@ def runtime(volume: str = STATE_VOLUME) -> tuple[dict, dict]:
     script = (
         "import json;"
         "print(json.dumps(json.load(open('/state/gateway.json'))));"
-        "print(json.dumps(json.load(open('/state/shared-default.json'))))"
+        "print(json.dumps(json.load(open('/state/active.json'))))"
     )
     output = run("docker", "run", "--rm", "-v", f"{volume}:/state:ro", "python:3.13-alpine", "python", "-c", script).stdout
     gateway, cell = output.splitlines()
     return json.loads(gateway), json.loads(cell)
+
+
+def strictly_servable_tls_hostname(cell: dict, routed_hostnames: set[str]) -> str:
+    certificates = cell.get("certificates", {})
+    candidates = []
+    for hostname, value in cell["hosts"].items():
+        if hostname not in routed_hostnames:
+            continue
+        certificate_id = value.get("tls", {}).get("certificate_id")
+        certificate = certificates.get(certificate_id)
+        if not certificate or certificate.get("expires_at", 0) <= int(time.time()):
+            continue
+        names = certificate.get("names", [])
+        if hostname in names or any(
+            name.startswith("*.") and hostname.endswith(name[1:])
+            for name in names
+        ):
+            # UUIDv7 certificate IDs are creation ordered. Prefer the newest
+            # active fixture instead of an arbitrary historical host retained
+            # in the persistent qualification database.
+            candidates.append((certificate_id, hostname))
+    if not candidates:
+        raise RuntimeError("runtime has no unexpired, name-matched TLS host and certificate")
+    return max(candidates)[1]
 
 
 def curl(address: str, hostname: str, tls: bool = False, expect_success: bool = True,
@@ -173,9 +197,14 @@ def multi_cell_pool_test() -> None:
 
 def main() -> None:
     gateway, cell = runtime()
-    hostname = next(
-        name for name, value in cell["hosts"].items()
-        if value.get("tls", {}).get("certificate_id")
+    dual_stack_hostnames = {
+        route["hostname"] for route in gateway["routes"]
+        if {candidate["address"] for candidate in gateway["routes"]
+            if candidate["hostname"] == route["hostname"]}
+        >= {"172.28.10.10", "fd00:cd0f:10::10"}
+    }
+    hostname = strictly_servable_tls_hostname(
+        cell, dual_stack_hostnames,
     )
     addresses = {route["address"] for route in gateway["routes"] if route["hostname"] == hostname}
     if not {"172.28.10.10", "fd00:cd0f:10::10"}.issubset(addresses):
@@ -200,9 +229,8 @@ def main() -> None:
         curl("172.28.10.10", hostname)
 
         ipv4_gateway, ipv4_cell = runtime(IPV4_ONLY_STATE_VOLUME)
-        ipv4_hostname = next(
-            name for name, value in ipv4_cell["hosts"].items()
-            if value.get("tls", {}).get("certificate_id")
+        ipv4_hostname = strictly_servable_tls_hostname(
+            ipv4_cell, {route["hostname"] for route in ipv4_gateway["routes"]},
         )
         ipv4_addresses = {route["address"] for route in ipv4_gateway["routes"] if route["hostname"] == ipv4_hostname}
         if "172.28.20.10" not in ipv4_addresses or any(":" in address for address in ipv4_addresses):
