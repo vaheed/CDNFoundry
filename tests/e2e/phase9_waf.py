@@ -83,15 +83,11 @@ def main() -> None:
             "-subj", "/CN=waf.test", "-keyout", str(temporary / "tls.key"), "-out", str(temporary / "tls.crt"))
         for item in (temporary / "tls.key", temporary / "tls.crt"):
             item.chmod(0o644)
-        cache = temporary / "cache"
-        for profile in ("small", "standard", "large", "streaming"):
-            (cache / "content" / profile).mkdir(parents=True, mode=0o777)
-            (cache / "content" / profile).chmod(0o777)
         run("docker", "run", "-d", "--name", CELL, "--network", NETWORK,
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/active.json", "-e", "EDGE_STATUS_TOKEN=phase9",
             "-v", f"{runtime}:/var/lib/cdnfoundry/runtime/active.json:ro",
             "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro", "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
-            "-v", f"{cache}:/var/cache/nginx", IMAGE)
+            "--tmpfs", "/var/cache/nginx:rw,noexec,nosuid,size=64m,mode=0777", IMAGE)
         try:
             configuration = run("docker", "exec", CELL, "openresty", "-t", check=False)
             if configuration.returncode:
