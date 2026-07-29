@@ -2,12 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Admin\Pages\AdminDashboard;
 use App\Models\DnsCluster;
 use App\Models\Domain;
 use App\Models\Edge;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Redis;
+use Mockery;
 use Tests\TestCase;
 
 class FilamentPanelAccessTest extends TestCase
@@ -48,11 +51,38 @@ class FilamentPanelAccessTest extends TestCase
         }
 
         $this->actingAs($admin)->get('/admin')->assertOk()
-            ->assertSee('Control-plane health')->assertSee('Queue lanes')->assertSee('Ready')->assertSee('Reserved')->assertSee('Delayed')
+            ->assertSee('Control-plane health')->assertSee('Queue lanes')
             ->assertSee('Recent audit activity')->assertSee('Recent audit activity', false)->assertSee('2 healthy and enabled');
         $this->actingAs($admin)->get('/app')->assertForbidden();
         $this->actingAs($user)->get('/app')->assertOk()->assertSee('Assigned domains')->assertSee('Start serving a domain');
         $this->actingAs($user)->get('/admin')->assertForbidden();
+    }
+
+    public function test_dashboard_queue_lanes_include_ready_reserved_delayed_and_total_work(): void
+    {
+        $redis = Mockery::mock();
+        $redis->shouldReceive('llen')->times(4)->andReturnUsing(
+            fn (string $key): int => $key === 'queues:interactive' ? 2 : 0,
+        );
+        $redis->shouldReceive('zcard')->times(8)->andReturnUsing(
+            fn (string $key): int => $key === 'queues:interactive:reserved' || $key === 'queues:interactive:delayed' ? 1 : 0,
+        );
+        $redis->shouldReceive('lindex')->once()->with('queues:interactive', 0)->andReturn(json_encode([
+            'pushedAt' => now()->subSeconds(20)->timestamp,
+        ], JSON_THROW_ON_ERROR));
+        Redis::shouldReceive('connection')->times(4)->andReturn($redis);
+
+        $lanes = (new AdminDashboard)->getQueueStateProperty();
+        $interactive = collect($lanes)->firstWhere('key', 'interactive');
+
+        $this->assertSame([
+            'depth' => 4,
+            'ready' => 2,
+            'reserved' => 1,
+            'delayed' => 1,
+            'oldest' => 'Oldest 20s',
+            'tone' => 'warning',
+        ], collect($interactive)->only(['depth', 'ready', 'reserved', 'delayed', 'oldest', 'tone'])->all());
     }
 
     public function test_both_panels_register_the_compiled_shared_theme(): void
