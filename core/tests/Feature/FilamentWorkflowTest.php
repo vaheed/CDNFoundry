@@ -244,6 +244,27 @@ class FilamentWorkflowTest extends TestCase
         $this->assertDatabaseHas('cache_purges', ['domain_id' => $domain->id, 'type' => 'urls', 'status' => 'succeeded']);
     }
 
+    public function test_custom_tls_mode_without_a_certificate_is_reported_as_an_action_validation_error(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        $domain = Domain::query()->create([
+            'name' => 'custom-tls-ui.example.test',
+            'display_name' => 'Custom TLS UI',
+            'revision' => 1,
+        ]);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->callAction('tlsMode', data: ['mode' => 'custom'])
+            ->assertHasActionErrors(['mode']);
+
+        $this->assertSame('managed', $domain->refresh()->tls_mode);
+        $this->assertSame(1, $domain->revision);
+        Queue::assertNothingPushed();
+    }
+
     public function test_security_profile_action_reacts_to_presets_and_refreshes_the_saved_profile(): void
     {
         Queue::fake();

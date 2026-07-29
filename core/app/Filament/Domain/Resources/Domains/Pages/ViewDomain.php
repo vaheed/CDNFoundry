@@ -40,6 +40,7 @@ use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ViewDomain extends ViewRecord
@@ -73,8 +74,11 @@ class ViewDomain extends ViewRecord
                 Select::make('mode')->options(['managed' => 'Managed', 'custom' => 'Custom', 'disabled' => 'Disabled'])->required(),
             ])->fillForm(fn (): array => ['mode' => $this->record->tls_mode])
                 ->action(function (array $data): void {
-                    if ($data['mode'] === 'custom') {
-                        abort_unless($this->record->tlsCertificates()->where('kind', 'custom')->where('status', 'active')->where('expires_at', '>', now())->exists(), 409, 'Upload a valid custom certificate before selecting custom mode.');
+                    if ($data['mode'] === 'custom'
+                        && ! $this->record->tlsCertificates()->where('kind', 'custom')->where('status', 'active')->where('expires_at', '>', now())->exists()) {
+                        throw ValidationException::withMessages([
+                            'mountedActions.0.data.mode' => 'Upload a valid custom certificate before selecting custom mode.',
+                        ]);
                     }
                     DB::transaction(function () use ($data): void {
                         $domain = $this->record->newQuery()->lockForUpdate()->findOrFail($this->record->id);
