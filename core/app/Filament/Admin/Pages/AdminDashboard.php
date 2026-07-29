@@ -16,7 +16,6 @@ use App\Models\User;
 use App\Support\SystemHealth;
 use Filament\Pages\Dashboard;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Redis;
 use Throwable;
 
 class AdminDashboard extends Dashboard
@@ -70,23 +69,23 @@ class AdminDashboard extends Dashboard
             'bulk_maintenance' => 'Bulk maintenance',
         ];
 
-        try {
-            return collect($lanes)->map(function (string $label, string $queue): array {
-                $depth = (int) Redis::connection()->llen("queues:$queue");
-                $payload = $depth > 0 ? Redis::connection()->lindex("queues:$queue", 0) : null;
-                $pushedAt = is_string($payload) ? (json_decode($payload, true)['pushedAt'] ?? null) : null;
+        $queues = app(SystemHealth::class)->queues();
 
-                return [
-                    'key' => $queue,
-                    'label' => $label,
-                    'depth' => $depth,
-                    'oldest' => $this->queueAge(is_numeric($pushedAt) ? (int) $pushedAt : null, $depth),
-                    'tone' => $depth > 0 ? 'warning' : 'success',
-                ];
-            })->values()->all();
-        } catch (Throwable) {
-            return [['key' => 'unavailable', 'label' => 'Queue backend', 'depth' => null, 'oldest' => 'Age unavailable', 'tone' => 'danger']];
-        }
+        return collect($lanes)->map(function (string $label, string $queue) use ($queues): array {
+            $state = $queues[$queue];
+
+            return [
+                'key' => $queue,
+                'label' => $label,
+                ...$state,
+                'oldest' => $this->queueAge($state['oldest_job_age_seconds'], $state['depth']),
+                'tone' => match ($state['status']) {
+                    'healthy' => $state['depth'] > 0 ? 'warning' : 'success',
+                    'degraded' => 'warning',
+                    default => 'danger',
+                },
+            ];
+        })->values()->all();
     }
 
     public function getQuickLinksProperty(): array
@@ -162,17 +161,18 @@ class AdminDashboard extends Dashboard
         };
     }
 
-    private function queueAge(?int $pushedAt, int $depth): string
+    private function queueAge(?int $seconds, ?int $depth): string
     {
+        if ($depth === null) {
+            return 'Age unavailable';
+        }
         if ($depth === 0) {
             return 'No queued jobs';
         }
 
-        if ($pushedAt === null) {
+        if ($seconds === null) {
             return 'Oldest age unavailable';
         }
-
-        $seconds = max(0, now()->timestamp - $pushedAt);
 
         return match (true) {
             $seconds < 60 => "Oldest {$seconds}s",

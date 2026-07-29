@@ -139,7 +139,11 @@ class AnalyticsApiTest extends TestCase
         $admin = User::factory()->admin()->create();
         Http::fake([
             config('services.clickhouse.url').'*' => Http::response(''),
-            'http://vector:9598/metrics' => Http::response("vector_buffer_byte_size 42\nvector_component_discarded_events_total 0\n"),
+            'http://vector:9598/metrics' => Http::response(implode("\n", [
+                'vector_buffer_byte_size 42',
+                'vector_component_discarded_events_total{component_id="clickhouse_edge"} 2',
+                'vector_component_errors_total{component_id="clickhouse_edge"} 2',
+            ])),
         ]);
 
         $this->actingAs($user)->get("/app/analytics?domain={$domain->id}")->assertOk()
@@ -148,7 +152,10 @@ class AnalyticsApiTest extends TestCase
             ->assertDontSee("/api/domains/{$domain->id}/logs", false);
         $this->actingAs($admin)->get('/admin/telemetry')->assertOk()
             ->assertSee('Global traffic')->assertSee('Vector metrics available')->assertSee('Live window included')
-            ->assertSee('Buffered data')->assertSee('42 B')->assertSee('Compression savings')->assertSee('Recent logs')->assertSee('Global usage CSV')
+            ->assertSee('Buffered data')->assertSee('42 B')->assertSee('Compression savings')->assertSee('Recent logs')
+            ->assertSee('Five rows per stream until expanded')->assertSee('Edge requests')
+            ->assertSee('Discarded events since start')->assertSee('Component errors since start')->assertSee('clickhouse_edge')
+            ->assertSee('must not be added together')->assertSee('Global usage CSV')
             ->assertDontSee('/api/admin/logs', false);
 
     }

@@ -219,29 +219,36 @@ feature.
    included** label to explain that only the configured newest window is
    provisional, not that delivery is degraded. Expect **Finalized usage** to
    show no more than five rows and every shown row to be **Finalized**.
-3. In **Vector buffer and delivery**, expect explicit human-readable
-   **Buffered data**, **Buffered events**, **Discarded events**, and
-   **Delivery / component errors** values. An available Vector with zero
-   backlog/errors must show zero values rather than an empty panel. Generate a
-   controlled buffer/recovery event and expect the current gauges to recover;
-   do not expect lifetime error counters to reset before Vector restarts.
-4. Open the administrator dashboard and inspect **Component health**. For each
+3. In **Compression savings**, expect encoding, profile/fallback, request,
+   delivered, and saved values to remain readable without page overflow. In
+   **Recent logs**, expect five rows per stream, **Edge requests** to contain
+   generated edge traffic, and **Show more**/**Show fewer** to expand and
+   collapse a stream without reloading the page.
+4. In **Vector buffer and delivery**, expect explicit human-readable current
+   **Buffered data** and **Buffered events** gauges plus **Discarded events
+   since start** and **Component errors since start**. Generate a controlled
+   buffer/recovery event and expect the current gauges to recover. Lifetime
+   counters need not reset before Vector restarts, may describe the same failed
+   events, and must identify affected components when nonzero.
+5. Open the administrator dashboard and inspect **Component health**. For each
    degraded/unavailable component, expect its bounded counts/timestamps and a
-   component-specific **How to fix** direction. Leave the page open for 35
-   seconds and expect the evidence to refresh without a browser reload. Resolve
-   one controlled failure and expect only its component to recover.
-5. Open **Operations**. Inspect pending, succeeded, and failed examples. Expect
+   component-specific **How to fix** direction. Confirm **Queue lanes** shows
+   ready, reserved, delayed, and total work and **Recent audit activity** is a
+   table directly below it. Leave the page open for 15 seconds and expect the
+   evidence to refresh without a browser reload. Resolve one controlled
+   failure and expect only its component to recover.
+6. Open **Operations**. Inspect pending, succeeded, and failed examples. Expect
    operation ID, type, requester, status, attempts, timestamps/duration, and a
    bounded error. Use the copy control and paste into a plain-text field; expect
    the complete UUID rather than the shortened table label. Retry only a
    supported disposable failure and expect no duplicate active work.
-6. Open **Platform settings**. Save one reversible non-runtime value and restore
+7. Open **Platform settings**. Save one reversible non-runtime value and restore
    it. Expect typed validation and audit history. Do not change a production
    secret.
-7. Stop telemetry only in the controlled environment. Expect a visible
+8. Stop telemetry only in the controlled environment. Expect a visible
    degraded state while DNS and edge traffic continue. Restore telemetry and
    record bounded buffer recovery.
-8. Refresh, sign out, sign in, and restart the affected non-database service.
+9. Refresh, sign out, sign in, and restart the affected non-database service.
    Expect PostgreSQL desired state and the previous valid runtime state to
    remain intact.
 
@@ -937,7 +944,7 @@ stoppable and must pass the normal public-destination safety policy.
 | Gate | Result | Evidence |
 | --- | --- | --- |
 | Implementation | Passed | One validated backup, bounded policy, revisioned artifacts, local cell state, role-specific tests, stale precedence, diagnostics, and telemetry |
-| Unit and feature tests | Passed | 205 isolated Laravel tests / 11,537 assertions cover authorization, validation, idempotency conflict, atomic preservation, IPv4/IPv6 artifact, and safety envelopes; Pint passes 311 files |
+| Unit and feature tests | Passed | 205 isolated Laravel tests / 11,548 assertions cover authorization, validation, idempotency conflict, atomic preservation, IPv4/IPv6 artifact, telemetry presentation, live queue accounting, and safety envelopes; Pint passes 311 files |
 | Real-runtime E2E | Passed | Primary, threshold failover, 24 concurrent backup requests, hold-down, delayed threshold recovery, dual failure stale, bounded error, and unrelated-host isolation |
 | IPv4 and IPv6 | Partially passed; owner run pending | IPv4 and IPv6 backup state compiles; owner external traffic and IPv4-only topology evidence required |
 | Scale | Pending owner load run | Exact measurements and accepted saturation limit from steps 5 and 10 |

@@ -47,7 +47,9 @@ class FilamentPanelAccessTest extends TestCase
             ]);
         }
 
-        $this->actingAs($admin)->get('/admin')->assertOk()->assertSee('Control-plane health')->assertSee('Queue lanes')->assertSee('2 healthy and enabled');
+        $this->actingAs($admin)->get('/admin')->assertOk()
+            ->assertSee('Control-plane health')->assertSee('Queue lanes')->assertSee('Ready')->assertSee('Reserved')->assertSee('Delayed')
+            ->assertSee('Recent audit activity')->assertSee('Recent audit activity', false)->assertSee('2 healthy and enabled');
         $this->actingAs($admin)->get('/app')->assertForbidden();
         $this->actingAs($user)->get('/app')->assertOk()->assertSee('Assigned domains')->assertSee('Start serving a domain');
         $this->actingAs($user)->get('/admin')->assertForbidden();

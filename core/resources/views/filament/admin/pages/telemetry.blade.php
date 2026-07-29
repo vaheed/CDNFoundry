@@ -65,30 +65,28 @@
             </div>
 
             <x-filament::section heading="Compression savings" description="Unsampled identity, Gzip, and Brotli delivery from the last hour. Identity estimates derive from the recorded filter ratio." icon="heroicon-o-arrows-pointing-in">
-                <x-ui.data-table caption="Global compression delivery">
-                    <x-slot:header><tr><th>Encoding / profile</th><th>Fallback</th><th class="text-right">Requests</th><th class="text-right">Delivered</th><th class="text-right">Saved</th><th class="text-right">Savings</th></tr></x-slot:header>
+                <x-ui.data-table caption="Global compression delivery" class="[&_.cdn-data-table]:min-w-[36rem]">
+                    <x-slot:header><tr><th>Encoding</th><th class="text-right">Requests</th><th class="text-right">Delivered</th><th class="text-right">Saved</th></tr></x-slot:header>
                     @forelse ($state['compression'] as $row)
                         <tr>
-                            <td class="px-3 py-2"><div class="font-medium">{{ strtoupper($row['encoding'] ?? 'identity') }}</div><div class="text-xs text-gray-500">{{ str($row['profile'] ?? 'off')->replace('_', ' ')->headline() }}</div></td>
-                            <td class="px-3 py-2">{{ str($row['fallback'] ?? 'none')->replace('_', ' ')->headline() }}</td>
+                            <td class="px-3 py-2"><div class="font-medium">{{ strtoupper($row['encoding'] ?? 'identity') }}</div><div class="text-xs text-gray-500">{{ str($row['profile'] ?? 'off')->replace('_', ' ')->headline() }} · {{ str($row['fallback'] ?? 'none')->replace('_', ' ')->headline() }} fallback</div></td>
                             <td class="px-3 py-2 text-right tabular-nums">{{ number_format((int) ($row['requests'] ?? 0)) }}</td>
                             <td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes($row['delivered_bytes'] ?? 0) }}</td>
-                            <td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes($row['bytes_saved'] ?? 0) }}</td>
-                            <td class="px-3 py-2 text-right tabular-nums">{{ number_format(((float) ($row['savings_ratio'] ?? 0)) * 100, 1) }}%</td>
+                            <td class="px-3 py-2 text-right tabular-nums"><div>{{ $formatBytes($row['bytes_saved'] ?? 0) }}</div><div class="text-xs text-gray-500">{{ number_format(((float) ($row['savings_ratio'] ?? 0)) * 100, 1) }}%</div></td>
                         </tr>
                     @empty
-                        <tr><td colspan="6" class="px-3 py-6 text-center text-gray-500">No compression events were recorded in the last hour.</td></tr>
+                        <tr><td colspan="4" class="px-3 py-6 text-center text-gray-500">No compression events were recorded in the last hour.</td></tr>
                     @endforelse
                 </x-ui.data-table>
             </x-filament::section>
 
-            <x-filament::section heading="Recent logs" description="Masked, bounded previews from the last hour. Up to 10 rows per stream." icon="heroicon-o-document-magnifying-glass">
+            <x-filament::section heading="Recent logs" description="Masked, bounded previews from the last hour. Five rows per stream until expanded." icon="heroicon-o-document-magnifying-glass">
                 <div class="grid gap-5 xl:grid-cols-3">
-                    @foreach ($state['logs'] as $stream => $rows)
+                    @foreach ($state['logs'] as $stream => $logState)
                         <div class="min-w-0">
-                            <div class="cdn-row-title mb-2">{{ str($stream)->headline() }}</div>
+                            <div class="cdn-row-title mb-2">{{ $stream === 'requests' ? 'Edge requests' : str($stream)->headline() }}</div>
                             <div class="cdn-activity-list">
-                                @forelse ($rows as $row)
+                                @forelse ($logState['items'] as $row)
                                     <div class="cdn-activity-row">
                                         <div class="min-w-0">
                                             <div class="cdn-row-title">{{ $row['hostname'] ?? $row['edge_id'] ?? ('Domain #' . ($row['domain_id'] ?? 'unknown')) }}</div>
@@ -97,9 +95,19 @@
                                         @if (isset($row['status']))<span class="cdn-status-pill" data-tone="{{ (int) $row['status'] >= 500 ? 'danger' : 'warning' }}">{{ $row['status'] }}</span>@endif
                                     </div>
                                 @empty
-                                    <x-ui.empty-state :title="'No ' . $stream . ' events'" description="Nothing was recorded in the last hour." />
+                                    <x-ui.empty-state :title="'No ' . ($stream === 'requests' ? 'edge request' : $stream) . ' events'" description="Nothing was recorded in the last hour." />
                                 @endforelse
                             </div>
+                            @if ($logState['has_more'] || $logState['expanded'])
+                                <div class="mt-3 flex justify-center gap-2">
+                                    @if ($logState['has_more'])
+                                        <x-filament::button size="sm" color="gray" icon="heroicon-o-chevron-down" wire:click="showMoreLogs('{{ $stream }}')">Show more</x-filament::button>
+                                    @endif
+                                    @if ($logState['expanded'])
+                                        <x-filament::button size="sm" color="gray" icon="heroicon-o-chevron-up" wire:click="showFewerLogs('{{ $stream }}')">Show fewer</x-filament::button>
+                                    @endif
+                                </div>
+                            @endif
                         </div>
                     @endforeach
                 </div>
@@ -107,7 +115,7 @@
         @endif
 
         <div class="cdn-dashboard-columns">
-            <x-filament::section heading="Vector buffer and delivery" description="Current collector backlog plus lifetime delivery counters. Zero discarded events and errors is healthy." icon="heroicon-o-circle-stack">
+            <x-filament::section heading="Vector buffer and delivery" description="Current collector backlog and counters since the collector last started." icon="heroicon-o-circle-stack">
                 <div class="cdn-queue-list">
                     @forelse ($state['buffer']['metrics'] as $metric => $value)
                         @php
@@ -115,8 +123,8 @@
                             $metricLabel = match ($metric) {
                                 'vector_buffer_byte_size' => 'Buffered data',
                                 'vector_buffer_events' => 'Buffered events',
-                                'vector_component_discarded_events_total' => 'Discarded events',
-                                'vector_component_errors_total' => 'Delivery / component errors',
+                                'vector_component_discarded_events_total' => 'Discarded events since start',
+                                'vector_component_errors_total' => 'Component errors since start',
                                 default => str($metric)->after('vector_')->replace('_', ' ')->headline(),
                             };
                             $metricValue = $metric === 'vector_buffer_byte_size'
@@ -131,6 +139,12 @@
                         <x-ui.empty-state title="Vector metrics unavailable" description="Serving remains independent; inspect the collector when metrics should be present." />
                     @endforelse
                 </div>
+                @if (($state['buffer']['metrics']['vector_component_discarded_events_total'] ?? 0) > 0 || ($state['buffer']['metrics']['vector_component_errors_total'] ?? 0) > 0)
+                    <p class="cdn-row-meta mt-3">Discarded events are usually also counted as component errors. These totals are related lifetime counters and must not be added together; a zero current buffer means there is no queued delivery backlog.</p>
+                    @foreach ($state['buffer']['components'] as $component => $metrics)
+                        <div class="cdn-row-meta mt-1"><code>{{ $component }}</code>: {{ number_format($metrics['vector_component_discarded_events_total'] ?? 0) }} discarded · {{ number_format($metrics['vector_component_errors_total'] ?? 0) }} errors</div>
+                    @endforeach
+                @endif
             </x-filament::section>
 
             <x-filament::section heading="Finalized usage" description="Stable PostgreSQL rollups for external reconciliation. Latest 5 finalized intervals." icon="heroicon-o-document-chart-bar">

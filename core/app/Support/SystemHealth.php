@@ -106,14 +106,32 @@ final class SystemHealth
     {
         return collect(self::QUEUES)->mapWithKeys(function (string $queue): array {
             try {
-                $depth = (int) Redis::connection()->llen("queues:{$queue}");
-                $payload = $depth > 0 ? json_decode((string) Redis::connection()->lindex("queues:{$queue}", 0), true) : null;
+                $redis = Redis::connection();
+                $ready = (int) $redis->llen("queues:{$queue}");
+                $reserved = (int) $redis->zcard("queues:{$queue}:reserved");
+                $delayed = (int) $redis->zcard("queues:{$queue}:delayed");
+                $depth = $ready + $reserved + $delayed;
+                $payload = $ready > 0 ? json_decode((string) $redis->lindex("queues:{$queue}", 0), true) : null;
                 $pushedAt = is_array($payload) ? ($payload['pushedAt'] ?? $payload['pushed_at'] ?? null) : null;
                 $oldestAge = is_numeric($pushedAt) ? max(0, (int) floor(microtime(true) - $pushedAt)) : null;
 
-                return [$queue => ['status' => $depth > 1000 || ($oldestAge !== null && $oldestAge > 900) ? 'degraded' : 'healthy', 'depth' => $depth, 'oldest_job_age_seconds' => $oldestAge]];
+                return [$queue => [
+                    'status' => $depth > 1000 || ($oldestAge !== null && $oldestAge > 900) ? 'degraded' : 'healthy',
+                    'depth' => $depth,
+                    'ready' => $ready,
+                    'reserved' => $reserved,
+                    'delayed' => $delayed,
+                    'oldest_job_age_seconds' => $oldestAge,
+                ]];
             } catch (Throwable) {
-                return [$queue => ['status' => 'unavailable', 'depth' => null, 'oldest_job_age_seconds' => null]];
+                return [$queue => [
+                    'status' => 'unavailable',
+                    'depth' => null,
+                    'ready' => null,
+                    'reserved' => null,
+                    'delayed' => null,
+                    'oldest_job_age_seconds' => null,
+                ]];
             }
         })->all();
     }

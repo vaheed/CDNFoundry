@@ -1,5 +1,5 @@
 <x-filament-panels::page>
-    <div class="cdn-dashboard" wire:poll.30s>
+    <div class="cdn-dashboard" wire:poll.10s>
         <div class="cdn-stat-grid">
             @foreach ($this->summary as $stat)
                 <x-ui.stat-card :label="$stat['label']" :value="number_format($stat['value'])" :description="$stat['description']" :tone="$stat['tone']" :href="$stat['url']" />
@@ -31,7 +31,12 @@
                         <div class="cdn-queue-row">
                             <div>
                                 <div class="cdn-row-title">{{ $lane['label'] }}</div>
-                                <div class="cdn-row-meta"><code>{{ $lane['key'] }}</code> · {{ $lane['oldest'] }}</div>
+                                <div class="cdn-row-meta">
+                                    <code>{{ $lane['key'] }}</code> · {{ $lane['oldest'] }}
+                                    @if ($lane['depth'] !== null)
+                                        · Ready {{ number_format($lane['ready']) }} · Reserved {{ number_format($lane['reserved']) }} · Delayed {{ number_format($lane['delayed']) }}
+                                    @endif
+                                </div>
                             </div>
                             <x-ui.status-pill :tone="$lane['tone']">
                                 {{ $lane['depth'] === null ? 'Unavailable' : number_format($lane['depth']) }}
@@ -41,22 +46,23 @@
                 </div>
             </x-filament::section>
 
-            <x-filament::section heading="Recent audit activity" description="Latest security and configuration changes." icon="heroicon-o-clipboard-document-list">
-                <div class="cdn-activity-list">
-                    @forelse ($this->recentAudits as $entry)
-                        <div class="cdn-activity-row">
-                            <div class="min-w-0">
-                                <div class="cdn-row-title">{{ str($entry->action)->replace(['.', '_'], ' ')->headline() }}</div>
-                                <div class="cdn-row-meta">{{ $entry->actor?->email ?? 'System' }} · {{ $entry->created_at?->diffForHumans() }}</div>
-                            </div>
-                            <x-ui.status-pill>#{{ $entry->id }}</x-ui.status-pill>
-                        </div>
-                    @empty
-                        <x-ui.empty-state title="No audit activity" description="Configuration and security changes will appear here." />
-                    @endforelse
-                </div>
-            </x-filament::section>
         </div>
+
+        <x-filament::section heading="Recent audit activity" description="Latest security and configuration changes." icon="heroicon-o-clipboard-document-list">
+            <x-ui.data-table caption="Recent audit activity">
+                <x-slot:header><tr><th>Action</th><th>Actor</th><th>Time</th><th class="text-right">ID</th></tr></x-slot:header>
+                @forelse ($this->recentAudits as $entry)
+                    <tr>
+                        <td class="font-medium">{{ str($entry->action)->replace(['.', '_'], ' ')->headline() }}</td>
+                        <td>{{ $entry->actor?->email ?? 'System' }}</td>
+                        <td class="whitespace-nowrap">{{ $entry->created_at?->diffForHumans() }}</td>
+                        <td class="text-right tabular-nums">#{{ $entry->id }}</td>
+                    </tr>
+                @empty
+                    <tr><td colspan="4"><x-ui.empty-state title="No audit activity" description="Configuration and security changes will appear here." /></td></tr>
+                @endforelse
+            </x-ui.data-table>
+        </x-filament::section>
 
         <x-filament::section heading="Common tasks" description="Direct links to the control-plane workflows used most often." icon="heroicon-o-bolt">
             <div class="flex flex-wrap gap-3">
