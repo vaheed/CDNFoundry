@@ -229,6 +229,19 @@ func TestRewriteGatewayAddressesUsesBoundedDevelopmentListeners(t *testing.T) {
 	}
 }
 
+func TestGatewayRevisionChangeRebuildsUnchangedBindings(t *testing.T) {
+	c := &client{gatewayRevision: 41, derivedEnsured: true}
+	c.updateGatewayRevision(42)
+	if c.gatewayRevision != 42 || c.derivedEnsured {
+		t.Fatalf("revision-only candidate did not require activation: %#v", c)
+	}
+	c.derivedEnsured = true
+	c.updateGatewayRevision(42)
+	if !c.derivedEnsured {
+		t.Fatal("unchanged revision unnecessarily required activation")
+	}
+}
+
 func TestCompileGatewayRejectsUnknownPoolDuplicateAndBounds(t *testing.T) {
 	pools := map[string]map[string]any{"shared": {"hosts": map[string]any{"a.example.test": map[string]any{}}}}
 	for _, raw := range []string{

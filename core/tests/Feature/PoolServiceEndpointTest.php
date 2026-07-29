@@ -75,7 +75,9 @@ class PoolServiceEndpointTest extends TestCase
         foreach ([1, 2, 3] as $slot) {
             $edge->cells()->create(['slot' => $slot, 'edge_pool_id' => $pool->id, 'status' => 'ready']);
         }
-        $pool->endpoints()->create(['edge_id' => $edge->id, 'ipv4' => '8.8.8.8', 'ipv6' => '2606:4700:4700::1111', 'revision' => 7]);
+        $endpoint = $pool->endpoints()->create(['edge_id' => $edge->id, 'ipv4' => '8.8.8.8', 'ipv6' => '2606:4700:4700::1111', 'revision' => 7]);
+        $settings = $this->settings();
+        $settings->update(['revision' => 99]);
         $request = Request::create('/edge/v1/gateway/config');
         $request->attributes->set('edge', $edge);
         $payload = app(EdgeAgentController::class)->gatewayConfig($request)->getData(true)['data'];
@@ -83,6 +85,10 @@ class PoolServiceEndpointTest extends TestCase
         $this->assertSame(7, $payload['revision']);
         $this->assertSame(['2606:4700:4700::1111', '8.8.8.8'], collect($payload['bindings'])->pluck('address')->sort()->values()->all());
         $this->assertSame(['cell-01', 'cell-02', 'cell-03'], collect($payload['bindings'][0]['cells'])->pluck('name')->all());
+
+        $endpoint->update(['gateway_revision' => 88]);
+        $payload = app(EdgeAgentController::class)->gatewayConfig($request)->getData(true)['data'];
+        $this->assertSame(88, $payload['revision']);
     }
 
     public function test_endpoint_address_families_can_be_removed_and_withdrawn_endpoint_can_be_deleted(): void

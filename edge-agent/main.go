@@ -745,7 +745,7 @@ func (c *client) refreshGatewayBindings() error {
 	}
 	rewriteGatewayTargets(response.Data.Bindings, c.cellTargets)
 	response.Data.Bindings = rewriteGatewayAddresses(response.Data.Bindings, c.gatewayAddresses)
-	c.gatewayRevision = response.Data.Revision
+	c.updateGatewayRevision(response.Data.Revision)
 	if len(response.Data.Bindings) == 0 {
 		if c.gatewayBindings != "[]" {
 			c.derivedEnsured = false
@@ -762,6 +762,13 @@ func (c *client) refreshGatewayBindings() error {
 	}
 	c.gatewayBindings = string(raw)
 	return nil
+}
+
+func (c *client) updateGatewayRevision(revision uint64) {
+	if c.gatewayRevision != revision {
+		c.gatewayRevision = revision
+		c.derivedEnsured = false
+	}
 }
 
 func rewriteGatewayAddresses(bindings []gatewayBinding, addresses []string) []gatewayBinding {

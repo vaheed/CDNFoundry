@@ -17,7 +17,6 @@ use App\Models\EdgePoolEndpoint;
 use App\Models\EdgeTask;
 use App\Models\FleetRolloutEdge;
 use App\Models\Operation;
-use App\Models\PlatformDnsSetting;
 use App\Models\SecurityEvent;
 use App\Support\ArtifactSigner;
 use App\Support\EdgeCertificateAuthority;
@@ -46,7 +45,11 @@ class EdgeAgentController extends Controller
             return collect([$endpoint->effectiveAddress('ipv4'), $endpoint->effectiveAddress('ipv6')])->filter()->map(fn (string $address): array => ['address' => $address, 'pool' => $endpoint->pool->name, 'cells' => $targets])->all();
         })->values();
 
-        $revision = max((int) $endpoints->max('revision'), (int) PlatformDnsSetting::query()->whereKey(1)->value('revision'));
+        $revision = max(
+            (int) $endpoints->max('revision'),
+            (int) $endpoints->max('gateway_revision'),
+            (int) $edge->active_sequence,
+        );
 
         return response()->json(['data' => ['revision' => $revision, 'bindings' => $bindings]]);
     }

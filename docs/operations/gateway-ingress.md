@@ -83,7 +83,7 @@ the qualified host ceiling; invalid or out-of-range values use 8,192.
    agent-fetched gateway candidate. Do not set the static override during
    normal operation.
 3. Start the agent, cells, state initializer, and gateway. Require gateway
-   readiness and a map revision equal to the agent sequence.
+   readiness and a map revision equal to the latest desired gateway revision.
 4. Probe every configured address/Host and address/SNI combination. Run IPv6
    probes only when an IPv6 service address is configured.
 5. Confirm cell HTTP/HTTPS ports are not publicly published before enabling
@@ -98,8 +98,9 @@ or operator bindings and let reconciliation render a candidate.
 connections, bounded errors, activations, and candidate rejections. The agent
 reports this bounded snapshot in its heartbeat and the administrator edge page
 displays it and refreshes live runtime state every five seconds. Readiness is
-false when the gateway is unavailable or its revision differs from the active
-agent sequence.
+false when the gateway is unavailable or its active map revision differs from
+the latest desired gateway revision. A revision-only change is activated even
+when the rendered routes are otherwise identical.
 
 The active configuration sequence and gateway map revision are monotonic
 identities, not retained configurations or allocated resources. They can safely
