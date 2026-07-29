@@ -153,6 +153,8 @@ class AnalyticsApiTest extends TestCase
         $this->actingAs($admin)->get('/admin/telemetry')->assertOk()
             ->assertSee('Global traffic')->assertSee('Vector metrics available')->assertSee('Live window included')
             ->assertSee('Buffered data')->assertSee('42 B')->assertSee('Compression savings')->assertSee('Recent logs')
+            ->assertSee('Unsampled uncompressed, Gzip, and Brotli delivery')
+            ->assertSee('Encoding / profile')->assertSee('Fallback')
             ->assertSee('Five rows per stream until expanded')->assertSee('Edge requests')
             ->assertSee('Discarded events since start')->assertSee('Component errors since start')->assertSee('clickhouse_edge')
             ->assertSee('must not be added together')->assertSee('Global usage CSV')

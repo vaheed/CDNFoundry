@@ -64,18 +64,33 @@
                 </x-filament::section>
             </div>
 
-            <x-filament::section heading="Compression savings" description="Unsampled identity, Gzip, and Brotli delivery from the last hour. Identity estimates derive from the recorded filter ratio." icon="heroicon-o-arrows-pointing-in">
-                <x-ui.data-table caption="Global compression delivery" class="[&_.cdn-data-table]:min-w-[36rem]">
-                    <x-slot:header><tr><th>Encoding</th><th class="text-right">Requests</th><th class="text-right">Delivered</th><th class="text-right">Saved</th></tr></x-slot:header>
+            <x-filament::section heading="Compression savings" description="Unsampled uncompressed, Gzip, and Brotli delivery from the last hour. Saved bytes compare delivered size with the estimated original response size." icon="heroicon-o-arrows-pointing-in">
+                <x-ui.data-table class="[&_.cdn-data-table]:min-w-[48rem]">
+                    <x-slot:header><tr><th class="text-left">Encoding / profile</th><th class="text-left">Fallback</th><th class="text-right">Requests</th><th class="text-right">Delivered</th><th class="text-right">Saved</th><th class="text-right">Savings</th></tr></x-slot:header>
                     @forelse ($state['compression'] as $row)
+                        @php
+                            $encoding = strtolower((string) ($row['encoding'] ?? 'identity'));
+                            $encodingLabel = $encoding === 'identity' ? 'Uncompressed' : strtoupper($encoding);
+                            $fallback = (string) ($row['fallback'] ?? 'none');
+                            $fallbackLabel = match ($fallback) {
+                                'client_identity' => 'Client requested uncompressed',
+                                'cpu_pressure_identity' => 'CPU pressure',
+                                'emergency_disabled' => 'Compression disabled',
+                                'range_identity' => 'Range response',
+                                'none', '' => 'None',
+                                default => str($fallback)->replace('_', ' ')->headline()->toString(),
+                            };
+                        @endphp
                         <tr>
-                            <td class="px-3 py-2"><div class="font-medium">{{ strtoupper($row['encoding'] ?? 'identity') }}</div><div class="text-xs text-gray-500">{{ str($row['profile'] ?? 'off')->replace('_', ' ')->headline() }} · {{ str($row['fallback'] ?? 'none')->replace('_', ' ')->headline() }} fallback</div></td>
+                            <td class="px-3 py-2 text-left"><div class="font-medium">{{ $encodingLabel }}</div><div class="text-xs text-gray-500">{{ str($row['profile'] ?? 'off')->replace('_', ' ')->headline() }}</div></td>
+                            <td class="px-3 py-2 text-left">{{ $fallbackLabel }}</td>
                             <td class="px-3 py-2 text-right tabular-nums">{{ number_format((int) ($row['requests'] ?? 0)) }}</td>
                             <td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes($row['delivered_bytes'] ?? 0) }}</td>
-                            <td class="px-3 py-2 text-right tabular-nums"><div>{{ $formatBytes($row['bytes_saved'] ?? 0) }}</div><div class="text-xs text-gray-500">{{ number_format(((float) ($row['savings_ratio'] ?? 0)) * 100, 1) }}%</div></td>
+                            <td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes($row['bytes_saved'] ?? 0) }}</td>
+                            <td class="px-3 py-2 text-right tabular-nums">{{ number_format(((float) ($row['savings_ratio'] ?? 0)) * 100, 1) }}%</td>
                         </tr>
                     @empty
-                        <tr><td colspan="4" class="px-3 py-6 text-center text-gray-500">No compression events were recorded in the last hour.</td></tr>
+                        <tr><td colspan="6" class="px-3 py-6 text-center text-gray-500">No compression events were recorded in the last hour.</td></tr>
                     @endforelse
                 </x-ui.data-table>
             </x-filament::section>

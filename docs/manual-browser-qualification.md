@@ -219,8 +219,10 @@ feature.
    included** label to explain that only the configured newest window is
    provisional, not that delivery is degraded. Expect **Finalized usage** to
    show no more than five rows and every shown row to be **Finalized**.
-3. In **Compression savings**, expect encoding, profile/fallback, request,
-   delivered, and saved values to remain readable without page overflow. In
+3. In **Compression savings**, expect uncompressed delivery to be labeled
+   **Uncompressed**, not **Identity**. Expect **Encoding / profile** and
+   **Fallback** to remain left-aligned while numeric columns remain
+   right-aligned without page overflow. In
    **Recent logs**, expect five rows per stream, **Edge requests** to contain
    generated edge traffic, and **Show more**/**Show fewer** to expand and
    collapse a stream without reloading the page.
@@ -234,9 +236,9 @@ feature.
    degraded/unavailable component, expect its bounded counts/timestamps and a
    component-specific **How to fix** direction. Confirm **Queue lanes** shows
    ready, reserved, delayed, and total work and **Recent audit activity** is a
-   table directly below it. Leave the page open for 15 seconds and expect the
-   evidence to refresh without a browser reload. Resolve one controlled
-   failure and expect only its component to recover.
+   table directly below it in the same right-hand column. Leave the page open
+   for 15 seconds and expect the evidence to refresh without a browser reload.
+   Resolve one controlled failure and expect only its component to recover.
 6. Open **Operations**. Inspect pending, succeeded, and failed examples. Expect
    operation ID, type, requester, status, attempts, timestamps/duration, and a
    bounded error. Use the copy control and paste into a plain-text field; expect
