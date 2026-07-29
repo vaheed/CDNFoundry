@@ -157,6 +157,7 @@ The edge-agent binary also accepts these internal variables:
 | `EDGE_RUNTIME_DIR` | empty | Active and previous compiled runtime directories |
 | `EDGE_CELL_STATUS_URLS` | empty | Comma-separated internal cell endpoints |
 | `EDGE_CELL_ASSIGNMENTS` | `{}` | JSON object mapping at most 32 stable `cell-NN` names to a pool name or an empty unassigned value |
+| `EDGE_RUNTIME_VERSIONS` | `{}` | JSON object containing the four immutable gateway, agent, normal-cell, and WAF-cell image digests reported after a fixed installer upgrade |
 | `EDGE_ONCE` | `false` | Run one sync cycle for diagnostics |
 
 Production fixes `EDGE_CELL_ASSIGNMENTS` to eight stable slots. The OpenResty container receives `EDGE_CELL_NAME`, `EDGE_RUNTIME_FILE`, and

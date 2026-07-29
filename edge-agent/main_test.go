@@ -551,3 +551,55 @@ func signedJSON(t *testing.T, private ed25519.PrivateKey, value any) (string, st
 func runtimeDomain(revision int) json.RawMessage {
 	return json.RawMessage(`{"domain":"example.test","revision":` + strconv.Itoa(revision) + `,"pools":["shared-default"],"settings":{"enabled":true},"cache":{"enabled":true,"epoch":2},"hostnames":[{"hostname":"www.example.test","origin":{"host":"origin.example"}}]}`)
 }
+
+func TestRuntimeUpgradeWritesOnlyBoundedIntentAndWaitsForReportedVersions(t *testing.T) {
+	digest := strings.Repeat("a", 64)
+	versions := map[string]string{
+		"gateway":     "registry.test/gateway@sha256:" + digest,
+		"agent":       "registry.test/agent@sha256:" + digest,
+		"normal_cell": "registry.test/cell@sha256:" + digest,
+		"waf_cell":    "registry.test/waf@sha256:" + digest,
+	}
+	task := edgeTask{ID: "upgrade-1", Type: "runtime_upgrade"}
+	task.Payload.Versions = versions
+	client := &client{dir: t.TempDir()}
+
+	complete, _, _ := client.runRuntimeUpgrade(task)
+	if complete {
+		t.Fatal("upgrade must remain pending until the fixed installer reports the desired versions")
+	}
+	body, err := os.ReadFile(filepath.Join(client.dir, "desired-runtime.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(body, []byte("command")) {
+		t.Fatal("runtime intent must never contain an arbitrary command")
+	}
+
+	t.Setenv("EDGE_RUNTIME_VERSIONS", string(mustJSON(t, versions)))
+	complete, result, status := client.runRuntimeUpgrade(task)
+	if !complete || status != "succeeded" || result["status"] != "completed" {
+		t.Fatalf("expected completed upgrade, got complete=%v status=%s result=%v", complete, status, result)
+	}
+}
+
+func TestRuntimeUpgradeRejectsMutableImageTag(t *testing.T) {
+	task := edgeTask{ID: "upgrade-2", Type: "runtime_upgrade"}
+	task.Payload.Versions = map[string]string{
+		"gateway": "registry.test/gateway:latest", "agent": "registry.test/agent:latest",
+		"normal_cell": "registry.test/cell:latest", "waf_cell": "registry.test/waf:latest",
+	}
+	complete, result, status := (&client{dir: t.TempDir()}).runRuntimeUpgrade(task)
+	if !complete || status != "failed" || result["failure_reason"] != "invalid_runtime_versions" {
+		t.Fatalf("mutable image tag was not rejected: %v %s %v", complete, status, result)
+	}
+}
+
+func mustJSON(t *testing.T, value any) []byte {
+	t.Helper()
+	body, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body
+}

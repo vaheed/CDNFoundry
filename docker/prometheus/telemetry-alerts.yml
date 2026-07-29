@@ -105,3 +105,24 @@ groups:
         labels: { severity: warning }
         annotations:
           summary: Prometheus cannot scrape the Vector telemetry collector
+      - alert: EdgeMapStale
+        expr: cdnfoundry_pool_endpoint_revision_mismatch == 1
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: An edge endpoint has not acknowledged its desired map
+          runbook: /operations/runbooks#stale-edge-map-or-endpoint-mismatch
+      - alert: EdgeCellCapacityPressure
+        expr: cdnfoundry_cell_capacity_ratio >= 0.8
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: A bounded edge-cell resource is nearing its limit
+          runbook: /operations/runbooks#cell-cache-or-compression-pressure
+      - alert: FleetRolloutPaused
+        expr: cdnfoundry_fleet_rollouts_paused > 0
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: A fleet rollout paused on a safety threshold
+          runbook: /operations/runbooks#paused-fleet-rollout

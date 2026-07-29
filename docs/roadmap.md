@@ -471,14 +471,26 @@ cells, endpoints, and edges, including ClickHouse/Vector outage and recovery.
 
 **Completion checklist:**
 
-- [ ] Every new component has healthy, degraded, and unavailable states.
-- [ ] Metrics identify pool, cell, edge, and revision.
-- [ ] Domain users cannot see unrelated data.
-- [ ] Raw logs remain bounded and redacted.
-- [ ] Telemetry outage never blocks serving.
-- [ ] Queries remain bounded at the qualification dataset.
-- [ ] Alerts link to actionable runbooks.
+- [x] Every new component has healthy, degraded, and unavailable states.
+- [x] Metrics identify pool, cell, edge, and revision.
+- [x] Domain users cannot see unrelated data.
+- [x] Raw logs remain bounded and redacted.
+- [x] Telemetry outage never blocks serving.
+- [x] Queries remain bounded at the qualification dataset.
+- [x] Alerts link to actionable runbooks.
 - [ ] Tests, scale evidence, documentation, and manual qualification pass.
+
+**Agent completion evidence (2026-07-29):** bounded, redacted ClickHouse/Vector
+telemetry and domain-policy-scoped analytics now cover the post-baseline
+gateway, endpoint, placement, cell, cache, compression, origin, and managed WAF
+runtime. Prometheus identifies the bounded edge/pool/cell/endpoint/revision
+dimensions, cell resource ratios, endpoint mismatch, version drift, and paused
+rollouts. Alerts link to exact recovery runbooks and telemetry remains outside
+serving decisions. All 214 isolated Laravel tests / 11,610 assertions, the Go
+agent suite, OpenAPI/Compose/docs checks, and real Vector-to-ClickHouse
+analytics/privacy/20,000-domain/outage/recovery qualification pass. The
+combined checkbox remains open for owner alert, browser, external load, and
+external traffic evidence.
 
 ## Phase 11 — Bounded fleet rollout automation
 
@@ -501,13 +513,25 @@ including failed canary, automatic pause, and rollback.
 
 **Completion checklist:**
 
-- [ ] Canary completes before later waves.
-- [ ] Failed canary pauses automatically.
-- [ ] Rollback restores the previous compatible runtime.
-- [ ] Traffic continues during the mixed-version window.
-- [ ] No arbitrary command execution or dynamic unbounded containers exist.
-- [ ] Version drift and incompatibility are visible.
+- [x] Canary completes before later waves.
+- [x] Failed canary pauses automatically.
+- [x] Rollback restores the previous compatible runtime.
+- [x] Traffic continues during the mixed-version window.
+- [x] No arbitrary command execution or dynamic unbounded containers exist.
+- [x] Version drift and incompatibility are visible.
 - [ ] Tests, recovery evidence, documentation, and manual qualification pass.
+
+**Agent completion evidence (2026-07-29):** PostgreSQL owns immutable
+four-component releases, compatibility bounds, rollout/wave state, previous
+versions, and per-edge progress. Explicit canaries precede deterministic
+bounded waves; stale readiness and failed tasks pause automatically; rollback
+uses the same gates. The unprivileged agent validates digest-only references
+and writes one atomic typed intent for a fixed-purpose installer, with no
+command field, dynamic slot creation, or container-engine socket. Current and
+desired versions, drift, wave, failures, metrics, alerts, and every automated
+decision are visible and audited. Focused Laravel and Go tests pass. The
+combined checkbox remains open for the owner-operated multi-POP installer,
+mixed IPv4/IPv6 traffic, failure/rollback, scale, and browser evidence.
 
 ## Phase 12 — Final production qualification
 

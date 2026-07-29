@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\PromoteReadyEdgePlacements;
+use App\Jobs\AdvanceFleetRollout;
 use App\Jobs\ReconcileAllEdgeDomains;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\CachePurge;
@@ -14,12 +15,14 @@ use App\Models\Edge;
 use App\Models\EdgeArtifact;
 use App\Models\EdgePoolEndpoint;
 use App\Models\EdgeTask;
+use App\Models\FleetRolloutEdge;
 use App\Models\Operation;
 use App\Models\PlatformDnsSetting;
 use App\Models\SecurityEvent;
 use App\Support\ArtifactSigner;
 use App\Support\EdgeCertificateAuthority;
 use App\Support\PlatformSettings;
+use App\Support\RuntimeVersions;
 use App\Support\SecurityConfig;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -111,6 +114,11 @@ class EdgeAgentController extends Controller
         $edge = $request->attributes->get('edge');
         $data = $request->validate([
             'agent_version' => ['required', 'string', 'max:40'], 'listener_ready' => ['required', 'boolean'],
+            'runtime_versions' => ['sometimes', 'required', 'array', 'size:4'],
+            'runtime_versions.gateway' => ['required_with:runtime_versions', 'string', 'max:255'],
+            'runtime_versions.agent' => ['required_with:runtime_versions', 'string', 'max:255'],
+            'runtime_versions.normal_cell' => ['required_with:runtime_versions', 'string', 'max:255'],
+            'runtime_versions.waf_cell' => ['required_with:runtime_versions', 'string', 'max:255'],
             'active_sequence' => ['required', 'integer', 'min:0'], 'cells' => ['required', 'array', 'max:32'],
             'gateway' => ['sometimes', 'array', 'max:12'],
             'gateway.ready' => ['required_with:gateway', 'boolean'],
@@ -137,6 +145,9 @@ class EdgeAgentController extends Controller
             'passive_origins.*.last_failed_at' => ['required', 'integer', 'min:0'],
         ]);
         $knownCells = $edge->cells()->pluck('id', 'name');
+        if (isset($data['runtime_versions'])) {
+            RuntimeVersions::validate($data['runtime_versions']);
+        }
         foreach ($data['cells'] as $index => $cell) {
             if (! $knownCells->has($cell['name'])) {
                 throw ValidationException::withMessages(["cells.$index.name" => 'The cell is not assigned to this edge.']);
@@ -168,6 +179,7 @@ class EdgeAgentController extends Controller
                 'listener_ready' => $listenerReady, 'gateway' => $data['gateway'] ?? null,
                 'cells' => $data['cells'], 'noisy_domains' => $data['noisy_domains'] ?? [],
             ]),
+            ...(isset($data['runtime_versions']) ? ['runtime_versions' => $data['runtime_versions'], 'runtime_versions_reported_at' => now()] : []),
         ]);
         $endpointRoutingChanged = false;
         if (isset($data['gateway'])) {
@@ -404,6 +416,23 @@ class EdgeAgentController extends Controller
                     'error' => $terminal && $tasks->contains('status', 'failed') ? 'One or more emergency-mode deliveries failed.' : null,
                     'finished_at' => $terminal ? now() : null,
                 ]);
+            }
+        }
+        if ($row->type === 'runtime_upgrade' && isset($row->payload['rollout_edge_id'])) {
+            $rolloutEdge = FleetRolloutEdge::query()->with('rollout')->find($row->payload['rollout_edge_id']);
+            if ($rolloutEdge !== null) {
+                $succeeded = $data['status'] === 'succeeded'
+                    && $edge->runtime_versions === ($row->payload['versions'] ?? null)
+                    && ($edge->capacity['listener_ready'] ?? false);
+                $rolloutEdge->update([
+                    'status' => $succeeded ? 'succeeded' : 'failed',
+                    'failure_reason' => $succeeded ? null : ($data['result']['failure_reason'] ?? 'runtime_version_or_readiness_mismatch'),
+                    'finished_at' => now(),
+                ]);
+                if ($succeeded) {
+                    $edge->update(['desired_runtime_versions' => null]);
+                }
+                AdvanceFleetRollout::dispatch($rolloutEdge->fleet_rollout_id)->afterCommit();
             }
         }
 

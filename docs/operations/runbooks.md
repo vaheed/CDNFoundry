@@ -5,6 +5,35 @@ description: Recover DNS, edge, origin, TLS, cache, telemetry, and security inci
 
 # Incident runbooks
 
+## Stale edge map or endpoint mismatch
+
+1. Open **Edge network → Edges**, record the edge, desired endpoint revision,
+   gateway revision, last heartbeat, and candidate-rejection reason.
+2. Confirm the edge agent and gateway are healthy. Do not withdraw unrelated
+   pools.
+3. Correct the candidate or connectivity failure and run bounded edge
+   reconciliation. A bad candidate must leave the previous map serving.
+4. Escalate if the revision remains mismatched for two minutes after a healthy
+   heartbeat.
+
+## Cell cache or compression pressure
+
+1. Identify the exact edge, pool, cell, resource, and ratio from the alert.
+2. Confirm whether cache, memory, connections, or temporary storage exceeded
+   80%. Keep a comparison pool under traffic.
+3. Drain only the affected cell if it cannot recover. Never create a replacement
+   container dynamically.
+4. Add a pre-provisioned slot or capacity only after recording saturation.
+
+## Paused fleet rollout
+
+1. Fetch the rollout and record its wave, pause reason, failed edge, desired and
+   current immutable digests, readiness, revision, and capacity.
+2. Do not resume while an edge is failed. Correct readiness or start rollback
+   to the recorded compatible release.
+3. Confirm the canary or rollback wave is healthy before later waves proceed.
+4. Verify unrelated edges continue serving during the mixed-version window.
+
 ## DNS cluster failure
 
 1. Check DNSdist backend state and query UDP and TCP directly.

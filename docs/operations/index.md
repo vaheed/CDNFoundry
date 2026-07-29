@@ -21,4 +21,5 @@ DNSdist, PowerDNS, Alertmanager, and node-exporter.
 - Use [Backup and recovery](backup-and-recovery.md) before an incident.
 - Use [Incident runbooks](runbooks.md) for bounded recovery steps.
 - Use [Scaling](scaling.md) to add capacity without adding per-domain processes.
+- Use [Bounded fleet rollouts](fleet-rollouts.md) for immutable canary upgrades.
 - Use [Troubleshooting](../troubleshooting/index.md) for symptom-first diagnosis.

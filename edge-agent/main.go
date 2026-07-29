@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -165,18 +166,19 @@ type edgeTask struct {
 	ID      string `json:"id"`
 	Type    string `json:"type"`
 	Payload struct {
-		CellName           string   `json:"cell_name"`
-		Addresses          []string `json:"addresses"`
-		Allowlist          []string `json:"private_allowlist"`
-		BlockedNetworks    []string `json:"blocked_networks"`
-		Domain             string   `json:"domain"`
-		PurgeType          string   `json:"type"`
-		CacheEpoch         uint64   `json:"cache_epoch"`
-		CacheKeys          []string `json:"cache_keys"`
-		CellNames          []string `json:"cell_names"`
-		EmergencyActive    bool     `json:"active"`
-		EmergencyActions   []string `json:"actions"`
-		EmergencyExpiresAt *int64   `json:"expires_at"`
+		CellName           string            `json:"cell_name"`
+		Addresses          []string          `json:"addresses"`
+		Allowlist          []string          `json:"private_allowlist"`
+		BlockedNetworks    []string          `json:"blocked_networks"`
+		Domain             string            `json:"domain"`
+		PurgeType          string            `json:"type"`
+		CacheEpoch         uint64            `json:"cache_epoch"`
+		CacheKeys          []string          `json:"cache_keys"`
+		CellNames          []string          `json:"cell_names"`
+		EmergencyActive    bool              `json:"active"`
+		EmergencyActions   []string          `json:"actions"`
+		EmergencyExpiresAt *int64            `json:"expires_at"`
+		Versions           map[string]string `json:"versions"`
 		Origin             struct {
 			Host              string `json:"host"`
 			Scheme            string `json:"scheme"`
@@ -201,6 +203,16 @@ func (c *client) processTasks() error {
 		return err
 	}
 	for _, task := range response.Data {
+		if task.Type == "runtime_upgrade" {
+			complete, result, status := c.runRuntimeUpgrade(task)
+			if !complete {
+				continue
+			}
+			if err := c.request("POST", "/edge/v1/tasks/"+task.ID+"/result", map[string]any{"status": status, "result": result}, &map[string]any{}, true); err != nil {
+				return err
+			}
+			continue
+		}
 		result := map[string]any{"status": "failed", "failure_reason": "cell_supervisor_unavailable"}
 		status := "failed"
 		if task.Type == "origin_test" {
@@ -218,6 +230,40 @@ func (c *client) processTasks() error {
 		}
 	}
 	return nil
+}
+
+func (c *client) runRuntimeUpgrade(task edgeTask) (bool, map[string]any, string) {
+	if len(task.Payload.Versions) != 4 {
+		return true, map[string]any{"status": "failed", "failure_reason": "invalid_runtime_versions"}, "failed"
+	}
+	for _, component := range []string{"gateway", "agent", "normal_cell", "waf_cell"} {
+		reference := task.Payload.Versions[component]
+		parts := strings.Split(reference, "@sha256:")
+		if len(parts) != 2 || len(parts[1]) != 64 {
+			return true, map[string]any{"status": "failed", "failure_reason": "invalid_runtime_versions"}, "failed"
+		}
+		if _, err := hex.DecodeString(parts[1]); err != nil {
+			return true, map[string]any{"status": "failed", "failure_reason": "invalid_runtime_versions"}, "failed"
+		}
+	}
+	current := runtimeVersions()
+	if reflect.DeepEqual(current, task.Payload.Versions) {
+		return true, map[string]any{"status": "completed"}, "succeeded"
+	}
+	if err := atomicJSON(filepath.Join(c.dir, "desired-runtime.json"), map[string]any{
+		"schema_version": 1, "task_id": task.ID, "versions": task.Payload.Versions,
+	}); err != nil {
+		return true, map[string]any{"status": "failed", "failure_reason": "runtime_intent_write_failed"}, "failed"
+	}
+	// A fixed, privileged installer watches this bounded intent file. The agent
+	// deliberately has no container-engine socket and executes no commands.
+	return false, nil, ""
+}
+
+func runtimeVersions() map[string]string {
+	versions := map[string]string{}
+	_ = json.Unmarshal([]byte(env("EDGE_RUNTIME_VERSIONS", "{}")), &versions)
+	return versions
 }
 
 func (c *client) runEmergencyMode(task edgeTask) (map[string]any, string) {
@@ -1145,10 +1191,14 @@ func (c *client) heartbeat(sequence uint64) error {
 	if c.gatewayStatusURL != "" {
 		listenerReady = gateway["ready"] == true && gateway["active_revision"] == c.gatewayActiveRevision(sequence)
 	}
-	return c.request("POST", "/edge/v1/heartbeat", map[string]any{
+	payload := map[string]any{
 		"agent_version": version, "listener_ready": listenerReady, "active_sequence": sequence,
 		"cells": cells, "passive_origins": failures, "noisy_domains": security, "gateway": gateway,
-	}, &map[string]any{}, true)
+	}
+	if versions := runtimeVersions(); len(versions) == 4 {
+		payload["runtime_versions"] = versions
+	}
+	return c.request("POST", "/edge/v1/heartbeat", payload, &map[string]any{}, true)
 }
 
 func (c *client) gatewayStatus() map[string]any {

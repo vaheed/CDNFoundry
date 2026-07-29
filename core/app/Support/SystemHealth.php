@@ -12,6 +12,7 @@ use App\Models\EdgeCell;
 use App\Models\EdgePool;
 use App\Models\EdgeTask;
 use App\Models\EmergencyMode;
+use App\Models\FleetRollout;
 use App\Models\Operation;
 use App\Models\TlsCertificate;
 use App\Models\TlsOrder;
@@ -71,6 +72,13 @@ final class SystemHealth
             ->where(fn ($query) => $query->whereNull('domains.active_edge_revision')->orWhereColumn('domains.active_edge_revision', '<', 'domain_edge_placements.desired_revision'))->count();
         $components['edge_placements'] = $this->state(($failedPlacements + $placementDrift) > 0 ? 'degraded' : 'healthy', ['failed' => $failedPlacements, 'drifted' => $placementDrift]);
         $components['edge_capacity'] = $this->edgeCapacity();
+        $pausedRollouts = FleetRollout::query()->where('status', 'paused')->count();
+        $failedRollouts = FleetRollout::query()->where('status', 'failed')->count();
+        $activeRollouts = FleetRollout::query()->whereIn('status', ['pending', 'running', 'rolling_back'])->count();
+        $components['fleet_rollouts'] = $this->state(
+            ($pausedRollouts + $failedRollouts) > 0 ? 'degraded' : 'healthy',
+            ['active' => $activeRollouts, 'paused' => $pausedRollouts, 'failed' => $failedRollouts],
+        );
 
         $activeEmergencyModes = EmergencyMode::query()->where('active', true)->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()))->count();
         $withdrawnPools = EdgePool::query()->where('enabled', true)->where('withdrawn', true)->count();

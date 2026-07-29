@@ -41,6 +41,11 @@ class Edge extends Model
         return $this->hasMany(EdgeTask::class);
     }
 
+    public function rolloutEdges(): HasMany
+    {
+        return $this->hasMany(FleetRolloutEdge::class);
+    }
+
     public function scopeReadyForTraffic(Builder $query): Builder
     {
         return $query->where('enabled', true)->where('drained', false)
@@ -51,6 +56,6 @@ class Edge extends Model
 
     protected function casts(): array
     {
-        return ['enabled' => 'boolean', 'drained' => 'boolean', 'capacity' => 'array', 'cell_slot_count' => 'integer', 'bootstrap_consumed_at' => 'immutable_datetime', 'identity_revoked_at' => 'immutable_datetime', 'identity_certificate_expires_at' => 'immutable_datetime', 'registered_at' => 'immutable_datetime', 'last_heartbeat_at' => 'immutable_datetime'];
+        return ['enabled' => 'boolean', 'drained' => 'boolean', 'capacity' => 'array', 'runtime_versions' => 'array', 'desired_runtime_versions' => 'array', 'runtime_versions_reported_at' => 'immutable_datetime', 'cell_slot_count' => 'integer', 'bootstrap_consumed_at' => 'immutable_datetime', 'identity_revoked_at' => 'immutable_datetime', 'identity_certificate_expires_at' => 'immutable_datetime', 'registered_at' => 'immutable_datetime', 'last_heartbeat_at' => 'immutable_datetime'];
     }
 }

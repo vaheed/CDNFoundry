@@ -21,10 +21,10 @@ The original roadmap is the completed regression baseline. The
 covers:
 
 1. a focused browser and real-traffic regression of that baseline; and
-2. implemented post-baseline Phases 1–9, with **Phase 9 — Managed OWASP CRS
-   WAF** as the current roadmap phase.
+2. implemented post-baseline Phases 1–11, with **Phase 11 — Bounded fleet
+   rollout automation** as the current roadmap phase.
 
-Post-baseline Phases 10–12 are intentionally absent. Add their exact browser and
+Post-baseline Phase 12 is intentionally absent. Add its exact browser and
 operator checkpoints only when their implementation becomes current. Do not
 invent future menus, forms, fields, or actions.
 
@@ -1028,6 +1028,84 @@ IDs, revisions, operation IDs, corpus versions, and sanitized measurements.
 | Manual qualification | Pending owner run | Steps 1–10; coding agents do not run browser automation |
 | Regression | Passed | Full isolated suite, clean cumulative non-browser E2E, immutable image/config validation, Compose, OpenAPI, Vector/ClickHouse analytics, and docs checks pass |
 | Release decision | Blocked | Owner browser, external load/saturation, invalid-image drill, and external IPv4/IPv6 evidence remain mandatory |
+
+## Phase 10 — Observability and capacity control
+
+1. As administrator open **Observe → Telemetry**, the dashboard, service pools,
+   endpoints, and **Edge network → Edges**. Expect healthy, degraded, or
+   unavailable state plus exact edge, pool, cell, endpoint, and revision.
+2. As a domain user inspect analytics/logs for two assigned domains. Directly
+   request an unassigned domain and confirm no aggregate, hostname, address,
+   WAF, origin, pool, cell, or edge detail leaks.
+3. Generate HIT/MISS, compression fallback, origin failover, WAF block/error,
+   gateway rejection, endpoint mismatch, and cell pressure. Confirm bounded,
+   redacted records and the corresponding Prometheus series.
+4. Stop ClickHouse and Vector under traffic. Confirm DNS/HTTP/HTTPS serving and
+   cache continue, bounded buffers do not exceed their limits, and recovery
+   drains without serving decisions depending on telemetry.
+5. Load at least 20,000 active proxied domains over several pools, endpoints,
+   cells, and edges. Record query latency, scanned/result rows, memory, CPU,
+   retention, alert time, recovery time, and accepted saturation.
+6. Trigger stale-map, endpoint-mismatch, cache/memory/connection pressure,
+   origin failover, WAF error, Anycast disagreement, and telemetry alerts.
+   Follow every runbook link and confirm it identifies a bounded recovery.
+
+### Phase 10 completion gate
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| Implementation | Passed | Bounded component state, revision/dimension metrics, capacity ratios, drift, alerts, scoped analytics, redaction, retention, and best-effort telemetry |
+| Unit and feature tests | Passed | 214 isolated Laravel tests / 11,610 assertions cover scoped analytics, bounded queries, redaction, outage behavior, health states, metrics authorization, and fleet behavior |
+| Real-runtime E2E | Passed | Real Vector-to-ClickHouse analytics, privacy, usage, 20,000-domain bounded query, outage, buffer, and recovery qualification |
+| IPv4 and IPv6 | Pending owner run | External traffic evidence in steps 4–5 |
+| Scale | Pending owner run | Exact 20,000-domain query and outage measurements |
+| Failure, recovery, and isolation | Pending owner run | Steps 3–6 |
+| Observability | Pending owner run | Steps 1–6 |
+| Documentation | Passed | Monitoring, telemetry schema, rollout operations, runbooks, roadmap, and this checklist |
+| Manual qualification | Pending owner run | Steps 1–6 |
+| Regression | Passed | Full isolated suite, Go agent suite, OpenAPI, Compose, docs, and real telemetry qualification |
+| Release decision | Blocked | Owner browser, external load, alert, and outage evidence remain mandatory |
+
+## Phase 11 — Bounded fleet rollout automation
+
+Use at least two POPs, a canary edge, two later waves, mixed normal/WAF cells,
+one healthy comparison edge, and two compatible immutable releases.
+
+1. Create a release through the administrator fleet API and inspect the edge
+   version fields in **Edge network → Edges**. Expect four digest-pinned images
+   and one compatibility range. Tags and missing components must fail.
+2. Create a rollout with explicit canary/later edges, wave size, parallelism,
+   readiness/error thresholds, and mixed-window bound. Expect canary wave 1 and
+   no later dispatch before canary success.
+3. Observe current/desired versions, wave, progress, drift, and audits. Confirm
+   the fixed slot count and assignments never change and the agent has no
+   command input or container-engine socket.
+4. Complete the canary, then one later wave. Keep HTTP/HTTPS/cache/WAF traffic
+   running through upgraded and previous-version edges and record continuity.
+5. Fail a canary installer/readiness check. Expect automatic pause, stable
+   reason, no later task, previous runtime serving, and an actionable alert.
+6. Start rollback to the recorded compatible release. Expect bounded waves,
+   current digests to converge, desired drift to clear, and previous
+   configuration/traffic to remain valid.
+7. Restart the control plane, queue, one edge agent, gateway, normal cell, and
+   WAF cell during controlled runs. Expect durable rollout state, idempotent
+   task replay, and no duplicate active upgrade.
+
+### Phase 11 completion gate
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| Implementation | Passed | Immutable releases, compatibility, explicit canary/waves, bounded parallelism, pause, rollback, drift, task intent, and full audit |
+| Unit and feature tests | Passed focused | Authorization, digest/range validation, canary ordering, parallel bound, and unready pause |
+| Real-runtime E2E | Pending owner installer run | Fixed-purpose privileged installer and multi-POP traffic steps 4–7 |
+| IPv4 and IPv6 | Pending owner run | Mixed-window traffic over both families |
+| Scale | Pending owner run | Multi-edge/multi-POP measurements and saturation |
+| Failure, recovery, and isolation | Pending owner run | Failed-canary, restart, rollback, and comparison-edge evidence |
+| Observability | Pending owner run | Version/wave/drift/audit/alert capture |
+| Documentation | Passed | Fleet operations, runbooks, API/OpenAPI, roadmap, and exact checklist |
+| Manual qualification | Pending owner run | Steps 1–7 |
+| Regression | Passed | 214 isolated Laravel tests / 11,610 assertions, Go agent suite, OpenAPI, Compose, docs, and Phase 10 real telemetry qualification |
+| Release decision | Blocked | Owner browser, installer, mixed-traffic, failure, and rollback evidence remain mandatory |
 
 ## Failure record
 

@@ -59,6 +59,8 @@ class EdgeResource extends Resource
                     TextEntry::make('registered_at')->label(FilamentHelp::label('Enrolled at', 'When this edge agent completed its first authenticated enrollment.'))->dateTime()->placeholder('Awaiting agent enrollment'),
                     TextEntry::make('last_heartbeat_at')->label(FilamentHelp::label('Last heartbeat', 'Expected every 5 seconds. The value refreshes automatically and becomes stale after the configured threshold.'))->since()->placeholder('No heartbeat received'),
                     TextEntry::make('agent_version')->label(FilamentHelp::label('Agent version', 'Software version reported by the running edge agent.'))->placeholder('Available after enrollment'),
+                    TextEntry::make('runtime_versions')->label(FilamentHelp::label('Current runtime versions', 'Immutable gateway, agent, normal-cell, and WAF-cell image digests reported by the edge.'))->formatStateUsing(fn (mixed $state): string => is_array($state) ? collect($state)->map(fn ($version, $component) => "{$component}: {$version}")->implode("\n") : 'Not reported')->columnSpanFull(),
+                    TextEntry::make('desired_runtime_versions')->label(FilamentHelp::label('Desired runtime versions', 'A value here means this edge is in a bounded fleet rollout or has version drift.'))->formatStateUsing(fn (mixed $state): string => is_array($state) ? collect($state)->map(fn ($version, $component) => "{$component}: {$version}")->implode("\n") : 'No rollout pending')->columnSpanFull(),
                     TextEntry::make('capacity.listener_ready')->label(FilamentHelp::label('Traffic listener', 'Ready only when the gateway revision matches and at least one assigned cell is ready.'))->badge()
                         ->formatStateUsing(fn (mixed $state): string => match ($state) {
                             true => 'Ready',
@@ -105,6 +107,8 @@ class EdgeResource extends Resource
             IconColumn::make('drained')->boolean(),
             TextColumn::make('last_heartbeat_at')->label('Heartbeat')->since()->placeholder('Never')->sortable(),
             TextColumn::make('agent_version')->label('Agent')->placeholder('Not registered'),
+            TextColumn::make('runtime_versions_reported_at')->label('Version report')->since()->placeholder('Not reported'),
+            TextColumn::make('desired_runtime_versions')->label('Version drift')->badge()->formatStateUsing(fn (mixed $state, Edge $record): string => $state !== null && $state !== $record->runtime_versions ? 'Drifted' : 'Aligned')->color(fn (mixed $state, Edge $record): string => $state !== null && $state !== $record->runtime_versions ? 'warning' : 'success'),
             TextColumn::make('active_sequence')->label('Active revision')->sortable(),
             TextColumn::make('cells_count')->counts('cells')->label('Cells'),
             TextColumn::make('capacity.last_rejection.reason')->label('Deployment failure')->placeholder('None'),
