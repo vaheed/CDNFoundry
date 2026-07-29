@@ -89,10 +89,14 @@ class EdgePoolController extends Controller
             'maximum_domains_per_cell' => ['sometimes', 'integer', 'between:1,100000'],
             'cache_profile' => ['sometimes', 'in:small,standard,large,streaming'],
             'compression_profile' => ['sometimes', 'in:off,standard,maximum_savings'],
+            'waf_capable' => ['sometimes', 'boolean'], 'waf_runtime_version' => ['nullable', 'string', 'max:80'],
+            'waf_canary_state' => ['sometimes', 'in:not_required,monitoring,passed,failed'],
         ]);
         $data = [...$data, ...EdgePoolRoutingData::validate(array_merge(['routing_mode' => 'geo_unicast', 'anycast_ipv4' => null, 'anycast_ipv6' => null], $request->only(['routing_mode', 'anycast_ipv4', 'anycast_ipv6'])))];
         abort_if(($data['replicas_per_edge'] ?? 1) > 1 && ! in_array($data['kind'], ['reserved', 'dedicated'], true), 422, 'Replicated placement is limited to reserved and dedicated pools.');
         abort_unless(CompressionPolicy::allowedForKind($data['compression_profile'] ?? 'standard', $data['kind']), 422, 'Maximum-savings compression is limited to reserved and dedicated pools.');
+        abort_if(($data['waf_capable'] ?? false) && blank($data['waf_runtime_version'] ?? null), 422, 'A pinned WAF runtime version is required for a WAF-capable pool.');
+        abort_if(($data['waf_canary_state'] ?? 'not_required') === 'passed' && ! ($data['waf_capable'] ?? false), 422, 'Only a WAF-capable pool can pass its WAF canary.');
         abort_if(EdgePool::query()->count() >= 32, 409, 'The deployment has reached the bounded 32-pool limit.');
         $pool = DB::transaction(function () use ($data, $request): EdgePool {
             $pool = EdgePool::query()->create([...$data, 'enabled' => false]);
@@ -112,6 +116,8 @@ class EdgePoolController extends Controller
             'maximum_domains_per_cell' => ['sometimes', 'integer', 'between:1,100000'],
             'cache_profile' => ['sometimes', 'in:small,standard,large,streaming'],
             'compression_profile' => ['sometimes', 'in:off,standard,maximum_savings'],
+            'waf_capable' => ['sometimes', 'boolean'], 'waf_runtime_version' => ['nullable', 'string', 'max:80'],
+            'waf_canary_state' => ['sometimes', 'in:not_required,monitoring,passed,failed'],
         ]);
         $routing = EdgePoolRoutingData::validate($request->only(['routing_mode', 'anycast_ipv4', 'anycast_ipv6']), $pool, true);
         $data = [...$data, ...$routing];
@@ -121,7 +127,9 @@ class EdgePoolController extends Controller
         abort_if(isset($data['replicas_per_edge']) && $data['replicas_per_edge'] > 1 && ! in_array($pool->kind, ['reserved', 'dedicated'], true), 422, 'Replicated placement is limited to reserved and dedicated pools.');
         abort_unless(CompressionPolicy::allowedForKind($data['compression_profile'] ?? $pool->compression_profile, $pool->kind), 422, 'Maximum-savings compression is limited to reserved and dedicated pools.');
         abort_if(isset($data['name']) && $data['name'] !== $pool->name && $pool->cells()->exists(), 409, 'Pool runtime names are immutable after cells have been provisioned.');
-        $placementPolicyChanged = array_intersect(array_keys($data), ['minimum_ready_cells', 'replicas_per_edge', 'maximum_domains_per_cell', 'cache_profile', 'compression_profile']) !== [];
+        abort_if(($data['waf_capable'] ?? $pool->waf_capable) && blank($data['waf_runtime_version'] ?? $pool->waf_runtime_version), 422, 'A pinned WAF runtime version is required for a WAF-capable pool.');
+        abort_if(($data['waf_canary_state'] ?? $pool->waf_canary_state) === 'passed' && ! ($data['waf_capable'] ?? $pool->waf_capable), 422, 'Only a WAF-capable pool can pass its WAF canary.');
+        $placementPolicyChanged = array_intersect(array_keys($data), ['minimum_ready_cells', 'replicas_per_edge', 'maximum_domains_per_cell', 'cache_profile', 'compression_profile', 'waf_capable', 'waf_runtime_version', 'waf_canary_state']) !== [];
         $operation = DB::transaction(function () use ($pool, $data, $placementPolicyChanged, $request): ?Operation {
             $pool->update([...$data, 'revision' => $pool->revision + 1]);
             if (array_intersect(array_keys($data), ['routing_mode', 'anycast_ipv4', 'anycast_ipv6']) !== []) {

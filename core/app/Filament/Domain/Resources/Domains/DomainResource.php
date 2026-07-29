@@ -8,6 +8,7 @@ use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
 use App\Filament\Domain\Resources\Domains\RelationManagers\DnsRecordsRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\SecurityRulesRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\UsersRelationManager;
+use App\Filament\Domain\Resources\Domains\RelationManagers\WafExclusionsRelationManager;
 use App\Http\Controllers\CacheController;
 use App\Models\Domain;
 use App\Models\EdgeRevision;
@@ -158,6 +159,7 @@ class DomainResource extends Resource
                     TextEntry::make('security_profile')->label('Configured profile')->state(fn (Domain $record): string => ($record->security_settings ?? SecurityConfig::defaults())['profile'])->badge(),
                     TextEntry::make('security_state')->label('Operational state')->badge(),
                     TextEntry::make('security_state_changed_at')->label('State changed')->dateTime()->placeholder('Never'),
+                    TextEntry::make('waf_profile')->label('Managed WAF')->badge(),
                     TextEntry::make('security_rules_count')->label('Rules')->state(fn (Domain $record): int => $record->securityRules()->count()),
                     TextEntry::make('security_limits_summary')->label('Effective request/origin limits')->state(function (Domain $record): string {
                         $compiled = SecurityConfig::compile($record);
@@ -180,7 +182,7 @@ class DomainResource extends Resource
 
     public static function getRelations(): array
     {
-        return [DnsRecordsRelationManager::class, SecurityRulesRelationManager::class, UsersRelationManager::class];
+        return [DnsRecordsRelationManager::class, SecurityRulesRelationManager::class, WafExclusionsRelationManager::class, UsersRelationManager::class];
     }
 
     public static function getPages(): array

@@ -24,6 +24,7 @@ synchronous deployment.
 | `edge:prune-revisions --limit=1000` | Prune derived history while keeping protected revisions |
 | `tls:dispatch-maintenance --limit=500` | Renew, retry, clean challenge state, and alert |
 | `security:reconcile-readiness --limit=100` | Expire controls and advance recovery |
+| `waf:expire-exclusions --limit=100` | Expire bounded managed-WAF exclusions and queue signed revisions |
 | `usage:finalize` | Dispatch the most recently finalizable usage hour |
 | `audit:prune --batch=1000` | Delete one bounded expired audit batch |
 | `backups:create [--wait]` | Queue or synchronously execute one Restic backup |
@@ -37,7 +38,7 @@ maintenance mode enabled for operator verification.
 
 | Schedule | Work |
 | --- | --- |
-| Every minute | DNS deprovision, domain finalization, placement drains, origin checks, platform DNS reconcile, security readiness, scheduler heartbeat |
+| Every minute | DNS deprovision, domain finalization, placement drains, origin checks, platform DNS reconcile, security readiness, WAF exclusion expiry, scheduler heartbeat |
 | Every five minutes | Horizon snapshot |
 | Hourly | Idempotency pruning, managed TLS maintenance |
 | Hourly at minute 20 | Usage finalization |

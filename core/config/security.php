@@ -1,6 +1,9 @@
 <?php
 
 return [
+    'waf' => [
+        'ruleset' => env('WAF_RULESET_VERSION', 'owasp-crs/4.26.0-modsecurity/3.0.14'),
+    ],
     'maximum_rules_per_domain' => 1000,
     'maximum_import_rules' => 500,
     'trusted_proxy_cidrs_maximum' => 32,

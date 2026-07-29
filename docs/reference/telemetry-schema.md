@@ -37,6 +37,13 @@ and reported through Vector metrics.
 | `compression_ratio` | float clamped to 1–100,000 |
 | `compression_profile` | low-cardinality string, 24 characters |
 | `compression_fallback` | stable reason, 32 characters |
+| `waf_profile` | `off`, `monitor`, `balanced`, or `strict` |
+| `waf_rule_id` | numeric managed-rule ID; zero means no match |
+| `waf_score` | bounded unsigned anomaly score |
+| `waf_action` | `off`, `allow`, `detect`, `block`, or `excluded` |
+| `waf_processing_us` | bounded processing time in microseconds |
+| `waf_body_limit` | `none` or `exceeded` |
+| `waf_exclusion_id` | numeric audit reference; zero means none |
 
 ## DNS events
 
@@ -58,7 +65,8 @@ Fallback events use the question name as the zone and `dnsdist` as the cluster.
 
 Both transforms delete authorization, cookies, request bodies, and bodies. Edge
 events also delete query strings. Control characters are removed from stored
-text fields.
+text fields. WAF telemetry never contains matched values, raw ModSecurity
+messages, request bodies, query values, cookie values, or customer rule text.
 
 ## Aggregates
 

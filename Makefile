@@ -42,6 +42,7 @@ dev-e2e:
 	python3 tests/e2e/phase6_security.py
 	python3 tests/e2e/phase7_analytics.py
 	python3 tests/e2e/phase8_operations.py
+	python3 tests/e2e/phase9_waf.py
 	python3 tests/e2e/origin_failover.py
 	python3 tests/e2e/phase4_runtime.py
 

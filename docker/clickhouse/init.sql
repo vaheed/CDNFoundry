@@ -29,7 +29,14 @@ CREATE TABLE IF NOT EXISTS cdnf.edge_events
     compression_encoding LowCardinality(String) DEFAULT 'identity',
     compression_ratio Float32 DEFAULT 1,
     compression_profile LowCardinality(String) DEFAULT 'off',
-    compression_fallback LowCardinality(String) DEFAULT 'none'
+    compression_fallback LowCardinality(String) DEFAULT 'none',
+    waf_profile LowCardinality(String) DEFAULT 'off',
+    waf_rule_id UInt32 DEFAULT 0,
+    waf_score UInt16 DEFAULT 0,
+    waf_action LowCardinality(String) DEFAULT 'off',
+    waf_processing_us UInt32 DEFAULT 0,
+    waf_body_limit LowCardinality(String) DEFAULT 'none',
+    waf_exclusion_id UInt64 DEFAULT 0
 )
 ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(occurred_at)

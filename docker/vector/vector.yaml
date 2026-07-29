@@ -73,6 +73,13 @@ transforms:
       }
       .compression_profile = slice!(to_string(.compression_profile) ?? "off", 0, 24)
       .compression_fallback = slice!(to_string(.compression_fallback) ?? "none", 0, 32)
+      .waf_profile = slice!(to_string(.waf_profile) ?? "off", 0, 16)
+      .waf_rule_id = to_int(.waf_rule_id) ?? 0
+      .waf_score = to_int(.waf_score) ?? 0
+      .waf_action = slice!(to_string(.waf_action) ?? "off", 0, 16)
+      .waf_processing_us = to_int(.waf_processing_us) ?? 0
+      .waf_body_limit = slice!(to_string(.waf_body_limit) ?? "none", 0, 16)
+      .waf_exclusion_id = to_int(.waf_exclusion_id) ?? 0
       del(.authorization); del(.cookie); del(.cookies); del(.request_body); del(.body); del(.query)
   safe_dns_events:
     type: remap

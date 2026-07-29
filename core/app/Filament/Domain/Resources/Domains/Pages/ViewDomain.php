@@ -6,6 +6,7 @@ use App\Actions\DispatchCachePurge;
 use App\Enums\DomainLifecycleState;
 use App\Filament\Domain\Resources\Domains\DomainResource;
 use App\Http\Controllers\DnsDeploymentController;
+use App\Http\Controllers\WafController;
 use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\ImportDnsZone;
 use App\Jobs\ReconcileDnsZone;
@@ -293,6 +294,16 @@ class ViewDomain extends ViewRecord
                     ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
                     Notification::make()->success()->title('Security profile saved')->body('The bounded policy is queued in the normal signed edge revision.')->send();
                 }),
+            Action::make('wafProfile')->label('Managed WAF profile')->icon('heroicon-o-shield-exclamation')->schema([
+                Select::make('profile')->options([
+                    'off' => 'Off', 'monitor' => 'Monitor only', 'balanced' => 'Balanced blocking', 'strict' => 'Strict blocking',
+                ])->helperText('Fixed OWASP CRS profiles only. Blocking requires a WAF-capable pool with a passed monitor-only canary.')->required(),
+            ])->fillForm(fn (): array => ['profile' => $this->record->waf_profile])
+                ->action(function (array $data): void {
+                    app(WafController::class)->update(request()->merge(['profile' => $data['profile']]), $this->record);
+                    $this->record->refresh();
+                    Notification::make()->success()->title('Managed WAF change queued')->body('The previous valid runtime remains active until a qualified WAF target acknowledges the signed revision.')->send();
+                }),
             Action::make('startMaintenance')->label('Start maintenance')->color('warning')->requiresConfirmation()->schema([
                 TextInput::make('body')->label('503 response message')->default('Service temporarily unavailable')->maxLength(4096)->required(),
             ])->visible(fn (): bool => ! is_array($this->record->proxy_settings['maintenance'] ?? null))
@@ -465,7 +476,7 @@ class ViewDomain extends ViewRecord
                 ->icon('heroicon-o-lock-closed')
                 ->color('gray')
                 ->button(),
-            ActionGroup::make($group(['securitySettings', 'startMaintenance', 'endMaintenance', 'protectSecurity', 'quarantineSecurity', 'returnSecurityToNormal']))
+            ActionGroup::make($group(['securitySettings', 'wafProfile', 'startMaintenance', 'endMaintenance', 'protectSecurity', 'quarantineSecurity', 'returnSecurityToNormal']))
                 ->label('Security')
                 ->icon('heroicon-o-shield-check')
                 ->color('warning')

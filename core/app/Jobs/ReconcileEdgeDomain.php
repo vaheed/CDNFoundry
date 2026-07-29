@@ -18,6 +18,7 @@ use App\Support\ArtifactSigner;
 use App\Support\CachePolicy;
 use App\Support\CompressionPolicy;
 use App\Support\ManagedCertificateNames;
+use App\Support\ManagedWaf;
 use App\Support\PlatformSettings;
 use App\Support\SecurityConfig;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
@@ -59,9 +60,16 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             DomainEdgePlacement::query()->where('domain_id', $domain->id)->delete();
             DomainEdgeCell::query()->where('domain_id', $domain->id)->delete();
         } else {
-            $pools = EdgePool::query()->where('enabled', true)->where('kind', 'shared')->orderBy('id')->get();
+            $requiresWaf = $domain->waf_profile !== 'off';
+            $pools = EdgePool::query()->where('enabled', true)
+                ->when($requiresWaf, fn ($query) => $query->where('waf_capable', true)
+                    ->whereIn('waf_canary_state', $domain->waf_profile === 'monitor' ? ['monitoring', 'passed'] : ['passed']))
+                ->orderByRaw("CASE kind WHEN 'reserved' THEN 0 WHEN 'dedicated' THEN 1 WHEN 'quarantine' THEN 2 ELSE 3 END")
+                ->orderBy('id')->get();
             if ($pools->isEmpty()) {
-                throw new \RuntimeException('No enabled shared edge pool exists.');
+                throw new \RuntimeException($requiresWaf
+                    ? 'No enabled WAF-capable pool has the required monitor-only canary state.'
+                    : 'No enabled edge pool exists.');
             }
             DomainEdgePlacement::query()->firstOrCreate(['domain_id' => $domain->id], ['desired_revision' => $revision]);
             $obsolete = false;
@@ -73,11 +81,11 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
 
                     return $placement;
                 }
-                $target = $placement->target_pool_id !== null
-                    ? EdgePool::query()->whereKey($placement->target_pool_id)->where('enabled', true)->firstOrFail()
-                    : ($placement->active_pool_id !== null
-                        ? EdgePool::query()->whereKey($placement->active_pool_id)->where('enabled', true)->firstOrFail()
-                        : $pools[abs(crc32($domain->name)) % $pools->count()]);
+                $eligibleIds = $pools->pluck('id');
+                $preferredId = $placement->target_pool_id ?? $placement->active_pool_id;
+                $target = $preferredId !== null && $eligibleIds->contains($preferredId)
+                    ? $pools->firstWhere('id', $preferredId)
+                    : $pools[abs(crc32($domain->name)) % $pools->count()];
                 $revisionIsActive = $placement->desired_revision === $revision && $currentDomain->active_edge_revision === $revision;
                 $alreadyActive = $placement->state === 'active' && $placement->active_pool_id === $target->id && $revisionIsActive;
                 $alreadyDraining = $placement->state === 'draining' && $placement->target_pool_id === $target->id && $revisionIsActive;
@@ -140,6 +148,7 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
                 ...CompressionPolicy::profile($targetPool === null ? 'standard' : $targetPool->compression_profile),
             ],
             'security' => SecurityConfig::compile($domain),
+            'waf' => ManagedWaf::compile($domain),
             'tls' => [
                 'mode' => $domain->tls_mode,
                 'certificate' => $domain->activeTlsCertificate !== null && $domain->activeTlsCertificate->expires_at->isFuture()

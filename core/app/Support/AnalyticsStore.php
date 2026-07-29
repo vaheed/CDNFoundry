@@ -88,12 +88,12 @@ final class AnalyticsStore
         } else {
             $filter = match ($stream) {
                 'errors' => "status >= 500 OR origin_error != '' OR tls_error != ''",
-                'security' => "security_action = 'block'",
+                'security' => "security_action = 'block' OR waf_action IN ('detect', 'block', 'excluded')",
                 'edges' => "event_type IN ('deployment', 'health')",
                 'requests' => "event_type = 'request'",
                 default => throw ValidationException::withMessages(['stream' => 'The log stream is invalid.']),
             };
-            $rows = $this->query("SELECT occurred_at, event_id, domain_id, hostname, method, path, status, bytes_in, bytes_out, cache_status, origin_latency_ms, origin_error, tls_error, security_action, security_reason, edge_id, client_ip, country, continent, event_type, compression_encoding, compression_ratio, compression_profile, compression_fallback FROM cdnf.edge_events WHERE {$scope} AND occurred_at >= {from:DateTime64} AND occurred_at < {to:DateTime64} AND {$cursorSql} AND ({$filter}) ORDER BY occurred_at DESC, event_id DESC LIMIT 101", $parameters);
+            $rows = $this->query("SELECT occurred_at, event_id, domain_id, hostname, method, path, status, bytes_in, bytes_out, cache_status, origin_latency_ms, origin_error, tls_error, security_action, security_reason, edge_id, client_ip, country, continent, event_type, compression_encoding, compression_ratio, compression_profile, compression_fallback, waf_profile, waf_rule_id, waf_score, waf_action, waf_processing_us, waf_body_limit, waf_exclusion_id FROM cdnf.edge_events WHERE {$scope} AND occurred_at >= {from:DateTime64} AND occurred_at < {to:DateTime64} AND {$cursorSql} AND ({$filter}) ORDER BY occurred_at DESC, event_id DESC LIMIT 101", $parameters);
         }
         $hasMore = count($rows) > 100;
         $rows = array_slice($rows, 0, 100);

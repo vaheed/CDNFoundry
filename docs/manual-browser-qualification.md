@@ -21,9 +21,10 @@ The original roadmap is the completed regression baseline. The
 covers:
 
 1. a focused browser and real-traffic regression of that baseline; and
-2. post-baseline **Phase 1 — Edge gateway ingress**, the current roadmap phase.
+2. implemented post-baseline Phases 1–9, with **Phase 9 — Managed OWASP CRS
+   WAF** as the current roadmap phase.
 
-Post-baseline Phases 2–12 are intentionally absent. Add their exact browser and
+Post-baseline Phases 10–12 are intentionally absent. Add their exact browser and
 operator checkpoints only when their implementation becomes current. Do not
 invent future menus, forms, fields, or actions.
 
@@ -960,6 +961,73 @@ stoppable and must pass the normal public-destination safety policy.
 | Manual qualification | Pending owner run | Steps 1–10; coding agents do not run browser automation |
 | Regression | Passed | Full isolated suite, cumulative foundation/DNS/Geo-DNS/control-plane/mTLS/TLS/security/analytics/operations E2E, established and Phase 8 OpenResty runtime, Compose, OpenAPI, Vector, and docs checks |
 | Release decision | Blocked | Owner browser, external load/saturation, control-plane partition, and external IPv4/IPv6 evidence remain mandatory |
+
+## Phase 9 — Managed OWASP CRS WAF
+
+Use disposable off, monitor, balanced, and strict domains, one WAF-capable
+candidate pool, one passed prior WAF pool/image, and one non-WAF comparison
+pool. Record image digests, ModSecurity/connector/CRS versions, pool and cell
+IDs, revisions, operation IDs, corpus versions, and sanitized measurements.
+
+1. As administrator, open **Edge network → Service pools**. On the candidate
+   pool enable **WAF-capable runtime**, enter its immutable digest/version, and
+   choose **Monitoring**. Expect one audited bounded global reconciliation.
+   Attempt **Passed** without capability/version and expect field rejection.
+2. As the assigned domain user, open the domain and choose **Security → Managed
+   WAF profile**. Exercise Off, Monitor only, Balanced blocking, and Strict
+   blocking. Expect one revision and asynchronous operation per effective
+   change. Arbitrary configuration, `SecRule`, rule upload, wildcard, and
+   expression inputs must not exist and API attempts must fail.
+3. With the canary still **Monitoring**, expect Monitor to place on it but
+   Balanced/Strict to remain on the previous valid runtime with a visible
+   operation failure. Run the approved benign and attack corpora, HIT/MISS
+   load, and body corpus. After evidence passes, mark the exact digest
+   **Passed**, retry, and expect target-first activation.
+4. Send benign traffic through all four profiles. Expect the same origin/cache
+   result. Send approved XSS, SQL injection, traversal, and command-injection
+   samples. Off serves; Monitor detects and serves; Balanced and Strict return
+   HTTP 403 with only `waf_request_blocked`.
+5. Send malformed JSON plus bodies just below and above 256 KiB and 1 MiB.
+   Expect strict and balanced documented bounds and stable `waf_body_limit`,
+   without unbounded buffering, raw body reflection, worker failure, or retry.
+6. In **Managed WAF exclusions**, create one literal path and one rule/parameter
+   exclusion with reason and expiry. Expect visible owner, expiry, audit rows,
+   one revision each, and detection marked with numeric exclusion ID. Verify a
+   wildcard, invalid rule ID, short reason, more than 30 days, and the 51st
+   active exclusion are rejected. Expire/delete and expect enforcement to
+   return.
+7. Open domain request/security logs and administrator telemetry. Expect
+   profile, numeric rule, score, action, processing time, body-limit outcome,
+   and numeric exclusion ID. Confirm no request body, matched value, query
+   secret, cookie value, raw ModSecurity message, or rule text is exposed.
+8. Apply concurrent benign/attack HIT/MISS load. Record throughput, p50/p95/p99,
+   detection and false-positive rates, CPU, RSS, temporary storage, and accepted
+   limit for every profile. Keep one off-profile domain and non-WAF pool loaded;
+   expect healthy latency and throughput throughout WAF pressure/failure.
+9. Deploy an invalid/new candidate image or ruleset and mark its canary
+   **Failed**. Expect the previous passed image/ruleset and active artifact to
+   remain serving. Restart a WAF cell and disconnect control-plane/telemetry
+   dependencies; expect last-valid local service and best-effort telemetry.
+10. Repeat representative benign, attack, exclusion, and body-bound traffic
+    over external IPv4 and configured IPv6, including the documented IPv4-only
+    topology. Confirm TLS, cache, compression, origin failover, and unrelated
+    domains remain healthy.
+
+### Phase 9 completion gate
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| Implementation | Passed | Fixed profiles, WAF-aware placement, canary gate, bounded owned exclusions, pinned immutable image, signed artifacts, stable reasons, and bounded telemetry |
+| Unit and feature tests | Passed | 210 isolated Laravel tests / 11,595 assertions cover WAF policy/API/idempotency/authorization/audit/artifact/pool behavior; Pint passes 318 files |
+| Real-runtime E2E | Passed | Pinned image builds and validates; off/monitor/balanced/strict, XSS/SQLi, malformed/oversized bodies, exclusion, 48 attack plus 48 healthy concurrent requests, stable reasons, privacy, and non-WAF isolation pass |
+| IPv4 and IPv6 | Pending owner run | Step 10 external evidence |
+| Scale | Pending owner load run | Exact measurements and accepted operating limits from step 8 |
+| Failure, recovery, and isolation | Partially passed; owner run pending | Automated canary/last-valid policy, configuration rejection, WAF/non-WAF concurrency, and cumulative origin/runtime isolation pass; owner invalid-candidate and external saturation evidence remains |
+| Observability | Partially passed; owner run pending | Privacy-safe runtime events and real Vector-to-ClickHouse analytics pipeline pass; owner UI/alert capture remains |
+| Documentation | Passed | Managed WAF guide, API/telemetry/testing references, roadmap evidence, and this checklist |
+| Manual qualification | Pending owner run | Steps 1–10; coding agents do not run browser automation |
+| Regression | Passed | Full isolated suite, clean cumulative non-browser E2E, immutable image/config validation, Compose, OpenAPI, Vector/ClickHouse analytics, and docs checks pass |
+| Release decision | Blocked | Owner browser, external load/saturation, invalid-image drill, and external IPv4/IPv6 evidence remain mandatory |
 
 ## Failure record
 

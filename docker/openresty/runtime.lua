@@ -421,6 +421,90 @@ local function prepare_compression(config, emergency)
     end
 end
 
+local function waf_exclusion(waf, rule_id)
+    local uri = ngx.var.uri or "/"
+    local args = ngx.req.get_uri_args(100)
+    local cookies = ngx.req.get_headers()["cookie"] or ""
+    local cookie_names = {}
+    for item in cookies:gmatch("[^;]+") do
+        local name = item:match("^%s*([^=%s]+)")
+        if name then cookie_names[name] = true end
+    end
+    for _, exclusion in ipairs(waf.exclusions or {}) do
+        if (tonumber(exclusion.expires_at) or 0) > ngx.time()
+            and (not exclusion.rule_id or tonumber(exclusion.rule_id) == rule_id) then
+            local matched = exclusion.dimension == "rule" and tonumber(exclusion.rule_id) == rule_id
+                or exclusion.dimension == "path" and exclusion.value == uri
+                or exclusion.dimension == "parameter" and args[exclusion.value] ~= nil
+                or exclusion.dimension == "cookie" and cookie_names[exclusion.value] == true
+            if matched then return tonumber(exclusion.id) or 0 end
+        end
+    end
+    return nil
+end
+
+local function evaluate_waf(config)
+    local started = ngx.now()
+    local waf = config.waf or {}
+    local profile = waf.name or "off"
+    ngx.var.cdn_waf_profile = profile
+    if profile == "off" then return end
+    local limit = math.max(1024, math.min(1048576, tonumber(waf.body_limit_bytes) or 1048576))
+    local length = tonumber(ngx.var.http_content_length) or 0
+    if length > limit then
+        ngx.var.cdn_waf_rule_id = "200002"
+        ngx.var.cdn_waf_score = "5"
+        ngx.var.cdn_waf_body_limit = "exceeded"
+        ngx.var.cdn_waf_action = waf.blocking == true and "block" or "detect"
+        ngx.var.cdn_waf_processing_us = tostring(math.floor((ngx.now() - started) * 1000000))
+        if waf.blocking == true then return security_reject(413, "waf_body_limit") end
+        return
+    end
+    local target = ngx.unescape_uri(ngx.var.request_uri or ""):lower()
+    local rule_id, score
+    if target:find("<script", 1, true) or target:find("%3cscript", 1, true) then
+        rule_id, score = 941100, 5
+    elseif target:find("union%s+select") or target:find("or%s+1%s*=%s*1") or target:find("sleep%s*%(") then
+        rule_id, score = 942100, 5
+    elseif target:find("../", 1, true) or target:find("%%2e%%2e", 1, true) then
+        rule_id, score = 930100, 5
+    elseif target:find("etc/passwd", 1, true) or target:find("cmd.exe", 1, true) then
+        rule_id, score = 932100, 5
+    end
+    if length > 0 and length <= limit then
+        ngx.req.read_body()
+        local body = ngx.req.get_body_data()
+        if body and #body <= limit then
+            local content_type = (ngx.var.http_content_type or ""):lower()
+            if content_type:find("application/json", 1, true) and not cjson.decode(body) then
+                rule_id, score = 200001, 5
+            elseif not rule_id then
+                local lower = body:lower()
+                if lower:find("<script", 1, true) then rule_id, score = 941100, 5
+                elseif lower:find("union%s+select") or lower:find("or%s+1%s*=%s*1") then rule_id, score = 942100, 5 end
+            end
+        end
+    end
+    if rule_id then
+        local excluded = waf_exclusion(waf, rule_id)
+        ngx.var.cdn_waf_rule_id = tostring(rule_id)
+        ngx.var.cdn_waf_score = tostring(score)
+        ngx.var.cdn_waf_exclusion_id = tostring(excluded or 0)
+        if excluded then
+            ngx.var.cdn_waf_action = "excluded"
+        else
+            ngx.var.cdn_waf_action = waf.blocking == true and "block" or "detect"
+            ngx.var.cdn_waf_processing_us = tostring(math.floor((ngx.now() - started) * 1000000))
+            if waf.blocking == true and score >= (tonumber(waf.inbound_threshold) or 5) then
+                return security_reject(403, "waf_request_blocked")
+            end
+        end
+    else
+        ngx.var.cdn_waf_action = "allow"
+    end
+    ngx.var.cdn_waf_processing_us = tostring(math.floor((ngx.now() - started) * 1000000))
+end
+
 function M.access()
     local dictionary = ngx.shared.runtime_limits
     dictionary:incr("capacity:requests:" .. ngx.time(), 1, 0, 2)
@@ -434,6 +518,8 @@ function M.access()
     ngx.ctx.security_domain = config.domain_id or config.domain
     ngx.ctx.security_hostname = host
     if config.settings and config.settings.enabled == false then return reject(503) end
+    local waf_result = evaluate_waf(config)
+    if waf_result then return waf_result end
     local security = config.security or {}
     local limits = security.limits or {}
     local emergency = emergency_actions(dictionary)

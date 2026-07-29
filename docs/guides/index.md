@@ -17,4 +17,5 @@ description: Task-oriented guides for every implemented CDNFoundry feature area.
 | Cache policy, development mode, purges | [Cache and purge](cache.md) |
 | Gzip, Brotli, canonical cache objects, pressure fallback | [Compression](compression.md) |
 | Rules, profiles, readiness, and incident controls | [Security](security.md) |
+| Fixed ModSecurity and OWASP CRS profiles and exclusions | [Managed WAF](managed-waf.md) |
 | Logs, analytics, privacy, usage exports | [Analytics and usage](analytics.md) |

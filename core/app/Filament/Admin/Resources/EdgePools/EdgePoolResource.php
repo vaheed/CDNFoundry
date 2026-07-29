@@ -17,6 +17,7 @@ use App\Support\FilamentHelp;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Utilities\Get;
@@ -47,6 +48,14 @@ class EdgePoolResource extends Resource
                         $fail('Maximum-savings compression is limited to reserved and dedicated pools.');
                     }
                 }),
+            Toggle::make('waf_capable')->label(FilamentHelp::label('WAF-capable runtime', 'This pool runs the immutable pinned ModSecurity and OWASP CRS image. Protected domains never fall back to a non-WAF pool.'))->default(false)->live(),
+            TextInput::make('waf_runtime_version')->label(FilamentHelp::label('WAF runtime version', 'Record the immutable image and CRS version. Runtime downloads and customer-supplied rules are forbidden.'))->maxLength(80)->nullable()->visible(fn (Get $get): bool => (bool) $get('waf_capable'))->required(fn (Get $get): bool => (bool) $get('waf_capable')),
+            Select::make('waf_canary_state')->label(FilamentHelp::label('WAF canary', 'New image and CRS versions start monitor-only. Blocking placement requires a passed canary; failure preserves the previous runtime.'))->options(['not_required' => 'Not required', 'monitoring' => 'Monitoring', 'passed' => 'Passed', 'failed' => 'Failed'])->required()->default('not_required')
+                ->rule(fn (Get $get) => function (string $attribute, mixed $value, \Closure $fail) use ($get): void {
+                    if ($value === 'passed' && ! $get('waf_capable')) {
+                        $fail('Only a WAF-capable pool can pass its WAF canary.');
+                    }
+                }),
             Select::make('routing_mode')->label(FilamentHelp::label('Routing mode', 'Simple Anycast only binds and publishes the shared pair. CDNFoundry never announces or withdraws BGP routes; the network operator/provider owns routing.'))->options(['geo_unicast' => 'Geo-Unicast', 'simple_anycast' => 'Simple Anycast'])->required()->default('geo_unicast')->live(),
             TextInput::make('anycast_ipv4')->label(FilamentHelp::label('Anycast IPv4', 'One distinct Anycast address pair belongs to one pool. Create a second pool only for a second distinct pair.'))->ipv4()->nullable()->visible(fn (Get $get): bool => $get('routing_mode') === 'simple_anycast'),
             TextInput::make('anycast_ipv6')->label(FilamentHelp::label('Anycast IPv6', 'At least one address is required. Every explicitly attached edge binds this same pair after local readiness is acknowledged.'))->ipv6()->nullable()->visible(fn (Get $get): bool => $get('routing_mode') === 'simple_anycast'),
@@ -70,6 +79,7 @@ class EdgePoolResource extends Resource
             TextColumn::make('kind')->badge(),
             TextColumn::make('cache_profile')->label('Cache')->badge(),
             TextColumn::make('compression_profile')->label('Compression')->badge(),
+            TextColumn::make('waf_canary_state')->label('WAF canary')->badge(),
             TextColumn::make('routing_mode')->label('Routing')->badge(),
             TextColumn::make('routing_status')->label('Route state')->state(fn (EdgePool $record): string => $record->routingStatus())->badge(),
             TextColumn::make('service_pair')->label('Service pair')->state(fn (EdgePool $record): ?string => $record->isSimpleAnycast()

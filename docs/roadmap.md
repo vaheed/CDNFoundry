@@ -423,14 +423,33 @@ latency, CPU, memory, throughput, detection, false positives, and accepted limit
 
 **Completion checklist:**
 
-- [ ] Off, monitor, balanced, and strict behave as documented.
-- [ ] Monitor detects without blocking.
-- [ ] Blocking uses stable, privacy-safe reasons.
-- [ ] Exclusions are bounded, audited, and expiring.
-- [ ] Oversized or malformed bodies remain bounded.
-- [ ] Failed canaries keep the previous valid WAF runtime.
-- [ ] Non-WAF pools remain healthy during WAF load or failure.
+- [x] Off, monitor, balanced, and strict behave as documented.
+- [x] Monitor detects without blocking.
+- [x] Blocking uses stable, privacy-safe reasons.
+- [x] Exclusions are bounded, audited, and expiring.
+- [x] Oversized or malformed bodies remain bounded.
+- [x] Failed canaries keep the previous valid WAF runtime.
+- [x] Non-WAF pools remain healthy during WAF load or failure.
 - [ ] Tests, security evidence, documentation, and manual qualification pass.
+
+**Agent completion evidence (2026-07-29):** the control plane stores one fixed
+managed profile and bounded, owned, expiring literal exclusions in PostgreSQL,
+increments the domain revision transactionally, audits mutations, coalesces
+reconciliation, and admits blocking profiles only to WAF-capable pools whose
+immutable runtime canary passed. Signed artifacts carry deterministic profile,
+threshold, body-limit, ruleset, and exclusion data; failed or ineligible
+candidates preserve the previous active placement and artifact. The edge image
+pins ModSecurity 3.0.14, connector 1.0.4, and CRS 4.26.0, disables raw
+matched-value logging, and emits bounded privacy-safe WAF telemetry through
+Vector to ClickHouse. Real OpenResty qualification covers all profiles,
+monitor-only detection, XSS/SQLi/malformed JSON, 256 KiB bounds, stable 403/413
+reasons, exclusions, 48 concurrent blocked requests beside 48 healthy non-WAF
+requests, configuration validation, and payload-free logs. All 210 isolated
+Laravel tests / 11,595 assertions, Pint, immutable image build, Compose,
+OpenAPI, docs, and the clean cumulative non-browser E2E pass. Owner browser,
+external corpus/load/saturation, invalid-image drill, and external IPv4/IPv6
+evidence remain mandatory, so the combined checkbox and release decision
+remain blocked.
 
 ## Phase 10 — Observability and capacity control
 

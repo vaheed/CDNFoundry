@@ -30,7 +30,7 @@ class EdgePool extends Model
 
     protected function casts(): array
     {
-        return ['enabled' => 'boolean', 'withdrawn' => 'boolean', 'minimum_ready_cells' => 'integer', 'replicas_per_edge' => 'integer', 'maximum_domains_per_cell' => 'integer'];
+        return ['enabled' => 'boolean', 'withdrawn' => 'boolean', 'waf_capable' => 'boolean', 'minimum_ready_cells' => 'integer', 'replicas_per_edge' => 'integer', 'maximum_domains_per_cell' => 'integer'];
     }
 
     public function isSimpleAnycast(): bool

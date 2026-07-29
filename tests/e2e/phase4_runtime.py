@@ -514,7 +514,8 @@ def main() -> None:
             assert hot.returncode == 0 and '"host":"origin-two.example"' in hot.stdout, hot.stderr
             scaled = wait_for("scale-1999.example")
             assert scaled.returncode == 0, scaled.stderr
-            assert "503 Service Temporarily Unavailable" in request("disabled.example").stderr
+            disabled = request("disabled.example")
+            assert "503 Service Temporarily Unavailable" in disabled.stderr, disabled.stderr
             assert "421 Misdirected Request" in request("tls.example").stderr
             assert run("docker", "exec", NAME, "cat", "/usr/local/openresty/nginx/logs/nginx.pid").stdout.strip() == pid
             run("docker", "stop", QUARANTINE_NAME)

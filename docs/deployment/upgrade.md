@@ -32,6 +32,8 @@ For additive migrations and compatible agents:
    `docker/clickhouse/migrations/2026_07_29_add_compression_telemetry.sql`
    and
    `docker/clickhouse/migrations/2026_07_29_add_origin_failover_telemetry.sql`,
+   and
+   `docker/clickhouse/migrations/2026_07_29_add_managed_waf_telemetry.sql`,
    with `clickhouse-client --multiquery` before replacing Vector;
 4. canary one control web process;
 5. replace Horizon workers gracefully with `php artisan horizon:terminate`;
@@ -40,7 +42,7 @@ For additive migrations and compatible agents:
 8. canary one DNS target and verify UDP/TCP answers;
 9. canary one edge agent and cell;
 10. verify artifact compatibility, acknowledgement, HTTP/HTTPS, cache,
-    compression, TLS, and telemetry;
+    compression, managed WAF, TLS, and telemetry;
 11. continue one failure domain at a time.
 
 Nginx/OpenResty services receive `SIGQUIT` and bounded stop grace. Do not force

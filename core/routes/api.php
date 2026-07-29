@@ -37,6 +37,7 @@ use App\Http\Controllers\SecurityController;
 use App\Http\Controllers\TlsController;
 use App\Http\Controllers\TokenController;
 use App\Http\Controllers\UsageController;
+use App\Http\Controllers\WafController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', [HealthController::class, 'health']);
@@ -111,6 +112,11 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:account'])->group
     Route::get('/domains/{domain}/security/ddos/status', [SecurityController::class, 'status']);
     Route::get('/domains/{domain}/security/ddos/events', [SecurityController::class, 'events']);
     Route::get('/domains/{domain}/security/events', [SecurityController::class, 'events']);
+    Route::get('/domains/{domain}/waf', [WafController::class, 'show']);
+    Route::patch('/domains/{domain}/waf', [WafController::class, 'update'])->middleware('idempotent');
+    Route::get('/domains/{domain}/waf/exclusions', [WafController::class, 'exclusions']);
+    Route::post('/domains/{domain}/waf/exclusions', [WafController::class, 'storeExclusion'])->middleware('idempotent');
+    Route::delete('/domains/{domain}/waf/exclusions/{exclusion}', [WafController::class, 'destroyExclusion'])->middleware('idempotent');
     Route::get('/domains/{domain}/analytics/summary', [AnalyticsController::class, 'summary']);
     Route::get('/domains/{domain}/analytics/timeseries', [AnalyticsController::class, 'view'])->defaults('view', 'timeseries');
     Route::get('/domains/{domain}/analytics/status-codes', [AnalyticsController::class, 'view'])->defaults('view', 'status-codes');

@@ -75,6 +75,12 @@ The Compose file fixes `APP_ENV=production`, `APP_DEBUG=false`,
 | `ACME_INITIAL_JITTER_SECONDS` | optional | Initial spread; default `300` |
 | `TLS_EXPIRY_ALERT_DAYS` | optional | Administrator expiry warning; default `14` |
 
+## Managed WAF
+
+| Variable | Required | Meaning and default |
+| --- | --- | --- |
+| `WAF_RULESET_VERSION` | optional control-plane label | Immutable WAF runtime identifier recorded in signed snapshots and telemetry; default `owasp-crs/4.26.0-modsecurity/3.0.14`. Change it only with the matching pinned edge image rollout. |
+
 ## Authoritative DNS
 
 | Variable | Required | Meaning and default |
