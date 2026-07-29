@@ -32,12 +32,12 @@ rebuilt, but they affect recovery time.
 
 ## Backup creation
 
-The daily scheduler queues `backups:create` at 01:30. Administrators can create
+The daily scheduler queues `cdnf:backups:create` at 01:30. Administrators can create
 one through `POST /api/admin/backups` or:
 
 ```sh
 docker compose --env-file .env.prod -f compose.prod.yml \
-  exec core php artisan backups:create --wait
+  exec core php artisan cdnf:backups:create --wait
 ```
 
 The job streams `pg_dump --format=custom --no-owner --no-privileges` directly
@@ -65,7 +65,7 @@ Perform this only on an isolated replacement or explicit maintenance host:
 1. install the exact compatible release and recovery secrets;
 2. configure the target empty PostgreSQL instance and Restic access;
 3. supply `BACKUP_RESTORE_ALLOWED=true` only to the one-off executor;
-4. run `php artisan backups:restore <operation UUID>`.
+4. run `php artisan cdnf:backups:restore <operation UUID>`.
 
 The command enters Laravel maintenance mode, streams the selected dump through
 `pg_restore --clean --if-exists --no-owner --no-privileges --exit-on-error`,

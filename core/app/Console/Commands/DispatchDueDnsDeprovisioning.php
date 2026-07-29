@@ -9,7 +9,7 @@ use Illuminate\Console\Command;
 
 class DispatchDueDnsDeprovisioning extends Command
 {
-    protected $signature = 'dns:deprovision-due';
+    protected $signature = 'cdnf:dns:deprovision-due';
 
     protected $description = 'Dispatch bounded DNS deprovisioning work whose delay has elapsed';
 

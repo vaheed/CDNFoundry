@@ -139,6 +139,7 @@ export default withMermaid(defineConfig({
       { text: 'Guides', link: '/guides/' },
       { text: 'API', link: '/reference/api/' },
       { text: 'Operations', link: '/operations/' },
+      { text: 'CLI', link: '/operations/cli-commands' },
       { text: 'Development', link: '/development/' }
     ],
     sidebar: {
@@ -235,6 +236,7 @@ export default withMermaid(defineConfig({
           text: 'Operations',
           items: [
             { text: 'Operations index', link: '/operations/' },
+            { text: 'CLI commands', link: '/operations/cli-commands' },
             { text: 'Monitoring', link: '/operations/monitoring' },
             { text: 'Backup and recovery', link: '/operations/backup-and-recovery' },
             { text: 'Incident runbooks', link: '/operations/runbooks' },

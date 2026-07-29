@@ -788,7 +788,7 @@ def main() -> None:
 
         artisan(
             f"App\\Models\\DomainEdgePlacement::query()->where('domain_id',{domain_id})->update(['drain_after'=>now()->subSecond()]);"
-            "Illuminate\\Support\\Facades\\Artisan::call('edge:complete-placement-drains');"
+            "Illuminate\\Support\\Facades\\Artisan::call('cdnf:edge:complete-placement-drains');"
         )
         wait_isolation(token, domain_id, "deploying", drain_scheduled=False)
         final, final_revisions = converge_placement_artifacts(

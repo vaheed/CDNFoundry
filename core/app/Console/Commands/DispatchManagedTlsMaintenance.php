@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
 
 class DispatchManagedTlsMaintenance extends Command
 {
-    protected $signature = 'tls:dispatch-maintenance {--limit=500}';
+    protected $signature = 'cdnf:tls:dispatch-maintenance {--limit=500}';
 
     protected $description = 'Queue bounded managed-certificate renewal and publish administrator TLS alerts';
 

@@ -7,7 +7,7 @@ use Illuminate\Console\Command;
 
 class ShowPlatformSettings extends Command
 {
-    protected $signature = 'platform:settings:show {group?} {--json}';
+    protected $signature = 'cdnf:platform:settings:show {group?} {--json}';
 
     protected $description = 'Show PostgreSQL-backed platform settings, descriptions, and defaults';
 

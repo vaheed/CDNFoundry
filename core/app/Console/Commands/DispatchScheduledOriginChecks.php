@@ -10,7 +10,7 @@ use Illuminate\Console\Command;
 
 class DispatchScheduledOriginChecks extends Command
 {
-    protected $signature = 'edge:dispatch-origin-checks {--limit=100}';
+    protected $signature = 'cdnf:edge:dispatch-origin-checks {--limit=100}';
 
     protected $description = 'Dispatch a bounded, jittered batch of explicitly enabled origin checks';
 

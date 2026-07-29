@@ -36,7 +36,7 @@ domain mapping depends on enriched events.
 
 ## Usage is stale
 
-Confirm scheduler heartbeat, `usage:finalize`, the `bulk_maintenance` lane,
+Confirm scheduler heartbeat, `cdnf:usage:finalize`, the `bulk_maintenance` lane,
 ClickHouse availability, and the latest finalized `usage_rollups.interval_end`.
 The component becomes degraded when no finalized interval exists or lag exceeds
 three hours.

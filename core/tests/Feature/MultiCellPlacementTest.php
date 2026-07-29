@@ -191,7 +191,7 @@ class MultiCellPlacementTest extends TestCase
         $this->assertDatabaseHas('domain_edge_cells', ['domain_id' => $domain->id, 'edge_id' => $second->id, 'target_cell_id' => null, 'desired_revision' => 2, 'state' => 'deploying']);
         DomainEdgeCell::query()->where('domain_id', $domain->id)->update(['state' => 'draining']);
         $placement->update(['state' => 'draining', 'drain_after' => now()->subSecond()]);
-        $this->artisan('edge:complete-placement-drains')->assertSuccessful();
+        $this->artisan('cdnf:edge:complete-placement-drains')->assertSuccessful();
         $this->assertDatabaseMissing('domain_edge_cells', ['domain_id' => $domain->id, 'edge_id' => $second->id]);
         $this->assertDatabaseHas('domain_edge_cells', ['domain_id' => $domain->id, 'edge_id' => $first->id, 'active_cell_id' => $targetCell->id, 'state' => 'deploying']);
 
@@ -215,7 +215,7 @@ class MultiCellPlacementTest extends TestCase
         ]);
         DomainEdgePlacement::query()->whereKey($placement->id)->update(['updated_at' => now()->subMinutes(6)]);
 
-        $this->artisan('edge:reconcile-stale-placements')->expectsOutput('Queued 1 stale edge placement(s).')->assertSuccessful();
+        $this->artisan('cdnf:edge:reconcile-stale-placements')->expectsOutput('Queued 1 stale edge placement(s).')->assertSuccessful();
 
         $this->assertDatabaseHas('operations', ['type' => 'edge.domain_reconcile', 'status' => 'pending']);
         Queue::assertPushed(ReconcileEdgeDomain::class, fn (ReconcileEdgeDomain $job): bool => $job->domainId === $domain->id);

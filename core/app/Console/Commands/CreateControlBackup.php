@@ -10,7 +10,7 @@ use Illuminate\Console\Command;
 
 class CreateControlBackup extends Command
 {
-    protected $signature = 'backups:create {--wait : Run in this process and wait for repository acknowledgement}';
+    protected $signature = 'cdnf:backups:create {--wait : Run in this process and wait for repository acknowledgement}';
 
     protected $description = 'Create an encrypted control PostgreSQL backup in the configured Restic repository';
 

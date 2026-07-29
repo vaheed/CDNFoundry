@@ -198,11 +198,11 @@ PEM,
             'names_hash' => hash('sha256', 'example.test'), 'last_error' => 'CA rate limited this order', 'finished_at' => now(),
         ]);
 
-        $this->artisan('tls:dispatch-maintenance')->assertSuccessful();
+        $this->artisan('cdnf:tls:dispatch-maintenance')->assertSuccessful();
         $this->assertCount(2, $admin->notifications()->get());
         $this->assertNotNull($certificate->refresh()->alerted_at);
         $this->assertNotNull($order->refresh()->alerted_at);
-        $this->artisan('tls:dispatch-maintenance')->assertSuccessful();
+        $this->artisan('cdnf:tls:dispatch-maintenance')->assertSuccessful();
         $this->assertCount(2, $admin->notifications()->get());
     }
 

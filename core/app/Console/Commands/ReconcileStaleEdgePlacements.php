@@ -9,7 +9,7 @@ use Illuminate\Console\Command;
 
 class ReconcileStaleEdgePlacements extends Command
 {
-    protected $signature = 'edge:reconcile-stale-placements {--limit=100 : Maximum placements to queue}';
+    protected $signature = 'cdnf:edge:reconcile-stale-placements {--limit=100 : Maximum placements to queue}';
 
     protected $description = 'Requeue bounded stale edge placements so interrupted deployments converge';
 

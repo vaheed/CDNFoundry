@@ -13,8 +13,8 @@ runtime change is incomplete until affected targets acknowledge it.
 
 Platform settings are validated groups in `core/config/platform.php` and stored
 in `system_settings`. Manage them at `/admin/platform-settings`,
-`/api/admin/system/settings`, or with `platform:settings:show` and
-`platform:settings:set`.
+`/api/admin/system/settings`, or with `cdnf:platform:settings:show` and
+`cdnf:platform:settings:set`.
 
 Updating `edge_runtime`, `origin_safety`, or `proxy_defaults` creates an
 asynchronous global edge reconcile operation. Other groups apply to later

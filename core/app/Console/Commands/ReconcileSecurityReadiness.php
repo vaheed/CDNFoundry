@@ -12,7 +12,7 @@ use Illuminate\Console\Command;
 
 class ReconcileSecurityReadiness extends Command
 {
-    protected $signature = 'security:reconcile-readiness {--limit=100}';
+    protected $signature = 'cdnf:security:reconcile-readiness {--limit=100}';
 
     protected $description = 'Expire emergency controls and advance quiet domains through bounded security recovery';
 

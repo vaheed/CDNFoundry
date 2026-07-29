@@ -8,7 +8,7 @@ use JsonException;
 
 class SetPlatformSettings extends Command
 {
-    protected $signature = 'platform:settings:set {group} {values : JSON object containing the fields to change}';
+    protected $signature = 'cdnf:platform:settings:set {group} {values : JSON object containing the fields to change}';
 
     protected $description = 'Validate and update one PostgreSQL-backed platform setting group';
 

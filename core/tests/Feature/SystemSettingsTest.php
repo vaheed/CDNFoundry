@@ -93,9 +93,9 @@ class SystemSettingsTest extends TestCase
 
     public function test_cli_shows_and_updates_the_same_database_rows(): void
     {
-        $this->artisan('platform:settings:show', ['group' => 'dns_lifecycle', '--json' => true])
+        $this->artisan('cdnf:platform:settings:show', ['group' => 'dns_lifecycle', '--json' => true])
             ->expectsOutputToContain('deprovision_delay_days')->assertSuccessful();
-        $this->artisan('platform:settings:set', ['group' => 'dns_lifecycle', 'values' => '{"domain_reclaim_cooldown_days":21}'])
+        $this->artisan('cdnf:platform:settings:set', ['group' => 'dns_lifecycle', 'values' => '{"domain_reclaim_cooldown_days":21}'])
             ->expectsOutputToContain('revision 2')->assertSuccessful();
         $this->assertSame(21, SystemSetting::query()->findOrFail('dns_lifecycle')->values['domain_reclaim_cooldown_days']);
     }

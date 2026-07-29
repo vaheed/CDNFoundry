@@ -31,7 +31,7 @@ The DNS profile starts the shared MMDB updater and does not start PowerDNS until
 Run `make prod-migrate` explicitly before starting application code that needs
 a new schema. No service performs implicit migrations.
 
-Operator-tunable product policy is not stored in `.env.prod`. After migration, manage it through the administrator **Platform settings** page, `/api/admin/system/settings`, or `php artisan platform:settings:*`; see [Platform settings](platform-settings.md). PostgreSQL remains the runtime source of truth.
+Operator-tunable product policy is not stored in `.env.prod`. After migration, manage it through the administrator **Platform settings** page, `/api/admin/system/settings`, or `php artisan cdnf:platform:settings:*`; see [Platform settings](platform-settings.md). PostgreSQL remains the runtime source of truth.
 
 The profiles may run repeatedly on separate hosts with host-specific Compose
 overrides. DNSdist and edge listeners are public. The public-only multi-host

@@ -91,14 +91,14 @@ ClickHouse are not substitutes for control PostgreSQL.
 Production backups stream `pg_dump` custom-format output directly into the
 configured S3-compatible Restic repository; no unbounded local dump is staged.
 Initialize the repository once with its separately stored password, then use
-the backup API or `php artisan backups:create`. The API records snapshot ID,
+the backup API or `php artisan cdnf:backups:create`. The API records snapshot ID,
 size, verification time, bounded failure, operation, and audit evidence. S3
 credentials should be restricted to the dedicated repository prefix.
 
 Restore requires the exact `RESTORE <backup UUID>` value and current
 administrator password. It queues a repository preflight and returns an
 operation. After the preflight succeeds, stop normal control-plane workers and
-run the returned `php artisan backups:restore <operation UUID>` command in a
+run the returned `php artisan cdnf:backups:restore <operation UUID>` command in a
 one-off maintenance container with `BACKUP_RESTORE_ALLOWED=true`. A failed
 restore deliberately leaves maintenance mode active. A successful restore runs
 forward migrations, records a receipt, queues all reconciliations, and leaves

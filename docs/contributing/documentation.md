@@ -71,7 +71,7 @@ excluded from build, search, lint, and current-link guarantees.
 After changing Laravel API routes:
 
 ```sh
-docker compose -f compose.dev.yml run --rm core php artisan api:openapi
+docker compose -f compose.dev.yml run --rm core php artisan cdnf:api:openapi
 ```
 
 Commit both `docs/public/openapi.json` and

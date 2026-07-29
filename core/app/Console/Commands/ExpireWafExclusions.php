@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 
 class ExpireWafExclusions extends Command
 {
-    protected $signature = 'waf:expire-exclusions {--limit=100}';
+    protected $signature = 'cdnf:waf:expire-exclusions {--limit=100}';
 
     protected $description = 'Remove due managed-WAF exclusions in bounded domain batches and reconcile signed artifacts';
 

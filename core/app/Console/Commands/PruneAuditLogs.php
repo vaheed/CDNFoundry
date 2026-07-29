@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 
 class PruneAuditLogs extends Command
 {
-    protected $signature = 'audit:prune {--batch=1000}';
+    protected $signature = 'cdnf:audit:prune {--batch=1000}';
 
     protected $description = 'Delete one bounded batch of audit events beyond the configured retention window';
 

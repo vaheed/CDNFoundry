@@ -142,7 +142,7 @@ class OperationsApiTest extends TestCase
         AuditLog::record($old, 'old.event');
         AuditLog::query()->update(['created_at' => now()->subDays(400)]);
         AuditLog::record($old, 'current.event');
-        $this->artisan('audit:prune', ['--batch' => 1])->assertSuccessful();
+        $this->artisan('cdnf:audit:prune', ['--batch' => 1])->assertSuccessful();
         $this->assertDatabaseMissing('audit_logs', ['action' => 'old.event']);
         $this->assertDatabaseHas('audit_logs', ['action' => 'current.event']);
     }

@@ -9,7 +9,7 @@ use Illuminate\Console\Command;
 
 class FinalizeDueDomainDeprovisioning extends Command
 {
-    protected $signature = 'domains:finalize-deprovisioning {--limit=100}';
+    protected $signature = 'cdnf:domains:finalize-deprovisioning {--limit=100}';
 
     protected $description = 'Finalize bounded domain retirement after runtime tombstones are safe';
 

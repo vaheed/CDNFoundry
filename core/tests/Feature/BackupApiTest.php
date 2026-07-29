@@ -95,7 +95,7 @@ class BackupApiTest extends TestCase
     {
         putenv('BACKUP_RESTORE_ALLOWED');
 
-        $this->artisan('backups:restore', ['operation' => (string) Str::uuid()])
+        $this->artisan('cdnf:backups:restore', ['operation' => (string) Str::uuid()])
             ->expectsOutput('Set BACKUP_RESTORE_ALLOWED=true only in the one-off maintenance container.')
             ->assertFailed();
     }

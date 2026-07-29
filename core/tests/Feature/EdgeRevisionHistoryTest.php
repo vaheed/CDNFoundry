@@ -76,7 +76,7 @@ class EdgeRevisionHistoryTest extends TestCase
             ]);
         }
 
-        $this->artisan('edge:prune-revisions')->expectsOutput('Pruned 8 edge revision(s) and 8 derived artifact(s).')->assertSuccessful();
+        $this->artisan('cdnf:edge:prune-revisions')->expectsOutput('Pruned 8 edge revision(s) and 8 derived artifact(s).')->assertSuccessful();
 
         $this->assertSame(20, $domain->refresh()->revision);
         $this->assertSame([3, 8, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], EdgeRevision::query()->orderBy('revision')->pluck('revision')->all());

@@ -17,7 +17,7 @@ use Throwable;
 
 class RestoreControlBackup extends Command
 {
-    protected $signature = 'backups:restore {operation : Successful backup.restore preflight operation UUID}';
+    protected $signature = 'cdnf:backups:restore {operation : Successful backup.restore preflight operation UUID}';
 
     protected $description = 'Restore a preflighted control backup while the deployment is in explicit maintenance mode';
 

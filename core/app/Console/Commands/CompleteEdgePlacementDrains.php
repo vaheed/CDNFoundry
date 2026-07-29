@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 
 class CompleteEdgePlacementDrains extends Command
 {
-    protected $signature = 'edge:complete-placement-drains {--limit=100}';
+    protected $signature = 'cdnf:edge:complete-placement-drains {--limit=100}';
 
     protected $description = 'Promote ready target pools after their bounded DNS drain period';
 

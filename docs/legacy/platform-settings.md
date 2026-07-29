@@ -33,9 +33,9 @@ The collection update body is `{"group":"dns_lifecycle","values":{"deprovision_d
 CLI examples:
 
 ```sh
-php artisan platform:settings:show
-php artisan platform:settings:show dns_lifecycle --json
-php artisan platform:settings:set dns_lifecycle '{"deprovision_delay_days":14,"domain_reclaim_cooldown_days":7}'
+php artisan cdnf:platform:settings:show
+php artisan cdnf:platform:settings:show dns_lifecycle --json
+php artisan cdnf:platform:settings:set dns_lifecycle '{"deprovision_delay_days":14,"domain_reclaim_cooldown_days":7}'
 ```
 
 Run these commands in the `core` container in Compose deployments. CLI mutations have no browser actor but are still audited. A missing group row is a migration/deployment error and fails closed; run the explicit migration command rather than adding an environment override.

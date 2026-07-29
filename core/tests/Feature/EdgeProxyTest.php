@@ -371,7 +371,7 @@ class EdgeProxyTest extends TestCase
         $this->assertSame('draining', $placement->state, 'A duplicate reconcile must not restart an acknowledged migration.');
         $this->assertTrue($placement->drain_after->equalTo($scheduledDrain), 'A duplicate reconcile must preserve the scheduled source drain.');
         DomainEdgePlacement::query()->where('domain_id', $domain->id)->update(['drain_after' => now()->subSecond()]);
-        $this->artisan('edge:complete-placement-drains')->assertSuccessful();
+        $this->artisan('cdnf:edge:complete-placement-drains')->assertSuccessful();
         $this->assertSame($moveRevision + 1, $domain->refresh()->revision);
         $this->assertDatabaseHas('domain_edge_placements', [
             'domain_id' => $domain->id,
@@ -408,7 +408,7 @@ class EdgeProxyTest extends TestCase
         $scheduledOrigin = $domain->dnsRecords()->findOrFail($record)->origin;
         $scheduledOrigin['health_check'] = ['enabled' => true, 'path' => '/', 'interval_seconds' => 60];
         $domain->dnsRecords()->whereKey($record)->update(['origin' => $scheduledOrigin, 'created_at' => now()->subHour()]);
-        $this->artisan('edge:dispatch-origin-checks', ['--limit' => 1])->assertSuccessful();
+        $this->artisan('cdnf:edge:dispatch-origin-checks', ['--limit' => 1])->assertSuccessful();
         $this->assertDatabaseHas('operations', ['type' => 'edge.origin_test', 'status' => 'running']);
         $this->assertSame(1, Operation::query()->where('input->scheduled', true)->count());
         $response = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records/$record/origin/test", [])->assertAccepted();

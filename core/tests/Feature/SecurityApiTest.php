@@ -180,7 +180,7 @@ class SecurityApiTest extends TestCase
         $this->assertSame(['return_maintenance_response'], $task->payload['actions']);
 
         EmergencyMode::query()->firstOrFail()->update(['expires_at' => now()->subMinute()]);
-        $this->artisan('security:reconcile-readiness')->assertSuccessful();
+        $this->artisan('cdnf:security:reconcile-readiness')->assertSuccessful();
         $this->assertFalse(EmergencyMode::query()->firstOrFail()->active);
         $this->assertSame(2, EdgeTask::query()->where('type', 'emergency_mode')->count());
     }

@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 
 class FinalizeUsage extends Command
 {
-    protected $signature = 'usage:finalize';
+    protected $signature = 'cdnf:usage:finalize';
 
     protected $description = 'Dispatch an idempotent rebuild for the most recently finalized usage hour';
 

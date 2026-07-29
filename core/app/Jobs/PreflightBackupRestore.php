@@ -26,7 +26,7 @@ class PreflightBackupRestore implements ShouldQueue
         $operation = Operation::query()->findOrFail($this->operationId);
         $operation->update(['status' => 'running', 'started_at' => now(), 'attempts' => $operation->attempts + 1]);
         $repository->snapshotExists($backup->snapshot_id);
-        $operation->update(['status' => 'running', 'result' => ['backup_id' => $backup->id, 'snapshot_id' => $backup->snapshot_id, 'preflight' => 'passed', 'maintenance_command' => "php artisan backups:restore {$operation->id}"]]);
+        $operation->update(['status' => 'running', 'result' => ['backup_id' => $backup->id, 'snapshot_id' => $backup->snapshot_id, 'preflight' => 'passed', 'maintenance_command' => "php artisan cdnf:backups:restore {$operation->id}"]]);
     }
 
     public function failed(Throwable $exception): void

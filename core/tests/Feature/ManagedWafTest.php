@@ -91,7 +91,7 @@ class ManagedWafTest extends TestCase
             'dimension' => 'path', 'value' => '/temporary', 'reason' => 'Approved temporary false positive',
             'owner_id' => $owner->id, 'expires_at' => now()->subMinute(),
         ]);
-        $this->artisan('waf:expire-exclusions')->expectsOutput('Expired 1 managed WAF exclusion(s) across 1 domain(s).')->assertSuccessful();
+        $this->artisan('cdnf:waf:expire-exclusions')->expectsOutput('Expired 1 managed WAF exclusion(s) across 1 domain(s).')->assertSuccessful();
         $this->assertDatabaseMissing('waf_exclusions', ['domain_id' => $domain->id]);
         $this->assertSame(2, $domain->refresh()->revision);
         $this->assertDatabaseHas('audit_logs', ['action' => 'waf.exclusions_expired', 'subject_id' => (string) $domain->id]);

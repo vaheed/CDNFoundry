@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 
 class PruneEdgeRevisionHistory extends Command
 {
-    protected $signature = 'edge:prune-revisions {--limit=1000}';
+    protected $signature = 'cdnf:edge:prune-revisions {--limit=1000}';
 
     protected $description = 'Prune expired derived edge revisions while preserving current state and recent rollback points';
 
