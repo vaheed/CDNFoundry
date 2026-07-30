@@ -22,13 +22,15 @@ PowerDNS, OpenResty, and ClickHouse dependencies inside containers.
 ```sh
 git clone https://github.com/vaheed/CDNFoundry.git cdnfoundry
 cd cdnfoundry
-make dev-up
+make dev-control-up
 make dev-migrate
+make dev-up
 ```
 
-`make dev-up` builds frontend assets, builds the development images, starts
-services, and initializes persistent development PKI and GeoIP data. It does not
-run Laravel or PowerDNS migrations.
+`make dev-control-up` starts only the services needed to run Laravel migrations.
+After the explicit migration, `make dev-up` builds and starts the full topology,
+including Grafana's read-only PostgreSQL role, development PKI, and GeoIP data.
+Neither startup target runs Laravel or PowerDNS migrations implicitly.
 
 Create the first administrator:
 

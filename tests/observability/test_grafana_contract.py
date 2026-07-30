@@ -101,6 +101,18 @@ class GrafanaContractTest(unittest.TestCase):
         self.assertIn("CLICKHOUSE_PLUGIN_VERSION=4.8.2", dockerfile)
         self.assertIn("CLICKHOUSE_PLUGIN_SHA256=81e824a64b3b2881", dockerfile)
 
+    def test_clean_ci_migrates_before_grafana_database_provisioning(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+        backend_job = workflow.split("  backend-e2e:\n", 1)[1].split("  scale-e2e:\n", 1)[0]
+        self.assertLess(
+            backend_job.index("make dev-control-up"), backend_job.index("make dev-migrate")
+        )
+        self.assertLess(
+            backend_job.index("make dev-migrate"), backend_job.index("make dev-up")
+        )
+        makefile = (ROOT / "Makefile").read_text()
+        self.assertIn("dev-control-up: dev-assets", makefile)
+
     def test_compose_contract_is_bounded_and_private(self) -> None:
         def compose_document(*arguments: str) -> dict:
             completed = subprocess.run(

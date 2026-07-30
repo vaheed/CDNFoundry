@@ -129,6 +129,10 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6
+      - name: Start migratable development control plane
+        run: make dev-control-up
+      - name: Apply migrations explicitly
+        run: make dev-migrate
       - name: Start real development topology
         shell: bash
         run: |
@@ -145,8 +149,6 @@ jobs:
           annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-dev-up-tail.log)"
           echo "::error title=Development topology startup failed::${annotation}"
           exit "${status}"
-      - name: Apply migrations explicitly
-        run: make dev-migrate
       - name: Run Python non-UI E2E
         shell: bash
         run: |

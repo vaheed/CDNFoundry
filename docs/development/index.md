@@ -13,15 +13,17 @@ required for the documented commands.
 ```sh
 git clone https://github.com/vaheed/CDNFoundry.git cdnfoundry
 cd cdnfoundry
-make dev-up
+make dev-control-up
 make dev-migrate
+make dev-up
 make dev-test
 ```
 
-`make dev-up` builds the frontend assets and starts the full topology with the
-development-tools profile. Migrations are always explicit. The supported test
-target forces `APP_ENV=testing`, SQLite `:memory:`, array cache, and synchronous
-queues before any Laravel test may migrate data.
+`make dev-control-up` starts the control database, Valkey, Laravel, and the web
+gateway. Run migrations explicitly before `make dev-up` starts the full
+topology, because Grafana's read-only database grants target migrated tables.
+The supported test target forces `APP_ENV=testing`, SQLite `:memory:`, array
+cache, and synchronous queues before any Laravel test may migrate data.
 
 ::: info Persistent storage initialization
 The shared Laravel storage volume disables Docker's automatic image copy-up.

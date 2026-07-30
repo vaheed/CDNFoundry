@@ -2,7 +2,7 @@ COMPOSE_DEV := docker compose -f compose.dev.yml
 COMPOSE_PROD := docker compose --env-file .env.prod -f compose.prod.yml
 COMPOSE_PROD_EXAMPLE := docker compose --env-file .env.prod.example -f compose.prod.yml
 
-.PHONY: backend-test contract-check dev-assets dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-waf-image dev-phase9-e2e dev-gateway-e2e dev-cache-e2e dev-compression-e2e dev-origin-failover-e2e dev-phase7-e2e dev-phase8-e2e dev-phase8-recovery-e2e dev-phase8-upgrade-e2e dev-phase8-throughput-e2e dev-phase8-mmdb-e2e dev-scale-e2e dev-grafana-smoke dev-operational-logs-smoke dev-production-qualification dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check docs-dev docs-build docs-check
+.PHONY: backend-test contract-check dev-assets dev-control-up dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-waf-image dev-phase9-e2e dev-gateway-e2e dev-cache-e2e dev-compression-e2e dev-origin-failover-e2e dev-phase7-e2e dev-phase8-e2e dev-phase8-recovery-e2e dev-phase8-upgrade-e2e dev-phase8-throughput-e2e dev-phase8-mmdb-e2e dev-scale-e2e dev-grafana-smoke dev-operational-logs-smoke dev-production-qualification dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check docs-dev docs-build docs-check
 
 backend-test: dev-test
 
@@ -11,6 +11,9 @@ contract-check: config-check openapi-check
 
 dev-assets:
 	docker build --target frontend-assets-export --output type=local,dest=./core/public/build ./core
+
+dev-control-up: dev-assets
+	$(COMPOSE_DEV) up -d --build control-db redis core web
 
 dev-up: dev-assets
 	$(COMPOSE_DEV) --profile devtools up -d --build
@@ -22,8 +25,7 @@ dev-edge-up: dev-assets
 dev-edge-status:
 	docker compose --env-file .env.dev -f compose.dev.yml --profile dev-edge ps edge-control edge-a edge-a-quarantine edge-agent-a edge-gateway-a edge-b edge-b-quarantine edge-agent-b edge-gateway-b
 
-dev-scale-up: dev-assets
-	$(COMPOSE_DEV) up -d --build control-db redis core web
+dev-scale-up: dev-control-up
 
 dev-down:
 	$(COMPOSE_DEV) down
