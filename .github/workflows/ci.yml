@@ -130,7 +130,21 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Start real development topology
-        run: make dev-up
+        shell: bash
+        run: |
+          set +e
+          for attempt in 1 2; do
+            COMPOSE_PARALLEL_LIMIT=2 make dev-up 2>&1 | tee -a /tmp/cdnfoundry-dev-up.log
+            status=${PIPESTATUS[0]}
+            if (( status == 0 )); then
+              exit 0
+            fi
+            echo "Development topology startup attempt ${attempt} failed."
+          done
+          tail -n 80 /tmp/cdnfoundry-dev-up.log > /tmp/cdnfoundry-dev-up-tail.log
+          annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-dev-up-tail.log)"
+          echo "::error title=Development topology startup failed::${annotation}"
+          exit "${status}"
       - name: Apply migrations explicitly
         run: make dev-migrate
       - name: Run Python non-UI E2E
