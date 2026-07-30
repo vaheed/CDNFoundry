@@ -1,0 +1,39 @@
+<clickhouse>
+  <profiles>
+    <cdnf_grafana>
+      <readonly>1</readonly>
+      <max_execution_time>30</max_execution_time>
+      <max_rows_to_read>5000000</max_rows_to_read>
+      <max_bytes_to_read>1073741824</max_bytes_to_read>
+      <max_result_rows>10000</max_result_rows>
+      <result_overflow_mode>break</result_overflow_mode>
+      <constraints>
+        <max_execution_time>
+          <min>1</min>
+          <max>60</max>
+          <changeable_in_readonly>true</changeable_in_readonly>
+        </max_execution_time>
+      </constraints>
+    </cdnf_grafana>
+  </profiles>
+  <users>
+    <cdnf_grafana>
+      <password from_env="GRAFANA_CLICKHOUSE_PASSWORD" />
+      <profile>cdnf_grafana</profile>
+      <quota>default</quota>
+      <default_database>cdnf</default_database>
+      <networks><ip>::/0</ip></networks>
+      <grants>
+        <query>GRANT SELECT ON cdnf.edge_events</query>
+        <query>GRANT SELECT ON cdnf.dns_events</query>
+        <query>GRANT SELECT ON cdnf.edge_hourly</query>
+        <query>GRANT SELECT ON cdnf.dns_hourly</query>
+        <query>GRANT SELECT ON cdnf.edge_daily</query>
+        <query>GRANT SELECT ON cdnf.dns_daily</query>
+        <query>GRANT SELECT ON system.metrics</query>
+        <query>GRANT SELECT ON system.asynchronous_metrics</query>
+        <query>GRANT SELECT ON system.events</query>
+      </grants>
+    </cdnf_grafana>
+  </users>
+</clickhouse>

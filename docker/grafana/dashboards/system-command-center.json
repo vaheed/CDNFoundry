@@ -1,0 +1,217 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 0,
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "enable": true,
+        "expr": "ALERTS{alertstate=\"firing\"}",
+        "hide": false,
+        "iconColor": "red",
+        "name": "Firing alerts",
+        "tagKeys": "alertname,severity",
+        "titleFormat": "{{alertname}} ({{severity}})"
+      }
+    ]
+  },
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    { "title": "CDNFoundry incident runbooks", "type": "link", "url": "https://vaheed.github.io/CDNFoundry/operations/runbooks" }
+  ],
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Platform state",
+      "description": "Green only when every SystemHealth component is healthy. Follow the component matrix when degraded.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "targets": [{ "expr": "min(cdnfoundry_component_health)", "instant": true, "refId": "A" }],
+      "fieldConfig": { "defaults": { "mappings": [{ "options": { "0": { "color": "red", "text": "DEGRADED" }, "1": { "color": "green", "text": "HEALTHY" } }, "type": "value" }], "noValue": "UNAVAILABLE", "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "textMode": "value_and_name" }
+    },
+    {
+      "id": 2, "type": "stat", "title": "Critical alerts",
+      "description": "Firing critical alerts. No-data is bad: it means alert evaluation is not visible.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 4, "w": 2, "x": 4, "y": 0 },
+      "targets": [{ "expr": "sum(ALERTS{alertstate=\"firing\",severity=\"critical\"}) or (vector(0) and on() up{job=\"prometheus\"})", "instant": true, "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "No data", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] }
+    },
+    {
+      "id": 3, "type": "stat", "title": "Warning alerts",
+      "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 4, "w": 2, "x": 6, "y": 0 },
+      "targets": [{ "expr": "sum(ALERTS{alertstate=\"firing\",severity=\"warning\"}) or (vector(0) and on() up{job=\"prometheus\"})", "instant": true, "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "No data", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }] } }, "overrides": [] }
+    },
+    {
+      "id": 4, "type": "stat", "title": "Unhealthy components",
+      "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 4, "w": 2, "x": 8, "y": 0 },
+      "targets": [{ "expr": "sum(cdnfoundry_component_health == 0)", "instant": true, "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "No data", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] }
+    },
+    {
+      "id": 5, "type": "stat", "title": "Targets available",
+      "description": "Percentage of configured Prometheus targets currently scrapeable.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 4, "w": 2, "x": 10, "y": 0 },
+      "targets": [{ "expr": "avg(up) * 100", "instant": true, "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "noValue": "No data", "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 90 }, { "color": "green", "value": 100 }] } }, "overrides": [] }
+    },
+    {
+      "id": 6, "type": "stat", "title": "Stale edges / gateways",
+      "description": "Enabled edges without a fresh heartbeat plus gateways not ready for traffic.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 4, "w": 3, "x": 12, "y": 0 },
+      "targets": [{ "expr": "cdnfoundry_edges_stale + cdnfoundry_edge_gateways_unready", "instant": true, "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "No data", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }, "links": [{ "title": "Edge failure runbook", "url": "https://vaheed.github.io/CDNFoundry/operations/runbooks#edge-or-cell-failure" }] }, "overrides": [] }
+    },
+    {
+      "id": 7, "type": "stat", "title": "DNS drift",
+      "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 4, "w": 3, "x": 15, "y": 0 },
+      "targets": [{ "expr": "cdnfoundry_dns_deployments_drifted", "instant": true, "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "No data", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }, "links": [{ "title": "DNS runbook", "url": "https://vaheed.github.io/CDNFoundry/operations/runbooks#dns-cluster-failure" }] }, "overrides": [] }
+    },
+    {
+      "id": 8, "type": "stat", "title": "TLS expiring",
+      "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 4, "w": 3, "x": 18, "y": 0 },
+      "targets": [{ "expr": "cdnfoundry_tls_certificates_expiring", "instant": true, "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "No data", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }, "links": [{ "title": "ACME runbook", "url": "https://vaheed.github.io/CDNFoundry/operations/runbooks#acme-failure" }] }, "overrides": [] }
+    },
+    {
+      "id": 9, "type": "stat", "title": "Failed operations",
+      "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 4, "w": 3, "x": 21, "y": 0 },
+      "targets": [{ "expr": "cdnfoundry_operations_failed", "instant": true, "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "No data", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] }
+    },
+    {
+      "id": 10, "type": "stat", "title": "Telemetry errors / drops",
+      "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 4, "w": 3, "x": 0, "y": 4 },
+      "targets": [{ "expr": "sum(increase(vector_component_discarded_events_total[5m])) + sum(increase(vector_component_errors_total[5m]))", "instant": true, "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "No data", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }, "links": [{ "title": "Telemetry runbook", "url": "https://vaheed.github.io/CDNFoundry/operations/runbooks#clickhouse-or-vector-outage" }] }, "overrides": [] }
+    },
+    {
+      "id": 11, "type": "stat", "title": "HTTP requests/s",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 4, "w": 3, "x": 3, "y": 4 },
+      "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT count() / greatest(dateDiff('second', $__fromTime, $__toTime), 1) AS requests_per_second FROM cdnf.edge_events WHERE $__timeFilter(occurred_at)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "decimals": 1, "noValue": "No traffic in selected range", "unit": "reqps" }, "overrides": [] }
+    },
+    {
+      "id": 12, "type": "stat", "title": "DNS QPS",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 4, "w": 3, "x": 6, "y": 4 },
+      "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT count() / greatest(dateDiff('second', $__fromTime, $__toTime), 1) AS queries_per_second FROM cdnf.dns_events WHERE $__timeFilter(occurred_at)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "decimals": 1, "noValue": "No traffic in selected range", "unit": "qps" }, "overrides": [] }
+    },
+    {
+      "id": 13, "type": "stat", "title": "Egress rate",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 4, "w": 3, "x": 9, "y": 4 },
+      "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT sum(bytes_out) * 8 / greatest(dateDiff('second', $__fromTime, $__toTime), 1) AS egress_bits_per_second FROM cdnf.edge_events WHERE $__timeFilter(occurred_at)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "No traffic in selected range", "unit": "bps" }, "overrides": [] }
+    },
+    {
+      "id": 14, "type": "stat", "title": "5xx rate",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 4, "w": 3, "x": 12, "y": 4 },
+      "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT 100 * countIf(status >= 500) / nullIf(count(), 0) AS five_xx_percent FROM cdnf.edge_events WHERE $__timeFilter(occurred_at)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "No traffic in selected range", "unit": "percent", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 }] } }, "overrides": [] }
+    },
+    {
+      "id": 15, "type": "stat", "title": "Cache hit ratio",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 4, "w": 3, "x": 15, "y": 4 },
+      "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT 100 * countIf(cache_status = 'HIT') / nullIf(countIf(cache_status IN ('HIT','MISS','EXPIRED','STALE')), 0) AS hit_percent FROM cdnf.edge_events WHERE $__timeFilter(occurred_at)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "No cache-eligible traffic", "unit": "percent", "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 70 }, { "color": "green", "value": 90 }] } }, "overrides": [] }
+    },
+    {
+      "id": 16, "type": "stat", "title": "Gateway revision mismatch",
+      "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 4, "w": 3, "x": 18, "y": 4 },
+      "targets": [{ "expr": "sum(cdnfoundry_pool_endpoint_revision_mismatch)", "instant": true, "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "No data", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] }
+    },
+    {
+      "id": 17, "type": "stat", "title": "Fleet rollout paused",
+      "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 4, "w": 3, "x": 21, "y": 4 },
+      "targets": [{ "expr": "cdnfoundry_fleet_rollouts_paused", "instant": true, "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "No data", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }] }, "links": [{ "title": "Fleet rollout runbook", "url": "https://vaheed.github.io/CDNFoundry/operations/runbooks#paused-fleet-rollout" }] }, "overrides": [] }
+    },
+
+    {
+      "id": 100, "type": "row", "title": "Control plane, queues, and active alerts", "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 8 },
+      "panels": [
+        { "id": 101, "type": "table", "title": "Complete SystemHealth component matrix", "description": "Every component emitted by SystemHealth. Any zero or missing series requires investigation.", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 10, "w": 12, "x": 0, "y": 9 }, "targets": [{ "expr": "cdnfoundry_component_health", "format": "table", "instant": true, "refId": "A" }] },
+        { "id": 102, "type": "table", "title": "Active alerts and firing duration", "description": "Severity, alert name, state, and seconds since the alert entered its current state.", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 10, "w": 12, "x": 12, "y": 9 }, "targets": [{ "expr": "time() - ALERTS_FOR_STATE{alertstate=\"firing\"}", "format": "table", "instant": true, "legendFormat": "{{severity}} {{alertname}} {{alertstate}}", "refId": "A" }] },
+        { "id": 103, "type": "table", "title": "Queue lanes: depth and oldest job", "description": "All four bounded lanes. Bad: depth above 1,000 or oldest job above 900 seconds.", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 9, "w": 24, "x": 0, "y": 19 }, "targets": [{ "expr": "cdnfoundry_queue_depth", "format": "table", "instant": true, "refId": "Depth" }, { "expr": "cdnfoundry_queue_oldest_job_age_seconds", "format": "table", "instant": true, "refId": "Age" }], "fieldConfig": { "defaults": { "links": [{ "title": "Queue backlog runbook", "url": "https://vaheed.github.io/CDNFoundry/operations/runbooks#queue-backlog" }] }, "overrides": [] } }
+      ]
+    },
+    {
+      "id": 200, "type": "row", "title": "Edge gateways, fleet, placement, and cell capacity", "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "panels": [
+        { "id": 201, "type": "table", "title": "Gateway readiness, map, connections, errors, and activations by edge", "description": "Heartbeat-reported per-edge gateway state. A bad candidate preserves the last valid map; rising errors or rejections identify the failing edge.", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 12, "w": 24, "x": 0, "y": 10 }, "targets": [
+          { "expr": "cdnfoundry_edge_gateway_ready", "format": "table", "instant": true, "refId": "Ready" }, { "expr": "cdnfoundry_edge_gateway_routes", "format": "table", "instant": true, "refId": "Routes" }, { "expr": "cdnfoundry_edge_gateway_listeners", "format": "table", "instant": true, "refId": "Listeners" }, { "expr": "cdnfoundry_edge_gateway_active_revision", "format": "table", "instant": true, "refId": "Revision" }, { "expr": "cdnfoundry_edge_gateway_connections_active", "format": "table", "instant": true, "refId": "Active" }, { "expr": "cdnfoundry_edge_gateway_connections_accepted_total", "format": "table", "instant": true, "refId": "Accepted" }, { "expr": "cdnfoundry_edge_gateway_connections_rejected_total", "format": "table", "instant": true, "refId": "Rejected" }, { "expr": "cdnfoundry_edge_gateway_errors_total", "format": "table", "instant": true, "refId": "Errors" }, { "expr": "cdnfoundry_edge_gateway_activations_total", "format": "table", "instant": true, "refId": "Activations" }, { "expr": "cdnfoundry_edge_gateway_candidate_rejections_total", "format": "table", "instant": true, "refId": "Candidates" }
+        ], "fieldConfig": { "defaults": { "links": [{ "title": "Stale edge map runbook", "url": "https://vaheed.github.io/CDNFoundry/operations/runbooks#stale-edge-map-or-endpoint-mismatch" }] }, "overrides": [] } },
+        { "id": 202, "type": "table", "title": "Edge heartbeat/runtime state and version drift", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 9, "w": 12, "x": 0, "y": 22 }, "targets": [{ "expr": "cdnfoundry_edge_runtime_state", "format": "table", "instant": true, "refId": "State" }, { "expr": "cdnfoundry_edge_runtime_version_drift", "format": "table", "instant": true, "refId": "Version drift" }] },
+        { "id": 203, "type": "table", "title": "Cells by runtime state and active revision", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 9, "w": 12, "x": 12, "y": 22 }, "targets": [{ "expr": "cdnfoundry_cell_runtime_state", "format": "table", "instant": true, "refId": "A" }] },
+        { "id": 204, "type": "table", "title": "Pool endpoint state and revision mismatch", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 9, "w": 12, "x": 0, "y": 31 }, "targets": [{ "expr": "cdnfoundry_pool_endpoint_state", "format": "table", "instant": true, "refId": "State" }, { "expr": "cdnfoundry_pool_endpoint_revision_mismatch", "format": "table", "instant": true, "refId": "Mismatch" }] },
+        { "id": 205, "type": "table", "title": "Cell cache, memory, and connection ratios", "description": "Yellow at 80%; red at 90%. Capacity is bounded per cell.", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 9, "w": 12, "x": 12, "y": 31 }, "targets": [{ "expr": "cdnfoundry_cell_capacity_ratio", "format": "table", "instant": true, "refId": "A" }], "fieldConfig": { "defaults": { "unit": "percentunit", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.8 }, { "color": "red", "value": 0.9 }] }, "links": [{ "title": "Capacity runbook", "url": "https://vaheed.github.io/CDNFoundry/operations/runbooks#cell-cache-or-compression-pressure" }] }, "overrides": [] } },
+        { "id": 206, "type": "stat", "title": "Fleet rollout safety state", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 5, "w": 24, "x": 0, "y": 40 }, "targets": [{ "expr": "cdnfoundry_fleet_rollouts_paused", "instant": true, "refId": "Paused" }] }
+      ]
+    },
+    {
+      "id": 300, "type": "row", "title": "HTTP analytics (raw seven-day incident detail)", "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 10 },
+      "panels": [
+        { "id": 301, "type": "timeseries", "title": "HTTP requests and bandwidth", "description": "Raw events are retained for seven days; ranges beyond that are partial in this incident-detail graph.", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 12, "x": 0, "y": 11 }, "targets": [{ "editorType": "sql", "format": 0, "queryType": "timeSeries", "rawSql": "SELECT $__timeInterval(occurred_at) AS time, count() AS requests, sum(bytes_out) AS bytes_out FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) GROUP BY time ORDER BY time", "refId": "A" }] },
+        { "id": 302, "type": "timeseries", "title": "Origin latency: average and exact p50/p95/p99", "description": "Exact quantiles from raw samples, never from hourly averages. Alert annotations mark coincident incidents.", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 12, "x": 12, "y": 11 }, "targets": [{ "editorType": "sql", "format": 0, "queryType": "timeSeries", "rawSql": "SELECT $__timeInterval(occurred_at) AS time, avg(origin_latency_ms) AS average, quantileExact(0.50)(origin_latency_ms) AS p50, quantileExact(0.95)(origin_latency_ms) AS p95, quantileExact(0.99)(origin_latency_ms) AS p99 FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) AND origin_latency_ms IS NOT NULL GROUP BY time ORDER BY time", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No traffic in selected range", "unit": "ms" }, "overrides": [] } },
+        { "id": 303, "type": "table", "title": "Status classes and codes", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 8, "w": 8, "x": 0, "y": 20 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT concat(toString(intDiv(status,100)), 'xx') AS class, status, count() AS requests FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) GROUP BY class,status ORDER BY requests DESC LIMIT 100", "refId": "A" }] },
+        { "id": 304, "type": "table", "title": "Cache outcomes", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 8, "w": 8, "x": 8, "y": 20 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT cache_status, count() AS requests FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) GROUP BY cache_status ORDER BY requests DESC LIMIT 32", "refId": "A" }] },
+        { "id": 305, "type": "table", "title": "Origin errors and transitions", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 8, "w": 8, "x": 16, "y": 20 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT origin_role, origin_transition, origin_error, count() AS events FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) AND (origin_error != '' OR origin_transition != 'none') GROUP BY origin_role,origin_transition,origin_error ORDER BY events DESC LIMIT 100", "refId": "A" }] },
+        { "id": 306, "type": "table", "title": "TLS failures and security actions", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 8, "w": 8, "x": 0, "y": 28 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT tls_error, security_action, security_reason, count() AS events FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) AND (tls_error != '' OR security_action = 'block') GROUP BY tls_error,security_action,security_reason ORDER BY events DESC LIMIT 100", "refId": "A" }] },
+        { "id": 307, "type": "table", "title": "WAF actions, rules, scores, processing, body limits, exclusions", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 8, "w": 8, "x": 8, "y": 28 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT waf_profile,waf_action,waf_rule_id,waf_score,waf_body_limit,waf_exclusion_id,round(avg(waf_processing_us),1) AS avg_processing_us,count() AS events FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) AND waf_action != 'off' GROUP BY waf_profile,waf_action,waf_rule_id,waf_score,waf_body_limit,waf_exclusion_id ORDER BY events DESC LIMIT 100", "refId": "A" }] },
+        { "id": 308, "type": "table", "title": "Compression outcomes", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 8, "w": 8, "x": 16, "y": 28 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT compression_encoding,compression_profile,compression_fallback,round(avg(compression_ratio),2) AS avg_ratio,count() AS requests FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) GROUP BY compression_encoding,compression_profile,compression_fallback ORDER BY requests DESC LIMIT 100", "refId": "A" }] },
+        { "id": 309, "type": "table", "title": "Traffic by edge, hostname, country", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 24, "x": 0, "y": 36 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT edge_id,hostname,country,count() AS requests,sum(bytes_out) AS bytes_out FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) GROUP BY edge_id,hostname,country ORDER BY requests DESC LIMIT 200", "refId": "A" }] }
+      ]
+    },
+    {
+      "id": 400, "type": "row", "title": "DNS analytics and authoritative service", "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 11 },
+      "panels": [
+        { "id": 401, "type": "timeseries", "title": "DNS query rate", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 }, "targets": [{ "editorType": "sql", "format": 0, "queryType": "timeSeries", "rawSql": "SELECT $__timeInterval(occurred_at) AS time,count() AS queries FROM cdnf.dns_events WHERE $__timeFilter(occurred_at) GROUP BY time ORDER BY time", "refId": "A" }] },
+        { "id": 402, "type": "table", "title": "RCODE, QTYPE, outcome, cluster, geography", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT rcode,qtype,outcome,dns_cluster,country,continent,count() AS queries FROM cdnf.dns_events WHERE $__timeFilter(occurred_at) GROUP BY rcode,qtype,outcome,dns_cluster,country,continent ORDER BY queries DESC LIMIT 200", "refId": "A" }] },
+        { "id": 403, "type": "table", "title": "DNSdist availability, backend health, queries and errors", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 10, "w": 12, "x": 0, "y": 20 }, "targets": [{ "expr": "up{job=\"dnsdist\"}", "format": "table", "instant": true, "refId": "Up" }, { "expr": "dnsdist_server_status", "format": "table", "instant": true, "refId": "Backend" }, { "expr": "rate(dnsdist_queries[5m])", "format": "table", "instant": true, "refId": "QPS" }, { "expr": "rate(dnsdist_servfail_responses[5m]) + rate(dnsdist_downstream_timeouts[5m]) + rate(dnsdist_server_senderrors[5m])", "format": "table", "instant": true, "refId": "Errors" }, { "expr": "rate(dnsdist_frontend_noerror[5m])", "format": "table", "instant": true, "refId": "NOERROR" }, { "expr": "rate(dnsdist_frontend_nxdomain[5m])", "format": "table", "instant": true, "refId": "NXDOMAIN" }, { "expr": "rate(dnsdist_frontend_servfail[5m])", "format": "table", "instant": true, "refId": "SERVFAIL" }] },
+        { "id": 404, "type": "table", "title": "PowerDNS availability, query/cache/error counters", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 10, "w": 12, "x": 12, "y": 20 }, "targets": [{ "expr": "up{job=\"powerdns\"}", "format": "table", "instant": true, "refId": "Up" }, { "expr": "rate(pdns_auth_udp_queries[5m]) + rate(pdns_auth_tcp_queries[5m])", "format": "table", "instant": true, "refId": "QPS" }, { "expr": "rate(pdns_auth_servfail_packets[5m]) + rate(pdns_auth_timedout_packets[5m]) + rate(pdns_auth_corrupt_packets[5m])", "format": "table", "instant": true, "refId": "Errors" }, { "expr": "rate(pdns_auth_query_cache_hit[5m])", "format": "table", "instant": true, "refId": "Cache hit" }, { "expr": "rate(pdns_auth_query_cache_miss[5m])", "format": "table", "instant": true, "refId": "Cache miss" }] }
+      ]
+    },
+    {
+      "id": 500, "type": "row", "title": "Telemetry pipeline and ClickHouse", "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 12 },
+      "panels": [
+        { "id": 501, "type": "timeseries", "title": "Vector received and sent events", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 }, "targets": [{ "expr": "sum by (component_id,component_type) (rate(vector_component_received_events_total[5m]))", "legendFormat": "received {{component_type}}/{{component_id}}", "refId": "Received" }, { "expr": "sum by (component_id,component_type) (rate(vector_component_sent_events_total[5m]))", "legendFormat": "sent {{component_type}}/{{component_id}}", "refId": "Sent" }] },
+        { "id": 502, "type": "table", "title": "Vector buffers, drops, component and sink failures", "description": "Any drop is data loss. A buffer at 80% or growing sink errors require the telemetry runbook.", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 }, "targets": [{ "expr": "vector_buffer_size_bytes / vector_buffer_max_size_bytes", "format": "table", "instant": true, "refId": "Buffer ratio" }, { "expr": "increase(vector_component_discarded_events_total[5m])", "format": "table", "instant": true, "refId": "Drops" }, { "expr": "increase(vector_component_errors_total[5m])", "format": "table", "instant": true, "refId": "Errors" }, { "expr": "increase(vector_http_client_errors_total[5m])", "format": "table", "instant": true, "refId": "Sink failures" }], "fieldConfig": { "defaults": { "links": [{ "title": "Telemetry runbook", "url": "https://vaheed.github.io/CDNFoundry/operations/runbooks#clickhouse-or-vector-outage" }] }, "overrides": [] } },
+        { "id": 503, "type": "stat", "title": "ClickHouse scrape availability", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 5, "w": 6, "x": 0, "y": 21 }, "targets": [{ "expr": "up{job=\"clickhouse\"}", "instant": true, "refId": "A" }] },
+        { "id": 504, "type": "timeseries", "title": "ClickHouse queries and active connections", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 8, "w": 9, "x": 6, "y": 21 }, "targets": [{ "expr": "ClickHouseMetrics_Query", "legendFormat": "queries", "refId": "Queries" }, { "expr": "ClickHouseMetrics_TCPConnection", "legendFormat": "connections", "refId": "Connections" }] },
+        { "id": 505, "type": "timeseries", "title": "ClickHouse memory and filesystem pressure", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 8, "w": 9, "x": 15, "y": 21 }, "targets": [{ "expr": "ClickHouseMetrics_MemoryTracking", "legendFormat": "tracked memory", "refId": "Memory" }, { "expr": "ClickHouseAsyncMetrics_FilesystemMainPathUsedBytes / ClickHouseAsyncMetrics_FilesystemMainPathTotalBytes", "legendFormat": "filesystem used", "refId": "Disk" }] }
+      ]
+    },
+    {
+      "id": 600, "type": "row", "title": "Host infrastructure and Alertmanager", "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 },
+      "panels": [
+        { "id": 601, "type": "timeseries", "title": "Host CPU and load", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 8, "w": 8, "x": 0, "y": 14 }, "targets": [{ "expr": "100 - avg by(instance)(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100", "legendFormat": "CPU {{instance}}", "refId": "CPU" }, { "expr": "node_load1", "legendFormat": "load1 {{instance}}", "refId": "Load" }] },
+        { "id": 602, "type": "timeseries", "title": "Host memory and pressure", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 8, "w": 8, "x": 8, "y": 14 }, "targets": [{ "expr": "1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes", "legendFormat": "used {{instance}}", "refId": "Memory" }, { "expr": "rate(node_pressure_memory_waiting_seconds_total[5m])", "legendFormat": "pressure {{instance}}", "refId": "Pressure" }] },
+        { "id": 603, "type": "timeseries", "title": "Filesystem space and inodes", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 8, "w": 8, "x": 16, "y": 14 }, "targets": [{ "expr": "1 - node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay\"}", "legendFormat": "space {{mountpoint}}", "refId": "Space" }, { "expr": "1 - node_filesystem_files_free{fstype!~\"tmpfs|overlay\"} / node_filesystem_files{fstype!~\"tmpfs|overlay\"}", "legendFormat": "inodes {{mountpoint}}", "refId": "Inodes" }] },
+        { "id": 604, "type": "timeseries", "title": "Disk I/O pressure and network throughput", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 }, "targets": [{ "expr": "rate(node_pressure_io_waiting_seconds_total[5m])", "legendFormat": "IO pressure {{instance}}", "refId": "Pressure" }, { "expr": "sum by(instance)(rate(node_network_receive_bytes_total{device!~\"lo|veth.*\"}[5m])) * 8", "legendFormat": "receive {{instance}}", "refId": "Receive" }, { "expr": "sum by(instance)(rate(node_network_transmit_bytes_total{device!~\"lo|veth.*\"}[5m])) * 8", "legendFormat": "transmit {{instance}}", "refId": "Transmit" }] },
+        { "id": 605, "type": "table", "title": "Clock synchronization", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 8, "w": 6, "x": 12, "y": 22 }, "targets": [{ "expr": "node_timex_sync_status", "format": "table", "instant": true, "refId": "Sync" }, { "expr": "node_timex_offset_seconds", "format": "table", "instant": true, "refId": "Offset" }] },
+        { "id": 606, "type": "table", "title": "Alertmanager health and notification failures", "description": "A healthy scrape with rising notification failures means alerts may not reach operators.", "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 8, "w": 6, "x": 18, "y": 22 }, "targets": [{ "expr": "up{job=\"alertmanager\"}", "format": "table", "instant": true, "refId": "Up" }, { "expr": "increase(alertmanager_notifications_failed_total[15m])", "format": "table", "instant": true, "refId": "Failures" }, { "expr": "increase(alertmanager_notification_requests_failed_total[15m])", "format": "table", "instant": true, "refId": "Request failures" }] }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 42,
+  "tags": ["cdnfoundry", "operations", "system"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": { "refresh_intervals": ["30s", "1m", "5m"], "time_options": ["1h", "6h", "24h", "7d", "30d", "1y"] },
+  "timezone": "browser",
+  "title": "CDNFoundry — System Command Center",
+  "uid": "cdnf-system-command-center",
+  "version": 1,
+  "weekStart": ""
+}

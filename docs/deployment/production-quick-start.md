@@ -9,7 +9,7 @@ keywords: private CDN deployment, ISP CDN, on-premises CDN, authoritative DNS, O
 This guide deploys the smallest practical production CDNFoundry fleet:
 
 - one control host for the panel, API, workers, PostgreSQL, Valkey,
-  ClickHouse, metrics, and public management gateways;
+  ClickHouse, metrics, loopback-only Grafana, and public management gateways;
 - two combined DNS and edge hosts in different failure domains;
 - one exact, immutable CDNFoundry release on every host;
 - IPv4 everywhere, with optional IPv6 enabled per host.
@@ -32,7 +32,7 @@ placeholder and documentation IP before copying a command to a host.
 
 | Host | Services | Public listeners |
 | --- | --- | --- |
-| `CONTROL` | Laravel, web, Horizon, Scheduler, edge control, PostgreSQL, Valkey, ClickHouse, Vector, Prometheus, Alertmanager, Caddy | TCP `80`, `443`, `8443`, `8444`; UDP `443` |
+| `CONTROL` | Laravel, web, Horizon, Scheduler, edge control, PostgreSQL, Valkey, ClickHouse, Vector, Prometheus, Alertmanager, loopback-only Grafana, Caddy | TCP `80`, `443`, `8443`, `8444`; UDP `443` |
 | `EDGE_1` | DNSdist, PowerDNS, PowerDNS database, DNS API gateway, shared/quarantine OpenResty cells, edge agent, Vector, MMDB updater | TCP/UDP `53`; TCP `80`, `443`, `8444` |
 | `EDGE_2` | Same roles as edge 1 in another provider, rack, or failure domain | TCP/UDP `53`; TCP `80`, `443`, `8444` |
 
@@ -57,7 +57,16 @@ flowchart LR
     Vector1["Edge Vector 1"] -->|"HTTPS 8444"| Telemetry["Telemetry gateway"]
     Vector2["Edge Vector 2"] -->|"HTTPS 8444"| Telemetry
     Telemetry --> ClickHouse[("ClickHouse")]
+    Prometheus["Prometheus"] --> Grafana["Grafana<br/>two command centers"]
+    ClickHouse -->|"bounded read-only"| Grafana
+    Desired -->|"sanitized read-only view"| Grafana
+    OpsProxy["Deployment-owned<br/>authenticated HTTPS proxy"] --> Grafana
 ```
+
+Grafana is not published by the control Caddy overlay. It binds to loopback by
+default; operators must place a separately authenticated HTTPS reverse proxy or
+trusted tunnel in front of it. Grafana failure affects diagnosis only and does
+not enter DNS, HTTP, telemetry ingestion, or reconciliation paths.
 
 Customer traffic has a separate path:
 
@@ -137,7 +146,7 @@ Apply provider and host firewall policy before starting services:
 | Edge TCP/UDP `53` | public |
 | Edge TCP `80`, `443` | public |
 | Edge TCP `8444` | control public IPv4 only |
-| PostgreSQL, Valkey, ClickHouse, raw PowerDNS API, Prometheus | never public |
+| PostgreSQL, Valkey, ClickHouse, raw PowerDNS API, Prometheus, Grafana port 3000 | never public |
 
 Docker-published ports can bypass ordinary UFW input policy. Enforce equivalent
 rules in the provider firewall and the host's `DOCKER-USER` chain, keep console

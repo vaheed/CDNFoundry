@@ -245,6 +245,7 @@ jobs:
           docker build -t ghcr.io/vaheed/cdnfoundry-edge-agent:${RELEASE} edge-agent
           docker build -t ghcr.io/vaheed/cdnfoundry-edge-gateway:${RELEASE} edge-gateway
           docker build -t ghcr.io/vaheed/cdnfoundry-mmdb-updater:${RELEASE} docker/mmdb-updater
+          docker build -t ghcr.io/vaheed/cdnfoundry-grafana:${RELEASE} docker/grafana
       - name: Push commit and channel tags
         env:
           RELEASE: ${{ github.sha }}
@@ -253,7 +254,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          images=(core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater)
+          images=(core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater grafana)
           aliases=()
 
           if [[ "${RELEASE_REF}" == "refs/heads/main" ]]; then

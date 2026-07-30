@@ -131,9 +131,21 @@ class OperationsApiTest extends TestCase
     {
         Http::fake(['*' => Http::response('Ok.', 200)]);
         config(['services.metrics.token' => 'metrics-test-token']);
+        $edge = Edge::query()->create([
+            'id' => (string) Str::uuid(), 'name' => 'metrics-edge', 'country_code' => 'US', 'continent_code' => 'NA',
+            'management_ipv4' => '192.0.2.90', 'enabled' => true, 'drained' => false,
+            'last_heartbeat_at' => now(), 'capacity' => ['gateway' => [
+                'ready' => true, 'active_revision' => 7, 'routes' => 12, 'listeners' => 2,
+                'connections_active' => 3, 'connections_accepted' => 10, 'connections_rejected' => 1,
+                'errors' => 2, 'activations' => 4, 'candidate_rejections' => 1,
+            ]],
+        ]);
         $this->get('/metrics')->assertNotFound();
         $response = $this->withToken('metrics-test-token')->get('/metrics')->assertOk()->assertHeader('content-type', 'text/plain; version=0.0.4; charset=utf-8');
-        $response->assertSee('cdnfoundry_component_health')->assertDontSee((string) config('app.key'));
+        $response->assertSee('cdnfoundry_component_health')
+            ->assertSee('cdnfoundry_edge_gateway_activations_total{edge="'.$edge->id.'"} 4', false)
+            ->assertSee('cdnfoundry_edge_gateway_connections_accepted_total{edge="'.$edge->id.'"} 10', false)
+            ->assertDontSee((string) config('app.key'));
     }
 
     public function test_audit_pruning_is_bounded_and_uses_database_policy(): void

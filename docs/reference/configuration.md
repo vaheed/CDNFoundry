@@ -119,6 +119,25 @@ The Compose file fixes `APP_ENV=production`, `APP_DEBUG=false`,
 | `MMDB_DOWNLOAD_URL` | custom updater | HTTPS artifact URL |
 | `MMDB_DOWNLOAD_HEADER` | custom updater | Optional authorization header; treat as secret |
 
+Grafana telemetry variables are:
+
+| Variable | Required | Meaning and default |
+| --- | --- | --- |
+| `GRAFANA_ADMIN_USER` | telemetry | Initial administrator name; default `admin` |
+| `GRAFANA_ADMIN_PASSWORD` | telemetry | High-entropy administrator password; no production default |
+| `GRAFANA_BIND` | telemetry | Host bind; default `127.0.0.1:3000` |
+| `GRAFANA_COOKIE_SECURE` | HTTPS telemetry | Secure-cookie flag; default `true` |
+| `GRAFANA_CLICKHOUSE_PASSWORD` | telemetry | Dedicated read-only ClickHouse password; no default |
+| `GRAFANA_CLICKHOUSE_HOST`, `GRAFANA_CLICKHOUSE_PORT` | telemetry | Local `clickhouse:9000` or external query endpoint |
+| `GRAFANA_CLICKHOUSE_PROTOCOL`, `GRAFANA_CLICKHOUSE_SECURE` | telemetry | `native`/`false` locally; use provider-supported verified TLS externally |
+| `GRAFANA_CLICKHOUSE_USER` | telemetry | Default `cdnf_grafana` |
+| `GRAFANA_POSTGRES_PASSWORD` | telemetry | Dedicated read-only PostgreSQL password; no default |
+| `GRAFANA_POSTGRES_HOST`, `GRAFANA_POSTGRES_PORT` | telemetry | Local `control-db:5432` or external endpoint |
+| `GRAFANA_POSTGRES_DATABASE`, `GRAFANA_POSTGRES_USER` | telemetry | Defaults `cdnf`, `cdnf_grafana` |
+| `GRAFANA_POSTGRES_SSLMODE` | telemetry | Default `disable` for embedded private PostgreSQL; set `require` or `verify-full` for external endpoints |
+| `GRAFANA_POSTGRES_PROVISION_HOST`, `GRAFANA_POSTGRES_PROVISION_PORT` | local account provisioning | Privileged endpoint; external operators may apply the SQL separately |
+| `PROMETHEUS_EDGE_TARGETS_FILE` | telemetry | Private file_sd target file; production default is empty |
+
 Vector receives `CLICKHOUSE_ENDPOINT`, `CLICKHOUSE_USER`, and
 `CLICKHOUSE_PASSWORD` from Compose. `MMDB_DIR` is an internal updater override
 whose default is `/mmdb`.

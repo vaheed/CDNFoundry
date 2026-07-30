@@ -266,9 +266,12 @@ services:
       CLICKHOUSE_USER: cdnf
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+      GRAFANA_CLICKHOUSE_PASSWORD: ${GRAFANA_CLICKHOUSE_PASSWORD:?GRAFANA_CLICKHOUSE_PASSWORD is required}
     volumes:
       - clickhouse:/var/lib/clickhouse
       - ./docker/clickhouse/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+      - ./docker/clickhouse/config.d/prometheus.xml:/etc/clickhouse-server/config.d/prometheus.xml:ro
+      - ./docker/clickhouse/users.d/grafana.xml:/etc/clickhouse-server/users.d/grafana.xml:ro
     networks: [telemetry]
     restart: unless-stopped
 
@@ -291,10 +294,87 @@ services:
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro
+      - ${PROMETHEUS_EDGE_TARGETS_FILE:-./docker/prometheus/edge-targets.prod.yml}:/etc/prometheus/edge-targets.yml:ro
       - ${METRICS_TOKEN_FILE:?METRICS_TOKEN_FILE is required}:/run/secrets/metrics-token:ro
       - prometheus:/prometheus
     networks: [telemetry, control, dns-private]
     restart: unless-stopped
+
+  grafana-control-db-provision:
+    image: postgres:18.4-alpine
+    profiles: [telemetry]
+    environment:
+      PGHOST: ${GRAFANA_POSTGRES_PROVISION_HOST:-control-db}
+      PGPORT: ${GRAFANA_POSTGRES_PROVISION_PORT:-5432}
+      PGDATABASE: cdnf
+      PGUSER: cdnf
+      PGPASSWORD: ${CONTROL_DB_PASSWORD:?CONTROL_DB_PASSWORD is required}
+      PGSSLMODE: ${DB_SSLMODE:-prefer}
+      GRAFANA_POSTGRES_PASSWORD: ${GRAFANA_POSTGRES_PASSWORD:?GRAFANA_POSTGRES_PASSWORD is required}
+    volumes:
+      - ./docker/grafana/postgres:/provision:ro
+    command: [sh, /provision/provision.sh]
+    networks: [control, egress]
+    restart: "no"
+    read_only: true
+    tmpfs: [/tmp]
+    mem_limit: 64m
+    cpus: 0.1
+    pids_limit: 32
+
+  grafana:
+    image: ghcr.io/vaheed/cdnfoundry-grafana:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
+    profiles: [telemetry]
+    ports: ["${GRAFANA_BIND:-127.0.0.1:3000}:3000"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_SECURITY_COOKIE_SECURE: ${GRAFANA_COOKIE_SECURE:-true}
+      GF_PATHS_PLUGINS: /usr/share/grafana/cdnfoundry-plugins
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/system-command-center.json
+      GRAFANA_CLICKHOUSE_HOST: ${GRAFANA_CLICKHOUSE_HOST:-clickhouse}
+      GRAFANA_CLICKHOUSE_PORT: ${GRAFANA_CLICKHOUSE_PORT:-9000}
+      GRAFANA_CLICKHOUSE_PROTOCOL: ${GRAFANA_CLICKHOUSE_PROTOCOL:-native}
+      GRAFANA_CLICKHOUSE_SECURE: ${GRAFANA_CLICKHOUSE_SECURE:-false}
+      GRAFANA_CLICKHOUSE_USER: ${GRAFANA_CLICKHOUSE_USER:-cdnf_grafana}
+      GRAFANA_CLICKHOUSE_PASSWORD: ${GRAFANA_CLICKHOUSE_PASSWORD:?GRAFANA_CLICKHOUSE_PASSWORD is required}
+      GRAFANA_POSTGRES_HOST: ${GRAFANA_POSTGRES_HOST:-control-db}
+      GRAFANA_POSTGRES_PORT: ${GRAFANA_POSTGRES_PORT:-5432}
+      GRAFANA_POSTGRES_DATABASE: ${GRAFANA_POSTGRES_DATABASE:-cdnf}
+      GRAFANA_POSTGRES_USER: ${GRAFANA_POSTGRES_USER:-cdnf_grafana}
+      GRAFANA_POSTGRES_PASSWORD: ${GRAFANA_POSTGRES_PASSWORD:?GRAFANA_POSTGRES_PASSWORD is required}
+      GRAFANA_POSTGRES_SSLMODE: ${GRAFANA_POSTGRES_SSLMODE:-disable}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      clickhouse: { condition: service_started }
+      grafana-control-db-provision: { condition: service_completed_successfully }
+      prometheus: { condition: service_started }
+    networks: [telemetry, control, egress]
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+      - /var/log/grafana:rw,noexec,nosuid,size=16m
+    mem_limit: 512m
+    cpus: 0.5
+    pids_limit: 128
+    deploy:
+      resources:
+        limits: { memory: 512m, cpus: "0.5", pids: 128 }
+    healthcheck:
+      test: [CMD, wget, -qO-, http://127.0.0.1:3000/api/health]
+      interval: 10s
+      timeout: 3s
+      retries: 20
 
   node-exporter:
     image: prom/node-exporter:v1.10.2
@@ -494,6 +574,7 @@ volumes:
   clickhouse: {}
   vector-data: {}
   prometheus: {}
+  grafana-data: {}
   edge-state: {}
   edge-agent-state: {}
   edge-gateway-state: {}

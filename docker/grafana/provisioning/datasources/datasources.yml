@@ -1,0 +1,54 @@
+apiVersion: 1
+
+deleteDatasources:
+  - { name: Prometheus, orgId: 1 }
+  - { name: ClickHouse, orgId: 1 }
+  - { name: CDNFoundry control database, orgId: 1 }
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s
+
+  - name: ClickHouse
+    uid: clickhouse
+    type: grafana-clickhouse-datasource
+    access: proxy
+    editable: false
+    jsonData:
+      defaultDatabase: cdnf
+      host: ${GRAFANA_CLICKHOUSE_HOST}
+      port: ${GRAFANA_CLICKHOUSE_PORT}
+      protocol: ${GRAFANA_CLICKHOUSE_PROTOCOL}
+      secure: ${GRAFANA_CLICKHOUSE_SECURE}
+      tlsSkipVerify: false
+      username: ${GRAFANA_CLICKHOUSE_USER}
+      dialTimeout: "5"
+      queryTimeout: "30"
+    secureJsonData:
+      password: ${GRAFANA_CLICKHOUSE_PASSWORD}
+
+  - name: CDNFoundry control database
+    uid: control-db
+    type: postgres
+    access: proxy
+    url: ${GRAFANA_POSTGRES_HOST}:${GRAFANA_POSTGRES_PORT}
+    user: ${GRAFANA_POSTGRES_USER}
+    database: ${GRAFANA_POSTGRES_DATABASE}
+    editable: false
+    jsonData:
+      database: ${GRAFANA_POSTGRES_DATABASE}
+      postgresVersion: 1800
+      sslmode: ${GRAFANA_POSTGRES_SSLMODE}
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 300
+    secureJsonData:
+      password: ${GRAFANA_POSTGRES_PASSWORD}

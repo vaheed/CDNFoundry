@@ -50,9 +50,18 @@ flowchart LR
     Control --> State[("PostgreSQL desired state")]
     Control -->|"asynchronous reconciliation"| DNS
     Control -->|"signed snapshots"| Edge
-    DNS -. "best-effort telemetry" .-> Analytics["Vector + ClickHouse"]
-    Edge -. "best-effort telemetry" .-> Analytics
+    DNS -. "best-effort telemetry" .-> Vector["Vector"]
+    Edge -. "best-effort telemetry" .-> Vector
+    Vector --> ClickHouse[("ClickHouse telemetry")]
+    Prometheus["Prometheus metrics"] --> Grafana["Grafana operations"]
+    ClickHouse -->|"bounded read-only queries"| Grafana
+    State -->|"sanitized read-only metadata"| Grafana
+    Admins -->|"separate operator access"| Grafana
 ```
+
+Grafana is a read-only operations component in the telemetry role. It has no
+request-path or reconciliation responsibility: an observability outage cannot
+change desired state or stop DNS and HTTP serving.
 
 ::: info Designed for private operators and ISPs
 CDNFoundry is intended for organizations that operate their own authoritative

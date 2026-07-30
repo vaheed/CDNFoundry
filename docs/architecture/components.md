@@ -55,10 +55,17 @@ cache policies. No normal domain change generates an Nginx server block or reloa
 | `prometheus` | Metrics and alert evaluation |
 | `alertmanager` | Alert routing |
 | `node-exporter` | Host resource and clock metrics |
+| `grafana` | Exactly two provisioned read-only operations command centers |
+| `grafana-control-db-provision` | Idempotent one-shot creation and restriction of the PostgreSQL Grafana role |
 | Edge gateway | Binds configured service IPv4/IPv6 addresses and routes by destination plus validated Host/SNI; sends PROXY protocol version 2 to private cell listeners |
 
 Vector has separate 1 GiB disk buffers for edge and DNS sinks and drops newest
-events when full. Telemetry loss is visible but never blocks serving.
+events when full. ClickHouse exposes private server metrics to Prometheus on
+port 9363. Grafana reads Prometheus, six CDNFoundry ClickHouse telemetry tables,
+three ClickHouse monitoring tables, four PostgreSQL domain inventory columns,
+and the sanitized `grafana_domain_operational_metadata` view. It has no write
+credential and no ingestion or serving role. Telemetry or observability loss is
+visible but never blocks serving.
 
 ## Development-only components
 

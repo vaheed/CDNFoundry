@@ -1298,7 +1298,9 @@ func (c *client) gatewayStatus() map[string]any {
 		"cdnfoundry_gateway_connections_active":         "connections_active",
 		"cdnfoundry_gateway_connections_accepted_total": "connections_accepted",
 		"cdnfoundry_gateway_connections_rejected_total": "connections_rejected",
-		"cdnfoundry_gateway_errors_total":               "errors", "cdnfoundry_gateway_candidate_rejections_total": "candidate_rejections",
+		"cdnfoundry_gateway_errors_total":               "errors",
+		"cdnfoundry_gateway_activations_total":          "activations",
+		"cdnfoundry_gateway_candidate_rejections_total": "candidate_rejections",
 	}
 	for _, line := range strings.Split(string(body), "\n") {
 		fields := strings.Fields(line)

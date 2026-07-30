@@ -32,11 +32,14 @@ flowchart TB
     subgraph Observe["Observability plane"]
       Vector["Vector"] --> ClickHouse[("ClickHouse")]
       Prometheus["Prometheus"] --> Alertmanager["Alertmanager"]
+      Prometheus --> Grafana["Grafana<br/>two command centers"]
+      ClickHouse -->|"bounded read-only"| Grafana
     end
     Laravel --> PG
     Horizon --> PG
     Laravel --> Valkey
     Horizon --> Valkey
+    PG -->|"sanitized read-only metadata"| Grafana
     Horizon -->|"versioned reconciliation"| PowerDNS
     Agent -->|"outbound mTLS: pull artifacts/tasks, acknowledge"| Laravel
     DNSdist -.-> Vector
@@ -49,12 +52,14 @@ flowchart TB
 | Durable control data | PostgreSQL, Valkey | Desired state, audit, operation records, queues, sessions, cache |
 | Authoritative DNS | DNSdist, PowerDNS, PowerDNS PostgreSQL | Public DNS ingress and private authoritative answers |
 | Edge HTTP | Edge agent, OpenResty cells | Artifact activation, TLS selection, proxying, cache, security |
-| Telemetry | Vector, ClickHouse, Prometheus, Alertmanager | Bounded event delivery, analytics, metrics, alerts |
+| Observability | Vector, ClickHouse, Prometheus, Alertmanager, Grafana | Bounded event delivery, analytics, metrics, alerts, read-only operator diagnosis |
 
 Only DNSdist, intended OpenResty listeners, and the browser/API reverse proxy
 belong on public ingress. Edge control uses mutual TLS. Telemetry and PowerDNS
 API gateways are source restricted in the production overlays. Internal
-databases, Valkey, ClickHouse, raw metrics, and PowerDNS itself remain private.
+databases, Valkey, ClickHouse, raw metrics, Grafana port 3000, and PowerDNS
+itself remain private. Remote Grafana access uses a deployment-owned
+authenticated HTTPS proxy or trusted tunnel.
 
 ## Architectural decisions
 
@@ -79,6 +84,14 @@ an already-configured DNS answer or HTTP request. DNSdist and OpenResty operate
 from private runtime state, and the edge agent retains active and previous
 snapshots.
 
+### Observability is read-only and downstream
+
+Grafana reads Prometheus, bounded ClickHouse telemetry, and a sanitized
+PostgreSQL view through separate least-privilege accounts. It cannot mutate
+desired state or ingest traffic. The two provisioned dashboards are diagnostic
+read models; dashboard or datasource failure cannot affect serving or
+reconciliation.
+
 ### Scale uses bounded shared units
 
 Domains are data inside shared DNS and OpenResty runtimes. Scale comes from
@@ -98,6 +111,7 @@ during a customer DNS or HTTP request, it violates the serving boundary.
 | One PowerDNS target fails | Other authoritative targets continue | Failed target keeps its last valid zone |
 | Invalid edge artifact | Active cell continues | Candidate is rejected and failure recorded |
 | ClickHouse or Vector unavailable | DNS and HTTP continue | Analytics becomes partial or unavailable |
+| Grafana or Prometheus unavailable | DNS and HTTP continue | Command centers or alert evaluation become unavailable; source state is unchanged |
 | Origin unavailable | Cache/stale policy may serve eligible objects | Origin health and errors become visible |
 
 Continue with [Components](components.md),

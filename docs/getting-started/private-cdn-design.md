@@ -149,7 +149,10 @@ uplink.
 
 Vector receives OpenResty events and DNSdist dnstap, removes sensitive fields,
 bounds values, and writes ClickHouse. Laravel queries bounded time ranges but
-does not receive raw traffic.
+does not receive raw traffic. The telemetry role also runs Prometheus,
+Alertmanager, and loopback-only Grafana. Grafana's two command centers read
+Prometheus, bounded ClickHouse tables, and a sanitized PostgreSQL operational
+view with separate read-only credentials.
 
 Recovery requires more than database rows:
 
@@ -173,8 +176,13 @@ flowchart LR
       Workers["Workers"]
       ControlDB[("PostgreSQL")]
       Telemetry[("ClickHouse")]
+      Metrics["Prometheus + Alertmanager"]
+      Grafana["Grafana<br/>two command centers"]
       Web --> ControlDB
       Workers --> ControlDB
+      Metrics --> Grafana
+      Telemetry -->|"bounded read-only"| Grafana
+      ControlDB -->|"sanitized read-only view"| Grafana
     end
     subgraph POP1["DNS/edge host 1"]
       NS1["DNSdist + PowerDNS"]
@@ -193,6 +201,10 @@ flowchart LR
     Edge1 -.-> Telemetry
     Edge2 -.-> Telemetry
 ```
+
+Grafana remains off public listeners. Remote operators reach it only through a
+deployment-owned authenticated HTTPS proxy or trusted tunnel; its failure does
+not enter serving, ingestion, or reconciliation paths.
 
 This is a reliability minimum, not a scale maximum. Larger ISPs can separate
 DNS, edge, telemetry, control workers, PostgreSQL, and Valkey using the shipped

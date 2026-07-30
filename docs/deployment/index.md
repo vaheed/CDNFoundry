@@ -39,7 +39,7 @@ relevant.
 - Run `make prod-migrate` and `make prod-pdns-migrate` explicitly.
 - Start only the profiles assigned to the host.
 - Keep the control database, Valkey, PowerDNS, PowerDNS PostgreSQL, ClickHouse,
-  and internal metrics off public networks.
+  internal metrics, and Grafana port 3000 off public networks.
 - Preserve the control PostgreSQL volume and all named volumes during upgrades.
 
 See [Production quick start](production-quick-start.md) for the

@@ -7,6 +7,9 @@ alerting:
     - static_configs:
         - targets: [alertmanager:9093]
 scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: [prometheus:9090]
   - job_name: cdnfoundry-control
     metrics_path: /metrics
     authorization:
@@ -29,5 +32,9 @@ scrape_configs:
     static_configs:
       - targets: [alertmanager:9093]
   - job_name: edge-gateway
+    file_sd_configs:
+      - files: [/etc/prometheus/edge-targets.yml]
+        refresh_interval: 30s
+  - job_name: clickhouse
     static_configs:
-      - targets: [edge-gateway-a:9105, edge-gateway-b:9105]
+      - targets: [clickhouse:9363]

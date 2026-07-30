@@ -157,6 +157,77 @@ Run the documented operator commands from a clean verification environment and a
 - Automated qualification: image builds and every roadmap supply-chain policy test have recorded passing evidence.
 - Manual release qualification: owner-run; **not complete until every applicable checkpoint above is recorded as passed**.
 
+## Grafana observability — owner-run browser qualification
+
+### Startup, access, and provisioning
+
+1. Start the telemetry profile with the three unique production Grafana
+   passwords set. Open the HTTPS reverse-proxy URL. Confirm plain HTTP redirects
+   to HTTPS, direct non-loopback port 3000 access is blocked, anonymous access
+   is denied, and the expected administrator login succeeds.
+2. Open **Connections → Data sources**. Confirm exactly the provisioned
+   `prometheus`, `clickhouse`, and `control-db` UIDs are present and each health
+   check succeeds. Confirm datasource editing is disabled.
+3. Open **Dashboards**. Confirm there is one **CDNFoundry Operations** folder
+   containing exactly **CDNFoundry — System Command Center** and **CDNFoundry —
+   Domain Command Center**. Confirm the system dashboard is the home dashboard.
+4. Restart Grafana with network egress blocked. Confirm it becomes healthy and
+   both dashboards and the ClickHouse plugin load without a startup download.
+
+### System Command Center
+
+1. Display the system dashboard at 1920×1080. Confirm the default range is six
+   hours, refresh is 30 seconds, there are no dashboard variables, and the
+   incident strip is visible without scrolling.
+2. Confirm the strip shows platform state, critical/warning alerts, unhealthy
+   components, target availability, stale edges/gateways, DNS drift, TLS
+   expiry, failed operations, telemetry errors/drops, HTTP rate, DNS QPS,
+   egress, 5xx, cache hit ratio, endpoint mismatch, and rollout state. Create
+   one controlled warning and confirm green/yellow/red behavior is consistent.
+3. Expand each diagnostic row. Confirm every current SystemHealth component and
+   all four queue lanes appear; active alerts show severity/name/state/duration;
+   gateway, edge, cell, endpoint, capacity, HTTP, DNS, Vector, host,
+   ClickHouse, PowerDNS, DNSdist, and Alertmanager panels populate from real
+   sources. Follow each displayed runbook link and confirm its anchor exists.
+4. Generate controlled HTTP traffic and an alert overlapping it. Confirm alert
+   annotations appear on HTTP request and exact origin-latency graphs.
+5. Stop one datasource at a time. Confirm the affected panels show datasource
+   failure/no data and never a fabricated zero, while unrelated datasources and
+   serving traffic remain healthy.
+
+### Domain Command Center
+
+1. Open the domain dashboard. Confirm exactly one searchable, single-select
+   **Domain** input exists, has no **All** option, and lists a current
+   non-deleted zero-traffic domain by display name and DNS name.
+2. Select that zero-traffic domain. Confirm authoritative lifecycle, revisions,
+   DNS, placement/cells, cache, TLS, security, and WAF metadata are visible and
+   every traffic panel says **No traffic in selected range** without reporting
+   datasource failure.
+3. Select a disposable traffic domain and generate HTTP/DNS, MISS/HIT, 5xx,
+   primary/backup transition, TLS failure, security/WAF block, and compression
+   samples. Confirm every panel changes only for the selected domain and the
+   diagnosis row identifies each controlled failure.
+4. Compare raw samples with average and exact p50/p95/p99 origin latency. Confirm
+   paths contain no query strings, top lists are bounded, and no client IP,
+   authorization, cookie, request body, user agent, or referrer appears.
+5. Select ranges inside seven days, crossing seven days, beyond 400 days, and
+   beyond available retention. Confirm raw-detail completeness is explicit,
+   exact quantiles are never synthesized from aggregates, and volume panels use
+   the documented raw/hourly/daily boundaries.
+
+### Grafana observability completion gate
+
+- Implementation: exactly two provisioned dashboards, pinned offline plugin,
+  private hardened service, and restricted datasource accounts are present.
+- Documentation: startup, credentials, reverse proxy/TLS, accounts, dashboards,
+  retention, split endpoints, and troubleshooting are current.
+- Automated/runtime qualification: static contracts, Compose validation,
+  datasource health, and both dashboard UID API checks have recorded passing
+  evidence.
+- Manual browser qualification: owner-run; **not complete until every
+  applicable checkpoint above is recorded as passed**.
+
 ## Final production-hardening gate
 
 1. Confirm no customer HTTP or DNS traffic passes through Laravel and no invariant in the roadmap or repository instructions was weakened.

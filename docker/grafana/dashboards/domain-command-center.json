@@ -1,0 +1,162 @@
+{
+  "annotations": { "list": [] },
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    { "title": "Domain operations guide", "type": "link", "url": "https://vaheed.github.io/CDNFoundry/guides/domains" },
+    { "title": "Incident runbooks", "type": "link", "url": "https://vaheed.github.io/CDNFoundry/operations/runbooks" }
+  ],
+  "panels": [
+    {
+      "id": 1, "type": "table", "title": "Domain identity and desired/active operational state",
+      "description": "Authoritative PostgreSQL state: lifecycle, revisions, DNS verification/drift, proxy placement and cells, cache, TLS, security, WAF, and pool profiles.",
+      "datasource": { "type": "postgres", "uid": "control-db" },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 0 },
+      "targets": [{ "format": "table", "rawQuery": true, "rawSql": "SELECT * FROM grafana_domain_operational_metadata WHERE domain_id = ${domain_id:raw}", "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "Domain metadata unavailable" }, "overrides": [] }
+    },
+    {
+      "id": 2, "type": "stat", "title": "5xx diagnosis",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 4, "w": 3, "x": 0, "y": 7 },
+      "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT 100 * countIf(status >= 500) / nullIf(count(),0) AS percent FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "noValue": "No traffic in selected range", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 }] } }, "overrides": [] }
+    },
+    {
+      "id": 3, "type": "stat", "title": "Origin failures",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 4, "w": 3, "x": 3, "y": 7 },
+      "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT if(count() = 0, CAST(NULL AS Nullable(UInt64)), countIf(origin_error != '')) AS failures FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "No traffic in selected range", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }, "links": [{ "title": "Origin runbook", "url": "https://vaheed.github.io/CDNFoundry/operations/runbooks#origin-failure" }] }, "overrides": [] }
+    },
+    {
+      "id": 4, "type": "stat", "title": "TLS failures",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 4, "w": 3, "x": 6, "y": 7 },
+      "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT if(count() = 0, CAST(NULL AS Nullable(UInt64)), countIf(tls_error != '')) AS failures FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "No traffic in selected range", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] }
+    },
+    {
+      "id": 5, "type": "stat", "title": "DNS failures",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 4, "w": 3, "x": 9, "y": 7 },
+      "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT if(count() = 0, CAST(NULL AS Nullable(UInt64)), countIf(rcode IN ('SERVFAIL','REFUSED') OR outcome NOT IN ('answered','noerror'))) AS failures FROM cdnf.dns_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "No DNS traffic in selected range", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }, "links": [{ "title": "DNS runbook", "url": "https://vaheed.github.io/CDNFoundry/operations/runbooks#dns-cluster-failure" }] }, "overrides": [] }
+    },
+    {
+      "id": 6, "type": "stat", "title": "Security / WAF blocks",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 4, "w": 3, "x": 12, "y": 7 },
+      "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT if(count() = 0, CAST(NULL AS Nullable(UInt64)), countIf(security_action = 'block' OR waf_action = 'block')) AS blocks FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "No traffic in selected range", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 100 }] } }, "overrides": [] }
+    },
+    {
+      "id": 7, "type": "stat", "title": "Cache hit ratio",
+      "description": "Eligible HIT / (HIT + MISS + EXPIRED + STALE). BYPASS is deliberately excluded.",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 4, "w": 3, "x": 15, "y": 7 },
+      "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT 100 * countIf(cache_status = 'HIT') / nullIf(countIf(cache_status IN ('HIT','MISS','EXPIRED','STALE')),0) AS hit_percent FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "noValue": "No cache-eligible traffic", "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 70 }, { "color": "green", "value": 90 }] } }, "overrides": [] }
+    },
+    {
+      "id": 8, "type": "stat", "title": "Busiest edge share",
+      "description": "The busiest edge's share of domain traffic. High values can indicate placement or routing imbalance.",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 4, "w": 3, "x": 18, "y": 7 },
+      "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT 100 * max(requests) / nullIf(sum(requests),0) AS busiest_edge_percent FROM (SELECT edge_id,count() AS requests FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) GROUP BY edge_id)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "noValue": "No traffic in selected range", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 90 }] } }, "overrides": [] }
+    },
+    {
+      "id": 9, "type": "stat", "title": "Raw retention completeness",
+      "description": "Raw detail and exact percentiles retain seven days. RED means the selected range begins before available raw data; use volume aggregates for long-range totals.",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 4, "w": 3, "x": 21, "y": 7 },
+      "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT if($__fromTime >= now() - INTERVAL 7 DAY, 1, 0) AS complete FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} LIMIT 1", "refId": "A" }],
+      "fieldConfig": { "defaults": { "mappings": [{ "options": { "0": { "color": "red", "text": "PARTIAL RAW DATA" }, "1": { "color": "green", "text": "COMPLETE RAW RANGE" } }, "type": "value" }], "noValue": "No traffic in selected range" }, "overrides": [] }
+    },
+
+    {
+      "id": 100, "type": "row", "title": "HTTP volume, status, and cache", "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 11 },
+      "panels": [
+        { "id": 101, "type": "timeseries", "title": "HTTP request rate", "description": "Raw for ≤7 days, hourly for >7–400 days, daily beyond 400 days. Each branch is disabled outside its valid retention range.", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 12, "x": 0, "y": 12 }, "targets": [{ "editorType": "sql", "format": 0, "queryType": "timeSeries", "rawSql": "SELECT time,sum(requests) AS requests FROM (SELECT $__timeInterval(occurred_at) AS time,count() AS requests FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND dateDiff('second',$__fromTime,$__toTime) <= 604800 AND $__timeFilter(occurred_at) GROUP BY time UNION ALL SELECT $__timeInterval(interval_start) AS time,sum(requests) AS requests FROM cdnf.edge_hourly WHERE domain_id = ${domain_id:raw} AND dateDiff('second',$__fromTime,$__toTime) > 604800 AND dateDiff('second',$__fromTime,$__toTime) <= 34560000 AND $__timeFilter(interval_start) GROUP BY time UNION ALL SELECT $__timeInterval(interval_start) AS time,sum(requests) AS requests FROM cdnf.edge_daily WHERE domain_id = ${domain_id:raw} AND dateDiff('second',$__fromTime,$__toTime) > 34560000 AND $__timeFilter(interval_start) GROUP BY time) GROUP BY time ORDER BY time", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No traffic in selected range", "unit": "reqps" }, "overrides": [] } },
+        { "id": 102, "type": "stat", "title": "Requests, ingress, and egress totals", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 12, "x": 12, "y": 12 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT sum(requests) AS requests,sum(bytes_in) AS bytes_in,sum(bytes_out) AS bytes_out FROM (SELECT count() AS requests,sum(bytes_in) AS bytes_in,sum(bytes_out) AS bytes_out FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND dateDiff('second',$__fromTime,$__toTime) <= 604800 AND $__timeFilter(occurred_at) UNION ALL SELECT sum(requests),sum(bytes_in),sum(bytes_out) FROM cdnf.edge_hourly WHERE domain_id = ${domain_id:raw} AND dateDiff('second',$__fromTime,$__toTime) > 604800 AND dateDiff('second',$__fromTime,$__toTime) <= 34560000 AND $__timeFilter(interval_start) UNION ALL SELECT sum(requests),sum(bytes_in),sum(bytes_out) FROM cdnf.edge_daily WHERE domain_id = ${domain_id:raw} AND dateDiff('second',$__fromTime,$__toTime) > 34560000 AND $__timeFilter(interval_start))", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No traffic in selected range" }, "overrides": [] } },
+        { "id": 103, "type": "table", "title": "Status classes and codes", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 8, "w": 12, "x": 0, "y": 21 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT concat(toString(intDiv(status,100)),'xx') AS class,status,count() AS requests FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) GROUP BY class,status ORDER BY requests DESC LIMIT 100", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No traffic in selected range" }, "overrides": [] } },
+        { "id": 104, "type": "table", "title": "Cache status breakdown", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 8, "w": 12, "x": 12, "y": 21 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT cache_status,count() AS requests,round(100 * count() / sum(count()) OVER (),2) AS percent FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) GROUP BY cache_status ORDER BY requests DESC LIMIT 32", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No traffic in selected range" }, "overrides": [] } }
+      ]
+    },
+    {
+      "id": 200, "type": "row", "title": "Origin and TLS diagnosis (raw seven-day detail)", "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 12 },
+      "panels": [
+        { "id": 201, "type": "timeseries", "title": "Origin latency: average and exact p50/p95/p99", "description": "Exact quantiles are computed from raw origin_latency_ms samples. Long ranges can be partial because raw retention is seven days.", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 24, "x": 0, "y": 13 }, "targets": [{ "editorType": "sql", "format": 0, "queryType": "timeSeries", "rawSql": "SELECT $__timeInterval(occurred_at) AS time,avg(origin_latency_ms) AS average,quantileExact(0.50)(origin_latency_ms) AS p50,quantileExact(0.95)(origin_latency_ms) AS p95,quantileExact(0.99)(origin_latency_ms) AS p99 FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) AND origin_latency_ms IS NOT NULL GROUP BY time ORDER BY time", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No traffic in selected range", "unit": "ms" }, "overrides": [] } },
+        { "id": 202, "type": "table", "title": "Origin errors, primary/backup role, and transitions", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 12, "x": 0, "y": 22 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT origin_role,origin_transition,origin_error,count() AS events,max(occurred_at) AS latest FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) AND (origin_error != '' OR origin_transition != 'none' OR origin_role = 'backup') GROUP BY origin_role,origin_transition,origin_error ORDER BY latest DESC,events DESC LIMIT 100", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No origin errors or transitions in selected range" }, "overrides": [] } },
+        { "id": 203, "type": "table", "title": "TLS failures", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 12, "x": 12, "y": 22 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT tls_error,count() AS events,max(occurred_at) AS latest FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) AND tls_error != '' GROUP BY tls_error ORDER BY latest DESC,events DESC LIMIT 100", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No TLS failures in selected range" }, "overrides": [] } }
+      ]
+    },
+    {
+      "id": 300, "type": "row", "title": "Security, WAF, and compression (raw seven-day detail)", "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 },
+      "panels": [
+        { "id": 301, "type": "table", "title": "Security actions and reasons", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 8, "x": 0, "y": 14 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT security_action,security_reason,count() AS events,max(occurred_at) AS latest FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) GROUP BY security_action,security_reason ORDER BY events DESC LIMIT 100", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No traffic in selected range" }, "overrides": [] } },
+        { "id": 302, "type": "table", "title": "WAF action, rule, score, body limit, exclusions", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 8, "x": 8, "y": 14 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT waf_profile,waf_action,waf_rule_id,waf_score,waf_body_limit,waf_exclusion_id,count() AS events,max(occurred_at) AS latest FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) AND waf_action != 'off' GROUP BY waf_profile,waf_action,waf_rule_id,waf_score,waf_body_limit,waf_exclusion_id ORDER BY events DESC LIMIT 100", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No WAF events in selected range" }, "overrides": [] } },
+        { "id": 303, "type": "table", "title": "WAF processing time", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 8, "x": 16, "y": 14 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT waf_profile,waf_action,round(avg(waf_processing_us),1) AS average_us,quantileExact(0.95)(waf_processing_us) AS p95_us,quantileExact(0.99)(waf_processing_us) AS p99_us,count() AS events FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) AND waf_action != 'off' GROUP BY waf_profile,waf_action ORDER BY events DESC LIMIT 32", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No WAF events in selected range" }, "overrides": [] } },
+        { "id": 304, "type": "table", "title": "Compression encoding, profile, fallback, and ratio", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 24, "x": 0, "y": 23 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT compression_encoding,compression_profile,compression_fallback,round(avg(compression_ratio),2) AS average_ratio,quantileExact(0.95)(compression_ratio) AS p95_ratio,count() AS requests FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) GROUP BY compression_encoding,compression_profile,compression_fallback ORDER BY requests DESC LIMIT 100", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No traffic in selected range" }, "overrides": [] } }
+      ]
+    },
+    {
+      "id": 400, "type": "row", "title": "HTTP request dimensions and bounded paths", "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "panels": [
+        { "id": 401, "type": "table", "title": "Requests by hostname, method, and event type", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 8, "x": 0, "y": 15 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT hostname,method,event_type,count() AS requests FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) GROUP BY hostname,method,event_type ORDER BY requests DESC LIMIT 200", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No traffic in selected range" }, "overrides": [] } },
+        { "id": 402, "type": "table", "title": "Requests by edge", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 8, "x": 8, "y": 15 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT edge_id,count() AS requests,sum(bytes_out) AS bytes_out,round(100 * count() / sum(count()) OVER (),2) AS percent FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) GROUP BY edge_id ORDER BY requests DESC LIMIT 100", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No traffic in selected range" }, "overrides": [] } },
+        { "id": 403, "type": "table", "title": "Requests by country and continent", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 8, "x": 16, "y": 15 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT country,continent,count() AS requests,sum(bytes_out) AS bytes_out FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) GROUP BY country,continent ORDER BY requests DESC LIMIT 200", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No traffic in selected range" }, "overrides": [] } },
+        { "id": 404, "type": "table", "title": "Top paths (query strings removed at ingestion; bounded to 100)", "description": "Paths are sanitized and capped at 2,048 bytes by Vector. This panel never reads query strings or client identifiers.", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 10, "w": 24, "x": 0, "y": 24 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT path,count() AS requests,countIf(status >= 500) AS five_xx,sum(bytes_out) AS bytes_out FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) GROUP BY path ORDER BY requests DESC LIMIT 100", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No traffic in selected range" }, "overrides": [] } }
+      ]
+    },
+    {
+      "id": 500, "type": "row", "title": "DNS analytics (raw seven-day detail)", "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+      "panels": [
+        { "id": 501, "type": "timeseries", "title": "Domain DNS QPS", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 12, "x": 0, "y": 16 }, "targets": [{ "editorType": "sql", "format": 0, "queryType": "timeSeries", "rawSql": "SELECT $__timeInterval(occurred_at) AS time,count() AS queries FROM cdnf.dns_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) GROUP BY time ORDER BY time", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No DNS traffic in selected range", "unit": "qps" }, "overrides": [] } },
+        { "id": 502, "type": "table", "title": "RCODEs, QTYPEs, and outcomes", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 12, "x": 12, "y": 16 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT rcode,qtype,outcome,count() AS queries FROM cdnf.dns_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) GROUP BY rcode,qtype,outcome ORDER BY queries DESC LIMIT 100", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No DNS traffic in selected range" }, "overrides": [] } },
+        { "id": 503, "type": "table", "title": "DNS clusters and geography", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 12, "x": 0, "y": 25 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT dns_cluster,country,continent,count() AS queries FROM cdnf.dns_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) GROUP BY dns_cluster,country,continent ORDER BY queries DESC LIMIT 200", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No DNS traffic in selected range" }, "overrides": [] } },
+        { "id": 504, "type": "table", "title": "Top qnames (bounded to 100)", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 12, "x": 12, "y": 25 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT qname,qtype,rcode,count() AS queries FROM cdnf.dns_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) GROUP BY qname,qtype,rcode ORDER BY queries DESC LIMIT 100", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No DNS traffic in selected range" }, "overrides": [] } }
+      ]
+    },
+    {
+      "id": 600, "type": "row", "title": "Recent aggregate errors for incident response", "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 },
+      "panels": [
+        { "id": 601, "type": "table", "title": "Recent HTTP error aggregates", "description": "Grouped sanitized fields only. No client IPs, headers, cookies, authorization data, queries, or bodies.", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 11, "w": 12, "x": 0, "y": 17 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT toStartOfFiveMinutes(occurred_at) AS interval,hostname,status,origin_error,tls_error,security_action,security_reason,waf_action,waf_rule_id,count() AS events FROM cdnf.edge_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) AND (status >= 500 OR origin_error != '' OR tls_error != '' OR security_action = 'block' OR waf_action = 'block') GROUP BY interval,hostname,status,origin_error,tls_error,security_action,security_reason,waf_action,waf_rule_id ORDER BY interval DESC,events DESC LIMIT 200", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No aggregate errors in selected range" }, "overrides": [] } },
+        { "id": 602, "type": "table", "title": "Recent DNS failure aggregates", "description": "Grouped qname/rcode/outcome only; raw client identifiers are never selected.", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 11, "w": 12, "x": 12, "y": 17 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT toStartOfFiveMinutes(occurred_at) AS interval,qname,qtype,rcode,outcome,dns_cluster,count() AS events FROM cdnf.dns_events WHERE domain_id = ${domain_id:raw} AND $__timeFilter(occurred_at) AND (rcode IN ('SERVFAIL','REFUSED') OR outcome NOT IN ('answered','noerror')) GROUP BY interval,qname,qtype,rcode,outcome,dns_cluster ORDER BY interval DESC,events DESC LIMIT 200", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No DNS failures in selected range" }, "overrides": [] } }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 42,
+  "tags": ["cdnfoundry", "operations", "domain"],
+  "templating": {
+    "list": [
+      {
+        "allValue": null,
+        "current": {},
+        "datasource": { "type": "postgres", "uid": "control-db" },
+        "definition": "SELECT id AS __value, display_name || ' (' || name || ')' AS __text FROM domains WHERE deleted_at IS NULL ORDER BY lower(display_name), id LIMIT 10000",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Domain",
+        "multi": false,
+        "name": "domain_id",
+        "options": [],
+        "query": "SELECT id AS __value, display_name || ' (' || name || ')' AS __text FROM domains WHERE deleted_at IS NULL ORDER BY lower(display_name), id LIMIT 10000",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": { "refresh_intervals": ["30s", "1m", "5m"], "time_options": ["1h", "6h", "24h", "7d", "30d", "1y", "3y"] },
+  "timezone": "browser",
+  "title": "CDNFoundry — Domain Command Center",
+  "uid": "cdnf-domain-command-center",
+  "version": 1,
+  "weekStart": ""
+}

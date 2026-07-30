@@ -1,0 +1,5 @@
+- targets:
+    - edge-gateway-a:9105
+    - edge-gateway-b:9105
+  labels:
+    deployment: development

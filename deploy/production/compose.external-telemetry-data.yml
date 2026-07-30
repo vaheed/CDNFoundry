@@ -1,0 +1,8 @@
+# Use when ClickHouse is an external TLS-protected service. Grafana and Vector
+# receive their external endpoints from .env.prod; this prevents the telemetry
+# profile from starting the local ClickHouse primary.
+services:
+  clickhouse:
+    profiles: !override [local-telemetry-data]
+  grafana:
+    depends_on: !reset {}

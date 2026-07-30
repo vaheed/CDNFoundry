@@ -19,6 +19,9 @@ flowchart LR
     Agent -->|"separate status token"| Cell["OpenResty cell"]
     Monitor["Monitoring client"] -->|"separate bearer token"| Metrics["Metrics"]
     Vector["Edge Vector"] -->|"restricted HTTPS"| Telemetry["Telemetry gateway"]
+    Operator["Operations user"] -->|"authenticated HTTPS proxy"| Grafana["Grafana"]
+    Grafana -->|"private read-only"| Metrics
+    Grafana -->|"restricted SELECT"| ObservabilityData["ClickHouse + sanitized PostgreSQL view"]
 ```
 
 Human and API authorization is policy based:
@@ -28,6 +31,13 @@ Human and API authorization is policy based:
 - disabled users lose API tokens and are rejected on later session requests;
 - edge agents enroll once and then use short-lived client certificates;
 - `/metrics` requires a separate bearer token and is not a user API.
+
+Grafana has a separate administrator credential and never receives Laravel,
+Vector-ingestion, or database-write credentials. Its ClickHouse account is
+read-only with query bounds; its PostgreSQL account can read only domain
+inventory columns and the sanitized operational view. Port 3000 remains on
+loopback and requires a deployment-owned authenticated HTTPS proxy or trusted
+tunnel for remote operator access.
 
 Private keys are never returned by status APIs. Sanctum hashes API tokens.
 Custom and managed TLS private keys are encrypted with the application

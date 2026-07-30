@@ -279,9 +279,12 @@ services:
       CLICKHOUSE_USER: cdnf
       CLICKHOUSE_PASSWORD: cdnf-dev-only
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+      GRAFANA_CLICKHOUSE_PASSWORD: cdnf-grafana-dev-only
     volumes:
       - clickhouse:/var/lib/clickhouse
       - ./docker/clickhouse/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+      - ./docker/clickhouse/config.d/prometheus.xml:/etc/clickhouse-server/config.d/prometheus.xml:ro
+      - ./docker/clickhouse/users.d/grafana.xml:/etc/clickhouse-server/users.d/grafana.xml:ro
     networks: [telemetry]
     healthcheck:
       test: [CMD, wget, -qO-, http://127.0.0.1:8123/ping]
@@ -308,9 +311,70 @@ services:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro
       - ./docker/prometheus/alerts.test.yml:/etc/prometheus/alerts.test.yml:ro
+      - ./docker/prometheus/edge-targets.dev.yml:/etc/prometheus/edge-targets.yml:ro
       - ./docker/prometheus/dev-metrics-token:/run/secrets/metrics-token:ro
       - prometheus:/prometheus
     networks: [telemetry, control, dns]
+
+  grafana-control-db-provision:
+    image: postgres:18.4-alpine
+    environment:
+      PGHOST: control-db
+      PGPORT: 5432
+      PGDATABASE: cdnf
+      PGUSER: cdnf
+      PGPASSWORD: cdnf-dev-only
+      GRAFANA_POSTGRES_PASSWORD: cdnf-grafana-dev-only
+    volumes:
+      - ./docker/grafana/postgres:/provision:ro
+    command: [sh, /provision/provision.sh]
+    depends_on:
+      control-db: { condition: service_healthy }
+    networks: [control]
+    restart: "no"
+
+  grafana:
+    build:
+      context: ./docker/grafana
+    ports: ["127.0.0.1:3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: cdnf-grafana-dev-only
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_PATHS_PLUGINS: /usr/share/grafana/cdnfoundry-plugins
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/system-command-center.json
+      GRAFANA_CLICKHOUSE_HOST: clickhouse
+      GRAFANA_CLICKHOUSE_PORT: 9000
+      GRAFANA_CLICKHOUSE_PROTOCOL: native
+      GRAFANA_CLICKHOUSE_SECURE: "false"
+      GRAFANA_CLICKHOUSE_USER: cdnf_grafana
+      GRAFANA_CLICKHOUSE_PASSWORD: cdnf-grafana-dev-only
+      GRAFANA_POSTGRES_HOST: control-db
+      GRAFANA_POSTGRES_PORT: 5432
+      GRAFANA_POSTGRES_DATABASE: cdnf
+      GRAFANA_POSTGRES_USER: cdnf_grafana
+      GRAFANA_POSTGRES_PASSWORD: cdnf-grafana-dev-only
+      GRAFANA_POSTGRES_SSLMODE: disable
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      clickhouse: { condition: service_healthy }
+      grafana-control-db-provision: { condition: service_completed_successfully }
+      prometheus: { condition: service_started }
+    networks: [telemetry, control]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, wget, -qO-, http://127.0.0.1:3000/api/health]
+      interval: 10s
+      timeout: 3s
+      retries: 20
 
   node-exporter:
     image: prom/node-exporter:v1.10.2
@@ -770,6 +834,7 @@ volumes:
   clickhouse: {}
   vector-data: {}
   prometheus: {}
+  grafana-data: {}
   mmdb: {}
   dev-pki: {}
   edge-a-state: {}

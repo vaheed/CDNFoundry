@@ -16,7 +16,9 @@ diagnostics.
 
 The smallest production-oriented layout documented by the repository is:
 
-1. one control host running `control` and `telemetry`, plus the control Caddy overlay;
+1. one control host running `control` and `telemetry`, including Prometheus,
+   Alertmanager, ClickHouse, and loopback-only Grafana, plus the control Caddy
+   overlay;
 2. two combined DNS/edge hosts, each running `dns` and `edge` plus the DNS API overlay.
 
 The two DNS/edge hosts provide distinct authoritative nameserver and edge
@@ -119,8 +121,11 @@ docker compose --env-file .env.prod \
 ```
 
 Create the first administrator inside `core` with `cdnf:admin:create`. Check
-`/api/health`, `/api/ready`, administrator component health, Horizon, Prometheus,
-and the first verified backup.
+`/api/health`, `/api/ready`, administrator component health, Horizon,
+Prometheus, Grafana datasource health and its two provisioned dashboard UIDs,
+and the first verified backup. Grafana remains on loopback until an operator
+adds the separately authenticated HTTPS reverse proxy described in the
+[Grafana runbook](../operations/grafana.md).
 
 ### 8. Start each DNS/edge host
 
@@ -177,6 +182,8 @@ topology, operation IDs, certificate fingerprints, checks, and deviations.
 - `compose.edge-host.yml` documents the base edge-only role; the base file owns its listeners.
 - `compose.telemetry-host.yml` adds public, source-restricted telemetry TLS.
 - `compose.external-control-data.yml` disables local PostgreSQL and Valkey.
+- `compose.external-telemetry-data.yml` disables local ClickHouse while Grafana
+  and Vector use the configured external telemetry endpoint.
 - `*-ipv6.yml` files explicitly add IPv6 publications.
 
 Use [Scaling](../operations/scaling.md) before splitting data services or adding

@@ -92,4 +92,7 @@ The PowerDNS schema under `docker/postgres/` is migrated separately. It can be
 rebuilt by global DNS reconciliation from the control database. Edge artifacts
 and snapshots can be rebuilt from desired domain and placement state.
 ClickHouse raw events and aggregates are operational telemetry, not
-authoritative configuration.
+authoritative configuration. The PostgreSQL
+`grafana_domain_operational_metadata` view is a derived, sanitized read model;
+it exposes no certificate key material, credentials, audit payloads, or raw
+customer request data and can be recreated from control-plane tables.

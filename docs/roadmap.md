@@ -11,6 +11,16 @@ Your goal is to complete three production-hardening workstreams:
 2. Correct, testable WAF enforcement based on ModSecurity and OWASP CRS.
 3. Production-grade software supply-chain security.
 
+## Accepted observability extension
+
+The production Grafana observability work is explicitly admitted alongside
+these workstreams. It authorizes exactly two dashboards—**CDNFoundry — System
+Command Center** and **CDNFoundry — Domain Command Center**—as the sole narrow
+exception to the repository's multiple-dashboard prohibition. No third
+dashboard, second application backend, request-path dependency, or telemetry
+path through Laravel is accepted. PostgreSQL remains authoritative desired
+state; Prometheus and ClickHouse remain read-only derived observability data.
+
 Do not only analyze the repository or provide recommendations. Inspect the complete relevant codebase, implement the changes, add automated tests, update documentation, and leave the repository in a passing state.
 
 ## General engineering requirements

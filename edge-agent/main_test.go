@@ -406,6 +406,18 @@ func TestPassiveFailuresAreBoundedAndAuthenticated(t *testing.T) {
 	}
 }
 
+func TestGatewayStatusIncludesActivationCounter(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("cdnfoundry_gateway_ready 1\ncdnfoundry_gateway_activations_total 9\n"))
+	}))
+	defer server.Close()
+	c := &client{http: server.Client(), gatewayStatusURL: server.URL}
+	status := c.gatewayStatus()
+	if status["ready"] != true || status["activations"] != uint64(9) {
+		t.Fatalf("gateway activation counter was not parsed: %#v", status)
+	}
+}
+
 func TestEmergencyModeTargetsOneCellWithBoundedActions(t *testing.T) {
 	controlCalls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
