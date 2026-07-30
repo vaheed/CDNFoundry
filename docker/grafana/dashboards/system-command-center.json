@@ -86,7 +86,7 @@
     {
       "id": 10, "type": "stat", "title": "Telemetry errors / drops",
       "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 4, "w": 3, "x": 0, "y": 4 },
-      "targets": [{ "expr": "sum(increase(vector_component_discarded_events_total[5m])) + sum(increase(vector_component_errors_total[5m]))", "instant": true, "refId": "A" }],
+      "targets": [{ "expr": "(sum(increase(vector_component_discarded_events_total[5m])) or vector(0)) + (sum(increase(vector_component_errors_total[5m])) or vector(0))", "instant": true, "refId": "A" }],
       "fieldConfig": { "defaults": { "noValue": "No data", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }, "links": [{ "title": "Telemetry runbook", "url": "https://vaheed.github.io/CDNFoundry/operations/runbooks#clickhouse-or-vector-outage" }, { "title": "Open ingestion logs in Explore", "url": "/explore?left=%7B%22datasource%22:%22loki%22,%22queries%22:%5B%7B%22expr%22:%22%7Bservice%3D~%5C%22vector%7Clog-collector%7Cloki%5C%22%7D%22%7D%5D%7D&${__url_time_range}" }] }, "overrides": [] }
     },
     {

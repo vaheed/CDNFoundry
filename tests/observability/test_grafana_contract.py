@@ -202,6 +202,14 @@ class GrafanaContractTest(unittest.TestCase):
             self.assertIn("origin_status", query)
             self.assertIn("LIMIT 200", query)
 
+    def test_telemetry_error_stat_treats_absent_counter_families_as_zero(self) -> None:
+        system = self.by_uid["cdnf-system-command-center"]
+        panel = next(panel for panel in system["panels"] if panel["id"] == 10)
+        expression = panel["targets"][0]["expr"]
+        self.assertEqual(2, expression.count("or vector(0)"))
+        self.assertIn("vector_component_discarded_events_total", expression)
+        self.assertIn("vector_component_errors_total", expression)
+
     def test_system_dashboard_covers_real_metric_families(self) -> None:
         serialized = json.dumps(self.by_uid["cdnf-system-command-center"])
         for metric in (
