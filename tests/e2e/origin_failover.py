@@ -118,7 +118,11 @@ def main() -> None:
             stale_seed = request("stale-failover.example", "/resident")
             assert "primary\n" in stale_seed and "X-CDNFoundry-Cache: MISS" in stale_seed, stale_seed
 
-            run("docker", "stop", PRIMARY)
+            # These disposable origins model an abrupt outage. A graceful
+            # `docker stop` can wait up to ten seconds for OpenResty's upstream
+            # keepalive connections, consuming the complete stale-if-error
+            # window before the test makes its next request.
+            run("docker", "kill", PRIMARY)
             first, second = request("failover.example", "/one"), request("failover.example", "/two")
             assert "502 Bad Gateway" in first and "502 Bad Gateway" in second, first + second
             activated = request("failover.example", "/three")
@@ -150,9 +154,9 @@ def main() -> None:
             assert "primary_recovery_threshold" in recovered, recovered + recovery_diagnostics
 
             stale_seed = request("stale-failover.example", "/resident-final")
-            assert "primary\n" in stale_seed, stale_seed
+            assert "primary\n" in stale_seed and "X-CDNFoundry-Cache: MISS" in stale_seed, stale_seed
             time.sleep(2.1)
-            run("docker", "stop", PRIMARY, BACKUP)
+            run("docker", "kill", PRIMARY, BACKUP)
             stale = request("stale-failover.example", "/resident-final")
             assert "X-CDNFoundry-Cache: STALE" in stale and "primary\n" in stale, stale
             bounded_failure = request("failover.example", "/both-down")
