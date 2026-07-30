@@ -87,7 +87,9 @@ jobs:
           docker build -t cdnfoundry/loki:validation docker/loki
           docker run --rm -e LOKI_RETENTION_PERIOD=168h -e LOKI_MAX_QUERY_LENGTH=168h \
             cdnfoundry/loki:validation -config.file=/etc/loki/loki.yml -config.expand-env=true -verify-config=true
-          docker run --rm --entrypoint /bin/promtool -v "$PWD/docker/prometheus:/etc/prometheus:ro" \
+          docker run --rm --entrypoint /bin/promtool \
+            -v "$PWD/docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
+            -v "$PWD/docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro" \
             -v "$PWD/docker/prometheus/dev-metrics-token:/run/secrets/metrics-token:ro" \
             -v "$PWD/docker/prometheus/edge-targets.dev.yml:/etc/prometheus/edge-targets.yml:ro" \
             -v "$PWD/docker/prometheus/operational-log-targets.dev.yml:/etc/prometheus/operational-log-targets.yml:ro" \
