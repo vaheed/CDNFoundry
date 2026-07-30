@@ -4,11 +4,12 @@
       {
         "builtIn": 0,
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "enable": true,
-        "expr": "ALERTS{alertstate=\"firing\"}",
+        "enable": false,
+        "expr": "ALERTS{alertstate=\"firing\"} unless ALERTS{alertstate=\"firing\"} offset 5m",
         "hide": false,
         "iconColor": "red",
-        "name": "Firing alerts",
+        "name": "New firing alerts",
+        "step": "5m",
         "tagKeys": "alertname,severity",
         "titleFormat": "{{alertname}} ({{severity}})"
       }
@@ -29,7 +30,7 @@
       "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
       "targets": [{ "expr": "min(cdnfoundry_component_health)", "instant": true, "refId": "A" }],
       "fieldConfig": { "defaults": { "mappings": [{ "options": { "0": { "color": "red", "text": "DEGRADED" }, "1": { "color": "green", "text": "HEALTHY" } }, "type": "value" }], "noValue": "UNAVAILABLE", "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] },
-      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "textMode": "value_and_name" }
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "textMode": "value_and_name" }
     },
     {
       "id": 2, "type": "stat", "title": "Critical alerts",
@@ -47,7 +48,7 @@
     {
       "id": 4, "type": "stat", "title": "Unhealthy components",
       "datasource": { "type": "prometheus", "uid": "prometheus" }, "gridPos": { "h": 4, "w": 2, "x": 8, "y": 0 },
-      "targets": [{ "expr": "sum(cdnfoundry_component_health == 0)", "instant": true, "refId": "A" }],
+      "targets": [{ "expr": "count(cdnfoundry_component_health == 0) or (vector(0) and on() up{job=\"prometheus\"})", "instant": true, "refId": "A" }],
       "fieldConfig": { "defaults": { "noValue": "No data", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] }
     },
     {
@@ -166,7 +167,8 @@
         { "id": 306, "type": "table", "title": "TLS failures and security actions", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 8, "w": 8, "x": 0, "y": 28 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT tls_error, security_action, security_reason, count() AS events FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) AND (tls_error != '' OR security_action = 'block') GROUP BY tls_error,security_action,security_reason ORDER BY events DESC LIMIT 100", "refId": "A" }] },
         { "id": 307, "type": "table", "title": "WAF actions, rules, scores, processing, body limits, exclusions", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 8, "w": 8, "x": 8, "y": 28 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT waf_profile,waf_action,waf_rule_id,waf_score,waf_body_limit,waf_exclusion_id,round(avg(waf_processing_us),1) AS avg_processing_us,count() AS events FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) AND waf_action != 'off' GROUP BY waf_profile,waf_action,waf_rule_id,waf_score,waf_body_limit,waf_exclusion_id ORDER BY events DESC LIMIT 100", "refId": "A" }] },
         { "id": 308, "type": "table", "title": "Compression outcomes", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 8, "w": 8, "x": 16, "y": 28 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT compression_encoding,compression_profile,compression_fallback,round(avg(compression_ratio),2) AS avg_ratio,count() AS requests FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) GROUP BY compression_encoding,compression_profile,compression_fallback ORDER BY requests DESC LIMIT 100", "refId": "A" }] },
-        { "id": 309, "type": "table", "title": "Traffic by edge, hostname, country", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 24, "x": 0, "y": 36 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT edge_id,hostname,country,count() AS requests,sum(bytes_out) AS bytes_out FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) GROUP BY edge_id,hostname,country ORDER BY requests DESC LIMIT 200", "refId": "A" }] }
+        { "id": 309, "type": "table", "title": "Traffic by edge, hostname, country", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 9, "w": 24, "x": 0, "y": 36 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT edge_id,hostname,country,count() AS requests,sum(bytes_out) AS bytes_out FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) GROUP BY edge_id,hostname,country ORDER BY requests DESC LIMIT 200", "refId": "A" }] },
+        { "id": 310, "type": "table", "title": "Recent proxy request tail", "description": "Near-real-time client-to-edge and edge-to-origin outcomes from ClickHouse. Refreshes with the dashboard; query strings, client IPs, headers, and bodies are excluded.", "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "gridPos": { "h": 12, "w": 24, "x": 0, "y": 45 }, "targets": [{ "editorType": "sql", "format": 1, "queryType": "table", "rawSql": "SELECT occurred_at AS time,domain_id,hostname,method,path,status AS client_status,nullIf(origin_error,'') AS origin_status,cache_status,origin_role,origin_transition,edge_id,bytes_in,bytes_out FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) ORDER BY occurred_at DESC,event_id DESC LIMIT 200", "refId": "A" }], "fieldConfig": { "defaults": { "noValue": "No proxy requests in selected range" }, "overrides": [] } }
       ]
     },
     {
@@ -225,7 +227,7 @@
   "tags": ["cdnfoundry", "operations", "system"],
   "templating": { "list": [] },
   "time": { "from": "now-6h", "to": "now" },
-  "timepicker": { "refresh_intervals": ["30s", "1m", "5m"], "time_options": ["1h", "6h", "24h", "7d", "30d", "1y"] },
+  "timepicker": { "refresh_intervals": ["10s", "30s", "1m", "5m"], "time_options": ["1h", "6h", "24h", "7d", "30d", "1y"] },
   "timezone": "browser",
   "title": "CDNFoundry — System Command Center",
   "uid": "cdnf-system-command-center",

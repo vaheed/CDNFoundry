@@ -40,6 +40,7 @@ def grafana_loki_health() -> dict:
 def main() -> None:
     run("docker", "compose", "-f", "compose.dev.yml", "up", "-d", "loki", "log-collector", "grafana")
     run("docker", "rm", "-f", FIXTURE, check=False)
+    service = f"qualification-{time.time_ns()}"
     secret = "vector-secret-must-not-reach-loki"
     operational = json.dumps(
         {
@@ -58,18 +59,22 @@ def main() -> None:
             "status": 200,
         }
     )
+    plain_access_event = (
+        '192.0.2.10 - - [30/Jul/2026:00:00:00 +0000] '
+        '"GET /private?token=plain-access-secret HTTP/1.1" 200 12 "-" "qualification-agent"'
+    )
     try:
         run(
             "docker", "run", "-d", "--name", FIXTURE,
-            "--label", "com.docker.compose.service=qualification",
+            "--label", f"com.docker.compose.service={service}",
             "alpine:3.22", "sh", "-c",
-            f"printf '%s\\n' '{operational}' '{access_event}'; sleep 30",
+            f"printf '%s\\n' '{operational}' '{access_event}' '{plain_access_event}'; sleep 30",
         )
         deadline = time.monotonic() + 45
         entries: list[dict] = []
         while time.monotonic() < deadline:
             try:
-                streams = loki_query('{service="qualification"}')
+                streams = loki_query(f'{{service="{service}"}}')
                 entries = [json.loads(value[1]) for stream in streams for value in stream.get("values", [])]
                 if any(entry.get("event") == "qualification_failure" for entry in entries):
                     break
@@ -84,9 +89,11 @@ def main() -> None:
             raise AssertionError(f"central redaction failed: {encoded}")
         if "filtered.example.test" in encoded:
             raise AssertionError("OpenResty access-event shape was duplicated into Loki")
+        if "plain-access-secret" in encoded or "qualification-agent" in encoded:
+            raise AssertionError("plain Nginx access line was duplicated into Loki")
         event = next(entry for entry in entries if entry.get("event") == "qualification_failure")
         expected = {
-            "level": "error", "environment": "development", "service": "qualification",
+            "level": "error", "environment": "development", "service": service,
             "role": "development", "host": "development", "collector_id": "development-01",
             "domain_id": "42", "operation_id": "qualification-operation",
         }

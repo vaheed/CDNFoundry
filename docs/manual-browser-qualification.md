@@ -189,8 +189,10 @@ Run the documented operator commands from a clean verification environment and a
    gateway, edge, cell, endpoint, capacity, HTTP, DNS, Vector, host,
    ClickHouse, PowerDNS, DNSdist, and Alertmanager panels populate from real
    sources. Follow each displayed runbook link and confirm its anchor exists.
-4. Generate controlled HTTP traffic and an alert overlapping it. Confirm alert
-   annotations appear on HTTP request and exact origin-latency graphs.
+4. Confirm **New firing alerts** is off by default and graph backgrounds remain
+   readable. Generate controlled HTTP traffic and one new alert, enable the
+   annotation, and confirm one bounded transition marker appears instead of a
+   red marker at every scrape. Disable the annotation again.
 5. Stop one datasource at a time. Confirm the affected panels show datasource
    failure/no data and never a fabricated zero, while unrelated datasources and
    serving traffic remain healthy.
@@ -198,6 +200,11 @@ Run the documented operator commands from a clean verification environment and a
    candidate rejection, and one queue failure. Confirm service/host matrices,
    latest errors, ingestion health, and the relevant grouped panels update.
    Follow a data link to Explore and confirm its range and Loki datasource.
+7. Expand **HTTP analytics** and open **Recent proxy request tail**. Generate a
+   MISS followed by a HIT. Confirm newest-first rows show client status, cache
+   result, origin status/role/transition, edge, and byte counts within two
+   refreshes. Confirm no client IP, query string, header, user agent, referrer,
+   cookie, authorization value, or body appears.
 
 ### Domain Command Center
 
@@ -215,11 +222,14 @@ Run the documented operator commands from a clean verification environment and a
 4. Compare raw samples with average and exact p50/p95/p99 origin latency. Confirm
    paths contain no query strings, top lists are bounded, and no client IP,
    authorization, cookie, request body, user agent, or referrer appears.
-5. Select ranges inside seven days, crossing seven days, beyond 400 days, and
+5. Open **Recent proxy request tail**. Confirm it is newest-first, contains only
+   the selected domain, distinguishes client status from origin status, and
+   updates within two refreshes after a controlled request.
+6. Select ranges inside seven days, crossing seven days, beyond 400 days, and
    beyond available retention. Confirm raw-detail completeness is explicit,
    exact quantiles are never synthesized from aggregates, and volume panels use
    the documented raw/hourly/daily boundaries.
-6. Expand **Live Operational Logs**. Confirm all log panels remain scoped to the
+7. Expand **Live Operational Logs**. Confirm all log panels remain scoped to the
    selected domain, failed deployment/DNS/origin/certificate/purge/security/edge
    task events appear, and changing the domain removes the previous domain's
    entries without adding another dashboard variable.

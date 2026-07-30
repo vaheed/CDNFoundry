@@ -63,6 +63,7 @@ class OperationalLoggingContractTest(unittest.TestCase):
 
     def test_access_and_dns_query_shapes_are_excluded_and_redaction_is_central(self) -> None:
         self.assertIn('parsed.event_type == "request"', self.vector)
+        self.assertIn("nginx_access = match", self.vector)
         for field in ("parsed.qname", "parsed.qtype", "parsed.rcode"):
             self.assertIn(field, self.vector)
         for secret in ("authorization", "cookie", "password", "bootstrap[_-]?token", "private[_-]?key", "database[_-]?(url|password)"):

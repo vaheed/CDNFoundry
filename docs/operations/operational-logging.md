@@ -13,7 +13,9 @@ the newest log entry instead of applying backpressure to a service.
 
 HTTP access events remain in ClickHouse. DNS query events remain in ClickHouse.
 The operational collector explicitly removes the OpenResty `edge_json` request
-shape and the dnstap-derived DNS query shape before Loki.
+shape, common/combined Nginx access lines, and the dnstap-derived DNS query
+shape before Loki. This also prevents stale web or edge-control containers from
+leaking request paths or query strings into the operational store.
 
 ## Deployment
 

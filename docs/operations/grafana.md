@@ -89,6 +89,13 @@ Both dashboards default to six hours and refresh every 30 seconds.
   incident strip; diagnostic rows below it are collapsed. Red means loss,
   drift, error, or immediate capacity pressure; yellow means warning or ≥80%
   capacity.
+- The **New firing alerts** annotation is disabled by default. Enabling it
+  shows one bounded marker near each new firing transition instead of painting
+  every Prometheus scrape across the graph background.
+- The HTTP analytics row includes a **Recent proxy request tail** backed by
+  ClickHouse. It refreshes every 30 seconds and shows sanitized client-facing
+  status plus edge-to-origin status, role, and transition. It never selects
+  client IPs, query strings, headers, user agents, referrers, cookies, or bodies.
 - Its collapsed **Live Operational Logs** row shows errors by service/host,
   critical events, restart/OOM evidence, edge/gateway/DNS/TLS/queue/data-store
   failures, ingestion health, and alert-adjacent logs.
@@ -98,6 +105,8 @@ Both dashboards default to six hours and refresh every 30 seconds.
   state independently of datasource health.
 - Its operational-log row reuses the same `$domain_id`; no second variable or
   label is introduced.
+- Its HTTP request row contains the same bounded request tail scoped to the
+  selected domain.
 
 Raw HTTP/DNS tables retain seven days. Exact origin and WAF quantiles and rich
 incident dimensions always use raw events and explicitly show when a selected
@@ -108,6 +117,11 @@ retention is three years. Hourly averages are never presented as percentiles.
 Paths exclude query strings at Vector ingestion and top lists are bounded.
 Dashboards never select client IP, authorization, cookie, request body, user
 agent, or referrer columns.
+
+Access events are not Loki logs. For a faster incident view, expand the request
+tail, shorten the dashboard range, and temporarily select the bounded 10-second
+refresh. Use Grafana Explore with the ClickHouse datasource for ad hoc access
+queries. Loki Explore remains reserved for operational and error logs.
 
 ## Prometheus target inventory
 

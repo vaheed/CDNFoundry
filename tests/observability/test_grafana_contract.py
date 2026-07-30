@@ -169,6 +169,27 @@ class GrafanaContractTest(unittest.TestCase):
         self.assertIn("Open gateway logs in Explore", json.dumps(system))
         self.assertIn("Open domain logs in Explore", json.dumps(domain))
 
+    def test_request_tail_stays_in_clickhouse_and_alert_overlay_is_readable(self) -> None:
+        system = self.by_uid["cdnf-system-command-center"]
+        domain = self.by_uid["cdnf-domain-command-center"]
+        annotation = system["annotations"]["list"][0]
+        self.assertFalse(annotation["enable"])
+        self.assertIn("unless", annotation["expr"])
+        self.assertEqual("5m", annotation["step"])
+        self.assertEqual("value", next(panel for panel in system["panels"] if panel["id"] == 1)["options"]["colorMode"])
+        unhealthy = next(panel for panel in system["panels"] if panel["id"] == 4)
+        self.assertIn("count(cdnfoundry_component_health == 0)", unhealthy["targets"][0]["expr"])
+        for dashboard in (system, domain):
+            self.assertIn("10s", dashboard["timepicker"]["refresh_intervals"])
+            tails = [panel for panel in panels(dashboard) if panel.get("title") == "Recent proxy request tail"]
+            self.assertEqual(1, len(tails))
+            tail = tails[0]
+            self.assertEqual("clickhouse", tail["datasource"]["uid"])
+            query = tail["targets"][0]["rawSql"]
+            self.assertIn("client_status", query)
+            self.assertIn("origin_status", query)
+            self.assertIn("LIMIT 200", query)
+
     def test_system_dashboard_covers_real_metric_families(self) -> None:
         serialized = json.dumps(self.by_uid["cdnf-system-command-center"])
         for metric in (
