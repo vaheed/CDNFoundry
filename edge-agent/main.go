@@ -19,18 +19,23 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
 const version = "1.2.0"
+
+var logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 type identity struct{ EdgeID, Certificate, PrivateKey, PublicKey string }
 type state struct {
@@ -112,18 +117,35 @@ func main() {
 	if err := c.configureMutualTLS(); err != nil {
 		fatal(err)
 	}
+	logger.Info("edge agent started", "event", "service_started", "edge_id", c.id.EdgeID, "version", version)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
 	once := env("EDGE_ONCE", "false") == "true"
+	var lastFailure string
+	var lastFailureAt time.Time
 	for {
 		if err := c.sync(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			if err.Error() != lastFailure || time.Since(lastFailureAt) >= time.Minute {
+				logger.Error("edge synchronization failed", "event", "edge_sync_failed", "edge_id", c.id.EdgeID, "error_code", "edge_sync_failed", "error", err.Error())
+				lastFailure, lastFailureAt = err.Error(), time.Now()
+			}
+		} else if lastFailure != "" {
+			logger.Info("edge synchronization recovered", "event", "edge_sync_recovered", "edge_id", c.id.EdgeID)
+			lastFailure = ""
 		}
 		if err := c.processTasks(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			logger.Error("edge task polling failed", "event", "edge_task_poll_failed", "edge_id", c.id.EdgeID, "error_code", "edge_task_poll_failed", "error", err.Error())
 		}
 		if once {
+			logger.Info("edge agent stopped", "event", "service_stopped", "edge_id", c.id.EdgeID)
 			return
 		}
-		time.Sleep(5 * time.Second)
+		select {
+		case <-ctx.Done():
+			logger.Info("edge agent stopped", "event", "service_stopped", "edge_id", c.id.EdgeID)
+			return
+		case <-time.After(5 * time.Second):
+		}
 	}
 }
 
@@ -221,14 +243,19 @@ func (c *client) processTasks() error {
 		return err
 	}
 	for _, task := range response.Data {
+		startedAt := time.Now()
+		logger.Info("edge task started", "event", "edge_task_started", "task_id", task.ID, "task_type", task.Type, "edge_id", c.id.EdgeID)
 		if task.Type == "runtime_upgrade" {
+			logger.Info("runtime upgrade intent received", "event", "runtime_upgrade_intent", "task_id", task.ID, "edge_id", c.id.EdgeID)
 			complete, result, status := c.runRuntimeUpgrade(task)
 			if !complete {
+				logger.Info("runtime upgrade intent persisted", "event", "runtime_upgrade_intent_persisted", "task_id", task.ID, "edge_id", c.id.EdgeID)
 				continue
 			}
 			if err := c.request("POST", "/edge/v1/tasks/"+task.ID+"/result", map[string]any{"status": status, "result": result}, &map[string]any{}, true); err != nil {
 				return err
 			}
+			logger.Info("edge task completed", "event", "edge_task_result", "task_id", task.ID, "task_type", task.Type, "status", status, "edge_id", c.id.EdgeID, "duration_ms", time.Since(startedAt).Milliseconds())
 			continue
 		}
 		result := map[string]any{"status": "failed", "failure_reason": "cell_supervisor_unavailable"}
@@ -246,6 +273,7 @@ func (c *client) processTasks() error {
 		if err := c.request("POST", "/edge/v1/tasks/"+task.ID+"/result", map[string]any{"status": status, "result": result}, &map[string]any{}, true); err != nil {
 			return err
 		}
+		logger.Info("edge task completed", "event", "edge_task_result", "task_id", task.ID, "task_type", task.Type, "status", status, "edge_id", c.id.EdgeID, "duration_ms", time.Since(startedAt).Milliseconds())
 	}
 	return nil
 }
@@ -697,9 +725,11 @@ func (c *client) sync() error {
 	if len(response.Data) == 0 {
 		return c.heartbeat(current.Sequence)
 	}
+	logger.Info("runtime candidate received", "event", "runtime_candidate_received", "edge_id", c.id.EdgeID, "revision_id", response.Data[len(response.Data)-1].Sequence)
 	candidate := state{Sequence: current.Sequence, Domains: clone(current.Domains)}
 	for _, item := range response.Data {
 		if item.SchemaVersion != 1 || !compatible(item.Minimum, item.Maximum) {
+			logger.Warn("runtime candidate rejected; previous valid state preserved", "event", "runtime_candidate_rejected", "edge_id", c.id.EdgeID, "revision_id", item.Sequence, "error_code", "incompatible_artifact")
 			c.queueAck(ack{Sequence: item.Sequence, Rejected: true, Reason: "incompatible_artifact"})
 			return nil
 		}
@@ -711,6 +741,7 @@ func (c *client) sync() error {
 		}
 		payload, err := verify(artifact.Encoded, item.Checksum, item.Signature, c.id.PublicKey)
 		if err != nil {
+			logger.Warn("runtime candidate rejected; previous valid state preserved", "event", "runtime_candidate_rejected", "edge_id", c.id.EdgeID, "revision_id", item.Sequence, "error_code", "signature_or_checksum_invalid")
 			c.queueAck(ack{Sequence: item.Sequence, Rejected: true, Reason: "signature_or_checksum_invalid", Details: err.Error()})
 			return nil
 		}
@@ -725,10 +756,12 @@ func (c *client) sync() error {
 		candidate.Sequence = item.Sequence
 	}
 	if err := c.activate(candidate); err != nil {
+		logger.Error("runtime candidate rejected; previous valid state preserved", "event", "runtime_activation_failed", "edge_id", c.id.EdgeID, "revision_id", candidate.Sequence, "error_code", "candidate_validation_failed", "error", err.Error())
 		c.queueAck(ack{Sequence: candidate.Sequence, Rejected: true, Reason: "candidate_validation_failed", Details: err.Error()})
 		return nil
 	}
 	c.queueAck(ack{Sequence: candidate.Sequence})
+	logger.Info("runtime candidate activated", "event", "runtime_candidate_activated", "edge_id", c.id.EdgeID, "revision_id", candidate.Sequence)
 	_ = c.flushAcks()
 	return c.heartbeat(candidate.Sequence)
 }
@@ -1562,4 +1595,7 @@ func required(k string) string {
 	}
 	return v
 }
-func fatal(e error) { fmt.Fprintln(os.Stderr, e); os.Exit(1) }
+func fatal(e error) {
+	logger.Error("edge agent terminated", "event", "service_fatal", "error_code", "startup_failed", "error", e.Error())
+	os.Exit(1)
+}

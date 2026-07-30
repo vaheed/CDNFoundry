@@ -29,7 +29,7 @@ high-entropy values for `GRAFANA_ADMIN_PASSWORD`,
 to render without them. Anonymous access and user signup are disabled.
 
 ```bash
-docker compose --env-file .env.prod -f compose.prod.yml --profile telemetry up -d
+docker compose --env-file .env.prod -f compose.prod.yml --profile telemetry --profile logs up -d
 ```
 
 With the embedded PostgreSQL service, start the `control` profile first so the
@@ -56,6 +56,7 @@ read-only and version controlled under `docker/grafana/`.
 | `prometheus` | none | private read-only HTTP endpoint |
 | `clickhouse` | `cdnf_grafana` | `SELECT` on six `cdnf` event/aggregate tables and `system.metrics`, `system.asynchronous_metrics`, `system.events` only |
 | `control-db` | `cdnf_grafana` | connect/usage, four inventory columns on `domains`, and the sanitized `grafana_domain_operational_metadata` view |
+| `loki` | none | private, bounded LogQL reads and live tail |
 
 The ClickHouse profile is `readonly=1`, caps execution at 60 seconds, defaults
 to 30 seconds, and bounds rows/bytes read and result rows. The datasource pins
@@ -88,10 +89,15 @@ Both dashboards default to six hours and refresh every 30 seconds.
   incident strip; diagnostic rows below it are collapsed. Red means loss,
   drift, error, or immediate capacity pressure; yellow means warning or ≥80%
   capacity.
+- Its collapsed **Live Operational Logs** row shows errors by service/host,
+  critical events, restart/OOM evidence, edge/gateway/DNS/TLS/queue/data-store
+  failures, ingestion health, and alert-adjacent logs.
 - **Domain Command Center** gets its searchable domain list from non-deleted
   PostgreSQL `domains`, so domains without traffic remain selectable. Every
   panel filters on the numeric selected domain ID and renders a no-traffic
   state independently of datasource health.
+- Its operational-log row reuses the same `$domain_id`; no second variable or
+  label is introduced.
 
 Raw HTTP/DNS tables retain seven days. Exact origin and WAF quantiles and rich
 incident dimensions always use raw events and explicitly show when a selected
@@ -115,6 +121,11 @@ the control plane even when direct gateway scraping is intentionally absent.
 ClickHouse's supported Prometheus exporter listens privately on port 9363.
 Prometheus also scrapes itself so zero firing-alert counts can be distinguished
 from a missing monitoring system.
+
+Prometheus scrapes Loki and the local operational collector. Populate the
+private target file selected by `PROMETHEUS_LOG_TARGETS_FILE` for collectors on
+other hosts. See [Operational logging](operational-logging.md) for identities,
+socket security, retention, saved queries, and outage recovery.
 
 ## Troubleshooting
 

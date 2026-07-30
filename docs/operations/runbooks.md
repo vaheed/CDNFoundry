@@ -116,6 +116,25 @@ Never scan or delete a cache volume for a normal full purge.
 5. Confirm backlog drains without resource starvation.
 6. Record the telemetry-loss interval; do not invent missing usage.
 
+## Loki or operational-log collector outage
+
+1. Confirm DNS, HTTP, edge activation, queues, and reconciliation continue; do
+   not restart those services to repair observability.
+2. Check Loki `/ready`, telemetry-gateway TLS/source allowlists, collector
+   `component_id="loki"` failures, buffer ratio, non-intentional drops, and host
+   filesystem usage.
+3. If one host collector failed, preserve its `operational-vector-data` volume,
+   repair only that collector, and confirm its stable `collector_id` did not
+   change. If the host itself failed, logs not durably buffered before failure
+   are unavailable.
+4. If Loki failed, preserve `loki-data`, repair disk/permissions/configuration,
+   and wait for `/ready`. Do not delete the volume to recover availability.
+5. Confirm the bounded oldest-first buffers drain, new logs appear in Explore,
+   and error/drop alerts clear. Events dropped after the 2 GiB buffer filled are
+   irrecoverable; record the exact interval.
+6. Verify compactor retention succeeds and the 14-day boundary advances. The
+   standard control backup does not restore Loki.
+
 ## Security incident
 
 1. Identify the smallest affected scope and its reason codes.

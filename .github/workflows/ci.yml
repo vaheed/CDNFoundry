@@ -61,6 +61,40 @@ jobs:
         run: docker compose --env-file .env.prod.example -f compose.prod.yml config --quiet
       - name: Validate production role overrides
         run: ./scripts/validate-production-overrides.sh
+      - name: Validate observability contracts
+        run: python3 -m unittest tests/observability/test_grafana_contract.py tests/observability/test_operational_logging_contract.py
+      - name: Validate operational logging configurations and alert rules
+        run: |
+          docker run --rm \
+            -e LOG_ENVIRONMENT=testing -e LOG_ROLE=test -e LOG_HOST=test-host \
+            -e LOG_COLLECTOR_ID=test-01 -e LOG_BUFFER_BYTES=268435488 \
+            -e LOG_METRICS_ADDRESS=127.0.0.1:9599 -e LOKI_ENDPOINT=http://127.0.0.1:3100 \
+            -v "$PWD/docker/vector/operational.yaml:/etc/vector/operational.yaml:ro" \
+            -v "$PWD/docker/vector/host-journal.yaml:/etc/vector/host-journal.yaml:ro" \
+            -v /var/run/docker.sock:/var/run/docker.sock:ro \
+            -v /tmp:/vector-data-dir \
+            timberio/vector:0.55.0-debian@sha256:a4be1111b40303524aae2ffb02cd59cef2a4e9753bd13d265bf0233e921828d9 \
+            validate --skip-healthchecks /etc/vector/operational.yaml /etc/vector/host-journal.yaml
+          docker run --rm \
+            -e LOG_ENVIRONMENT=testing -e LOG_ROLE=test -e LOG_HOST=test-host \
+            -e LOG_COLLECTOR_ID=test-01 -e LOG_BUFFER_BYTES=268435488 \
+            -e LOG_METRICS_ADDRESS=127.0.0.1:9599 -e LOKI_ENDPOINT=http://127.0.0.1:3100 \
+            -v "$PWD/docker/vector/operational.yaml:/etc/vector/operational.yaml:ro" \
+            -v /var/run/docker.sock:/var/run/docker.sock:ro \
+            -v /tmp:/vector-data-dir \
+            timberio/vector:0.55.0-debian@sha256:a4be1111b40303524aae2ffb02cd59cef2a4e9753bd13d265bf0233e921828d9 \
+            test /etc/vector/operational.yaml
+          docker build -t cdnfoundry/loki:validation docker/loki
+          docker run --rm -e LOKI_RETENTION_PERIOD=168h -e LOKI_MAX_QUERY_LENGTH=168h \
+            cdnfoundry/loki:validation -config.file=/etc/loki/loki.yml -config.expand-env=true -verify-config=true
+          docker run --rm --entrypoint /bin/promtool -v "$PWD/docker/prometheus:/etc/prometheus:ro" \
+            -v "$PWD/docker/prometheus/dev-metrics-token:/run/secrets/metrics-token:ro" \
+            -v "$PWD/docker/prometheus/edge-targets.dev.yml:/etc/prometheus/edge-targets.yml:ro" \
+            -v "$PWD/docker/prometheus/operational-log-targets.dev.yml:/etc/prometheus/operational-log-targets.yml:ro" \
+            prom/prometheus:v3.12.0 \
+            check config /etc/prometheus/prometheus.yml
+          docker run --rm --entrypoint /bin/promtool -v "$PWD/docker/prometheus:/etc/prometheus:ro" prom/prometheus:v3.12.0 \
+            test rules /etc/prometheus/alerts.test.yml
       - name: Validate Python syntax
         run: python3 -m compileall -q tests/e2e tests/docs
       - name: Build every production image from its pinned base
@@ -72,6 +106,7 @@ jobs:
           docker build -t cdnfoundry/edge-agent:ci edge-agent
           docker build -t cdnfoundry/edge-gateway:ci edge-gateway
           docker build -t cdnfoundry/mmdb-updater:ci docker/mmdb-updater
+          docker build -t cdnfoundry/loki:ci docker/loki
       - name: Smoke-test the read-only core image
         shell: bash
         run: |
@@ -246,6 +281,7 @@ jobs:
           docker build -t ghcr.io/vaheed/cdnfoundry-edge-gateway:${RELEASE} edge-gateway
           docker build -t ghcr.io/vaheed/cdnfoundry-mmdb-updater:${RELEASE} docker/mmdb-updater
           docker build -t ghcr.io/vaheed/cdnfoundry-grafana:${RELEASE} docker/grafana
+          docker build -t ghcr.io/vaheed/cdnfoundry-loki:${RELEASE} docker/loki
       - name: Push commit and channel tags
         env:
           RELEASE: ${{ github.sha }}
@@ -254,7 +290,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          images=(core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater grafana)
+          images=(core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater grafana loki)
           aliases=()
 
           if [[ "${RELEASE_REF}" == "refs/heads/main" ]]; then

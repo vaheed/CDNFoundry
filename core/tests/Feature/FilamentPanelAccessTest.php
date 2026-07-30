@@ -165,6 +165,33 @@ class FilamentPanelAccessTest extends TestCase
         $this->actingAs($disabledUser)->get('/app')->assertForbidden();
     }
 
+    public function test_live_logs_navigation_opens_configured_explore_for_administrators(): void
+    {
+        $admin = User::factory()->admin()->create();
+        config()->set('services.grafana.explore_url', 'https://grafana.example.test/explore?left=loki');
+
+        $this->actingAs($admin)->get('/admin')->assertOk()
+            ->assertSee('Live Logs')
+            ->assertSee('href="https://grafana.example.test/explore?left=loki"', false)
+            ->assertSee('target="_blank"', false);
+    }
+
+    public function test_live_logs_navigation_is_absent_from_the_domain_panel(): void
+    {
+        $user = User::factory()->create();
+        config()->set('services.grafana.explore_url', 'https://grafana.example.test/explore?left=loki');
+
+        $this->actingAs($user)->get('/app')->assertOk()->assertDontSee('Live Logs');
+    }
+
+    public function test_live_logs_navigation_is_hidden_when_unconfigured(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        config()->set('services.grafana.explore_url', null);
+        $this->actingAs($admin)->get('/admin')->assertOk()->assertDontSee('Live Logs');
+    }
+
     public function test_administrator_operational_pages_render_and_domain_users_cannot_open_them(): void
     {
         $admin = User::factory()->admin()->create();

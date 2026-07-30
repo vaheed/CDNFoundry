@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -24,6 +25,8 @@ import (
 )
 
 const version = "1.0.0"
+
+var logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 type config struct {
 	SchemaVersion int      `json:"schema_version"`
@@ -80,12 +83,15 @@ func main() {
 	if err := g.loadInitial(); err != nil {
 		fatal(err)
 	}
+	logger.Info("edge gateway started", "event", "service_started", "version", version, "revision_id", g.table.Load().revision)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 	go g.serveMetrics(ctx)
 	go g.watch(ctx)
+	go g.logRejectionSummaries(ctx)
 	<-ctx.Done()
 	g.close()
+	logger.Info("edge gateway stopped", "event", "service_stopped")
 }
 
 func (g *gateway) loadInitial() error {
@@ -117,8 +123,12 @@ func (g *gateway) watch(ctx context.Context) {
 				continue
 			}
 			data, err := os.ReadFile(g.configPath)
-			if err != nil || g.activate(data) != nil {
+			if err == nil {
+				err = g.activate(data)
+			}
+			if err != nil {
 				g.rejects.Add(1)
+				logger.Error("gateway candidate rejected; last valid map preserved", "event", "gateway_candidate_rejected", "error_code", "candidate_validation_failed", "error", err.Error())
 				continue
 			}
 			signature = next
@@ -153,7 +163,26 @@ func (g *gateway) activate(data []byte) error {
 	commitListeners()
 	g.reloads.Add(1)
 	g.ready.Store(true)
+	logger.Info("gateway listener map activated", "event", "gateway_candidate_activated", "revision_id", candidate.Revision, "listeners", len(candidate.Listeners), "routes", len(candidate.Routes))
 	return nil
+}
+
+func (g *gateway) logRejectionSummaries(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	var previousRejected, previousErrors uint64
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			rejected, failures := g.rejected.Load(), g.errors.Load()
+			if rejected > previousRejected || failures > previousErrors {
+				logger.Warn("bounded gateway connection failures", "event", "gateway_connection_rejection_summary", "rejected", rejected-previousRejected, "errors", failures-previousErrors)
+			}
+			previousRejected, previousErrors = rejected, failures
+		}
+	}
 }
 
 func validate(candidate config) (*routingTable, error) {
@@ -277,9 +306,7 @@ func (g *gateway) accept(address string, listener net.Listener) {
 			}
 			defer g.active.Add(-1)
 			defer connection.Close()
-			if err := g.handle(address, connection); err != nil {
-				fmt.Fprintf(os.Stderr, "connection rejected on %s: %s\n", address, err)
-			}
+			_ = g.handle(address, connection)
 		}()
 	}
 }
@@ -583,6 +610,6 @@ func boundedIntegerEnv(name string, fallback, minimum, maximum int) int {
 }
 
 func fatal(err error) {
-	fmt.Fprintln(os.Stderr, err)
+	logger.Error("edge gateway terminated", "event", "service_fatal", "error_code", "startup_failed", "error", err.Error())
 	os.Exit(1)
 }

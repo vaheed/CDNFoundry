@@ -137,10 +137,26 @@ Grafana telemetry variables are:
 | `GRAFANA_POSTGRES_SSLMODE` | telemetry | Default `disable` for embedded private PostgreSQL; set `require` or `verify-full` for external endpoints |
 | `GRAFANA_POSTGRES_PROVISION_HOST`, `GRAFANA_POSTGRES_PROVISION_PORT` | local account provisioning | Privileged endpoint; external operators may apply the SQL separately |
 | `PROMETHEUS_EDGE_TARGETS_FILE` | telemetry | Private file_sd target file; production default is empty |
+| `PROMETHEUS_LOG_TARGETS_FILE` | telemetry | Private file_sd targets for remote collector metrics; production default is empty |
+| `GRAFANA_EXPLORE_URL` | control | External Explore URL for the admin-only Live Logs link; empty hides it |
+| `GRAFANA_LOKI_URL` | telemetry | Private Grafana-to-Loki endpoint; default `http://loki:3100` |
+| `LOKI_RETENTION_PERIOD` | telemetry | Loki retention; production default `336h` |
+| `LOKI_MAX_QUERY_LENGTH` | telemetry | Maximum query range; production default `336h` |
+| `LOKI_ENDPOINT` | logs | Collector push endpoint; use the source-restricted HTTPS telemetry gateway off-host |
+| `LOG_ROLE` | logs | Stable host role: `control`, `dns`, `edge`, or `telemetry` |
+| `LOG_HOST` | logs | Stable deployment host name |
+| `LOG_COLLECTOR_ID` | logs | Globally unique stable collector identity |
+| `LOG_BUFFER_BYTES` | logs | Per-host disk-buffer bytes; production default `2147483648` |
+| `LOG_METRICS_BIND` | logs | Host metrics bind; loopback default `127.0.0.1:9599` |
+| `LOG_SOURCE_IPV4_ALLOWLIST` | telemetry gateway | Exact non-edge host sources allowed to push logs |
 
 Vector receives `CLICKHOUSE_ENDPOINT`, `CLICKHOUSE_USER`, and
 `CLICKHOUSE_PASSWORD` from Compose. `MMDB_DIR` is an internal updater override
 whose default is `/mmdb`.
+
+Laravel containers fix `LOG_CHANNEL=stderr`, `LOG_STACK=stderr`, and the
+allowlisting JSON formatter. Changing these back to a private file would bypass
+the supported host collector.
 
 ## Images and host publication
 

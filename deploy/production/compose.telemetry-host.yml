@@ -6,6 +6,7 @@ services:
       TELEMETRY_HOSTNAME: ${TELEMETRY_HOSTNAME:?TELEMETRY_HOSTNAME is required}
       ACME_CONTACT_EMAIL: ${ACME_CONTACT_EMAIL:?ACME_CONTACT_EMAIL is required}
       EDGE_PUBLIC_IPV4_ALLOWLIST: ${EDGE_PUBLIC_IPV4_ALLOWLIST:?EDGE_PUBLIC_IPV4_ALLOWLIST is required}
+      LOG_SOURCE_IPV4_ALLOWLIST: ${LOG_SOURCE_IPV4_ALLOWLIST:?LOG_SOURCE_IPV4_ALLOWLIST is required}
     ports:
       - "${PUBLIC_BIND_IPV4:?PUBLIC_BIND_IPV4 is required}:80:80/tcp"
       - "${PUBLIC_BIND_IPV4:?PUBLIC_BIND_IPV4 is required}:443:443/tcp"
@@ -16,6 +17,10 @@ services:
       - telemetry-caddy-config:/config
     depends_on:
       clickhouse: { condition: service_started }
+      loki: { condition: service_healthy }
+  log-collector:
+    environment:
+      LOKI_ENDPOINT: http://loki:3100
     networks: [telemetry, egress]
     restart: unless-stopped
     read_only: true

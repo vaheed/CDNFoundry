@@ -5,6 +5,11 @@ namespace App\Providers;
 use App\Support\PlatformSettings;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Queue\Events\JobExceptionOccurred;
+use Illuminate\Queue\Events\JobProcessed;
+use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Support\Facades\Context;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
@@ -36,6 +41,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Queue::before(function (JobProcessing $event): void {
+            Context::add('job_id', $event->job->uuid() ?? $event->job->getJobId());
+        });
+        $clearJobContext = static fn (JobProcessed|JobExceptionOccurred $event) => Context::forget('job_id');
+        Queue::after($clearJobContext);
+        Queue::exceptionOccurred($clearJobContext);
+
         RateLimiter::for('login', fn (Request $request): Limit => Limit::perMinute(app(PlatformSettings::class)->integer('rate_limits', 'login_per_minute'))->by($request->ip().'|'.strtolower((string) $request->string('email'))));
         RateLimiter::for('account', function (Request $request): Limit {
             $identity = (string) ($request->user()?->getAuthIdentifier() ?? $request->ip());

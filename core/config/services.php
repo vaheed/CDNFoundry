@@ -28,6 +28,7 @@ return [
         'region' => env('BACKUP_DEFAULT_REGION', 'us-east-1'),
     ],
     'prometheus' => ['url' => env('PROMETHEUS_URL', 'http://prometheus:9090')],
+    'grafana' => ['explore_url' => env('GRAFANA_EXPLORE_URL')],
     'acme' => [
         'enabled' => filter_var(env('ACME_ENABLED', false), FILTER_VALIDATE_BOOL),
         'verify_tls' => filter_var(env('ACME_VERIFY_TLS', true), FILTER_VALIDATE_BOOL),

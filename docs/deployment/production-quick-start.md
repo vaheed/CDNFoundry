@@ -296,12 +296,12 @@ cd /opt/cdnfoundry
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.control-host.yml \
-  --profile control --profile telemetry config --quiet
+  --profile control --profile telemetry --profile logs config --quiet
 
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.control-host.yml \
-  --profile control --profile telemetry pull
+  --profile control --profile telemetry --profile logs pull
 
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
@@ -311,7 +311,7 @@ docker compose --env-file .env.prod \
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.control-host.yml \
-  --profile control --profile telemetry up -d
+  --profile control --profile telemetry --profile logs up -d
 
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
@@ -355,12 +355,12 @@ cd /opt/cdnfoundry
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.dns-edge-host.yml \
-  --profile dns --profile edge config --quiet
+  --profile dns --profile edge --profile logs config --quiet
 
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.dns-edge-host.yml \
-  --profile dns --profile edge pull
+  --profile dns --profile edge --profile logs pull
 
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
@@ -370,7 +370,7 @@ docker compose --env-file .env.prod \
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.dns-edge-host.yml \
-  --profile dns up -d
+  --profile dns --profile logs up -d
 ```
 
 Inspect the host:
@@ -467,7 +467,7 @@ Start the edge profile:
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.dns-edge-host.yml \
-  --profile edge up -d
+  --profile edge --profile logs up -d
 
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
@@ -704,7 +704,7 @@ docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.control-host.yml \
   -f deploy/production/compose.control-host-ipv6.yml \
-  --profile control --profile telemetry up -d
+  --profile control --profile telemetry --profile logs up -d
 ```
 
 Combined DNS/edge with IPv6:
@@ -715,7 +715,7 @@ docker compose --env-file .env.prod \
   -f deploy/production/compose.dns-edge-host.yml \
   -f deploy/production/compose.dns-host-ipv6.yml \
   -f deploy/production/compose.edge-host-ipv6.yml \
-  --profile dns --profile edge up -d
+  --profile dns --profile edge --profile logs up -d
 ```
 
 Publish AAAA and glue only after external IPv6 DNS and HTTPS checks pass.

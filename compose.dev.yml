@@ -32,6 +32,10 @@ x-core-env: &core-env
   METRICS_TOKEN_FILE: /run/dev-metrics/metrics-token
   RESTIC_REPOSITORY: /app/storage/app/restic
   RESTIC_PASSWORD_FILE: /run/dev-backup/restic-password
+  LOG_CHANNEL: stderr
+  LOG_STACK: stderr
+  LOG_STDERR_FORMATTER: App\Logging\OperationalJsonFormatter
+  GRAFANA_EXPLORE_URL: ${GRAFANA_EXPLORE_URL:-http://localhost:3000/explore?left=%7B%22datasource%22:%22loki%22%7D}
 
 x-core: &core
   build:
@@ -304,6 +308,59 @@ services:
     networks: [telemetry, edge, dns]
     restart: unless-stopped
 
+  loki-data-init:
+    image: alpine:3.22
+    command: [chown, "10001:10001", /loki]
+    volumes: [loki-data:/loki]
+    restart: "no"
+
+  loki:
+    build:
+      context: ./docker/loki
+    ports: ["127.0.0.1:3100:3100"]
+    environment:
+      LOKI_RETENTION_PERIOD: 168h
+      LOKI_MAX_QUERY_LENGTH: 168h
+    volumes: [loki-data:/loki]
+    depends_on:
+      loki-data-init: { condition: service_completed_successfully }
+    networks: [telemetry]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, /usr/local/bin/busybox, wget, -qO-, http://127.0.0.1:3100/ready]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  log-collector:
+    image: timberio/vector:0.55.0-debian@sha256:a4be1111b40303524aae2ffb02cd59cef2a4e9753bd13d265bf0233e921828d9
+    container_name: cdnfoundry-log-collector
+    command: [--config, /etc/vector/operational.yaml]
+    environment:
+      LOG_ENVIRONMENT: development
+      LOG_ROLE: development
+      LOG_HOST: ${LOG_HOST:-development}
+      LOG_COLLECTOR_ID: ${LOG_COLLECTOR_ID:-development-01}
+      LOG_BUFFER_BYTES: "268435488"
+      LOG_METRICS_ADDRESS: 0.0.0.0:9599
+      LOKI_ENDPOINT: http://loki:3100
+    volumes:
+      - ./docker/vector/operational.yaml:/etc/vector/operational.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - operational-vector-data:/vector-data-dir
+    depends_on:
+      loki: { condition: service_healthy }
+    ports: ["127.0.0.1:9599:9599"]
+    networks: [telemetry]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    mem_limit: 256m
+    cpus: 0.25
+    pids_limit: 96
+
   prometheus:
     image: prom/prometheus:v3.12.0
     ports: ["9090:9090"]
@@ -312,6 +369,7 @@ services:
       - ./docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro
       - ./docker/prometheus/alerts.test.yml:/etc/prometheus/alerts.test.yml:ro
       - ./docker/prometheus/edge-targets.dev.yml:/etc/prometheus/edge-targets.yml:ro
+      - ./docker/prometheus/operational-log-targets.dev.yml:/etc/prometheus/operational-log-targets.yml:ro
       - ./docker/prometheus/dev-metrics-token:/run/secrets/metrics-token:ro
       - prometheus:/prometheus
     networks: [telemetry, control, dns]
@@ -360,6 +418,7 @@ services:
       GRAFANA_POSTGRES_USER: cdnf_grafana
       GRAFANA_POSTGRES_PASSWORD: cdnf-grafana-dev-only
       GRAFANA_POSTGRES_SSLMODE: disable
+      GRAFANA_LOKI_URL: http://loki:3100
     volumes:
       - grafana-data:/var/lib/grafana
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -368,6 +427,7 @@ services:
       clickhouse: { condition: service_healthy }
       grafana-control-db-provision: { condition: service_completed_successfully }
       prometheus: { condition: service_started }
+      loki: { condition: service_healthy }
     networks: [telemetry, control]
     restart: unless-stopped
     healthcheck:
@@ -833,6 +893,8 @@ volumes:
   pdns-db: {}
   clickhouse: {}
   vector-data: {}
+  operational-vector-data: {}
+  loki-data: {}
   prometheus: {}
   grafana-data: {}
   mmdb: {}

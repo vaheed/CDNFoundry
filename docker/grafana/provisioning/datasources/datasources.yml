@@ -4,8 +4,19 @@ deleteDatasources:
   - { name: Prometheus, orgId: 1 }
   - { name: ClickHouse, orgId: 1 }
   - { name: CDNFoundry control database, orgId: 1 }
+  - { name: Loki, orgId: 1 }
 
 datasources:
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: ${GRAFANA_LOKI_URL}
+    editable: false
+    jsonData:
+      timeout: 30
+      maxLines: 5000
+
   - name: Prometheus
     uid: prometheus
     type: prometheus

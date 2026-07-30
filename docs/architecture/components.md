@@ -51,7 +51,9 @@ cache policies. No normal domain change generates an Nginx server block or reloa
 | Component | Responsibility |
 | --- | --- |
 | `vector` | Redact, normalize, buffer, and deliver edge/DNS events |
+| `log-collector` | One per host; normalize/redact bounded operational container and optional journal logs |
 | `clickhouse` | Raw events plus hourly and daily materialized aggregates |
+| `loki` | Bounded retained operational logs using TSDB and filesystem object storage |
 | `prometheus` | Metrics and alert evaluation |
 | `alertmanager` | Alert routing |
 | `node-exporter` | Host resource and clock metrics |
@@ -59,11 +61,13 @@ cache policies. No normal domain change generates an Nginx server block or reloa
 | `grafana-control-db-provision` | Idempotent one-shot creation and restriction of the PostgreSQL Grafana role |
 | Edge gateway | Binds configured service IPv4/IPv6 addresses and routes by destination plus validated Host/SNI; sends PROXY protocol version 2 to private cell listeners |
 
-Vector has separate 1 GiB disk buffers for edge and DNS sinks and drops newest
-events when full. ClickHouse exposes private server metrics to Prometheus on
+The traffic Vector has separate 1 GiB disk buffers for edge and DNS sinks. The
+independent host collectors have 2 GiB production disk buffers. Both drop newest
+events when full, so Loki failure cannot disturb ClickHouse ingestion or serving.
+ClickHouse exposes private server metrics to Prometheus on
 port 9363. Grafana reads Prometheus, six CDNFoundry ClickHouse telemetry tables,
 three ClickHouse monitoring tables, four PostgreSQL domain inventory columns,
-and the sanitized `grafana_domain_operational_metadata` view. It has no write
+and the sanitized `grafana_domain_operational_metadata` view, plus Loki. It has no write
 credential and no ingestion or serving role. Telemetry or observability loss is
 visible but never blocks serving.
 

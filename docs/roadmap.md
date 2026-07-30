@@ -20,6 +20,11 @@ exception to the repository's multiple-dashboard prohibition. No third
 dashboard, second application backend, request-path dependency, or telemetry
 path through Laravel is accepted. PostgreSQL remains authoritative desired
 state; Prometheus and ClickHouse remain read-only derived observability data.
+Loki is additionally accepted for bounded operational/application/container
+logs, with one Vector collector per deployed host and direct read-only Grafana
+access. Full HTTP access and DNS query telemetry remains in ClickHouse. Logging
+failure must drop only within documented bounds and never block serving,
+runtime activation, queues, or reconciliation.
 
 Do not only analyze the repository or provide recommendations. Inspect the complete relevant codebase, implement the changes, add automated tests, update documentation, and leave the repository in a passing state.
 

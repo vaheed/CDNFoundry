@@ -53,7 +53,7 @@ class GrafanaContractTest(unittest.TestCase):
         self.assertIn("LIMIT 10000", variable["query"])
 
     def test_only_fixed_datasource_uids_are_referenced(self) -> None:
-        allowed = {"prometheus", "clickhouse", "control-db"}
+        allowed = {"prometheus", "clickhouse", "control-db", "loki", "-- Mixed --"}
         for dashboard in self.by_uid.values():
             for panel in panels(dashboard):
                 datasource = panel.get("datasource")
@@ -72,7 +72,7 @@ class GrafanaContractTest(unittest.TestCase):
             targets = panel.get("targets", [])
             self.assertTrue(targets, panel.get("title"))
             for target in targets:
-                query = target.get("rawSql", "")
+                query = target.get("rawSql", target.get("expr", ""))
                 self.assertIn("${domain_id:raw}", query, panel.get("title"))
 
     def test_queries_do_not_select_forbidden_sensitive_fields(self) -> None:
@@ -89,7 +89,7 @@ class GrafanaContractTest(unittest.TestCase):
 
     def test_required_provisioning_contracts_are_versioned(self) -> None:
         datasources = (ROOT / "docker/grafana/provisioning/datasources/datasources.yml").read_text()
-        for uid in ("prometheus", "clickhouse", "control-db"):
+        for uid in ("prometheus", "clickhouse", "control-db", "loki"):
             self.assertRegex(datasources, rf"(?m)^\s+uid: {re.escape(uid)}$")
         self.assertIn("isDefault: true", datasources)
         self.assertRegex(datasources, r'(?m)^\s+queryTimeout: "30"$')
@@ -147,6 +147,27 @@ class GrafanaContractTest(unittest.TestCase):
         self.assertEqual("536870912", production_grafana["mem_limit"])
         self.assertEqual(128, production_grafana["pids_limit"])
         self.assertEqual("disable", production_grafana["environment"]["GRAFANA_POSTGRES_SSLMODE"])
+
+        for document, retention in ((development, "168h"), (production, "336h")):
+            loki = document["services"]["loki"]
+            self.assertEqual(retention, loki["environment"]["LOKI_RETENTION_PERIOD"])
+            self.assertTrue(any(volume.get("target") == "/loki" for volume in loki["volumes"]))
+        self.assertNotIn("ports", production["services"]["loki"])
+
+    def test_operational_log_sections_use_loki_and_preserve_domain_variable(self) -> None:
+        system = self.by_uid["cdnf-system-command-center"]
+        domain = self.by_uid["cdnf-domain-command-center"]
+        self.assertIn("Live Operational Logs", [panel["title"] for panel in system["panels"]])
+        self.assertIn("Live Operational Logs", [panel["title"] for panel in domain["panels"]])
+        self.assertIn("loki", json.dumps(system))
+        for panel in panels(domain):
+            if panel.get("datasource", {}).get("uid") != "loki":
+                continue
+            for target in panel["targets"]:
+                self.assertIn('domain_id=\\"${domain_id:raw}\\"', json.dumps(target["expr"]))
+        self.assertIn("Open ingestion logs in Explore", json.dumps(system))
+        self.assertIn("Open gateway logs in Explore", json.dumps(system))
+        self.assertIn("Open domain logs in Explore", json.dumps(domain))
 
     def test_system_dashboard_covers_real_metric_families(self) -> None:
         serialized = json.dumps(self.by_uid["cdnf-system-command-center"])

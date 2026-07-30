@@ -30,6 +30,12 @@ Managed TLS private keys are encrypted in PostgreSQL and require the same
 application key. PowerDNS data, edge snapshots, artifacts, and analytics can be
 rebuilt, but they affect recovery time.
 
+The control Restic job does not include `loki-data`. Loki operational logs are
+derived, retention-bounded incident data and are not required to recover
+serving. When policy requires preservation, use a separately tested crash-safe
+volume snapshot or supported object storage; never imply the control backup
+contains Loki.
+
 ## Backup creation
 
 The daily scheduler queues `cdnf:backups:create` at 01:30. Administrators can create

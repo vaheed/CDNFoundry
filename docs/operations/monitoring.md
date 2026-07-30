@@ -54,7 +54,8 @@ narrow runbook while preserving unrelated serving paths.
 
 The control endpoint exposes component status, queue depth/age, failed
 operations, drifted DNS deployments, stale edges, and expiring certificates.
-Prometheus also scrapes Vector, node-exporter, DNSdist, PowerDNS, and Alertmanager.
+Prometheus also scrapes the traffic Vector, every configured operational-log
+collector, Loki, node-exporter, DNSdist, PowerDNS, and Alertmanager.
 It additionally scrapes itself, the private ClickHouse Prometheus endpoint,
 and deployment-configured edge gateways. The two provisioned
 [Grafana command centers](grafana.md) consume these metrics plus read-only

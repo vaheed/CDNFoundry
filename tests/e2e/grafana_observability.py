@@ -65,7 +65,7 @@ def main() -> None:
         raise AssertionError(f"unexpected ClickHouse dial timeout: {clickhouse_settings}")
     if clickhouse_settings.get("queryTimeout") != "30":
         raise AssertionError(f"unexpected ClickHouse query timeout: {clickhouse_settings}")
-    for uid in ("prometheus", "clickhouse", "control-db"):
+    for uid in ("prometheus", "clickhouse", "control-db", "loki"):
         body = get(f"/api/datasources/uid/{uid}/health")
         if body.get("status") not in ("OK", "Success"):
             raise AssertionError(f"datasource {uid} unhealthy: {body}")
@@ -83,6 +83,22 @@ def main() -> None:
             candidates = panel.get("panels", []) if panel.get("type") == "row" else [panel]
             for candidate in candidates:
                 source = candidate.get("datasource", {})
+                if source.get("uid") == "loki":
+                    for target in candidate.get("targets", []):
+                        query = {
+                            **target,
+                            "expr": target["expr"].replace("${domain_id:raw}", "1"),
+                            "datasource": source,
+                            "intervalMs": 60000,
+                            "maxDataPoints": 1000,
+                        }
+                        payload = {
+                            "from": str(int((time.time() - 3600) * 1000)),
+                            "to": str(int(time.time() * 1000)),
+                            "queries": [query],
+                        }
+                        checks.append((candidate.get("title", "untitled"), payload, target.get("refId", "A")))
+                    continue
                 if source.get("uid") not in ("clickhouse", "control-db"):
                     continue
                 for target in candidate.get("targets", []):
@@ -114,7 +130,7 @@ def main() -> None:
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
         list(executor.map(check_panel, checks))
-    print("Grafana health, datasources, dashboard UIDs, and provisioned SQL queries are healthy")
+    print("Grafana health, datasources, dashboard UIDs, and provisioned SQL/LogQL queries are healthy")
 
 
 if __name__ == "__main__":

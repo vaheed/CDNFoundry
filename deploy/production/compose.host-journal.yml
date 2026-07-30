@@ -1,0 +1,8 @@
+services:
+  log-collector:
+    command: [--config, /etc/vector/operational.yaml, --config, /etc/vector/host-journal.yaml]
+    volumes:
+      - ./docker/vector/host-journal.yaml:/etc/vector/host-journal.yaml:ro
+      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro

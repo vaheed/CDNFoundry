@@ -44,6 +44,10 @@ x-core-env: &core-env
   BACKUP_ACCESS_KEY_ID: ${BACKUP_ACCESS_KEY_ID:?BACKUP_ACCESS_KEY_ID is required}
   BACKUP_SECRET_ACCESS_KEY: ${BACKUP_SECRET_ACCESS_KEY:?BACKUP_SECRET_ACCESS_KEY is required}
   BACKUP_DEFAULT_REGION: ${BACKUP_DEFAULT_REGION:-us-east-1}
+  LOG_CHANNEL: stderr
+  LOG_STACK: stderr
+  LOG_STDERR_FORMATTER: App\Logging\OperationalJsonFormatter
+  GRAFANA_EXPLORE_URL: ${GRAFANA_EXPLORE_URL:-}
 
 x-edge-cell: &edge-cell
   image: ghcr.io/vaheed/cdnfoundry-edge-runtime:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
@@ -288,6 +292,70 @@ services:
     networks: [telemetry, edge, dns-private]
     restart: unless-stopped
 
+  loki-data-init:
+    image: alpine:3.22
+    profiles: [telemetry]
+    command: [chown, "10001:10001", /loki]
+    volumes: [loki-data:/loki]
+    restart: "no"
+
+  loki:
+    image: ghcr.io/vaheed/cdnfoundry-loki:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
+    profiles: [telemetry]
+    environment:
+      LOKI_RETENTION_PERIOD: ${LOKI_RETENTION_PERIOD:-336h}
+      LOKI_MAX_QUERY_LENGTH: ${LOKI_MAX_QUERY_LENGTH:-336h}
+    volumes: [loki-data:/loki]
+    depends_on:
+      loki-data-init: { condition: service_completed_successfully }
+    networks: [telemetry]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    mem_limit: 1g
+    cpus: 1
+    pids_limit: 128
+    cap_drop: [ALL]
+    healthcheck:
+      test: [CMD, /usr/local/bin/busybox, wget, -qO-, http://127.0.0.1:3100/ready]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    deploy:
+      resources:
+        limits: { memory: 1g, cpus: "1", pids: 128 }
+
+  log-collector:
+    image: timberio/vector:0.55.0-debian@sha256:a4be1111b40303524aae2ffb02cd59cef2a4e9753bd13d265bf0233e921828d9
+    container_name: cdnfoundry-log-collector
+    profiles: [logs]
+    command: [--config, /etc/vector/operational.yaml]
+    environment:
+      LOG_ENVIRONMENT: production
+      LOG_ROLE: ${LOG_ROLE:?LOG_ROLE is required for the logs profile}
+      LOG_HOST: ${LOG_HOST:?LOG_HOST is required for the logs profile}
+      LOG_COLLECTOR_ID: ${LOG_COLLECTOR_ID:?LOG_COLLECTOR_ID is required for the logs profile}
+      LOG_BUFFER_BYTES: ${LOG_BUFFER_BYTES:-2147483648}
+      LOG_METRICS_ADDRESS: 0.0.0.0:9599
+      LOKI_ENDPOINT: ${LOKI_ENDPOINT:?LOKI_ENDPOINT is required for the logs profile}
+    volumes:
+      - ./docker/vector/operational.yaml:/etc/vector/operational.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - operational-vector-data:/vector-data-dir
+    ports: ["${LOG_METRICS_BIND:-127.0.0.1:9599}:9599"]
+    networks: [telemetry, egress]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    mem_limit: 256m
+    cpus: 0.25
+    pids_limit: 96
+    deploy:
+      resources:
+        limits: { memory: 256m, cpus: "0.25", pids: 96 }
+
   prometheus:
     image: prom/prometheus:v3.12.0
     profiles: [telemetry]
@@ -295,6 +363,7 @@ services:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro
       - ${PROMETHEUS_EDGE_TARGETS_FILE:-./docker/prometheus/edge-targets.prod.yml}:/etc/prometheus/edge-targets.yml:ro
+      - ${PROMETHEUS_LOG_TARGETS_FILE:-./docker/prometheus/operational-log-targets.prod.yml}:/etc/prometheus/operational-log-targets.yml:ro
       - ${METRICS_TOKEN_FILE:?METRICS_TOKEN_FILE is required}:/run/secrets/metrics-token:ro
       - prometheus:/prometheus
     networks: [telemetry, control, dns-private]
@@ -338,6 +407,7 @@ services:
       GF_SECURITY_COOKIE_SECURE: ${GRAFANA_COOKIE_SECURE:-true}
       GF_PATHS_PLUGINS: /usr/share/grafana/cdnfoundry-plugins
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/system-command-center.json
+      GRAFANA_LOKI_URL: ${GRAFANA_LOKI_URL:-http://loki:3100}
       GRAFANA_CLICKHOUSE_HOST: ${GRAFANA_CLICKHOUSE_HOST:-clickhouse}
       GRAFANA_CLICKHOUSE_PORT: ${GRAFANA_CLICKHOUSE_PORT:-9000}
       GRAFANA_CLICKHOUSE_PROTOCOL: ${GRAFANA_CLICKHOUSE_PROTOCOL:-native}
@@ -573,6 +643,8 @@ volumes:
   pdns-db: {}
   clickhouse: {}
   vector-data: {}
+  operational-vector-data: {}
+  loki-data: {}
   prometheus: {}
   grafana-data: {}
   edge-state: {}

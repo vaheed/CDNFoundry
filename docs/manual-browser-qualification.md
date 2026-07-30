@@ -166,7 +166,7 @@ Run the documented operator commands from a clean verification environment and a
    to HTTPS, direct non-loopback port 3000 access is blocked, anonymous access
    is denied, and the expected administrator login succeeds.
 2. Open **Connections → Data sources**. Confirm exactly the provisioned
-   `prometheus`, `clickhouse`, and `control-db` UIDs are present and each health
+   `prometheus`, `clickhouse`, `control-db`, and `loki` UIDs are present and each health
    check succeeds. Confirm datasource editing is disabled.
 3. Open **Dashboards**. Confirm there is one **CDNFoundry Operations** folder
    containing exactly **CDNFoundry — System Command Center** and **CDNFoundry —
@@ -194,6 +194,10 @@ Run the documented operator commands from a clean verification environment and a
 5. Stop one datasource at a time. Confirm the affected panels show datasource
    failure/no data and never a fabricated zero, while unrelated datasources and
    serving traffic remain healthy.
+6. Expand **Live Operational Logs**. Generate one controlled warning, one edge
+   candidate rejection, and one queue failure. Confirm service/host matrices,
+   latest errors, ingestion health, and the relevant grouped panels update.
+   Follow a data link to Explore and confirm its range and Loki datasource.
 
 ### Domain Command Center
 
@@ -215,11 +219,36 @@ Run the documented operator commands from a clean verification environment and a
    beyond available retention. Confirm raw-detail completeness is explicit,
    exact quantiles are never synthesized from aggregates, and volume panels use
    the documented raw/hourly/daily boundaries.
+6. Expand **Live Operational Logs**. Confirm all log panels remain scoped to the
+   selected domain, failed deployment/DNS/origin/certificate/purge/security/edge
+   task events appear, and changing the domain removes the previous domain's
+   entries without adding another dashboard variable.
+
+### Live Logs control-panel navigation
+
+1. Set `GRAFANA_EXPLORE_URL`, restart `core`, sign in as an administrator, and
+   confirm **Observe → Live Logs** opens Grafana Explore in a new tab.
+2. Sign in as a domain user and confirm the entry is absent. Unset the variable,
+   restart `core`, and confirm it is absent from the administrator panel too.
+3. In Explore, live-tail one controlled operational event. Confirm request,
+   operation, job, task, domain, edge, cell, and revision fields are searchable
+   JSON but not stream labels. Confirm injected passwords, tokens, cookies,
+   database URLs, PEM blocks, query strings, and sensitive command options are
+   redacted.
+4. Stop Loki while leaving an edge and DNS service under controlled traffic.
+   Confirm serving and control work continues, the host collector buffer grows,
+   and the Loki/Vector alerts fire only after their persistence windows. Restart
+   Loki, confirm `/ready`, buffered delivery, Explore recovery, and alert clear.
+5. Stop one host collector. Confirm only that collector identity becomes absent,
+   other hosts continue ingesting, and its critical-service silence alert is
+   bounded rather than one alert per line. Restart it with the same volume and
+   `LOG_COLLECTOR_ID`, then confirm recovery without duplicate streams.
 
 ### Grafana observability completion gate
 
 - Implementation: exactly two provisioned dashboards, pinned offline plugin,
-  private hardened service, and restricted datasource accounts are present.
+  private hardened Grafana/Loki services, per-host collectors, and restricted
+  datasource accounts are present.
 - Documentation: startup, credentials, reverse proxy/TLS, accounts, dashboards,
   retention, split endpoints, and troubleshooting are current.
 - Automated/runtime qualification: static contracts, Compose validation,

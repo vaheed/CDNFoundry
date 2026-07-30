@@ -81,6 +81,72 @@ groups:
           summary: A CDNFoundry host clock offset exceeds five seconds
   - name: cdnfoundry-telemetry
     rules:
+      - alert: LokiUnavailable
+        expr: up{job="loki"} == 0
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: Loki operational-log storage is unavailable; traffic serving remains independent
+      - alert: OperationalLogCollectorUnavailable
+        expr: up{job=~"operational-log-collector.*"} == 0
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: Prometheus cannot scrape an operational-log collector
+      - alert: OperationalLogsDropped
+        expr: increase(vector_component_discarded_events_total{job=~"operational-log-collector.*",intentional!="true"}[5m]) > 0
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: An operational-log collector dropped events after reaching a bound
+      - alert: OperationalLogDeliveryFailures
+        expr: increase(vector_component_errors_total{job=~"operational-log-collector.*",component_id="loki"}[5m]) > 0
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: An operational-log collector cannot deliver to Loki
+      - alert: OperationalLogBufferNearLimit
+        expr: vector_buffer_size_bytes{job=~"operational-log-collector.*",component_id="loki"} / vector_buffer_max_size_bytes{job=~"operational-log-collector.*",component_id="loki"} > 0.8
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: An operational-log disk buffer is above 80 percent
+      - alert: LokiIngestionRejected
+        expr: increase(loki_discarded_samples_total[5m]) > 0
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: Loki rejected operational-log lines because an ingestion limit was reached
+      - alert: LokiCompactorRetentionStalled
+        expr: (loki_compactor_apply_retention_last_successful_run_timestamp_seconds > 0 and time() - loki_compactor_apply_retention_last_successful_run_timestamp_seconds > 3600) or (loki_compactor_apply_retention_last_successful_run_timestamp_seconds == 0 and time() - process_start_time_seconds{job="loki"} > 3600)
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: Loki compactor retention has not completed successfully for one hour
+      - alert: OperationalErrorLogSpike
+        expr: sum by (service) (increase(cdnfoundry_operational_log_events{level=~"error|critical"}[5m])) > 20
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: A service emitted more than 20 error logs in five minutes
+      - alert: OperationalCriticalServiceSilent
+        expr: sum by (service) (increase(cdnfoundry_operational_log_events{service=~"core|edge-agent|edge-gateway|dnsdist|pdns-auth|loki"}[30m])) == 0 and sum by (service) (increase(cdnfoundry_operational_log_events{service=~"core|edge-agent|edge-gateway|dnsdist|pdns-auth|loki"}[30m] offset 30m)) > 0
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: A previously active critical service has stopped emitting operational logs
+      - alert: LokiHostFilesystemPressure
+        expr: 1 - node_filesystem_avail_bytes{job="node",mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{job="node",mountpoint="/",fstype!~"tmpfs|overlay"} > 0.8
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: A host filesystem, including the bounded Loki volume host, is over 80 percent full
+      - alert: LokiHostFilesystemCritical
+        expr: 1 - node_filesystem_avail_bytes{job="node",mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{job="node",mountpoint="/",fstype!~"tmpfs|overlay"} > 0.9
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: A host filesystem, including the bounded Loki volume host, is over 90 percent full
       - alert: TelemetryEventsDropped
         expr: increase(vector_component_discarded_events_total[5m]) > 0
         for: 1m

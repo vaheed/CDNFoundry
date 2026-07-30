@@ -16,7 +16,7 @@ Publish only:
 - source-restricted DNS API and telemetry TLS gateways.
 
 Keep PostgreSQL, Valkey, PowerDNS, ClickHouse, Vector internals, Prometheus,
-Alertmanager, node-exporter, OpenResty control, and container APIs private.
+Alertmanager, Loki, node-exporter, OpenResty control, and container APIs private.
 Use provider firewalls and host `DOCKER-USER` policy because Docker publication
 can bypass simple host input rules.
 
@@ -36,6 +36,14 @@ Pin immutable image tags and verify digests. Production core, edge, agent, and
 gateway services use read-only roots where supported, tmpfs for writable
 ephemera, restart policies, health checks, bounded stop periods, and resource
 limits. Retain named volumes across upgrades.
+
+The per-host operational Vector collector is the sole exception that reads the
+local Docker Unix socket. A read-only socket mount is still a privileged
+host-inspection boundary: never expose the socket over TCP, never mount it into
+application containers, restrict host access to deployment administrators, and
+keep the collector's root filesystem read-only with all capabilities dropped.
+Optional journal mounts are read-only. The collector's allowlisted envelope and
+final redaction transform must remain before its private Loki sink.
 
 ## Origin policy
 
@@ -62,4 +70,4 @@ set is available.
 
 Select the security profile based on traffic risk, not throughput aspiration.
 Monitor 80% capacity signals, queue age, cache/temp storage, Vector buffers, and
-clock. Use upstream DDoS controls for uplink saturation.
+Loki host disk, and clock. Use upstream DDoS controls for uplink saturation.

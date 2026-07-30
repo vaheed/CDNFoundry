@@ -1,0 +1,251 @@
+data_dir: /vector-data-dir
+
+api:
+  enabled: false
+
+sources:
+  docker_operational:
+    type: docker_logs
+    docker_host: unix:///var/run/docker.sock
+    exclude_containers: ["cdnfoundry-log-collector"]
+    auto_partial_merge: true
+    multiline:
+      start_pattern: '^(\{|\d{4}-\d{2}-\d{2}|\[[0-9]{4}-[0-9]{2}-[0-9]{2}|[A-Z][a-z]{2} [ 0-9][0-9])'
+      mode: halt_before
+      condition_pattern: '^(\{|\d{4}-\d{2}-\d{2}|\[[0-9]{4}-[0-9]{2}-[0-9]{2}|[A-Z][a-z]{2} [ 0-9][0-9])'
+      timeout_ms: 1000
+  internal_metrics:
+    type: internal_metrics
+
+transforms:
+  exclude_traffic_events:
+    type: filter
+    inputs: ["*_operational"]
+    condition: |-
+      raw = string!(.message)
+      parsed, err = parse_json(raw)
+      !(err == null && is_object(parsed) && ((exists(parsed.event_type) && parsed.event_type == "request" && exists(parsed.hostname) && exists(parsed.status)) || (exists(parsed.qname) && exists(parsed.qtype) && exists(parsed.rcode))))
+
+  normalize:
+    type: remap
+    inputs: [exclude_traffic_events]
+    drop_on_abort: false
+    drop_on_error: false
+    source: |-
+      raw = string!(.message)
+      parsed, parse_err = parse_json(raw)
+      parse_error = false
+      if parse_err != null || !is_object(parsed) {
+        parsed = {}
+        parse_error = true
+      }
+
+      service = string(.label."com.docker.compose.service") ?? string(.container_name) ?? "unknown"
+      service = replace(service, r'^/', "")
+      level = downcase(string(parsed.level) ?? string(parsed.level_name) ?? "info")
+      if includes(["warn", "warning"], level) { level = "warning" }
+      if includes(["err", "error"], level) { level = "error" }
+      if includes(["fatal", "panic", "emergency", "alert", "critical"], level) { level = "critical" }
+      if !includes(["debug", "info", "notice", "warning", "error", "critical"], level) { level = "info" }
+
+      message = string(parsed.message) ?? string(parsed.msg) ?? raw
+      message = truncate(message, 16384)
+      stack = string(parsed.stack_trace) ?? string(parsed.exception) ?? null
+      if stack != null { stack = truncate!(stack, 65536) }
+      source_timestamp = parse_timestamp(string(parsed.timestamp) ?? string(parsed.time) ?? "", format: "%+") ?? now()
+      error_text = string(parsed.error) ?? null
+      if error_text != null { error_text = truncate!(error_text, 4096) }
+
+      . = {
+        "timestamp": format_timestamp!(source_timestamp, format: "%+"),
+        "level": level,
+        "environment": "${LOG_ENVIRONMENT}",
+        "service": service,
+        "role": "${LOG_ROLE}",
+        "host": "${LOG_HOST}",
+        "collector_id": "${LOG_COLLECTOR_ID}",
+        "stream": string(.stream) ?? "stdout",
+        "container": string(.container_name) ?? null,
+        "event": string(parsed.event) ?? "log",
+        "message": message,
+        "stack_trace": stack,
+        "request_id": string(parsed.request_id) ?? null,
+        "operation_id": string(parsed.operation_id) ?? null,
+        "job_id": string(parsed.job_id) ?? null,
+        "task_id": string(parsed.task_id) ?? null,
+        "domain_id": string(parsed.domain_id) ?? null,
+        "edge_id": string(parsed.edge_id) ?? null,
+        "cell_id": string(parsed.cell_id) ?? null,
+        "revision_id": string(parsed.revision_id) ?? null,
+        "actor_id": string(parsed.actor_id) ?? null,
+        "route": string(parsed.route) ?? null,
+        "duration_ms": to_float(parsed.duration_ms) ?? null,
+        "error_code": string(parsed.error_code) ?? null,
+        "error": error_text,
+        "outcome": string(parsed.status) ?? null,
+        "parse_error": parse_error
+      }
+
+  redact:
+    type: remap
+    inputs: [normalize]
+    source: |-
+      sensitive = r'(?i)(authorization|proxy-authorization|cookie|set-cookie|password|secret|access[_-]?token|refresh[_-]?token|bootstrap[_-]?token|api[_-]?key|session[_-]?id|private[_-]?key|certificate|database[_-]?(url|password)|request[_-]?body|response[_-]?body)([" ]*[:=][" ]*).*'
+      credential_url = r'(?i)(postgres(?:ql)?|mysql|redis|rediss|clickhouse)://[^ /@:]+:[^ /@]+@'
+      pem = r'(?s)-----BEGIN [^-]*(PRIVATE KEY|CERTIFICATE)-----.*?-----END [^-]*(PRIVATE KEY|CERTIFICATE)-----'
+      query = r'(?i)(https?://[^ ?]+)\?[^ ]+'
+      command_secret = r'(?i)(--(?:password|secret|token|api-key)(?:=| +)).*'
+      .message = string!(.message)
+      .message = replace(.message, sensitive, "$${1}$${2}[REDACTED]")
+      .message = replace(.message, credential_url, "$${1}://[REDACTED]@")
+      .message = replace(.message, pem, "[REDACTED PEM]")
+      .message = replace(.message, query, "$${1}?[REDACTED]")
+      .message = replace(.message, command_secret, "$${1}[REDACTED]")
+      if .stack_trace != null {
+        .stack_trace = string!(.stack_trace)
+        .stack_trace = replace(.stack_trace, sensitive, "$${1}$${2}[REDACTED]")
+        .stack_trace = replace(.stack_trace, credential_url, "$${1}://[REDACTED]@")
+        .stack_trace = replace(.stack_trace, pem, "[REDACTED PEM]")
+        .stack_trace = replace(.stack_trace, query, "$${1}?[REDACTED]")
+        .stack_trace = replace(.stack_trace, command_secret, "$${1}[REDACTED]")
+      }
+      if .error != null {
+        .error = string!(.error)
+        .error = replace(.error, sensitive, "$${1}$${2}[REDACTED]")
+        .error = replace(.error, credential_url, "$${1}://[REDACTED]@")
+        .error = replace(.error, pem, "[REDACTED PEM]")
+        .error = replace(.error, query, "$${1}?[REDACTED]")
+        .error = replace(.error, command_secret, "$${1}[REDACTED]")
+      }
+
+  operational_log_metrics:
+    type: log_to_metric
+    inputs: [redact]
+    metrics:
+      - type: counter
+        field: level
+        name: cdnfoundry_operational_log_events
+        tags:
+          environment: "{{ environment }}"
+          host: "{{ host }}"
+          role: "{{ role }}"
+          service: "{{ service }}"
+          level: "{{ level }}"
+
+sinks:
+  loki:
+    type: loki
+    inputs: [redact]
+    endpoint: "${LOKI_ENDPOINT}"
+    encoding:
+      codec: json
+    labels:
+      environment: "{{ environment }}"
+      host: "{{ host }}"
+      role: "{{ role }}"
+      service: "{{ service }}"
+      level: "{{ level }}"
+      stream: "{{ stream }}"
+      collector_id: "{{ collector_id }}"
+    structured_metadata:
+      domain_id: "{{ domain_id }}"
+      operation_id: "{{ operation_id }}"
+      request_id: "{{ request_id }}"
+      task_id: "{{ task_id }}"
+      revision_id: "{{ revision_id }}"
+    healthcheck:
+      enabled: false
+    request:
+      timeout_secs: 10
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 30
+    buffer:
+      type: disk
+      max_size: ${LOG_BUFFER_BYTES}
+      when_full: drop_newest
+
+  prometheus:
+    type: prometheus_exporter
+    inputs: [internal_metrics, operational_log_metrics]
+    address: "${LOG_METRICS_ADDRESS}"
+
+tests:
+  - name: redact_representative_secrets_before_loki
+    inputs:
+      - insert_at: normalize
+        type: log
+        log_fields:
+          message: 'authorization: Bearer auth-token password=hunter2 api_key=key-leak database_url=postgresql://user:dbpass@db.example/cdnf https://example.test/path?token=query-leak --token cli-leak'
+          container_name: core
+          stream: stderr
+          label:
+            com.docker.compose.service: core
+    outputs:
+      - extract_from: redact
+        conditions:
+          - type: vrl
+            source: |-
+              assert!(contains(string!(.message), "[REDACTED]"))
+              assert!(!contains(string!(.message), "auth-token"))
+              assert!(!contains(string!(.message), "hunter2"))
+              assert!(!contains(string!(.message), "key-leak"))
+              assert!(!contains(string!(.message), "dbpass"))
+              assert!(!contains(string!(.message), "query-leak"))
+              assert!(!contains(string!(.message), "cli-leak"))
+
+  - name: preserve_invalid_plain_text_as_searchable
+    inputs:
+      - insert_at: normalize
+        type: log
+        log_fields:
+          message: plain third-party failure
+          container_name: pdns-auth
+          stream: stderr
+          label:
+            com.docker.compose.service: pdns-auth
+    outputs:
+      - extract_from: redact
+        conditions:
+          - type: vrl
+            source: |-
+              assert_eq!(.parse_error, true)
+              assert_eq!(.message, "plain third-party failure")
+              assert_eq!(.service, "pdns-auth")
+
+  - name: redact_database_url_query_and_command_secrets
+    inputs:
+      - insert_at: normalize
+        type: log
+        log_fields:
+          message: 'failed postgresql://dbuser:db-password@db.example/cdnf at https://example.test/path?access_token=query-secret --api-key cli-secret'
+          container_name: scheduler
+          stream: stderr
+          label:
+            com.docker.compose.service: scheduler
+    outputs:
+      - extract_from: redact
+        conditions:
+          - type: vrl
+            source: |-
+              assert!(!contains(string!(.message), "db-password"))
+              assert!(!contains(string!(.message), "query-secret"))
+              assert!(!contains(string!(.message), "cli-secret"))
+
+  - name: redact_cookie_and_pem_content
+    inputs:
+      - insert_at: normalize
+        type: log
+        log_fields:
+          message: "cookie: session-cookie; private_key=-----BEGIN PRIVATE KEY-----pem-secret-----END PRIVATE KEY-----"
+          container_name: core
+          stream: stderr
+          label:
+            com.docker.compose.service: core
+    outputs:
+      - extract_from: redact
+        conditions:
+          - type: vrl
+            source: |-
+              assert!(!contains(string!(.message), "session-cookie"))
+              assert!(!contains(string!(.message), "pem-secret"))

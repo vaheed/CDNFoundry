@@ -117,7 +117,7 @@ make prod-migrate
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.control-host.yml \
-  --profile control --profile telemetry up -d
+  --profile control --profile telemetry --profile logs up -d
 ```
 
 Create the first administrator inside `core` with `cdnf:admin:create`. Check
@@ -126,6 +126,11 @@ Prometheus, Grafana datasource health and its two provisioned dashboard UIDs,
 and the first verified backup. Grafana remains on loopback until an operator
 adds the separately authenticated HTTPS reverse proxy described in the
 [Grafana runbook](../operations/grafana.md).
+
+Every host must set its own stable `LOG_HOST`, `LOG_ROLE`, and
+`LOG_COLLECTOR_ID`. Add `--profile logs` exactly once to DNS-only, edge-only,
+and telemetry-only role commands too. See the
+[operational logging runbook](../operations/operational-logging.md).
 
 ### 8. Start each DNS/edge host
 
@@ -136,7 +141,7 @@ make prod-pdns-migrate
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.dns-edge-host.yml \
-  --profile dns --profile edge up -d
+  --profile dns --profile edge --profile logs up -d
 ```
 
 The MMDB updater must activate a valid database before PowerDNS becomes ready.

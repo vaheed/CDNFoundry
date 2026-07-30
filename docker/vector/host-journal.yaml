@@ -1,0 +1,18 @@
+sources:
+  host_journal:
+    type: journald
+    journal_directory: /var/log/journal
+    include_units:
+      - docker.service
+      - containerd.service
+    include_matches:
+      _TRANSPORT: [kernel]
+
+transforms:
+  journal_operational:
+    type: remap
+    inputs: [host_journal]
+    source: |-
+      .container_name = "host-journal"
+      .label."com.docker.compose.service" = string(._SYSTEMD_UNIT) ?? "kernel"
+      .stream = "journal"

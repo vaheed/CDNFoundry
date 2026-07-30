@@ -1,6 +1,7 @@
 <?php
 
 use App\Exceptions\AnalyticsUnavailableException;
+use App\Http\Middleware\AttachRequestContext;
 use App\Http\Middleware\AuthenticateEdge;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureHorizonAdmin;
@@ -11,7 +12,9 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Context;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -22,6 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->append(AttachRequestContext::class);
         $middleware->redirectGuestsTo(fn (Request $request): ?string => $request->is('api/*') ? null : '/');
         $middleware->alias([
             'account.active' => EnsureAccountIsActive::class,
@@ -33,6 +37,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: ['edge/v1/*']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->respond(function (Response $response): Response {
+            if ($requestId = Context::get('request_id')) {
+                $response->headers->set('X-Request-ID', (string) $requestId);
+            }
+
+            return $response;
+        });
         $exceptions->render(function (AnalyticsUnavailableException $exception, Request $request) {
             if (! $request->is('api/*')) {
                 return null;

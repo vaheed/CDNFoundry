@@ -10,6 +10,7 @@ use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
+use Filament\Navigation\NavigationItem;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
@@ -38,6 +39,14 @@ class AdminPanelProvider extends PanelProvider
             ->sidebarCollapsibleOnDesktop()
             ->databaseNotifications()
             ->navigationGroups(['Control plane', 'Customers', 'Edge network', 'Operations', 'Observe', 'Account'])
+            ->navigationItems([
+                NavigationItem::make('Live Logs')
+                    ->group('Observe')
+                    ->icon('heroicon-o-document-magnifying-glass')
+                    ->sort(100)
+                    ->url(fn (): ?string => config('services.grafana.explore_url'), shouldOpenInNewTab: true)
+                    ->visible(fn (): bool => filled(config('services.grafana.explore_url'))),
+            ])
             ->discoverResources(in: app_path('Filament/Admin/Resources'), for: 'App\\Filament\\Admin\\Resources')
             ->resources([DomainResource::class])
             ->discoverPages(in: app_path('Filament/Admin/Pages'), for: 'App\\Filament\\Admin\\Pages')

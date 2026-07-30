@@ -166,13 +166,17 @@ flowchart LR
     Grafana -->|"PromQL"| Prometheus["Prometheus"]
     Grafana -->|"bounded SELECT<br/>raw/hourly/daily"| ClickHouse[("ClickHouse")]
     Grafana -->|"inventory + sanitized view"| PostgreSQL[("PostgreSQL")]
+    Grafana -->|"LogQL"| Loki[("Loki")]
     Vector["Vector"] --> ClickHouse
+    HostCollectors["One Vector log collector per host"] -->|"bounded push"| Loki
     Exporters["Control, gateway, DNS, host,<br/>Vector, ClickHouse exporters"] --> Prometheus
 ```
 
 Grafana provisions exactly a system and a domain command center. The domain
 selector comes from non-deleted PostgreSQL domains, while traffic panels query
 ClickHouse by numeric domain ID. Prometheus supplies current health, alerts,
-capacity, infrastructure, and gateway metrics. Each datasource account is
+capacity, infrastructure, and gateway metrics. Loki supplies normalized,
+redacted operational logs and live tail; HTTP access and DNS queries remain
+exclusively in ClickHouse. Each datasource account is
 read-only and independently bounded. Grafana does not proxy telemetry
 ingestion, call Laravel per panel, or participate in a customer request.
