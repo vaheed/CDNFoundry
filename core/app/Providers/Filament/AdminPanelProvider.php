@@ -30,6 +30,7 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->login()
             ->brandName('CDNFoundry Administration')
+            ->favicon(asset('favicon.svg'))
             ->profile(EditProfile::class)
             ->viteTheme('resources/css/filament/shared/theme.css')
             ->readOnlyRelationManagersOnResourceViewPagesByDefault(false)

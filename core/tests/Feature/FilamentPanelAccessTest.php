@@ -96,6 +96,16 @@ class FilamentPanelAccessTest extends TestCase
         $this->assertArrayHasKey($theme, $manifest);
     }
 
+    public function test_control_plane_pages_use_the_documentation_favicon(): void
+    {
+        $favicon = asset('favicon.svg');
+
+        $this->assertSame($favicon, Filament::getPanel('admin')->getFavicon());
+        $this->assertSame($favicon, Filament::getPanel('app')->getFavicon());
+        $this->assertFileEquals(base_path('../docs/public/favicon.svg'), public_path('favicon.svg'));
+        $this->get('/')->assertOk()->assertSee('href="'.$favicon.'"', false);
+    }
+
     public function test_administrator_can_open_edge_gateway_status_and_domain_user_cannot(): void
     {
         $admin = User::factory()->admin()->create();

@@ -5,6 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="color-scheme" content="light dark">
         <meta name="description" content="CDNFoundry private CDN control plane">
+        <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
         <title>CDNFoundry</title>
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>

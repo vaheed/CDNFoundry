@@ -30,6 +30,7 @@ class DomainPanelProvider extends PanelProvider
             ->path('app')
             ->login()
             ->brandName('CDNFoundry')
+            ->favicon(asset('favicon.svg'))
             ->profile(EditProfile::class)
             ->viteTheme('resources/css/filament/shared/theme.css')
             ->readOnlyRelationManagersOnResourceViewPagesByDefault(false)
