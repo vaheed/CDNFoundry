@@ -80,6 +80,12 @@ if [[ $role == control ]]; then
     ask backup_access_key 'Backup-only access key ID'
     ask_secret backup_secret_key 'Backup-only secret access key'
     clickhouse_password=$(random_secret)
+    clickhouse_url=http://clickhouse:8123
+    loki_endpoint=http://loki:3100
+    log_role=control
+    log_host=control-01
+    log_collector_id=control-01
+    log_source_allowlist="$public_ipv4 $edge_allowlist"
     dns_api_hostname="dns-api-placeholder.$ops_domain"
     dns_api_cert=/etc/cdnfoundry/pki/dns-api.crt
     dns_api_key=/etc/cdnfoundry/pki/dns-api.key
@@ -93,6 +99,12 @@ else
     dns_api_cert="/etc/cdnfoundry/pki/$dns_api_name.crt"
     dns_api_key="/etc/cdnfoundry/pki/$dns_api_name.key"
     ask_secret clickhouse_password 'Telemetry CLICKHOUSE_PASSWORD from the control host .env.prod'
+    clickhouse_url="https://telemetry.$ops_domain:8444"
+    loki_endpoint="https://telemetry.$ops_domain:8444"
+    log_role=dns-edge
+    log_host=$dns_api_name
+    log_collector_id=$dns_api_name
+    log_source_allowlist=
 fi
 
 app_key="base64:$(openssl rand -base64 32 | tr -d '\n')"
@@ -102,6 +114,9 @@ redis_password=$(random_secret)
 pdns_db_password=$(random_secret)
 pdns_api_key=$(random_secret)
 edge_status_token=$(random_secret)
+grafana_admin_password=$(random_secret)
+grafana_clickhouse_password=$(random_secret)
+grafana_postgres_password=$(random_secret)
 
 umask 077
 tmp=$(mktemp "${output}.tmp.XXXXXX")
@@ -123,6 +138,15 @@ awk -v app_key="$app_key" \
     -v pdns_db_password="$pdns_db_password" \
     -v pdns_api_key="$pdns_api_key" \
     -v clickhouse_password="$clickhouse_password" \
+    -v clickhouse_url="$clickhouse_url" \
+    -v grafana_admin_password="$grafana_admin_password" \
+    -v grafana_clickhouse_password="$grafana_clickhouse_password" \
+    -v grafana_postgres_password="$grafana_postgres_password" \
+    -v log_source_allowlist="$log_source_allowlist" \
+    -v log_role="$log_role" \
+    -v log_host="$log_host" \
+    -v log_collector_id="$log_collector_id" \
+    -v loki_endpoint="$loki_endpoint" \
     -v release="$release" \
     -v public_ipv4="$public_ipv4" \
     -v public_ipv6="$public_ipv6" \
@@ -142,6 +166,7 @@ awk -v app_key="$app_key" \
       values["TELEMETRY_HOSTNAME"]=telemetry_hostname
       values["CONTROL_PUBLIC_IPV4_ALLOWLIST"]=control_allowlist
       values["EDGE_PUBLIC_IPV4_ALLOWLIST"]=edge_allowlist
+      values["LOG_SOURCE_IPV4_ALLOWLIST"]=log_source_allowlist
       values["CONTROL_DB_PASSWORD"]=control_db_password; values["REDIS_PASSWORD"]=redis_password
       values["RESTIC_REPOSITORY"]=restic_repository
       values["BACKUP_ACCESS_KEY_ID"]=backup_access_key
@@ -149,6 +174,12 @@ awk -v app_key="$app_key" \
       values["ACME_CONTACT_EMAIL"]=acme_email
       values["PDNS_DB_PASSWORD"]=pdns_db_password; values["PDNS_API_KEY"]=pdns_api_key
       values["DNS_BIND_V4"]=dns_bind_v4; values["CLICKHOUSE_PASSWORD"]=clickhouse_password
+      values["CLICKHOUSE_URL"]=clickhouse_url
+      values["GRAFANA_ADMIN_PASSWORD"]=grafana_admin_password
+      values["GRAFANA_CLICKHOUSE_PASSWORD"]=grafana_clickhouse_password
+      values["GRAFANA_POSTGRES_PASSWORD"]=grafana_postgres_password
+      values["LOG_ROLE"]=log_role; values["LOG_HOST"]=log_host
+      values["LOG_COLLECTOR_ID"]=log_collector_id; values["LOKI_ENDPOINT"]=loki_endpoint
       values["CDNF_RELEASE"]=release; values["PUBLIC_BIND_IPV4"]=public_ipv4
       values["PUBLIC_BIND_IPV6"]=public_ipv6; values["EDGE_CONTROL_URL"]=edge_control_url
       values["EDGE_CONTROL_BIND"]=edge_control_bind; values["EDGE_HTTP_BIND"]=edge_http_bind

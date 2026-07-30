@@ -46,6 +46,20 @@ class OperationalLoggingContractTest(unittest.TestCase):
         self.assertIn("retry_attempts: 10", self.vector)
         self.assertNotIn("type: clickhouse", self.vector.lower())
 
+    def test_combined_control_host_can_enable_monitoring_after_serving(self) -> None:
+        caddy = (ROOT / "deploy/production/Caddyfile").read_text()
+        overlay = (ROOT / "deploy/production/compose.control-host.yml").read_text()
+        generator = (ROOT / "scripts/generate-production-env.sh").read_text()
+        self.assertIn("path /loki/api/v1/push", caddy)
+        self.assertIn("reverse_proxy loki:3100", caddy)
+        self.assertIn("LOG_SOURCE_IPV4_ALLOWLIST", overlay)
+        for variable in (
+            "CLICKHOUSE_URL", "GRAFANA_ADMIN_PASSWORD", "GRAFANA_CLICKHOUSE_PASSWORD",
+            "GRAFANA_POSTGRES_PASSWORD", "LOG_ROLE", "LOG_HOST", "LOG_COLLECTOR_ID",
+            "LOKI_ENDPOINT",
+        ):
+            self.assertIn(f'values["{variable}"]', generator)
+
     def test_only_low_cardinality_labels_are_configured(self) -> None:
         label_block = self.vector.split("    labels:\n", 1)[1].split("    structured_metadata:\n", 1)[0]
         labels = {line.strip().split(":", 1)[0] for line in label_block.splitlines() if line.strip()}

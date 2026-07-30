@@ -1,90 +1,68 @@
 ---
 title: Production quick start
-description: Deploy a minimum three-host CDNFoundry private CDN with a control plane and two redundant DNS and edge nodes.
-keywords: private CDN deployment, ISP CDN, on-premises CDN, authoritative DNS, OpenResty CDN, PowerDNS
+description: Deploy a small three-host CDNFoundry fleet first, then optionally add monitoring and centralized logs.
+keywords: private CDN deployment, production CDN, authoritative DNS, OpenResty CDN, PowerDNS, Grafana monitoring
 ---
 
 # Production quick start
 
-This guide deploys the smallest practical production CDNFoundry fleet:
+This guide deploys the smallest practical CDNFoundry production fleet:
 
-- one control host for the panel, API, workers, PostgreSQL, Valkey,
-  ClickHouse, metrics, loopback-only Grafana, and public management gateways;
+- one control host;
 - two combined DNS and edge hosts in different failure domains;
-- one exact, immutable CDNFoundry release on every host;
-- IPv4 everywhere, with optional IPv6 enabled per host.
+- one exact CDNFoundry release on every host;
+- optional monitoring and centralized logs, enabled only after serving works.
 
-The procedure is intentionally explicit. Each mutation has a validation step,
-and delegation is delayed until both authoritative servers answer correctly.
+Follow the numbered steps in order. Commands say exactly which host they run
+on. Do not enable the optional `telemetry` or `logs` profiles during the base
+installation.
 
-::: danger Production data
-Never run `docker compose down -v`, delete named volumes, regenerate
-`APP_KEY`, or replace CA keys during an upgrade. PostgreSQL and the PKI contain
-state that cannot be reconstructed from container images.
+::: danger Preserve production state
+Never run `docker compose down -v`, delete named volumes, regenerate `APP_KEY`,
+or replace CA keys during an upgrade. PostgreSQL, application keys, CA keys,
+and externally stored TLS material are part of the recovery set.
 :::
 
-::: tip Copyable examples
-VitePress adds a copy button to every command block. Replace every uppercase
-placeholder and documentation IP before copying a command to a host.
+::: tip Replace the examples
+Replace every uppercase placeholder and documentation IP before running a
+command. `198.51.100.0/24` is reserved for documentation and cannot carry real
+Internet traffic.
 :::
 
-## What this topology provides
+## Resulting topology
 
-| Host | Services | Public listeners |
+| Host | Required services | Public listeners |
 | --- | --- | --- |
-| `CONTROL` | Laravel, web, Horizon, Scheduler, edge control, PostgreSQL, Valkey, ClickHouse, Vector, Prometheus, Alertmanager, loopback-only Grafana, Caddy | TCP `80`, `443`, `8443`, `8444`; UDP `443` |
-| `EDGE_1` | DNSdist, PowerDNS, PowerDNS database, DNS API gateway, shared/quarantine OpenResty cells, edge agent, Vector, MMDB updater | TCP/UDP `53`; TCP `80`, `443`, `8444` |
-| `EDGE_2` | Same roles as edge 1 in another provider, rack, or failure domain | TCP/UDP `53`; TCP `80`, `443`, `8444` |
+| `CONTROL` | Laravel, web, Horizon, Scheduler, PostgreSQL, Valkey, edge-control, Caddy | TCP `80`, `443`, `8443`, `8444`; UDP `443` |
+| `EDGE_1` | DNSdist, PowerDNS, DNS API, OpenResty cells, edge agent, gateway, traffic Vector | TCP/UDP `53`; TCP `80`, `443`, `8444` |
+| `EDGE_2` | Same as edge 1 in another provider, rack, or failure domain | TCP/UDP `53`; TCP `80`, `443`, `8444` |
 
-The control host is not highly available in this minimum topology. Customer
-DNS and HTTP traffic continue through the last valid runtime state when it is
-offline, but management, deployment, new certificates, and analytics queries
-pause. Off-host backup and tested recovery are therefore mandatory.
+The optional final step adds ClickHouse, Prometheus, Alertmanager, Grafana,
+Loki, node-exporter, and one operational-log collector per host.
+
+The control host is a single management failure domain in this minimum
+topology. If it is offline, existing DNS and HTTP traffic continue using the
+last valid runtime state. Management, deployments, new certificates, and
+analytics pause until it recovers.
 
 ```mermaid
 flowchart LR
-    Operator["Operator browser"] -->|"HTTPS 443"| Gateway["Control Caddy"]
-    Gateway --> Panel["Laravel + Filament"]
-    Panel --> Desired[("PostgreSQL<br/>desired state")]
-    Worker["Horizon workers"] --> Desired
-    Agent1["Edge agent 1"] -->|"outbound mTLS 8443"| Control["Edge control"]
+    Admin["Administrator"] -->|"HTTPS 443"| Control["Control plane"]
+    Control --> Desired[("PostgreSQL desired state")]
+    Agent1["Edge agent 1"] -->|"outbound mTLS 8443"| Control
     Agent2["Edge agent 2"] -->|"outbound mTLS 8443"| Control
-    Control --> Desired
-    Worker -->|"HTTPS 8444<br/>exact source"| API1["DNS API 1"]
-    Worker -->|"HTTPS 8444<br/>exact source"| API2["DNS API 2"]
-    API1 --> PDNS1["Private PowerDNS 1"]
-    API2 --> PDNS2["Private PowerDNS 2"]
-    Vector1["Edge Vector 1"] -->|"HTTPS 8444"| Telemetry["Telemetry gateway"]
-    Vector2["Edge Vector 2"] -->|"HTTPS 8444"| Telemetry
-    Telemetry --> ClickHouse[("ClickHouse")]
-    Prometheus["Prometheus"] --> Grafana["Grafana<br/>two command centers"]
-    ClickHouse -->|"bounded read-only"| Grafana
-    Desired -->|"sanitized read-only view"| Grafana
-    OpsProxy["Deployment-owned<br/>authenticated HTTPS proxy"] --> Grafana
+    Control -->|"HTTPS 8444"| DNS1["DNS API 1"]
+    Control -->|"HTTPS 8444"| DNS2["DNS API 2"]
+    Resolver["DNS resolver"] -->|"UDP/TCP 53"| DNSdist["DNSdist"]
+    Visitor["Visitor"] -->|"HTTP/HTTPS"| Cell["OpenResty cell"]
+    Cell -->|"validated origin"| Origin["Customer origin"]
 ```
 
-Grafana is not published by the control Caddy overlay. It binds to loopback by
-default; operators must place a separately authenticated HTTPS reverse proxy or
-trusted tunnel in front of it. Grafana failure affects diagnosis only and does
-not enter DNS, HTTP, telemetry ingestion, or reconciliation paths.
+Laravel is never in the DNS or HTTP request path.
 
-Customer traffic has a separate path:
+## Example values
 
-```mermaid
-flowchart LR
-    Resolver["Recursive resolver"] -->|"UDP/TCP 53"| DNSdist["DNSdist"]
-    DNSdist -->|"private network"| PDNS["PowerDNS"]
-    Browser["Customer visitor"] -->|"HTTP/HTTPS"| Cell["Bounded OpenResty cell"]
-    Cell -->|"validated destination<br/>bounded timeouts"| Origin["Customer origin"]
-    Cell -.->|"best-effort logs"| Vector["Vector"]
-
-    Laravel["Laravel control plane"] -. "never in request path" .-> DNSdist
-    Laravel -. "never in request path" .-> Cell
-```
-
-## Values used in this guide
-
-Replace these examples consistently:
+Use your real values consistently on every host:
 
 | Purpose | Example |
 | --- | --- |
@@ -93,69 +71,50 @@ Replace these examples consistently:
 | Control IPv4 | `198.51.100.10` |
 | Edge 1 IPv4 | `198.51.100.20` |
 | Edge 2 IPv4 | `198.51.100.30` |
-| Exact existing release | `v0.8.2` |
+| Exact release | `v0.8.2` |
 | Installation directory | `/opt/cdnfoundry` |
 | Protected PKI directory | `/etc/cdnfoundry/pki` |
 
-`198.51.100.0/24` is reserved for documentation and cannot route on the public
-Internet. `ops.example.com` must remain at an independent DNS provider.
-CDNFoundry will become authoritative for `example.net`.
+Keep `control.ops.example.com`, `edge-control.ops.example.com`,
+`telemetry.ops.example.com`, and every `dns-api-N.ops.example.com` at an
+independent DNS provider. Do not put management names inside the CDNFoundry
+platform zone.
 
-::: warning Avoid a bootstrap dependency
-Do not host `control`, `edge-control`, `telemetry`, or `dns-api-*` inside the
-CDNFoundry-managed platform zone. Operators must still resolve management
-endpoints while platform DNS is being repaired.
-:::
+## Step 1: prepare hosts and firewall rules
 
-## Before you start
+Prepare three supported Linux hosts with:
 
-Prepare:
+- Docker Engine and the Docker Compose plugin;
+- Git, OpenSSL, curl, and CA certificates;
+- accurate system time;
+- an operator firewall and a provider firewall;
+- an encrypted off-host Restic repository;
+- console access in case a firewall rule is wrong.
 
-- three fresh supported Linux hosts with Docker Engine and the Compose plugin;
-- exact public IPv4 addresses and provider firewall access;
-- optional exact public IPv6 addresses;
-- an independent operator-owned DNS zone;
-- one unused platform domain whose registrar permits child nameserver glue;
-- an ACME contact address;
-- an encrypted, off-host Restic repository and prefix-scoped credentials;
-- a secret transfer channel and password manager;
-- an immutable release tag or 40-character commit SHA.
-
-A reasonable *starting point*, not a capacity promise, is:
+A reasonable starting size is:
 
 | Role | CPU | Memory | Disk |
 | --- | ---: | ---: | ---: |
 | Control | 4 vCPU | 8 GiB | 100 GiB SSD |
-| Each combined DNS/edge | 4 vCPU | 6 GiB | 50 GiB SSD plus planned cache capacity |
+| Each DNS/edge host | 4 vCPU | 6 GiB | 50 GiB SSD plus cache capacity |
 
-Measure DNS QPS, HTTP requests per second, concurrent origin connections,
-bandwidth, cache churn, telemetry volume, ClickHouse retention, and disk
-latency before resizing. See [Scaling](../operations/scaling.md) for the actual
-scaling units.
-
-## Network policy
-
-Apply provider and host firewall policy before starting services:
+Allow only these inbound connections:
 
 | Destination | Allowed source |
 | --- | --- |
 | Control TCP `22` | trusted administrator networks |
 | Control TCP `80`, `443`; UDP `443` | public |
-| Control TCP `8443` | registered edge networks |
-| Control TCP `8444` | registered edge networks |
+| Control TCP `8443`, `8444` | the two edge public IPv4 addresses |
 | Edge TCP/UDP `53` | public |
 | Edge TCP `80`, `443` | public |
 | Edge TCP `8444` | control public IPv4 only |
-| PostgreSQL, Valkey, ClickHouse, raw PowerDNS API, Prometheus, Grafana port 3000 | never public |
+| PostgreSQL, Valkey, ClickHouse, PowerDNS API, Prometheus, Loki, Grafana `3000` | never public |
 
-Docker-published ports can bypass ordinary UFW input policy. Enforce equivalent
-rules in the provider firewall and the host's `DOCKER-USER` chain, keep console
-access open during changes, and test both allowed and denied sources.
+Docker-published ports can bypass ordinary UFW rules. Apply the same policy in
+the provider firewall and the host `DOCKER-USER` chain. Keep outbound DNS and
+HTTPS available for images, ACME, origins, GeoIP, telemetry, and backups.
 
-Outbound DNS and HTTPS are needed for image pulls, ACME, origin validation,
-GeoIP downloads, agent enrollment, telemetry, and backups.
-
-## Step 1: create bootstrap DNS and glue
+## Step 2: create bootstrap DNS and registrar glue
 
 At the independent provider for `ops.example.com`, create:
 
@@ -167,20 +126,20 @@ At the independent provider for `ops.example.com`, create:
 | `dns-api-1.ops.example.com` A | edge 1 IPv4 |
 | `dns-api-2.ops.example.com` A | edge 2 IPv4 |
 
-Add AAAA records only when the matching host and firewall are IPv6-ready.
+Add AAAA records only when that host and its firewall are IPv6-ready.
 
-At the registrar for `example.net`, register child nameservers:
+At the registrar for `example.net`, register child nameserver glue:
 
-| Child nameserver | Glue |
+| Child nameserver | Address |
 | --- | --- |
 | `ns1.example.net` | edge 1 IPv4 and optional IPv6 |
 | `ns2.example.net` | edge 2 IPv4 and optional IPv6 |
 
-Do **not** delegate `example.net` yet.
+Do not delegate `example.net` yet.
 
-## Step 2: install one exact release everywhere
+## Step 3: install the same exact release on every host
 
-Run on all three hosts:
+Run on `CONTROL`, `EDGE_1`, and `EDGE_2`:
 
 ```sh
 sudo apt-get update
@@ -199,12 +158,16 @@ cd /opt/cdnfoundry
 git rev-parse HEAD
 ```
 
-If GHCR packages are private, authenticate with a read-only package token.
-Never deploy `latest`, a major alias, or a minor alias.
+The final commit must match on all three hosts. Use an exact release tag or
+40-character commit SHA; never deploy `latest` or a moving major/minor alias.
+Authenticate to GHCR with a read-only package token if the images are private.
 
-## Step 3: generate a host-specific environment
+## Step 4: generate one private environment per host
 
-Run the interactive generator once on each host:
+The generator creates `.env.prod` with mode `0600` and refuses to overwrite an
+existing file.
+
+On `CONTROL`:
 
 ```sh
 cd /opt/cdnfoundry
@@ -212,44 +175,54 @@ cd /opt/cdnfoundry
 stat -c '%a %n' .env.prod
 ```
 
-The expected mode is `600`. The generator refuses to overwrite an existing
-file and generates independent secrets for each host.
-
-On `CONTROL`, choose:
+Choose:
 
 - role `control`;
-- operator domain `ops.example.com`;
-- platform domain `example.net`;
-- the exact release;
+- your operator and platform domains;
+- the exact release from Step 3;
 - the control IPv4;
 - both edge IPv4 addresses in the edge allowlist;
-- the real Restic repository and backup-only credentials.
+- the real Restic repository and its prefix-scoped credentials.
 
-On each edge, choose role `dns-edge` and a unique label:
-
-- `dns-api-1` on edge 1;
-- `dns-api-2` on edge 2.
-
-Each edge needs the control host's ClickHouse password for Vector ingestion.
-Transfer only that value through the protected channel:
+Record the generated ClickHouse ingestion password in the password manager:
 
 ```sh
 sudo sed -n 's/^CLICKHOUSE_PASSWORD=//p' \
   /opt/cdnfoundry/.env.prod
 ```
 
-::: danger Secret separation
-Never copy the control `.env.prod` to an edge. Each PowerDNS database password,
-PowerDNS API key, edge status token, and agent identity has a distinct trust
-boundary.
-:::
+Run the generator separately on `EDGE_1` and `EDGE_2`. Choose role `dns-edge`
+and use a unique DNS API label:
 
-## Step 4: generate the private PKI
+- `dns-api-1` on `EDGE_1`;
+- `dns-api-2` on `EDGE_2`.
+
+When prompted, enter the ClickHouse password copied from `CONTROL`. The
+generator sets the remote ClickHouse and Loki endpoints, plus unique log host
+and collector identities, so optional monitoring can be enabled later.
+
+Verify every host:
+
+```sh
+cd /opt/cdnfoundry
+test "$(stat -c '%a' .env.prod)" = 600
+if grep -n 'replace-with' .env.prod; then
+  echo 'Replace every value shown above before continuing.' >&2
+  exit 1
+fi
+```
+
+Never copy the whole control environment to an edge. Database passwords, API
+keys, edge tokens, and agent identities have separate trust boundaries.
+
+## Step 5: create secret files and internal certificates
 
 Run once on `CONTROL`:
 
 ```sh
 sudo install -d -m 0700 /etc/cdnfoundry/secrets
+sudo install -d -m 0700 /etc/cdnfoundry/pki
+
 sudo /opt/cdnfoundry/scripts/generate-production-certificates.sh \
   /etc/cdnfoundry/pki \
   edge-control.ops.example.com \
@@ -263,7 +236,11 @@ sudo chown root:82 /etc/cdnfoundry/pki/edge-identity-ca.key
 sudo chmod 0640 /etc/cdnfoundry/pki/edge-identity-ca.key
 ```
 
-Verify certificate names before distribution:
+Initialize the Restic repository using the exact password stored in
+`/etc/cdnfoundry/secrets/restic-password`, then store a recovery copy outside
+these hosts.
+
+Verify certificate names:
 
 ```sh
 openssl x509 -in /etc/cdnfoundry/pki/edge-control-server.crt \
@@ -275,20 +252,19 @@ openssl verify -CAfile /etc/cdnfoundry/pki/edge-server-ca.crt \
   /etc/cdnfoundry/pki/dns-api-2.crt
 ```
 
-Copy to each edge only:
+Copy to each edge through a protected channel:
 
 - `edge-server-ca.crt`;
 - `edge-runtime.crt` and `edge-runtime.key`;
-- its own `dns-api-N.crt` and `dns-api-N.key`.
+- only that host's `dns-api-N.crt` and `dns-api-N.key`.
 
-Certificate mode is `0644`; private-key mode is `0600`. Never copy
+Certificates use mode `0644`; private keys use `0600`. Never copy
 `edge-server-ca.key` or `edge-identity-ca.key` to an edge. See
-[Internal certificates](certificates.md) for the complete ownership
-and rotation matrix.
+[Internal certificates](certificates.md) for the full ownership matrix.
 
-## Step 5: validate and start the control host
+## Step 6: start the control plane
 
-Use the base production file plus the control-host overlay:
+Run on `CONTROL`. Notice that only the required `control` profile is enabled.
 
 ```sh
 cd /opt/cdnfoundry
@@ -296,12 +272,12 @@ cd /opt/cdnfoundry
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.control-host.yml \
-  --profile control --profile telemetry --profile logs config --quiet
+  --profile control config --quiet
 
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.control-host.yml \
-  --profile control --profile telemetry --profile logs pull
+  --profile control pull
 
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
@@ -311,25 +287,23 @@ docker compose --env-file .env.prod \
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.control-host.yml \
-  --profile control --profile telemetry --profile logs up -d
+  --profile control up -d
 
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.control-host.yml ps
 ```
 
-The migration is explicit. Long-running services do not race database
-migration during startup.
-
-Verify the public path:
+Verify the control database, Valkey, workers, scheduler, web, edge-control, and
+Caddy are running. Then check the public API:
 
 ```sh
 curl -fsS https://control.ops.example.com/api/health
 curl -fsS https://control.ops.example.com/api/ready
 ```
 
-`health` proves process liveness. `ready` reports dependency and operational
-readiness; investigate degraded components before continuing.
+`health` proves process liveness. `ready` requires PostgreSQL and Valkey and
+must return `ready` before continuing.
 
 Create the first administrator:
 
@@ -342,12 +316,12 @@ docker compose --env-file .env.prod \
   --email="admin@example.com"
 ```
 
-The command prompts for the password and does not place it in shell history.
-Sign in at `https://control.ops.example.com/admin`.
+Enter the password only at the prompt. Sign in at
+`https://control.ops.example.com/admin`.
 
-## Step 6: start authoritative DNS on both edges
+## Step 7: start authoritative DNS on both edge hosts
 
-Run independently on `EDGE_1` and `EDGE_2`:
+Run these commands independently on `EDGE_1` and `EDGE_2`:
 
 ```sh
 cd /opt/cdnfoundry
@@ -355,12 +329,12 @@ cd /opt/cdnfoundry
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.dns-edge-host.yml \
-  --profile dns --profile edge --profile logs config --quiet
+  --profile dns --profile edge config --quiet
 
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.dns-edge-host.yml \
-  --profile dns --profile edge --profile logs pull
+  --profile dns --profile edge pull
 
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
@@ -370,19 +344,15 @@ docker compose --env-file .env.prod \
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.dns-edge-host.yml \
-  --profile dns --profile logs up -d
-```
+  --profile dns up -d
 
-Inspect the host:
-
-```sh
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.dns-edge-host.yml \
   ps pdns-db pdns-auth dnsdist dns-api
 ```
 
-From an external workstation, prove both transports reach DNSdist:
+From an external workstation, verify UDP and TCP on both hosts:
 
 ```sh
 dig @198.51.100.20 example.net SOA
@@ -392,9 +362,9 @@ dig @198.51.100.30 example.net SOA +tcp
 ```
 
 The zone does not exist yet, so an authoritative negative answer is acceptable.
-A timeout, connection refusal, or response from an unrelated server is not.
+A timeout, refusal, or response from an unrelated DNS server is not.
 
-## Step 7: configure system DNS identity
+## Step 8: configure platform DNS
 
 In **Control plane → System DNS identity**, enter:
 
@@ -409,13 +379,10 @@ In **Control plane → System DNS identity**, enter:
 | Refresh / retry / expire | `3600` / `600` / `1209600` |
 | Minimum / default TTL | `300` / `300` |
 
-Choose **Validate and preview**. Confirm normalization, nameserver/glue pairs,
-SOA values, proxy hostname, and target list. Apply the exact confirmation token.
-Changing input invalidates the preview token.
+Choose **Validate and preview**, review the normalized result, and apply the
+exact confirmation token.
 
-## Step 8: add and qualify DNS clusters
-
-Create two disabled clusters:
+Create two disabled DNS clusters:
 
 | Field | Cluster 1 | Cluster 2 |
 | --- | --- | --- |
@@ -428,12 +395,12 @@ For each cluster:
 
 1. save it disabled;
 2. run the asynchronous connection test;
-3. inspect the stable result and TLS verification;
-4. enable only after it is healthy;
+3. confirm TLS verification and a healthy result;
+4. enable it;
 5. reconcile system DNS identity;
-6. wait for the candidate checksum to become active.
+6. wait for its candidate checksum to become active.
 
-Test directly:
+Verify the active zone externally:
 
 ```sh
 dig @198.51.100.20 example.net SOA +tcp
@@ -442,49 +409,48 @@ dig @198.51.100.20 ns1.example.net A
 dig @198.51.100.30 ns2.example.net A
 ```
 
-Only now delegate `example.net` to `ns1.example.net` and `ns2.example.net`.
+Only now delegate `example.net` to `ns1.example.net` and `ns2.example.net` at
+the registrar.
 
-## Step 9: create and enroll each edge
+## Step 9: create and enroll both edges
 
-In **Edge network → Edges**, create one edge per host with its real location.
-Management IPv4/IPv6 are optional inventory fields; use them only for operator
-access or monitoring. They are not pool endpoints and are not used by mTLS.
-Copy the UUID and one-time bootstrap token.
+In **Edge network → Edges**, create one edge per host and copy its UUID and
+one-time bootstrap token.
 
-The edge agent needs outbound DNS and TCP access to the hostname and port in
-`EDGE_CONTROL_URL`. The control plane does not need inbound access to the edge.
-
-Add them to that edge's `.env.prod`:
+Add the values to the matching edge's `.env.prod`:
 
 ```dotenv
 EDGE_ID=replace-with-edge-uuid
 EDGE_BOOTSTRAP_TOKEN=replace-with-one-time-token
 ```
 
-Start the edge profile:
+Start the edge runtime on that host:
 
 ```sh
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.dns-edge-host.yml \
-  --profile edge --profile logs up -d
+  --profile edge up -d
 
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.dns-edge-host.yml \
-  ps edge edge-quarantine edge-agent vector mmdb-updater
+  ps edge edge-quarantine edge-agent edge-gateway vector mmdb-updater
 ```
 
-Wait for:
+The traffic Vector process starts with the edge profile. Until optional
+telemetry is enabled, it retries into a bounded disk buffer and may eventually
+drop old analytics events. This does not block or slow DNS and HTTP serving.
 
-- registered identity;
-- a fresh heartbeat;
-- a ready shared cell;
-- listener-ready status;
-- current agent version and sequence;
-- visible bounded CPU, memory, and connection capacity.
+Wait until the panel shows:
 
-Erase the bootstrap token after registration, then recreate only the agent:
+- registered identity and a fresh heartbeat;
+- ready shared and quarantine cells;
+- listener-ready gateway status;
+- an acknowledged active revision;
+- bounded CPU, memory, disk, and connection capacity.
+
+Remove the bootstrap token after registration and recreate only the agent:
 
 ```sh
 sudo sed -i 's/^EDGE_BOOTSTRAP_TOKEN=.*/EDGE_BOOTSTRAP_TOKEN=/' \
@@ -496,43 +462,23 @@ docker compose --env-file .env.prod \
   --profile edge up -d --force-recreate edge-agent
 ```
 
-Never clone the edge-agent identity volume to another host.
+Repeat this step on the other edge. Never clone an edge-agent identity volume.
 
-```mermaid
-sequenceDiagram
-    participant Admin as Administrator
-    participant CP as Control plane
-    participant Agent as Edge agent
-    participant Cell as OpenResty cell
-
-    Admin->>CP: Create edge
-    CP-->>Admin: UUID + one-time token
-    Agent->>CP: Register with token
-    CP-->>Agent: mTLS identity
-    Agent->>CP: Fetch signed snapshot
-    Agent->>Agent: Verify, stage, validate
-    Agent->>Cell: Atomic activation
-    Cell-->>Agent: Listener/runtime status
-    Agent->>CP: Acknowledge revision
-    Note over Agent,Cell: Invalid candidates never replace active state
-```
-
-## Step 10: add the first customer domain
+## Step 10: add and test the first customer domain
 
 Use this order:
 
-1. create the domain user;
+1. create a domain user;
 2. create and assign the domain;
 3. ask the owner to delegate to `ns1.example.net` and `ns2.example.net`;
 4. verify nameservers asynchronously;
 5. activate the domain;
 6. wait for both DNS clusters to acknowledge the revision;
-7. add DNS-only A/AAAA records first;
-8. test DNS from outside;
-9. add one proxied hostname with one explicit public origin;
-10. wait for edge deployment and managed DNS-01 certificate completion.
+7. add DNS-only A/AAAA records and test them;
+8. add one proxied hostname with one explicit public origin;
+9. wait for edge deployment and DNS-01 certificate completion.
 
-External checks:
+From an external workstation:
 
 ```sh
 dig +trace CUSTOMER_DOMAIN NS
@@ -541,50 +487,147 @@ dig @198.51.100.30 CUSTOMER_DOMAIN A +tcp
 curl --fail --head \
   --resolve CUSTOMER_DOMAIN:443:198.51.100.20 \
   https://CUSTOMER_DOMAIN/
+curl --fail --head \
+  --resolve CUSTOMER_DOMAIN:443:198.51.100.30 \
+  https://CUSTOMER_DOMAIN/
 ```
 
 Origin validation rejects loopback, link-local, multicast, metadata, internal
 platform, edge-service, and proxy-loop destinations. Do not weaken this check
-to make a private origin work; private origin connectivity is not implemented.
+to make a private origin work.
 
-## Step 11: establish backup and monitoring
+## Step 11: create and prove the mandatory backup
 
-Before accepting customer traffic:
+Monitoring is optional; recovery is not. Before accepting customer traffic:
 
-- create and verify a Restic backup;
-- copy required application and CA keys into the protected recovery system;
-- configure a real Alertmanager receiver;
-- confirm metrics require the separate bearer-token file;
-- record baseline queue depth, disk use, edge capacity, DNS health, and MMDB age;
-- restore into an isolated environment and measure RPO/RTO.
+1. create an encrypted Restic backup;
+2. verify the snapshot remotely;
+3. store `APP_KEY`, signing keys, CA keys, Restic credentials, and external TLS
+   material in the protected recovery system;
+4. restore into an isolated environment;
+5. record the tested RPO and RTO.
 
-PostgreSQL, CA keys, application encryption/signing keys, and externally stored
-customer TLS material form the recovery set. Derived PowerDNS data, edge
-snapshots, and telemetry aggregates can be rebuilt.
+See [Backup and recovery](../operations/backup-and-recovery.md).
 
-## Step 12: production acceptance checklist
+The required serving checklist is:
 
-Do not announce service until all items are true:
-
-- [ ] all hosts use the same exact release;
-- [ ] Compose configuration renders without placeholders;
+- [ ] every host runs the same exact release;
+- [ ] every Compose configuration renders successfully;
 - [ ] Laravel and PowerDNS migrations completed explicitly;
-- [ ] control health and readiness are acceptable;
+- [ ] control `/api/health` and `/api/ready` succeed;
 - [ ] both DNS servers answer UDP and TCP externally;
-- [ ] registrar glue matches active listener addresses;
-- [ ] system DNS identity is active on both clusters;
+- [ ] registrar glue matches the active listener addresses;
+- [ ] both DNS clusters have active system-zone revisions;
 - [ ] both edge identities are registered and bootstrap tokens removed;
-- [ ] shared cells are listener-ready;
-- [ ] one test domain resolves through both nameservers;
-- [ ] one proxied HTTPS request succeeds through each edge;
-- [ ] failed candidate activation preserves the previous valid state;
-- [ ] telemetry failure does not interrupt DNS or HTTP;
-- [ ] off-host backup and isolated restore are proven;
+- [ ] shared cells and gateways are listener-ready;
+- [ ] the test domain resolves through both nameservers;
+- [ ] proxied HTTPS works through each edge;
+- [ ] a failed runtime candidate preserves the previous valid state;
+- [ ] an off-host backup and isolated restore are proven;
 - [ ] firewall tests confirm private services are not public.
 
-## Daily commands
+## Step 12, optional: enable monitoring and centralized logs
 
-Control host status:
+The CDN can serve without this step. Prometheus, Grafana, Loki, ClickHouse, and
+operational log collectors are diagnostic systems: their failure must not stop
+DNS, HTTP, queue processing, or runtime activation.
+
+### 12.1 Start telemetry on `CONTROL`
+
+The environment generator already created independent Grafana passwords,
+ClickHouse credentials, Loki limits, and the source allowlists.
+
+```sh
+cd /opt/cdnfoundry
+
+docker compose --env-file .env.prod \
+  -f compose.prod.yml \
+  -f deploy/production/compose.control-host.yml \
+  --profile telemetry config --quiet
+
+docker compose --env-file .env.prod \
+  -f compose.prod.yml \
+  -f deploy/production/compose.control-host.yml \
+  --profile telemetry pull
+
+docker compose --env-file .env.prod \
+  -f compose.prod.yml \
+  -f deploy/production/compose.control-host.yml \
+  --profile telemetry up -d
+
+docker compose --env-file .env.prod \
+  -f compose.prod.yml \
+  -f deploy/production/compose.control-host.yml \
+  ps clickhouse prometheus alertmanager grafana loki node-exporter vector
+```
+
+### 12.2 Start exactly one operational-log collector per host
+
+On `CONTROL`:
+
+```sh
+docker compose --env-file .env.prod \
+  -f compose.prod.yml \
+  -f deploy/production/compose.control-host.yml \
+  --profile logs up -d log-collector
+```
+
+On both `EDGE_1` and `EDGE_2`:
+
+```sh
+docker compose --env-file .env.prod \
+  -f compose.prod.yml \
+  -f deploy/production/compose.dns-edge-host.yml \
+  --profile logs up -d log-collector
+```
+
+The Docker socket is a privileged read boundary. Only the collector receives a
+read-only mount; never expose the socket over TCP or mount it into application
+containers. Add `deploy/production/compose.host-journal.yml` only on hosts that
+use persistent systemd journals and need kernel OOM, disk, and daemon events.
+
+### 12.3 Configure Prometheus targets and Alertmanager
+
+Populate deployment-owned copies of:
+
+- `docker/prometheus/edge-targets.prod.yml` with private gateway metrics
+  endpoints;
+- `docker/prometheus/operational-log-targets.prod.yml` with each private
+  `host:9599` collector endpoint.
+
+Configure a real Alertmanager receiver. Keep metrics endpoints private and
+require the metrics bearer-token file.
+
+### 12.4 Open Grafana safely
+
+Grafana binds to `127.0.0.1:3000`. For the first check, use an SSH tunnel from
+an administrator workstation:
+
+```sh
+ssh -L 3000:127.0.0.1:3000 ADMIN_USER@control.ops.example.com
+```
+
+Open `http://127.0.0.1:3000`, sign in with `GRAFANA_ADMIN_USER` and the generated
+`GRAFANA_ADMIN_PASSWORD`, and confirm exactly two dashboards exist. For ongoing
+use, deploy an authenticated HTTPS reverse proxy or SSO gateway; never expose
+port `3000` directly.
+
+Verify:
+
+- all four datasources report healthy;
+- the System and Domain Command Centers load;
+- HTTP and DNS access analytics reach ClickHouse;
+- operational logs reach Loki without access-log duplication;
+- the request tail shows client and origin status with a bounded refresh;
+- stopping monitoring does not interrupt DNS or HTTP traffic.
+
+See [Grafana](../operations/grafana.md),
+[Monitoring](../operations/monitoring.md), and
+[Operational logging](../operations/operational-logging.md).
+
+## Daily status commands
+
+On `CONTROL`:
 
 ```sh
 docker compose --env-file .env.prod \
@@ -597,7 +640,7 @@ docker compose --env-file .env.prod \
   logs --tail=200 core horizon scheduler caddy
 ```
 
-Combined edge status:
+On an edge:
 
 ```sh
 docker compose --env-file .env.prod \
@@ -607,20 +650,15 @@ docker compose --env-file .env.prod \
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.dns-edge-host.yml \
-  logs --tail=200 dnsdist pdns-auth dns-api edge edge-agent vector
+  logs --tail=200 dnsdist pdns-auth dns-api edge edge-agent edge-gateway
 ```
 
 ## Common startup failures
 
-### Caddy cannot obtain the control certificate
+### Control certificate failure
 
-Check:
-
-1. the independent A/AAAA record;
-2. public TCP `80` and `443`;
-3. the ACME contact and upstream reachability;
-4. Caddy logs;
-5. provider rate limits.
+Check the independent A/AAAA record, public TCP `80` and `443`, ACME contact,
+Caddy logs, outbound HTTPS, and provider rate limits:
 
 ```sh
 docker compose --env-file .env.prod \
@@ -636,66 +674,35 @@ docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.control-host.yml \
   logs --tail=200 core
-
-docker inspect --format '{{json .State.Health}}' \
-  "$(docker compose --env-file .env.prod \
-  -f compose.prod.yml \
-  -f deploy/production/compose.control-host.yml ps -q core)"
 ```
 
-The production root filesystem is read-only. Do not make it writable as a
-workaround. Verify migrations, mounted secrets, permissions, and writable
-tmpfs/storage paths.
+Verify migrations, secret-file paths, file permissions, PostgreSQL, Valkey,
+and writable tmpfs/storage mounts. Do not make the production root filesystem
+writable as a workaround.
 
 ### DNS reconciliation fails
 
-Check in order:
+Check the operation error code, control source IPv4, firewall counters,
+`DNS_API_HOSTNAME`, certificate SAN, mounted CA, the edge's unique API key, and
+`dns-api`/`pdns-auth` health. Never publish raw PowerDNS API port `8081`.
 
-1. the operation and stable error code;
-2. the control source IPv4 and firewall counters;
-3. `DNS_API_HOSTNAME` against the certificate SAN;
-4. the mounted server CA;
-5. that edge's unique `PDNS_API_KEY`;
-6. `dns-api` and `pdns-auth` health.
+### Edge registration fails
 
-Never publish raw PowerDNS API port `8081`.
+Check edge UUID, one-time token state, server CA, system clock, outbound TCP
+`8443`, identity volume, artifact signature, sequence, available disk, gateway,
+and cell status. Do not delete the active runtime directory; it is the rollback
+state.
 
-### Edge registration or deployment fails
+### Optional monitoring is empty
 
-Check edge UUID, one-time token state, server CA, system clock, outbound `8443`,
-agent identity volume, artifact signature, sequence, available disk, and cell
-status. Do not delete the active runtime directory: the agent intentionally
-retains it as rollback state.
-
-## Add another combined node
-
-For each additional node:
-
-1. create `dns-api-N.ops.example.com`;
-2. install the same exact release;
-3. generate a host-specific `dns-edge` environment;
-4. issue a unique DNS API identity:
-
-   ```sh
-   sudo ./scripts/issue-production-dns-api-certificate.sh \
-     /etc/cdnfoundry/pki \
-     dns-api-3 \
-     dns-api-3.ops.example.com
-   ```
-
-5. update exact-source firewall and gateway allowlists;
-6. migrate and start DNS;
-7. add, test, and enable its DNS cluster;
-8. create and enroll its edge;
-9. test DNS and HTTP before adding traffic.
-
-The current platform bounds are eight nameserver identities and sixteen DNS
-cluster targets. Adding a server does not always require adding another
-delegated nameserver identity.
+Check `telemetry.ops.example.com`, source allowlists, edge `CLICKHOUSE_URL` and
+`LOKI_ENDPOINT`, collector identities, Vector buffers, ClickHouse health, Loki
+`/ready`, and the selected Grafana time range. Do not restart serving services
+to repair monitoring.
 
 ## Optional IPv6
 
-Leave `PUBLIC_BIND_IPV6=` empty on IPv4-only hosts and omit IPv6 overlays.
+Leave `PUBLIC_BIND_IPV6=` empty and omit IPv6 overlays on IPv4-only hosts.
 
 Control with IPv6:
 
@@ -704,7 +711,7 @@ docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.control-host.yml \
   -f deploy/production/compose.control-host-ipv6.yml \
-  --profile control --profile telemetry --profile logs up -d
+  --profile control up -d
 ```
 
 Combined DNS/edge with IPv6:
@@ -715,25 +722,24 @@ docker compose --env-file .env.prod \
   -f deploy/production/compose.dns-edge-host.yml \
   -f deploy/production/compose.dns-host-ipv6.yml \
   -f deploy/production/compose.edge-host-ipv6.yml \
-  --profile dns --profile edge --profile logs up -d
+  --profile dns --profile edge up -d
 ```
 
 Publish AAAA and glue only after external IPv6 DNS and HTTPS checks pass.
 
 ## Upgrade and rollback
 
-Back up first. Upgrade one edge at a time, then control components. Keep
-application and runtime compatibility within the documented envelope. Run
-explicit migrations and never roll back a database after an incompatible
+Back up first. Upgrade one edge at a time, then control components. Run explicit
+migrations and keep application/runtime versions inside the documented
+compatibility envelope. Never roll back a database after an incompatible
 migration.
 
-Use [Upgrade and rollback](upgrade.md) for the canary sequence and
-[Backup and recovery](../operations/backup-and-recovery.md) for the recovery set.
+Use [Upgrade and rollback](upgrade.md) and
+[Backup and recovery](../operations/backup-and-recovery.md).
 
 ## Next steps
 
 - [Understand the production topology](topology.md)
 - [Harden secrets and networks](../security/hardening.md)
-- [Configure monitoring](../operations/monitoring.md)
 - [Practice incident runbooks](../operations/runbooks.md)
 - [Scale roles independently](../operations/scaling.md)

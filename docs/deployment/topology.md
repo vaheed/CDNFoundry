@@ -14,12 +14,15 @@ diagnostics.
 
 ## Minimum topology
 
-The smallest production-oriented layout documented by the repository is:
+The smallest serving layout documented by the repository is:
 
-1. one control host running `control` and `telemetry`, including Prometheus,
-   Alertmanager, ClickHouse, and loopback-only Grafana, plus the control Caddy
-   overlay;
+1. one control host running `control` plus the control Caddy overlay;
 2. two combined DNS/edge hosts, each running `dns` and `edge` plus the DNS API overlay.
+
+After DNS and HTTP serving qualify, the operator may enable the `telemetry`
+profile on the control host and one `logs` collector per host. This adds
+ClickHouse, Prometheus, Alertmanager, Grafana, Loki, exporters, and centralized
+operational logs without placing them in the serving path.
 
 The two DNS/edge hosts provide distinct authoritative nameserver and edge
 addresses. This layout is not automatic high availability: PostgreSQL, Valkey,
@@ -117,20 +120,18 @@ make prod-migrate
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.control-host.yml \
-  --profile control --profile telemetry --profile logs up -d
+  --profile control up -d
 ```
 
 Create the first administrator inside `core` with `cdnf:admin:create`. Check
-`/api/health`, `/api/ready`, administrator component health, Horizon,
-Prometheus, Grafana datasource health and its two provisioned dashboard UIDs,
-and the first verified backup. Grafana remains on loopback until an operator
-adds the separately authenticated HTTPS reverse proxy described in the
-[Grafana runbook](../operations/grafana.md).
+`/api/health`, `/api/ready`, administrator component health, Horizon, and the
+first verified backup.
 
-Every host must set its own stable `LOG_HOST`, `LOG_ROLE`, and
-`LOG_COLLECTOR_ID`. Add `--profile logs` exactly once to DNS-only, edge-only,
-and telemetry-only role commands too. See the
-[operational logging runbook](../operations/operational-logging.md).
+When optional monitoring is enabled, every host must use its generated stable
+`LOG_HOST`, `LOG_ROLE`, and `LOG_COLLECTOR_ID`, and run `--profile logs` exactly
+once. Grafana remains on loopback until an operator adds the separately
+authenticated HTTPS reverse proxy described in the
+[Grafana runbook](../operations/grafana.md).
 
 ### 8. Start each DNS/edge host
 
@@ -141,7 +142,7 @@ make prod-pdns-migrate
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.dns-edge-host.yml \
-  --profile dns --profile edge --profile logs up -d
+  --profile dns --profile edge up -d
 ```
 
 The MMDB updater must activate a valid database before PowerDNS becomes ready.
@@ -175,7 +176,8 @@ From external networks, verify:
 - origin safety and headers;
 - cache hit, development mode, full purge, URL purge;
 - security rule and quarantine behaviour;
-- telemetry and usage without affecting serving;
+- telemetry and usage without affecting serving, when the optional telemetry
+  profile is enabled;
 - backup and recovery procedure.
 
 Run the current non-browser qualification suite. Record the exact revision,

@@ -17,6 +17,15 @@
 }
 
 https://{$TELEMETRY_HOSTNAME}:8444 {
+	@log_sources {
+		remote_ip {$LOG_SOURCE_IPV4_ALLOWLIST}
+		path /loki/api/v1/push
+	}
+
+	handle @log_sources {
+		reverse_proxy loki:3100
+	}
+
 	@edge_sources remote_ip {$EDGE_PUBLIC_IPV4_ALLOWLIST}
 
 	handle @edge_sources {
