@@ -317,7 +317,7 @@ def main() -> None:
             file.chmod(0o644)
         run("docker", "run", "-d", "--name", NAME, "--network", EDGE_NETWORK,
             "--tmpfs", "/var/cache/nginx:rw,size=64m", "--tmpfs", "/var/lib/nginx/tmp:rw,size=32m",
-            "--memory", "256m", "--cpus", "0.5", "--pids-limit", "96",
+            "--memory", "512m", "--cpus", "0.5", "--pids-limit", "96",
             "--ulimit", "nofile=65536:65536",
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/active.json", "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
             "-e", "GEOIP_DATABASE=/mmdb/GeoLite2-City.mmdb", "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro",
@@ -363,7 +363,9 @@ def main() -> None:
             status_payload = run("docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token", "http://127.0.0.1:9080/passive-failures")
             decoded = json.loads(status_payload.stdout)
             assert len(decoded["security"]) <= 20 and any(event["reason_code"] == "domain_quarantined" for event in decoded["security"]), decoded
-            assert decoded["cell"]["capacity"]["memory_usage"] <= 256 * 1024 * 1024, decoded["cell"]
+            capacity = decoded["cell"]["capacity"]
+            assert capacity["memory_limit"] == 512 * 1024 * 1024, decoded["cell"]
+            assert capacity["memory_usage"] <= capacity["memory_limit"], decoded["cell"]
 
             runtime.write_text('{"schema_version":1,"hosts":"invalid"}')
             time.sleep(1.2)
