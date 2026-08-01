@@ -5,6 +5,12 @@ description: Start, secure, provision, and troubleshoot CDNFoundry's two operati
 
 # Grafana command centers
 
+::: warning Grafana is an operator surface
+Keep port `3000` private. Publish Grafana only through a deployment-owned
+authenticated HTTPS proxy or trusted tunnel, and retain the provisioned
+read-only data-source roles.
+:::
+
 CDNFoundry provisions exactly two Grafana dashboards in the **CDNFoundry
 Operations** folder. The system command center is the home dashboard; the
 domain command center has one single-select `$domain_id` input. Neither

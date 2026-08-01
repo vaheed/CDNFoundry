@@ -5,6 +5,12 @@ description: Diagnose enrollment, heartbeat, artifacts, listeners, placement, an
 
 # Troubleshoot edge and origin
 
+::: danger Preserve identity and active runtime state
+Do not delete agent state, reset revision numbers, or edit generated gateway or
+cell files. Those actions can destroy the evidence and last-valid state needed
+for safe recovery.
+:::
+
 For gateway listener, Host/SNI rejection, revision drift, and last-valid
 recovery, see [Edge gateway ingress](../operations/gateway-ingress.md).
 

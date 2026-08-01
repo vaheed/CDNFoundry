@@ -5,6 +5,12 @@ description: Maintain CDNFoundry documentation as verified, linked, accessible, 
 
 # Documentation contributions
 
+::: warning Document observed behavior
+Verify fields, routes, limits, services, and commands against the current code
+and rendered Compose configuration. Do not promote roadmap proposals or legacy
+phase documents into current instructions before implementation qualifies.
+:::
+
 Authored documentation lives in `docs/**/*.md`, excluding `docs/legacy/`.
 VitePress config, theme code, and static SEO assets support the site but are not
 documentation content. The OpenAPI JSON file is generated machine-readable

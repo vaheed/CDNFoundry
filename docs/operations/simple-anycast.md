@@ -11,8 +11,9 @@ pool owns the pair in PostgreSQL. Each edge endpoint is only a participation,
 readiness, revision, and withdrawal record; it does not duplicate the pair.
 
 ::: danger CDNFoundry is not a BGP controller
-CDNFoundry binds the service addresses on ready gateways and publishes them in
-authoritative DNS. It never installs FRR or BIRD, stores router credentials,
+CDNFoundry maps the advertised service identities to operator-provisioned local
+gateway addresses and publishes the service identities in authoritative DNS.
+It never installs FRR or BIRD, stores router credentials,
 runs arbitrary network commands, announces a prefix, or withdraws a BGP route.
 The network operator or provider must approve the prefix and independently
 advertise, steer, withdraw, restore, monitor, and record routing changes.
@@ -47,7 +48,10 @@ do not participate on that edge consume zero slots there.
 5. Enable the pool after all intended endpoints and cell assignments exist. Confirm the
    same pair appears in each edge gateway candidate and becomes `ready` only
    after local gateway acknowledgement.
-6. Have the network operator advertise the approved prefix. Verify routes and
+6. On each edge, assign distinct local addresses, configure the approved
+   routing or layer-4 translation, and map every service address through
+   `EDGE_GATEWAY_ADDRESS_MAP`. The public Anycast pair is never a host bind.
+7. Have the network operator advertise the approved prefix. Verify routes and
    real HTTP/HTTPS traffic from independent external vantage points before
    assigning production domains.
 

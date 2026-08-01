@@ -5,6 +5,12 @@ description: Install, monitor, control, and recover stable OpenResty cell slots.
 
 # Bounded cell inventory
 
+::: caution Slots are installed capacity
+A configured slot must have a matching fixed service, port set, volume, and
+agent entry before the host starts. Creating a pool or domain never creates a
+new process, container, cache directory, or timer.
+:::
+
 Each production edge installation starts exactly eight generic OpenResty slots,
 `cell-01` through `cell-08`. PostgreSQL records the configured slot count and
 each slot's identity, assignment, ports, paths, state, capacity, and resource
@@ -25,8 +31,9 @@ failed installation, not elastic scaling.
 | `cell-02` | 18082 | 18445 | 19082 | Unassigned |
 | `cell-03`–`cell-08` | 18083–18088 | 18446–18451 | 19083–19088 | Unassigned |
 
-All host publications are loopback diagnostics. Customer traffic enters only
-through the gateway's public service addresses. Each container has separate
+All cell publications are loopback diagnostics. Customer traffic enters only
+through gateway listeners mapped from advertised service addresses to distinct
+private local addresses. Each container has separate
 tmpfs-backed cache, request-temporary, and log storage, plus CPU, memory, PID,
 and file-descriptor limits. The agent has its own smaller limits and no Docker
 or other container-engine socket.

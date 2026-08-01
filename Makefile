@@ -2,7 +2,7 @@ COMPOSE_DEV := docker compose -f compose.dev.yml
 COMPOSE_PROD := docker compose --env-file .env.prod -f compose.prod.yml
 COMPOSE_PROD_EXAMPLE := docker compose --env-file .env.prod.example -f compose.prod.yml
 
-.PHONY: backend-test contract-check dev-assets dev-control-up dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-waf-image dev-phase9-e2e dev-gateway-e2e dev-cache-e2e dev-compression-e2e dev-origin-failover-e2e dev-phase7-e2e dev-phase8-e2e dev-phase8-recovery-e2e dev-phase8-upgrade-e2e dev-phase8-throughput-e2e dev-phase8-mmdb-e2e dev-scale-e2e dev-grafana-smoke dev-operational-logs-smoke dev-production-qualification dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge config-check openapi-check docs-dev docs-build docs-check
+.PHONY: backend-test contract-check dev-assets dev-control-up dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-waf-image dev-phase9-e2e dev-gateway-e2e dev-cache-e2e dev-compression-e2e dev-origin-failover-e2e dev-phase7-e2e dev-phase8-e2e dev-phase8-recovery-e2e dev-phase8-upgrade-e2e dev-phase8-throughput-e2e dev-phase8-mmdb-e2e dev-scale-e2e dev-grafana-smoke dev-operational-logs-smoke dev-production-qualification dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge prod-logs config-check openapi-check docs-dev docs-build docs-check
 
 backend-test: dev-test
 
@@ -110,26 +110,32 @@ prod-pull:
 	$(COMPOSE_PROD) pull
 
 prod-migrate:
+	$(COMPOSE_PROD) --profile control up -d --wait --wait-timeout 120 control-db redis
 	$(COMPOSE_PROD) --profile tools run --rm migrate
 
 prod-pdns-migrate:
+	$(COMPOSE_PROD) --profile dns up -d --wait --wait-timeout 120 pdns-db
 	$(COMPOSE_PROD) --profile tools run --rm pdns-migrate
 
 prod-control:
-	$(COMPOSE_PROD) --profile control --profile logs up -d
+	$(COMPOSE_PROD) --profile control up -d
 
 prod-dns:
-	$(COMPOSE_PROD) --profile dns --profile logs up -d
+	$(COMPOSE_PROD) --profile dns up -d
 
 prod-telemetry:
-	$(COMPOSE_PROD) --profile telemetry --profile logs up -d
+	$(COMPOSE_PROD) --profile telemetry up -d
 
 prod-edge:
-	$(COMPOSE_PROD) --profile edge --profile logs up -d
+	$(COMPOSE_PROD) --profile edge up -d
+
+prod-logs:
+	$(COMPOSE_PROD) --profile logs up -d log-collector
 
 config-check:
 	$(COMPOSE_DEV) config --quiet
 	$(COMPOSE_PROD_EXAMPLE) config --quiet
+	bash tests/config/generate-production-env.sh
 	./scripts/validate-production-overrides.sh
 
 openapi-check:

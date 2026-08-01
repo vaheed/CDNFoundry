@@ -7,6 +7,12 @@ description: Configure system DNS, add a domain, delegate it, and activate servi
 
 This workflow assumes an administrator account and a healthy DNS cluster.
 
+::: warning Delegation is an external change
+Create and verify platform identity, authoritative clusters, glue, and direct
+UDP/TCP answers before changing registrar delegation. CDNFoundry cannot roll
+back an incorrect parent-zone or registrar change.
+:::
+
 ## Prepare platform identity
 
 In `/admin/system-dns-identity`, enter:

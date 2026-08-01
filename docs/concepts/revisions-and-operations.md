@@ -5,6 +5,12 @@ description: Understand monotonic revisions, operation receipts, retries, and ro
 
 # Revisions and operations
 
+::: warning Accepted is not active
+`202 Accepted` proves that bounded work was recorded or queued. Do not announce
+success until the operation and every relevant DNS, edge, TLS, cache, or purge
+acknowledgement reaches the intended revision.
+:::
+
 ```mermaid
 flowchart LR
     Mutation["Mutation + Idempotency-Key"] --> Receipt["Operation receipt"]

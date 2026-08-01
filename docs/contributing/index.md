@@ -5,6 +5,12 @@ description: Contribute to CDNFoundry within its architecture, scope, safety, an
 
 # Contributing
 
+::: info Start with the product contract
+Read `AGENTS.md` and `docs/roadmap.md` before implementation. A locally elegant
+change is still invalid when it breaks bounded resources, asynchronous effects,
+last-valid rollback, authorization, or the one-monolith architecture.
+:::
+
 Read `AGENTS.md` before changing behaviour.
 The key invariants are:
 

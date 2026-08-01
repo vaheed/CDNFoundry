@@ -16,15 +16,15 @@ diagnostics.
 
 The smallest serving layout documented by the repository is:
 
-1. one control host running `control` plus the control Caddy overlay;
-2. two combined DNS/edge hosts, each running `dns` and `edge` plus the DNS API overlay.
+1. `CONTROL`, running `control` plus the control Caddy overlay;
+2. `EDGE_1` and `EDGE_2`, each running `dns` and `edge` plus the DNS API overlay.
 
 After DNS and HTTP serving qualify, the operator may enable the `telemetry`
-profile on the control host and one `logs` collector per host. This adds
+profile on `CONTROL` and one `logs` collector per host. This adds
 ClickHouse, Prometheus, Alertmanager, Grafana, Loki, exporters, and centralized
 operational logs without placing them in the serving path.
 
-The two DNS/edge hosts provide distinct authoritative nameserver and edge
+`EDGE_1` and `EDGE_2` provide distinct authoritative nameserver and edge
 addresses. This layout is not automatic high availability: PostgreSQL, Valkey,
 ClickHouse, backup storage, external firewalls, routing, and failure procedures
 remain operator responsibilities.
@@ -40,8 +40,8 @@ hostnames, and pool records.
 Install Docker Engine, the Compose plugin, GNU Make, Git, OpenSSL, and a host
 firewall. Create public records for:
 
-- `control.<operator-zone>` → control host;
-- `edge-control.<operator-zone>` → control host;
+- `control.<operator-zone>` → `CONTROL`;
+- `edge-control.<operator-zone>` → `CONTROL`;
 - `telemetry.<operator-zone>` → control/telemetry host;
 - one `dns-api-N.<operator-zone>` → each DNS host.
 
@@ -77,9 +77,12 @@ profile's required values.
 
 ### 4. Create secret files
 
-Create the metrics token and Restic password at the absolute paths in
-`.env.prod`, mode `0600`. Initialize the off-host Restic repository using its
-separately stored password. Restrict backup credentials to the CDNFoundry prefix.
+Create the required metrics token at its absolute path with mode `0600`. If the
+optional S3-compatible Restic integration is enabled, also create its separate
+password file, initialize the off-host repository, and restrict backup
+credentials to the CDNFoundry bucket/prefix. Empty backup settings do not block
+startup; they leave backup health degraded until another recovery method is
+recorded.
 
 ### 5. Generate internal PKI
 
@@ -111,12 +114,20 @@ Validate each exact overlay combination before starting it. The repository's
 DNS-only, edge-only, telemetry-only, opt-in IPv6, and external control-data
 configurations with documentation addresses.
 
-### 7. Start the control host
+### 7. Start `CONTROL`
 
-Run migrations before application processes:
+Start the database dependencies, wait for their health checks, run migrations,
+and only then start application processes:
 
 ```sh
-make prod-migrate
+docker compose --env-file .env.prod \
+  -f compose.prod.yml \
+  -f deploy/production/compose.control-host.yml \
+  --profile control up -d --wait --wait-timeout 120 control-db redis
+docker compose --env-file .env.prod \
+  -f compose.prod.yml \
+  -f deploy/production/compose.control-host.yml \
+  --profile tools run --rm migrate
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.control-host.yml \
@@ -124,8 +135,8 @@ docker compose --env-file .env.prod \
 ```
 
 Create the first administrator inside `core` with `cdnf:admin:create`. Check
-`/api/health`, `/api/ready`, administrator component health, Horizon, and the
-first verified backup.
+`/api/health`, `/api/ready`, administrator component health, and Horizon. If
+the built-in backup integration is enabled, create its first verified snapshot.
 
 When optional monitoring is enabled, every host must use its generated stable
 `LOG_HOST`, `LOG_ROLE`, and `LOG_COLLECTOR_ID`, and run `--profile logs` exactly
@@ -133,12 +144,20 @@ once. Grafana remains on loopback until an operator adds the separately
 authenticated HTTPS reverse proxy described in the
 [Grafana runbook](../operations/grafana.md).
 
-### 8. Start each DNS/edge host
+### 8. Start `EDGE_1` and `EDGE_2`
 
-Apply the separate PowerDNS runtime migration, then start the profiles:
+Start and health-check the PowerDNS database, apply its separate runtime
+migration, then start the profiles:
 
 ```sh
-make prod-pdns-migrate
+docker compose --env-file .env.prod \
+  -f compose.prod.yml \
+  -f deploy/production/compose.dns-edge-host.yml \
+  --profile dns up -d --wait --wait-timeout 120 pdns-db
+docker compose --env-file .env.prod \
+  -f compose.prod.yml \
+  -f deploy/production/compose.dns-edge-host.yml \
+  --profile tools run --rm pdns-migrate
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
   -f deploy/production/compose.dns-edge-host.yml \
@@ -156,7 +175,7 @@ In the administrator panel:
 1. configure and apply system DNS identity;
 2. register each DNS API cluster, test it, then enable it;
 3. create shared and quarantine pools if they are not present;
-4. create each edge row and copy its one-time UUID/token;
+4. create the `EDGE_1` and `EDGE_2` rows and copy each one-time UUID/token;
 5. assign bounded cells to pools and create one public service endpoint pair for
    each participating edge/pool; keep management addresses distinct.
 

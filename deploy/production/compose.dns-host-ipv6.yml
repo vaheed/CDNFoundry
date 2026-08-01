@@ -1,5 +1,5 @@
 services:
   dnsdist:
     ports:
-      - "[${PUBLIC_BIND_IPV6:?PUBLIC_BIND_IPV6 is required by the IPv6 override}]:53:53/udp"
-      - "[${PUBLIC_BIND_IPV6:?PUBLIC_BIND_IPV6 is required by the IPv6 override}]:53:53/tcp"
+      - "[${HOST_BIND_IPV6:-::}]:53:53/udp"
+      - "[${HOST_BIND_IPV6:-::}]:53:53/tcp"

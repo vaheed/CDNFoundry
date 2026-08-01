@@ -229,6 +229,64 @@ func TestRewriteGatewayAddressesUsesBoundedDevelopmentListeners(t *testing.T) {
 	}
 }
 
+func TestRewriteGatewayAddressMapUsesExactLocalListeners(t *testing.T) {
+	bindings := []gatewayBinding{
+		{Address: "192.0.2.10", Pool: "shared-default"},
+		{Address: "2001:db8::10", Pool: "shared-default"},
+		{Address: "192.0.2.11", Pool: "quarantine-default"},
+	}
+	addresses, err := parseGatewayAddressMap(`{"192.0.2.10":"10.20.0.10","2001:db8::10":"fd00:20::10"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rewritten := rewriteGatewayAddressMap(bindings, addresses)
+	if rewritten[0].Address != "10.20.0.10" || rewritten[1].Address != "fd00:20::10" || rewritten[2].Address != "192.0.2.11" {
+		t.Fatalf("production listener map was not applied exactly: %#v", rewritten)
+	}
+	if bindings[0].Address != "192.0.2.10" {
+		t.Fatalf("desired-state binding was mutated: %#v", bindings)
+	}
+}
+
+func TestParseGatewayAddressMapRejectsUnsafeMappings(t *testing.T) {
+	for _, raw := range []string{
+		`[]`,
+		`{"192.0.2.10":"0.0.0.0"}`,
+		`{"192.0.2.10":"198.51.100.10"}`,
+		`{"192.0.2.10":"fd00:20::10"}`,
+		`{"192.0.2.10":"10.20.0.10","192.0.2.11":"10.20.0.10"}`,
+	} {
+		if _, err := parseGatewayAddressMap(raw); err == nil {
+			t.Fatalf("unsafe listener map was accepted: %s", raw)
+		}
+	}
+}
+
+func TestStaticGatewayBindingsUseProductionAddressMap(t *testing.T) {
+	raw := `[{"address":"192.0.2.10","pool":"shared-default"}]`
+	rewritten, err := rewriteGatewayBindingsJSON(raw, map[string]string{"192.0.2.10": "10.20.0.10"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rewritten, `"address":"10.20.0.10"`) {
+		t.Fatalf("static production binding retained its advertised address: %s", rewritten)
+	}
+}
+
+func TestGatewayAddressMapCoverageFailsClosed(t *testing.T) {
+	bindings := []gatewayBinding{
+		{Address: "192.0.2.10", Pool: "shared-default"},
+		{Address: "192.0.2.11", Pool: "quarantine-default"},
+	}
+	addresses := map[string]string{"192.0.2.10": "10.20.0.10"}
+	if err := validateGatewayAddressMapCoverage(bindings, addresses, true); err == nil {
+		t.Fatal("production listener map accepted an unmapped advertised address")
+	}
+	if err := validateGatewayAddressMapCoverage(bindings, addresses, false); err != nil {
+		t.Fatalf("development listener mapping was unexpectedly required: %v", err)
+	}
+}
+
 func TestGatewayRevisionChangeRebuildsUnchangedBindings(t *testing.T) {
 	c := &client{gatewayRevision: 41, derivedEnsured: true}
 	c.updateGatewayRevision(42)

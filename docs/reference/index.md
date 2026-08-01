@@ -5,6 +5,12 @@ description: Exact configuration, service, DNS, API, CLI, limit, and telemetry r
 
 # Reference
 
+::: info Reference values are contracts, not a production template
+Defaults and examples explain the shipped behavior. Use the deployment guide,
+environment ownership table, and measured capacity when selecting real values;
+never copy example credentials or documentation addresses.
+:::
+
 - [Configuration](configuration.md) lists deployment environment variables.
 - [Platform settings](platform-settings.md) lists PostgreSQL-backed policy.
 - [Services and ports](services-and-ports.md) maps development and production services.

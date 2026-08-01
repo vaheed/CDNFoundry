@@ -5,6 +5,12 @@ description: Immutable canary and wave upgrades for the fixed edge runtime.
 
 # Bounded fleet rollouts
 
+::: danger Rollout intent is not arbitrary remote execution
+The edge agent accepts only the four bounded immutable image references and
+writes an intent for the privileged installer. Never give the agent a
+container-engine socket or extend this path into a shell-command channel.
+:::
+
 Fleet rollouts manage exactly four immutable image references: gateway, agent,
 normal cell, and WAF cell. Every reference must contain a registry digest. Tags,
 shell commands, arbitrary component names, dynamic slots, and container-engine

@@ -6,7 +6,7 @@ services:
       DNS_API_HOSTNAME: ${DNS_API_HOSTNAME:?DNS_API_HOSTNAME is required}
       CONTROL_PUBLIC_IPV4_ALLOWLIST: ${CONTROL_PUBLIC_IPV4_ALLOWLIST:?CONTROL_PUBLIC_IPV4_ALLOWLIST is required}
     ports:
-      - "${PUBLIC_BIND_IPV4:?PUBLIC_BIND_IPV4 is required}:8444:8444/tcp"
+      - "${HOST_BIND_IPV4:-0.0.0.0}:8444:8444/tcp"
     volumes:
       - ./deploy/production/Caddyfile.dns-api:/etc/caddy/Caddyfile:ro
       - ${DNS_API_SERVER_CERTIFICATE:?DNS_API_SERVER_CERTIFICATE is required}:/run/secrets/dns-api.crt:ro

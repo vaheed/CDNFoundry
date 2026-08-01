@@ -12,9 +12,18 @@ hero:
       text: Get started
       link: /getting-started/
     - theme: alt
+      text: Learn CDN fundamentals
+      link: /concepts/cdn-fundamentals
+    - theme: alt
       text: Production quick start
       link: /deployment/production-quick-start
 features:
+  - title: Learn how a CDN works
+    details: Follow DNS, TLS, edge routing, cache, origins, desired state, and failure behavior from first principles.
+    link: /concepts/cdn-fundamentals
+  - title: Architecture
+    details: Compare production reference designs, planes, durable state ownership, bounded cells, and failure isolation.
+    link: /architecture/production-reference-architectures
   - title: Domain users
     details: Add domains, manage DNS, proxy origins, TLS, cache, security, analytics, and usage.
     link: /guides/
@@ -44,7 +53,8 @@ replace the last valid runtime state.
 ```mermaid
 flowchart LR
     Users["Internet users"] -->|"DNS"| DNS["DNSdist + PowerDNS"]
-    Users -->|"HTTP/HTTPS"| Edge["Bounded OpenResty cells"]
+    Users -->|"HTTP/HTTPS"| Gateway["Edge gateway"]
+    Gateway --> Edge["Bounded OpenResty cells"]
     Edge --> Origin["Validated customer origins"]
     Admins["Administrators"] --> Control["Laravel + Filament"]
     Control --> State[("PostgreSQL desired state")]

@@ -5,6 +5,12 @@ description: Understand what CDNFoundry provides, who it is for, and where to be
 
 # CDNFoundry overview
 
+::: info Serving and management are separate
+Laravel owns desired state and operator workflows, but DNS and HTTP requests do
+not pass through it. A control-plane outage pauses changes while previously
+activated DNS and edge state continues serving.
+:::
+
 CDNFoundry combines authoritative DNS, HTTP/HTTPS proxying, managed and custom
 TLS, bounded caching, security controls, telemetry, and usage export in one
 private platform. It is intended for an operator who controls the infrastructure
@@ -21,9 +27,12 @@ clients authenticate with Laravel Sanctum bearer tokens.
 
 ## Choose your path
 
+- If CDN concepts are new, begin with [CDN fundamentals](../concepts/cdn-fundamentals.md).
+- To understand the product end to end, read [How CDNFoundry works](../concepts/how-cdnfoundry-works.md).
 - To evaluate a company or ISP deployment, read [How to build a private CDN](private-cdn-design.md).
 - To run the repository locally, follow [Installation](installation.md).
 - To onboard a domain, follow [First domain](first-domain.md).
+- For common administrator, domain-user, and API tasks, use [Using CDNFoundry](using-cdnfoundry.md).
 - To understand state and failure guarantees, read [Desired state](../concepts/desired-state.md).
 - To deploy real hosts, start with the [Production quick start](../deployment/production-quick-start.md).
 - To integrate over HTTP, use the [API reference](../reference/api/index.md).

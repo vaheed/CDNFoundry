@@ -134,8 +134,10 @@ export default withMermaid(defineConfig({
       }
     },
     nav: [
+      { text: 'Learn', link: '/concepts/cdn-fundamentals' },
       { text: 'Get started', link: '/getting-started/' },
       { text: 'Production quick start', link: '/deployment/production-quick-start' },
+      { text: 'Architecture', link: '/architecture/' },
       { text: 'Guides', link: '/guides/' },
       { text: 'API', link: '/reference/api/' },
       { text: 'Operations', link: '/operations/' },
@@ -149,6 +151,7 @@ export default withMermaid(defineConfig({
           items: [
             { text: 'Overview', link: '/getting-started/' },
             { text: 'Private CDN design guide', link: '/getting-started/private-cdn-design' },
+            { text: 'Using CDNFoundry', link: '/getting-started/using-cdnfoundry' },
             { text: 'Installation', link: '/getting-started/installation' },
             { text: 'First domain', link: '/getting-started/first-domain' }
           ]
@@ -159,6 +162,8 @@ export default withMermaid(defineConfig({
           text: 'Concepts',
           items: [
             { text: 'Product model', link: '/concepts/' },
+            { text: 'CDN fundamentals', link: '/concepts/cdn-fundamentals' },
+            { text: 'How CDNFoundry works', link: '/concepts/how-cdnfoundry-works' },
             { text: 'Desired state', link: '/concepts/desired-state' },
             { text: 'Domains and DNS', link: '/concepts/domains-and-dns' },
             { text: 'Edges and cells', link: '/concepts/edges-and-cells' },
@@ -173,7 +178,8 @@ export default withMermaid(defineConfig({
             { text: 'System overview', link: '/architecture/' },
             { text: 'Components', link: '/architecture/components' },
             { text: 'Data flows', link: '/architecture/data-flows' },
-            { text: 'Data model', link: '/architecture/data-model' }
+            { text: 'Data model', link: '/architecture/data-model' },
+            { text: 'Production reference architectures', link: '/architecture/production-reference-architectures' }
           ]
         }
       ],
@@ -190,7 +196,9 @@ export default withMermaid(defineConfig({
             { text: 'Edges and placement', link: '/guides/edges' },
             { text: 'TLS', link: '/guides/tls' },
             { text: 'Cache and purge', link: '/guides/cache' },
+            { text: 'Compression', link: '/guides/compression' },
             { text: 'Security', link: '/guides/security' },
+            { text: 'Managed WAF', link: '/guides/managed-waf' },
             { text: 'Analytics and usage', link: '/guides/analytics' }
           ]
         }
@@ -236,8 +244,18 @@ export default withMermaid(defineConfig({
           text: 'Operations',
           items: [
             { text: 'Operations index', link: '/operations/' },
+            { text: 'Production best practices', link: '/operations/production-best-practices' },
             { text: 'CLI commands', link: '/operations/cli-commands' },
             { text: 'Monitoring', link: '/operations/monitoring' },
+            { text: 'Grafana command centers', link: '/operations/grafana' },
+            { text: 'Operational logging', link: '/operations/operational-logging' },
+            { text: 'Edge gateway ingress', link: '/operations/gateway-ingress' },
+            { text: 'Bounded cell inventory', link: '/operations/cell-inventory' },
+            { text: 'Multi-cell pools', link: '/operations/multi-cell-pools' },
+            { text: 'Pool service endpoints', link: '/operations/pool-service-endpoints' },
+            { text: 'Simple Anycast', link: '/operations/simple-anycast' },
+            { text: 'Anycast qualification', link: '/operations/simple-anycast-qualification' },
+            { text: 'Fleet rollouts', link: '/operations/fleet-rollouts' },
             { text: 'Backup and recovery', link: '/operations/backup-and-recovery' },
             { text: 'Incident runbooks', link: '/operations/runbooks' },
             { text: 'Scaling', link: '/operations/scaling' },

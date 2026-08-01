@@ -5,6 +5,12 @@ description: Reference supported DNS record types, modes, normalization, and zon
 
 # DNS record reference
 
+::: caution Record modes are mutually constrained
+Geo-DNS is authoritative answer selection; proxied mode is CDN traffic routing.
+They cannot be combined on one record. Changing type or mode revalidates the
+entire owner and zone before desired state changes.
+:::
+
 Every record requires `type`, `name`, `ttl`, and a mode. TTL is 30 through
 2,147,483,647 seconds. Names are lower-cased, converted to IDNA ASCII, limited
 to 253 characters and 63 per label, and must remain inside the managed zone.
@@ -33,6 +39,9 @@ DNS root.
 | `dns_only` | Publish normalized content |
 | `geo_dns` | Publish country, continent, then default answer sets |
 | `proxied` | Publish pool routing and use `origin.host` as stored content |
+
+See [Geo-DNS](../guides/geo-dns.md) for the selection flow, panel and API
+examples, ECS/resolver limitations, MMDB behavior, and production qualification.
 
 Only A, AAAA, and CNAME may be proxied. One proxied hostname has exactly one
 record and origin. It cannot coexist with another A, AAAA, or CNAME at the same

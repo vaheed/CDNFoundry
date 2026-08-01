@@ -5,6 +5,12 @@ description: Reference the private mutual-TLS protocol between CDNFoundry edge a
 
 # Edge-agent API
 
+::: danger Edge identity is one host's credential
+Enroll with the one-time token, persist the issued identity, then remove the
+bootstrap token. Never clone an agent state volume or reuse one edge identity
+on another host.
+:::
+
 Edge routes are rooted at `/edge/v1` and are not part of the customer API.
 They are served by the dedicated edge-control listener. Registration is
 bootstrap-token authenticated and rate limited; every later route requires a

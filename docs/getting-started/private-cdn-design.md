@@ -266,8 +266,11 @@ orchestration.
 
 ## Continue
 
-1. Read the [architecture](../architecture/index.md) and [desired-state model](../concepts/desired-state.md).
-2. Follow the [Production quick start](../deployment/production-quick-start.md).
-3. Review [security hardening](../security/hardening.md).
-4. Establish [monitoring](../operations/monitoring.md) and [backup recovery](../operations/backup-and-recovery.md).
-5. Use [scaling guidance](../operations/scaling.md) after measuring the first fleet.
+1. Learn the request lifecycle in [CDN fundamentals](../concepts/cdn-fundamentals.md).
+2. Compare [Production reference architectures](../architecture/production-reference-architectures.md).
+3. Read the [architecture](../architecture/index.md) and [desired-state model](../concepts/desired-state.md).
+4. Follow the [Production quick start](../deployment/production-quick-start.md).
+5. Apply [Production best practices](../operations/production-best-practices.md)
+   and [security hardening](../security/hardening.md).
+6. Establish [monitoring](../operations/monitoring.md) and [backup recovery](../operations/backup-and-recovery.md).
+7. Use [scaling guidance](../operations/scaling.md) after measuring the first fleet.

@@ -5,6 +5,12 @@ description: Generate, distribute, verify, and rotate CDNFoundry edge-control, r
 
 # Internal certificates
 
+::: danger CA private keys define fleet identity
+Never copy `edge-server-ca.key` or `edge-identity-ca.key` to an edge host.
+Losing or replacing the identity CA without a planned rotation breaks agent
+trust and cannot be repaired from PostgreSQL alone.
+:::
+
 Customer TLS is documented in [TLS certificates](../guides/tls.md). This page covers
 private service PKI used by edge enrollment, agent control, bootstrap listeners,
 and DNS API gateways.

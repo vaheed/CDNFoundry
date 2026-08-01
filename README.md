@@ -43,7 +43,7 @@ role-based Docker Compose deployments.
 - **Direct telemetry:** Vector sends redacted DNS and edge events directly to
   ClickHouse; analytics failure cannot block serving.
 - **Operational recovery:** explicit migrations, immutable images, health and
-  readiness, four queue lanes, Restic backup, restore preflight, runbooks, and
+  readiness, four queue lanes, optional Restic backup/restore, runbooks, and
   canary upgrade guidance.
 - **Predictable mutation:** external effects are asynchronous, revisioned,
   idempotent, coalesced, verified, and last-valid-state preserving.
@@ -81,7 +81,9 @@ flowchart TB
 | TLS/cache/security | Typed domain state | OpenResty applies data without per-domain reload |
 | Telemetry | Runtime events | Vector buffers and ClickHouse stores bounded analytics |
 
-Read the [architecture overview](docs/architecture/index.md) and
+Start with [CDN fundamentals](docs/concepts/cdn-fundamentals.md) and
+[How CDNFoundry works](docs/concepts/how-cdnfoundry-works.md), then read the
+[architecture overview](docs/architecture/index.md) and
 [data-flow diagrams](docs/architecture/data-flows.md) for component and failure
 boundaries.
 
@@ -92,8 +94,9 @@ DNS/edge hosts in separate failure domains.
 
 > [!CAUTION]
 > Production uses immutable images, explicit Laravel and PowerDNS migrations,
-> private PKI, exact-source firewalls, persistent named volumes, and off-host
-> backups. Do not promote the development stack.
+> private PKI, exact-source firewalls, and persistent named volumes. The
+> built-in encrypted off-host backup integration is optional but a tested
+> recovery method is strongly recommended. Do not promote the development stack.
 
 Follow the detailed [Production quick start](docs/deployment/production-quick-start.md).
 It covers bootstrap DNS, registrar glue, `.env.prod`, private certificates,
@@ -106,8 +109,9 @@ Requirements are Docker Engine, Docker Compose, GNU Make, and enough capacity
 for the complete development topology.
 
 ```sh
-make dev-up
+make dev-control-up
 make dev-migrate
+make dev-up
 make dev-test
 ```
 
@@ -138,13 +142,13 @@ See [Installation](docs/getting-started/installation.md) and
 | Identity | Administrators, assigned domain users, sessions, Sanctum tokens, audit, account disablement |
 | Domains | Normalization, delegation verification, activation, delayed deprovision, tombstones, reclaim cooldown |
 | DNS | A, AAAA, CNAME, MX, TXT, NS, CAA, SRV, reverse PTR, BIND import/export, Geo-DNS |
-| Edge | Pools, cells, enrollment, mTLS identity, signed artifacts, recovery snapshots, placement and drain |
-| Proxy | Explicit safe origins, host/SNI policy, bounded timeouts/retries, WebSocket policy, health tests |
+| Edge | Geo-Unicast and Simple Anycast pools, eight bounded cell slots, host gateway ingress, enrollment, mTLS identity, signed artifacts, placement, drain, and fleet rollouts |
+| Proxy | Explicit safe primary/backup origins, host/SNI policy, bounded timeouts/retries, active-passive failover, WebSocket policy, and health tests |
 | TLS | Managed ACME DNS-01, custom uploads, renewal, reissue, validation, encrypted private keys |
-| Cache | TTL policy, admission, query policy, stale grace, development mode, URL/full purge |
-| Security | Ordered rules, trusted-client parsing, profiles, quarantine, emergency controls |
-| Analytics | Raw logs, aggregates, status/cache/origin/geography views, stable usage exports |
-| Operations | Health, readiness, metrics, alerts, reconciliation, failed jobs, backups, restore, upgrades |
+| Cache and delivery | Persistent bounded cache, canonical keys, TTL/admission/query policy, stale grace, development mode, URL/full purge, Gzip, and Brotli |
+| Security | Ordered rules, trusted-client parsing, profiles, managed OWASP CRS WAF, bounded exclusions, quarantine, and emergency controls |
+| Analytics | Raw events, aggregates, status/cache/origin/geography/compression/WAF views, stable usage exports |
+| Operations | Health, readiness, metrics, alerts, two Grafana command centers, bounded Loki logs, reconciliation, failed jobs, optional Restic backups, restore, and canary upgrades |
 
 ## API
 
@@ -166,8 +170,11 @@ links below also work directly on GitHub.
 
 | Audience | Start here |
 | --- | --- |
+| CDN learners | [CDN fundamentals](docs/concepts/cdn-fundamentals.md) |
 | Evaluators | [Product overview](docs/getting-started/index.md) |
-| Production operators | [Production quick start](docs/deployment/production-quick-start.md) |
+| New CDNFoundry users | [Using CDNFoundry](docs/getting-started/using-cdnfoundry.md) |
+| Architects | [Production reference architectures](docs/architecture/production-reference-architectures.md) |
+| Production operators | [Production best practices](docs/operations/production-best-practices.md) |
 | Administrators | [Operations](docs/operations/index.md) |
 | Domain users | [Feature guides](docs/guides/index.md) |
 | API clients | [API reference](docs/reference/api/index.md) |

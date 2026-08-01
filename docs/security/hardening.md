@@ -5,6 +5,12 @@ description: Harden CDNFoundry networks, secrets, identities, containers, origin
 
 # Deployment hardening
 
+::: danger Private services must remain private
+A provider security group alone is not sufficient when Docker publishes ports.
+Apply equivalent host `DOCKER-USER` policy and verify exposure externally from
+an untrusted network.
+:::
+
 ## Public surface
 
 Publish only:

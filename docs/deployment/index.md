@@ -21,11 +21,15 @@ qualification, while overlays expose split roles with restricted TLS gateways.
 
 Before deploying, read:
 
-1. [Production quick start](production-quick-start.md) for an end-to-end first installation.
-2. [Topology](topology.md) for networks, profiles, and public ports.
-3. [Certificates](certificates.md) for the edge-control and DNS API PKI.
-4. [Configuration](../reference/configuration.md) for every `.env.prod` key.
-5. [Upgrade](upgrade.md) for schema, worker, DNS, and edge sequencing.
+1. [Production reference architectures](../architecture/production-reference-architectures.md)
+   to choose failure domains and role placement.
+2. [Production best practices](../operations/production-best-practices.md) for
+   the readiness and change contract.
+3. [Production quick start](production-quick-start.md) for an end-to-end first installation.
+4. [Topology](topology.md) for networks, profiles, and public ports.
+5. [Certificates](certificates.md) for the edge-control and DNS API PKI.
+6. [Configuration](../reference/configuration.md) for every `.env.prod` key.
+7. [Upgrade](upgrade.md) for schema, worker, DNS, and edge sequencing.
 
 The [Production quick start](production-quick-start.md) is the
 authoritative first-install procedure. The remaining deployment pages explain

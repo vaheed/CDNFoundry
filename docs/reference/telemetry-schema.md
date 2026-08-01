@@ -5,6 +5,12 @@ description: Reference CDNFoundry edge and DNS event fields, redaction, aggregat
 
 # Telemetry schema
 
+::: danger Telemetry can contain sensitive metadata
+Apply the documented redaction and retention rules before export. Do not place
+tokens, request bodies, certificate material, raw customer data, or unbounded
+headers into labels, logs, dashboards, or incident evidence.
+:::
+
 Vector normalizes events before ClickHouse. Invalid transformations are dropped
 and reported through Vector metrics.
 

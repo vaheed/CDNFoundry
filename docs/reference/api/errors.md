@@ -5,6 +5,11 @@ description: Handle CDNFoundry stable JSON errors, validation failures, conflict
 
 # API errors
 
+::: warning Automate against codes, not prose
+Clients should branch on HTTP status and stable machine-readable error codes.
+Human messages may gain clarification and must not be parsed as a protocol.
+:::
+
 API and edge routes render JSON errors.
 
 ## Stable error

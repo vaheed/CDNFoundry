@@ -39,10 +39,10 @@ x-core-env: &core-env
   CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
   PROMETHEUS_URL: http://prometheus:9090
   METRICS_TOKEN_FILE: /run/secrets/metrics-token
-  RESTIC_REPOSITORY: ${RESTIC_REPOSITORY:?RESTIC_REPOSITORY is required}
+  RESTIC_REPOSITORY: ${RESTIC_REPOSITORY:-}
   RESTIC_PASSWORD_FILE: /run/secrets/restic-password
-  BACKUP_ACCESS_KEY_ID: ${BACKUP_ACCESS_KEY_ID:?BACKUP_ACCESS_KEY_ID is required}
-  BACKUP_SECRET_ACCESS_KEY: ${BACKUP_SECRET_ACCESS_KEY:?BACKUP_SECRET_ACCESS_KEY is required}
+  BACKUP_ACCESS_KEY_ID: ${BACKUP_ACCESS_KEY_ID:-}
+  BACKUP_SECRET_ACCESS_KEY: ${BACKUP_SECRET_ACCESS_KEY:-}
   BACKUP_DEFAULT_REGION: ${BACKUP_DEFAULT_REGION:-us-east-1}
   LOG_CHANNEL: stderr
   LOG_STACK: stderr
@@ -102,7 +102,7 @@ x-core: &core
     - ${EDGE_IDENTITY_CA_PRIVATE_KEY:?EDGE_IDENTITY_CA_PRIVATE_KEY is required}:/run/secrets/edge-identity-ca.key:ro
     - ${PDNS_CA_CERTIFICATE:?PDNS_CA_CERTIFICATE is required}:/run/secrets/pdns-api-ca.crt:ro
     - ${METRICS_TOKEN_FILE:?METRICS_TOKEN_FILE is required}:/run/secrets/metrics-token:ro
-    - ${RESTIC_PASSWORD_FILE:?RESTIC_PASSWORD_FILE is required}:/run/secrets/restic-password:ro
+    - ${RESTIC_PASSWORD_FILE:-/dev/null}:/run/secrets/restic-password:ro
 
 services:
   core:
@@ -541,6 +541,8 @@ services:
       EDGE_STATE_DIR: /var/lib/cdnfoundry/agent
       EDGE_RUNTIME_DIR: /var/lib/cdnfoundry/runtime
       EDGE_GATEWAY_STATUS_URL: ${EDGE_GATEWAY_STATUS_URL:-http://host-gateway:9105/metrics}
+      EDGE_GATEWAY_ADDRESS_MAP: ${EDGE_GATEWAY_ADDRESS_MAP:-{}}
+      EDGE_GATEWAY_REQUIRE_ADDRESS_MAP: "true"
       EDGE_RUNTIME_VERSIONS: ${EDGE_RUNTIME_VERSIONS:-{}}
       EDGE_CELL_ASSIGNMENTS: '{"cell-01":"shared-default","cell-02":"quarantine-default","cell-03":"","cell-04":"","cell-05":"","cell-06":"","cell-07":"","cell-08":""}'
       EDGE_CELL_STATUS_URLS: http://cell-01:9080/passive-failures,http://cell-02:9080/passive-failures,http://cell-03:9080/passive-failures,http://cell-04:9080/passive-failures,http://cell-05:9080/passive-failures,http://cell-06:9080/passive-failures,http://cell-07:9080/passive-failures,http://cell-08:9080/passive-failures

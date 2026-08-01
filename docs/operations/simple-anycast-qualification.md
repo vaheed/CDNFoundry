@@ -5,6 +5,12 @@ description: Agent-owned evidence and the remaining operator-owned release gate.
 
 # Simple Anycast qualification
 
+::: danger The network operator owns route evidence
+Gateway readiness does not prove BGP advertisement, convergence, or withdrawal.
+The provider/operator must record route origin, path, multi-vantage traffic,
+failure-domain behavior, and restoration independently of CDNFoundry.
+:::
+
 Agent-owned implementation and qualification completed on 2026-07-28. The
 owner-operated BGP and external-vantage run remains mandatory; CDNFoundry does
 not have and must not gain the authority needed to execute it.
@@ -45,11 +51,11 @@ real provider Anycast route from this environment.
 
 ## Remaining owner release gate
 
-Run all Phase 5 steps in
-[Manual browser qualification](https://github.com/vaheed/CDNFoundry/blob/main/docs/manual-browser-qualification.md) with two
-provider-approved POPs and at least three independent external vantage points.
+Run the **Edge pools, cells, gateway, and routing** regression in
+[Manual browser qualification](https://github.com/vaheed/CDNFoundry/blob/main/docs/manual-browser-qualification.md#edge-pools-cells-gateway-and-routing)
+with two provider-approved POPs and at least three independent external vantage points.
 Record provider ticket/change IDs, route origin/path and collectors, actual
 HTTP/HTTPS POP selection, route withdrawal/restoration convergence, load,
 uplink saturation, screenshots, revisions, and failures. Browser automation
 was not launched. Until that evidence passes, the implementation is
-agent-qualified but the Phase 5 release decision remains **Blocked**.
+agent-qualified but the Simple Anycast release decision remains **Blocked**.

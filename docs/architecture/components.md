@@ -5,6 +5,12 @@ description: Reference the responsibility and failure boundary of every CDNFound
 
 # Architecture components
 
+::: warning Keep the data plane independent
+Do not route DNS queries, visitor HTTP/TLS traffic, certificate selection,
+security decisions, or raw telemetry through `core`. The components below are
+separated so a management outage cannot become a serving outage.
+:::
+
 ## Control plane
 
 | Component | Implementation | Responsibility |
@@ -38,8 +44,8 @@ Direct edits are drift.
 | Component | Responsibility |
 | --- | --- |
 | `edge-agent` | Enrollment, signed artifacts, atomic activation, heartbeat, tasks |
-| `edge` | Shared OpenResty cell |
-| `edge-quarantine` | Smaller isolated quarantine cell |
+| `cell-01` through `cell-08` | Stable bounded OpenResty slots; the control plane assigns each slot to a shared, quarantine, or exceptional pool |
+| `edge-gateway` | Host-network service-address listener and destination/Host/SNI router to assigned cells |
 | `mmdb-updater` | Download, validate, and atomically activate the GeoIP database |
 
 OpenResty selects certificates and domain configuration from data-driven

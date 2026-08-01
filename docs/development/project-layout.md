@@ -5,6 +5,12 @@ description: Navigate CDNFoundry source, configuration, runtime, deployment, tes
 
 # Project layout
 
+::: info Source and derived state have different owners
+PostgreSQL and source configuration are durable inputs. PowerDNS rows, edge
+snapshots, generated artifacts, built docs, and aggregates are derived and must
+remain rebuildable rather than becoming hidden sources of truth.
+:::
+
 | Path | Purpose |
 | --- | --- |
 | `core/` | Laravel modular monolith and Filament panels |

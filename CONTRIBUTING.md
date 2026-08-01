@@ -6,8 +6,9 @@ Read [AGENTS.md](AGENTS.md), the [roadmap](docs/roadmap.md), and the full
 Use the supported Compose workflow:
 
 ```sh
-make dev-up
+make dev-control-up
 make dev-migrate
+make dev-up
 make dev-test
 make config-check
 make openapi-check

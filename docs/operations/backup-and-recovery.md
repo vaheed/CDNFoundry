@@ -5,6 +5,13 @@ description: Back up, preflight, restore, and reconstruct CDNFoundry control and
 
 # Backup and recovery
 
+The built-in Restic integration is optional at deployment time. Leave
+`RESTIC_REPOSITORY`, `RESTIC_PASSWORD_FILE`, and the S3 credential values empty
+to disable it; containers and migrations still start, the daily backup schedule
+is skipped, API/CLI backup creation fails explicitly as unconfigured, and the
+backup health component remains degraded until an operator records a working
+recovery method.
+
 ::: danger Practice before an incident
 A snapshot listing is not recovery proof. Restore to an isolated environment,
 retain the encryption/signing and PKI keys, rebuild derived runtimes, and
@@ -38,8 +45,9 @@ contains Loki.
 
 ## Backup creation
 
-The daily scheduler queues `cdnf:backups:create` at 01:30. Administrators can create
-one through `POST /api/admin/backups` or:
+With a readable password file and non-empty repository configured, the daily
+scheduler queues `cdnf:backups:create` at 01:30. Administrators can create one
+through `POST /api/admin/backups` or:
 
 ```sh
 docker compose --env-file .env.prod -f compose.prod.yml \
@@ -52,6 +60,31 @@ count, output-manifest SHA-256, verification time, operation, and audit event.
 
 Deleting a backup is also asynchronous and calls `restic forget`; a running
 backup is preserved.
+
+### S3-compatible repository setup
+
+The production generator directly supports the S3 backend. A repository value
+identifies storage; it is not itself encrypted or secret:
+
+```dotenv
+RESTIC_REPOSITORY=s3:https://object-storage.example/bucket/cdnfoundry-control
+RESTIC_PASSWORD_FILE=/etc/cdnfoundry/secrets/restic-password
+BACKUP_ACCESS_KEY_ID=prefix-scoped-access-key
+BACKUP_SECRET_ACCESS_KEY=prefix-scoped-secret
+BACKUP_DEFAULT_REGION=us-east-1
+```
+
+Use a dedicated bucket or prefix, deny access to unrelated objects, and retain
+the Restic password separately from both the repository and S3 credentials.
+Initialize a new repository once after the control dependencies, migration, and
+core service are healthy; use `restic snapshots` instead when attaching an
+existing repository. The exact secret-safe container commands are in the
+[Production quick start](../deployment/production-quick-start.md#step-11-optional-initialize-and-prove-encrypted-backups).
+
+Restic also supports SFTP, REST, Azure, Google Cloud Storage, and other
+backends, but their provider variables, identity files, and mounts are not
+present in the default production Compose contract. Add and qualify that wiring
+explicitly instead of entering placeholder S3 credentials.
 
 ## Restore preflight
 

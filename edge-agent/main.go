@@ -58,6 +58,8 @@ type client struct {
 	cellAssignments                    map[string]string
 	cellTargets                        map[string]cellTarget
 	gatewayAddresses                   []string
+	gatewayAddressMap                  map[string]string
+	gatewayAddressMapRequired          bool
 	http                               *http.Client
 	id                                 identity
 }
@@ -98,6 +100,21 @@ func main() {
 	for _, address := range c.gatewayAddresses {
 		if net.ParseIP(address) == nil {
 			fatal(errors.New("EDGE_GATEWAY_ADDRESSES contains an invalid IP address"))
+		}
+	}
+	var err error
+	c.gatewayAddressMap, err = parseGatewayAddressMap(env("EDGE_GATEWAY_ADDRESS_MAP", "{}"))
+	if err != nil {
+		fatal(err)
+	}
+	if len(c.gatewayAddresses) > 0 && len(c.gatewayAddressMap) > 0 {
+		fatal(errors.New("EDGE_GATEWAY_ADDRESSES and EDGE_GATEWAY_ADDRESS_MAP cannot both be set"))
+	}
+	c.gatewayAddressMapRequired = env("EDGE_GATEWAY_REQUIRE_ADDRESS_MAP", "false") == "true"
+	if c.gatewayBindingsConfigured {
+		c.gatewayBindings, err = rewriteGatewayBindingsJSON(c.gatewayBindings, c.gatewayAddressMap, c.gatewayAddressMapRequired)
+		if err != nil {
+			fatal(err)
 		}
 	}
 	for cellName, poolName := range c.cellAssignments {
@@ -777,6 +794,10 @@ func (c *client) refreshGatewayBindings() error {
 		return err
 	}
 	rewriteGatewayTargets(response.Data.Bindings, c.cellTargets)
+	if err := validateGatewayAddressMapCoverage(response.Data.Bindings, c.gatewayAddressMap, c.gatewayAddressMapRequired); err != nil {
+		return err
+	}
+	response.Data.Bindings = rewriteGatewayAddressMap(response.Data.Bindings, c.gatewayAddressMap)
 	response.Data.Bindings = rewriteGatewayAddresses(response.Data.Bindings, c.gatewayAddresses)
 	c.updateGatewayRevision(response.Data.Revision)
 	if len(response.Data.Bindings) == 0 {
@@ -822,6 +843,80 @@ func rewriteGatewayAddresses(bindings []gatewayBinding, addresses []string) []ga
 		}
 	}
 	return rewritten
+}
+
+func parseGatewayAddressMap(raw string) (map[string]string, error) {
+	configured := map[string]string{}
+	if err := json.Unmarshal([]byte(raw), &configured); err != nil || len(configured) > 64 {
+		return nil, errors.New("EDGE_GATEWAY_ADDRESS_MAP must be an object with at most 64 IP address pairs")
+	}
+	addresses := make(map[string]string, len(configured))
+	localAddresses := map[string]bool{}
+	for advertisedRaw, localRaw := range configured {
+		advertised, local := net.ParseIP(advertisedRaw), net.ParseIP(localRaw)
+		if advertised == nil || local == nil || advertised.IsUnspecified() || local.IsUnspecified() || !local.IsPrivate() {
+			return nil, errors.New("EDGE_GATEWAY_ADDRESS_MAP contains an invalid, public, or unspecified local IP address")
+		}
+		if (advertised.To4() == nil) != (local.To4() == nil) {
+			return nil, errors.New("EDGE_GATEWAY_ADDRESS_MAP address pairs must use the same IP family")
+		}
+		canonicalLocal := local.String()
+		if localAddresses[canonicalLocal] {
+			return nil, errors.New("EDGE_GATEWAY_ADDRESS_MAP local addresses must be unique")
+		}
+		localAddresses[canonicalLocal] = true
+		addresses[advertised.String()] = canonicalLocal
+	}
+	return addresses, nil
+}
+
+func rewriteGatewayAddressMap(bindings []gatewayBinding, addresses map[string]string) []gatewayBinding {
+	if len(addresses) == 0 {
+		return bindings
+	}
+	rewritten := make([]gatewayBinding, len(bindings))
+	copy(rewritten, bindings)
+	for index := range rewritten {
+		advertised := net.ParseIP(rewritten[index].Address)
+		if advertised == nil {
+			continue
+		}
+		if local, configured := addresses[advertised.String()]; configured {
+			rewritten[index].Address = local
+		}
+	}
+	return rewritten
+}
+
+func validateGatewayAddressMapCoverage(bindings []gatewayBinding, addresses map[string]string, required bool) error {
+	if !required {
+		return nil
+	}
+	for _, binding := range bindings {
+		advertised := net.ParseIP(binding.Address)
+		if advertised == nil || addresses[advertised.String()] == "" {
+			return fmt.Errorf("EDGE_GATEWAY_ADDRESS_MAP has no local address for advertised service address %q", binding.Address)
+		}
+	}
+	return nil
+}
+
+func rewriteGatewayBindingsJSON(raw string, addresses map[string]string, required bool) (string, error) {
+	if len(addresses) == 0 && !required {
+		return raw, nil
+	}
+	var bindings []gatewayBinding
+	if len(raw) > 64<<10 || json.Unmarshal([]byte(raw), &bindings) != nil || len(bindings) > 32 {
+		return "", errors.New("invalid gateway bindings")
+	}
+	if err := validateGatewayAddressMapCoverage(bindings, addresses, required); err != nil {
+		return "", err
+	}
+	rewritten, err := json.Marshal(rewriteGatewayAddressMap(bindings, addresses))
+	if err != nil {
+		return "", err
+	}
+	return string(rewritten), nil
 }
 
 func rewriteGatewayTargets(bindings []gatewayBinding, targets map[string]cellTarget) {

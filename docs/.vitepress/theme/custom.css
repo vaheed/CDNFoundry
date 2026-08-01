@@ -10,16 +10,22 @@
 }
 
 .VPDoc table {
-  display: table;
+  display: block;
   width: 100%;
+  overflow-x: auto;
 }
 
 .VPDoc th {
   text-align: left;
 }
 
-.vp-doc code {
-  overflow-wrap: anywhere;
+.vp-doc :not(pre) > code {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.vp-doc table :not(pre) > code {
+  white-space: nowrap;
 }
 
 .vp-doc .mermaid {
