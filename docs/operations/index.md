@@ -6,6 +6,7 @@ description: Operate health, reconciliation, backups, incidents, and capacity fo
 # Operations
 
 - [Atomic edge runtime generations](runtime-generations.md)
+- [Software supply-chain verification](software-supply-chain.md)
 
 ::: warning A green control plane is not end-user proof
 Combine dashboard state with authoritative DNS, gateway, origin, TLS, and
