@@ -22,40 +22,6 @@ role-based Docker Compose deployments.
 > through Laravel. Existing data planes continue from their last valid state
 > during a control-plane or telemetry outage.
 
-## Product tour
-
-CDNFoundry gives operators one focused control plane for service health,
-customer impact, traffic, cache efficiency, DNS, queues, and the changes that
-preceded an incident. Select any thumbnail to open the full-resolution view.
-
-<!-- markdownlint-disable MD033 -->
-<table>
-  <tr>
-    <td align="center">
-      <a href="docs/public/images/screencapture-admin.png">
-        <img src="docs/public/images/screencapture-admin.png" alt="Operations overview" height="320">
-      </a><br>
-      <strong>Operations overview</strong><br>
-      Health, impact, traffic, DNS, cache, queues, and timeline
-    </td>
-    <td align="center">
-      <a href="docs/public/images/screencapture-telemetry.png">
-        <img src="docs/public/images/screencapture-telemetry.png" alt="Telemetry investigation" height="320">
-      </a><br>
-      <strong>Telemetry investigation</strong><br>
-      Analytics, compression, security, logs, and finalized usage
-    </td>
-    <td align="center">
-      <a href="docs/public/images/screencapture-edges.png">
-        <img src="docs/public/images/screencapture-edges.png" alt="Edge and cell inventory" height="320">
-      </a><br>
-      <strong>Edge and cell inventory</strong><br>
-      Gateway state, revisions, assignments, resources, and ports
-    </td>
-  </tr>
-</table>
-<!-- markdownlint-enable MD033 -->
-
 ## Why CDNFoundry
 
 - **Private ownership:** run DNS, edge, certificates, cache, telemetry, and
@@ -222,6 +188,40 @@ Build and validate the documentation:
 npm ci --prefix docs
 make docs-check
 ```
+
+## Product tour
+
+CDNFoundry gives operators one focused control plane for service health,
+customer impact, traffic, cache efficiency, DNS, queues, and the changes that
+preceded an incident. Select any thumbnail to open the full-resolution view.
+
+<!-- markdownlint-disable MD033 -->
+<table>
+  <tr>
+    <td align="center">
+      <a href="docs/public/images/screencapture-admin.png">
+        <img src="docs/public/images/screencapture-admin.png" alt="Operations overview" height="320">
+      </a><br>
+      <strong>Operations overview</strong><br>
+      Health, impact, traffic, DNS, cache, queues, and timeline
+    </td>
+    <td align="center">
+      <a href="docs/public/images/screencapture-telemetry.png">
+        <img src="docs/public/images/screencapture-telemetry.png" alt="Telemetry investigation" height="320">
+      </a><br>
+      <strong>Telemetry investigation</strong><br>
+      Analytics, compression, security, logs, and finalized usage
+    </td>
+    <td align="center">
+      <a href="docs/public/images/screencapture-edges.png">
+        <img src="docs/public/images/screencapture-edges.png" alt="Edge and cell inventory" height="320">
+      </a><br>
+      <strong>Edge and cell inventory</strong><br>
+      Gateway state, revisions, assignments, resources, and ports
+    </td>
+  </tr>
+</table>
+<!-- markdownlint-enable MD033 -->
 
 ## Safety and contribution
 
