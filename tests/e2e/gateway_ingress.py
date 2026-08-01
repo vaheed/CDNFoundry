@@ -62,6 +62,14 @@ def strictly_servable_tls_hostname(cell: dict, routed_hostnames: set[str]) -> st
     return max(candidates)[1]
 
 
+def active_certificate_chain(cell: dict, hostname: str) -> str:
+    certificate_id = cell["hosts"][hostname]["tls"]["certificate_id"]
+    chain = cell["certificates"][certificate_id].get("chain_pem", "").strip()
+    if not chain:
+        raise RuntimeError(f"active certificate {certificate_id} has no validation chain")
+    return chain + "\n"
+
+
 def curl(address: str, hostname: str, tls: bool = False, expect_success: bool = True,
          gateway: str = GATEWAY, tls_ca: pathlib.Path | None = None) -> str:
     url = f"{'https' if tls else 'http'}://{hostname}/"
@@ -213,11 +221,8 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="cdnfoundry-gateway-ca-") as ca_directory:
         ca_path = pathlib.Path(ca_directory) / "root.pem"
         pathlib.Path(ca_directory).chmod(0o777)
-        run(
-            "docker", "run", "--rm", "--network", "cdnfoundry-dev_control",
-            "-v", f"{ca_directory}:/out", "curlimages/curl:8.16.0", "-ksS",
-            "https://pebble:15000/roots/0", "-o", "/out/root.pem",
-        )
+        ca_path.write_text(active_certificate_chain(cell, hostname))
+        ca_path.chmod(0o644)
         for address in ("172.28.10.10", "fd00:cd0f:10::10"):
             curl(address, hostname)
             curl(address, hostname, tls=True, tls_ca=ca_path)
@@ -232,6 +237,7 @@ def main() -> None:
         ipv4_hostname = strictly_servable_tls_hostname(
             ipv4_cell, {route["hostname"] for route in ipv4_gateway["routes"]},
         )
+        ca_path.write_text(active_certificate_chain(ipv4_cell, ipv4_hostname))
         ipv4_addresses = {route["address"] for route in ipv4_gateway["routes"] if route["hostname"] == ipv4_hostname}
         if "172.28.20.10" not in ipv4_addresses or any(":" in address for address in ipv4_addresses):
             raise RuntimeError(f"IPv4-only gateway unexpectedly required another family: {sorted(ipv4_addresses)}")
