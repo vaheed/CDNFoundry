@@ -99,8 +99,13 @@ See [Desired state](../concepts/desired-state.md) for failure behaviour.
 3. Edge control validates the token and signs a short-lived identity certificate.
 4. Later requests require that certificate and its serial.
 5. The agent polls for tasks and fetches the manifest or a full recovery snapshot.
-6. It verifies, compiles, atomically activates, then acknowledges.
-7. Heartbeats report sequence, listener readiness, cell capacity, origin health, and bounded security summaries.
+6. It compiles one immutable runtime generation, verifies its exact manifest,
+   durably publishes the directory, and atomically switches the shared
+   `current` pointer. Gateway and cell readers therefore observe the same
+   generation rather than independently replaced JSON files.
+7. It acknowledges only after readers report the committed generation.
+8. Heartbeats report sequence, generation, listener readiness, cell capacity,
+   origin health, and bounded security summaries.
 
 Laravel and its workers never initiate a connection to an edge host. They
 commit desired state, artifacts, and durable tasks; the agent pulls them over

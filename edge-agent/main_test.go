@@ -87,31 +87,144 @@ func TestActivationPreservesPreviousAndRestartState(t *testing.T) {
 	if err := c.activate(second); err != nil {
 		t.Fatal(err)
 	}
-	active, err := loadState(filepath.Join(dir, "active", "state.json"))
+	active, err := loadState(filepath.Join(dir, "runtime", "current", "state.json"))
 	if err != nil || active.Sequence != 5 {
 		t.Fatalf("active state not restart-safe: %v", err)
 	}
-	previous, err := loadState(filepath.Join(dir, "previous", "state.json"))
+	previous, err := loadState(filepath.Join(dir, "runtime", "previous", "state.json"))
 	if err != nil || previous.Sequence != 4 {
 		t.Fatalf("previous state not preserved: %v", err)
 	}
 	if err := c.activate(state{Sequence: 6}); err == nil {
 		t.Fatal("invalid candidate activated")
 	}
-	active, _ = loadState(filepath.Join(dir, "active", "state.json"))
+	active, _ = loadState(filepath.Join(dir, "runtime", "current", "state.json"))
 	if active.Sequence != 5 {
 		t.Fatal("invalid candidate replaced active state")
 	}
 	var poolRuntime struct {
 		Hosts map[string]any `json:"hosts"`
 	}
-	poolBytes, err := os.ReadFile(filepath.Join(dir, "runtime", "shared-default.json"))
+	poolBytes, err := os.ReadFile(filepath.Join(dir, "runtime", "current", "shared-default.json"))
 	if err != nil || json.Unmarshal(poolBytes, &poolRuntime) != nil || poolRuntime.Hosts["www.example.test"] == nil {
 		t.Fatal("placement-aware pool runtime was not published")
 	}
 	poolInfo, err := os.Stat(filepath.Join(dir, "runtime", "shared-default.json"))
 	if err != nil || poolInfo.Mode().Perm() != 0600 {
 		t.Fatalf("runtime snapshot containing TLS keys must be mode 0600: %v", err)
+	}
+}
+
+func TestGenerationFailureBoundariesNeverExposePartialCandidate(t *testing.T) {
+	stages := []string{"after_files", "before_publish", "after_publish", "pointer_replace"}
+	for _, stage := range stages {
+		t.Run(stage, func(t *testing.T) {
+			root := t.TempDir()
+			first, err := publishGeneration(root, 1, generationFixture("one"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			generationFault = func(actual string) error {
+				if actual == stage {
+					return errors.New("injected " + stage)
+				}
+				return nil
+			}
+			_, err = publishGeneration(root, 2, generationFixture("two"))
+			generationFault = nil
+			if err == nil {
+				t.Fatal("failure injection did not interrupt publication")
+			}
+			active, recoverErr := recoverGeneration(root)
+			if recoverErr != nil {
+				t.Fatal(recoverErr)
+			}
+			if active.GenerationID != first.GenerationID || active.Revision != 1 {
+				t.Fatalf("partial candidate became active: %#v", active)
+			}
+		})
+	}
+}
+
+func TestGenerationVerificationRollbackRetentionAndIdempotency(t *testing.T) {
+	root := t.TempDir()
+	first, err := publishGeneration(root, 1, generationFixture("one"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := publishGeneration(root, 2, generationFixture("two"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	duplicate, err := publishGeneration(root, 2, generationFixture("two"))
+	if err != nil || duplicate.GenerationID != second.GenerationID {
+		t.Fatalf("duplicate activation was not idempotent: %#v %v", duplicate, err)
+	}
+	if _, err := publishGeneration(root, 1, generationFixture("old")); err == nil {
+		t.Fatal("older revision activated")
+	}
+	rolledBack, err := rollbackGeneration(root)
+	if err != nil || rolledBack.GenerationID != first.GenerationID {
+		t.Fatalf("rollback failed: %#v %v", rolledBack, err)
+	}
+	if current, err := readGenerationPointer(root, "current"); err != nil || current.GenerationID != first.GenerationID {
+		t.Fatal("rollback pointer is invalid")
+	}
+
+	currentPath := filepath.Join(root, "current", "active.json")
+	if err := os.WriteFile(currentPath, []byte("corrupt"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readGenerationPointer(root, "current"); err == nil {
+		t.Fatal("digest mismatch was accepted")
+	}
+	if recovered, err := recoverGeneration(root); err != nil || recovered.GenerationID != second.GenerationID {
+		t.Fatalf("previous generation was not recovered: %#v %v", recovered, err)
+	}
+}
+
+func TestGenerationRejectsMissingUnexpectedAndCorruptManifest(t *testing.T) {
+	for _, mutation := range []string{"missing", "unexpected", "manifest"} {
+		t.Run(mutation, func(t *testing.T) {
+			root := t.TempDir()
+			manifest, err := publishGeneration(root, 1, generationFixture("one"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			dir := filepath.Join(root, "generations", manifest.GenerationID)
+			switch mutation {
+			case "missing":
+				if err := os.Remove(filepath.Join(dir, "active.json")); err != nil {
+					t.Fatal(err)
+				}
+			case "unexpected":
+				if err := os.WriteFile(filepath.Join(dir, "extra.json"), []byte("{}"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			case "manifest":
+				if err := os.WriteFile(filepath.Join(dir, "manifest.json"), []byte("{"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := verifyGeneration(dir); err == nil {
+				t.Fatal("invalid generation verified")
+			}
+		})
+	}
+}
+
+func generationFixture(value string) func(string, string) error {
+	return func(dir, generationID string) error {
+		if err := os.MkdirAll(filepath.Join(dir, "cells"), 0750); err != nil {
+			return err
+		}
+		if err := atomicJSON(filepath.Join(dir, "state.json"), map[string]any{"sequence": 1}); err != nil {
+			return err
+		}
+		if err := atomicJSON(filepath.Join(dir, "active.json"), map[string]any{"value": value, "generation_id": generationID}); err != nil {
+			return err
+		}
+		return atomicJSON(filepath.Join(dir, "cells", "cell-01.json"), map[string]any{"value": value})
 	}
 }
 
@@ -350,14 +463,14 @@ func TestFreshFullSnapshotThenIncrementalArtifact(t *testing.T) {
 	if err := c.full(); err != nil {
 		t.Fatal(err)
 	}
-	active, err := loadState(filepath.Join(dir, "active", "state.json"))
+	active, err := loadState(filepath.Join(dir, "runtime", "current", "state.json"))
 	if err != nil || active.Sequence != 4 || len(active.Domains) != 1 {
 		t.Fatalf("fresh full snapshot was not activated: %#v, %v", active, err)
 	}
 	if err := c.sync(); err != nil {
 		t.Fatal(err)
 	}
-	active, err = loadState(filepath.Join(dir, "active", "state.json"))
+	active, err = loadState(filepath.Join(dir, "runtime", "current", "state.json"))
 	if err != nil || active.Sequence != 5 || !bytes.Contains(active.Domains["1"], []byte(`"revision":5`)) {
 		t.Fatalf("incremental artifact was not activated: %#v, %v", active, err)
 	}

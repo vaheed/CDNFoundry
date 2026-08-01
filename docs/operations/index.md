@@ -5,6 +5,8 @@ description: Operate health, reconciliation, backups, incidents, and capacity fo
 
 # Operations
 
+- [Atomic edge runtime generations](runtime-generations.md)
+
 ::: warning A green control plane is not end-user proof
 Combine dashboard state with authoritative DNS, gateway, origin, TLS, and
 external client probes. A healthy API alone does not prove that customer
