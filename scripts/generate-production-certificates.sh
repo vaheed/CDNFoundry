@@ -14,7 +14,13 @@ runtime_hostname=$3
 shift 3
 
 command -v openssl >/dev/null 2>&1 || { echo "openssl is required" >&2; exit 1; }
-[ ! -e "$output_directory" ] || { echo "Refusing to overwrite existing directory: $output_directory" >&2; exit 1; }
+if [ -e "$output_directory" ]; then
+    [ -d "$output_directory" ] || { echo "Output path is not a directory: $output_directory" >&2; exit 1; }
+    [ -z "$(find "$output_directory" -mindepth 1 -maxdepth 1 -print -quit)" ] || {
+        echo "Refusing to overwrite non-empty directory: $output_directory" >&2
+        exit 1
+    }
+fi
 
 umask 077
 mkdir -p "$output_directory"

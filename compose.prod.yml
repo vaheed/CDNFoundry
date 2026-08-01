@@ -163,6 +163,10 @@ services:
     <<: *core
     profiles: [tools]
     command: [php, artisan, migrate, --force]
+    # The deployment workflow starts and health-checks control-db and redis
+    # explicitly before this one-shot tool. A cross-profile depends_on makes
+    # the tools profile invalid on DNS-only hosts.
+    depends_on: {}
     restart: "no"
 
   control-db:
@@ -239,8 +243,8 @@ services:
     command: [psql, -v, ON_ERROR_STOP=1, -h, pdns-db, -U, pdns, -d, pdns, -f, /migrations/2026_07_17_000001_add_powerdns_metadata_tables.sql]
     environment: { PGPASSWORD: "${PDNS_DB_PASSWORD}" }
     volumes: [./docker/postgres/pdns-migrations:/migrations:ro]
-    depends_on:
-      pdns-db: { condition: service_healthy }
+    # The deployment workflow starts and health-checks pdns-db explicitly.
+    # Keep this tool valid when the same base file is used on control hosts.
     networks: [dns-private]
     restart: "no"
 

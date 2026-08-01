@@ -24,8 +24,10 @@ compose() {
 # IPv4-only configuration must not require a fake IPv6 value.
 unset HOST_BIND_IPV6
 compose -f deploy/production/compose.control-host.yml --profile control --profile telemetry --profile logs config --quiet
+compose -f deploy/production/compose.control-host.yml --profile tools config --quiet
 
 compose -f deploy/production/compose.dns-edge-host.yml --profile dns --profile edge --profile logs config --quiet
+compose -f deploy/production/compose.dns-edge-host.yml --profile tools config --quiet
 compose -f deploy/production/compose.dns-host.yml --profile dns --profile logs config --quiet
 compose -f deploy/production/compose.edge-host.yml --profile edge --profile logs config --quiet
 

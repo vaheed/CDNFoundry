@@ -386,13 +386,38 @@ jobs:
             jq -n --arg source "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" --arg commit "${RELEASE}" --arg workflow "${GITHUB_WORKFLOW_REF}" --arg builder "${GITHUB_ACTOR}" --arg image "${digest}" \
               '{_type:"https://in-toto.io/Statement/v1",subject:[{name:$image,digest:{sha256:($image|split("@sha256:")[1])}}],predicateType:"https://slsa.dev/provenance/v1",predicate:{buildDefinition:{buildType:"https://github.com/CDNFoundry/container-release/v1",externalParameters:{source:$source,commit:$commit,workflow:$workflow}},runDetails:{builder:{id:$builder}}}}' \
               > "release-evidence/${component}.provenance.json"
-            for command in \
-              "sign --yes ${digest}" \
-              "attest --yes --type spdxjson --predicate /evidence/${component}.spdx.json ${digest}" \
-              "attest --yes --type slsaprovenance --predicate /evidence/${component}.provenance.json ${digest}"; do
-              docker run --rm -e ACTIONS_ID_TOKEN_REQUEST_TOKEN -e ACTIONS_ID_TOKEN_REQUEST_URL -v "${PWD}/release-evidence:/evidence:ro" \
-                gcr.io/projectsigstore/cosign:v3.0.2@sha256:b29487e48205d875c324c79583e2806d9d269c0fa299e0861bbec023d8430c8b ${command}
-            done
+            docker run --rm \
+              -e ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+              -e ACTIONS_ID_TOKEN_REQUEST_URL \
+              -e DOCKER_CONFIG=/docker-config \
+              -v "${HOME}/.docker/config.json:/docker-config/config.json:ro" \
+              -v "${PWD}/release-evidence:/evidence:ro" \
+              gcr.io/projectsigstore/cosign:v3.0.2@sha256:b29487e48205d875c324c79583e2806d9d269c0fa299e0861bbec023d8430c8b \
+              sign --yes "${digest}"
+
+            docker run --rm \
+              -e ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+              -e ACTIONS_ID_TOKEN_REQUEST_URL \
+              -e DOCKER_CONFIG=/docker-config \
+              -v "${HOME}/.docker/config.json:/docker-config/config.json:ro" \
+              -v "${PWD}/release-evidence:/evidence:ro" \
+              gcr.io/projectsigstore/cosign:v3.0.2@sha256:b29487e48205d875c324c79583e2806d9d269c0fa299e0861bbec023d8430c8b \
+              attest --yes \
+              --type spdxjson \
+              --predicate "/evidence/${component}.spdx.json" \
+              "${digest}"
+
+            docker run --rm \
+              -e ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+              -e ACTIONS_ID_TOKEN_REQUEST_URL \
+              -e DOCKER_CONFIG=/docker-config \
+              -v "${HOME}/.docker/config.json:/docker-config/config.json:ro" \
+              -v "${PWD}/release-evidence:/evidence:ro" \
+              gcr.io/projectsigstore/cosign:v3.0.2@sha256:b29487e48205d875c324c79583e2806d9d269c0fa299e0861bbec023d8430c8b \
+              attest --yes \
+              --type slsaprovenance \
+              --predicate "/evidence/${component}.provenance.json" \
+              "${digest}"
             ${first} || printf ',' >> release-evidence/release-manifest.json
             first=false
             jq -n --arg component "${component}" --arg image "${digest}" \

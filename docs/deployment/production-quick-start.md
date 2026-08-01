@@ -336,9 +336,19 @@ docker compose --env-file .env.prod \
 ```
 
 The first `up` creates the persistent PostgreSQL and Valkey services and waits
-for both health checks. The one-shot Laravel migration runs only after those
-dependencies are healthy. Application startup never performs an implicit
-migration.
+for both health checks. The one-shot migration then connects to those already
+healthy dependencies. Application startup never performs an implicit migration.
+
+If `REDIS_PASSWORD` is changed after control containers have already been
+created, recreate the control services so every container receives the same
+value. A restart alone does not update container environment variables:
+
+```sh
+docker compose --env-file .env.prod \
+  -f compose.prod.yml \
+  -f deploy/production/compose.control-host.yml \
+  --profile control up -d --force-recreate
+```
 
 Verify the control database, Valkey, workers, scheduler, web, edge-control, and
 Caddy are running. Then check the public API:
