@@ -15,12 +15,8 @@ PRIMARY = "cdnf-origin-failover-primary"
 BACKUP = "cdnf-origin-failover-backup"
 ISOLATED = "cdnf-origin-failover-isolated"
 NETWORK = os.environ.get("CDNF_EDGE_NETWORK", "cdnfoundry-dev_edge")
-# Docker daemon scheduling is outside the runtime's control and can consume a
-# small stale window on loaded CI hosts. The short-window expiry boundary is
-# qualified separately in phase4_runtime.py; this test covers its interaction
-# with active-passive failover.
-CACHE_TTL_SECONDS = 5
-STALE_IF_ERROR_SECONDS = 60
+CACHE_TTL_SECONDS = 1
+STALE_IF_ERROR_SECONDS = 10
 
 
 def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -135,7 +131,10 @@ def main() -> None:
             "-v", f"{runtime_file}:/var/lib/cdnfoundry/runtime/active.json:ro",
             "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro",
             "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
-            "--tmpfs", "/var/cache/nginx:rw,noexec,nosuid,size=64m,mode=0777",
+            # The standard cache profile reserves 64 MiB with min_free. A
+            # same-sized filesystem makes the cache manager continuously
+            # evict otherwise valid entries as soon as it accounts overhead.
+            "--tmpfs", "/var/cache/nginx:rw,noexec,nosuid,size=256m,mode=0777",
             "cdnfoundry/edge-runtime:test")
         try:
             wait_for_cell()
