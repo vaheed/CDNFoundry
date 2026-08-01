@@ -22,6 +22,20 @@ role-based Docker Compose deployments.
 > through Laravel. Existing data planes continue from their last valid state
 > during a control-plane or telemetry outage.
 
+## Product tour
+
+CDNFoundry gives operators one focused control plane for service health,
+customer impact, traffic, cache efficiency, DNS, queues, and the changes that
+preceded an incident.
+
+[![CDNFoundry operations overview showing service health, traffic, cache, DNS, queues, and an operations timeline](docs/public/images/screencapture-admin.png)](docs/public/images/screencapture-admin.png)
+
+The edge view connects desired state to the running data plane: enrollment and
+heartbeat status, gateway revisions and routes, bounded cell assignments,
+workload, resource use, storage, and listener ports are visible together.
+
+[![CDNFoundry edge detail showing gateway status and the bounded OpenResty cell inventory](docs/public/images/screencapture-edges.png)](docs/public/images/screencapture-edges.png)
+
 ## Why CDNFoundry
 
 - **Private ownership:** run DNS, edge, certificates, cache, telemetry, and
