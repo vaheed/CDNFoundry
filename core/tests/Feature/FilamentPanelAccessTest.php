@@ -6,7 +6,9 @@ use App\Filament\Admin\Pages\AdminDashboard;
 use App\Models\DnsCluster;
 use App\Models\Domain;
 use App\Models\Edge;
+use App\Models\SystemSetting;
 use App\Models\User;
+use App\Support\GrafanaExploreUrl;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Redis;
@@ -51,8 +53,8 @@ class FilamentPanelAccessTest extends TestCase
         }
 
         $this->actingAs($admin)->get('/admin')->assertOk()
-            ->assertSee('Control-plane health')->assertSee('Queue lanes')
-            ->assertSee('Recent audit activity')->assertSee('Recent audit activity', false)->assertSee('2 healthy and enabled');
+            ->assertSee('Operations overview')->assertSee('Investigation context')
+            ->assertSee('Active conditions')->assertSee('Service is degraded');
         $this->actingAs($admin)->get('/app')->assertForbidden();
         $this->actingAs($user)->get('/app')->assertOk()->assertSee('Assigned domains')->assertSee('Start serving a domain');
         $this->actingAs($user)->get('/admin')->assertForbidden();
@@ -169,11 +171,48 @@ class FilamentPanelAccessTest extends TestCase
     {
         $admin = User::factory()->admin()->create();
         config()->set('services.grafana.explore_url', 'https://grafana.example.test/explore?left=loki');
+        $url = app(GrafanaExploreUrl::class)->operationalLogs(config('services.grafana.explore_url'));
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+        $panes = json_decode($query['panes'], true, flags: JSON_THROW_ON_ERROR);
+        $pane = $panes['cdnfoundry'];
+
+        $this->assertSame('1', $query['schemaVersion']);
+        $this->assertArrayNotHasKey('left', $query);
+        $this->assertSame('loki', $pane['datasource']);
+        $this->assertSame('{environment=~"production|development"} | json', $pane['queries'][0]['expr']);
+        $this->assertSame(['from' => 'now-1h', 'to' => 'now'], $pane['range']);
 
         $this->actingAs($admin)->get('/admin')->assertOk()
             ->assertSee('Live Logs')
-            ->assertSee('href="https://grafana.example.test/explore?left=loki"', false)
+            ->assertSee('href="'.e($url).'"', false)
             ->assertSee('target="_blank"', false);
+    }
+
+    public function test_visible_dns_forms_use_grouped_sections_and_correct_acronym_labels(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $cluster = DnsCluster::query()->create([
+            'name' => 'label-test',
+            'location' => 'local',
+            'enabled' => false,
+            'api_url' => 'http://pdns-auth:8081',
+            'api_key' => 'test-api-key',
+            'server_id' => 'localhost',
+            'nameservers' => ['ns1.example.test', 'ns2.example.test'],
+            'capacity_zones' => 100,
+        ]);
+
+        $this->actingAs($admin)->get('/admin/system-dns-identity')->assertOk()
+            ->assertSee('Public DNS identity')
+            ->assertSee('Authoritative nameservers')
+            ->assertSee('SOA and TTL policy')
+            ->assertSee('SOA primary')
+            ->assertSee('IPv4');
+        $this->actingAs($admin)->get("/admin/dns-clusters/{$cluster->id}/edit")->assertOk()
+            ->assertSee('Cluster connection')
+            ->assertSee('API URL')
+            ->assertSee('Server ID')
+            ->assertSee('Zone capacity');
     }
 
     public function test_live_logs_navigation_is_absent_from_the_domain_panel(): void
@@ -182,6 +221,25 @@ class FilamentPanelAccessTest extends TestCase
         config()->set('services.grafana.explore_url', 'https://grafana.example.test/explore?left=loki');
 
         $this->actingAs($user)->get('/app')->assertOk()->assertDontSee('Live Logs');
+    }
+
+    public function test_platform_setting_overrides_the_optional_grafana_environment_default(): void
+    {
+        $admin = User::factory()->admin()->create();
+        config()->set('services.grafana.explore_url', 'https://environment-grafana.example.test/explore');
+        $setting = SystemSetting::query()->findOrFail('observability');
+        $setting->update(['values' => ['grafana_explore_url' => 'https://admin-grafana.example.test/explore']]);
+
+        $url = app(GrafanaExploreUrl::class)->configuredOperationalLogs();
+        $this->assertStringStartsWith('https://admin-grafana.example.test/explore?', $url);
+        $this->actingAs($admin)->get('/admin')->assertOk()
+            ->assertSee('href="'.e($url).'"', false)
+            ->assertDontSee('environment-grafana.example.test');
+
+        $this->actingAs($admin)->get('/admin/platform-settings')->assertOk()
+            ->assertSee('Observability links')
+            ->assertSee('Grafana Explore URL')
+            ->assertSee('https://admin-grafana.example.test/explore');
     }
 
     public function test_live_logs_navigation_is_hidden_when_unconfigured(): void

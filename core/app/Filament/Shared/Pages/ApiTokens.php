@@ -3,6 +3,7 @@
 namespace App\Filament\Shared\Pages;
 
 use App\Models\AuditLog;
+use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Collection;
@@ -14,8 +15,6 @@ class ApiTokens extends Page
 
     protected static ?string $navigationLabel = 'API tokens';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Account';
-
     protected static ?string $slug = 'tokens';
 
     protected string $view = 'filament.shared.pages.api-tokens';
@@ -23,6 +22,11 @@ class ApiTokens extends Page
     public string $name = '';
 
     public ?string $plainTextToken = null;
+
+    public static function getNavigationGroup(): string|\UnitEnum|null
+    {
+        return Filament::getCurrentPanel()?->getId() === 'admin' ? 'Governance' : 'Account';
+    }
 
     public function getTokensProperty(): Collection
     {

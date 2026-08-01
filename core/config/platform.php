@@ -24,6 +24,19 @@ return [
                 'ipv6_mask_bits' => ['type' => 'integer', 'label' => 'IPv6 display mask', 'default' => 48, 'description' => 'Prefix retained in normal views and exports.', 'rules' => ['required', 'integer', 'between:16,64']],
             ],
         ],
+        'observability' => [
+            'label' => 'Observability links',
+            'description' => 'Optional administrator-facing links to external observability tools. These links never participate in serving traffic.',
+            'fields' => [
+                'grafana_explore_url' => [
+                    'type' => 'url',
+                    'label' => 'Grafana Explore URL',
+                    'default' => null,
+                    'description' => 'Optional absolute HTTP or HTTPS Grafana Explore address used by the Live Logs navigation item. Leave empty to use GRAFANA_EXPLORE_URL when configured.',
+                    'rules' => ['nullable', 'string', 'url:http,https', 'max:2048'],
+                ],
+            ],
+        ],
         'dns_lifecycle' => [
             'label' => 'DNS lifecycle',
             'description' => 'Retention windows for disabled domains and released domain names.',

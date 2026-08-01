@@ -19,12 +19,20 @@ frontend API client. Both panels compile the shared
 
 | Path | Audience | Navigation |
 | --- | --- | --- |
-| `/admin` | administrators | Control plane, Customers, Edge network, Operations, Observe, Account |
+| `/admin` | administrators | Observe, Operate, Infrastructure, Customers, Governance, Account |
 | `/app` | assigned domain users | Domains, Observe, Account |
 
 The administrator panel exposes dashboard, system DNS identity, platform
 settings, users, domains, DNS clusters, edge pools, edges/cells, operations,
 audit logs, telemetry, profile, and tokens.
+
+The `/admin` landing page is a full-width operations overview composed of
+independently polling Filament widgets. Its compact investigation section spans
+the entire dashboard width; filters persist in the URL, and charts use
+Filament's bundled Chart.js integration. See
+[Laravel operations dashboard](../operations/laravel-operations-dashboard.md)
+for data sources, cache keys, refresh intervals, failure semantics, and the
+performance budget.
 
 The domain panel exposes dashboard, domains, domain detail/actions, DNS records,
 security rules, analytics, profile, and tokens. Administrator domain views reuse
@@ -44,7 +52,7 @@ the supported clean-checkout path does not require host Node.js.
 ## Shared components
 
 Blade components under `resources/views/components/ui` provide status pills,
-stat cards, empty states, data tables, form actions, and list rows. Keep
+stat cards, empty/widget states, data tables, form actions, and list rows. Keep
 business validation in controllers/support types and mirror bounds in Filament
 forms for usability.
 
@@ -62,3 +70,11 @@ Feature tests render panel routes, scope resources, confirm shared themes and
 navigation, and exercise Livewire/Filament actions without browser automation.
 Feature tests do not claim to prove visual layout, keyboard navigation, mobile
 viewports, focus behavior, or real browser downloads.
+
+The operations filter section spans the dashboard width. Telemetry exposes
+range, domain, and edge scope in one column on mobile, two columns on tablet,
+and one aligned row on desktop. Content-heavy overview widgets use half or full
+rows instead of compressing several paragraphs into one-third-width cards.
+Delayed and stale aggregate notices appear once in the page-level status area,
+not repeatedly inside charts. Full-height states are reserved for a chart that
+cannot render. Paired overview charts use equal grid spans and maximum heights.

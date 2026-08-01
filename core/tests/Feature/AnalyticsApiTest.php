@@ -163,7 +163,9 @@ class AnalyticsApiTest extends TestCase
             ->assertSee('Request and bandwidth timeseries')->assertSee('Compression savings (last hour)')->assertSee('DNS activity')->assertSee('Recent logs')->assertSee('Usage CSV export')
             ->assertDontSee("/api/domains/{$domain->id}/logs", false);
         $this->actingAs($admin)->get('/admin/telemetry')->assertOk()
-            ->assertSee('Global traffic')->assertSee('Vector metrics available')->assertSee('Live window included')
+            ->assertSee('Apply filters')->assertSee('All domains')->assertSee('All edges')->assertSee('24 hours')->assertDontSee('15 minutes (hourly source)')
+            ->assertSeeHtml('class="cdn-filter-select"')
+            ->assertSee('Global traffic')->assertSee('Vector metrics available')->assertSee('complete-hour analytics')
             ->assertSee('Buffered data')->assertSee('42 B')->assertSee('Compression savings')->assertSee('Recent logs')
             ->assertSee('Identity means the response was sent without compression')
             ->assertSee('Encoding / profile')->assertSee('Fallback')

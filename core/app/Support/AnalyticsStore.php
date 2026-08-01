@@ -69,12 +69,69 @@ final class AnalyticsStore
         return $this->query("SELECT {$select} FROM cdnf.{$table} WHERE {$scope} AND {$timeColumn} >= {from:DateTime64} AND {$timeColumn} < {to:DateTime64}{$groupSql} ORDER BY {$order} LIMIT 1000", $parameters);
     }
 
+    /**
+     * Return the bounded hourly evidence used by the administrator operations
+     * overview. Percentile latency is intentionally absent because the current
+     * aggregate schema stores only a latency sum and sample count.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function operationalTrafficSeries(?Domain $domain, array $range, ?string $edgeId = null): array
+    {
+        $scope = $domain === null ? '1' : 'domain_id = {domain_id:UInt64}';
+        if ($edgeId !== null) {
+            $scope .= ' AND edge_id = {edge_id:String}';
+        }
+
+        return $this->query(
+            "SELECT toStartOfHour(interval_start) AS bucket,
+                sum(requests) AS requests,
+                sum(bytes_in) AS bytes_in,
+                sum(bytes_out) AS bytes_out,
+                sumIf(requests, upper(cache_status) = 'HIT') AS cache_hits,
+                sumIf(requests, upper(cache_status) = 'MISS') AS cache_misses,
+                sumIf(requests, upper(cache_status) = 'BYPASS') AS cache_bypass,
+                sumIf(requests, upper(cache_status) = 'STALE') AS cache_stale,
+                sumIf(bytes_out, upper(cache_status) = 'HIT') AS cache_bytes_out,
+                sumIf(requests, status >= 400 AND status < 500) AS requests_4xx,
+                sumIf(requests, status >= 500 AND status < 600) AS requests_5xx,
+                sum(origin_errors) AS origin_errors,
+                sum(origin_latency_sum) AS origin_latency_sum_ms,
+                sum(origin_latency_samples) AS origin_latency_samples
+            FROM cdnf.edge_hourly
+            WHERE {$scope} AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64}
+            GROUP BY bucket ORDER BY bucket LIMIT 169",
+            array_filter([...$this->parameters($range, $domain), 'edge_id' => $edgeId], fn ($value): bool => $value !== null),
+        );
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    public function operationalDnsSeries(?Domain $domain, array $range): array
+    {
+        $scope = $domain === null
+            ? '1'
+            : '(domain_id = {domain_id:UInt64} OR zone = {domain_name:String} OR endsWith(zone, concat(\'.\', {domain_name:String})))';
+
+        return $this->query(
+            "SELECT toStartOfHour(interval_start) AS bucket,
+                sum(queries) AS queries,
+                sumIf(queries, upper(rcode) = 'NOERROR') AS successful,
+                sumIf(queries, upper(rcode) = 'SERVFAIL') AS servfail,
+                sumIf(queries, upper(rcode) = 'NXDOMAIN') AS nxdomain,
+                sumIf(queries, upper(rcode) NOT IN ('NOERROR', 'SERVFAIL', 'NXDOMAIN')) AS other
+            FROM cdnf.dns_hourly
+            WHERE {$scope} AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64}
+            GROUP BY bucket ORDER BY bucket LIMIT 169",
+            $this->parameters($range, $domain),
+        );
+    }
+
     public function topUrls(Domain $domain, array $range): array
     {
         return $this->query('SELECT path, count() AS requests, sum(bytes_out) AS bytes_out FROM cdnf.edge_events WHERE domain_id = {domain_id:UInt64} AND occurred_at >= {from:DateTime64} AND occurred_at < {to:DateTime64} GROUP BY path ORDER BY requests DESC, path LIMIT 100', $this->parameters($range, $domain));
     }
 
-    public function logs(?Domain $domain, array $range, string $stream, ?string $cursor): array
+    public function logs(?Domain $domain, array $range, string $stream, ?string $cursor, ?string $statusFamily = null): array
     {
         $decoded = $this->decodeCursor($cursor);
         $parameters = [...$this->parameters($range, $domain), 'cursor_time' => $decoded['occurred_at'] ?? '9999-12-31 23:59:59.999', 'cursor_id' => $decoded['event_id'] ?? 'ffffffff-ffff-ffff-ffff-ffffffffffff'];
@@ -93,6 +150,17 @@ final class AnalyticsStore
                 'requests' => "event_type = 'request'",
                 default => throw ValidationException::withMessages(['stream' => 'The log stream is invalid.']),
             };
+            $statusFilter = match ($statusFamily) {
+                null => null,
+                '4xx' => 'status >= 400 AND status < 500',
+                '5xx' => 'status >= 500 AND status < 600',
+                default => throw ValidationException::withMessages(['status_family' => 'The HTTP status family is invalid.']),
+            };
+            if ($statusFilter !== null) {
+                $filter = $stream === 'errors' && $statusFamily === '4xx'
+                    ? $statusFilter
+                    : "({$filter}) AND {$statusFilter}";
+            }
             $rows = $this->query("SELECT occurred_at, event_id, domain_id, hostname, method, path, status, bytes_in, bytes_out, cache_status, origin_latency_ms, origin_error, tls_error, security_action, security_reason, edge_id, client_ip, country, continent, event_type, compression_encoding, compression_ratio, compression_profile, compression_fallback, waf_profile, waf_rule_id, waf_score, waf_action, waf_processing_us, waf_body_limit, waf_exclusion_id FROM cdnf.edge_events WHERE {$scope} AND occurred_at >= {from:DateTime64} AND occurred_at < {to:DateTime64} AND {$cursorSql} AND ({$filter}) ORDER BY occurred_at DESC, event_id DESC LIMIT 101", $parameters);
         }
         $hasMore = count($rows) > 100;

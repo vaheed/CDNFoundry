@@ -19,16 +19,15 @@
     @endphp
 
     <div class="cdn-dashboard">
-        <x-filament::section heading="Domain scope" description="Every query is limited to one assigned domain. Aggregate range: last 24 hours UTC; raw previews: last hour UTC." icon="heroicon-o-shield-check">
-            <div class="flex flex-wrap gap-2">
-                @forelse ($this->domains as $domain)
-                    <x-filament::button tag="a" :color="$state['domain']?->id === $domain->id ? 'primary' : 'gray'" :href="request()->url() . '?domain=' . $domain->id">
-                        {{ $domain->display_name ?: $domain->name }}
-                    </x-filament::button>
-                @empty
-                    <div class="cdn-empty-state w-full">No domains are assigned to this account.</div>
-                @endforelse
-            </div>
+        <x-filament::section heading="Domain scope" description="Every query is limited to one assigned domain. Use the searchable header switcher; metrics are not loaded until a domain is selected." icon="heroicon-o-shield-check">
+            @if ($state['domain'])
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div><div class="cdn-row-title">{{ $state['domain']->display_name ?: $state['domain']->name }}</div><div class="cdn-row-meta">{{ $state['domain']->name }} · authorized domain #{{ $state['domain']->id }}</div></div>
+                    <x-ui.status-pill tone="info">Selected domain</x-ui.status-pill>
+                </div>
+            @else
+                <x-ui.empty-state title="Select an assigned domain" description="Use Select domain above to search your authorized domains. No telemetry query runs before selection." />
+            @endif
         </x-filament::section>
 
         @if ($state['domain'])

@@ -146,7 +146,7 @@ Grafana telemetry variables are:
 | `GRAFANA_POSTGRES_PROVISION_HOST`, `GRAFANA_POSTGRES_PROVISION_PORT` | local account provisioning | Privileged endpoint; external operators may apply the SQL separately |
 | `PROMETHEUS_EDGE_TARGETS_FILE` | telemetry | Private file_sd target file; production default is empty |
 | `PROMETHEUS_LOG_TARGETS_FILE` | telemetry | Private file_sd targets for remote collector metrics; production default is empty |
-| `GRAFANA_EXPLORE_URL` | control | External Explore URL for the admin-only Live Logs link; empty hides it |
+| `GRAFANA_EXPLORE_URL` | control | Optional deployment fallback for the admin-only Live Logs link. The PostgreSQL-backed **Platform settings → Observability links → Grafana Explore URL** overrides it. Laravel supplies Loki, a safe selector, and a one-hour range when the chosen URL has no query; both empty hides the link |
 | `GRAFANA_LOKI_URL` | telemetry | Private Grafana-to-Loki endpoint; default `http://loki:3100` |
 | `LOKI_RETENTION_PERIOD` | telemetry | Loki retention; production default `336h` |
 | `LOKI_MAX_QUERY_LENGTH` | telemetry | Maximum query range; production default `336h` |

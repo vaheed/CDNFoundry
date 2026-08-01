@@ -52,6 +52,23 @@ The `/app/analytics` page and domain API expose:
 - compression encoding, delivered/identity bytes, savings ratio, profile, and fallback;
 - DNS query aggregates.
 
+The browser page does not choose or preload the first assigned domain. Use its
+searchable **Select domain** action; search results and the selected label are
+policy-scoped, and telemetry queries begin only after an authorized domain is
+selected.
+
+## Administrator operations overview
+
+The `/admin` operations overview uses complete hourly ClickHouse aggregates for
+request, transfer, status-family, cache, origin-error, origin-average-latency,
+and DNS-response evidence. Quick range, previous-period comparison, domain, and
+edge filters are URL-persisted. A scoped drill-down opens **Traffic and
+telemetry** with the same range and identifiers.
+
+The current aggregate schema has no edge latency percentile, origin latency
+percentile, or DNS latency field. The interface says **Unavailable** for those
+metrics. It does not calculate overview KPIs from raw event logs.
+
 Aggregate queries accept at most 90 days. Raw request, DNS, error, and security
 logs and the unsampled compression view accept at most 24 hours. Logs use
 opaque cursor pagination.

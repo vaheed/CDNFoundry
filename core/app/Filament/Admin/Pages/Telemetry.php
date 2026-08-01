@@ -4,7 +4,9 @@ namespace App\Filament\Admin\Pages;
 
 use App\Http\Controllers\Admin\UsageController;
 use App\Models\Domain;
+use App\Models\Edge;
 use App\Models\UsageRollup;
+use App\Ops\Data\OpsDashboardContext;
 use App\Support\AnalyticsStore;
 use App\Support\PlatformSettings;
 use Carbon\CarbonImmutable;
@@ -14,10 +16,26 @@ use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Http;
+use Livewire\Attributes\Url;
 use Throwable;
 
 class Telemetry extends Page
 {
+    #[Url]
+    public string $range = '24h';
+
+    #[Url]
+    public ?string $domain = null;
+
+    #[Url]
+    public ?string $edge = null;
+
+    #[Url(as: 'view')]
+    public ?string $investigationView = null;
+
+    #[Url(as: 'status_family')]
+    public ?string $statusFamily = null;
+
     /** @var array<string, int> */
     public array $logLimits = [];
 
@@ -27,13 +45,22 @@ class Telemetry extends Page
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-presentation-chart-line';
 
-    protected static ?string $navigationLabel = 'Telemetry and usage';
+    protected static ?string $navigationLabel = 'Traffic and telemetry';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Observe';
 
     protected static ?int $navigationSort = 10;
 
     protected string $view = 'filament.admin.pages.telemetry';
+
+    /** @return array{domains: array<int, string>, edges: array<string, string>} */
+    public function getFilterOptionsProperty(): array
+    {
+        return [
+            'domains' => Domain::query()->orderBy('name')->limit(500)->pluck('name', 'id')->all(),
+            'edges' => Edge::query()->orderBy('name')->limit(500)->pluck('name', 'id')->all(),
+        ];
+    }
 
     protected function getHeaderActions(): array
     {
@@ -71,14 +98,32 @@ class Telemetry extends Page
     public function getStateProperty(): array
     {
         $store = app(AnalyticsStore::class);
-        $to = CarbonImmutable::now('UTC');
-        $range = ['from' => $to->subDay(), 'to' => $to, 'raw' => false];
-        $rawRange = ['from' => $to->subHour(), 'to' => $to, 'raw' => true];
+        $context = OpsDashboardContext::fromFilters([
+            'range' => $this->range,
+            'compare' => true,
+            'domain_id' => $this->domain,
+            'edge_id' => $this->edge,
+        ], auth()->user());
+        $range = $context->rangeValue();
+        $rawTo = CarbonImmutable::now('UTC');
+        $rawHours = min(24, max(1, (int) ceil(OpsDashboardContext::RANGES[$context->range] / 3600)));
+        $rawRange = ['from' => $rawTo->subHours($rawHours), 'to' => $rawTo, 'raw' => true];
+        $domain = $context->domainId === null ? null : Domain::query()->find($context->domainId);
+        $investigationView = in_array($this->investigationView, ['traffic', 'cache', 'origin', 'dns'], true) ? $this->investigationView : null;
+        $statusFamily = in_array($this->statusFamily, ['4xx', '5xx'], true) ? $this->statusFamily : null;
+        $filterErrors = $context->errors;
+        if (filled($this->investigationView) && $investigationView === null) {
+            $filterErrors[] = 'The requested analytics focus is invalid.';
+        }
+        if (filled($this->statusFamily) && $statusFamily === null) {
+            $filterErrors[] = 'The requested HTTP status family is invalid.';
+        }
         $state = [
             'available' => false,
             'meta' => [
                 'from' => $range['from']->toIso8601String(), 'to' => $range['to']->toIso8601String(),
                 'partial' => true,
+                'raw_window_hours' => $rawHours,
                 'finalization_delay_minutes' => app(PlatformSettings::class)->integer('telemetry', 'finalization_delay_minutes'),
             ],
             'summary' => [],
@@ -87,26 +132,47 @@ class Telemetry extends Page
             'compression' => ['items' => [], 'has_more' => false, 'expanded' => false],
             'logs' => ['errors' => [], 'security' => [], 'requests' => []],
             'buffer' => $this->bufferStatus(),
-            'usage' => $this->recentUsage(),
+            'usage' => $this->recentUsage($domain),
+            'filters' => [
+                'range' => $context->range, 'domain' => $domain, 'edge' => $context->edgeId,
+                'view' => $investigationView, 'status_family' => $statusFamily, 'errors' => $filterErrors,
+            ],
         ];
+        if (! $context->isValid() || count($filterErrors) > count($context->errors)) {
+            return $state;
+        }
         try {
             $state['meta'] = $store->metadata($range);
-            $state['summary'] = $store->summary(null, $range);
-            $traffic = $store->aggregate(null, $range, 'traffic');
+            $state['meta']['raw_window_hours'] = $rawHours;
+            $state['summary'] = $store->summary($domain, $range);
+            $traffic = $store->aggregate($domain, $range, 'traffic');
+            $latestTrafficBucket = collect($traffic)->pluck('bucket')->filter()->sort()->last();
+            $state['meta']['aggregate_source_timestamp'] = is_string($latestTrafficBucket)
+                ? CarbonImmutable::parse($latestTrafficBucket, 'UTC')->toIso8601String()
+                : null;
+            $aggregateAge = is_string($latestTrafficBucket)
+                ? abs(CarbonImmutable::now('UTC')->diffInSeconds(CarbonImmutable::parse($latestTrafficBucket, 'UTC')))
+                : null;
+            $state['meta']['aggregate_state'] = match (true) {
+                $aggregateAge === null => 'no_data',
+                $aggregateAge > 14400 => 'stale',
+                $aggregateAge > 7200 => 'delayed',
+                default => 'fresh',
+            };
             $state['traffic'] = [
                 'items' => array_slice($traffic, 0, $this->trafficLimit),
                 'has_more' => count($traffic) > $this->trafficLimit,
                 'expanded' => $this->trafficLimit > 12,
             ];
-            $state['dns'] = $store->aggregate(null, $range, 'dns');
-            $compression = $store->aggregate(null, $rawRange, 'compression');
+            $state['dns'] = $store->aggregate($domain, $range, 'dns');
+            $compression = $store->aggregate($domain, $rawRange, 'compression');
             $state['compression'] = [
                 'items' => array_slice($compression, 0, $this->compressionLimit),
                 'has_more' => count($compression) > $this->compressionLimit,
                 'expanded' => $this->compressionLimit > 5,
             ];
             foreach (array_keys($state['logs']) as $stream) {
-                $result = $store->logs(null, $rawRange, $stream, null);
+                $result = $store->logs($domain, $rawRange, $stream, null, $stream === 'security' ? null : $statusFamily);
                 $limit = $this->logLimits[$stream] ?? 5;
                 $state['logs'][$stream] = [
                     'items' => array_slice($result['items'], 0, $limit),
@@ -154,9 +220,11 @@ class Telemetry extends Page
         $this->logLimits[$stream] = 5;
     }
 
-    private function recentUsage(): array
+    private function recentUsage(?Domain $domain): array
     {
-        return UsageRollup::query()->with('domain:id,name')->where('status', 'finalized')->latest('interval_start')->limit(5)->get()
+        return UsageRollup::query()->with('domain:id,name')->where('status', 'finalized')
+            ->when($domain, fn ($query) => $query->whereBelongsTo($domain))
+            ->latest('interval_start')->limit(5)->get()
             ->map(fn (UsageRollup $row): array => [
                 'domain' => $row->domain?->name ?? "Domain #{$row->domain_id}",
                 'interval' => $row->interval_start->toIso8601String(),

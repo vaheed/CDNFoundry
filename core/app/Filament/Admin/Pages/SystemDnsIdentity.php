@@ -14,6 +14,7 @@ use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
@@ -25,7 +26,7 @@ class SystemDnsIdentity extends Page
 
     protected static ?string $navigationLabel = 'System DNS identity';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Control plane';
+    protected static string|\UnitEnum|null $navigationGroup = 'Infrastructure';
 
     protected static ?int $navigationSort = 20;
 
@@ -53,46 +54,60 @@ class SystemDnsIdentity extends Page
     public function form(Schema $schema): Schema
     {
         return $schema->statePath('data')->components([
-            TextInput::make('platform_domain')
-                ->label(FilamentHelp::label('Platform domain', 'Enter the public platform domain; standard DNS identity fields will be filled automatically.'))
-                ->required()->maxLength(253)->live(onBlur: true)
-                ->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
-                    $domain = mb_strtolower(rtrim(trim((string) $state), '.'));
-                    if ($domain === '') {
-                        return;
-                    }
-                    if (blank($get('proxy_hostname'))) {
-                        $set('proxy_hostname', "proxy.{$domain}");
-                    }
-                    $nameservers = $get('nameservers');
-                    if (! is_array($nameservers) || collect($nameservers)->every(fn (array $item): bool => blank($item['hostname'] ?? null))) {
-                        $set('nameservers', [
-                            ['hostname' => "ns1.{$domain}", 'ipv4' => null, 'ipv6' => null],
-                            ['hostname' => "ns2.{$domain}", 'ipv4' => null, 'ipv6' => null],
-                        ]);
-                    }
-                    if (blank($get('soa_primary'))) {
-                        $set('soa_primary', "ns1.{$domain}");
-                    }
-                    if (blank($get('soa_mailbox'))) {
-                        $set('soa_mailbox', "hostmaster.{$domain}");
-                    }
-                }),
-            TextInput::make('proxy_hostname')->required()->maxLength(220),
-            Repeater::make('nameservers')->minItems(2)->maxItems(8)->schema([
-                TextInput::make('hostname')->required()->maxLength(253),
-                TextInput::make('ipv4')->required()->ipv4(),
-                TextInput::make('ipv6')->label(FilamentHelp::label('IPv6', 'Optional. Leave empty for IPv4-only authoritative DNS.'))->ipv6(),
-            ])->columns(3),
-            TextInput::make('soa_primary')->required()->maxLength(253),
-            TextInput::make('soa_mailbox')->required()->maxLength(253),
-            TextInput::make('soa_refresh')->required()->integer()->minValue(300)->maxValue(86400),
-            TextInput::make('soa_retry')->required()->integer()->minValue(60)->maxValue(86400),
-            TextInput::make('soa_expire')->required()->integer()->minValue(86400)->maxValue(2419200),
-            TextInput::make('soa_minimum_ttl')->required()->integer()->minValue(30)->maxValue(86400),
-            TextInput::make('default_ttl')->required()->integer()->minValue(30)->maxValue(86400),
-            TagsInput::make('cluster_targets')->required()->nestedRecursiveRules(['string', 'max:253']),
-        ])->columns(2);
+            Section::make('Public DNS identity')
+                ->description('Canonical platform names used by authoritative DNS and the shared proxy endpoint.')
+                ->columns(['default' => 1, 'lg' => 2])
+                ->schema([
+                    TextInput::make('platform_domain')
+                        ->label(FilamentHelp::label('Platform domain', 'Enter the public platform domain; standard DNS identity fields will be filled automatically.'))
+                        ->required()->maxLength(253)->live(onBlur: true)
+                        ->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
+                            $domain = mb_strtolower(rtrim(trim((string) $state), '.'));
+                            if ($domain === '') {
+                                return;
+                            }
+                            if (blank($get('proxy_hostname'))) {
+                                $set('proxy_hostname', "proxy.{$domain}");
+                            }
+                            $nameservers = $get('nameservers');
+                            if (! is_array($nameservers) || collect($nameservers)->every(fn (array $item): bool => blank($item['hostname'] ?? null))) {
+                                $set('nameservers', [
+                                    ['hostname' => "ns1.{$domain}", 'ipv4' => null, 'ipv6' => null],
+                                    ['hostname' => "ns2.{$domain}", 'ipv4' => null, 'ipv6' => null],
+                                ]);
+                            }
+                            if (blank($get('soa_primary'))) {
+                                $set('soa_primary', "ns1.{$domain}");
+                            }
+                            if (blank($get('soa_mailbox'))) {
+                                $set('soa_mailbox', "hostmaster.{$domain}");
+                            }
+                        }),
+                    TextInput::make('proxy_hostname')->label('Proxy hostname')->required()->maxLength(220),
+                ]),
+            Section::make('Authoritative nameservers')
+                ->description('At least two public authoritative endpoints. IPv6 is optional but validated when supplied.')
+                ->schema([
+                    Repeater::make('nameservers')->label('Nameservers')->minItems(2)->maxItems(8)->schema([
+                        TextInput::make('hostname')->label('Hostname')->required()->maxLength(253),
+                        TextInput::make('ipv4')->label('IPv4')->required()->ipv4(),
+                        TextInput::make('ipv6')->label(FilamentHelp::label('IPv6', 'Optional. Leave empty for IPv4-only authoritative DNS.'))->ipv6(),
+                    ])->columns(['default' => 1, 'md' => 3]),
+                    TagsInput::make('cluster_targets')->label('DNS cluster targets')->required()->nestedRecursiveRules(['string', 'max:253']),
+                ]),
+            Section::make('SOA and TTL policy')
+                ->description('Zone authority identity and bounded default timers, in seconds.')
+                ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
+                ->schema([
+                    TextInput::make('soa_primary')->label('SOA primary')->required()->maxLength(253),
+                    TextInput::make('soa_mailbox')->label('SOA mailbox')->required()->maxLength(253),
+                    TextInput::make('soa_refresh')->label('SOA refresh')->required()->integer()->minValue(300)->maxValue(86400),
+                    TextInput::make('soa_retry')->label('SOA retry')->required()->integer()->minValue(60)->maxValue(86400),
+                    TextInput::make('soa_expire')->label('SOA expire')->required()->integer()->minValue(86400)->maxValue(2419200),
+                    TextInput::make('soa_minimum_ttl')->label('SOA minimum TTL')->required()->integer()->minValue(30)->maxValue(86400),
+                    TextInput::make('default_ttl')->label('Default TTL')->required()->integer()->minValue(30)->maxValue(86400),
+                ]),
+        ]);
     }
 
     public function previewChanges(): void

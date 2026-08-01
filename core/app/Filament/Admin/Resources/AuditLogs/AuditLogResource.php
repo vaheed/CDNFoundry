@@ -16,7 +16,7 @@ class AuditLogResource extends Resource
 
     protected static ?string $navigationLabel = 'Audit logs';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Operations';
+    protected static string|\UnitEnum|null $navigationGroup = 'Governance';
 
     protected static ?int $navigationSort = 20;
 

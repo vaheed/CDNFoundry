@@ -35,7 +35,7 @@ class EdgeResource extends Resource
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-globe-americas';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Edge network';
+    protected static string|\UnitEnum|null $navigationGroup = 'Infrastructure';
 
     public static function form(Schema $schema): Schema
     {

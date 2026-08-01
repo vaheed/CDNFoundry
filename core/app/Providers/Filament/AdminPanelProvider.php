@@ -6,6 +6,7 @@ use App\Filament\Admin\Pages\AdminDashboard;
 use App\Filament\Domain\Resources\Domains\DomainResource;
 use App\Filament\Shared\Pages\ApiTokens;
 use App\Filament\Shared\Pages\EditProfile;
+use App\Support\GrafanaExploreUrl;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -38,14 +39,14 @@ class AdminPanelProvider extends PanelProvider
             ->colors(['primary' => Color::Blue])
             ->sidebarCollapsibleOnDesktop()
             ->databaseNotifications()
-            ->navigationGroups(['Control plane', 'Customers', 'Edge network', 'Operations', 'Observe', 'Account'])
+            ->navigationGroups(['Observe', 'Operate', 'Infrastructure', 'Customers', 'Governance', 'Account'])
             ->navigationItems([
                 NavigationItem::make('Live Logs')
                     ->group('Observe')
                     ->icon('heroicon-o-document-magnifying-glass')
                     ->sort(100)
-                    ->url(fn (): ?string => config('services.grafana.explore_url'), shouldOpenInNewTab: true)
-                    ->visible(fn (): bool => filled(config('services.grafana.explore_url'))),
+                    ->url(fn (): ?string => app(GrafanaExploreUrl::class)->configuredOperationalLogs(), shouldOpenInNewTab: true)
+                    ->visible(fn (): bool => filled(app(GrafanaExploreUrl::class)->configuredOperationalLogs())),
             ])
             ->discoverResources(in: app_path('Filament/Admin/Resources'), for: 'App\\Filament\\Admin\\Resources')
             ->resources([DomainResource::class])

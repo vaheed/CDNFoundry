@@ -6,6 +6,17 @@ use App\Filament\Admin\Resources\DnsClusters\DnsClusterResource;
 use App\Filament\Admin\Resources\Edges\EdgeResource;
 use App\Filament\Admin\Resources\Operations\OperationResource;
 use App\Filament\Admin\Resources\Users\UserResource;
+use App\Filament\Admin\Widgets\ActiveConditionsWidget;
+use App\Filament\Admin\Widgets\CacheEfficiencyWidget;
+use App\Filament\Admin\Widgets\DataFreshnessWidget;
+use App\Filament\Admin\Widgets\DnsHealthWidget;
+use App\Filament\Admin\Widgets\EdgeHealthTable;
+use App\Filament\Admin\Widgets\ErrorLatencyChart;
+use App\Filament\Admin\Widgets\OperationsTimelineWidget;
+use App\Filament\Admin\Widgets\OpsKpiOverview;
+use App\Filament\Admin\Widgets\QueueHealthWidget;
+use App\Filament\Admin\Widgets\ServiceStatusBanner;
+use App\Filament\Admin\Widgets\TrafficOverviewChart;
 use App\Filament\Domain\Resources\Domains\DomainResource;
 use App\Models\AuditLog;
 use App\Models\DnsCluster;
@@ -14,17 +25,88 @@ use App\Models\Edge;
 use App\Models\Operation;
 use App\Models\User;
 use App\Support\SystemHealth;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Toggle;
 use Filament\Pages\Dashboard;
+use Filament\Pages\Dashboard\Concerns\HasFiltersForm;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
+use Filament\Support\Enums\Width;
+use Filament\Widgets\Widget;
+use Filament\Widgets\WidgetConfiguration;
 use Illuminate\Support\Collection;
 use Throwable;
 
 class AdminDashboard extends Dashboard
 {
-    protected string $view = 'filament.admin.pages.dashboard';
+    use HasFiltersForm;
+
+    protected static ?string $title = 'Operations overview';
+
+    protected static ?string $navigationLabel = 'Operations overview';
+
+    protected static string|\UnitEnum|null $navigationGroup = 'Observe';
+
+    protected Width|string|null $maxContentWidth = Width::Full;
 
     public function getSubheading(): ?string
     {
-        return 'Control-plane health and recent operator activity.';
+        return 'Service condition, customer impact, telemetry, infrastructure, and the changes that preceded an issue.';
+    }
+
+    public function persistsFiltersInSession(): bool
+    {
+        return false;
+    }
+
+    public function filtersForm(Schema $schema): Schema
+    {
+        return $schema->components([
+            Section::make('Investigation context')
+                ->description('Filters are stored in the URL so this investigation can be bookmarked or shared with another administrator.')
+                ->icon('heroicon-o-funnel')
+                ->compact()
+                ->columnSpanFull()
+                ->columns(['default' => 1, 'md' => 2, 'xl' => 4])
+                ->schema([
+                    Select::make('range')->label('Time range')->options([
+                        '1h' => 'Last hour',
+                        '6h' => 'Last 6 hours',
+                        '24h' => 'Last 24 hours',
+                        '7d' => 'Last 7 days',
+                    ])->default('24h')->required()->native(false),
+                    Select::make('domain_id')->label('Domain')->placeholder('All domains')->searchable()->native(false)
+                        ->getSearchResultsUsing(fn (string $search): array => Domain::query()->where('name', 'like', '%'.$search.'%')->orderBy('name')->limit(50)->pluck('name', 'id')->all())
+                        ->getOptionLabelUsing(fn (mixed $value): ?string => Domain::query()->find($value)?->name),
+                    Select::make('edge_id')->label('Edge')->placeholder('All edges')->searchable()->native(false)
+                        ->getSearchResultsUsing(fn (string $search): array => Edge::query()->where('name', 'like', '%'.$search.'%')->orderBy('name')->limit(50)->pluck('name', 'id')->all())
+                        ->getOptionLabelUsing(fn (mixed $value): ?string => Edge::query()->find($value)?->name),
+                    Toggle::make('compare')->label('Compare previous period')->default(true)->inline(false),
+                ]),
+        ]);
+    }
+
+    /** @return array<class-string<Widget>|WidgetConfiguration> */
+    public function getWidgets(): array
+    {
+        return [
+            ServiceStatusBanner::class,
+            OpsKpiOverview::class,
+            TrafficOverviewChart::class,
+            ErrorLatencyChart::class,
+            ActiveConditionsWidget::class,
+            EdgeHealthTable::class,
+            CacheEfficiencyWidget::class,
+            DnsHealthWidget::class,
+            QueueHealthWidget::class,
+            OperationsTimelineWidget::class,
+            DataFreshnessWidget::class,
+        ];
+    }
+
+    public function getColumns(): int|array
+    {
+        return ['default' => 1, 'xl' => 12];
     }
 
     public function getSummaryProperty(): array

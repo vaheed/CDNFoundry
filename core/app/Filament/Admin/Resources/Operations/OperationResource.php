@@ -38,9 +38,16 @@ class OperationResource extends Resource
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-arrow-path';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Operations';
+    protected static string|\UnitEnum|null $navigationGroup = 'Operate';
 
     protected static ?int $navigationSort = 10;
+
+    public static function failedUrl(): string
+    {
+        return static::getUrl(parameters: [
+            'filters' => ['status' => ['values' => ['failed']]],
+        ], panel: 'admin');
+    }
 
     public static function table(Table $table): Table
     {

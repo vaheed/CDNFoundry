@@ -124,9 +124,16 @@ sum by (service) (
 )
 ```
 
-Set `GRAFANA_EXPLORE_URL` on control processes to show the administrator-only
-**Live Logs** navigation item. It opens Grafana in a new tab. Leaving the value
-empty hides the item; CDNFoundry never iframes Grafana or proxies Loki.
+Administrators may set **Platform settings → Observability links → Grafana
+Explore URL** to show the administrator-only **Live Logs** navigation item.
+This optional PostgreSQL value overrides `GRAFANA_EXPLORE_URL`, which remains a
+deployment fallback. The link opens Grafana in a new tab with the Loki
+datasource, a bounded one-hour range, and the safe operational selector
+`{environment=~"production|development"} | json` already populated. A fully
+configured Explore URL with its own non-empty query is preserved. Leaving the
+admin value and environment fallback both empty hides the item. The form accepts
+only absolute HTTP or HTTPS URLs, and the link builder also rejects embedded
+credentials. CDNFoundry never iframes Grafana or proxies Loki.
 
 ## Failure and recovery
 

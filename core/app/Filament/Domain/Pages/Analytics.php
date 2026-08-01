@@ -7,6 +7,8 @@ use App\Models\UsageRollup;
 use App\Support\AnalyticsStore;
 use App\Support\PlatformSettings;
 use Carbon\CarbonImmutable;
+use Filament\Actions\Action;
+use Filament\Forms\Components\Select;
 use Filament\Pages\Page;
 use Illuminate\Database\Eloquent\Builder;
 use Throwable;
@@ -22,6 +24,22 @@ class Analytics extends Page
     protected static ?int $navigationSort = 10;
 
     protected string $view = 'filament.domain.pages.analytics';
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('selectDomain')
+                ->label($this->selectedDomain() === null ? 'Select domain' : 'Switch domain')
+                ->icon('heroicon-o-magnifying-glass')
+                ->schema([
+                    Select::make('domain_id')->label('Assigned domain')->required()->searchable()->native(false)
+                        ->getSearchResultsUsing(fn (string $search): array => $this->domainQuery()->where('name', 'like', '%'.$search.'%')->orderBy('name')->limit(50)->pluck('name', 'domains.id')->all())
+                        ->getOptionLabelUsing(fn (mixed $value): ?string => $this->domainQuery()->whereKey($value)->value('name')),
+                ])
+                ->fillForm(fn (): array => ['domain_id' => $this->selectedDomain()?->id])
+                ->action(fn (array $data) => redirect(static::getUrl(['domain' => $data['domain_id']], panel: 'app'))),
+        ];
+    }
 
     public function getStateProperty(): array
     {
@@ -78,16 +96,15 @@ class Analytics extends Page
             ])->all();
     }
 
-    public function getDomainsProperty()
-    {
-        return $this->domainQuery()->orderBy('name')->get(['domains.id', 'domains.name', 'domains.display_name']);
-    }
-
     private function selectedDomain(): ?Domain
     {
         $requested = request()->integer('domain');
 
-        return $this->domainQuery()->when($requested > 0, fn (Builder $query): Builder => $query->whereKey($requested))->orderBy('domains.id')->first();
+        if ($requested < 1) {
+            return null;
+        }
+
+        return $this->domainQuery()->whereKey($requested)->first();
     }
 
     private function domainQuery(): Builder

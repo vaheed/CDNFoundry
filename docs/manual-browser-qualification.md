@@ -62,13 +62,17 @@ workstream does not replace an earlier product checkpoint.
 
 ### System DNS, clusters, and domains
 
-1. Open **Control plane → System DNS identity**. Enter platform domain, proxy
-   hostname, two nameservers with IPv4 and optional IPv6, SOA primary/mailbox,
-   refresh, retry, expire, minimum TTL, and default TTL. Choose **Validate and
-   preview**, inspect normalization, apply the exact confirmation, and record
-   the asynchronous operation and active checksum on both clusters.
-2. Under **Control plane → DNS clusters**, create each cluster disabled with
-   API URL, API key, server ID, and nameservers. Run **Test connection**, require
+1. Open **Infrastructure → System DNS identity**. Confirm **Public DNS
+   identity**, **Authoritative nameservers**, and **SOA and TTL policy** are
+   full-width readable sections. Enter platform domain, proxy hostname, two
+   nameservers with IPv4 and optional IPv6, SOA primary/mailbox, refresh, retry,
+   expire, minimum TTL, and default TTL. Choose **Validate and preview**, inspect
+   normalization, apply the exact confirmation, and record the asynchronous
+   operation and active checksum on both clusters.
+2. Under **Infrastructure → DNS clusters**, create each cluster disabled. Confirm
+   the form groups **Cluster connection**, **Authoritative nameservers**, and
+   **Operator context**, with labels **API URL**, **API key**, **Server ID**, and
+   **Zone capacity**. Run **Test connection**, require
    verified TLS and a healthy result, then enable it. A bad key, CA, name, or
    unreachable API must fail without replacing an active zone.
 3. Create a domain, assign the user, verify nameservers, activate it, then cover
@@ -82,12 +86,12 @@ workstream does not replace an earlier product checkpoint.
 
 ### Edge pools, cells, gateway, and routing
 
-1. Under **Edge network → Service pools**, create a Geo-Unicast shared pool and
+1. Under **Infrastructure → Service pools**, create a Geo-Unicast shared pool and
    a quarantine pool. Record Kind, Cache profile, Compression profile, managed
    WAF capability, Routing mode, Minimum ready cells, Replicas per edge, and
    Maximum domains per cell. Confirm invalid replicas/capacity/address
    combinations fail before activation.
-2. Under **Edge network → Edges**, create two edges with **Cell slots = 8**,
+2. Under **Infrastructure → Edges**, create two edges with **Cell slots = 8**,
    country, continent, and optional management addresses. Enroll each agent with
    its one-time token, remove that token after registration, and confirm fresh
    heartbeat, current runtime versions, gateway process, traffic listener,
@@ -138,22 +142,81 @@ workstream does not replace an earlier product checkpoint.
 
 ### Analytics, operations, recovery, and upgrade
 
-1. In **Observe → Analytics and logs** and administrator **Telemetry and
-   usage**, verify bounded ranges, filters, pagination, partial-data notices,
-   raw/hourly/daily boundaries, usage finalization/export, redaction, and
-   ClickHouse/Vector outage behavior without interrupting serving.
-2. On the administrator dashboard and under **Operations**, verify component,
-   queue, scheduler, DNS, edge/cell/gateway, TLS, task, purge, usage, rollout,
-   and backup state. Exercise failed-job retry, global reconciliations,
-   quarantine recovery, and operation/audit visibility without exposing input
-   secrets.
-3. If built-in Restic backup is configured, create and verify a snapshot,
+1. Sign in at `/admin` and open **Observe → Operations overview** at desktop,
+   tablet, and narrow/mobile widths. In **Investigation context**, select each
+   **Time range** value (1 hour, 6 hours, 24 hours, and 7 days), confirming
+   **24 hours** is selected when the URL contains no range,
+   toggle **Compare previous period**, search and select one **Domain**, then
+   search and select one **Edge**. Expect the URL query string to change. Copy
+   it into a second authenticated administrator tab and expect the same filter
+   labels and scope. An invalid/deleted domain or edge in a copied URL must show
+   **Invalid investigation filter** and must not silently show global metrics.
+2. Above the first scroll, confirm the service banner explicitly labels the
+   condition **Healthy**, **Degraded**, **Critical**, **Maintenance**,
+   **Unknown**, or **Stale** and
+   includes active conditions, affected domains/edges/regions, condition start,
+   metric freshness, **Polling**, and **Investigate**. Stop ClickHouse/Vector
+   in the disposable environment: expect unknown/stale telemetry, never green,
+   while comparison DNS/HTTPS keeps serving. Restore them and expect recovery
+   without a full-page refresh.
+3. Confirm **Operational KPIs**, **Traffic and egress**, and **Errors and origin
+   latency** render complete hourly evidence with units, previous-period state,
+   source time, and accessible data summaries. A zero or absent comparison must
+   say **No comparable baseline**. Confirm unsupported percentile and DNS
+   latency values say **Unavailable**, not zero. Follow the 5xx, cache, origin,
+   and telemetry links and confirm the range/domain/edge query parameters are
+   retained.
+4. Confirm **Active conditions**, **Edge health and capacity**, **Cache
+   efficiency**, **DNS health**, **Queue and worker health**, **Operations
+   timeline**, and **Data freshness** independently update at their documented
+   intervals. Search/sort/filter/paginate the edge table. Verify stale
+   heartbeat, disabled, drained, degraded, and healthy badges include text;
+   inspect each row link. Confirm queue depth distinguishes unavailable from
+   zero and the timeline answers what changed before the test condition.
+   In the edge table, confirm there is no Pools column and **Peak resource**
+   names Memory, Cache, Temporary, or Connections; its tooltip identifies the
+   cell and used/limit values.
+   Confirm an idle edge is not interpreted as resource-free. Follow an active
+   condition and the banner **Investigate** action: edge and DNS conditions
+   must open their relevant resource, while runtime failures must open
+   Operations with the Failed filter active.
+5. Open **Observe → Traffic and telemetry** from a scoped dashboard link.
+   Confirm **Investigation context** exposes Time range, Domain, and Edge
+   filters plus one **Apply filters** action. Confirm the controls stack in one
+   column on mobile, two columns on tablet, and one aligned row on desktop;
+   each select must have the same visible bordered box, height, radius, focus
+   ring, and dropdown indicator as the Operations overview controls. Labels and
+   selected values must never wrap letter by letter. Confirm the
+   Analytics focus and HTTP status filters are also visible and that selecting
+   4xx or 5xx scopes the bounded recent-log query. Confirm a delayed/stale
+   aggregate notice appears once in **Telemetry status** near the top, never as
+   repeated chart-sized boxes. Confirm both overview charts have equal width
+   and height. Confirm the six filtered KPI cards appear above both charts. For
+   a 7-day investigation, confirm **Recent logs** and **Compression savings**
+   explicitly use the latest bounded 24 hours and can show recent events. When
+   DNS has no aggregate rows, confirm DNS health still shows healthy/enabled
+   cluster counts and links to DNS analytics and DNS clusters. Confirm the
+   selected scope persists, the two
+   Chart.js charts render, table/log previews stay bounded, partial/finalized
+   semantics remain explicit, exports remain authorized, and ClickHouse/Vector
+   outage states do not interrupt serving. The page must state that its legacy
+   detailed tables are not yet edge-scoped when an edge is selected.
+6. As a domain user open **Observe → Analytics and logs** without a `domain`
+   query parameter. Expect no telemetry query and **Select an assigned domain**.
+   Use the searchable **Select domain** action, search an assigned domain, and
+   expect only that domain's data. Searching for or sharing another user's
+   domain ID must not reveal its name or metrics.
+7. Under **Operate → Operations**, exercise failed-job retry, global
+   reconciliations, quarantine recovery, and operation visibility. Under
+   **Governance → Audit logs**, verify matching change evidence without input
+   secrets. Confirm the dashboard timeline links to both destinations.
+8. If built-in Restic backup is configured, create and verify a snapshot,
    perform restore preflight with exact confirmation and current password, then
    complete a clean-host restore with the full recovery secret set. If it is
    disabled, record the alternative tested recovery method and the expected
    degraded backup component; do not mark recovery passed without real restore
    evidence.
-4. Run one bounded fleet canary and wave rollout with immutable gateway, agent,
+9. Run one bounded fleet canary and wave rollout with immutable gateway, agent,
    normal-cell, and WAF-cell digests. Inject a canary failure, confirm automatic
    pause, roll back, and verify no dynamic cell creation. Upgrade one edge at a
    time, then control/DNS components, while comparison DNS/HTTPS stays healthy.
@@ -367,11 +430,18 @@ Run the documented operator commands from a clean verification environment and a
 
 ### Live Logs control-panel navigation
 
-1. Set `GRAFANA_EXPLORE_URL`, restart `core`, sign in as an administrator, and
-   confirm **Observe → Live Logs** opens Grafana Explore in a new tab.
-2. Sign in as a domain user and confirm the entry is absent. Unset the variable,
-   restart `core`, and confirm it is absent from the administrator panel too.
-3. In Explore, live-tail one controlled operational event. Confirm request,
+1. Sign in as an administrator, open **Governance → Platform settings →
+   Observability links**, enter an absolute HTTP or HTTPS address in **Grafana
+   Explore URL**, and save. Confirm **Observe → Live Logs** appears without a
+   runtime operation and opens Grafana Explore in a new tab with Loki, the
+   last-hour range, and
+   `{environment=~"production|development"} | json` already populated. The
+   query editor must not be blank.
+2. Enter `ftp://grafana.example.test` and confirm the form rejects it. Clear the
+   saved value and confirm `GRAFANA_EXPLORE_URL` is used when configured. Then
+   clear the saved value with no environment fallback and confirm **Live Logs**
+   is absent. Sign in as a domain user and confirm the entry is always absent.
+3. Restore a valid administrator URL. In Explore, live-tail one controlled operational event. Confirm request,
    operation, job, task, domain, edge, cell, and revision fields are searchable
    JSON but not stream labels. Confirm injected passwords, tokens, cookies,
    database URLs, PEM blocks, query strings, and sensitive command options are

@@ -22,7 +22,7 @@ class SystemSettingsTest extends TestCase
         $admin = User::factory()->admin()->create();
         $response = $this->actingAs($admin)->getJson('/api/admin/system/settings')->assertOk();
 
-        $this->assertCount(8, $response->json('data'));
+        $this->assertCount(9, $response->json('data'));
         $settings = collect($response->json('data'));
         $dnsLifecycle = $settings->firstWhere('group', 'dns_lifecycle');
         $this->assertSame(7, $dnsLifecycle['fields'][0]['value']);
@@ -30,7 +30,8 @@ class SystemSettingsTest extends TestCase
         $this->assertNotEmpty($dnsLifecycle['fields'][0]['description']);
         $this->assertNotNull($settings->firstWhere('group', 'telemetry'));
         $this->assertNotNull($settings->firstWhere('group', 'operations'));
-        $this->assertDatabaseCount('system_settings', 8);
+        $this->assertNull($settings->firstWhere('group', 'observability')['fields'][0]['value']);
+        $this->assertDatabaseCount('system_settings', 9);
     }
 
     public function test_dns_lifecycle_update_is_typed_audited_and_reads_from_postgresql(): void
@@ -44,6 +45,22 @@ class SystemSettingsTest extends TestCase
 
         $this->assertSame(14, SystemSetting::query()->findOrFail('dns_lifecycle')->values['deprovision_delay_days']);
         $this->assertDatabaseHas('audit_logs', ['action' => 'system_settings.updated', 'subject_id' => 'dns_lifecycle']);
+    }
+
+    public function test_optional_grafana_url_is_validated_audited_and_has_no_runtime_operation(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->patchJson('/api/admin/system/settings/observability', ['values' => ['grafana_explore_url' => 'https://grafana.example.test/explore']])
+            ->assertOk()
+            ->assertJsonPath('data.setting.fields.0.value', 'https://grafana.example.test/explore')
+            ->assertJsonPath('data.operation', null);
+
+        $this->assertDatabaseHas('audit_logs', ['action' => 'system_settings.updated', 'subject_id' => 'observability']);
+        $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->patchJson('/api/admin/system/settings/observability', ['values' => ['grafana_explore_url' => 'ftp://grafana.example.test']])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['grafana_explore_url']);
     }
 
     public function test_runtime_setting_update_returns_operation_and_queues_bounded_reconciliation(): void

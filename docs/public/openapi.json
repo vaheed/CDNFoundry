@@ -4361,6 +4361,7 @@
                             "enum": [
                                 "operations",
                                 "telemetry",
+                                "observability",
                                 "dns_lifecycle",
                                 "revision_history",
                                 "rate_limits",
@@ -4403,6 +4404,7 @@
                             "enum": [
                                 "operations",
                                 "telemetry",
+                                "observability",
                                 "dns_lifecycle",
                                 "revision_history",
                                 "rate_limits",

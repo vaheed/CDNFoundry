@@ -19,7 +19,7 @@ class PlatformSettings extends Page
 
     protected static ?string $navigationLabel = 'Platform settings';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Control plane';
+    protected static string|\UnitEnum|null $navigationGroup = 'Governance';
 
     protected static ?int $navigationSort = 10;
 
@@ -69,6 +69,7 @@ class PlatformSettings extends Page
             'boolean' => Toggle::make($name)->label(FilamentHelp::label($field['label'], $help)),
             'cidr_list', 'ip_list' => TagsInput::make($name)->label(FilamentHelp::label($field['label'], $help)),
             'choice_list' => CheckboxList::make($name)->label(FilamentHelp::label($field['label'], $help))->options($field['options'])->columns(2),
+            'url' => TextInput::make($name)->label(FilamentHelp::label($field['label'], $help))->url()->maxLength(2048)->placeholder('https://grafana.example.com/explore'),
             default => TextInput::make($name)->label(FilamentHelp::label($field['label'], $help))->integer()->required(),
         };
     }

@@ -1,6 +1,7 @@
 <x-filament-panels::page>
     @php
         $state = $this->state;
+        $filterOptions = $this->filterOptions;
         $summary = $state['summary'];
         $formatBytes = function (int|float|string|null $value): string {
             $bytes = max(0, (float) ($value ?? 0));
@@ -12,12 +13,33 @@
     @endphp
 
     <div class="cdn-dashboard">
-        <x-filament::section heading="Telemetry status" :description="'Live 24-hour analytics · UTC · bytes · milliseconds · no sampling. Data through ' . ($state['meta']['finalized_until'] ?? 'the finalization boundary') . ' is finalized.'" icon="heroicon-o-signal">
+        <x-filament::section heading="Investigation context" description="Choose the time and scope for every item below. Filters are preserved in the URL; raw previews use up to the latest 24 hours." icon="heroicon-o-funnel">
+            <form method="get" class="cdn-investigation-form">
+                <label><span class="cdn-field-label">Time range</span><select name="range" class="cdn-filter-select"><option value="1h" @selected($this->range === '1h')>1 hour</option><option value="6h" @selected($this->range === '6h')>6 hours</option><option value="24h" @selected($this->range === '24h')>24 hours</option><option value="7d" @selected($this->range === '7d')>7 days</option></select></label>
+                <label><span class="cdn-field-label">Domain</span><select name="domain" class="cdn-filter-select"><option value="">All domains</option>@foreach ($filterOptions['domains'] as $domainId => $domainName)<option value="{{ $domainId }}" @selected((string) $domainId === (string) $this->domain)>{{ $domainName }}</option>@endforeach</select></label>
+                <label><span class="cdn-field-label">Edge</span><select name="edge" class="cdn-filter-select"><option value="">All edges</option>@foreach ($filterOptions['edges'] as $edgeId => $edgeName)<option value="{{ $edgeId }}" @selected((string) $edgeId === (string) $this->edge)>{{ $edgeName }}</option>@endforeach</select></label>
+                <label><span class="cdn-field-label">Analytics focus</span><select name="view" class="cdn-filter-select"><option value="">All telemetry</option><option value="traffic" @selected($this->investigationView === 'traffic')>Traffic and egress</option><option value="cache" @selected($this->investigationView === 'cache')>Cache</option><option value="origin" @selected($this->investigationView === 'origin')>Origin health</option><option value="dns" @selected($this->investigationView === 'dns')>DNS</option></select></label>
+                <label><span class="cdn-field-label">HTTP status</span><select name="status_family" class="cdn-filter-select"><option value="">All statuses</option><option value="4xx" @selected($this->statusFamily === '4xx')>4xx client errors</option><option value="5xx" @selected($this->statusFamily === '5xx')>5xx server errors</option></select></label>
+                <x-filament::button type="submit" icon="heroicon-o-funnel">Apply filters</x-filament::button>
+            </form>
+            <div class="mt-3 flex flex-wrap gap-2">
+                <x-ui.status-pill tone="info">{{ $state['filters']['domain']?->name ?? 'All domains' }}</x-ui.status-pill>
+                @if ($state['filters']['edge'])<x-ui.status-pill tone="warning">Edge {{ $state['filters']['edge'] }} · detailed legacy tables are not edge-scoped</x-ui.status-pill>@endif
+                @if ($state['filters']['view'])<x-ui.status-pill tone="info">{{ str($state['filters']['view'])->headline() }} focus</x-ui.status-pill>@endif
+                @if ($state['filters']['status_family'])<x-ui.status-pill tone="warning">HTTP {{ $state['filters']['status_family'] }} log focus</x-ui.status-pill>@endif
+                @foreach ($state['filters']['errors'] as $error)<x-ui.status-pill tone="danger">{{ $error }}</x-ui.status-pill>@endforeach
+            </div>
+        </x-filament::section>
+
+        <x-filament::section heading="Telemetry status" :description="strtoupper($state['filters']['range']) . ' complete-hour analytics · UTC · bytes · milliseconds · no sampling. Data through ' . ($state['meta']['finalized_until'] ?? 'the finalization boundary') . ' is finalized.'" icon="heroicon-o-signal">
             <div class="flex flex-wrap gap-3">
                 <x-ui.status-pill :tone="$state['available'] ? 'success' : 'danger'">ClickHouse {{ $state['available'] ? 'available' : 'unavailable' }}</x-ui.status-pill>
                 <x-ui.status-pill :tone="$state['buffer']['available'] ? 'success' : 'warning'">Vector metrics {{ $state['buffer']['available'] ? 'available' : 'unavailable' }}</x-ui.status-pill>
                 <x-ui.status-pill :tone="($state['meta']['partial'] ?? true) ? 'info' : 'success'">{{ ($state['meta']['partial'] ?? true) ? 'Live window included' : 'Fully finalized range' }}</x-ui.status-pill>
             </div>
+            @if (in_array($state['meta']['aggregate_state'] ?? null, ['delayed', 'stale'], true))
+                <x-ui.widget-state class="cdn-widget-state--compact mt-3" :state="$state['meta']['aggregate_state']" :description="'Latest complete traffic bucket: ' . ($state['meta']['aggregate_source_timestamp'] ?? 'unavailable')" />
+            @endif
             @if ($state['meta']['partial'] ?? true)
                 <p class="cdn-row-meta mt-3">Normal: the latest {{ $state['meta']['finalization_delay_minutes'] ?? 15 }} minutes remain provisional so this page can include current traffic. This is not a delivery warning; finalized usage is listed separately below.</p>
             @endif
@@ -38,6 +60,11 @@
                 ] as $stat)
                     <x-ui.stat-card :label="$stat['label']" :value="$stat['value']" :description="$stat['description']" :tone="$stat['tone']" />
                 @endforeach
+            </div>
+
+            <div class="cdn-dashboard-columns">
+                @livewire(\App\Filament\Admin\Widgets\TrafficOverviewChart::class, ['pageFilters' => ['range' => $state['filters']['range'], 'compare' => true, 'domain_id' => $state['filters']['domain']?->id, 'edge_id' => $state['filters']['edge']]], key('telemetry-traffic-'.$state['filters']['range'].'-'.($state['filters']['domain']?->id ?? 'all').'-'.($state['filters']['edge'] ?? 'all')))
+                @livewire(\App\Filament\Admin\Widgets\ErrorLatencyChart::class, ['pageFilters' => ['range' => $state['filters']['range'], 'compare' => true, 'domain_id' => $state['filters']['domain']?->id, 'edge_id' => $state['filters']['edge']]], key('telemetry-errors-'.$state['filters']['range'].'-'.($state['filters']['domain']?->id ?? 'all').'-'.($state['filters']['edge'] ?? 'all')))
             </div>
 
             <div class="cdn-dashboard-columns">
@@ -74,7 +101,7 @@
                 </x-filament::section>
             </div>
 
-            <x-filament::section heading="Compression savings" description="Last-hour delivery by encoding. Identity means the response was sent without compression; Fallback explains why compression was skipped." icon="heroicon-o-arrows-pointing-in">
+            <x-filament::section heading="Compression savings" :description="'Delivery by encoding from the latest ' . $state['meta']['raw_window_hours'] . ' hours. Identity means the response was sent without compression; Fallback explains why compression was skipped.'" icon="heroicon-o-arrows-pointing-in">
                 <x-ui.data-table class="[&_.cdn-data-table]:min-w-[48rem]">
                     <x-slot:header><tr><th class="text-left">Encoding / profile</th><th class="text-left">Fallback</th><th class="text-right">Requests</th><th class="text-right">Delivered</th><th class="text-right">Saved</th><th class="text-right">Savings</th></tr></x-slot:header>
                     @forelse ($state['compression']['items'] as $row)
@@ -105,7 +132,7 @@
                             <td class="px-3 py-2 text-right tabular-nums">{{ number_format(((float) ($row['savings_ratio'] ?? 0)) * 100, 1) }}%</td>
                         </tr>
                     @empty
-                        <tr><td colspan="6" class="px-3 py-6 text-center text-gray-500">No compression events were recorded in the last hour.</td></tr>
+                        <tr><td colspan="6" class="px-3 py-6 text-center text-gray-500">No compression events were recorded in the latest {{ $state['meta']['raw_window_hours'] }} hours.</td></tr>
                     @endforelse
                 </x-ui.data-table>
                 @if ($state['compression']['has_more'] || $state['compression']['expanded'])
@@ -120,7 +147,7 @@
                 @endif
             </x-filament::section>
 
-            <x-filament::section heading="Recent logs" description="Masked, bounded previews from the last hour. Five rows per stream until expanded." icon="heroicon-o-document-magnifying-glass">
+            <x-filament::section heading="Recent logs" :description="'Masked, bounded previews from the latest ' . $state['meta']['raw_window_hours'] . ' hours within this investigation. Five rows per stream until expanded.'" icon="heroicon-o-document-magnifying-glass">
                 <div class="grid gap-5 xl:grid-cols-3">
                     @foreach ($state['logs'] as $stream => $logState)
                         <div class="min-w-0">
@@ -135,7 +162,7 @@
                                         @if (isset($row['status']))<span class="cdn-status-pill" data-tone="{{ (int) $row['status'] >= 500 ? 'danger' : 'warning' }}">{{ $row['status'] }}</span>@endif
                                     </div>
                                 @empty
-                                    <x-ui.empty-state :title="'No ' . ($stream === 'requests' ? 'edge request' : $stream) . ' events'" description="Nothing was recorded in the last hour." />
+                                    <x-ui.empty-state :title="'No ' . ($stream === 'requests' ? 'edge request' : $stream) . ' events'" :description="'Nothing was recorded in the latest ' . $state['meta']['raw_window_hours'] . ' hours.'" />
                                 @endforelse
                             </div>
                             @if ($logState['has_more'] || $logState['expanded'])

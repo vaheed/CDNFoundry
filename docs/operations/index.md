@@ -27,6 +27,10 @@ queue, scheduler, backup, MMDB, TLS, runtime-task, and edge-capacity state.
 Prometheus scrapes the token-protected `/metrics` endpoint plus Vector,
 DNSdist, PowerDNS, Alertmanager, and node-exporter.
 
+Use [Laravel operations dashboard](laravel-operations-dashboard.md) for the
+administrator overview's investigation context, operational condition rules,
+derived conditions, refresh strategy, cache isolation, and unsupported metrics.
+
 - Use [Monitoring](monitoring.md) for health and alert interpretation.
 - Use [Production best practices](production-best-practices.md) for readiness
   and change checklists.
