@@ -5,7 +5,7 @@ local bit = require "bit"
 local ffi = require "ffi"
 ffi.cdef[[int kill(int pid, int sig);]]
 local M = {}
-local state = { hosts = {}, certificates = {}, sequence = 0 }
+local state = { hosts = {}, certificates = {}, sequence = 0, generation_id = "bootstrap" }
 local path = os.getenv("EDGE_RUNTIME_FILE") or "/var/lib/cdnfoundry/runtime/active.json"
 local restart_generation = 0
 local certificate_cache = {}
@@ -132,7 +132,13 @@ local function load()
     local raw = file:read("*a"); file:close()
     if #raw > 64 * 1024 * 1024 then return nil, "runtime state exceeds limit" end
     local decoded = cjson.decode(raw)
-    if not decoded or decoded.schema_version ~= 1 or type(decoded.hosts) ~= "table" then return nil, "invalid runtime state" end
+    if decoded and decoded.generation_id == nil and type(decoded.sequence) == "number" then
+        decoded.generation_id = "legacy-" .. tostring(decoded.sequence)
+    end
+    if not decoded or decoded.schema_version ~= 1 or type(decoded.hosts) ~= "table"
+        or type(decoded.generation_id) ~= "string" or #decoded.generation_id > 64 then
+        return nil, "invalid runtime state"
+    end
     if decoded.certificates == nil then decoded.certificates = {} end
     if type(decoded.certificates) ~= "table" then return nil, "invalid runtime certificates" end
     if decoded.sequence ~= state.sequence then
@@ -999,9 +1005,10 @@ function M.passive_failures()
         cell = {
             name = os.getenv("EDGE_CELL_NAME") or "unknown",
             status = drained and "drained" or "ready",
-            capacity = {
-                assigned_domain_count = assigned,
-                active_revision = state.sequence,
+			capacity = {
+				assigned_domain_count = assigned,
+				active_revision = state.sequence,
+				active_generation = state.generation_id,
                 openresty_version = ngx.config.nginx_version,
                 active_connections = tonumber(ngx.var.connections_active) or 0,
                 requests_per_second = requests_per_second,

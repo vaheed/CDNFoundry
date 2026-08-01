@@ -191,6 +191,10 @@ func (c *client) ensureDerivedRuntime(current state) error {
 	if c.runtimeDir == "" || c.derivedEnsured {
 		return nil
 	}
+	if manifest, err := recoverGeneration(c.runtimeDir); err == nil && manifest.Revision == current.Sequence {
+		c.derivedEnsured = true
+		return nil
+	}
 	runtime, pools, err := compileRuntime(current)
 	if err != nil {
 		return err
@@ -715,7 +719,7 @@ func (c *client) sync() error {
 			return err
 		}
 	}
-	current, err := loadState(filepath.Join(c.dir, "active", "state.json"))
+	current, err := loadState(c.activeStatePath())
 	if errors.Is(err, os.ErrNotExist) {
 		return c.full()
 	}
@@ -781,6 +785,13 @@ func (c *client) sync() error {
 	logger.Info("runtime candidate activated", "event", "runtime_candidate_activated", "edge_id", c.id.EdgeID, "revision_id", candidate.Sequence)
 	_ = c.flushAcks()
 	return c.heartbeat(candidate.Sequence)
+}
+
+func (c *client) activeStatePath() string {
+	if c.runtimeDir != "" {
+		return filepath.Join(c.runtimeDir, "current", "state.json")
+	}
+	return filepath.Join(c.dir, "active", "state.json")
 }
 
 func (c *client) refreshGatewayBindings() error {
@@ -1008,6 +1019,53 @@ func (c *client) activate(s state) error {
 	if s.Domains == nil || len(s.Domains) > 100000 {
 		return errors.New("invalid domain count")
 	}
+	if c.runtimeDir != "" {
+		logger.Info("runtime generation activation started", "event", "runtime_generation_activation_started", "edge_id", c.id.EdgeID, "revision_id", s.Sequence)
+		manifest, err := publishGeneration(c.runtimeDir, c.gatewayActiveRevision(s.Sequence), func(candidate, generationID string) error {
+			if err := atomicJSON(filepath.Join(candidate, "state.json"), s); err != nil {
+				return err
+			}
+			runtime, pools, err := compileRuntime(s)
+			if err != nil {
+				return err
+			}
+			runtime["generation_id"] = generationID
+			for _, poolRuntime := range pools {
+				poolRuntime["generation_id"] = generationID
+			}
+			if err := atomicJSON(filepath.Join(candidate, "active.json"), runtime); err != nil {
+				return err
+			}
+			for name, poolRuntime := range pools {
+				if !validPoolName(name) {
+					return errors.New("invalid runtime pool name")
+				}
+				if err := atomicJSON(filepath.Join(candidate, name+".json"), poolRuntime); err != nil {
+					return err
+				}
+			}
+			if err := c.writeCellRuntimesAt(candidate, s.Sequence, pools); err != nil {
+				return err
+			}
+			if c.gatewayBindings != "" {
+				gateway, err := compileGateway(c.gatewayActiveRevision(s.Sequence), pools, c.gatewayBindings)
+				if err != nil {
+					return err
+				}
+				gateway["generation_id"] = generationID
+				if err := atomicJSON(filepath.Join(candidate, "gateway.json"), gateway); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		c.derivedEnsured = true
+		logger.Info("runtime generation activation succeeded", "event", "runtime_generation_activation_succeeded", "edge_id", c.id.EdgeID, "generation_id", manifest.GenerationID, "revision_id", manifest.Revision)
+		return nil
+	}
 	candidate := filepath.Join(c.dir, "candidate")
 	os.RemoveAll(candidate)
 	if err := os.MkdirAll(candidate, 0700); err != nil {
@@ -1074,6 +1132,10 @@ func (c *client) activate(s state) error {
 }
 
 func (c *client) writeCellRuntimes(sequence uint64, pools map[string]map[string]any) error {
+	return c.writeCellRuntimesAt(c.runtimeDir, sequence, pools)
+}
+
+func (c *client) writeCellRuntimesAt(directory string, sequence uint64, pools map[string]map[string]any) error {
 	for cellName, poolName := range c.resolvedCellAssignments(pools) {
 		runtime := pools[cellName]
 		if runtime == nil {
@@ -1082,7 +1144,7 @@ func (c *client) writeCellRuntimes(sequence uint64, pools map[string]map[string]
 		if runtime == nil {
 			runtime = map[string]any{"schema_version": 1, "sequence": sequence, "hosts": map[string]any{}, "certificates": map[string]any{}}
 		}
-		if err := atomicJSON(filepath.Join(c.runtimeDir, cellName+".json"), runtime); err != nil {
+		if err := atomicJSON(filepath.Join(directory, cellName+".json"), runtime); err != nil {
 			return err
 		}
 	}
@@ -1380,18 +1442,28 @@ func compileGateway(sequence uint64, pools map[string]map[string]any, raw string
 func (c *client) heartbeat(sequence uint64) error {
 	cells, failures, security := c.runtimeStatus()
 	listenerReady := false
+	expectedGeneration := ""
+	if c.runtimeDir != "" {
+		if manifest, err := readGenerationPointer(c.runtimeDir, "current"); err == nil {
+			expectedGeneration = manifest.GenerationID
+		}
+	}
 	for _, cell := range cells {
-		if cell["status"] == "ready" {
+		capacity, _ := cell["capacity"].(map[string]any)
+		generation, _ := capacity["active_generation"].(string)
+		if cell["status"] == "ready" && (expectedGeneration == "" || generation == expectedGeneration) {
 			listenerReady = true
+		} else if expectedGeneration != "" && generation != expectedGeneration {
+			logger.Warn("runtime reader generation mismatch", "event", "runtime_reader_generation_mismatch", "edge_id", c.id.EdgeID, "expected_generation_id", expectedGeneration, "loaded_generation_id", generation)
 		}
 	}
 	gateway := c.gatewayStatus()
 	if c.gatewayStatusURL != "" {
-		listenerReady = gateway["ready"] == true && gateway["active_revision"] == c.gatewayActiveRevision(sequence)
+		listenerReady = gateway["ready"] == true && gateway["active_revision"] == c.gatewayActiveRevision(sequence) && (expectedGeneration == "" || gateway["active_generation"] == expectedGeneration)
 	}
 	payload := map[string]any{
 		"agent_version": version, "listener_ready": listenerReady, "active_sequence": sequence,
-		"cells": cells, "passive_origins": failures, "noisy_domains": security, "gateway": gateway,
+		"active_generation": expectedGeneration, "cells": cells, "passive_origins": failures, "noisy_domains": security, "gateway": gateway,
 	}
 	if versions := runtimeVersions(); len(versions) == 4 {
 		payload["runtime_versions"] = versions
@@ -1431,6 +1503,13 @@ func (c *client) gatewayStatus() map[string]any {
 		"cdnfoundry_gateway_candidate_rejections_total": "candidate_rejections",
 	}
 	for _, line := range strings.Split(string(body), "\n") {
+		if strings.HasPrefix(line, "cdnfoundry_gateway_generation_info{generation_id=\"") {
+			value := strings.TrimPrefix(line, "cdnfoundry_gateway_generation_info{generation_id=\"")
+			if end := strings.Index(value, "\""); end > 0 && end <= 64 {
+				status["active_generation"] = value[:end]
+			}
+			continue
+		}
 		fields := strings.Fields(line)
 		key := names[first(fields...)]
 		if len(fields) != 2 || key == "" {
