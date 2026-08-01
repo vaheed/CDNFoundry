@@ -45,6 +45,16 @@ def wait_for_cell(timeout_seconds: float = 15) -> None:
     raise RuntimeError(f"edge cell did not become ready\n{run('docker', 'logs', CELL, check=False).stderr}")
 
 
+def wait_for_origin(address: str, marker: str, timeout_seconds: float = 10) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        result = run("docker", "exec", CELL, "wget", "-T", "2", "-qO-", f"http://{address}/", check=False)
+        if result.returncode == 0 and result.stdout == f"{marker}\n":
+            return
+        time.sleep(0.2)
+    raise RuntimeError(f"{marker} origin did not become ready at {address}")
+
+
 def endpoint(host: str, marker: str) -> dict:
     return {
         "host": host, "port": 80, "scheme": "http", "host_header": f"{marker}.origin",
@@ -153,8 +163,15 @@ def main() -> None:
             assert all("backup\n" in response for response in concurrent), "concurrent traffic escaped the backup"
 
             run("docker", "start", PRIMARY)
-            time.sleep(5.2)
-            probe_one = request("failover.example", "/probe-one")
+            wait_for_origin(primary["host"], "primary")
+            probe_one = ""
+            failback_deadline = time.monotonic() + 10
+            while time.monotonic() < failback_deadline:
+                probe_one = request("failover.example", "/probe-one")
+                if "primary\n" in probe_one:
+                    break
+                time.sleep(0.2)
+            assert "primary\n" in probe_one, probe_one
             time.sleep(0.1)
             probe_two = request("failover.example", "/probe-two")
             time.sleep(0.1)
