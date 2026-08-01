@@ -90,9 +90,10 @@ VitePress generates clean URLs, local search, metadata chunks, and a sitemap.
 `DOCS_SITE_URL` and `DOCS_BASE` to the production location; update
 `docs/public/robots.txt` if the canonical origin changes.
 
-The `Documentation website` GitHub Actions workflow validates the source and
-rendered output, uploads `docs/.vitepress/dist`, and deploys that artifact to
-GitHub Pages. Production uses:
+The single `CI` GitHub Actions workflow validates the source and rendered
+output in its documentation stage, uploads `docs/.vitepress/dist`, and deploys
+that artifact to GitHub Pages after every validation stage passes on `main`.
+Production uses:
 
 ```text
 DOCS_SITE_URL=https://vaheed.github.io/CDNFoundry
