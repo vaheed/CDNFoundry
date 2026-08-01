@@ -36,12 +36,13 @@ runtime. Customers cannot upload rules, enter `SecRule`, or define expressions.
 
 | UI choice | Internal profile | What happens |
 | --- | --- | --- |
-| Off | `off` | No attack-signature inspection |
-| Observe | `monitor` | Detect and report; never block |
-| Recommended | `balanced` | Block common attacks; best default after observing |
-| High sensitivity | `strict` | Block more aggressively; higher false-positive risk |
+| Off | `off` | CRS is disabled for the transaction; platform request-safety and abuse limits remain active |
+| Observe | `monitor` | CRS runs in transaction-level detection-only mode and never disrupts solely for an anomaly |
+| Recommended | `balanced` | CRS blocks when its inbound anomaly score reaches 5 |
+| High sensitivity | `strict` | CRS uses paranoia level 2 and blocks at score 3; false-positive risk is higher |
 
-The public response exposes only `waf_request_blocked` or `waf_body_limit`.
+The public response is a controlled HTTP status and never exposes matched data
+or rule text. Platform body admission can expose only `waf_body_limit`.
 Paths, parameter values, request bodies, matched data, raw ModSecurity messages,
 and rule text are never returned or placed in CDNFoundry telemetry.
 
@@ -76,9 +77,36 @@ WAF image changes use the normal bounded edge release and rollback process.
 Candidate validation or acknowledgement failure leaves the active cell and
 signed artifact unchanged.
 
-Telemetry contains only profile, numeric rule ID, anomaly score, action,
-processing microseconds, body-limit outcome, and numeric exclusion ID.
+The Nginx request event contains the selected profile, transaction action,
+body-limit outcome, and numeric exclusion ID. A separate minimal ModSecurity
+audit record uses parts `A`, `H`, and `Z` only; request headers, cookies,
+authorization values, bodies, and query strings are excluded. CRS rule logging
+is suppressed and only bounded anomaly/intervention evidence is retained.
 Telemetry remains best effort and never participates in serving.
+
+An exclusion that matches its literal path, parameter, cookie, or rule scope
+places that one request into monitor mode. This is deliberately broader than
+removing a dynamically supplied rule ID because libModSecurity does not accept
+runtime-expanded `ctl:ruleRemoveById` safely. The exception remains bounded,
+owned, audited, and expiring; use the narrowest literal dimension.
+
+## Failure behavior
+
+- Invalid or unknown profiles are rejected by Laravel and invalid runtime JSON
+  leaves the cell's last valid in-memory state active.
+- Missing CRS files, an unavailable module, or CRS initialization errors fail
+  the WAF cell at startup; readiness prevents placement on it.
+- A transaction-level ModSecurity error preserves Nginx's module result and is
+  surfaced as a cell/runtime error; operators remove an unhealthy WAF cell from
+  placement rather than silently bypassing managed inspection.
+- Telemetry, ClickHouse, and analytics failures fail open: serving continues
+  and the bounded Vector buffer drops newest events when full.
+- Loss of the control plane does not change the loaded signed profile.
+
+Platform safety checks are not managed WAF signatures. They continue to enforce
+host identity, method/header/body bounds, trusted-client parsing, rate and
+connection limits, origin SSRF/loop protection, and malformed JSON handling
+even when managed CRS is Off.
 
 Before deploying Vector, apply the additive ClickHouse migration:
 
