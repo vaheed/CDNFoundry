@@ -30,7 +30,7 @@ class OperationalLoggingContractTest(unittest.TestCase):
         self.assertEqual(128, service["pids_limit"])
         self.assertTrue(any(volume.get("source") == "loki-data" and volume.get("target") == "/loki" for volume in service["volumes"]))
         dockerfile = (ROOT / "docker/loki/Dockerfile").read_text()
-        self.assertIn("grafana/loki:3.7.2@sha256:", dockerfile)
+        self.assertIn("grafana/loki:3.7.4@sha256:", dockerfile)
         for contract in ("store: tsdb", "object_store: filesystem", "retention_enabled: true", "max_line_size: 65536", "query_timeout: 30s"):
             self.assertIn(contract, self.loki)
 
