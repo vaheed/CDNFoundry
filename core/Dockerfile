@@ -1,4 +1,4 @@
-FROM php:8.5-fpm-alpine AS php-dependencies
+FROM php:8.5-fpm-alpine@sha256:9dc81f4086ea5402227a6bcc489b04b4baba12394624d9621faa92ed812fb8ee AS php-dependencies
 
 RUN apk add --no-cache icu-libs libpq libzip libmaxminddb nginx supervisor su-exec postgresql-client restic \
     && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS icu-dev postgresql-dev libzip-dev \
@@ -7,12 +7,12 @@ RUN apk add --no-cache icu-libs libpq libzip libmaxminddb nginx supervisor su-ex
 
 WORKDIR /app
 
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+COPY --from=composer:2@sha256:629d4ef35e75349d452851637d37a40ac33a09d6ac010139020603d79713d9bf /usr/bin/composer /usr/bin/composer
 COPY composer.json composer.lock ./
 RUN --mount=type=cache,target=/tmp/composer-cache \
     COMPOSER_CACHE_DIR=/tmp/composer-cache COMPOSER_MAX_PARALLEL_HTTP=4 COMPOSER_IPRESOLVE=4 composer install --no-dev --no-interaction --no-progress --prefer-dist --no-scripts --classmap-authoritative
 
-FROM node:24-alpine AS frontend-assets
+FROM node:24-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3 AS frontend-assets
 
 WORKDIR /app
 
@@ -54,4 +54,8 @@ RUN --mount=type=cache,target=/tmp/composer-cache \
 RUN mv /app/vendor /opt/cdnf-vendor
 
 FROM php-base AS production
-LABEL org.opencontainers.image.source="https://github.com/vaheed/CDNFoundry"
+ARG SOURCE_REVISION=development RELEASE_VERSION=development BUILD_DATE=1970-01-01T00:00:00Z
+LABEL org.opencontainers.image.source="https://github.com/vaheed/CDNFoundry" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" org.opencontainers.image.version="${RELEASE_VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" org.opencontainers.image.description="CDNFoundry Laravel control plane" \
+      org.opencontainers.image.licenses="Apache-2.0" org.opencontainers.image.documentation="https://vaheed.github.io/CDNFoundry/"

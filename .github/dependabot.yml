@@ -1,0 +1,38 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+  - package-ecosystem: docker
+    directory: /core
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 3
+  - package-ecosystem: docker
+    directory: /edge-agent
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 3
+  - package-ecosystem: docker
+    directory: /edge-gateway
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 3
+  - package-ecosystem: docker
+    directory: /docker/openresty
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 3
+  - package-ecosystem: docker
+    directory: /docker/nginx
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 3
+  - package-ecosystem: docker
+    directory: /docker/mmdb-updater
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 3
+  - package-ecosystem: docker
+    directory: /docker/grafana
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 3
+  - package-ecosystem: docker
+    directory: /docker/loki
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 3

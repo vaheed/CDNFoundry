@@ -3,6 +3,11 @@ FROM ${GRAFANA_IMAGE}
 
 ARG CLICKHOUSE_PLUGIN_VERSION=4.8.2
 ARG CLICKHOUSE_PLUGIN_SHA256=81e824a64b3b2881ca506de798dcc4ba56e11f5f1e3acc7c01faf4b69ac71649
+ARG SOURCE_REVISION=development RELEASE_VERSION=development BUILD_DATE=1970-01-01T00:00:00Z
+LABEL org.opencontainers.image.source="https://github.com/vaheed/CDNFoundry" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" org.opencontainers.image.version="${RELEASE_VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" org.opencontainers.image.description="CDNFoundry Grafana observability" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" org.opencontainers.image.documentation="https://vaheed.github.io/CDNFoundry/"
 USER root
 ADD --checksum=sha256:${CLICKHOUSE_PLUGIN_SHA256} \
     https://github.com/grafana/clickhouse-datasource/releases/download/v${CLICKHOUSE_PLUGIN_VERSION}/grafana-clickhouse-datasource-${CLICKHOUSE_PLUGIN_VERSION}.linux_amd64.zip \

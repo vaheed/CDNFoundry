@@ -15,6 +15,7 @@ jobs:
   core:
     name: PHP, contracts, and assets
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       APP_ENV: testing
       APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
@@ -22,13 +23,13 @@ jobs:
       run:
         working-directory: core
     steps:
-      - uses: actions/checkout@v6
-      - uses: shivammathur/setup-php@v2
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: shivammathur/setup-php@b604ade2a87db23f8871b7182e69ec5e75effb45 # v2
         with:
           php-version: '8.4'
           extensions: mbstring, pdo_sqlite
           coverage: none
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
           cache: npm
@@ -53,8 +54,11 @@ jobs:
   compose:
     name: Compose contracts and production images
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Enforce software supply-chain policy
+        run: python3 scripts/supply-chain-policy.py
       - name: Validate development topology
         run: docker compose -f compose.dev.yml config --quiet
       - name: Validate production topology
@@ -128,7 +132,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Start migratable development control plane
         run: make dev-control-up
       - name: Apply migrations explicitly
@@ -182,7 +186,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Start bounded control-plane topology
         run: make dev-scale-up
       - name: Apply migrations explicitly
@@ -218,9 +222,10 @@ jobs:
   go:
     name: Go test and build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.24.x'
           cache: false
@@ -258,9 +263,10 @@ jobs:
   docs:
     name: Documentation contracts and production build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
           cache: npm
@@ -277,12 +283,15 @@ jobs:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     needs: [core, compose, backend-e2e, scale-e2e, go, docs]
     runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: production
     permissions:
       contents: read
       packages: write
+      id-token: write
     steps:
-      - uses: actions/checkout@v6
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -290,27 +299,33 @@ jobs:
       - name: Build commit-addressed images
         env:
           RELEASE: ${{ github.sha }}
+          RELEASE_REF_NAME: ${{ github.ref_name }}
         run: |
-          docker build --target production -t ghcr.io/vaheed/cdnfoundry-core:${RELEASE} core
-          docker build --build-arg CORE_IMAGE=ghcr.io/vaheed/cdnfoundry-core:${RELEASE} --target web -t ghcr.io/vaheed/cdnfoundry-web:${RELEASE} -f docker/nginx/Dockerfile.production .
-          docker build --build-arg CORE_IMAGE=ghcr.io/vaheed/cdnfoundry-core:${RELEASE} --target edge-control -t ghcr.io/vaheed/cdnfoundry-edge-control:${RELEASE} -f docker/nginx/Dockerfile.production .
-          docker build -t ghcr.io/vaheed/cdnfoundry-edge-runtime:${RELEASE} -f docker/openresty/Dockerfile .
-          docker build -t ghcr.io/vaheed/cdnfoundry-edge-agent:${RELEASE} edge-agent
-          docker build -t ghcr.io/vaheed/cdnfoundry-edge-gateway:${RELEASE} edge-gateway
-          docker build -t ghcr.io/vaheed/cdnfoundry-mmdb-updater:${RELEASE} docker/mmdb-updater
-          docker build -t ghcr.io/vaheed/cdnfoundry-grafana:${RELEASE} docker/grafana
-          docker build -t ghcr.io/vaheed/cdnfoundry-loki:${RELEASE} docker/loki
-      - name: Push commit and channel tags
+          set -euo pipefail
+          build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          labels=(--build-arg "SOURCE_REVISION=${RELEASE}" --build-arg "RELEASE_VERSION=${RELEASE_REF_NAME}" --build-arg "BUILD_DATE=${build_date}")
+          docker build "${labels[@]}" --target production -t "ghcr.io/vaheed/cdnfoundry-core:${RELEASE}" core
+          docker build "${labels[@]}" --build-arg "CORE_IMAGE=ghcr.io/vaheed/cdnfoundry-core:${RELEASE}" --target web -t "ghcr.io/vaheed/cdnfoundry-web:${RELEASE}" -f docker/nginx/Dockerfile.production .
+          docker build "${labels[@]}" --build-arg "CORE_IMAGE=ghcr.io/vaheed/cdnfoundry-core:${RELEASE}" --target edge-control -t "ghcr.io/vaheed/cdnfoundry-edge-control:${RELEASE}" -f docker/nginx/Dockerfile.production .
+          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-edge-runtime:${RELEASE}" -f docker/openresty/Dockerfile .
+          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-edge-agent:${RELEASE}" edge-agent
+          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-edge-gateway:${RELEASE}" edge-gateway
+          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-mmdb-updater:${RELEASE}" docker/mmdb-updater
+          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-grafana:${RELEASE}" docker/grafana
+          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-loki:${RELEASE}" docker/loki
+      - name: Push, scan, attest, and sign immutable images
         env:
           RELEASE: ${{ github.sha }}
           RELEASE_REF: ${{ github.ref }}
           RELEASE_REF_NAME: ${{ github.ref_name }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
-
           images=(core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater grafana loki)
           aliases=()
-
+          mkdir -p release-evidence
+          printf '{"schema_version":1,"release_version":"%s","source_commit":"%s","created_at":"%s","workflow_run_id":"%s","runtime_schema_version":1,"database_migration":"2026_07_29_200000_add_observability_and_fleet_rollouts","images":[' \
+            "${RELEASE_REF_NAME}" "${RELEASE}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${WORKFLOW_RUN_ID}" > release-evidence/release-manifest.json
           if [[ "${RELEASE_REF}" == "refs/heads/main" ]]; then
             aliases+=(latest)
           elif [[ "${RELEASE_REF}" == refs/tags/v* ]]; then
@@ -327,12 +342,50 @@ jobs:
               aliases+=("${minor}" "${major}" latest)
             fi
           fi
-
+          first=true
           for component in "${images[@]}"; do
             image="ghcr.io/vaheed/cdnfoundry-${component}"
             docker push "${image}:${RELEASE}"
+            digest="$(docker inspect --format='{{index .RepoDigests 0}}' "${image}:${RELEASE}")"
+            test "${digest}" != "${image}:${RELEASE}"
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}/release-evidence:/out" \
+              anchore/syft:v1.33.0@sha256:f94e5d9fce1f2278491a8e3a63bd5f6ddb81fdfdbb8bf7a1637565c1d5344357 \
+              "${image}:${RELEASE}" -o "spdx-json=/out/${component}.spdx.json"
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/work:ro" -v "${PWD}/release-evidence:/out" \
+              aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e \
+              image --config /work/supply-chain/trivy.yaml --format json --output "/out/${component}.trivy.json" --exit-code 1 --severity CRITICAL "${image}:${RELEASE}"
+            jq -n --arg source "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" --arg commit "${RELEASE}" --arg workflow "${GITHUB_WORKFLOW_REF}" --arg builder "${GITHUB_ACTOR}" --arg image "${digest}" \
+              '{_type:"https://in-toto.io/Statement/v1",subject:[{name:$image,digest:{sha256:($image|split("@sha256:")[1])}}],predicateType:"https://slsa.dev/provenance/v1",predicate:{buildDefinition:{buildType:"https://github.com/CDNFoundry/container-release/v1",externalParameters:{source:$source,commit:$commit,workflow:$workflow}},runDetails:{builder:{id:$builder}}}}' \
+              > "release-evidence/${component}.provenance.json"
+            for command in \
+              "sign --yes ${digest}" \
+              "attest --yes --type spdxjson --predicate /evidence/${component}.spdx.json ${digest}" \
+              "attest --yes --type slsaprovenance --predicate /evidence/${component}.provenance.json ${digest}"; do
+              docker run --rm -e ACTIONS_ID_TOKEN_REQUEST_TOKEN -e ACTIONS_ID_TOKEN_REQUEST_URL -v "${PWD}/release-evidence:/evidence:ro" \
+                gcr.io/projectsigstore/cosign:v3.0.2@sha256:b29487e48205d875c324c79583e2806d9d269c0fa299e0861bbec023d8430c8b ${command}
+            done
+            ${first} || printf ',' >> release-evidence/release-manifest.json
+            first=false
+            jq -n --arg component "${component}" --arg image "${digest}" \
+              '{component:$component,image:$image,sbom:"oci-attestation:spdxjson",signature:"sigstore-keyless",provenance:"oci-attestation:slsaprovenance",vulnerability_scan:"passed-critical-policy"}' \
+              >> release-evidence/release-manifest.json
+          done
+          printf ']}' >> release-evidence/release-manifest.json
+          jq empty release-evidence/release-manifest.json
+          docker run --rm -e ACTIONS_ID_TOKEN_REQUEST_TOKEN -e ACTIONS_ID_TOKEN_REQUEST_URL -v "${PWD}/release-evidence:/evidence" \
+            gcr.io/projectsigstore/cosign:v3.0.2@sha256:b29487e48205d875c324c79583e2806d9d269c0fa299e0861bbec023d8430c8b \
+            sign-blob --yes --bundle /evidence/release-manifest.sigstore.json /evidence/release-manifest.json
+          for component in "${images[@]}"; do
+            image="ghcr.io/vaheed/cdnfoundry-${component}"
             for alias in "${aliases[@]}"; do
               docker tag "${image}:${RELEASE}" "${image}:${alias}"
               docker push "${image}:${alias}"
             done
           done
+      - name: Retain release evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-evidence-${{ github.sha }}
+          path: release-evidence/
+          if-no-files-found: error
+          retention-days: 90

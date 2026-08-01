@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "release_version": "1.0.0",
+  "source_commit": "0123456789abcdef0123456789abcdef01234567",
+  "created_at": "2026-08-01T00:00:00Z",
+  "workflow_run_id": "123456789",
+  "runtime_schema_version": 1,
+  "database_migration": "2026_07_29_200000_add_observability_and_fleet_rollouts",
+  "images": [
+    {
+      "component": "core",
+      "image": "ghcr.io/vaheed/cdnfoundry-core@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "sbom": "oci-attestation:spdxjson",
+      "signature": "sigstore-keyless",
+      "provenance": "oci-attestation:slsaprovenance",
+      "vulnerability_scan": "passed-critical-policy"
+    }
+  ]
+}

@@ -1,7 +1,7 @@
-FROM openresty/openresty:1.31.1.1-0-alpine AS brotli-builder
+FROM openresty/openresty:1.31.1.1-0-alpine@sha256:23520ed7708e21bbc49229eae9bb1baf4ed915a262f84a9235ebf47fbf9cc3ac AS brotli-builder
 
 ARG NGX_BROTLI_COMMIT=a71f9312c2deb28875acc7bacfdd5695a111aa53
-ARG MODSECURITY_VERSION=v3.0.14
+ARG MODSECURITY_COMMIT=a555e5a44573e50f04ad997b3b24c214c42f8e29
 ARG MODSECURITY_NGINX_VERSION=v1.0.4
 ARG OWASP_CRS_VERSION=v4.26.0
 RUN apk add --no-cache autoconf automake build-base cmake curl-dev git libtool linux-headers lmdb-dev libxml2-dev openssl-dev pcre-dev pcre2-dev perl yajl-dev zlib-dev
@@ -10,7 +10,8 @@ RUN git clone https://github.com/google/ngx_brotli.git /tmp/ngx_brotli \
     && git -C /tmp/ngx_brotli submodule update --init --recursive \
     && cmake -S /tmp/ngx_brotli/deps/brotli -B /tmp/ngx_brotli/deps/brotli/out -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
     && cmake --build /tmp/ngx_brotli/deps/brotli/out --config Release --target brotlienc
-RUN git clone --depth 1 --branch "${MODSECURITY_VERSION}" https://github.com/owasp-modsecurity/ModSecurity.git /tmp/ModSecurity \
+RUN git clone https://github.com/owasp-modsecurity/ModSecurity.git /tmp/ModSecurity \
+    && git -C /tmp/ModSecurity checkout "${MODSECURITY_COMMIT}" \
     && git -C /tmp/ModSecurity submodule update --init --depth 1 others/libinjection \
     && git -C /tmp/ModSecurity submodule update --init --recursive --depth 1 others/mbedtls \
     && sed -i '1i#ifdef __cplusplus\n#include <cstdint>\n#endif' /tmp/ModSecurity/headers/modsecurity/collection/collection.h \
@@ -21,19 +22,27 @@ RUN git clone --depth 1 --branch "${MODSECURITY_VERSION}" https://github.com/owa
     && make install
 
 FROM brotli-builder AS module-builder
-ARG MODSECURITY_NGINX_VERSION=v1.0.4
-ARG OWASP_CRS_VERSION=v4.26.0
-RUN git clone --depth 1 --branch "${MODSECURITY_NGINX_VERSION}" https://github.com/owasp-modsecurity/ModSecurity-nginx.git /tmp/ModSecurity-nginx \
-    && git clone --depth 1 --branch "${OWASP_CRS_VERSION}" https://github.com/coreruleset/coreruleset.git /tmp/coreruleset \
+ARG MODSECURITY_NGINX_COMMIT=3f4b57df10ce43b1f1c722141f7621dc64838be8
+ARG OWASP_CRS_COMMIT=955649c1221633cc3ea63674904e94fbc5fb6356
+ARG OPENRESTY_SHA256=65b78baadd3f0984055de89bf13f4a1932e5bfe9c31932037a134ea2b1a0ce42
+RUN git clone https://github.com/owasp-modsecurity/ModSecurity-nginx.git /tmp/ModSecurity-nginx \
+    && git -C /tmp/ModSecurity-nginx checkout "${MODSECURITY_NGINX_COMMIT}" \
+    && git clone https://github.com/coreruleset/coreruleset.git /tmp/coreruleset \
+    && git -C /tmp/coreruleset checkout "${OWASP_CRS_COMMIT}" \
     && wget -q "https://openresty.org/download/openresty-1.31.1.1.tar.gz" -O /tmp/openresty.tar.gz \
+    && echo "${OPENRESTY_SHA256}  /tmp/openresty.tar.gz" | sha256sum -c - \
     && tar -xzf /tmp/openresty.tar.gz -C /tmp \
     && cd /tmp/openresty-1.31.1.1/bundle/nginx-1.31.1 \
     && LD_LIBRARY_PATH=/usr/local/modsecurity/lib MODSECURITY_INC=/usr/local/modsecurity/include MODSECURITY_LIB=/usr/local/modsecurity/lib \
        ./configure --with-compat --add-dynamic-module=/tmp/ngx_brotli --add-dynamic-module=/tmp/ModSecurity-nginx \
     && make modules
 
-FROM openresty/openresty:1.31.1.1-0-alpine
-LABEL org.opencontainers.image.source="https://github.com/vaheed/CDNFoundry"
+FROM openresty/openresty:1.31.1.1-0-alpine@sha256:23520ed7708e21bbc49229eae9bb1baf4ed915a262f84a9235ebf47fbf9cc3ac
+ARG SOURCE_REVISION=development RELEASE_VERSION=development BUILD_DATE=1970-01-01T00:00:00Z
+LABEL org.opencontainers.image.source="https://github.com/vaheed/CDNFoundry" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" org.opencontainers.image.version="${RELEASE_VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" org.opencontainers.image.description="CDNFoundry OpenResty edge runtime" \
+      org.opencontainers.image.licenses="Apache-2.0" org.opencontainers.image.documentation="https://vaheed.github.io/CDNFoundry/"
 
 RUN apk add --no-cache libcurl libgcc libstdc++ lmdb lua5.1-maxminddb libxml2 pcre yajl \
     && addgroup -S -g 10101 cdnf && adduser -S -D -H -u 10101 -G cdnf cdnf \
