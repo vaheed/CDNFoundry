@@ -1,9 +1,23 @@
 <template>
   <figure
     class="cdnf-diagram"
-    :class="{ 'cdnf-diagram-failed': failure }"
+    :class="{
+      'cdnf-diagram-failed': failure,
+      'cdnf-diagram-expanded': expanded
+    }"
     :aria-busy="rendering ? 'true' : 'false'"
+    @keydown.esc.prevent.stop="closeExpanded"
   >
+    <div v-if="renderedSvg" class="cdnf-diagram-toolbar">
+      <button
+        type="button"
+        class="cdnf-diagram-toggle"
+        :aria-expanded="expanded ? 'true' : 'false'"
+        @click="toggleExpanded"
+      >
+        {{ expanded ? 'Close large view' : 'View larger' }}
+      </button>
+    </div>
     <div
       v-if="renderedSvg"
       class="cdnf-diagram-svg"
@@ -42,10 +56,21 @@ const source = computed(() => decodeURIComponent(props.graph))
 const renderedSvg = ref('')
 const failure = ref('')
 const rendering = ref(false)
+const expanded = ref(false)
 
 let observer: MutationObserver | undefined
 let active = true
 let dark = false
+
+function closeExpanded(): void {
+  expanded.value = false
+  document.documentElement.classList.remove('cdnf-diagram-open')
+}
+
+function toggleExpanded(): void {
+  expanded.value = !expanded.value
+  document.documentElement.classList.toggle('cdnf-diagram-open', expanded.value)
+}
 
 async function renderDiagram(): Promise<void> {
   rendering.value = true
@@ -97,5 +122,6 @@ onMounted(async () => {
 onUnmounted(() => {
   active = false
   observer?.disconnect()
+  closeExpanded()
 })
 </script>

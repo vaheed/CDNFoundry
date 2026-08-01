@@ -109,6 +109,8 @@ The default VitePress theme provides keyboard-accessible local search,
 responsive navigation, and a light/dark appearance switch. The local diagram
 component server-renders the complete diagram source as a fallback, then uses
 Mermaid to replace it with an SVG and rerenders when the color theme changes.
+Rendered diagrams use a compact page-height limit by default; readers can open
+the full-size view with **View larger** and close it with the button or Escape.
 If client rendering fails, readers see a diagnostic fallback instead of an
 empty box. The rendered-site validator requires navigation, search, appearance
 control, a fallback for every diagram, rendered custom callouts, and the Google

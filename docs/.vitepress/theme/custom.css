@@ -29,6 +29,7 @@
 }
 
 .vp-doc .cdnf-diagram {
+  position: relative;
   margin: 1.5rem 0;
   overflow-x: auto;
   padding: 1rem;
@@ -38,15 +39,75 @@
 }
 
 .vp-doc .cdnf-diagram-svg {
-  min-width: max-content;
   text-align: center;
 }
 
 .vp-doc .cdnf-diagram-svg svg {
   display: block;
+  width: auto;
   max-width: 100%;
   height: auto;
+  max-height: min(52vh, 28rem);
   margin: 0 auto;
+}
+
+.vp-doc .cdnf-diagram-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+.vp-doc .cdnf-diagram-toggle {
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 7px;
+  color: var(--vp-c-text-2);
+  background: var(--vp-c-bg);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.vp-doc .cdnf-diagram-toggle:hover {
+  border-color: var(--vp-c-brand-1);
+  color: var(--vp-c-brand-1);
+}
+
+.vp-doc .cdnf-diagram-toggle:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
+}
+
+html.cdnf-diagram-open {
+  overflow: hidden;
+}
+
+.vp-doc .cdnf-diagram-expanded {
+  position: fixed;
+  inset: 1rem;
+  z-index: 1000;
+  max-width: none;
+  margin: 0;
+  overflow: auto;
+  background: var(--vp-c-bg);
+  box-shadow: 0 18px 60px rgb(0 0 0 / 30%);
+}
+
+.vp-doc .cdnf-diagram-expanded .cdnf-diagram-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.vp-doc .cdnf-diagram-expanded .cdnf-diagram-svg {
+  min-width: max-content;
+}
+
+.vp-doc .cdnf-diagram-expanded .cdnf-diagram-svg svg {
+  max-width: none;
+  max-height: none;
 }
 
 .vp-doc .cdnf-diagram-fallback strong {
@@ -70,4 +131,24 @@
 
 .vp-doc .custom-block {
   box-shadow: 0 1px 2px rgb(8 31 42 / 8%);
+}
+
+@media (max-width: 640px) {
+  .vp-doc .cdnf-diagram {
+    padding: 0.75rem;
+  }
+
+  .vp-doc .cdnf-diagram-expanded {
+    inset: 0.5rem;
+  }
+}
+
+@media print {
+  .vp-doc .cdnf-diagram-toolbar {
+    display: none;
+  }
+
+  .vp-doc .cdnf-diagram-svg svg {
+    max-height: none;
+  }
 }

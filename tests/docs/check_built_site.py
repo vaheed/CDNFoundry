@@ -89,6 +89,19 @@ def main() -> int:
         if marker not in home_markup:
             failures.append(f"index.html: missing {feature}")
 
+    compiled_css = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((DIST / "assets").glob("*.css"))
+    )
+    diagram_style_markers = {
+        "compact diagram height": "max-height: min(52vh, 28rem)",
+        "large diagram view": ".cdnf-diagram-expanded",
+        "diagram size control": ".cdnf-diagram-toggle",
+    }
+    for feature, marker in diagram_style_markers.items():
+        if marker not in compiled_css:
+            failures.append(f"compiled CSS: missing {feature}")
+
     published_sources = [
         path
         for path in SOURCE_DOCS.rglob("*.md")
