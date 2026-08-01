@@ -109,7 +109,7 @@ func TestActivationPreservesPreviousAndRestartState(t *testing.T) {
 	if err != nil || json.Unmarshal(poolBytes, &poolRuntime) != nil || poolRuntime.Hosts["www.example.test"] == nil {
 		t.Fatal("placement-aware pool runtime was not published")
 	}
-	poolInfo, err := os.Stat(filepath.Join(dir, "runtime", "shared-default.json"))
+	poolInfo, err := os.Stat(filepath.Join(dir, "runtime", "current", "shared-default.json"))
 	if err != nil || poolInfo.Mode().Perm() != 0600 {
 		t.Fatalf("runtime snapshot containing TLS keys must be mode 0600: %v", err)
 	}
