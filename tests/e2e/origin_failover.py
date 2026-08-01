@@ -188,6 +188,8 @@ def main() -> None:
 
             stale_seed = request("stale-failover.example", "/resident-final")
             assert "primary\n" in stale_seed and "X-CDNFoundry-Cache: MISS" in stale_seed, stale_seed
+            stale_resident = request("stale-failover.example", "/resident-final")
+            assert "primary\n" in stale_resident and "X-CDNFoundry-Cache: HIT" in stale_resident, stale_resident
             stale_seeded_at = time.monotonic()
             time.sleep(2.1)
             run("docker", "kill", PRIMARY, BACKUP)
