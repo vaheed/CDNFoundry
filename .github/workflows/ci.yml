@@ -381,8 +381,9 @@ jobs:
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}/release-evidence:/out" \
               anchore/syft:v1.33.0@sha256:f94e5d9fce1f2278491a8e3a63bd5f6ddb81fdfdbb8bf7a1637565c1d5344357 \
               "${image}:${RELEASE}" -o "spdx-json=/out/${component}.spdx.json"
-              docker run --rm -e ACTIONS_ID_TOKEN_REQUEST_TOKEN -e ACTIONS_ID_TOKEN_REQUEST_URL -v "${PWD}/release-evidence:/evidence:ro" \
-                gcr.io/projectsigstore/cosign:v3.0.2@sha256:b29487e48205d875c324c79583e2806d9d269c0fa299e0861bbec023d8430c8b ${command}              image --config /work/supply-chain/trivy.yaml --format json --output "/out/${component}.trivy.json" --exit-code 1 --severity CRITICAL "${image}:${RELEASE}"
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/work:ro" -v "${PWD}/release-evidence:/out" \
+              aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e \
+              image --config /work/supply-chain/trivy.yaml --format json --output "/out/${component}.trivy.json" --exit-code 1 --severity CRITICAL "${image}:${RELEASE}"
             jq -n --arg source "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" --arg commit "${RELEASE}" --arg workflow "${GITHUB_WORKFLOW_REF}" --arg builder "${GITHUB_ACTOR}" --arg image "${digest}" \
               '{_type:"https://in-toto.io/Statement/v1",subject:[{name:$image,digest:{sha256:($image|split("@sha256:")[1])}}],predicateType:"https://slsa.dev/provenance/v1",predicate:{buildDefinition:{buildType:"https://github.com/CDNFoundry/container-release/v1",externalParameters:{source:$source,commit:$commit,workflow:$workflow}},runDetails:{builder:{id:$builder}}}}' \
               > "release-evidence/${component}.provenance.json"
@@ -437,6 +438,7 @@ jobs:
             done
           done
       - name: Retain release evidence
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-evidence-${{ github.sha }}
