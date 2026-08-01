@@ -127,7 +127,7 @@ TLS, origin reachability, telemetry, and failure behavior over IPv6 first.
 - Preserve correct Host and forwarding semantics while removing hop-by-hop and
   untrusted forwarding headers.
 
-::: caution Retries amplify failures
+::: warning Retries amplify failures
 An origin that is already overloaded can become less available when every edge
 retries. Keep retry count and timeout bounded, monitor amplification, and prefer
 fast failure plus eligible stale content where policy allows.

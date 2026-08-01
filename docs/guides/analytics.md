@@ -27,7 +27,7 @@ flowchart LR
 | Client address | IPv4/IPv6 masking applied |
 | Sensitive fields | Authorization, cookies, bodies, and query strings removed |
 
-::: caution Analytics is not authoritative
+::: warning Analytics is not authoritative
 ClickHouse loss can create partial intervals, but it cannot change DNS, edge
 state, security decisions, certificate selection, or serving.
 :::

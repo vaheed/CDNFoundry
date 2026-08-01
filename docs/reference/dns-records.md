@@ -5,7 +5,7 @@ description: Reference supported DNS record types, modes, normalization, and zon
 
 # DNS record reference
 
-::: caution Record modes are mutually constrained
+::: warning Record modes are mutually constrained
 Geo-DNS is authoritative answer selection; proxied mode is CDN traffic routing.
 They cannot be combined on one record. Changing type or mode revalidates the
 entire owner and zone before desired state changes.

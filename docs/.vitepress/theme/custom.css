@@ -28,13 +28,44 @@
   white-space: nowrap;
 }
 
-.vp-doc .mermaid {
+.vp-doc .cdnf-diagram {
   margin: 1.5rem 0;
   overflow-x: auto;
   padding: 1rem;
   border: 1px solid var(--vp-c-divider);
   border-radius: 12px;
   background: var(--vp-c-bg-soft);
+}
+
+.vp-doc .cdnf-diagram-svg {
+  min-width: max-content;
+  text-align: center;
+}
+
+.vp-doc .cdnf-diagram-svg svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.vp-doc .cdnf-diagram-fallback strong {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.vp-doc .cdnf-diagram-fallback p {
+  margin: 0 0 0.75rem;
+}
+
+.vp-doc .cdnf-diagram-fallback pre {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.vp-doc .cdnf-diagram-failed {
+  border-color: var(--vp-c-warning-1);
+  background: var(--vp-c-warning-soft);
 }
 
 .vp-doc .custom-block {

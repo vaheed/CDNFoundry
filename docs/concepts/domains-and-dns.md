@@ -50,7 +50,7 @@ addresses. The platform DNS zone advertises only enabled, fresh, non-drained,
 ready endpoints whose gateway revision is acknowledged. The target placement
 activates before the source begins its drain window.
 
-::: caution Disable is not deletion
+::: warning Disable is not deletion
 Disabling preserves last-valid state for the configured delay. Final removal
 uses target tombstones and a name cooldown so stale agents and delayed jobs
 cannot recreate an earlier tenant.

@@ -52,6 +52,15 @@ IMAGE = re.compile(
 )
 HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
 FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
+CUSTOM_CONTAINER = re.compile(r"^:::\s+([A-Za-z][A-Za-z0-9-]*)\b")
+SUPPORTED_CUSTOM_CONTAINERS = {
+    "danger",
+    "details",
+    "info",
+    "raw",
+    "tip",
+    "warning",
+}
 ENDPOINT_ROW = re.compile(
     r"^\| `(?P<method>[A-Z]+)` \| `(?P<path>/[^`]+)` \| "
     r"(?:Required|No) \| (?:Supported|No) \| `(?P<operation>[^`]+)` \|$",
@@ -316,6 +325,13 @@ def main() -> int:
 
         if document.is_relative_to(DOCS_ROOT):
             text = document.read_text(encoding="utf-8")
+            for line, content in content_lines(text):
+                container = CUSTOM_CONTAINER.match(content)
+                if container and container.group(1) not in SUPPORTED_CUSTOM_CONTAINERS:
+                    failures.append(
+                        f"{document.relative_to(ROOT)}:{line}: unsupported VitePress "
+                        f"custom container {container.group(1)}"
+                    )
             frontmatter = FRONTMATTER.match(text)
             if frontmatter is None:
                 failures.append(

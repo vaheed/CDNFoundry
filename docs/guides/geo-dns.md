@@ -91,7 +91,7 @@ case-insensitively and rejected. One Geo-DNS record must be the only record of
 its type at that owner; normal CNAME coexistence and zone-boundary rules still
 apply.
 
-::: caution Default answers are mandatory
+::: warning Default answers are mandatory
 The default set is the availability fallback for missing MMDB data, unknown
 addresses, resolvers without useful ECS, and countries or continents without
 an override. Do not use a placeholder or an address that is intentionally

@@ -6,6 +6,7 @@ from __future__ import annotations
 from html.parser import HTMLParser
 import os
 import pathlib
+import re
 import sys
 import urllib.parse
 
@@ -15,6 +16,8 @@ DIST = ROOT / "docs" / ".vitepress" / "dist"
 SITE_ORIGIN = "https://docs.invalid"
 CONFIGURED_BASE = os.environ.get("DOCS_BASE", "/CDNFoundry/").strip("/")
 SITE_BASE = f"/{CONFIGURED_BASE}/" if CONFIGURED_BASE else "/"
+SOURCE_DOCS = ROOT / "docs"
+UNPUBLISHED_DOCUMENTS = {"manual-browser-qualification.md", "roadmap.md"}
 
 
 class PageParser(HTMLParser):
@@ -71,10 +74,12 @@ def main() -> int:
     home_markup = page_markup.get(home.resolve(), "")
     shell_markers = {
         "VitePress navigation": 'class="VPNav"',
+        "Learn navigation": f'href="{SITE_BASE}concepts/cdn-fundamentals"',
+        "Architecture navigation": f'href="{SITE_BASE}architecture/"',
         "local search": 'id="local-search"',
         "accessible appearance switch": 'class="VPSwitch VPSwitchAppearance"',
-        "Mermaid rendering container": 'class="mermaid"',
-        "Mermaid client module": "virtual_mermaid-config",
+        "diagram rendering container": 'class="cdnf-diagram"',
+        "server-rendered diagram fallback": 'class="cdnf-diagram-fallback"',
         "Google Search Console verification": (
             'name="google-site-verification" '
             'content="5Vy61YITiNmNEK2ePkuwEyAL34Lq2UQ6C7xXGXt05uI"'
@@ -84,7 +89,62 @@ def main() -> int:
         if marker not in home_markup:
             failures.append(f"index.html: missing {feature}")
 
+    published_sources = [
+        path
+        for path in SOURCE_DOCS.rglob("*.md")
+        if path.name not in UNPUBLISHED_DOCUMENTS
+        and not {"legacy", "node_modules", ".vitepress"}.intersection(
+            path.relative_to(SOURCE_DOCS).parts
+        )
+    ]
+    source_diagrams = sum(
+        path.read_text(encoding="utf-8").count("```mermaid")
+        for path in published_sources
+    )
+    source_callouts = sum(
+        len(
+            re.findall(
+                r"^:::\s+(?:info|tip|warning|danger)\b",
+                path.read_text(encoding="utf-8"),
+                re.MULTILINE,
+            )
+        )
+        for path in published_sources
+    )
+    rendered_diagrams = sum(
+        markup.count('class="cdnf-diagram"') for markup in page_markup.values()
+    )
+    rendered_callouts = sum(
+        markup.count(' custom-block"') for markup in page_markup.values()
+    )
+    if rendered_diagrams != source_diagrams:
+        failures.append(
+            f"rendered site has {rendered_diagrams} diagrams but source has "
+            f"{source_diagrams}"
+        )
+    if rendered_callouts != source_callouts:
+        failures.append(
+            f"rendered site has {rendered_callouts} callouts but source has "
+            f"{source_callouts}"
+        )
+
     for source, parser in pages.items():
+        markup = page_markup[source]
+        if '<div class="mermaid"></div>' in markup:
+            failures.append(
+                f"{source.relative_to(DIST)}: contains an empty Mermaid container"
+            )
+        if re.search(r"<p>:::\s+(?:info|tip|warning|danger)\b", markup):
+            failures.append(
+                f"{source.relative_to(DIST)}: contains an unrendered custom container"
+            )
+        diagrams = markup.count('class="cdnf-diagram"')
+        fallbacks = markup.count('class="cdnf-diagram-fallback"')
+        if diagrams != fallbacks:
+            failures.append(
+                f"{source.relative_to(DIST)}: {diagrams} diagrams but "
+                f"{fallbacks} server-rendered fallbacks"
+            )
         source_url = page_url(source)
         for raw_target in parser.links:
             if raw_target.startswith(
@@ -123,7 +183,8 @@ def main() -> int:
         return 1
     print(
         "built_site_link_validation=passed "
-        f"pages={len(pages)} internal_links={link_count}"
+        f"pages={len(pages)} internal_links={link_count} "
+        f"diagrams={rendered_diagrams} callouts={rendered_callouts}"
     )
     return 0
 

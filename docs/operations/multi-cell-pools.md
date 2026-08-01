@@ -5,7 +5,7 @@ description: Operate stable bounded placement across several cells on each edge.
 
 # Multi-cell pools and placement
 
-::: caution Activate before draining
+::: warning Activate before draining
 When moving traffic, make the target cell ready and acknowledged before
 draining the source. Removing the source first can reduce the pool below its
 minimum ready-cell requirement and withdraw publication.

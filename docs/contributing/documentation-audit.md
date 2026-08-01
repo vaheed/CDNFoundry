@@ -5,7 +5,7 @@ description: Trace how the CDNFoundry documentation was reconstructed from code 
 
 # Documentation audit
 
-::: caution An audit date is not permanent proof
+::: warning An audit date is not permanent proof
 Re-run route, environment, Compose, link, build, and feature checks whenever the
 implementation changes. This page records review scope; it does not replace
 current automated and owner-run qualification evidence.
@@ -59,6 +59,8 @@ does not expand the implemented product boundary.
 | A successful backup restore leaves maintenance mode active. | `RestoreControlBackup` runs migrations, queues reconciliation, then calls `artisan up`; only failure leaves maintenance active. |
 | The cumulative `make dev-e2e` covers phases 1–5. | The Make target now includes security, analytics, operations, and runtime programs through the current phase 8 boundary. |
 | A link-only checker was sufficient documentation validation. | The old checker checked target-file existence only; it did not validate anchors, duplicate headings, Markdown, required pages, route catalog drift, or the site build. |
+| A client-only Mermaid container was sufficient diagram output. | The old integration server-rendered an empty box and depended entirely on successful browser hydration. The local component now server-renders the complete source fallback, replaces it with SVG when Mermaid succeeds, and retains visible diagnostics on failure. |
+| `caution` was a supported VitePress callout type. | VitePress emitted those blocks as literal `:::` text. Current pages use supported callout types, and source plus built-site checks reject future container drift. |
 | The raw `docs/openapi.json` was the API documentation. | The generator describes routes but has intentionally generic bodies/responses. A generated human endpoint catalog and authored conventions/feature guides are also required. |
 | `core/README.md` described the project. | It was the generic Laravel skeleton README and did not document CDNFoundry. |
 | Historical phase test counts were current qualification status. | Counts such as 118 or 140 tests apply only to their recorded commits; the current suite contains more tests and must be rerun. |

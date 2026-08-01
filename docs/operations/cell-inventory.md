@@ -5,7 +5,7 @@ description: Install, monitor, control, and recover stable OpenResty cell slots.
 
 # Bounded cell inventory
 
-::: caution Slots are installed capacity
+::: warning Slots are installed capacity
 A configured slot must have a matching fixed service, port set, volume, and
 agent entry before the host starts. Creating a pool or domain never creates a
 new process, container, cache directory, or timer.

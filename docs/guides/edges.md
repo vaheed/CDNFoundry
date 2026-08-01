@@ -29,7 +29,7 @@ sequenceDiagram
     CP->>Source: Remove assignment
 ```
 
-::: caution Never clone identity state
+::: warning Never clone identity state
 An edge-agent volume belongs to one edge row and host. Restore it only to that
 identity, or rotate the edge and enroll again.
 :::

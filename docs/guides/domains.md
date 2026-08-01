@@ -29,7 +29,7 @@ sequenceDiagram
     Targets-->>CP: Per-target acknowledgement
 ```
 
-::: caution Form save is not runtime activation
+::: warning Form save is not runtime activation
 Inspect domain status, the operation receipt, and DNS/edge deployment state
 before declaring a lifecycle change complete.
 :::

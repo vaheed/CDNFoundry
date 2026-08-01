@@ -50,7 +50,7 @@ Use VitePress callouts deliberately:
 
 - `::: info` for architectural boundaries;
 - `::: tip` for safe shortcuts and verification;
-- `::: warning` or `::: caution` before risky or commonly misunderstood work;
+- `::: warning` before risky or commonly misunderstood work;
 - `::: danger` where data loss, secret exposure, or traffic outage is possible.
 
 ## Add or move a page
@@ -106,11 +106,13 @@ documentation validation, or the website workflow then publishes
 protected `github-pages` environment and does not need a repository secret.
 
 The default VitePress theme provides keyboard-accessible local search,
-responsive navigation, and a light/dark appearance switch. The Mermaid plugin
-detects dark mode and changes diagram rendering with it. The rendered-site
-validator requires the navigation, search, appearance control, Mermaid
-container, Mermaid client module, and Google Search Console verification meta
-tag before an artifact can deploy.
+responsive navigation, and a light/dark appearance switch. The local diagram
+component server-renders the complete diagram source as a fallback, then uses
+Mermaid to replace it with an SVG and rerenders when the color theme changes.
+If client rendering fails, readers see a diagnostic fallback instead of an
+empty box. The rendered-site validator requires navigation, search, appearance
+control, a fallback for every diagram, rendered custom callouts, and the Google
+Search Console verification meta tag before an artifact can deploy.
 
 Pages with specific search intent should set a concise `keywords` frontmatter
 list. The generated head also contains `TechArticle` or `WebSite` and

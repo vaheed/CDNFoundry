@@ -1,5 +1,4 @@
 import { defineConfig, type HeadConfig } from 'vitepress'
-import { withMermaid } from 'vitepress-plugin-mermaid'
 
 const siteUrl = (process.env.DOCS_SITE_URL ?? 'https://vaheed.github.io/CDNFoundry').replace(/\/$/, '')
 const siteBase = process.env.DOCS_BASE ?? '/CDNFoundry/'
@@ -37,7 +36,7 @@ function breadcrumbItems(relativePath: string): Array<Record<string, unknown>> {
   return items
 }
 
-export default withMermaid(defineConfig({
+export default defineConfig({
   lang: 'en-US',
   title: 'CDNFoundry Documentation',
   description: 'Operate, deploy, use, and develop the CDNFoundry private CDN.',
@@ -48,6 +47,18 @@ export default withMermaid(defineConfig({
   metaChunk: true,
   sitemap: {
     hostname: `${siteUrl}/`
+  },
+  markdown: {
+    config(markdown) {
+      const defaultFence = markdown.renderer.rules.fence
+      markdown.renderer.rules.fence = (tokens, index, options, environment, self) => {
+        const token = tokens[index]
+        if (token.info.trim() === 'mermaid') {
+          return `<MermaidDiagram graph="${encodeURIComponent(token.content)}" />`
+        }
+        return defaultFence?.(tokens, index, options, environment, self) ?? ''
+      }
+    }
   },
   srcExclude: [
     'legacy/**',
@@ -116,11 +127,6 @@ export default withMermaid(defineConfig({
       ['script', { type: 'application/ld+json' }, JSON.stringify(breadcrumbSchema)]
     ]
   },
-  mermaid: {
-    securityLevel: 'strict',
-    startOnLoad: false,
-    theme: 'neutral'
-  },
   themeConfig: {
     logo: {
       src: '/favicon.svg',
@@ -139,10 +145,19 @@ export default withMermaid(defineConfig({
       { text: 'Production quick start', link: '/deployment/production-quick-start' },
       { text: 'Architecture', link: '/architecture/' },
       { text: 'Guides', link: '/guides/' },
-      { text: 'API', link: '/reference/api/' },
       { text: 'Operations', link: '/operations/' },
-      { text: 'CLI', link: '/operations/cli-commands' },
-      { text: 'Development', link: '/development/' }
+      {
+        text: 'Reference',
+        items: [
+          { text: 'API', link: '/reference/api/' },
+          { text: 'CLI', link: '/operations/cli-commands' },
+          { text: 'Configuration', link: '/reference/configuration' },
+          { text: 'Security', link: '/security/' },
+          { text: 'Troubleshooting', link: '/troubleshooting/' },
+          { text: 'Development', link: '/development/' },
+          { text: 'Contributing', link: '/contributing/' }
+        ]
+      }
     ],
     sidebar: {
       '/getting-started/': [
@@ -320,4 +335,4 @@ export default withMermaid(defineConfig({
       copyright: 'Licensed under MIT'
     }
   }
-}))
+})

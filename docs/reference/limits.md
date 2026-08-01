@@ -5,7 +5,7 @@ description: Reference CDNFoundry API, DNS, edge, cache, security, analytics, an
 
 # Limits reference
 
-::: caution Limits protect shared capacity
+::: warning Limits protect shared capacity
 These ceilings are correctness and failure-isolation controls, not sizing
 recommendations. Do not remove them to solve load; measure the constrained
 resource and add bounded capacity instead.
