@@ -146,13 +146,13 @@ def main() -> None:
                 "--header=X-Edge-Status-Token: origin-failover-test", "http://127.0.0.1:9080/passive-failures", check=False).stdout
             assert "backup\n" in activated and "X-CDNFoundry-Origin: backup" in activated, activated + diagnostics + run("docker", "logs", CELL, check=False).stderr
             assert "primary_failure_threshold" in activated, activated
+            held = request("failover.example", "/held")
+            assert "backup\n" in held, held
             with ThreadPoolExecutor(max_workers=12) as pool:
                 concurrent = list(pool.map(lambda index: request("failover.example", f"/load-{index}"), range(24)))
             assert all("backup\n" in response for response in concurrent), "concurrent traffic escaped the backup"
 
             run("docker", "start", PRIMARY)
-            held = request("failover.example", "/held")
-            assert "backup\n" in held, held
             time.sleep(5.2)
             probe_one = request("failover.example", "/probe-one")
             time.sleep(0.1)
