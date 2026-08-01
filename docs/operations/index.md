@@ -18,12 +18,18 @@ See [Pool service endpoints](pool-service-endpoints.md) for Geo-Unicast and
 The [Simple Anycast qualification](simple-anycast-qualification.md) records
 agent evidence and the remaining owner-operated release gate.
 
+Read [Production best practices](production-best-practices.md) before the first
+release or topology change. It consolidates network, secret, DNS, edge, origin,
+cache, TLS, observability, backup, capacity, and change-control expectations.
+
 The administrator dashboard and `/api/admin/system/components` expose dependency,
 queue, scheduler, backup, MMDB, TLS, runtime-task, and edge-capacity state.
 Prometheus scrapes the token-protected `/metrics` endpoint plus Vector,
 DNSdist, PowerDNS, Alertmanager, and node-exporter.
 
 - Use [Monitoring](monitoring.md) for health and alert interpretation.
+- Use [Production best practices](production-best-practices.md) for readiness
+  and change checklists.
 - Use [Grafana command centers](grafana.md) for the provisioned system and
   per-domain operational views.
 - Use [Operational logging](operational-logging.md) for Loki, per-host Vector

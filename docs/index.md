@@ -12,12 +12,18 @@ hero:
       text: Get started
       link: /getting-started/
     - theme: alt
+      text: Learn CDN fundamentals
+      link: /concepts/cdn-fundamentals
+    - theme: alt
       text: Production quick start
       link: /deployment/production-quick-start
 features:
+  - title: Learn how a CDN works
+    details: Follow DNS, TLS, edge routing, cache, origins, desired state, and failure behavior from first principles.
+    link: /concepts/cdn-fundamentals
   - title: Architecture
-    details: Understand planes, durable state ownership, reconciliation, bounded cells, and failure isolation.
-    link: /architecture/
+    details: Compare production reference designs, planes, durable state ownership, bounded cells, and failure isolation.
+    link: /architecture/production-reference-architectures
   - title: Domain users
     details: Add domains, manage DNS, proxy origins, TLS, cache, security, analytics, and usage.
     link: /guides/

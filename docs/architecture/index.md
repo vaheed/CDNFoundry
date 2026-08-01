@@ -118,5 +118,6 @@ during a customer DNS or HTTP request, it violates the serving boundary.
 | Grafana or Prometheus unavailable | DNS and HTTP continue | Command centers or alert evaluation become unavailable; source state is unchanged |
 | Origin unavailable | Cache/stale policy may serve eligible objects | Origin health and errors become visible |
 
-Continue with [Components](components.md),
-[Data flows](data-flows.md), and [Data model](data-model.md).
+Continue with [Components](components.md), [Data flows](data-flows.md), and
+[Data model](data-model.md). Before allocating production hosts, compare the
+[Production reference architectures](production-reference-architectures.md).

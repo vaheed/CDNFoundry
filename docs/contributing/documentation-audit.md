@@ -45,6 +45,12 @@ production overlays, the environment generator, and every quick-start command.
 Generated dependency lockfiles were treated as dependency evidence, not prose
 to paraphrase.
 
+The current documentation also includes a first-principles CDN learning path,
+an end-to-end CDNFoundry usage guide, production reference architectures, and a
+production best-practices checklist. These pages derive their product-specific
+claims from the audited implementation surfaces above; generic CDN background
+does not expand the implemented product boundary.
+
 ## Outdated or incorrect legacy assumptions
 
 | Legacy claim or pattern | Verified implementation |

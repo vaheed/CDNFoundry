@@ -27,9 +27,12 @@ clients authenticate with Laravel Sanctum bearer tokens.
 
 ## Choose your path
 
+- If CDN concepts are new, begin with [CDN fundamentals](../concepts/cdn-fundamentals.md).
+- To understand the product end to end, read [How CDNFoundry works](../concepts/how-cdnfoundry-works.md).
 - To evaluate a company or ISP deployment, read [How to build a private CDN](private-cdn-design.md).
 - To run the repository locally, follow [Installation](installation.md).
 - To onboard a domain, follow [First domain](first-domain.md).
+- For common administrator, domain-user, and API tasks, use [Using CDNFoundry](using-cdnfoundry.md).
 - To understand state and failure guarantees, read [Desired state](../concepts/desired-state.md).
 - To deploy real hosts, start with the [Production quick start](../deployment/production-quick-start.md).
 - To integrate over HTTP, use the [API reference](../reference/api/index.md).

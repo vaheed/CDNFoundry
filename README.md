@@ -81,7 +81,9 @@ flowchart TB
 | TLS/cache/security | Typed domain state | OpenResty applies data without per-domain reload |
 | Telemetry | Runtime events | Vector buffers and ClickHouse stores bounded analytics |
 
-Read the [architecture overview](docs/architecture/index.md) and
+Start with [CDN fundamentals](docs/concepts/cdn-fundamentals.md) and
+[How CDNFoundry works](docs/concepts/how-cdnfoundry-works.md), then read the
+[architecture overview](docs/architecture/index.md) and
 [data-flow diagrams](docs/architecture/data-flows.md) for component and failure
 boundaries.
 
@@ -168,8 +170,11 @@ links below also work directly on GitHub.
 
 | Audience | Start here |
 | --- | --- |
+| CDN learners | [CDN fundamentals](docs/concepts/cdn-fundamentals.md) |
 | Evaluators | [Product overview](docs/getting-started/index.md) |
-| Production operators | [Production quick start](docs/deployment/production-quick-start.md) |
+| New CDNFoundry users | [Using CDNFoundry](docs/getting-started/using-cdnfoundry.md) |
+| Architects | [Production reference architectures](docs/architecture/production-reference-architectures.md) |
+| Production operators | [Production best practices](docs/operations/production-best-practices.md) |
 | Administrators | [Operations](docs/operations/index.md) |
 | Domain users | [Feature guides](docs/guides/index.md) |
 | API clients | [API reference](docs/reference/api/index.md) |
