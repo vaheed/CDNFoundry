@@ -416,8 +416,10 @@ def main() -> None:
             # Nginx cache freshness is evaluated at whole-second resolution. Give
             # the one-second TTL a full additional clock tick before taking the
             # origin offline so slower CI runners cannot still observe a HIT.
+            # Use an abrupt outage because graceful Nginx shutdown may drain
+            # keepalive connections longer than this deliberately short window.
             time.sleep(2.2)
-            run("docker", "compose", "-f", "compose.dev.yml", "stop", "origin-http")
+            run("docker", "compose", "-f", "compose.dev.yml", "kill", "origin-http")
             stale = request_with("stale.example", "/stale")
             assert stale.returncode == 0 and "X-CDNFoundry-Cache: STALE" in stale.stderr, stale.stderr
             no_stale = request_with("no-stale.example", "/stale")
