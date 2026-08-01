@@ -89,12 +89,16 @@ def main() -> int:
         if marker not in home_markup:
             failures.append(f"index.html: missing {feature}")
 
-    compiled_css = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in sorted((DIST / "assets").glob("*.css"))
+    compiled_css = re.sub(
+        r"\s+",
+        "",
+        "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted((DIST / "assets").glob("*.css"))
+        ),
     )
     diagram_style_markers = {
-        "compact diagram height": "max-height: min(52vh, 28rem)",
+        "compact diagram height": "max-height:min(52vh,28rem)",
         "large diagram view": ".cdnf-diagram-expanded",
         "diagram size control": ".cdnf-diagram-toggle",
     }

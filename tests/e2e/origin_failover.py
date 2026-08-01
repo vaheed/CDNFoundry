@@ -15,6 +15,11 @@ PRIMARY = "cdnf-origin-failover-primary"
 BACKUP = "cdnf-origin-failover-backup"
 ISOLATED = "cdnf-origin-failover-isolated"
 NETWORK = os.environ.get("CDNF_EDGE_NETWORK", "cdnfoundry-dev_edge")
+# Docker daemon scheduling is outside the runtime's control and can consume a
+# small stale window on loaded CI hosts. The short-window expiry boundary is
+# qualified separately in phase4_runtime.py; this test covers its interaction
+# with active-passive failover.
+STALE_IF_ERROR_SECONDS = 60
 
 
 def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -28,6 +33,16 @@ def request(host: str, path: str = "/") -> str:
     result = run("docker", "exec", CELL, "wget", "-T", "3", "-S", "-O-",
         f"--header=Host: {host}", f"http://127.0.0.1:8080{path}", check=False)
     return result.stderr + result.stdout
+
+
+def wait_for_cell(timeout_seconds: float = 15) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        result = run("docker", "exec", CELL, "wget", "-qO-", "http://127.0.0.1:8080/healthz", check=False)
+        if result.returncode == 0 and result.stdout == "ok\n":
+            return
+        time.sleep(0.2)
+    raise RuntimeError(f"edge cell did not become ready\n{run('docker', 'logs', CELL, check=False).stderr}")
 
 
 def endpoint(host: str, marker: str) -> dict:
@@ -47,7 +62,7 @@ def host_config(domain: str, origin: dict, cache: bool = False) -> dict:
             "enabled": cache, "edge_ttl_seconds": 1, "browser_ttl_seconds": 0,
             "maximum_object_bytes": 1048576, "respect_origin_headers": True,
             "include_query_string": True, "bypass_cookie_names": [],
-            "stale_if_error_seconds": 10, "stale_while_revalidate_seconds": 0,
+            "stale_if_error_seconds": STALE_IF_ERROR_SECONDS, "stale_while_revalidate_seconds": 0,
             "status_ttl_seconds": {"200": 1}, "epoch": 1,
         },
         "origin": origin,
@@ -112,6 +127,7 @@ def main() -> None:
             "--tmpfs", "/var/cache/nginx:rw,noexec,nosuid,size=64m,mode=0777",
             "cdnfoundry/edge-runtime:test")
         try:
+            wait_for_cell()
             run("docker", "exec", CELL, "openresty", "-t")
             healthy = request("failover.example")
             assert "primary\n" in healthy and "X-CDNFoundry-Origin: primary" in healthy, healthy + runtime_file.read_text() + run("docker", "logs", CELL, check=False).stderr
@@ -155,10 +171,15 @@ def main() -> None:
 
             stale_seed = request("stale-failover.example", "/resident-final")
             assert "primary\n" in stale_seed and "X-CDNFoundry-Cache: MISS" in stale_seed, stale_seed
+            stale_seeded_at = time.monotonic()
             time.sleep(2.1)
             run("docker", "kill", PRIMARY, BACKUP)
             stale = request("stale-failover.example", "/resident-final")
-            assert "X-CDNFoundry-Cache: STALE" in stale and "primary\n" in stale, stale
+            stale_elapsed = time.monotonic() - stale_seeded_at
+            assert "X-CDNFoundry-Cache: STALE" in stale and "primary\n" in stale, (
+                f"stale request failed after {stale_elapsed:.3f}s "
+                f"(configured window={STALE_IF_ERROR_SECONDS}s)\n{stale}"
+            )
             bounded_failure = request("failover.example", "/both-down")
             assert "502 Bad Gateway" in bounded_failure, bounded_failure
             isolated = request("isolated.example")
