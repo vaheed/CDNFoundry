@@ -19,6 +19,7 @@ NETWORK = os.environ.get("CDNF_EDGE_NETWORK", "cdnfoundry-dev_edge")
 # small stale window on loaded CI hosts. The short-window expiry boundary is
 # qualified separately in phase4_runtime.py; this test covers its interaction
 # with active-passive failover.
+CACHE_TTL_SECONDS = 5
 STALE_IF_ERROR_SECONDS = 60
 
 
@@ -69,11 +70,11 @@ def host_config(domain: str, origin: dict, cache: bool = False) -> dict:
     return {
         "domain": domain, "domain_id": 8, "revision": 1, "settings": {"enabled": True},
         "cache": {
-            "enabled": cache, "edge_ttl_seconds": 1, "browser_ttl_seconds": 0,
+            "enabled": cache, "edge_ttl_seconds": CACHE_TTL_SECONDS, "browser_ttl_seconds": 0,
             "maximum_object_bytes": 1048576, "respect_origin_headers": True,
             "include_query_string": True, "bypass_cookie_names": [],
             "stale_if_error_seconds": STALE_IF_ERROR_SECONDS, "stale_while_revalidate_seconds": 0,
-            "status_ttl_seconds": {"200": 1}, "epoch": 1,
+            "status_ttl_seconds": {"200": CACHE_TTL_SECONDS}, "epoch": 1,
         },
         "origin": origin,
     }
@@ -89,7 +90,7 @@ def main() -> None:
         for name, marker in ((PRIMARY, "primary"), (BACKUP, "backup"), (ISOLATED, "isolated")):
             config = temporary / f"{marker}.conf"
             config.write_text(
-                "server { listen 80; location / { add_header Cache-Control \"public, max-age=1\"; "
+                f"server {{ listen 80; location / {{ add_header Cache-Control \"public, max-age={CACHE_TTL_SECONDS}\"; "
                 f"add_header X-Origin-Marker \"{marker}\"; return 200 \"{marker}\\n\"; }}}}\n"
             )
             config.chmod(0o644)
@@ -188,16 +189,28 @@ def main() -> None:
 
             stale_seed = request("stale-failover.example", "/resident-final")
             assert "primary\n" in stale_seed and "X-CDNFoundry-Cache: MISS" in stale_seed, stale_seed
-            stale_resident = request("stale-failover.example", "/resident-final")
+            stale_resident = ""
+            resident_deadline = time.monotonic() + 2
+            while time.monotonic() < resident_deadline:
+                stale_resident = request("stale-failover.example", "/resident-final")
+                if "X-CDNFoundry-Cache: HIT" in stale_resident:
+                    break
+                time.sleep(0.1)
             assert "primary\n" in stale_resident and "X-CDNFoundry-Cache: HIT" in stale_resident, stale_resident
             stale_seeded_at = time.monotonic()
-            time.sleep(2.1)
+            time.sleep(CACHE_TTL_SECONDS + 1.1)
             run("docker", "kill", PRIMARY, BACKUP)
             stale = request("stale-failover.example", "/resident-final")
             stale_elapsed = time.monotonic() - stale_seeded_at
+            stale_diagnostics = run("docker", "logs", CELL, check=False)
+            cache_files = run(
+                "docker", "exec", CELL, "find", "/var/cache/nginx", "-type", "f", "-ls", check=False
+            )
             assert "X-CDNFoundry-Cache: STALE" in stale and "primary\n" in stale, (
                 f"stale request failed after {stale_elapsed:.3f}s "
                 f"(configured window={STALE_IF_ERROR_SECONDS}s)\n{stale}"
+                f"\ncache files:\n{cache_files.stdout}{cache_files.stderr}"
+                f"\nedge logs:\n{stale_diagnostics.stdout}{stale_diagnostics.stderr}"
             )
             bounded_failure = request("failover.example", "/both-down")
             assert "502 Bad Gateway" in bounded_failure, bounded_failure
