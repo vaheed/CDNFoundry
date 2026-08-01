@@ -2,6 +2,7 @@
 
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\IdempotencyKey;
+use App\Support\ResticBackupRepository;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
@@ -25,5 +26,6 @@ Schedule::command('cdnf:security:reconcile-readiness')->everyMinute()->withoutOv
 Schedule::command('cdnf:waf:expire-exclusions')->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:usage:finalize')->hourlyAt(20)->withoutOverlapping();
 Schedule::command('cdnf:audit:prune')->dailyAt('03:10')->withoutOverlapping();
-Schedule::command('cdnf:backups:create')->dailyAt('01:30')->withoutOverlapping();
+Schedule::command('cdnf:backups:create')->dailyAt('01:30')->withoutOverlapping()
+    ->when(fn (): bool => app(ResticBackupRepository::class)->configured());
 Schedule::call(fn () => Cache::put('operations:scheduler_heartbeat', now()->toIso8601String(), now()->addMinutes(10)))->name('operations.scheduler-heartbeat')->everyMinute()->withoutOverlapping();

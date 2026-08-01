@@ -5,6 +5,12 @@ description: Install CDNFoundry for local development or prepare a production de
 
 # Installation
 
+::: danger Preserve development data
+The named PostgreSQL and Compose volumes persist between phases. Never use
+`docker compose down -v`, destructive database refreshes, or PostgreSQL-backed
+`RefreshDatabase` tests. The supported test command forces in-memory SQLite.
+:::
+
 ## Development requirements
 
 - Docker Engine with the Compose plugin
@@ -104,5 +110,6 @@ administrator **Rotate identity** action and a new token.
 
 Do not promote the development environment. Production uses published images,
 host-private `.env.prod` files, explicit PKI, explicit Laravel and PowerDNS
-migrations, firewalls, off-host backups, and the profiles described in
+migrations, firewalls, a tested recovery method (optionally the built-in
+encrypted Restic integration), and the profiles described in
 [Production deployment](../deployment/index.md).

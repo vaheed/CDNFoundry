@@ -5,6 +5,12 @@ description: Understand CDNFoundry helper scripts, GitHub Actions checks, images
 
 # Scripts and CI/CD
 
+::: danger Keep secrets out of automation output
+CI logs, generated documentation, test fixtures, and command transcripts must
+not print production tokens, customer data, certificate keys, CA keys,
+encryption keys, signing keys, or backup credentials.
+:::
+
 ## Shell scripts
 
 | Script | Contract |
@@ -15,8 +21,22 @@ description: Understand CDNFoundry helper scripts, GitHub Actions checks, images
 | `generate-production-env.sh` | Interactively create mode-`0600` control or combined DNS/edge environment |
 | `validate-production-overrides.sh` | Validate every supported role, IPv4/IPv6, and external-data Compose combination |
 
+`tests/config/generate-production-env.sh`, run by `make config-check`, exercises
+both interactive host roles, optional-backup output, mode `0600`, and the
+separation between advertised/NAT addresses and local listener addresses.
+
 Backup scripts inside the core image stream PostgreSQL to and from Restic. The
 MMDB updater downloads, extracts, validates, and atomically activates GeoIP data.
+
+## Production Make targets
+
+`make prod-migrate` starts and health-checks the local control PostgreSQL and
+Valkey dependencies before running the explicit Laravel migration.
+`make prod-pdns-migrate` does the same for PowerDNS PostgreSQL. The
+`prod-control`, `prod-dns`, `prod-edge`, and `prod-telemetry` targets start only
+their named profile; monitoring and logs are not enabled implicitly. Run
+`make prod-logs` separately when this host is configured to own one operational
+log collector.
 
 ## CI jobs
 

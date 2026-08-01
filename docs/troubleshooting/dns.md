@@ -5,6 +5,12 @@ description: Diagnose delegation, record validation, DNS cluster, reconciliation
 
 # Troubleshoot DNS
 
+::: danger Do not repair derived DNS by hand
+PowerDNS rows and PowerAdmin edits are rebuildable runtime state and will drift
+from PostgreSQL. Repair desired state or the reconciliation boundary, then let a
+validated revision activate atomically.
+:::
+
 ## Delegation never verifies
 
 - Compare `/api/nameservers` with public NS answers.
@@ -41,8 +47,10 @@ The previous `active_rrsets` should remain present on failure.
 ## Geo-DNS returns unexpected geography
 
 Confirm the MMDB age and provider, preview the exact client IP, and determine
-whether the public query carried trusted EDNS Client Subnet. Without ECS the
-recursive resolver address may be classified.
+whether the public query carried EDNS Client Subnet. Without ECS the recursive
+resolver address may be classified. Compare authoritative queries through
+`EDGE_1` and `EDGE_2`, both with and without controlled ECS, and remember that
+recursive caches can retain an earlier selection until TTL expiry.
 
 Use the [DNS cluster runbook](../operations/runbooks.md#dns-cluster-failure) for
 recovery.

@@ -5,6 +5,12 @@ description: Report CDNFoundry security vulnerabilities privately without exposi
 
 # Report a vulnerability
 
+::: danger Report privately
+Do not open a public issue, discussion, or pull request containing exploit
+details, secrets, customer data, private addresses, or raw production evidence.
+Use the private advisory channel below.
+:::
+
 Do not open a public issue for a suspected vulnerability.
 
 Use the repository's private

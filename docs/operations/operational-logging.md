@@ -5,6 +5,12 @@ description: Deploy, query, secure, and recover CDNFoundry's bounded Vector and 
 
 # Operational logging
 
+::: info Logging failure must not stop serving
+Collectors use bounded buffers and redaction. If Loki or a remote sink is
+unavailable, DNS and HTTP continue; old buffered events may eventually be
+dropped and cannot be reconstructed.
+:::
+
 CDNFoundry sends application and container operational logs from one Vector
 collector per host to a single-binary Loki service. Grafana reads Loki directly.
 Laravel is never an ingestion proxy, and neither Loki nor Vector participates in

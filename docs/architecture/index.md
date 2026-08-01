@@ -26,8 +26,11 @@ flowchart TB
       PowerDNS --> PDNSDB[("Derived PowerDNS DB")]
     end
     subgraph Edge["HTTP edge plane"]
-      Agent["Edge agent"] --> Shared["Shared OpenResty cell"]
-      Agent --> Quarantine["Quarantine cell"]
+      Agent["Edge agent"] --> Gateway["Destination + Host/SNI gateway"]
+      Agent --> Cell1["cell-01"]
+      Agent --> Cell2["cell-02 through cell-08"]
+      Gateway --> Cell1
+      Gateway --> Cell2
     end
     subgraph Observe["Observability plane"]
       Vector["Vector"] --> ClickHouse[("ClickHouse")]
@@ -43,7 +46,8 @@ flowchart TB
     Horizon -->|"versioned reconciliation"| PowerDNS
     Agent -->|"outbound mTLS: pull artifacts/tasks, acknowledge"| Laravel
     DNSdist -.-> Vector
-    Shared -.-> Vector
+    Cell1 -.-> Vector
+    Cell2 -.-> Vector
 ```
 
 | Plane | Components | Responsibility |
@@ -51,10 +55,10 @@ flowchart TB
 | Management | Laravel, Filament, Horizon, scheduler | Authorization, validation, desired state, operations, reconciliation |
 | Durable control data | PostgreSQL, Valkey | Desired state, audit, operation records, queues, sessions, cache |
 | Authoritative DNS | DNSdist, PowerDNS, PowerDNS PostgreSQL | Public DNS ingress and private authoritative answers |
-| Edge HTTP | Edge agent, OpenResty cells | Artifact activation, TLS selection, proxying, cache, security |
+| Edge HTTP | Edge agent, edge gateway, bounded OpenResty cells | Artifact activation, destination/Host/SNI routing, TLS selection, proxying, cache, security |
 | Observability | Vector, ClickHouse, Prometheus, Alertmanager, Grafana | Bounded event delivery, analytics, metrics, alerts, read-only operator diagnosis |
 
-Only DNSdist, intended OpenResty listeners, and the browser/API reverse proxy
+Only DNSdist, mapped edge-gateway service listeners, and the browser/API reverse proxy
 belong on public ingress. Edge control uses mutual TLS. Telemetry and PowerDNS
 API gateways are source restricted in the production overlays. Internal
 databases, Valkey, ClickHouse, raw metrics, Grafana port 3000, and PowerDNS

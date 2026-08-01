@@ -5,6 +5,12 @@ description: Recover DNS, edge, origin, TLS, cache, telemetry, and security inci
 
 # Incident runbooks
 
+::: danger Preserve the last valid state
+Do not delete agent identity, reset monotonic revisions, edit derived runtime
+files, remove zones manually, or erase named volumes during diagnosis. Capture
+evidence and repair desired state or the failed external boundary.
+:::
+
 ## Stale edge map or endpoint mismatch
 
 1. Open **Edge network → Edges**, record the edge, desired endpoint revision,

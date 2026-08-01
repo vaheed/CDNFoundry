@@ -38,6 +38,136 @@ Evidence must be sanitized. Never record passwords, API or bootstrap tokens, coo
 4. Record successful automated evidence for PHP, Go, Lua/OpenResty, schemas, OpenAPI, Compose, non-browser E2E, failure injection, image builds, supply-chain policy, and vulnerability scanning. Record exact unavailable commands and prerequisites as blocked.
 5. Keep browser developer tools open for console and network inspection. Any unexpected JavaScript exception, failed asset, authorization leak, or unstable operation state fails the relevant checkpoint.
 
+## Implemented product regression
+
+Complete this regression before the current hardening workstreams. It preserves
+the owner-run coverage for all functionality shipped through `v0.9.1`; a newer
+workstream does not replace an earlier product checkpoint.
+
+### Accounts, scope, and navigation
+
+1. At desktop and narrow/mobile widths, sign in to `/admin` as an administrator
+   and `/app` as a domain user. Confirm navigation, tables, forms, badges,
+   dialogs, help text, validation, empty states, and notifications remain
+   readable without labels breaking into fragments or requiring page-wide
+   horizontal scrolling.
+2. Under **Customers → Users**, create one domain user, assign exactly one
+   disposable domain, disable and re-enable the account, and verify the domain
+   user never sees another domain, administrator navigation, global operations,
+   platform settings, clusters, edges, pools, users, or backups.
+3. Under **Account → API tokens**, create a bounded token, record it only at its
+   one-time boundary, use it for one permitted API request, then revoke it and
+   confirm subsequent use fails. Confirm password/profile changes invalidate
+   the documented sessions and never reveal password history.
+
+### System DNS, clusters, and domains
+
+1. Open **Control plane → System DNS identity**. Enter platform domain, proxy
+   hostname, two nameservers with IPv4 and optional IPv6, SOA primary/mailbox,
+   refresh, retry, expire, minimum TTL, and default TTL. Choose **Validate and
+   preview**, inspect normalization, apply the exact confirmation, and record
+   the asynchronous operation and active checksum on both clusters.
+2. Under **Control plane → DNS clusters**, create each cluster disabled with
+   API URL, API key, server ID, and nameservers. Run **Test connection**, require
+   verified TLS and a healthy result, then enable it. A bad key, CA, name, or
+   unreachable API must fail without replacing an active zone.
+3. Create a domain, assign the user, verify nameservers, activate it, then cover
+   DNS-only A, AAAA, CNAME, MX, TXT, NS, CAA, SRV, and reverse PTR records.
+   Exercise BIND preview/import/export, duplicate/CNAME/zone-boundary failures,
+   bulk bounds, and Geo-DNS country/continent/default preview. Confirm UDP and
+   TCP answers externally on both authoritative hosts.
+4. Disable, re-enable, and deprovision only a disposable domain. Confirm delayed
+   cleanup, tombstone/reclaim behavior, policy scope, and last-valid DNS while
+   a replacement candidate is invalid.
+
+### Edge pools, cells, gateway, and routing
+
+1. Under **Edge network → Service pools**, create a Geo-Unicast shared pool and
+   a quarantine pool. Record Kind, Cache profile, Compression profile, managed
+   WAF capability, Routing mode, Minimum ready cells, Replicas per edge, and
+   Maximum domains per cell. Confirm invalid replicas/capacity/address
+   combinations fail before activation.
+2. Under **Edge network → Edges**, create two edges with **Cell slots = 8**,
+   country, continent, and optional management addresses. Enroll each agent with
+   its one-time token, remove that token after registration, and confirm fresh
+   heartbeat, current runtime versions, gateway process, traffic listener,
+   gateway revision/listeners/routes, capacity, and no deployment rejection.
+3. In each edge's **Cells** relation, use **Assign service pool** for the
+   intended stable slots. Exercise drain, undrain, restart, and unassign; confirm
+   unrelated cells keep serving and active placement prevents unsafe removal.
+4. Create each Geo-Unicast pool endpoint with its distinct advertised service
+   IPv4 and optional IPv6. Map every address to a distinct assigned local
+   listener with `EDGE_GATEWAY_ADDRESS_MAP`. Confirm the gateway binds only the
+   local pair, DNS publishes only ready advertised endpoints, Host/SNI routing
+   reaches the intended cell, and management addresses are never published or
+   bound for customer traffic.
+5. Where the provider approves BGP, create one **Simple Anycast** pool with a
+   shared IPv4/optional IPv6 pair and explicit addressless participation on two
+   POPs. Verify external route origin/path and three independent vantage points,
+   POP drain/withdrawal/restoration, DNS state, HTTP/HTTPS POP selection, and
+   convergence. Confirm CDNFoundry never claims to announce BGP or protect a
+   saturated uplink.
+
+### Proxy, TLS, cache, compression, and security
+
+1. Add one proxied hostname with primary origin host/IP, scheme, port, Host
+   header, TLS SNI/verification, connection/response timeouts, health check,
+   and optional backup origin plus failure/recovery thresholds and hold-down.
+   Run **Test origin** and **Test backup**; unsafe, mixed safe/unsafe, metadata,
+   internal-service, and proxy-loop destinations must fail closed.
+2. Exercise primary failure, bounded transition to backup, hold-down, failback,
+   both-origin failure, WebSocket policy, forwarding headers, and control-plane
+   outage. Record `X-CDNFoundry-Origin`, request IDs, revisions, and comparison
+   traffic showing unrelated hosts remain available.
+3. Use **TLS mode** for managed DNS-01 and a valid custom certificate. Exercise
+   **Renew managed certificate**, **Reissue managed certificate**, **Upload
+   custom certificate**, and **Remove custom certificate** with valid/invalid
+   keys, chains, names, and expiry. Confirm DNS-only hosts do not cause issuance
+   and a failed order or upload preserves the previous valid certificate.
+4. Use **Cache settings** to cover TTLs, object bound, origin-header policy,
+   query policy/selected parameters, bypass cookies, status TTLs, admission,
+   stale windows, and variant bounds. Prove MISS then HIT, development-mode
+   bypass/expiry, URL purge, epoch-based full purge, retry, and exact cache-key
+   agreement. Confirm Gzip and Brotli follow the pool profile while storing one
+   canonical object and falling back safely under pressure.
+5. Use **Security profile and limits**, ordered security rules, maintenance,
+   Under Attack mode, quarantine, and expiring controls. Verify IPv4/IPv6/CIDR,
+   country, and continent rules, trusted-client handling, allow/deny/rate-limit
+   outcomes, bounded error bodies, and continued comparison traffic. Complete
+   the managed WAF checkpoints below on a WAF-capable pool.
+
+### Analytics, operations, recovery, and upgrade
+
+1. In **Observe → Analytics and logs** and administrator **Telemetry and
+   usage**, verify bounded ranges, filters, pagination, partial-data notices,
+   raw/hourly/daily boundaries, usage finalization/export, redaction, and
+   ClickHouse/Vector outage behavior without interrupting serving.
+2. On the administrator dashboard and under **Operations**, verify component,
+   queue, scheduler, DNS, edge/cell/gateway, TLS, task, purge, usage, rollout,
+   and backup state. Exercise failed-job retry, global reconciliations,
+   quarantine recovery, and operation/audit visibility without exposing input
+   secrets.
+3. If built-in Restic backup is configured, create and verify a snapshot,
+   perform restore preflight with exact confirmation and current password, then
+   complete a clean-host restore with the full recovery secret set. If it is
+   disabled, record the alternative tested recovery method and the expected
+   degraded backup component; do not mark recovery passed without real restore
+   evidence.
+4. Run one bounded fleet canary and wave rollout with immutable gateway, agent,
+   normal-cell, and WAF-cell digests. Inject a canary failure, confirm automatic
+   pause, roll back, and verify no dynamic cell creation. Upgrade one edge at a
+   time, then control/DNS components, while comparison DNS/HTTPS stays healthy.
+
+### Implemented product completion gate
+
+- Implementation: all applicable baseline capabilities above are present.
+- Documentation: feature, operations, reference, troubleshooting, and
+  deployment pages match the observed fields and behavior.
+- Automated/runtime qualification: current isolated and real-runtime suites
+  have recorded passing evidence for the tested commit.
+- Manual browser/public qualification: owner-run; **not complete until every
+  applicable checkpoint above is recorded as passed**.
+
 ## Workstream 1 — Atomic and durable runtime generations
 
 ### Administrator workflow and observability
@@ -82,9 +212,9 @@ Evidence must be sanitized. Never record passwords, API or bootstrap tokens, coo
 
 ### Configuration, permissions, and terminology
 
-1. As an administrator, open the hostname security/WAF form. Confirm the managed WAF offers exactly the documented `off`, `monitor`, and `block` modes (or documented public equivalents), with accurate help text for each.
-2. Confirm threshold and paranoia controls, if exposed, show bounded valid ranges and safe defaults. Unknown modes, invalid thresholds, and invalid paranoia levels must produce clear validation errors.
-3. Save each valid mode and confirm an asynchronous operation is created. Confirm the resulting revision and generation become active without an Nginx reload.
+1. As a domain owner, open **Web application firewall (WAF)**. Confirm it offers exactly **Off**, **Observe**, **Recommended**, and **High sensitivity**, corresponding to the internal `off`, `monitor`, `balanced`, and `strict` profiles, with accurate help text for each.
+2. Confirm owners cannot enter arbitrary thresholds, paranoia levels, rules, or expressions. Unknown profiles and malformed exclusions must produce clear validation errors; the fixed profiles own their reviewed thresholds.
+3. Save each valid profile and confirm an asynchronous operation is created. Confirm the resulting revision and generation become active without an Nginx reload.
 4. Sign in as a domain user assigned to only one test domain. Confirm the user can view or change only authorized settings and cannot read or change the other hostname's WAF mode.
 5. Confirm migration/compatibility messaging does not silently enable blocking for a hostname that previously used detection-only behavior.
 
@@ -92,15 +222,16 @@ Evidence must be sanitized. Never record passwords, API or bootstrap tokens, coo
 
 Use two hostnames on the same OpenResty cell. Record request IDs, generation ID, configuration revision, HTTP results, and sanitized security-event evidence.
 
-1. Set hostname A to `off`. Send benign GET and POST requests, then the documented SQL injection, XSS, path traversal, and command injection probes. Confirm managed CRS enforcement is not applied and separately documented platform safety checks still behave as specified.
-2. Set hostname A to `monitor`. Repeat the same probes. Confirm benign traffic succeeds; CRS-detected attacks are allowed; and bounded events record mode, allowed/monitored action, rule IDs, anomaly score, threshold, request ID, and generation/revision.
-3. Set hostname A to `block`. Repeat the probes. Confirm attacks exceeding the threshold receive the controlled CDNFoundry response while benign traffic succeeds. The visitor response must not leak rule internals.
-4. Keep hostname A in `block` and hostname B in `monitor` on the same cell. Send the identical attack to both and confirm A blocks while B allows and records it, with no separate per-domain process, worker, or server block.
-5. Change both modes at runtime and repeat. Confirm behavior changes only after the acknowledged generation is loaded and no Nginx reload occurs.
+1. Set hostname A to **Off** (`off`). Send benign GET and POST requests, then the documented SQL injection, XSS, path traversal, and command injection probes. Confirm managed CRS enforcement is not applied and separately documented platform safety checks still behave as specified.
+2. Set hostname A to **Observe** (`monitor`). Repeat the same probes. Confirm benign traffic succeeds; CRS-detected attacks are allowed; and bounded events record profile, allowed/monitored action, numeric rule ID, anomaly score, request ID, and generation/revision.
+3. Set hostname A to **Recommended** (`balanced`). Repeat the probes. Confirm attacks exceeding the fixed profile threshold receive the controlled CDNFoundry response while benign traffic succeeds. The visitor response must not leak rule internals.
+4. Repeat with **High sensitivity** (`strict`) and confirm it applies the documented stricter fixed policy without exposing an arbitrary-expression surface.
+5. Keep hostname A on **Recommended** and hostname B on **Observe** on the same cell. Send the identical attack to both and confirm A blocks while B allows and records it, with no separate per-domain process, worker, or server block.
+6. Change both profiles at runtime and repeat. Confirm behavior changes only after the acknowledged generation is loaded and no Nginx reload occurs.
 
 ### Thresholds, bodies, failures, and privacy
 
-1. Exercise the documented threshold boundary and each exposed paranoia level. Confirm behavior matches the saved configuration and events report the effective values.
+1. Exercise the documented boundary for Recommended and High sensitivity. Confirm behavior matches each fixed profile and events report the effective profile and anomaly result.
 2. Exercise benign JSON POST, common false-positive fixtures, malformed bodies, oversized bodies, and multipart boundary handling. Confirm responses match documented bounded-body and fail-open/fail-closed policies.
 3. Inject an invalid runtime WAF configuration. Confirm the previous mode remains active and the failed generation is not acknowledged.
 4. Exercise documented CRS startup failure, missing rules, unavailable ModSecurity module, and transaction failure procedures. Confirm behavior exactly matches the documented failure policy and is clearly degraded rather than falsely successful.
@@ -110,7 +241,7 @@ Use two hostnames on the same OpenResty cell. Record request IDs, generation ID,
 
 ### Workstream 2 completion gate
 
-- Implementation: real ModSecurity/CRS inspection authoritatively provides per-hostname off/monitor/block behavior on shared cells; remaining Lua protections are distinctly classified.
+- Implementation: real ModSecurity/CRS inspection authoritatively provides per-hostname Off/Observe/Recommended/High sensitivity behavior on shared cells; remaining Lua protections are distinctly classified.
 - Documentation: modes, thresholds, CRS version/update, false positives, exclusions, privacy, platform checks, compatibility, and failure policies are current and truthful.
 - Automated/runtime qualification: real-module and real-CRS E2E cases from the roadmap have recorded passing evidence.
 - Manual browser/traffic qualification: owner-run; **not complete until every applicable checkpoint above is recorded as passed**.

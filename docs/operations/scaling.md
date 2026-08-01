@@ -5,6 +5,12 @@ description: Scale CDNFoundry control workers, DNS, edges, telemetry, and data s
 
 # Scaling
 
+::: warning Scale measured bottlenecks
+Add bounded workers, DNS capacity, ClickHouse capacity, edges, or fixed cells
+only after identifying the saturated resource. Never solve growth by creating a
+default per-domain process, container, worker, timer, or reload path.
+:::
+
 Scale by repeating bounded service roles:
 
 - add Horizon workers for a specific queue lane;
@@ -20,7 +26,8 @@ cache directory, or reload per domain.
 ## Add an edge-only host
 
 1. prepare host firewall, immutable release, `.env.prod`, runtime certificate,
-   server CA, status token, and public service addresses;
+   server CA, status token, advertised service identities, and private local
+   gateway address mappings;
 2. validate `compose.prod.yml` plus `compose.edge-host.yml`;
 3. create the edge row and configure its cells;
 4. enroll its agent with the one-time token;

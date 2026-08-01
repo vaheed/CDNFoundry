@@ -5,6 +5,12 @@ description: Diagnose analytics outages, missing events, Vector buffers, ClickHo
 
 # Troubleshoot telemetry
 
+::: info Serving remains independent
+A telemetry outage should never stop DNS or HTTP. Bounded buffers eventually
+discard old events under a prolonged outage, so missing historical telemetry
+cannot always be recovered after the sink returns.
+:::
+
 ## Analytics returns 503
 
 `analytics_unavailable` means the bounded ClickHouse request failed. Check

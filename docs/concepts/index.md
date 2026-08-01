@@ -5,6 +5,12 @@ description: Learn the vocabulary and invariants shared across CDNFoundry.
 
 # Product concepts
 
+::: info Read desired state first
+Most mutations are asynchronous. Understanding desired versus active state
+prevents an accepted API request or queued operation from being mistaken for a
+runtime deployment acknowledgement.
+:::
+
 Read these short concept guides before changing production state:
 
 - [Desired state](desired-state.md) explains PostgreSQL ownership and derived runtime data.

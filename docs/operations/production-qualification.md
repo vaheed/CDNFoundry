@@ -5,6 +5,12 @@ description: Run, record, and decide the final CDNFoundry production release qua
 
 # Production qualification
 
+::: danger Qualification requires real infrastructure
+Compose validation and local tests cannot prove registrar delegation, external
+routing, provider firewalls, NAT mappings, IPv6 reachability, real certificates,
+or multi-vantage behavior. Record live evidence before approving production.
+:::
+
 CDNFoundry is release-qualified only when one report records every automated,
 real-runtime, external-traffic, installer, load, and browser checkpoint as
 passed. A skipped applicable check blocks release. A failed check fails release.

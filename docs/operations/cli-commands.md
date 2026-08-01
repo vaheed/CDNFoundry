@@ -5,6 +5,12 @@ description: Complete reference for CDNFoundry-owned Artisan commands and their 
 
 # CDNFoundry CLI commands
 
+::: danger Confirm the target environment
+Before a production command, verify the exact release, Compose files,
+environment file, host role, and database endpoint. Never paste secrets into
+command arguments or run maintenance commands against an assumed context.
+:::
+
 Run commands from the Laravel application directory, or through the repository's
 `core` Docker Compose service. List only CDNFoundry commands with:
 
@@ -55,7 +61,7 @@ docker compose -f compose.dev.yml run --rm core php artisan cdnf:api:openapi --c
 
 | Command and syntax | Purpose and effects | Scheduled |
 | --- | --- | --- |
-| `cdnf:backups:create {--wait}` | Creates backup and operation records, then queues an encrypted PostgreSQL Restic backup. `--wait` executes the job in the foreground and waits for repository acknowledgement. Fails if the repository is not configured. | Daily at 01:30 |
+| `cdnf:backups:create {--wait}` | Creates backup and operation records, then queues an encrypted PostgreSQL Restic backup. `--wait` executes the job in the foreground and waits for repository acknowledgement. Fails if the repository is not configured. | Daily at 01:30 when configured |
 | `cdnf:backups:restore {operation}` | Restores the backup approved by a successful restore-preflight operation. This is destructive, requires the explicit restore maintenance boundary, runs migrations, queues reconciliation, and leaves maintenance mode active if recovery fails. | No |
 
 ```sh
@@ -132,7 +138,7 @@ or internal non-command work, which is intentionally not renamed here.
 | `cdnf:waf:expire-exclusions` | Every minute | Remove due WAF exclusions |
 | `cdnf:usage:finalize` | Hourly at minute 20 | Queue the finalized usage hour |
 | `cdnf:audit:prune` | Daily at 03:10 | Delete one expired audit batch |
-| `cdnf:backups:create` | Daily at 01:30 | Queue the control-plane backup |
+| `cdnf:backups:create` | Daily at 01:30 when configured | Queue the control-plane backup |
 
 Laravel's `horizon:snapshot` runs every five minutes and `model:prune` runs
 hourly. They remain unchanged because they are not CDNFoundry-owned commands.

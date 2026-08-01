@@ -5,6 +5,12 @@ description: Operate destination-address and Host/SNI routing to bounded OpenRes
 
 # Edge gateway ingress
 
+::: danger Preserve layer-4 identity
+Public/NAT service addresses must map one-to-one to distinct private listener
+addresses. The firewall or load balancer must pass TCP and TLS through without
+terminating TLS or collapsing several advertised addresses onto one local IP.
+:::
+
 The edge gateway is the only process that binds customer HTTP and HTTPS
 service addresses on a gateway-enabled edge. It performs a bounded lookup on
 destination address plus HTTP `Host` or TLS SNI, then proxies the untouched
@@ -27,6 +33,14 @@ cells use their loopback ports. Containerized development may set
 `EDGE_CELL_TARGETS`, a bounded cell-name-to-HTTP/HTTPS-endpoint map, to replace
 targets with private container DNS names and ports.
 
+Production keeps endpoint identity separate from host listeners. Set
+`EDGE_GATEWAY_ADDRESS_MAP` to an exact advertised-to-local JSON object, for
+example `{"198.51.100.40":"10.20.0.40"}`. The external firewall or layer-4
+load balancer forwards the advertised address to that local address without
+terminating TLS. The production profile requires complete coverage: an
+unmapped endpoint, cross-family pair, wildcard address, or reused local
+address rejects the candidate and preserves the previous valid map.
+
 `EDGE_GATEWAY_BINDINGS` remains an emergency rollout override. When set, its
 static JSON is authoritative and dynamic endpoint changes are intentionally
 ignored. Its shape is a JSON array with at most 32 entries:
@@ -48,6 +62,10 @@ ignored. Its shape is a JSON array with at most 32 entries:
 ]
 ```
 
+The address fields remain advertised identities; the production agent applies
+the same required `EDGE_GATEWAY_ADDRESS_MAP` before compiling this emergency
+override.
+
 For a multi-cell pool, replace the top-level `http` and `https` target with a
 bounded `cells` array. Each item has the stable `name`, `http`, and `https`
 target for that cell. The compiler uses each cell's assigned hostname set, so
@@ -61,10 +79,11 @@ unrelated cells receive neither routes nor domain artifacts:
 ]}]
 ```
 
-Every address must be assigned to the host. Each address/pool pair expands only
-to hostnames assigned by signed artifacts. Candidates are rejected for unknown
-pools, invalid addresses or targets, duplicate address/hostname pairs, more
-than 64 listeners, more than 100,000 protocol routes, or a size over 32 MiB.
+Every mapped local address must be assigned to the host. Each address/pool pair
+expands only to hostnames assigned by signed artifacts. Candidates are rejected
+for unknown pools, invalid addresses or targets, incomplete local mapping,
+duplicate address/hostname pairs, more than 64 listeners, more than 100,000
+protocol routes, or a size over 32 MiB.
 
 The gateway sends PROXY protocol version 2 to private cell ports `8081` and `8444`.
 This is the trusted client-identity contract for HTTP and encrypted HTTPS.
@@ -78,15 +97,19 @@ only `NET_BIND_SERVICE`; drop all other capabilities. Restrict port `9105` to
 the edge agent and monitoring source. Set `EDGE_GATEWAY_MAX_CONNECTIONS` from
 the qualified host ceiling; invalid or out-of-range values use 8,192.
 
-1. Assign every service IPv4/IPv6 address to the host.
-2. Confirm every ready endpoint and participating cell appears in the
+1. Allocate one distinct private/local IPv4 or IPv6 address for every
+   advertised service address and assign only the local addresses to the host.
+2. Configure one-to-one DNAT or layer-4 forwarding for TCP `80` and `443`,
+   preserving the connection and TLS stream. Put every pair in
+   `EDGE_GATEWAY_ADDRESS_MAP`.
+3. Confirm every ready endpoint and participating cell appears in the
    agent-fetched gateway candidate. Do not set the static override during
    normal operation.
-3. Start the agent, cells, state initializer, and gateway. Require gateway
+4. Start the agent, cells, state initializer, and gateway. Require gateway
    readiness and a map revision equal to the latest desired gateway revision.
-4. Probe every configured address/Host and address/SNI combination. Run IPv6
+5. Probe every configured address/Host and address/SNI combination. Run IPv6
    probes only when an IPv6 service address is configured.
-5. Confirm cell HTTP/HTTPS ports are not publicly published before enabling
+6. Confirm cell HTTP/HTTPS ports are not publicly published before enabling
    customer DNS.
 
 Never edit generated gateway, cell, or last-valid files. Change desired state

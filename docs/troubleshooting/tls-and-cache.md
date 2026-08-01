@@ -5,6 +5,12 @@ description: Diagnose managed and custom TLS, cache admission, development mode,
 
 # Troubleshoot TLS and cache
 
+::: danger Preserve the valid certificate and cache state
+Do not delete an active certificate, private key, runtime bundle, or cache
+volume while diagnosing a failed replacement. Repair the candidate and retain
+the previous serving state until the new revision verifies.
+:::
+
 ## Managed order is not created
 
 The domain must be active, nameserver verified, and contain a proxied hostname.

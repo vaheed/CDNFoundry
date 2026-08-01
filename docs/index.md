@@ -15,6 +15,9 @@ hero:
       text: Production quick start
       link: /deployment/production-quick-start
 features:
+  - title: Architecture
+    details: Understand planes, durable state ownership, reconciliation, bounded cells, and failure isolation.
+    link: /architecture/
   - title: Domain users
     details: Add domains, manage DNS, proxy origins, TLS, cache, security, analytics, and usage.
     link: /guides/
@@ -44,7 +47,8 @@ replace the last valid runtime state.
 ```mermaid
 flowchart LR
     Users["Internet users"] -->|"DNS"| DNS["DNSdist + PowerDNS"]
-    Users -->|"HTTP/HTTPS"| Edge["Bounded OpenResty cells"]
+    Users -->|"HTTP/HTTPS"| Gateway["Edge gateway"]
+    Gateway --> Edge["Bounded OpenResty cells"]
     Edge --> Origin["Validated customer origins"]
     Admins["Administrators"] --> Control["Laravel + Filament"]
     Control --> State[("PostgreSQL desired state")]

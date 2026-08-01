@@ -5,6 +5,12 @@ description: Develop and manually qualify the CDNFoundry Filament administrator 
 
 # Frontend development
 
+::: warning Browser qualification is owner-run
+Agents may build assets and maintain the manual checklist, but must not launch
+Playwright, Chromium, Selenium, Cypress, or other browser automation. Report UI
+qualification as not run until the owner completes it.
+:::
+
 The frontend is Filament inside the Laravel monolith. There is no second SPA or
 frontend API client. Both panels compile the shared
 `resources/css/filament/shared/theme.css` through Vite.

@@ -5,6 +5,12 @@ description: Task-oriented guides for every implemented CDNFoundry feature area.
 
 # Feature guides
 
+::: info Guides describe implemented behavior
+These pages document the current product contract. Archived phase documents
+under `docs/legacy/` are historical evidence and must not be used as current
+deployment instructions.
+:::
+
 | Area | Guide |
 | --- | --- |
 | Accounts, roles, assignments, tokens | [Users and access](users-and-access.md) |

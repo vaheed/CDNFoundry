@@ -49,14 +49,20 @@ The Compose file fixes `APP_ENV=production`, `APP_DEBUG=false`,
 `CLICKHOUSE_DATABASE=cdnf`, `CLICKHOUSE_USER=cdnf`, and
 `GEOIP_DATABASE=/mmdb/GeoLite2-City.mmdb`.
 
-## Backup
+## Backup (optional)
+
+Leave `RESTIC_REPOSITORY`, `RESTIC_PASSWORD_FILE`, and both credential values
+empty to disable the built-in backup integration. The control plane still
+starts, while backup creation returns an explicit unavailable error and backup
+health remains degraded. The supported generator path uses S3-compatible
+object storage; other Restic backends need their own credential/mount wiring.
 
 | Variable | Required | Meaning and default |
 | --- | --- | --- |
-| `RESTIC_REPOSITORY` | control | Encrypted off-host Restic repository |
-| `RESTIC_PASSWORD_FILE` | control | Absolute password-file path |
-| `BACKUP_ACCESS_KEY_ID` | S3 repository | Prefix-scoped access key |
-| `BACKUP_SECRET_ACCESS_KEY` | S3 repository | Prefix-scoped secret |
+| `RESTIC_REPOSITORY` | optional control | Restic storage location, such as `s3:https://endpoint/bucket/prefix`; empty disables built-in backups |
+| `RESTIC_PASSWORD_FILE` | configured backup | Absolute file containing the separate Restic encryption password |
+| `BACKUP_ACCESS_KEY_ID` | configured S3 backup | Bucket/prefix-scoped access key |
+| `BACKUP_SECRET_ACCESS_KEY` | configured S3 backup | Bucket/prefix-scoped secret |
 | `BACKUP_DEFAULT_REGION` | S3 repository | Default `us-east-1` |
 | `BACKUP_RESTORE_ALLOWED` | restore executor | Must be true in explicit maintenance context; default false |
 
@@ -91,7 +97,9 @@ The Compose file fixes `APP_ENV=production`, `APP_DEBUG=false`,
 | `PDNS_CA_CERTIFICATE` | control worker | Trust anchor for HTTPS PowerDNS API gateways |
 | `EDGE_GATEWAY_BINDINGS` | edge agent | Optional rollout override. When absent, the agent fetches the bounded, revisioned edge/pool endpoint candidate over mTLS; when set, this static JSON remains authoritative. |
 | `EDGE_CELL_TARGETS` | edge agent | Optional development-only JSON map from stable cell names to private container HTTP/HTTPS endpoints; production host-network cells use control-plane loopback targets |
-| `EDGE_GATEWAY_ADDRESSES` | edge agent | Optional development-only JSON array of at most two gateway listener IPs; production uses control-plane public addresses |
+| `EDGE_GATEWAY_ADDRESSES` | edge agent | Optional development-only JSON array of at most two gateway listener IPs; never set in production |
+| `EDGE_GATEWAY_ADDRESS_MAP` | production edge agent | Exact JSON object mapping every advertised service IPv4/IPv6 address to its distinct private listener address. Both sides use the same family; public, wildcard, and duplicate local values fail closed. Default `{}` permits startup before endpoints exist. |
+| `EDGE_GATEWAY_REQUIRE_ADDRESS_MAP` | production edge agent | Production Compose fixes this to `true`; every fetched endpoint must have a local mapping before activation. Do not override it. |
 | `EDGE_GATEWAY_STATUS_URL` | edge agent | Gateway metrics URL used for heartbeat readiness |
 | `EDGE_GATEWAY_METRICS_ADDRESS` | edge gateway | Restricted metrics listener; production default `0.0.0.0:9105` |
 | `EDGE_GATEWAY_MAX_CONNECTIONS` | edge gateway | Global accepted-connection bound, `128`–`65536` (default `8192`) |
@@ -163,8 +171,8 @@ the supported host collector.
 | Variable | Required | Meaning and default |
 | --- | --- | --- |
 | `CDNF_RELEASE` | every production host | Exact commit SHA or exact release tag |
-| `PUBLIC_BIND_IPV4` | multi-host overlay | Exact public IPv4 owned by the host |
-| `PUBLIC_BIND_IPV6` | IPv6 overlay | Exact public IPv6; omit the overlay when absent |
+| `HOST_BIND_IPV4` | multi-host overlay | Local listener address; default `0.0.0.0`, independent of public/NAT DNS addresses |
+| `HOST_BIND_IPV6` | IPv6 overlay | Local IPv6 listener; default `::`, consumed only when an IPv6 overlay is included |
 | `EDGE_QUARANTINE_HTTP_BIND` | edge | Quarantine HTTP, default `127.0.0.1:18080` |
 | `EDGE_QUARANTINE_HTTPS_BIND` | edge | Quarantine HTTPS, default `127.0.0.1:18443` |
 | `EDGE_RUNTIME_TLS_CERTIFICATE` | edge | Bootstrap listener certificate path |

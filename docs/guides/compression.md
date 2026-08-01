@@ -5,6 +5,12 @@ description: Configure bounded delivery compression while retaining one canonica
 
 # Gzip and Brotli compression
 
+::: tip Start with Standard
+Use Standard for ordinary shared traffic. Enable Maximum savings only on a
+qualified reserved or dedicated WAF-capable image after measuring CPU,
+latency, response mix, and fallback behavior under pressure.
+:::
+
 Compression is selected per service pool and compiled into each assigned
 domain's revisioned edge artifact. It does not create a process, cache
 directory, timer, or Nginx configuration per domain.

@@ -5,6 +5,12 @@ description: Understand what CDNFoundry provides, who it is for, and where to be
 
 # CDNFoundry overview
 
+::: info Serving and management are separate
+Laravel owns desired state and operator workflows, but DNS and HTTP requests do
+not pass through it. A control-plane outage pauses changes while previously
+activated DNS and edge state continues serving.
+:::
+
 CDNFoundry combines authoritative DNS, HTTP/HTTPS proxying, managed and custom
 TLS, bounded caching, security controls, telemetry, and usage export in one
 private platform. It is intended for an operator who controls the infrastructure

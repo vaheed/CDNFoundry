@@ -5,6 +5,12 @@ description: Interpret CDNFoundry liveness, readiness, component health, metrics
 
 # Monitoring and alerts
 
+::: info Metrics are evidence, not control state
+Use metrics to detect and investigate symptoms. PostgreSQL desired state,
+revision acknowledgements, and last-valid runtime state remain authoritative;
+never repair deployment state by editing a dashboard or derived metric.
+:::
+
 ## HTTP health endpoints
 
 | Endpoint | Access | Meaning |

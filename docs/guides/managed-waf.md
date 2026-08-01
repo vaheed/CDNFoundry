@@ -5,6 +5,12 @@ description: Operate fixed profiles, bounded exclusions, and rollback.
 
 # Managed OWASP CRS WAF
 
+::: warning Observe before blocking
+Start a new workload with **Observe**, review sanitized detections and false
+positives, then move to **Recommended**. High sensitivity is intentionally more
+likely to block legitimate application traffic.
+:::
+
 ## The simple mental model
 
 There are only two everyday decisions:

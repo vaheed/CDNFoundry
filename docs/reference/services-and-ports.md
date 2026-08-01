@@ -5,6 +5,12 @@ description: Map CDNFoundry Compose services, profiles, listeners, networks, and
 
 # Services and ports
 
+::: danger A bind is not a firewall policy
+Wildcard and private listener binds still require provider and host firewall
+rules. Keep databases, control endpoints, metrics, cell diagnostics, and
+telemetry internals off public networks.
+:::
+
 ## Production profiles
 
 | Profile | Services |
@@ -31,17 +37,25 @@ ClickHouse when a verified external endpoint is configured.
 | Edge control mTLS | `0.0.0.0:8443` | Restrict to registered edge sources |
 | DNSdist | `${DNS_BIND_V4}:53` TCP and UDP | Public authoritative DNS |
 | Cell slot host diagnostics | loopback `18081`–`18088`, `18444`–`18451`, `19081`–`19088` | HTTP, HTTPS, and status; never public |
-| Edge gateway | operator service IPv4/IPv6 TCP `80`, `443` | Public ingress; TLS passes through |
+| Edge gateway | mapped local service IPv4/IPv6 TCP `80`, `443` | Public/NAT ingress maps one-to-one to local listeners; TLS passes through |
 | Gateway metrics | TCP `9105` | Restrict to edge agent and monitoring |
 | Cell gateway contract | TCP `8081`, `8444` | Private gateway-to-cell network; PROXY protocol version 2 required |
-| DNS API Caddy | `${PUBLIC_BIND_IPV4}:8444` | Exact-source allowlist, TLS |
-| Telemetry Caddy | `${PUBLIC_BIND_IPV4}:8444` | Exact-source allowlist, TLS; routes Loki push and ClickHouse ingestion privately |
+| DNS API Caddy | `${HOST_BIND_IPV4}:8444` | Local bind; exact-source allowlist and TLS protect external access |
+| Telemetry Caddy | `${HOST_BIND_IPV4}:8444` | Local bind; exact-source allowlist and TLS; routes Loki push and ClickHouse ingestion privately |
 | Grafana | `127.0.0.1:3000` | Operator UI; publish only through an authenticated HTTPS reverse proxy |
 | Loki (development only) | `127.0.0.1:3100` | Direct diagnostics; production has no host publication |
 | Operational collector metrics | `127.0.0.1:9599` | Bind to a private monitoring address for remote scraping |
 
-IPv6 publication exists only when the matching `compose.*-host-ipv6.yml`
-overlay is supplied. Do not use a placeholder IPv6 address.
+Host binds are deliberately separate from the public, routed, or NAT addresses
+advertised in DNS. The default IPv4 wildcard works when those addresses exist
+only on an external firewall or load balancer. IPv6 publication exists only
+when the matching `compose.*-host-ipv6.yml` overlay is supplied; omit the
+overlay on IPv4-only hosts.
+
+The edge gateway is stricter than the shared host publications: every
+control-plane service endpoint must be mapped one-to-one to a distinct local
+address in `EDGE_GATEWAY_ADDRESS_MAP`. The production agent rejects an
+unmapped endpoint, so it never binds the advertised public/NAT address.
 
 PowerDNS `8081`, DNSdist statistics `8083`, Vector ingestion `8686`/`8687`,
 Vector traffic metrics `9598`, Loki `3100`, operational Vector metrics `9599`, ClickHouse `8123` and exporter `9363`, Prometheus `9090`, Alertmanager

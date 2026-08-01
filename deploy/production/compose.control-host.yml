@@ -9,10 +9,10 @@ services:
       EDGE_PUBLIC_IPV4_ALLOWLIST: ${EDGE_PUBLIC_IPV4_ALLOWLIST:?EDGE_PUBLIC_IPV4_ALLOWLIST is required}
       LOG_SOURCE_IPV4_ALLOWLIST: ${LOG_SOURCE_IPV4_ALLOWLIST:-127.0.0.1}
     ports:
-      - "${PUBLIC_BIND_IPV4:?PUBLIC_BIND_IPV4 is required}:80:80/tcp"
-      - "${PUBLIC_BIND_IPV4:?PUBLIC_BIND_IPV4 is required}:443:443/tcp"
-      - "${PUBLIC_BIND_IPV4:?PUBLIC_BIND_IPV4 is required}:443:443/udp"
-      - "${PUBLIC_BIND_IPV4:?PUBLIC_BIND_IPV4 is required}:8444:8444/tcp"
+      - "${HOST_BIND_IPV4:-0.0.0.0}:80:80/tcp"
+      - "${HOST_BIND_IPV4:-0.0.0.0}:443:443/tcp"
+      - "${HOST_BIND_IPV4:-0.0.0.0}:443:443/udp"
+      - "${HOST_BIND_IPV4:-0.0.0.0}:8444:8444/tcp"
     volumes:
       - ./deploy/production/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
