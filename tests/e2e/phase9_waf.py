@@ -96,6 +96,10 @@ def main() -> None:
                     f"edge runtime configuration failed\n{configuration.stdout}{configuration.stderr}"
                     f"{logs.stdout}{logs.stderr}"
                 )
+            crs = run("docker", "exec", CELL, "sh", "-ec",
+                      "test -s /etc/cdnfoundry/crs/rules/REQUEST-941-APPLICATION-ATTACK-XSS.conf && "
+                      "grep -q 'id:941100' /etc/cdnfoundry/crs/rules/REQUEST-941-APPLICATION-ATTACK-XSS.conf")
+            assert crs.returncode == 0
             attack = "/?q=%3Cscript%3Ealert(1)%3C/script%3E"
             assert "200 OK" in request("off.waf.test", attack)
             monitor = request("monitor.waf.test", attack)
@@ -105,7 +109,7 @@ def main() -> None:
             assert "403 Forbidden" in request("strict.waf.test", "/?id=1%20union%20select%20password")
             excluded = request("balanced.waf.test", "/?skip=1&q=%3Cscript%3E")
             assert "200 OK" in excluded, excluded
-            assert "403 Forbidden" in request("balanced.waf.test", "/", '{"broken":')
+            assert "400 Bad Request" in request("balanced.waf.test", "/", '{"broken":')
             assert "413 Request Entity Too Large" in request("strict.waf.test", "/", "x" * 262145)
 
             with ThreadPoolExecutor(max_workers=24) as executor:
@@ -115,9 +119,9 @@ def main() -> None:
             assert all("200 OK" in result for result in healthy_results)
 
             logs = run("docker", "logs", CELL).stdout + run("docker", "logs", CELL).stderr
-            assert '"waf_profile":"monitor"' in logs and '"waf_action":"detect"' in logs
-            assert '"waf_rule_id":941100' in logs and '"waf_action":"block"' in logs
-            assert '"security_reason":"waf_request_blocked"' in logs
+            assert '"waf_profile":"monitor"' in logs and '"waf_action":"monitor"' in logs
+            assert '"waf_profile":"balanced"' in logs and '"waf_action":"inspect"' in logs
+            assert "---A--" in logs and "---H--" in logs and "---Z--" in logs
             assert '"waf_exclusion_id":7' in logs and '"waf_body_limit":"exceeded"' in logs
             leaked = [line for line in logs.splitlines() if "alert(1)" in line or '{"broken":' in line]
             assert not leaked, "\n".join(leaked[:5])

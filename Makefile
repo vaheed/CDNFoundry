@@ -9,6 +9,9 @@ backend-test: dev-test
 contract-check: config-check openapi-check
 	python3 -m unittest tests/observability/test_grafana_contract.py tests/observability/test_operational_logging_contract.py
 
+supply-chain-check:
+	python3 scripts/supply-chain-policy.py
+
 dev-assets:
 	docker build --target frontend-assets-export --output type=local,dest=./core/public/build ./core
 

@@ -485,7 +485,7 @@ services:
       dockerfile: docker/openresty/Dockerfile
     environment:
       EDGE_CELL_NAME: cell-01
-      EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-01.json
+      EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-01.json
       EDGE_STATUS_TOKEN: ${CDNF_DEV_EDGE_STATUS_TOKEN:-cdnf-dev-edge-status-only}
       GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb
     volumes:
@@ -518,7 +518,7 @@ services:
       dockerfile: docker/openresty/Dockerfile
     environment:
       EDGE_CELL_NAME: cell-02
-      EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-02.json
+      EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-02.json
       EDGE_STATUS_TOKEN: ${CDNF_DEV_EDGE_STATUS_TOKEN:-cdnf-dev-edge-status-only}
       GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb
     volumes:
@@ -542,32 +542,32 @@ services:
 
   edge-a-cell-03: &edge-a-extra-cell
     <<: *dev-cell
-    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-03, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-03.json }
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-03, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-03.json }
     volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-a-cell-03-cache:/var/cache/nginx]
 
   edge-a-cell-04:
     <<: *edge-a-extra-cell
-    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-04, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-04.json }
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-04, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-04.json }
     volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-a-cell-04-cache:/var/cache/nginx]
 
   edge-a-cell-05:
     <<: *edge-a-extra-cell
-    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-05, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-05.json }
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-05, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-05.json }
     volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-a-cell-05-cache:/var/cache/nginx]
 
   edge-a-cell-06:
     <<: *edge-a-extra-cell
-    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-06, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-06.json }
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-06, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-06.json }
     volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-a-cell-06-cache:/var/cache/nginx]
 
   edge-a-cell-07:
     <<: *edge-a-extra-cell
-    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-07, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-07.json }
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-07, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-07.json }
     volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-a-cell-07-cache:/var/cache/nginx]
 
   edge-a-cell-08:
     <<: *edge-a-extra-cell
-    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-08, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-08.json }
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-08, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-08.json }
     volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-a-cell-08-cache:/var/cache/nginx]
 
   edge-agent-a:
@@ -612,7 +612,7 @@ services:
     build: ./edge-gateway
     profiles: [dev-edge]
     environment:
-      GATEWAY_CONFIG_FILE: /var/lib/cdnfoundry/runtime/gateway.json
+      GATEWAY_CONFIG_FILE: /var/lib/cdnfoundry/runtime/current/gateway.json
       GATEWAY_STATE_DIR: /var/lib/cdnfoundry/gateway-state
       GATEWAY_METRICS_ADDRESS: 0.0.0.0:9105
       GATEWAY_MAX_CONNECTIONS: 4096
@@ -655,7 +655,7 @@ services:
       dockerfile: docker/openresty/Dockerfile
     environment:
       EDGE_CELL_NAME: cell-01
-      EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-01.json
+      EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-01.json
       EDGE_STATUS_TOKEN: ${CDNF_DEV_EDGE_STATUS_TOKEN:-cdnf-dev-edge-status-only}
       GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb
     volumes:
@@ -688,7 +688,7 @@ services:
       dockerfile: docker/openresty/Dockerfile
     environment:
       EDGE_CELL_NAME: cell-02
-      EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-02.json
+      EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-02.json
       EDGE_STATUS_TOKEN: ${CDNF_DEV_EDGE_STATUS_TOKEN:-cdnf-dev-edge-status-only}
       GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb
     volumes:
@@ -712,32 +712,32 @@ services:
 
   edge-b-cell-03: &edge-b-extra-cell
     <<: *dev-cell
-    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-03, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-03.json }
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-03, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-03.json }
     volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-b-cell-03-cache:/var/cache/nginx]
 
   edge-b-cell-04:
     <<: *edge-b-extra-cell
-    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-04, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-04.json }
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-04, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-04.json }
     volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-b-cell-04-cache:/var/cache/nginx]
 
   edge-b-cell-05:
     <<: *edge-b-extra-cell
-    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-05, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-05.json }
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-05, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-05.json }
     volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-b-cell-05-cache:/var/cache/nginx]
 
   edge-b-cell-06:
     <<: *edge-b-extra-cell
-    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-06, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-06.json }
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-06, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-06.json }
     volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-b-cell-06-cache:/var/cache/nginx]
 
   edge-b-cell-07:
     <<: *edge-b-extra-cell
-    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-07, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-07.json }
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-07, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-07.json }
     volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-b-cell-07-cache:/var/cache/nginx]
 
   edge-b-cell-08:
     <<: *edge-b-extra-cell
-    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-08, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/cell-08.json }
+    environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-08, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-08.json }
     volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-b-cell-08-cache:/var/cache/nginx]
 
   edge-agent-b:
@@ -782,7 +782,7 @@ services:
     build: ./edge-gateway
     profiles: [dev-edge]
     environment:
-      GATEWAY_CONFIG_FILE: /var/lib/cdnfoundry/runtime/gateway.json
+      GATEWAY_CONFIG_FILE: /var/lib/cdnfoundry/runtime/current/gateway.json
       GATEWAY_STATE_DIR: /var/lib/cdnfoundry/gateway-state
       GATEWAY_METRICS_ADDRESS: 0.0.0.0:9105
       GATEWAY_MAX_CONNECTIONS: 4096

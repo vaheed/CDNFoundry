@@ -1,0 +1,14 @@
+format: json
+severity:
+  - UNKNOWN
+  - LOW
+  - MEDIUM
+  - HIGH
+  - CRITICAL
+ignore-unfixed: false
+exit-code: 1
+exit-on-eol: 1
+scanners:
+  - vuln
+vulnerability:
+  ignore-statuses: []

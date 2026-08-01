@@ -31,6 +31,7 @@ var logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level:
 type config struct {
 	SchemaVersion int      `json:"schema_version"`
 	Revision      uint64   `json:"revision"`
+	GenerationID  string   `json:"generation_id"`
 	Listeners     []string `json:"listeners"`
 	Routes        []route  `json:"routes"`
 }
@@ -43,8 +44,9 @@ type route struct {
 }
 
 type routingTable struct {
-	revision uint64
-	routes   map[string]string
+	revision     uint64
+	generationID string
+	routes       map[string]string
 }
 
 type gateway struct {
@@ -226,7 +228,13 @@ func validate(candidate config) (*routingTable, error) {
 	if len(routes) == 0 {
 		return nil, errors.New("gateway map has no routes")
 	}
-	return &routingTable{revision: candidate.Revision, routes: routes}, nil
+	if candidate.GenerationID == "" {
+		candidate.GenerationID = fmt.Sprintf("legacy-%020d", candidate.Revision)
+	}
+	if len(candidate.GenerationID) < 22 || len(candidate.GenerationID) > 64 {
+		return nil, errors.New("invalid gateway generation identity")
+	}
+	return &routingTable{revision: candidate.Revision, generationID: candidate.GenerationID, routes: routes}, nil
 }
 
 func (g *gateway) prepareListeners(desired []string) (func(), func(), error) {
@@ -556,6 +564,9 @@ func (g *gateway) serveMetrics(ctx context.Context) {
 		sort.Strings(keys)
 		for _, key := range keys {
 			fmt.Fprintf(writer, "%s %d\n", key, values[key])
+		}
+		if table != nil {
+			fmt.Fprintf(writer, "cdnfoundry_gateway_generation_info{generation_id=%q} 1\n", table.generationID)
 		}
 	})
 	server.Handler = mux

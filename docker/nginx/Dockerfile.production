@@ -1,8 +1,12 @@
 ARG CORE_IMAGE=cdnfoundry/core:ci
 FROM ${CORE_IMAGE} AS core
 
-FROM nginx:1.30.3-alpine AS base
-LABEL org.opencontainers.image.source="https://github.com/vaheed/CDNFoundry"
+FROM nginx:1.30.3-alpine@sha256:0d3b80406a13a767339fbe2f41406d6c7da727ab89cf8fae399e81f780f814d1 AS base
+ARG SOURCE_REVISION=development RELEASE_VERSION=development BUILD_DATE=1970-01-01T00:00:00Z
+LABEL org.opencontainers.image.source="https://github.com/vaheed/CDNFoundry" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" org.opencontainers.image.version="${RELEASE_VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" org.opencontainers.image.description="CDNFoundry web and edge-control ingress" \
+      org.opencontainers.image.licenses="Apache-2.0" org.opencontainers.image.documentation="https://vaheed.github.io/CDNFoundry/"
 COPY --from=core /app/public /app/public
 
 FROM base AS web

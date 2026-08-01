@@ -273,6 +273,10 @@ workstream does not replace an earlier product checkpoint.
 
 ## Workstream 2 — ModSecurity and OWASP CRS enforcement
 
+The coding agent does not run this browser checklist. Real-runtime automated
+qualification executes the actual ModSecurity module and pinned CRS image; the
+steps below remain owner-run and must be recorded separately.
+
 ### Configuration, permissions, and terminology
 
 1. As a domain owner, open **Web application firewall (WAF)**. Confirm it offers exactly **Off**, **Observe**, **Recommended**, and **High sensitivity**, corresponding to the internal `off`, `monitor`, `balanced`, and `strict` profiles, with accurate help text for each.
