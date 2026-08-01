@@ -70,6 +70,14 @@ def main() -> None:
         raise AssertionError("Phase 5 TLS qualification requires the qualified local PowerDNS cluster")
     if sql("select count(*) from edge_pools where name='shared-default' and enabled") != "1":
         raise AssertionError("Phase 5 TLS qualification requires the shared-default edge pool")
+    # Pebble does not persist its account registry when its container is
+    # recreated, while the development PostgreSQL volume intentionally does.
+    # Preserve the account key but force local account rediscovery so a
+    # long-lived development stack remains qualifiable.
+    artisan(
+        "if(str_contains((string)config('services.acme.directory_url'),'pebble')){"
+        "App\\Models\\AcmeAccount::query()->update(['account_url'=>null]);}"
+    )
     artisan(
         "App\\Models\\User::query()->create(["
         f"'name'=>'Phase 5 TLS E2E','email'=>{quote(EMAIL)},"
