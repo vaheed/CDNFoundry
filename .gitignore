@@ -9,3 +9,4 @@
 /storage/qualification/
 __pycache__/
 *.py[cod]
+storage

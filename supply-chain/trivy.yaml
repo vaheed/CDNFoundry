@@ -8,6 +8,7 @@ severity:
 ignore-unfixed: false
 exit-code: 1
 exit-on-eol: 1
+ignorefile: /work/supply-chain/.trivyignore
 scanners:
   - vuln
 vulnerability:

@@ -1,0 +1,8 @@
+# GHSA-r277-6w6q-xmqw: kin-openapi ValidationHandler.Load() fail-open authentication bypass.
+# False positive for the Grafana image: Grafana links kin-openapi only through its build-time
+# OpenAPI conversion script (scripts/openapi3/openapi3conv.go), which imports openapi2,
+# openapi2conv, and openapi3 — never the vulnerable openapi3filter.ValidationHandler package.
+# Verified: `strings /usr/share/grafana/bin/grafana | grep openapi3filter` returns no matches,
+# so the vulnerable code path is not linked into any runtime binary. No released Grafana
+# version (up to 13.1.1) upgrades kin-openapi past the vulnerable range; re-evaluate on upgrade.
+GHSA-r277-6w6q-xmqw
