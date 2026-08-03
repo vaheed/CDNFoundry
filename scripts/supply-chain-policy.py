@@ -65,6 +65,10 @@ release = (ROOT / ".github/workflows/ci.yml").read_text()
 for evidence in ["syft", "trivy", "sign --yes", "attest --yes", "release-manifest.json", "@sha256:"]:
     if evidence not in release:
         fail(f"release workflow lacks {evidence}")
+if re.search(r"\\[ \t]+(?:>>|>)", release):
+    fail("release workflow has an escaped whitespace sequence before an output redirection")
+if "Normalize release evidence permissions" not in release:
+    fail("release workflow does not make container-generated evidence readable before upload")
 
 example = json.loads((ROOT / "supply-chain/release-manifest.example.json").read_text())
 for image in example.get("images", []):
