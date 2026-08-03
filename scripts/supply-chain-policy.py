@@ -69,6 +69,8 @@ if re.search(r"\\[ \t]+(?:>>|>)", release):
     fail("release workflow has an escaped whitespace sequence before an output redirection")
 if "Normalize release evidence permissions" not in release:
     fail("release workflow does not make container-generated evidence readable before upload")
+if '--user "$(id -u):$(id -g)"' not in release:
+    fail("release manifest signer does not write evidence as the runner user")
 
 example = json.loads((ROOT / "supply-chain/release-manifest.example.json").read_text())
 for image in example.get("images", []):
