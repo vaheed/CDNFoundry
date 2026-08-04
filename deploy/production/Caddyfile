@@ -5,14 +5,21 @@
 
 {$CONTROL_HOSTNAME} {
 	encode zstd gzip
-	reverse_proxy web:8080
+	reverse_proxy web:8080 {
+                header_up X-Forwarded-Proto https
+                header_up X-Forwarded-Port 443
+                header_up X-Forwarded-Host {$CONTROL_HOSTNAME}
+                header_down Location "http://{$CONTROL_HOSTNAME}" "https://{$CONTROL_HOSTNAME}"
+}
+
 
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "SAMEORIGIN"
 		Referrer-Policy "strict-origin-when-cross-origin"
-		-Server
+	        Content-Security-Policy "upgrade-insecure-requests"
+                -Server
 	}
 }
 
