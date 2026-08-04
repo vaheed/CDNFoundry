@@ -76,7 +76,7 @@ Use your real values consistently on every host:
 | `EDGE_2` advertised shared/quarantine service IPv4 | `198.51.100.130`, `198.51.100.131` |
 | `EDGE_2` assigned local service IPv4 | `10.20.2.130`, `10.20.2.131` |
 | Local IPv4 bind on every host | `0.0.0.0` or an assigned private address |
-| Exact release | `v0.9.3` |
+| Exact release | `v0.9.4` |
 | Installation directory | `/opt/cdnfoundry` |
 | Protected PKI directory | `/etc/cdnfoundry/pki` |
 
@@ -163,7 +163,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
 docker version
 docker compose version
 
-export CDNF_RELEASE=v0.9.3
+export CDNF_RELEASE=v0.9.4
 sudo install -d -m 0755 /opt/cdnfoundry
 sudo git clone --branch "${CDNF_RELEASE}" --depth 1 \
   https://github.com/vaheed/CDNFoundry.git /opt/cdnfoundry
