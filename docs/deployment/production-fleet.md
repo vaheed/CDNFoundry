@@ -1,6 +1,11 @@
+---
+title: Production fleet reference
+description: Understand the design rules, topology, certificate trust, startup order, upgrade behavior, and secret distribution for CDNFoundry production fleets.
+---
+
 # Production fleet reference
 
-For the complete command workflow and interactive setup, see [Production fleet operator guide](production-fleet-operator-guide.md).
+For the complete command workflow and interactive setup, see [Production fleet operator guide](production-fleet-operator-guide).
 
 ## Design rules
 
@@ -301,6 +306,6 @@ A control-plane generation process already holds the fleet lock. Find and finish
 
 ## Deployment runbooks
 
-- [Three-node production quick start](production-quick-start.md)
-- [18-node production quick start](production-quick-start-large-fleet.md)
-- [Production fleet operator guide](production-fleet-operator-guide.md)
+- [Three-node production quick start](production-quick-start)
+- [18-node production quick start](production-quick-start-large-fleet)
+- [Production fleet operator guide](production-fleet-operator-guide)

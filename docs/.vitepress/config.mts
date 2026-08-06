@@ -248,6 +248,10 @@ export default defineConfig({
           items: [
             { text: 'Production deployment', link: '/deployment/' },
             { text: 'Production quick start', link: '/deployment/production-quick-start' },
+            { text: 'Production quick start: 18-node fleet', link: '/deployment/production-quick-start-large-fleet' },
+            { text: 'Production fleet reference', link: '/deployment/production-fleet' },
+            { text: 'Production fleet operator guide', link: '/deployment/production-fleet-operator-guide' },
+            { text: 'Production fleet configuration reference', link: '/deployment/production-fleet-config-reference' },
             { text: 'Topology', link: '/deployment/topology' },
             { text: 'Certificates', link: '/deployment/certificates' },
             { text: 'Upgrade', link: '/deployment/upgrade' }

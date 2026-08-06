@@ -401,4 +401,4 @@ Update `telemetry.ops.example.com` or the load balancer, distribute affected bun
 - [ ] a failed runtime candidate preserves the previous active revision;
 - [ ] a full isolated restore exercise has a recorded RPO and RTO.
 
-See [Production quick start: three nodes](production-quick-start.md) for the complete manual mTLS registration sequence and [Production fleet operator guide](production-fleet-operator-guide.md) for upgrades, rotation, adoption, and troubleshooting.
+See [Production quick start: three nodes](production-quick-start) for the complete manual mTLS registration sequence and [Production fleet operator guide](production-fleet-operator-guide) for upgrades, rotation, adoption, and troubleshooting.
