@@ -1,3 +1,8 @@
+---
+title: Production fleet configuration reference
+description: Reference for CDNFoundry production fleet CLI options, setup config schema, node objects, feature configuration, and generated bundle contract.
+---
+
 # Production fleet configuration reference
 
 ## Common command options
