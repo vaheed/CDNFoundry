@@ -418,4 +418,4 @@ Final checklist:
 - [ ] private databases, metrics, logs, and APIs are not public;
 - [ ] recovery copies and an isolated restore test exist.
 
-For the larger topology, see [Production quick start: 18-node fleet](production-quick-start-large-fleet). For all commands and lifecycle operations, see [Production fleet operator guide](production-fleet-operator-guide).
+For the larger topology, see [Production quick start: 18-node fleet](production-quick-start-large-fleet.md). For all commands and lifecycle operations, see [Production fleet operator guide](production-fleet-operator-guide.md).

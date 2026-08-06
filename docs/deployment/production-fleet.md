@@ -5,7 +5,7 @@ description: Understand the design rules, topology, certificate trust, startup o
 
 # Production fleet reference
 
-For the complete command workflow and interactive setup, see [Production fleet operator guide](./production-fleet-operator-guide).
+For the complete command workflow and interactive setup, see [Production fleet operator guide](./production-fleet-operator-guide.md).
 
 ::: warning Critical prerequisites
 Before deploying a production fleet, ensure you have completed certificate provisioning, network firewall configuration, and have validated all target hosts. Do not proceed without verifying connectivity between all nodes.
@@ -310,6 +310,6 @@ A control-plane generation process already holds the fleet lock. Find and finish
 
 ## Deployment runbooks
 
-- [Three-node production quick start](./production-quick-start)
-- [18-node production quick start](./production-quick-start-large-fleet)
-- [Production fleet operator guide](./production-fleet-operator-guide)
+- [Three-node production quick start](./production-quick-start.md)
+- [18-node production quick start](./production-quick-start-large-fleet.md)
+- [Production fleet operator guide](./production-fleet-operator-guide.md)

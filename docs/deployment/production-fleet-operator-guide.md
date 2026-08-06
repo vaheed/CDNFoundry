@@ -454,7 +454,7 @@ You can still generate bundles and run Python-level validation. Run each bundleâ
 
 ## Related documents
 
-- [Production quick start: three nodes](./production-quick-start)
-- [Production quick start: 18-node fleet](./production-quick-start-large-fleet)
-- [Production fleet reference](./production-fleet)
-- [Fleet configuration reference](./production-fleet-config-reference)
+- [Production quick start: three nodes](./production-quick-start.md)
+- [Production quick start: 18-node fleet](./production-quick-start-large-fleet.md)
+- [Production fleet reference](./production-fleet.md)
+- [Fleet configuration reference](./production-fleet-config-reference.md)
