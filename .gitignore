@@ -1,31 +1,42 @@
-```
-# Dependencies
-node_modules/
-
-# Build artifacts
-dist/
-build/
-target/
-
-# Cache directories
-.vitepress/cache/
-
-# Logs
+# Logs and temp files
 *.log
 
-# Environment
+# Environment files
 .env
 .env.local
 *.env.*
 
-# Editor/IDE
+# Dependencies
+node_modules/
+venv/
+.venv/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+dist/
+build/
+target/
+.gradle/
+
+# Compiled files
+*.pyc
+*.class
+*.o
+*.exe
+*.dll
+*.so
+*.a
+*.obj
+*.out
+
+# Editors
 .vscode/
 .idea/
 *.swp
 *.swo
 *.tmp
 
-# OS
+# System files
 .DS_Store
 Thumbs.db
 
@@ -33,16 +44,6 @@ Thumbs.db
 coverage/
 htmlcov/
 .coverage
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-*.egg-info/
-.eggs/
 
 # Compressed files
 *.zip
@@ -67,4 +68,3 @@ __pycache__/
 *.tar.bz2
 *.tar.xz
 *.tar.zst
-```
