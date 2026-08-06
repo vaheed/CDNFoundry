@@ -49,7 +49,7 @@ Equivalent non-interactive command:
   --repo-root "$PWD" \
   setup \
   --operator-domain ops.example.com \
-  --platform-domain example.com \
+  --platform-domain example.net \
   --release v1.0.0 \
   --preset control-monitoring \
   --control-ipv4 192.0.2.10 \
@@ -88,9 +88,9 @@ For repeatable automation, use a JSON file:
   "preset": "control-monitoring",
   "global": {
     "operator_domain": "ops.example.com",
-    "platform_domain": "example.com",
+    "platform_domain": "example.net",
     "release": "v1.0.0",
-    "acme_email": "operations@example.com",
+    "acme_email": "operations@example.net",
     "ipv6": false
   },
   "nodes": [
@@ -454,7 +454,7 @@ You can still generate bundles and run Python-level validation. Run each bundleâ
 
 ## Related documents
 
-- [Production quick start: three nodes](production-quick-start)
-- [Production quick start: 18-node fleet](production-quick-start-large-fleet)
-- [Production fleet reference](production-fleet)
-- [Fleet configuration reference](production-fleet-config-reference)
+- [Production quick start: three nodes](./production-quick-start.md)
+- [Production quick start: 18-node fleet](./production-quick-start-large-fleet.md)
+- [Production fleet reference](./production-fleet.md)
+- [Fleet configuration reference](./production-fleet-config-reference.md)

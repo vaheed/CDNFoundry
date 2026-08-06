@@ -33,9 +33,9 @@ CDNFOUNDRY_FLEET_OUTPUT_DIR
   "preset": "control-monitoring",
   "global": {
     "operator_domain": "ops.example.com",
-    "platform_domain": "example.com",
+    "platform_domain": "example.net",
     "release": "v1.0.0",
-    "acme_email": "operations@example.com",
+    "acme_email": "operations@example.net",
     "ipv6": false
   },
   "nodes": [],
