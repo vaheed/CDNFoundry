@@ -450,7 +450,7 @@ curl --fail --head \
   https://CUSTOMER_DOMAIN/
 ```
 
-## 11. Backups and operational checks {#step-11-backups-and-operational-checks}
+## Step 11. Backups and operational checks
 
 Never run `docker compose down -v`, delete named volumes, regenerate `APP_KEY`, rotate CA keys during an ordinary upgrade, or copy one edge identity volume to another host.
 

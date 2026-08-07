@@ -123,7 +123,7 @@ sudo ./scripts/cdnfoundry-fleet \
 #### `[control]` Section
 
 | Key | Description | Required | Example |
-|-----|-------------|----------|---------|
+| --- | --- | --- | --- |
 | `hostname` | Fully qualified domain name for control plane | Yes | `control.ops.example.com` |
 | `ipv4` | Public IPv4 address | Yes | `192.0.2.10` |
 | `ipv6` | Public IPv6 address (optional) | No | `2001:db8::10` |
@@ -148,7 +148,7 @@ Optional IPv6: `<name> = <ipv4>,<ipv6>,<region>,<location>`
 #### `[fleet]` Section
 
 | Key | Description | Required | Default |
-|-----|-------------|----------|---------|
+| --- | --- | --- | --- |
 | `operator_domain` | Operator DNS domain | Yes | - |
 | `platform_domain` | CDN platform domain | Yes | - |
 | `release` | Exact release tag or commit SHA | Yes | - |
@@ -161,7 +161,7 @@ Optional IPv6: `<name> = <ipv4>,<ipv6>,<region>,<location>`
 #### `[backup]` Section
 
 | Key | Description | Required | Example |
-|-----|-------------|----------|---------|
+| --- | --- | --- | --- |
 | `enabled` | Enable Restic backups | No | `true`/`false` |
 | `repository` | S3 repository URL | If enabled | `s3:https://...` |
 | `region` | S3 region | No | `us-east-1` |
@@ -253,6 +253,7 @@ sudo ./scripts/cdnfoundry-fleet --config /absolute/path/to/fleet-config.ini init
 ### Invalid Configuration Format
 
 Check for:
+
 - Missing section headers `[section]`
 - Incorrect key-value separators (use `=`)
 - Missing required fields
