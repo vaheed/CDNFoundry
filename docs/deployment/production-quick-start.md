@@ -1,3 +1,8 @@
+---
+title: Production quick start: three nodes
+description: Deploy the smallest practical CDNFoundry fleet with one control node and two combined DNS/edge nodes using a centralized configuration file.
+---
+
 # Production quick start: three nodes
 
 This guide deploys the smallest practical CDNFoundry fleet with the fleet generator:
@@ -10,7 +15,63 @@ This guide deploys the smallest practical CDNFoundry fleet with the fleet genera
 
 The generator runs only on a protected control/operations machine. Edge enrollment is deliberately manual: first start the control plane, create each edge in the control panel, then give the generator the returned UUID and one-time bootstrap token.
 
-> Replace every example domain, address, release, email, service address, UUID, and token. The `192.0.2.0/24` and `198.51.100.0/24` ranges are documentation-only.
+> **Replace every example domain, address, release, email, service address, UUID, and token.** The `192.0.2.0/24` and `198.51.100.0/24` ranges are documentation-only.
+
+## Before You Begin
+
+### 1. Clone the Repository at a Specific Version
+
+```bash
+# For production: clone a specific release tag (recommended)
+git clone --branch v1.0.0 --depth 1 https://github.com/vaheed/CDNFoundry.git
+cd CDNFoundry
+
+# For testing/development: clone a specific branch
+git clone --branch dev --depth 1 https://github.com/vaheed/CDNFoundry.git
+cd CDNFoundry
+
+# Or clone and checkout a specific commit
+git clone https://github.com/vaheed/CDNFoundry.git
+cd CDNFoundry
+git checkout <commit-sha>
+```
+
+> **Important**: Always deploy from a pinned release tag or commit SHA in production. Never use mutable tags like `latest`, `main`, or major/minor version tags.
+
+### 2. Quick Configuration with a Single File (Recommended)
+
+Instead of editing multiple scripts, you can use a centralized configuration file. See [Production Fleet Configuration Guide](production-config.md) for details.
+
+Create a `fleet-config.ini` file:
+
+```ini
+[control]
+hostname = control.ops.example.com
+ipv4 = 192.0.2.10
+region = global
+location = primary
+
+[pop]
+pop-1 = 198.51.100.20,europe,amsterdam
+pop-2 = 198.51.100.30,europe,frankfurt
+
+[fleet]
+operator_domain = ops.example.com
+platform_domain = example.net
+release = v1.0.0
+acme_email = operations@example.com
+enable_monitoring = true
+state_dir = /var/lib/cdnfoundry-fleet
+output_dir = /var/lib/cdnfoundry-fleet/bundles
+```
+
+Then generate your fleet state:
+
+```bash
+sudo ./scripts/cdnfoundry-fleet --config fleet-config.ini setup --non-interactive
+```
+
+The rest of this guide shows the manual step-by-step approach for full control.
 
 ## Resulting topology
 
@@ -389,7 +450,7 @@ curl --fail --head \
   https://CUSTOMER_DOMAIN/
 ```
 
-## 11. Backups and operational checks
+## Step 11. Backups and operational checks
 
 Never run `docker compose down -v`, delete named volumes, regenerate `APP_KEY`, rotate CA keys during an ordinary upgrade, or copy one edge identity volume to another host.
 

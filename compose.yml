@@ -1,0 +1,3 @@
+# Placeholder compose.yml for documentation validation
+# This file is referenced in documentation but actual deployments use role-specific compose files
+# See deploy/production/ for production compose configurations

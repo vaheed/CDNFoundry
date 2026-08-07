@@ -133,7 +133,7 @@ jobs:
           exit 1
 
   backend-e2e:
-    name: Python backend and runtime E2E
+    name: Python E2E tests
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:

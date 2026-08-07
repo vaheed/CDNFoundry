@@ -26,7 +26,8 @@ PowerDNS, OpenResty, and ClickHouse dependencies inside containers.
 ## Install the development stack
 
 ```sh
-git clone https://github.com/vaheed/CDNFoundry.git cdnfoundry
+# Clone the repository (development branch)
+git clone --branch dev --depth 1 https://github.com/vaheed/CDNFoundry.git cdnfoundry
 cd cdnfoundry
 make dev-control-up
 make dev-migrate

@@ -1,1 +1,61 @@
-(docs/deployment/production-fleet-operator-guide.md, docs/deployment/production-fleet.md, docs/deployment/production-quick-start-large-fleet.md, docs/deployment/production-quick-start.md)
+```
+# Dependencies
+node_modules/
+package-lock.json
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editors
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-selfcheck.json
+.spyderproject
+.spyproject
+.ropeproject
+/site-packages/
+
+# Build directories
+build/
+dist/
+*.egg
+*.egg-info/
+.coverage
+htmlcov/
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git/
+.mypy_cache/
+.pytest_cache/
+.hypothesis/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+```

@@ -11,7 +11,8 @@ normal workflow. GNU Make, Docker Engine, the Compose plugin, and Python 3 are
 required for the documented commands.
 
 ```sh
-git clone https://github.com/vaheed/CDNFoundry.git cdnfoundry
+# Clone the repository (development branch)
+git clone --branch dev --depth 1 https://github.com/vaheed/CDNFoundry.git cdnfoundry
 cd cdnfoundry
 make dev-control-up
 make dev-migrate

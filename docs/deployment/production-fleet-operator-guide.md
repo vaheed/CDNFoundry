@@ -1,3 +1,8 @@
+---
+title: Production fleet operator guide
+description: Complete lifecycle guide for CDNFoundry production fleets including setup, monitoring, DNS, edge nodes, validation, bundle transfer, operation, upgrades, recovery, and troubleshooting.
+---
+
 # Production fleet operator guide
 
 This guide covers the full lifecycle of a CDNFoundry production fleet: first-time setup, control plus monitoring, additional DNS and edge nodes, validation, bundle transfer, operation, upgrades, recovery, and troubleshooting.

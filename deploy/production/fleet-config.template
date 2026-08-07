@@ -1,0 +1,140 @@
+# CDNFoundry Fleet Configuration Template
+# Copy this file to fleet-config.ini and customize for your deployment
+# 
+# This is a simple INI-style configuration file that centralizes
+# all deployment parameters in one place.
+
+# -----------------------------------------------------------------------------
+# Control Plane Configuration
+# -----------------------------------------------------------------------------
+[control]
+# Fully qualified domain name for the control plane
+hostname = control.ops.example.com
+
+# Public IPv4 address (required)
+ipv4 = 192.0.2.10
+
+# Public IPv6 address (optional, comment out if not using)
+# ipv6 = 2001:db8::10
+
+# Geographic region identifier
+region = global
+
+# Datacenter/location identifier
+location = primary
+
+# -----------------------------------------------------------------------------
+# Point of Presence (PoP) / Edge Nodes Configuration
+# -----------------------------------------------------------------------------
+[pop]
+# Format: <node-name> = <ipv4>[,<ipv6>],<region>,<location>
+# Add one line per PoP node
+# Minimum 2 nodes recommended for redundancy
+
+pop-1 = 198.51.100.20,europe,amsterdam
+pop-2 = 198.51.100.30,europe,frankfurt
+
+# Example with IPv6:
+# pop-3 = 203.0.113.40,2001:db8::40,us-east,new-york
+
+# -----------------------------------------------------------------------------
+# Fleet-Wide Settings
+# -----------------------------------------------------------------------------
+[fleet]
+# Operator DNS domain (where management records live)
+operator_domain = ops.example.com
+
+# CDN platform domain (customer-facing domain)
+platform_domain = example.net
+
+# Exact release version - MUST be a specific tag or commit SHA
+# Examples: v1.0.0, abc123..., or leave empty for latest dev
+release = v1.0.0
+
+# ACME/Let's Encrypt contact email for certificate notifications
+acme_email = operations@example.com
+
+# Enable monitoring stack (Prometheus, Grafana)
+enable_monitoring = true
+
+# Enable centralized logging (Loki, Vector)
+enable_logs = true
+
+# Fleet state directory (where generator stores state)
+state_dir = /var/lib/cdnfoundry-fleet
+
+# Bundle output directory (where rendered configs go)
+output_dir = /var/lib/cdnfoundry-fleet/bundles
+
+# Dual-stack IPv4/IPv6 support (true/false)
+dual_stack = false
+
+# -----------------------------------------------------------------------------
+# Backup Configuration (Optional but Recommended)
+# -----------------------------------------------------------------------------
+[backup]
+# Enable encrypted Restic backups (true/false)
+enabled = false
+
+# S3-compatible repository URL
+# Format: s3:https://<endpoint>/<bucket>/<prefix>
+repository = s3:https://object-storage.example/bucket/cdnfoundry-control
+
+# S3 region
+region = us-east-1
+
+# S3 credentials (leave empty and use environment variables for security)
+access_key_id = 
+secret_access_key = 
+
+# Path to file containing Restic encryption password
+password_file = /etc/cdnfoundry/secrets/restic-password
+
+# -----------------------------------------------------------------------------
+# Monitoring Configuration (Optional)
+# -----------------------------------------------------------------------------
+[monitoring]
+# Mode: colocated (on control), dedicated (separate host), or disabled
+mode = colocated
+
+# Dedicated monitoring host (if mode = dedicated)
+# host = monitoring.ops.example.com
+
+# Prometheus scrape interval
+scrape_interval = 30s
+
+# Retention period for metrics
+retention_days = 30
+
+# -----------------------------------------------------------------------------
+# Logging Configuration (Optional)
+# -----------------------------------------------------------------------------
+[logging]
+# Mode: centralized (to control), external, or disabled
+mode = centralized
+
+# External log endpoint (if mode = external)
+# endpoint = https://logs.example.com
+
+# Log retention period
+retention_days = 14
+
+# -----------------------------------------------------------------------------
+# Advanced Settings (Optional)
+# -----------------------------------------------------------------------------
+[advanced]
+# Custom certificate authority settings
+# ca_country = US
+# ca_state = California
+# ca_organization = Your Organization
+
+# Rate limiting and budgets
+# acme_order_budget_per_hour = 20
+
+# Custom network settings
+# control_bind = 0.0.0.0:8080
+# edge_control_bind = 0.0.0.0:8443
+
+# Service address mappings (for NAT scenarios)
+# Format: {"public_ip":"private_ip","..."}
+# edge_gateway_address_map = {}
