@@ -12,7 +12,6 @@
         "laravel/horizon": "^5.47",
         "laravel/sanctum": "^4.3",
         "laravel/tinker": "^3.0",
-        "league/commonmark": "^2.9",
         "predis/predis": "^3.5"
     },
     "require-dev": {
