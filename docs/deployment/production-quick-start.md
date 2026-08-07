@@ -1,5 +1,5 @@
 ---
-title: Production quick start: three nodes
+title: "Production quick start: three nodes"
 description: Deploy the smallest practical CDNFoundry fleet with one control node and two combined DNS/edge nodes using a centralized configuration file.
 ---
 
