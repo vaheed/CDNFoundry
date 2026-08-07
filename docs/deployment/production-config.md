@@ -1,3 +1,8 @@
+---
+title: Production Fleet Configuration Guide
+description: Learn how to configure a production CDNFoundry fleet using a centralized INI-style configuration file for all IPs, domains, and settings.
+---
+
 # Production Fleet Configuration Guide
 
 This guide explains how to configure a production CDNFoundry fleet using a centralized configuration file.

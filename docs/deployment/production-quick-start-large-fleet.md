@@ -1,3 +1,8 @@
+---
+title: Production quick start: 18-node fleet
+description: Deploy a larger CDNFoundry fleet with one control node, two DNS nodes, and fifteen edge nodes using a centralized configuration file.
+---
+
 # Production quick start: 18-node fleet
 
 This guide creates a larger CDNFoundry deployment with:

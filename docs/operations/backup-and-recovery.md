@@ -79,7 +79,7 @@ the Restic password separately from both the repository and S3 credentials.
 Initialize a new repository once after the control dependencies, migration, and
 core service are healthy; use `restic snapshots` instead when attaching an
 existing repository. The exact secret-safe container commands are in the
-[Production quick start](../deployment/production-quick-start.md#step-11-optional-initialize-and-prove-encrypted-backups).
+[Production quick start](../deployment/production-quick-start.md#step-11-backups-and-operational-checks).
 
 Restic also supports SFTP, REST, Azure, Google Cloud Storage, and other
 backends, but their provider variables, identity files, and mounts are not

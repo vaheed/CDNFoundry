@@ -1,43 +1,20 @@
 ```
-# Environment variables
-.env
-.env.local
-.env.*
+# Dependencies
+vendor/
+composer.lock
 
-# Logs
+# Logs and temp files
 *.log
-
-# Temporary files
 *.tmp
 
-# Editor/IDE files
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editors
 .vscode/
 .idea/
-*.swp
-*.swo
-
-# Dependencies
-node_modules/
-venv/
-.venv/
-__pycache__/
-*.egg-info/
-.pytest_cache/
-.mypy_cache/
-
-# Build artifacts
-dist/
-build/
-target/
-*.pyc
-*.class
-*.o
-*.obj
-*.exe
-*.dll
-*.so
-*.a
-*.out
 
 # Coverage reports
 coverage/
@@ -47,28 +24,4 @@ htmlcov/
 # OS generated files
 .DS_Store
 Thumbs.db
-
-# Compressed files
-*.zip
-*.gz
-*.tar
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
 ```

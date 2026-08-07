@@ -1,3 +1,8 @@
+---
+title: Production quick start: three nodes
+description: Deploy the smallest practical CDNFoundry fleet with one control node and two combined DNS/edge nodes using a centralized configuration file.
+---
+
 # Production quick start: three nodes
 
 This guide deploys the smallest practical CDNFoundry fleet with the fleet generator:
@@ -445,7 +450,7 @@ curl --fail --head \
   https://CUSTOMER_DOMAIN/
 ```
 
-## 11. Backups and operational checks
+## 11. Backups and operational checks {#step-11-backups-and-operational-checks}
 
 Never run `docker compose down -v`, delete named volumes, regenerate `APP_KEY`, rotate CA keys during an ordinary upgrade, or copy one edge identity volume to another host.
 

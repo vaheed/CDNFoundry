@@ -139,6 +139,10 @@ jobs:
           SAFE_TAG="${SAFE_TAG%-}"  # Remove trailing dash
           
           echo "Building images with tag: ${SAFE_TAG}"
+          # Fallback to 'dev' if tag is empty
+          if [[ -z "${SAFE_TAG}" ]]; then
+            SAFE_TAG="dev"
+          fi
           
           # Build all production images with branch-specific tags
           docker build --target production -t "cdnfoundry/core:${SAFE_TAG}" core
