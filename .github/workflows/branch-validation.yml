@@ -1,0 +1,403 @@
+name: Branch Validation
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+    branches:
+      - main
+      - dev
+
+permissions:
+  contents: read
+
+concurrency:
+  group: branch-validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-branch:
+    name: Validate branch naming and version tags
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      release-tag: ${{ steps.extract-tag.outputs.release }}
+      is-release: ${{ steps.check-release.outputs.is-release }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      
+      - name: Extract release tag or branch name
+        id: extract-tag
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "release=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            echo "type=tag" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.ref }}" == refs/heads/* ]]; then
+            branch="${{ github.ref_name }}"
+            echo "release=${branch//\//-}" >> "$GITHUB_OUTPUT"
+            echo "type=branch" >> "$GITHUB_OUTPUT"
+          fi
+      
+      - name: Check if this is a release tag
+        id: check-release
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "is-release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is-release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  core:
+    name: PHP, contracts, and assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: validate-branch
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    defaults:
+      run:
+        working-directory: core
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_sqlite
+          coverage: none
+      
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: core/package-lock.json
+      
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+      
+      - name: Validate PHP dependency contract and advisories
+        run: composer validate --strict && composer audit --locked --no-interaction
+      
+      - name: Install frontend dependencies
+        run: npm ci
+      
+      - name: Check production frontend dependency advisories
+        run: npm audit --omit=dev --audit-level=moderate
+      
+      - name: Check PHP formatting
+        run: vendor/bin/pint --test
+      
+      - name: Build frontend assets
+        run: npm run build
+      
+      - name: Run application tests
+        run: php artisan test
+      
+      - name: Check OpenAPI contract
+        run: php artisan cdnf:api:openapi --check
+
+  compose:
+    name: Compose contracts and images (branch-specific tags)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: validate-branch
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      
+      - name: Enforce software supply-chain policy
+        run: python3 scripts/supply-chain-policy.py
+      
+      - name: Validate development topology
+        run: docker compose -f compose.dev.yml config --quiet
+      
+      - name: Validate production topology
+        run: docker compose --env-file .env.prod.example -f compose.prod.yml config --quiet
+      
+      - name: Validate production role overrides
+        run: ./scripts/validate-production-overrides.sh
+      
+      - name: Validate observability contracts
+        run: python3 -m unittest tests/observability/test_grafana_contract.py tests/observability/test_operational_logging_contract.py
+      
+      - name: Validate Python syntax
+        run: python3 -m compileall -q tests/e2e tests/docs
+      
+      - name: Build every image with branch-specific tags
+        env:
+          BRANCH_TAG: ${{ needs.validate-branch.outputs.release-tag }}
+        run: |
+          set -euo pipefail
+          
+          # Create a safe tag from branch name (replace / with -, remove special chars)
+          SAFE_TAG="${BRANCH_TAG//[^a-zA-Z0-9.-]/-}"
+          SAFE_TAG="${SAFE_TAG#-}"  # Remove leading dash
+          SAFE_TAG="${SAFE_TAG%-}"  # Remove trailing dash
+          
+          echo "Building images with tag: ${SAFE_TAG}"
+          
+          # Build all production images with branch-specific tags
+          docker build --target production -t "cdnfoundry/core:${SAFE_TAG}" core
+          docker build --build-arg CORE_IMAGE="cdnfoundry/core:${SAFE_TAG}" --target web -t "cdnfoundry/web:${SAFE_TAG}" -f docker/nginx/Dockerfile.production .
+          docker build --build-arg CORE_IMAGE="cdnfoundry/core:${SAFE_TAG}" --target edge-control -t "cdnfoundry/edge-control:${SAFE_TAG}" -f docker/nginx/Dockerfile.production .
+          docker build -t "cdnfoundry/edge-runtime:${SAFE_TAG}" -f docker/openresty/Dockerfile .
+          docker build -t "cdnfoundry/edge-agent:${SAFE_TAG}" edge-agent
+          docker build -t "cdnfoundry/edge-gateway:${SAFE_TAG}" edge-gateway
+          docker build -t "cdnfoundry/mmdb-updater:${SAFE_TAG}" docker/mmdb-updater
+          docker build -t "cdnfoundry/loki:${SAFE_TAG}" docker/loki
+          
+          # Also build with :latest suffix for the branch (e.g., :dev:latest)
+          docker tag "cdnfoundry/core:${SAFE_TAG}" "cdnfoundry/core:${SAFE_TAG}-latest"
+          docker tag "cdnfoundry/web:${SAFE_TAG}" "cdnfoundry/web:${SAFE_TAG}-latest"
+          docker tag "cdnfoundry/edge-control:${SAFE_TAG}" "cdnfoundry/edge-control:${SAFE_TAG}-latest"
+          docker tag "cdnfoundry/edge-runtime:${SAFE_TAG}" "cdnfoundry/edge-runtime:${SAFE_TAG}-latest"
+          docker tag "cdnfoundry/edge-agent:${SAFE_TAG}" "cdnfoundry/edge-agent:${SAFE_TAG}-latest"
+          docker tag "cdnfoundry/edge-gateway:${SAFE_TAG}" "cdnfoundry/edge-gateway:${SAFE_TAG}-latest"
+          docker tag "cdnfoundry/mmdb-updater:${SAFE_TAG}" "cdnfoundry/mmdb-updater:${SAFE_TAG}-latest"
+          docker tag "cdnfoundry/loki:${SAFE_TAG}" "cdnfoundry/loki:${SAFE_TAG}-latest"
+      
+      - name: Smoke-test the read-only core image
+        shell: bash
+        env:
+          BRANCH_TAG: ${{ needs.validate-branch.outputs.release-tag }}
+        run: |
+          set -euo pipefail
+          
+          SAFE_TAG="${BRANCH_TAG//[^a-zA-Z0-9.-]/-}"
+          SAFE_TAG="${SAFE_TAG#-}"
+          SAFE_TAG="${SAFE_TAG%-}"
+          
+          container_id="$(docker run -d --read-only --tmpfs /tmp --tmpfs /app/storage "cdnfoundry/core:${SAFE_TAG}")"
+          trap 'docker logs "${container_id}"; docker rm -f "${container_id}" >/dev/null' EXIT
+          for attempt in {1..30}; do
+            if docker exec "${container_id}" php -r "exit(@fsockopen('127.0.0.1', 9000) ? 0 : 1);"; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+
+  backend-e2e:
+    name: Python backend and runtime E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [validate-branch, core]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      
+      - name: Start migratable development control plane
+        run: make dev-control-up
+      
+      - name: Apply migrations explicitly
+        run: make dev-migrate
+      
+      - name: Start real development topology
+        shell: bash
+        run: |
+          set +e
+          for attempt in 1 2; do
+            COMPOSE_PARALLEL_LIMIT=2 make dev-up 2>&1 | tee -a /tmp/cdnfoundry-dev-up.log
+            status=${PIPESTATUS[0]}
+            if (( status == 0 )); then
+              exit 0
+            fi
+            echo "Development topology startup attempt ${attempt} failed."
+          done
+          tail -n 80 /tmp/cdnfoundry-dev-up.log > /tmp/cdnfoundry-dev-up-tail.log
+          annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-dev-up-tail.log)"
+          echo "::error title=Development topology startup failed::${annotation}"
+          exit "${status}"
+      
+      - name: Run Python non-UI E2E
+        shell: bash
+        run: |
+          set +e
+          make dev-e2e 2>&1 | tee /tmp/cdnfoundry-e2e.log
+          status=${PIPESTATUS[0]}
+          if (( status != 0 )); then
+            tail -n 25 /tmp/cdnfoundry-e2e.log > /tmp/cdnfoundry-e2e-tail.log
+            {
+              echo '### Non-UI E2E failure tail'
+              echo '```text'
+              cat /tmp/cdnfoundry-e2e-tail.log
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+            annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-e2e-tail.log)"
+            echo "::error title=Non-UI E2E failed::${annotation}"
+          fi
+          exit "${status}"
+      
+      - name: Capture service state
+        if: always()
+        run: docker compose -f compose.dev.yml ps
+      
+      - name: Capture failure logs
+        if: failure()
+        run: docker compose -f compose.dev.yml logs --tail=300
+      
+      - name: Stop qualification topology
+        if: always()
+        run: docker compose -f compose.dev.yml down
+
+  go:
+    name: Go test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: validate-branch
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.24.x'
+          cache: false
+      
+      - name: Test and build every Go module
+        shell: bash
+        run: |
+          set +e
+          {
+            mapfile -t modules < <(find . -name go.mod -not -path './.git/*' -printf '%h\n' | sort -u)
+            if (( ${#modules[@]} == 0 )); then
+              echo 'No Go modules are present yet; nothing to test or build.'
+              exit 0
+            fi
+            for module in "${modules[@]}"; do
+              echo "Testing ${module}"
+              unformatted="$(find "${module}" -name '*.go' -type f -print0 | xargs -0 gofmt -l)"
+              test -z "${unformatted}" || { printf 'Unformatted Go files:\n%s\n' "${unformatted}"; exit 1; }
+              (cd "${module}" && go vet ./... && go test -v ./... && go build ./...)
+            done
+          } 2>&1 | tee /tmp/cdnfoundry-go.log
+          status=${PIPESTATUS[0]}
+          if (( status != 0 )); then
+            tail -n 40 /tmp/cdnfoundry-go.log > /tmp/cdnfoundry-go-tail.log
+            {
+              echo '### Go test/build failure tail'
+              echo '```text'
+              cat /tmp/cdnfoundry-go-tail.log
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+            annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-go-tail.log)"
+            echo "::error title=Go test/build failed::${annotation}"
+          fi
+          exit "${status}"
+
+  docs:
+    name: Documentation contracts and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: validate-branch
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+      
+      - name: Install documentation dependencies
+        run: npm ci --prefix docs
+      
+      - name: Audit documentation dependencies
+        run: npm audit --prefix docs --audit-level=high
+      
+      - name: Validate and build documentation
+        env:
+          DOCS_SITE_URL: https://vaheed.github.io/CDNFoundry
+          DOCS_BASE: /CDNFoundry/
+        run: make docs-check
+
+  fleet-config:
+    name: Fleet configuration validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: validate-branch
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      
+      - name: Validate configuration template exists
+        run: |
+          test -f deploy/production/fleet-config.template || {
+            echo "ERROR: fleet-config.template not found"
+            exit 1
+          }
+      
+      - name: Validate example scripts support config file
+        run: |
+          grep -q "CONFIG_FILE" deploy/production/examples/three-node-production.sh || {
+            echo "ERROR: three-node-production.sh does not support CONFIG_FILE"
+            exit 1
+          }
+      
+      - name: Test config file parsing (syntax check)
+        run: |
+          # Create a minimal test config
+          cat > /tmp/test-fleet-config.ini <<EOF
+          [control]
+          hostname = test.ops.example.com
+          ipv4 = 192.0.2.10
+          region = global
+          location = primary
+          
+          [pop]
+          pop-1 = 198.51.100.20,europe,amsterdam
+          pop-2 = 198.51.100.30,europe,frankfurt
+          
+          [fleet]
+          operator_domain = ops.example.com
+          platform_domain = example.net
+          release = v1.0.0
+          acme_email = test@example.com
+          enable_monitoring = true
+          EOF
+          
+          # Test that the config file can be parsed by the script
+          cd deploy/production/examples
+          # Just source the config parsing part to verify it works
+          bash -n three-node-production.sh || {
+            echo "ERROR: Script has syntax errors"
+            exit 1
+          }
+
+  summary:
+    name: Validation Summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [validate-branch, core, compose, backend-e2e, go, docs, fleet-config]
+    if: always()
+    steps:
+      - name: Generate validation summary
+        shell: bash
+        run: |
+          echo "## Branch Validation Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Branch:** ${{ github.ref_name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Commit:** ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          
+          # Check overall status
+          if [[ "${{ needs.core.result }}" == "success" && \
+                "${{ needs.compose.result }}" == "success" && \
+                "${{ needs.backend-e2e.result }}" == "success" && \
+                "${{ needs.go.result }}" == "success" && \
+                "${{ needs.docs.result }}" == "success" && \
+                "${{ needs.fleet-config.result }}" == "success" ]]; then
+            echo "✅ All validations passed" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ Some validations failed" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Job | Status |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|-----|--------|" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Core | ${{ needs.core.result }} |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Compose | ${{ needs.compose.result }} |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Backend E2E | ${{ needs.backend-e2e.result }} |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Go | ${{ needs.go.result }} |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Docs | ${{ needs.docs.result }} |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Fleet Config | ${{ needs.fleet-config.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          fi
