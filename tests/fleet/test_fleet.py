@@ -648,6 +648,11 @@ def test_control_monitoring_bundle_uses_project_pki_contract(store: FleetState, 
     add(store, node("control-1", "control", "192.0.2.140"))
     with store.locked():
         store.configure_feature(store.load(), "monitoring", {"mode": "colocated", "host": None})
+        store.configure_feature(
+            store.load(),
+            "logs",
+            {"mode": "centralized", "host": "control-1", "endpoint": None},
+        )
     output = tmp_path / "bundles"
     Renderer(source_repo, store, output).render(store.load())
     bundle = output / "control-1"
@@ -663,6 +668,17 @@ def test_control_monitoring_bundle_uses_project_pki_contract(store: FleetState, 
     assert "core" in compose["services"]
     assert "clickhouse" in compose["services"]
     assert "prometheus" in compose["services"]
+    assert "LOG_AUTH_TOKEN" in compose["services"]["log-collector"]["environment"]
+    assert env["LOG_AUTH_TOKEN"]
+
+
+def test_production_log_collector_passes_auth_token_to_vector() -> None:
+    from cdnfoundry_fleet.compose import load_yaml
+
+    compose = load_yaml(REPO_PATCH / "compose.prod.yml")
+    assert compose["services"]["log-collector"]["environment"]["LOG_AUTH_TOKEN"] == (
+        "${LOG_AUTH_TOKEN:?LOG_AUTH_TOKEN is required for the logs profile}"
+    )
 
 
 def test_edge_bundle_has_control_url_and_server_ca(store: FleetState, source_repo: Path, tmp_path: Path) -> None:

@@ -480,7 +480,10 @@ docker compose --env-file .env.prod -f compose.prod.yml \
 ```
 
 Run one operational log collector per host, with a unique `LOG_HOST`,
-`LOG_ROLE`, and `LOG_COLLECTOR_ID` in that host's environment:
+`LOG_ROLE`, and `LOG_COLLECTOR_ID` in that host's environment. Set the shared
+Loki bearer credential as `LOG_AUTH_TOKEN`; Compose passes it only to the
+collector and the generated Vector configuration expands it inside that
+container:
 
 ```bash
 docker compose --env-file .env.prod -f compose.prod.yml \

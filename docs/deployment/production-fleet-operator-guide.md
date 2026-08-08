@@ -395,6 +395,8 @@ sudo ./start.sh
 
 Never transfer the entire fleet state or another node’s bundle. Do not replace the generated control activation with a direct `docker compose up`: the activation applies the restricted PHP-worker access required for `pki/edge-identity-ca.key`. If `core` reports that the key is not readable, rerun `sudo ./start.sh` and verify `stat -c '%u:%g %a %n' pki/edge-identity-ca.key` reports `0:82 640`.
 
+If `log-collector` exits with code `78` and reports that `LOG_AUTH_TOKEN` is missing, do not put the token directly in `compose.yml`. Verify that `.env.prod` contains a non-empty `LOG_AUTH_TOKEN` and that the rendered `log-collector.environment` maps `LOG_AUTH_TOKEN` from Compose interpolation, then rerender and transfer the corrected node bundle. Recreate only `log-collector`; its bounded `operational-vector-data` volume preserves buffered logs.
+
 ## Updating the fleet
 
 Add a host:
