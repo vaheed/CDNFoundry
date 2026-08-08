@@ -110,16 +110,18 @@ local function blocked(ip, networks, blocked_networks, denied)
     end
     if allowed(ip, blocked_networks) then return true end
     if ip:lower():match("^::ffff:") then return true end
-    if ip == "0.0.0.0" or ip:match("^127%.") or ip:match("^169%.254%.") or ip:match("^224%.") then return true end
-    local a, b = ip:match("^(%d+)%.(%d+)%.")
-    a, b = tonumber(a), tonumber(b)
+    local a, b, c = ip:match("^(%d+)%.(%d+)%.(%d+)%.")
+    a, b, c = tonumber(a), tonumber(b), tonumber(c)
+    if a == 0 or a == 127 or a == 169 and b == 254 or (a and a >= 224) then return true end
     if (a == 10 or a == 192 and b == 168 or a == 172 and b and b >= 16 and b <= 31) and not allowed(ip, networks) then return true end
     if a == 100 and b and b >= 64 and b <= 127 then return true end
-    if a == 192 and b == 0 or a == 198 and b and (b == 18 or b == 19) then return true end
+    if a == 192 and (b == 0 or b == 2 or b == 88 and c == 99)
+        or a == 198 and (b == 18 or b == 19 or b == 51 and c == 100)
+        or a == 203 and b == 0 and c == 113 then return true end
     local lower = ip:lower()
     local hard_v6 = lower == "::" or lower == "::1" or lower:match("^fe[89ab]") ~= nil
         or lower:match("^fe[c-f]") ~= nil or lower:match("^ff") ~= nil
-        or lower:match("^64:ff9b:") ~= nil
+        or lower:match("^64:ff9b:") ~= nil or lower:match("^2001:db8:") ~= nil
     if hard_v6 then return true end
     local private_v6 = lower:match("^f[cd]") ~= nil
     if private_v6 and allowed(ip, networks) then return false end

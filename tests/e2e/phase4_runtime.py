@@ -235,6 +235,11 @@ def main() -> None:
         initial["hosts"]["blocked.example"] = initial["hosts"]["runtime.example"] | {
             "origin": initial["hosts"]["runtime.example"]["origin"] | {"host": "127.0.0.1", "private_allowlist": []},
         }
+        for index, address in enumerate(("0.1.2.3", "192.0.2.1", "192.88.99.1", "198.51.100.1", "203.0.113.1", "239.1.2.3", "240.0.0.1", "2001:db8::1")):
+            hostname = f"reserved-{index}.example"
+            initial["hosts"][hostname] = initial["hosts"]["runtime.example"] | {
+                "origin": initial["hosts"]["runtime.example"]["origin"] | {"host": address, "private_allowlist": []},
+            }
         initial["hosts"]["policy-blocked.example"] = initial["hosts"]["runtime.example"] | {
             "origin": initial["hosts"]["runtime.example"]["origin"] | {"blocked_networks": ["172.16.0.0/12"]},
         }
@@ -499,6 +504,9 @@ def main() -> None:
             assert bad_tls_failure["failure_count"] == bad_tls_attempts, bad_tls_failure
             blocked = request("blocked.example")
             assert "502 Bad Gateway" in blocked.stderr, blocked.stderr
+            for index in range(8):
+                reserved = request(f"reserved-{index}.example")
+                assert "502 Bad Gateway" in reserved.stderr, reserved.stderr
             policy_blocked = request("policy-blocked.example")
             assert "502 Bad Gateway" in policy_blocked.stderr, policy_blocked.stderr
             unknown = request("unknown.example")
