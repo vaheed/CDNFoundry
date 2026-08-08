@@ -248,6 +248,7 @@ export default defineConfig({
           items: [
             { text: 'Production deployment', link: '/deployment/' },
             { text: 'Production quick start', link: '/deployment/production-quick-start' },
+            { text: 'Manual Docker Compose deployment', link: '/deployment/manual-compose' },
             { text: 'Topology', link: '/deployment/topology' },
             { text: 'Certificates', link: '/deployment/certificates' },
             { text: 'Upgrade', link: '/deployment/upgrade' }
