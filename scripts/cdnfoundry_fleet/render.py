@@ -70,7 +70,7 @@ class Renderer:
             atomic_write(tmp / ".env.prod", self._format_env(env), 0o600)
             self._write_generated_configs(state, node, tmp, monitoring_host)
             atomic_write(tmp / "README.md", self._node_readme(state, node, filtered), 0o600)
-            atomic_write(tmp / "validate.sh", self._validate_script(), 0o700)
+            atomic_write(tmp / "validate.sh", self._validate_script(node), 0o700)
             atomic_write(tmp / "start.sh", self._start_script(node), 0o700)
             self._write_manifest(tmp, state, node)
             previous = destination.with_name(destination.name + ".previous")
@@ -608,7 +608,7 @@ This bundle intentionally contains only files and credentials needed by this nod
 
 ## Requirements
 
-Docker Engine, Docker Compose v2, accurate system time, CA certificates, and sufficient disk for stateful volumes. Keep the directory mode `0700` and `.env.prod`, private keys, and secret files mode `0600`.
+Docker Engine, Docker Compose v2, accurate system time, CA certificates, and sufficient disk for stateful volumes. Keep the directory mode `0700` and `.env.prod`, private keys, and secret files mode `0600`. On control nodes, `start.sh` restricts the edge identity CA key to mode `0640`, owner `root`, and numeric group `82` so only the PHP worker can read it.
 
 ## Validate and start
 
@@ -674,20 +674,44 @@ After successful validation and the retention period, securely remove obsolete t
             )
         return "# No database migration is required for this role."
 
-    def _validate_script(self) -> str:
-        return """#!/usr/bin/env sh
+    def _validate_script(self, node: dict[str, Any]) -> str:
+        identity_key_validation = ""
+        if node["role"] == "control":
+            identity_key_validation = """identity_key_mode="$(stat -c '%a' pki/edge-identity-ca.key)"
+case "$identity_key_mode" in
+    600) ;;
+    640)
+        test "$(stat -c '%u:%g' pki/edge-identity-ca.key)" = "0:82"
+        ;;
+    *)
+        echo "pki/edge-identity-ca.key must be transfer-safe mode 600 or activated as root:82 mode 640." >&2
+        exit 1
+        ;;
+esac
+"""
+        return f"""#!/usr/bin/env sh
 set -eu
 umask 077
 test "$(stat -c '%a' .env.prod)" = 600
 test "$(stat -c '%a' pki/node.key)" = 600
-docker compose --env-file .env.prod config --quiet
+{identity_key_validation}docker compose --env-file .env.prod config --quiet
 openssl verify -CAfile pki/edge-server-ca.crt pki/node.crt
 """
 
     def _start_script(self, node: dict[str, Any]) -> str:
         migration = self._node_start_order(node)
+        key_permissions = ""
+        if node["role"] == "control":
+            key_permissions = """if [ "$(id -u)" != "0" ]; then
+    echo "Control activation must run as root so the edge identity CA key can be restricted to the PHP worker group." >&2
+    exit 1
+fi
+chown 0:82 pki/edge-identity-ca.key
+chmod 0640 pki/edge-identity-ca.key
+"""
         return f"""#!/usr/bin/env sh
 set -eu
+{key_permissions}
 ./validate.sh
 {migration}
 docker compose --env-file .env.prod up -d

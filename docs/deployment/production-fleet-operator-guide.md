@@ -233,7 +233,7 @@ The generator follows the production repository’s two-CA model:
 - `edge-identity-ca`: used by the control plane for edge identity issuance and verification.
 - `edge-server-ca`: signs edge-control, edge runtime, and DNS API TLS certificates.
 
-CA private keys stay in the protected fleet state directory. Every node bundle receives the edge server CA certificate plus its own certificate and private key. Only the control bundle receives the edge identity CA private key because the control service requires it.
+CA private keys stay in the protected fleet state directory. Every node bundle receives the edge server CA certificate plus its own certificate and private key. Only the control bundle receives the edge identity CA private key because the control service requires it. The transferred key begins root-only; the generated control `start.sh` must run as root and changes only this key to owner `root`, numeric group `82`, mode `0640`, allowing the immutable image's PHP-FPM worker to read it without making it public.
 
 Important generated environment paths include:
 
@@ -390,10 +390,10 @@ cd /opt
 mv cdnfoundry cdnfoundry.previous 2>/dev/null || true
 mv cdnfoundry.new cdnfoundry
 cd /opt/cdnfoundry
-./start.sh
+sudo ./start.sh
 ```
 
-Never transfer the entire fleet state or another node’s bundle.
+Never transfer the entire fleet state or another node’s bundle. Do not replace the generated control activation with a direct `docker compose up`: the activation applies the restricted PHP-worker access required for `pki/edge-identity-ca.key`. If `core` reports that the key is not readable, rerun `sudo ./start.sh` and verify `stat -c '%u:%g %a %n' pki/edge-identity-ca.key` reports `0:82 640`.
 
 ## Updating the fleet
 

@@ -338,6 +338,20 @@ def test_file_permissions_and_redacted_metadata(store: FleetState, source_repo: 
     assert pdns_password not in metadata
 
 
+def test_control_start_restricts_identity_ca_key_for_php_worker(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
+    add(store, node("control-1", "control", "192.0.2.10"))
+    output = tmp_path / "bundles"
+    Renderer(source_repo, store, output).render(store.load())
+
+    start = (output / "control-1/start.sh").read_text(encoding="utf-8")
+    assert 'if [ "$(id -u)" != "0" ]' in start
+    assert "chown 0:82 pki/edge-identity-ca.key" in start
+    assert "chmod 0640 pki/edge-identity-ca.key" in start
+    assert start.index("chmod 0640 pki/edge-identity-ca.key") < start.index("./validate.sh")
+    validate = (output / "control-1/validate.sh").read_text(encoding="utf-8")
+    assert 'test "$(stat -c \'%u:%g\' pki/edge-identity-ca.key)" = "0:82"' in validate
+
+
 def test_dry_run_does_not_create_state_or_secrets(tmp_path: Path) -> None:
     store = FleetState(tmp_path / "dry-state", dry_run=True)
     state = store.init({"operator_domain": "ops.example.com", "platform_domain": "example.net", "release": "v1.0.0"})

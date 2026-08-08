@@ -216,7 +216,7 @@ DNS nodes may additionally receive `reconcile-pdns-password.sh` and a pending pa
 ## Security properties
 
 - State directories use mode `0700`.
-- State, secrets, environment files, manifests, and private keys use mode `0600`.
+- State, secrets, environment files, manifests, and private keys use mode `0600` at render and transfer time. During control activation, generated `start.sh` changes only `pki/edge-identity-ca.key` to owner `root`, numeric group `82`, mode `0640`, so the core image's PHP-FPM worker can read the signing key.
 - Node bundles are assembled in temporary directories and activated atomically.
 - Normal rendering does not rotate secrets.
 - DNS database credentials are node-scoped.
