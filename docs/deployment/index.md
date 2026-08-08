@@ -12,6 +12,12 @@ on production hosts and never migrates a database during container startup.
 ::: tip Recommended starting point
 For a new installation, use the [starter Fleet quick start](production-quick-start.md). It copies a JSON topology, validates it, and generates complete per-node bundles without editing deployment scripts.
 
+Advanced operators who intentionally do not want Fleet can use the
+[manual Docker Compose deployment](manual-compose.md). It documents the same
+three-host outcome with hand-managed environments, secrets, PKI, migrations,
+enrollment, qualification, upgrades, and recovery, and invokes no repository
+scripts or Make targets.
+
 Use the [Production quick start](production-quick-start.md) for the
 complete three-host sequence: bootstrap DNS, private PKI, explicit migrations,
 cluster qualification, edge enrollment, acceptance checks, and diagnosis.
@@ -19,7 +25,8 @@ cluster qualification, edge enrollment, acceptance checks, and diagnosis.
 
 The minimum documented layout is one control/telemetry host plus two combined
 DNS/edge hosts. The base file also supports colocated development-like
-qualification, while overlays expose split roles with restricted TLS gateways.
+qualification, while Compose profiles and generated bundles expose split roles
+with restricted TLS gateways.
 
 Before deploying, read:
 
@@ -28,12 +35,14 @@ Before deploying, read:
 2. [Production best practices](../operations/production-best-practices.md) for
    the readiness and change contract.
 3. [Production quick start](production-quick-start.md) for an end-to-end first installation.
-4. [Topology](topology.md) for networks, profiles, and public ports.
-5. [Certificates](certificates.md) for the edge-control and DNS API PKI.
-6. [Configuration](../reference/configuration.md) for every `.env.prod` key.
-7. [Upgrade](upgrade.md) for schema, worker, DNS, and edge sequencing.
+4. [Manual Docker Compose deployment](manual-compose.md) when deliberately
+   operating without Fleet, scripts, or Make.
+5. [Topology](topology.md) for networks, profiles, and public ports.
+6. [Certificates](certificates.md) for the edge-control and DNS API PKI.
+7. [Configuration](../reference/configuration.md) for every `.env.prod` key.
+8. [Upgrade](upgrade.md) for schema, worker, DNS, and edge sequencing.
 
-For separated roles across several failure domains, continue with the [multi-region Fleet quick start](production-quick-start-multi-region.md). The [Fleet operator guide](production-fleet-operator-guide.md) and [configuration reference](production-fleet-config-reference.md) cover lifecycle operations and the JSON schema.
+For separated roles across several failure domains, continue with the [multi-region Fleet quick start](production-quick-start-multi-region.md). The [Fleet operator guide](production-fleet-operator-guide.md), [configuration reference](production-fleet-config-reference.md), and [architecture reference](production-fleet.md) cover lifecycle operations, the JSON schema, and role boundaries.
 
 The [Production quick start](production-quick-start.md) is the
 authoritative first-install procedure. The remaining deployment pages explain
@@ -52,4 +61,4 @@ relevant.
 
 See [Production quick start](production-quick-start.md) for the
 verified command sequence and [Topology](topology.md) for the role and
-overlay model.
+profile and generated-bundle model.

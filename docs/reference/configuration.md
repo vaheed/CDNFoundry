@@ -28,8 +28,8 @@ Runtime product policy is not an environment variable. Manage it through
 | `APP_URL` | control | Canonical public control-panel URL |
 | `SESSION_SECURE_COOKIE` | HTTPS control | Secure-cookie flag; production default `true` |
 | `CONTROL_BIND` | control | Host publication for web; default `127.0.0.1:8080` |
-| `CONTROL_HOSTNAME` | control overlay | Public browser/API hostname |
-| `TELEMETRY_HOSTNAME` | control overlay | Public telemetry-ingest hostname |
+| `CONTROL_HOSTNAME` | control | Public browser/API hostname in independent management DNS |
+| `TELEMETRY_HOSTNAME` | control/telemetry | Public telemetry-ingest hostname in independent management DNS |
 | `CONTROL_PUBLIC_IPV4_ALLOWLIST` | DNS API gateway | Exact control/worker sources allowed to call PowerDNS |
 | `CONTROL_PUBLIC_IPV6_ALLOWLIST` | DNS API gateway | Optional IPv6 control/worker sources allowed to call PowerDNS |
 | `EDGE_PUBLIC_IPV6_ALLOWLIST` | telemetry gateway | Optional IPv6 edge sources allowed to submit telemetry |
@@ -106,9 +106,9 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `EDGE_GATEWAY_STATUS_URL` | edge agent | Gateway metrics URL used for heartbeat readiness |
 | `EDGE_GATEWAY_METRICS_ADDRESS` | edge gateway | Restricted metrics listener; production default `0.0.0.0:9105` |
 | `EDGE_GATEWAY_MAX_CONNECTIONS` | edge gateway | Global accepted-connection bound, `128`–`65536` (default `8192`) |
-| `DNS_API_HOSTNAME` | DNS overlay | DNS API TLS hostname |
-| `DNS_API_SERVER_CERTIFICATE` | DNS overlay | Absolute server certificate path |
-| `DNS_API_SERVER_PRIVATE_KEY` | DNS overlay | Absolute mode-`0600` key path |
+| `DNS_API_HOSTNAME` | DNS | DNS API TLS hostname in independent management DNS |
+| `DNS_API_SERVER_CERTIFICATE` | DNS | Absolute server certificate path |
+| `DNS_API_SERVER_PRIVATE_KEY` | DNS | Absolute mode-`0600` key path |
 
 ## Telemetry and GeoIP
 
@@ -150,7 +150,7 @@ Grafana telemetry variables are:
 | `PROMETHEUS_EDGE_TARGETS_FILE` | telemetry | Private file_sd target file; production default is empty |
 | `PROMETHEUS_LOG_TARGETS_FILE` | telemetry | Private file_sd targets for remote collector metrics; production default is empty |
 | `GRAFANA_EXPLORE_URL` | control | Optional deployment fallback for the admin-only Live Logs link. The PostgreSQL-backed **Platform settings → Observability links → Grafana Explore URL** overrides it. Laravel supplies Loki, a safe selector, and a one-hour range when the chosen URL has no query; both empty hides the link |
-| `GRAFANA_HOSTNAME` | control/telemetry | Public Grafana hostname under the Cloudflare-managed operational domain |
+| `GRAFANA_HOSTNAME` | control/telemetry | Public Grafana hostname in the independently hosted operator DNS zone |
 | `GRAFANA_LOKI_URL` | telemetry | Private Grafana-to-Loki endpoint; default `http://loki:3100` |
 | `LOKI_RETENTION_PERIOD` | telemetry | Loki retention; production default `336h` |
 | `LOKI_MAX_QUERY_LENGTH` | telemetry | Maximum query range; production default `336h` |
@@ -158,6 +158,7 @@ Grafana telemetry variables are:
 | `LOG_ROLE` | logs | Stable host role: `control`, `dns`, `edge`, or `telemetry` |
 | `LOG_HOST` | logs | Stable deployment host name |
 | `LOG_COLLECTOR_ID` | logs | Globally unique stable collector identity |
+| `LOG_AUTH_TOKEN` | logs | Secret bearer credential used by the per-host Vector collector when pushing to the source-restricted Loki gateway |
 | `LOG_BUFFER_BYTES` | logs | Per-host disk-buffer bytes; production default `2147483648` |
 | `LOG_METRICS_BIND` | logs | Host metrics bind; loopback default `127.0.0.1:9599` |
 | `LOG_SOURCE_IPV4_ALLOWLIST` | telemetry gateway | Exact non-edge host sources allowed to push logs |
@@ -175,8 +176,8 @@ the supported host collector.
 | Variable | Required | Meaning and default |
 | --- | --- | --- |
 | `CDNF_RELEASE` | every production host | Exact commit SHA or exact release tag |
-| `HOST_BIND_IPV4` | multi-host overlay | Local listener address; default `0.0.0.0`, independent of public/NAT DNS addresses |
-| `HOST_BIND_IPV6` | IPv6 overlay | Local IPv6 listener; default `::`, consumed only when an IPv6 overlay is included |
+| `HOST_BIND_IPV4` | generated multi-host bundle | Local listener address; default `0.0.0.0`, independent of public/NAT DNS addresses |
+| `HOST_BIND_IPV6` | generated dual-stack bundle | Local IPv6 listener; default `::`; publish only after end-to-end IPv6 qualification |
 | `EDGE_QUARANTINE_HTTP_BIND` | edge | Quarantine HTTP, default `127.0.0.1:18080` |
 | `EDGE_QUARANTINE_HTTPS_BIND` | edge | Quarantine HTTPS, default `127.0.0.1:18443` |
 | `EDGE_RUNTIME_TLS_CERTIFICATE` | edge | Bootstrap listener certificate path |

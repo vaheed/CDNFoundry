@@ -6,18 +6,40 @@ description: Deploy CDNFoundry with one control node and two combined DNS and ed
 # Production quick start: starter fleet
 
 ```mermaid
-flowchart LR
-  CF[Cloudflare DNS: ops.example.com] --> C[control.ops.example.com]
-  CF --> G[grafana.ops.example.com]
-  CF --> P1[pop-1.ops.example.com]
-  CF --> P2[pop-2.ops.example.com]
-  R[example.net delegation] --> P1
-  R --> P2
-  C -->|mTLS control| P1
-  C -->|mTLS control| P2
+flowchart TB
+  ExternalDNS["Independent external DNS provider<br/>ops.example.com"] --> CONTROL["CONTROL<br/>control.ops.example.com<br/>Laravel + workers"]
+  ExternalDNS --> EC["edge-control.ops.example.com<br/>edge-agent mTLS ingress"]
+  ExternalDNS --> TI["telemetry.ops.example.com<br/>restricted telemetry ingress"]
+  ExternalDNS --> API1["dns-api-1.ops.example.com<br/>restricted DNS API"]
+  ExternalDNS --> API2["dns-api-2.ops.example.com<br/>restricted DNS API"]
+  CONTROL --> PG[("PostgreSQL<br/>desired state")]
+  CONTROL -->|"asynchronous DNS reconciliation"| API1
+  CONTROL -->|"asynchronous DNS reconciliation"| API2
+  API1 --> PDNS1["POP 1: private PowerDNS"]
+  API2 --> PDNS2["POP 2: private PowerDNS"]
+  Resolver["Recursive resolvers"] -->|"UDP/TCP 53"| DD1["POP 1: DNSdist"]
+  Resolver -->|"UDP/TCP 53"| DD2["POP 2: DNSdist"]
+  DD1 --> PDNS1
+  DD2 --> PDNS2
+  Client["HTTP clients"] --> GW1["POP 1: gateway + OpenResty cells"]
+  Client --> GW2["POP 2: gateway + OpenResty cells"]
+  GW1 --> Origins["Validated origins"]
+  GW2 --> Origins
+  GW1 -->|"edge agent: outbound mTLS"| EC
+  GW2 -->|"edge agent: outbound mTLS"| EC
 ```
 
-`ops.example.com` and `example.net` are intentionally unrelated zones. Cloudflare remains authoritative for the operational zone: create DNS-only A and optional AAAA records for control, Grafana, telemetry, and every node. PowerDNS owns `example.net` and enrolled customer zones; never delegate `ops.example.com` to CDNFoundry.
+::: danger Keep management DNS independent
+`ops.example.com` and `example.net` are intentionally separate zones. Host
+`control`, `edge-control`, `telemetry`, `grafana`, and every `dns-api-N` record
+for the operator zone with an independent external DNS provider. Never host or
+delegate the operator zone in CDNFoundry's own PowerDNS: that database is
+derived runtime state, so using it for management names creates a bootstrap
+dependency and can break control, recovery, and DNS reconciliation.
+:::
+
+CDNFoundry owns the platform zone (`example.net`) and enrolled customer zones.
+Only DNSdist is public on port 53; PowerDNS and its database remain private.
 
 This runbook creates the smallest practical production CDNFoundry fleet:
 
@@ -53,14 +75,14 @@ install -m 0600 deploy/production/examples/starter-fleet.json ./fleet.json
 
 Edit `fleet.json` and replace every example value:
 
-- `operator_domain`: private operator DNS suffix for control, node, and telemetry names;
+- `operator_domain`: independently hosted management DNS suffix for control, DNS API, edge-control, node, and telemetry names;
 - `platform_domain`: customer-facing CDN platform suffix;
 - `release`: the exact checked-out tag or 40-character commit SHA;
 - `acme_email`: monitored certificate contact;
 - every `hostname`, `public_ipv4`, region, and location;
 - `public_ipv6` and `bind_ipv6` when deploying dual stack.
 
-Keep `public_ipv6`, `bind_ipv6`, `monitor_ipv6`, and `log_ipv6` in every node object and set unavailable paths to JSON `null`. Set global `ipv6` to `true` only after Cloudflare AAAA records, host routes, firewalls, and external reachability are ready.
+Keep `public_ipv6`, `bind_ipv6`, `monitor_ipv6`, and `log_ipv6` in every node object and set unavailable paths to JSON `null`. Set global `ipv6` to `true` only after the independent DNS provider's AAAA records, host routes, firewalls, and external reachability are ready.
 
 The checked-in addresses are RFC documentation ranges and cannot serve production traffic. Keep `bind_ipv4` as `0.0.0.0` for normal routed/NAT hosts unless a specific local interface address is required.
 
@@ -104,7 +126,7 @@ sudo ./scripts/cdnfoundry-fleet \
   show-start-order
 ```
 
-For every bundle, verify `SHA256SUMS`, review `README.md`, and run `./validate.sh`. Production Compose has no deployment-value defaults: all interpolation comes from that bundle's generated `.env.prod`.
+For every bundle, verify `SHA256SUMS`, review `README.md`, and run `./validate.sh`. Validation uses the pinned Caddy images to parse every Caddyfile included in that node before activation, in addition to checking Compose interpolation, permissions, and certificate chains. It may pull a missing pinned image and create a short-lived validation container, but it does not start the application services. Production Compose has no deployment-value defaults: all interpolation comes from that bundle's generated `.env.prod`.
 
 ## 5. Start the control plane
 
@@ -114,9 +136,11 @@ Transfer `bundles/control-1` over an authenticated channel to `/opt/cdnfoundry` 
 cd /opt/cdnfoundry
 sha256sum -c SHA256SUMS
 ./validate.sh
-./start.sh
+sudo ./start.sh
 docker compose --env-file .env.prod ps
 ```
+
+Run the control bundle's `start.sh` as root. Before starting Compose, it keeps the edge identity CA signing key restricted while changing it from the transfer-safe root-only mode to owner `root`, numeric group `82`, mode `0640`; group `82` is the PHP-FPM worker in the immutable core image. Without this activation step, `core` deliberately refuses to start because its worker cannot read the signing key. Other private keys remain mode `0600`.
 
 The control bundle starts `mmdb-updater` before services that consume GeoIP data. Run migrations only through the generated `start.sh`/tools workflow; container startup never migrates the database.
 

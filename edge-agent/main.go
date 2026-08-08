@@ -606,7 +606,11 @@ func blockedIP(address string, allowlist, blockedNetworks []string) bool {
 	}
 	private := ip.IsPrivate() || inNetworks(ip, []string{"100.64.0.0/10", "fec0::/10"})
 	if !private {
-		return inNetworks(ip, []string{"192.0.0.0/24", "198.18.0.0/15", "224.0.0.0/4", "240.0.0.0/4", "64:ff9b::/96", "64:ff9b:1::/48"})
+		return inNetworks(ip, []string{
+			"0.0.0.0/8", "192.0.0.0/24", "192.0.2.0/24", "192.88.99.0/24", "198.18.0.0/15",
+			"198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4",
+			"64:ff9b::/96", "64:ff9b:1::/48", "2001:db8::/32",
+		})
 	}
 	for _, cidr := range allowlist {
 		_, network, err := net.ParseCIDR(cidr)

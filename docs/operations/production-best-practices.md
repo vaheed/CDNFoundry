@@ -21,7 +21,7 @@ Never use destructive volume or database refresh commands as an upgrade step.
 - Deploy the same exact successful commit SHA or semantic-version tag on every
   role participating in one rollout.
 - Never deploy mutable `latest`, major-only, or minor-only image aliases.
-- Validate every exact Compose overlay combination before pulling or starting.
+- Validate `compose.prod.yml` and every exact generated node bundle before pulling or starting.
 - Use bounded canaries and readiness gates; do not restart every failure domain
   simultaneously.
 - Keep host clocks synchronized. Certificates, DNS, telemetry, and operation

@@ -248,6 +248,11 @@ export default defineConfig({
           items: [
             { text: 'Production deployment', link: '/deployment/' },
             { text: 'Production quick start', link: '/deployment/production-quick-start' },
+            { text: 'Multi-region quick start', link: '/deployment/production-quick-start-multi-region' },
+            { text: 'Fleet operator guide', link: '/deployment/production-fleet-operator-guide' },
+            { text: 'Fleet configuration', link: '/deployment/production-fleet-config-reference' },
+            { text: 'Fleet architecture', link: '/deployment/production-fleet' },
+            { text: 'Manual Docker Compose deployment', link: '/deployment/manual-compose' },
             { text: 'Topology', link: '/deployment/topology' },
             { text: 'Certificates', link: '/deployment/certificates' },
             { text: 'Upgrade', link: '/deployment/upgrade' }
@@ -264,6 +269,7 @@ export default defineConfig({
             { text: 'Monitoring', link: '/operations/monitoring' },
             { text: 'Grafana command centers', link: '/operations/grafana' },
             { text: 'Operational logging', link: '/operations/operational-logging' },
+            { text: 'Laravel operations dashboard', link: '/operations/laravel-operations-dashboard' },
             { text: 'Edge gateway ingress', link: '/operations/gateway-ingress' },
             { text: 'Bounded cell inventory', link: '/operations/cell-inventory' },
             { text: 'Multi-cell pools', link: '/operations/multi-cell-pools' },
@@ -271,6 +277,8 @@ export default defineConfig({
             { text: 'Simple Anycast', link: '/operations/simple-anycast' },
             { text: 'Anycast qualification', link: '/operations/simple-anycast-qualification' },
             { text: 'Fleet rollouts', link: '/operations/fleet-rollouts' },
+            { text: 'Runtime generations', link: '/operations/runtime-generations' },
+            { text: 'Software supply chain', link: '/operations/software-supply-chain' },
             { text: 'Backup and recovery', link: '/operations/backup-and-recovery' },
             { text: 'Incident runbooks', link: '/operations/runbooks' },
             { text: 'Scaling', link: '/operations/scaling' },

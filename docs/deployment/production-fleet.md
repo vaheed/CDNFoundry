@@ -21,27 +21,32 @@ For the complete command workflow and interactive setup, see [Production fleet o
 
 ```mermaid
 flowchart TB
-    CP[Control-plane host\nGenerator + application DB + Valkey]
-    M[Optional monitoring host\nPrometheus + Grafana + ClickHouse/Loki]
-    D1[DNS host A\nPowerDNS + local PostgreSQL]
-    D2[DNS host B\nPowerDNS + local PostgreSQL]
-    DN[DNS host N\nPowerDNS + local PostgreSQL]
-    E1[Edge host A]
-    E2[Edge host B]
-    EN[Edge host N]
-    CP -->|signed desired state / DNS API| D1
-    CP -->|signed desired state / DNS API| D2
-    CP -->|signed desired state / DNS API| DN
-    CP -->|signed edge configuration| E1
-    CP -->|signed edge configuration| E2
-    CP -->|signed edge configuration| EN
-    D1 -. metrics/logs .-> M
-    D2 -. metrics/logs .-> M
-    DN -. metrics/logs .-> M
-    E1 -. metrics/logs .-> M
-    E2 -. metrics/logs .-> M
-    EN -. metrics/logs .-> M
+    ExternalDNS["Independent external DNS<br/>operator-zone management names"] --> CONTROL["CONTROL<br/>Laravel + Horizon + Scheduler"]
+    ExternalDNS --> EDGE_CONTROL["edge-control<br/>mTLS ingress"]
+    ExternalDNS --> DNS_API["dns-api-N<br/>restricted TLS"]
+    ExternalDNS --> TELEMETRY["telemetry/Grafana ingress"]
+    CONTROL --> PG[("PostgreSQL<br/>desired state")]
+    CONTROL --> V[("Valkey<br/>queues and locks")]
+    CONTROL -->|"revisioned reconciliation"| DNS_API
+    DNS_API --> PDNS["Private PowerDNS<br/>one derived DB per DNS host"]
+    Resolvers["Recursive resolvers"] -->|"UDP/TCP 53"| DNSDIST["DNSdist<br/>public authoritative ingress"]
+    DNSDIST --> PDNS
+    Agents["Edge agents"] -->|"outbound mTLS"| EDGE_CONTROL
+    EDGE_CONTROL --> CONTROL
+    Agents --> CELLS["Gateway + bounded OpenResty cells"]
+    Clients["HTTP/HTTPS clients"] --> CELLS
+    CELLS --> Origins["Validated origins"]
+    DNSDIST -. "bounded telemetry" .-> TELEMETRY
+    CELLS -. "bounded telemetry" .-> TELEMETRY
+    TELEMETRY --> CH[("ClickHouse + metrics + logs")]
 ```
+
+::: danger Keep management DNS independent
+The operator-zone records shown above must be published by an independent
+external DNS provider. CDNFoundry PowerDNS is private derived runtime state for
+platform and customer zones; using it for management names creates a bootstrap
+and recovery dependency.
+:::
 
 ## DNS and geo-routing flow
 

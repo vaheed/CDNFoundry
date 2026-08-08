@@ -51,15 +51,22 @@ asynchronously through revisioned reconciliation, and invalid candidates never
 replace the last valid runtime state.
 
 ```mermaid
-flowchart LR
+flowchart TB
+    ExternalDNS["Independent external DNS<br/>management hostnames"] --> Control
+    ExternalDNS --> DNSAPI["Restricted DNS API"]
+    ExternalDNS --> EdgeControl["Edge-control mTLS ingress"]
     Users["Internet users"] -->|"DNS"| DNS["DNSdist + PowerDNS"]
     Users -->|"HTTP/HTTPS"| Gateway["Edge gateway"]
     Gateway --> Edge["Bounded OpenResty cells"]
     Edge --> Origin["Validated customer origins"]
     Admins["Administrators"] --> Control["Laravel + Filament"]
     Control --> State[("PostgreSQL desired state")]
-    Control -->|"asynchronous reconciliation"| DNS
-    Control -->|"signed snapshots"| Edge
+    Control -->|"asynchronous reconciliation"| DNSAPI
+    DNSAPI --> DNS
+    EdgeAgent["Edge agent"] -->|"outbound mTLS"| EdgeControl
+    EdgeControl --> Control
+    Control -->|"signed snapshots through agent"| EdgeAgent
+    EdgeAgent --> Edge
     DNS -. "best-effort telemetry" .-> Vector["Vector"]
     Edge -. "best-effort telemetry" .-> Vector
     Vector --> ClickHouse[("ClickHouse telemetry")]
@@ -68,6 +75,14 @@ flowchart LR
     State -->|"sanitized read-only metadata"| Grafana
     Admins -->|"separate operator access"| Grafana
 ```
+
+::: danger Management DNS must be independent
+Management names such as `control.<operator-zone>`,
+`edge-control.<operator-zone>`, `telemetry.<operator-zone>`, and
+`dns-api-N.<operator-zone>` must use an independent external DNS provider.
+Never place the operator zone in CDNFoundry PowerDNS; that runtime is derived
+from PostgreSQL desired state and must not become its own bootstrap dependency.
+:::
 
 Grafana is a read-only operations component in the telemetry role. It has no
 request-path or reconciliation responsibility: an observability outage cannot

@@ -7,11 +7,11 @@ description: Reference for CDNFoundry production fleet CLI options, setup config
 
 ```mermaid
 flowchart LR
-  JSON[Fleet JSON including nullable IPv6] --> STATE[Protected desired state]
-  STATE --> C[Control bundle]
-  STATE --> D[DNS bundles]
-  STATE --> E[Edge bundles]
-  STATE --> M[Monitoring bundle]
+  JSON["Fleet JSON<br/>roles, addresses, nullable IPv6"] --> STATE["Protected Fleet authority<br/>secrets + private PKI + topology"]
+  STATE --> C["CONTROL bundle<br/>Laravel + PostgreSQL + Valkey"]
+  STATE --> D["DNS bundles<br/>DNSdist + private PowerDNS + DNS API"]
+  STATE --> E["Edge bundles<br/>agent + gateway + OpenResty cells"]
+  STATE --> M["Telemetry bundle<br/>Vector + ClickHouse + Grafana"]
 ```
 
 Copy `deploy/production/examples/starter-fleet.json` or `multi-region-fleet.json` to a protected local `fleet.json`, then change deployment data there. Checked-in examples are templates; repository scripts and generated Compose manifests are not configuration surfaces.
@@ -24,7 +24,7 @@ These options work before or after a subcommand:
 | --- | --- | --- |
 | `--state-dir` | `/var/lib/cdnfoundry-fleet` | Protected authoritative fleet state |
 | `--output-dir` | `/var/lib/cdnfoundry-fleet/bundles` | Generated per-node bundles |
-| `--repo-root` | Repository containing the script | Base Compose and production overlays |
+| `--repo-root` | Repository containing the script | Base production Compose file and deployment assets |
 | `--config` | none | JSON input for setup or node commands |
 | `--non-interactive` | false | Never prompt; fail when required input is absent |
 | `--dry-run` | false | Validate intent without writing state or bundles |
@@ -216,11 +216,11 @@ DNS nodes may additionally receive `reconcile-pdns-password.sh` and a pending pa
 ## Security properties
 
 - State directories use mode `0700`.
-- State, secrets, environment files, manifests, and private keys use mode `0600`.
+- State, secrets, environment files, manifests, and private keys use mode `0600` at render and transfer time. During control activation, generated `start.sh` changes only `pki/edge-identity-ca.key` to owner `root`, numeric group `82`, mode `0640`, so the core image's PHP-FPM worker can read the signing key.
 - Node bundles are assembled in temporary directories and activated atomically.
 - Normal rendering does not rotate secrets.
 - DNS database credentials are node-scoped.
 - CA private keys remain in authoritative fleet state, except the edge identity CA key required by the control service in the control bundle.
 - Bundle metadata contains hashes and non-secret inventory only.
-- Every operator-controlled Compose interpolation value is present in the node's generated `.env.prod`; production Compose and role overlays provide no fallback deployment values.
+- Every operator-controlled Compose interpolation value is present in the node's generated `.env.prod`; production Compose provides no fallback deployment values.
 - Compose `environment` mappings remain explicit per-service allowlists. Replacing them with a shared `env_file` entry would expose unrelated database, PKI, and API credentials to every container, so containers receive only the variables they own while Compose reads values through `--env-file .env.prod`.

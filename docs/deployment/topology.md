@@ -1,6 +1,6 @@
 ---
 title: Production topology and Compose roles
-description: Understand CDNFoundry control, DNS, edge, and telemetry roles, networks, listeners, and Compose overlays.
+description: Understand CDNFoundry control, DNS, edge, and telemetry roles, networks, listeners, and Compose profiles.
 ---
 
 # Production topology and Compose roles
@@ -16,8 +16,8 @@ diagnostics.
 
 The smallest serving layout documented by the repository is:
 
-1. `CONTROL`, running `control` plus the control Caddy overlay;
-2. `EDGE_1` and `EDGE_2`, each running `dns` and `edge` plus the DNS API overlay.
+1. `CONTROL`, running the `control` profile and public Caddy ingress;
+2. `EDGE_1` and `EDGE_2`, each running the `dns` and `edge` profiles.
 
 After DNS and HTTP serving qualify, the operator may enable the `telemetry`
 profile on `CONTROL` and one `logs` collector per host. This adds
@@ -29,9 +29,13 @@ addresses. This layout is not automatic high availability: PostgreSQL, Valkey,
 ClickHouse, backup storage, external firewalls, routing, and failure procedures
 remain operator responsibilities.
 
-Use one operator-owned DNS zone for control, edge-control, telemetry, and DNS API
-hostnames. Use a separate platform DNS zone for CDNFoundry nameservers, proxy
-hostnames, and pool records.
+::: danger Management DNS is an external dependency
+Use an independently hosted operator DNS zone for `control`, `edge-control`,
+`telemetry`, `grafana`, and `dns-api-N` management hostnames. Never serve this
+zone from CDNFoundry PowerDNS. Use a separate platform DNS zone for CDNFoundry
+nameservers, proxy hostnames, and pool records; those records are desired state
+that CDNFoundry derives into its private PowerDNS databases.
+:::
 
 ## Deployment sequence overview
 
@@ -109,10 +113,10 @@ make config-check
 docker compose --env-file .env.prod -f compose.prod.yml config --quiet
 ```
 
-Validate each exact overlay combination before starting it. The repository's
-`scripts/validate-production-overrides.sh` qualifies control, combined DNS/edge,
-DNS-only, edge-only, telemetry-only, opt-in IPv6, and external control-data
-configurations with documentation addresses.
+Validate each exact profile combination before starting it. `compose.prod.yml`
+defines the `control`, `dns`, `edge`, `telemetry`, `logs`, and one-shot `tools`
+profiles; generated Fleet bundles retain only the services assigned to that
+node.
 
 ### 7. Start `CONTROL`
 
@@ -122,14 +126,11 @@ and only then start application processes:
 ```sh
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f compose.prod.yml \
   --profile control up -d --wait --wait-timeout 120 control-db redis
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f compose.prod.yml \
   --profile tools run --rm migrate
 docker compose --env-file .env.prod \
-  -f compose.prod.yml \
   -f compose.prod.yml \
   --profile control up -d
 ```
@@ -152,14 +153,11 @@ migration, then start the profiles:
 ```sh
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f compose.prod.yml \
   --profile dns up -d --wait --wait-timeout 120 pdns-db
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f compose.prod.yml \
   --profile tools run --rm pdns-migrate
 docker compose --env-file .env.prod \
-  -f compose.prod.yml \
   -f compose.prod.yml \
   --profile dns --profile edge up -d
 ```
@@ -202,15 +200,23 @@ From external networks, verify:
 Run the current non-browser qualification suite. Record the exact revision,
 topology, operation IDs, certificate fingerprints, checks, and deviations.
 
-## Split-role overlays
+## Split-role profiles
 
-- `compose.prod.yml` adds the DNS API gateway to a DNS-only host.
-- `compose.prod.yml` documents the base edge-only role; the base file owns its listeners.
-- `compose.prod.yml` adds public, source-restricted telemetry TLS.
-- `compose.prod.yml` disables local PostgreSQL and Valkey.
-- `compose.prod.yml` disables local ClickHouse while Grafana
-  and Vector use the configured external telemetry endpoint.
-- `*-ipv6.yml` files explicitly add IPv6 publications.
+- `control` runs Laravel, web ingress, Horizon, Scheduler, edge-control, and its
+  default local PostgreSQL and Valkey dependencies.
+- `dns` runs DNSdist, private PowerDNS, its local PostgreSQL runtime database,
+  and the restricted DNS API gateway.
+- `edge` runs the agent, destination/Host/SNI gateway, bounded cells, and edge
+  traffic Vector.
+- `telemetry` runs ClickHouse, Prometheus, Alertmanager, Grafana, Loki, and
+  telemetry ingress; `logs` runs one host log collector.
+- `tools` contains explicit migrations and other one-shot helpers. It is not a
+  long-running role.
+
+Fleet can render separated-role hosts and typed external data endpoints without
+requiring operators to edit Compose. Review each generated Compose manifest and
+`.env.prod` for its node rather than assuming services from another role are
+present.
 
 Use [Scaling](../operations/scaling.md) before splitting data services or adding
 workers.

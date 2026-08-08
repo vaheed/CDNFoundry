@@ -523,6 +523,23 @@ func TestOriginTaskNeverAllowsLoopbackThroughPrivateAllowlist(t *testing.T) {
 	}
 }
 
+func TestOriginTaskRejectsReservedDestinations(t *testing.T) {
+	for _, address := range []string{
+		"0.1.2.3", "192.0.2.1", "192.88.99.1", "198.51.100.1", "203.0.113.1",
+		"239.1.2.3", "240.0.0.1", "64:ff9b::7f00:1", "2001:db8::1",
+	} {
+		task := edgeTask{}
+		task.Payload.Addresses = []string{address}
+		task.Payload.Origin.Scheme = "http"
+		task.Payload.Origin.HostHeader = "origin.example"
+		task.Payload.Origin.Port = 80
+		result := runOriginTest(task)
+		if result["failure_reason"] != "blocked_destination" {
+			t.Fatalf("reserved destination %s was accepted: %#v", address, result)
+		}
+	}
+}
+
 func TestOriginTaskAppliesPostgresqlBackedBlockedNetworks(t *testing.T) {
 	task := edgeTask{}
 	task.Payload.Addresses = []string{"203.0.113.10"}

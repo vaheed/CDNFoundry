@@ -13,7 +13,7 @@ class NetworkAddressTest extends TestCase
         $this->assertTrue(NetworkAddress::isPrivate('10.20.30.40'));
         $this->assertTrue(NetworkAddress::inCidr('10.20.30.40', '10.0.0.0/8'));
 
-        foreach (['127.0.0.1', '169.254.169.254', '::1', '::ffff:127.0.0.1', '64:ff9b::7f00:1'] as $address) {
+        foreach (['0.1.2.3', '127.0.0.1', '169.254.169.254', '192.0.2.1', '192.88.99.1', '198.51.100.1', '203.0.113.1', '239.1.2.3', '240.0.0.1', '::1', '::ffff:127.0.0.1', '64:ff9b::7f00:1', '2001:db8::1'] as $address) {
             $this->assertTrue(NetworkAddress::isUnsafe($address), "$address must be blocked");
             $this->assertFalse(NetworkAddress::isPrivate($address), "$address must never be private-allowlist eligible");
         }

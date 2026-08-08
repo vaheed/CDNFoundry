@@ -7,10 +7,10 @@ description: Complete lifecycle guide for CDNFoundry production fleets including
 
 ```mermaid
 flowchart LR
-  A[Fleet authority] --> C[Control-only env and PKI]
-  A --> D[DNS-only env and PKI]
-  A --> E1[Edge A env and identity]
-  A --> E2[Edge B env and identity]
+  A["Protected Fleet authority<br/>topology + secrets + private PKI"] --> C["CONTROL bundle<br/>control profile"]
+  A --> D["DNS bundle<br/>DNSdist + private PowerDNS + DNS API"]
+  A --> E1["Edge A bundle<br/>agent + gateway + cells"]
+  A --> E2["Edge B bundle<br/>agent + gateway + cells"]
 ```
 
 Each bundle is a security boundary. Never use a shared `env_file`: database, PowerDNS, bootstrap, identity, backup, and telemetry credentials are emitted only when that node's filtered services require them. Never copy a bundle, `.env.prod`, `pki/`, or `secrets/` directory between nodes.
@@ -202,7 +202,7 @@ Run before setup or after updating the repository:
 ./scripts/cdnfoundry-fleet --repo-root "$PWD" doctor
 ```
 
-`doctor` verifies the base Compose file, role overlays, Python, OpenSSL, and existing fleet state. Docker is reported separately because rendering can occur on a generator machine without starting containers, but Docker Compose is required on deployment hosts and for the final host-side validation.
+`doctor` verifies the production Compose file, deployment assets, Python, OpenSSL, and existing fleet state. Docker is reported separately because rendering can occur on a generator machine without starting containers, but Docker Compose is required on deployment hosts and for the final host-side validation.
 
 ## Node roles
 
@@ -233,7 +233,7 @@ The generator follows the production repository’s two-CA model:
 - `edge-identity-ca`: used by the control plane for edge identity issuance and verification.
 - `edge-server-ca`: signs edge-control, edge runtime, and DNS API TLS certificates.
 
-CA private keys stay in the protected fleet state directory. Every node bundle receives the edge server CA certificate plus its own certificate and private key. Only the control bundle receives the edge identity CA private key because the control service requires it.
+CA private keys stay in the protected fleet state directory. Every node bundle receives the edge server CA certificate plus its own certificate and private key. Only the control bundle receives the edge identity CA private key because the control service requires it. The transferred key begins root-only; the generated control `start.sh` must run as root and changes only this key to owner `root`, numeric group `82`, mode `0640`, allowing the immutable image's PHP-FPM worker to read it without making it public.
 
 Important generated environment paths include:
 
@@ -390,10 +390,14 @@ cd /opt
 mv cdnfoundry cdnfoundry.previous 2>/dev/null || true
 mv cdnfoundry.new cdnfoundry
 cd /opt/cdnfoundry
-./start.sh
+sudo ./start.sh
 ```
 
-Never transfer the entire fleet state or another node’s bundle.
+Never transfer the entire fleet state or another node’s bundle. Do not replace the generated control activation with a direct `docker compose up`: the activation applies the restricted PHP-worker access required for `pki/edge-identity-ca.key`. If `core` reports that the key is not readable, rerun `sudo ./start.sh` and verify `stat -c '%u:%g %a %n' pki/edge-identity-ca.key` reports `0:82 640`.
+
+`validate.sh` runs the pinned Caddy image's adapter against each Caddyfile present in the bundle. Treat any adapter error as a failed bundle and do not activate it. The validation container is short-lived and does not start dependencies; Docker may create the bundle's declared network or empty named-volume metadata while preparing the container.
+
+If `log-collector` exits with code `78` and reports that `LOG_AUTH_TOKEN` is missing, do not put the token directly in the rendered Compose manifest. Verify that `.env.prod` contains a non-empty `LOG_AUTH_TOKEN` and that the rendered `log-collector.environment` maps `LOG_AUTH_TOKEN` from Compose interpolation, then rerender and transfer the corrected node bundle. Recreate only `log-collector`; its bounded `operational-vector-data` volume preserves buffered logs.
 
 ## Updating the fleet
 
@@ -470,9 +474,9 @@ The full setup command reuses existing state. It does not rotate secrets. To ins
 
 The renderer derives required variables from the final filtered Compose file. Add project-specific values to a node’s `extra_env` only when the repository introduces a new required variable that the generator does not yet know. Do not place secrets in version-controlled config files.
 
-### Compose overlay contains `!reset` or `!override`
+### Compose input contains `!reset` or `!override`
 
-The fleet loader supports both Docker Compose tags. Older generator versions used `yaml.safe_load` directly and failed on these overlays.
+The Fleet loader supports both Docker Compose tags. Older generator versions used `yaml.safe_load` directly and failed on Compose inputs containing them.
 
 ### Docker is unavailable on the generator machine
 

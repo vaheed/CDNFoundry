@@ -401,6 +401,7 @@ services:
       LOG_BUFFER_BYTES: ${LOG_BUFFER_BYTES}
       LOG_METRICS_ADDRESS: 0.0.0.0:9599
       LOKI_ENDPOINT: ${LOKI_ENDPOINT:?LOKI_ENDPOINT is required for the logs profile}
+      LOG_AUTH_TOKEN: ${LOG_AUTH_TOKEN:?LOG_AUTH_TOKEN is required for the logs profile}
     volumes:
       - ./docker/vector/operational.yaml:/etc/vector/operational.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro

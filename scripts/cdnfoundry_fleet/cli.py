@@ -460,7 +460,7 @@ def _setup(args: argparse.Namespace, store: FleetState, output_dir: Path, config
             name = payload.get("name")
             if not name:
                 raise ValidationError("Every setup node requires a name")
-            current = store.load()
+            current = state
             if name in current["nodes"]:
                 state = store.update_node(current, name, payload)
                 print(f"Updated node: {name}")
@@ -481,23 +481,23 @@ def _setup(args: argparse.Namespace, store: FleetState, output_dir: Path, config
             control_payload = _interactive_node(state, role="control", defaults=control_payload)
         elif not args.control_ipv4:
             raise ValidationError("--control-ipv4 or a config nodes list is required in non-interactive setup")
-        state = store.add_node(store.load(), control_payload)
+        state = store.add_node(state, control_payload)
         print(f"Added control node: {control_payload['name']}")
 
         if preset == "dedicated-monitoring":
             if args.non_interactive:
                 raise ValidationError("Dedicated monitoring in non-interactive mode requires a monitoring node in --config")
             monitor_payload = _interactive_node(state, role="monitoring", defaults={"name": "monitoring-1"})
-            state = store.add_node(store.load(), monitor_payload)
+            state = store.add_node(state, monitor_payload)
             print(f"Added monitoring node: {monitor_payload['name']}")
 
         if not args.non_interactive:
             while _prompt_yes_no("Add a DNS or edge node now?", default=False):
                 payload = _interactive_node(state)
-                state = store.add_node(store.load(), payload)
+                state = store.add_node(state, payload)
                 print(f"Added node: {payload['name']}")
 
-    state = _apply_setup_features(store, store.load(), config, preset)
+    state = _apply_setup_features(store, state, config, preset)
     store.validate(state, require_secrets=not args.dry_run)
     print(f"Fleet validation passed ({len(state['nodes'])} node(s)).")
 

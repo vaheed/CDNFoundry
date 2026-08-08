@@ -6,20 +6,19 @@
 {$CONTROL_HOSTNAME} {
 	encode zstd gzip
 	reverse_proxy web:8080 {
-                header_up X-Forwarded-Proto https
-                header_up X-Forwarded-Port 443
-                header_up X-Forwarded-Host {$CONTROL_HOSTNAME}
-                header_down Location "http://{$CONTROL_HOSTNAME}" "https://{$CONTROL_HOSTNAME}"
-}
-
+		header_up X-Forwarded-Proto https
+		header_up X-Forwarded-Port 443
+		header_up X-Forwarded-Host {$CONTROL_HOSTNAME}
+		header_down Location "http://{$CONTROL_HOSTNAME}" "https://{$CONTROL_HOSTNAME}"
+	}
 
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "SAMEORIGIN"
 		Referrer-Policy "strict-origin-when-cross-origin"
-	        Content-Security-Policy "upgrade-insecure-requests"
-                -Server
+		Content-Security-Policy "upgrade-insecure-requests"
+		-Server
 	}
 }
 
@@ -44,7 +43,11 @@ https://{$TELEMETRY_HOSTNAME}:8444 {
 
 {$GRAFANA_HOSTNAME} {
 	reverse_proxy grafana:3000
-	header { Strict-Transport-Security "max-age=31536000"; X-Content-Type-Options "nosniff"; -Server }
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
 }
 
 http://127.0.0.1:2019 {

@@ -17,7 +17,7 @@ the proven schema compatibility envelope.
 2. Create and verify an encrypted off-host control backup.
 3. Retain `.env.prod`, `APP_KEY`, artifact signing key, both CA keys,
    listener identities, Restic password, and externally held custom TLS material.
-4. Validate target Compose and production overlays.
+4. Validate the target production Compose file and every generated node bundle.
 5. Review migrations for expand/contract compatibility.
 6. Run the target's automated and real-runtime qualification.
 

@@ -43,7 +43,7 @@ log collector.
 | Job | Checks |
 | --- | --- |
 | `core` | PHP 8.4 setup, Composer install/validate/audit, Node 24 npm install/audit, Pint, frontend build, Laravel tests, OpenAPI |
-| `compose` | development/production/overlay config, docs validation, Python syntax, every production image, read-only core smoke |
+| `compose` | development/production Compose config, docs validation, Python syntax, every production image, read-only core smoke |
 | `backend-e2e` | full real development stack, migrations, cumulative Python non-UI E2E |
 | `scale-e2e` | bounded control stack and 500,000-zone/1,000,000-record mutation qualification |
 | `go` | Go 1.24 formatting, vet, tests, build |
