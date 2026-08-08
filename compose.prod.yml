@@ -6,32 +6,32 @@ x-core-env: &core-env
   APP_KEY: ${APP_KEY:?APP_KEY is required}
   EDGE_ARTIFACT_SIGNING_KEY: ${EDGE_ARTIFACT_SIGNING_KEY:?EDGE_ARTIFACT_SIGNING_KEY is required}
   APP_URL: ${APP_URL:?APP_URL is required}
-  SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-true}
+  SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE}
   DB_CONNECTION: pgsql
-  DB_URL: ${DB_URL:-}
-  DB_HOST: ${DB_HOST:-control-db}
-  DB_PORT: ${DB_PORT:-5432}
+  DB_URL: ${DB_URL}
+  DB_HOST: ${DB_HOST}
+  DB_PORT: ${DB_PORT}
   DB_DATABASE: cdnf
   DB_USERNAME: cdnf
   DB_PASSWORD: ${CONTROL_DB_PASSWORD:?CONTROL_DB_PASSWORD is required}
-  DB_SSLMODE: ${DB_SSLMODE:-prefer}
+  DB_SSLMODE: ${DB_SSLMODE}
   CACHE_STORE: redis
   SESSION_DRIVER: redis
   QUEUE_CONNECTION: redis
 
-  REDIS_URL: ${REDIS_URL:-}
-  REDIS_HOST: ${REDIS_HOST:-redis}
-  REDIS_PORT: ${REDIS_PORT:-6379}
+  REDIS_URL: ${REDIS_URL}
+  REDIS_HOST: ${REDIS_HOST}
+  REDIS_PORT: ${REDIS_PORT}
   REDIS_CLIENT: predis
   REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
   GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb
   ACME_ENABLED: "true"
-  ACME_DIRECTORY_URL: ${ACME_DIRECTORY_URL:-https://acme-v02.api.letsencrypt.org/directory}
+  ACME_DIRECTORY_URL: ${ACME_DIRECTORY_URL}
   ACME_CONTACT_EMAIL: ${ACME_CONTACT_EMAIL:?ACME_CONTACT_EMAIL is required}
-  ACME_ORDER_BUDGET_PER_HOUR: ${ACME_ORDER_BUDGET_PER_HOUR:-20}
+  ACME_ORDER_BUDGET_PER_HOUR: ${ACME_ORDER_BUDGET_PER_HOUR}
   EDGE_IDENTITY_CA_CERTIFICATE: /run/secrets/edge-identity-ca.crt
   EDGE_IDENTITY_CA_PRIVATE_KEY: /run/secrets/edge-identity-ca.key
-  EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE: ${EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE:-}
+  EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE: ${EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE}
   PDNS_CA_CERTIFICATE: /run/secrets/pdns-api-ca.crt
   CLICKHOUSE_URL: ${CLICKHOUSE_URL:?CLICKHOUSE_URL is required}
   CLICKHOUSE_DATABASE: cdnf
@@ -39,15 +39,15 @@ x-core-env: &core-env
   CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
   PROMETHEUS_URL: http://prometheus:9090
   METRICS_TOKEN_FILE: /run/secrets/metrics-token
-  RESTIC_REPOSITORY: ${RESTIC_REPOSITORY:-}
+  RESTIC_REPOSITORY: ${RESTIC_REPOSITORY}
   RESTIC_PASSWORD_FILE: /run/secrets/restic-password
-  BACKUP_ACCESS_KEY_ID: ${BACKUP_ACCESS_KEY_ID:-}
-  BACKUP_SECRET_ACCESS_KEY: ${BACKUP_SECRET_ACCESS_KEY:-}
-  BACKUP_DEFAULT_REGION: ${BACKUP_DEFAULT_REGION:-us-east-1}
+  BACKUP_ACCESS_KEY_ID: ${BACKUP_ACCESS_KEY_ID}
+  BACKUP_SECRET_ACCESS_KEY: ${BACKUP_SECRET_ACCESS_KEY}
+  BACKUP_DEFAULT_REGION: ${BACKUP_DEFAULT_REGION}
   LOG_CHANNEL: stderr
   LOG_STACK: stderr
   LOG_STDERR_FORMATTER: App\Logging\OperationalJsonFormatter
-  GRAFANA_EXPLORE_URL: ${GRAFANA_EXPLORE_URL:-}
+  GRAFANA_EXPLORE_URL: ${GRAFANA_EXPLORE_URL}
 
 x-edge-cell: &edge-cell
   image: ghcr.io/vaheed/cdnfoundry-edge-runtime:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
@@ -83,6 +83,7 @@ x-core: &core
   depends_on:
     control-db: { condition: service_healthy }
     redis: { condition: service_healthy }
+    mmdb-updater: { condition: service_healthy }
   networks: [control, telemetry, egress]
   restart: unless-stopped
   stop_grace_period: 60s
@@ -102,7 +103,7 @@ x-core: &core
     - ${EDGE_IDENTITY_CA_PRIVATE_KEY:?EDGE_IDENTITY_CA_PRIVATE_KEY is required}:/run/secrets/edge-identity-ca.key:ro
     - ${PDNS_CA_CERTIFICATE:?PDNS_CA_CERTIFICATE is required}:/run/secrets/pdns-api-ca.crt:ro
     - ${METRICS_TOKEN_FILE:?METRICS_TOKEN_FILE is required}:/run/secrets/metrics-token:ro
-    - ${RESTIC_PASSWORD_FILE:-/dev/null}:/run/secrets/restic-password:ro
+    - ${RESTIC_PASSWORD_FILE}:/run/secrets/restic-password:ro
 
 services:
   core:
@@ -117,7 +118,7 @@ services:
   web:
     image: ghcr.io/vaheed/cdnfoundry-web:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
     profiles: [control]
-    ports: ["${CONTROL_BIND:-127.0.0.1:8080}:8080"]
+    ports: ["${CONTROL_BIND}:8080"]
     depends_on:
       core: { condition: service_healthy }
     networks: [control, ingress]
@@ -133,7 +134,7 @@ services:
   edge-control:
     image: ghcr.io/vaheed/cdnfoundry-edge-control:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
     profiles: [control]
-    ports: ["${EDGE_CONTROL_BIND:-0.0.0.0:8443}:8443"]
+    ports: ["${EDGE_CONTROL_BIND}:8443"]
     volumes:
       - ${EDGE_CONTROL_SERVER_CERTIFICATE:?EDGE_CONTROL_SERVER_CERTIFICATE is required}:/run/secrets/edge-control-server.crt:ro
       - ${EDGE_CONTROL_SERVER_PRIVATE_KEY:?EDGE_CONTROL_SERVER_PRIVATE_KEY is required}:/run/secrets/edge-control-server.key:ro
@@ -252,8 +253,8 @@ services:
     image: powerdns/dnsdist-21:2.1.0
     profiles: [dns]
     ports:
-      - "${DNS_BIND_V4:-0.0.0.0}:53:53/udp"
-      - "${DNS_BIND_V4:-0.0.0.0}:53:53/tcp"
+      - "${DNS_BIND_V4}:53:53/udp"
+      - "${DNS_BIND_V4}:53:53/tcp"
     volumes: [./docker/dnsdist/dnsdist.conf:/etc/dnsdist/dnsdist.conf:ro]
     depends_on:
       pdns-auth: { condition: service_healthy }
@@ -307,8 +308,8 @@ services:
     image: ghcr.io/vaheed/cdnfoundry-loki:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
     profiles: [telemetry]
     environment:
-      LOKI_RETENTION_PERIOD: ${LOKI_RETENTION_PERIOD:-336h}
-      LOKI_MAX_QUERY_LENGTH: ${LOKI_MAX_QUERY_LENGTH:-336h}
+      LOKI_RETENTION_PERIOD: ${LOKI_RETENTION_PERIOD}
+      LOKI_MAX_QUERY_LENGTH: ${LOKI_MAX_QUERY_LENGTH}
     volumes: [loki-data:/loki]
     depends_on:
       loki-data-init: { condition: service_completed_successfully }
@@ -340,14 +341,14 @@ services:
       LOG_ROLE: ${LOG_ROLE:?LOG_ROLE is required for the logs profile}
       LOG_HOST: ${LOG_HOST:?LOG_HOST is required for the logs profile}
       LOG_COLLECTOR_ID: ${LOG_COLLECTOR_ID:?LOG_COLLECTOR_ID is required for the logs profile}
-      LOG_BUFFER_BYTES: ${LOG_BUFFER_BYTES:-2147483648}
+      LOG_BUFFER_BYTES: ${LOG_BUFFER_BYTES}
       LOG_METRICS_ADDRESS: 0.0.0.0:9599
       LOKI_ENDPOINT: ${LOKI_ENDPOINT:?LOKI_ENDPOINT is required for the logs profile}
     volumes:
       - ./docker/vector/operational.yaml:/etc/vector/operational.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - operational-vector-data:/vector-data-dir
-    ports: ["${LOG_METRICS_BIND:-127.0.0.1:9599}:9599"]
+    ports: ["${LOG_METRICS_BIND}:9599"]
     networks: [telemetry, egress]
     restart: unless-stopped
     read_only: true
@@ -366,8 +367,8 @@ services:
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro
-      - ${PROMETHEUS_EDGE_TARGETS_FILE:-./docker/prometheus/edge-targets.prod.yml}:/etc/prometheus/edge-targets.yml:ro
-      - ${PROMETHEUS_LOG_TARGETS_FILE:-./docker/prometheus/operational-log-targets.prod.yml}:/etc/prometheus/operational-log-targets.yml:ro
+      - ${PROMETHEUS_EDGE_TARGETS_FILE}:/etc/prometheus/edge-targets.yml:ro
+      - ${PROMETHEUS_LOG_TARGETS_FILE}:/etc/prometheus/operational-log-targets.yml:ro
       - ${METRICS_TOKEN_FILE:?METRICS_TOKEN_FILE is required}:/run/secrets/metrics-token:ro
       - prometheus:/prometheus
     networks: [telemetry, control, dns-private]
@@ -377,12 +378,12 @@ services:
     image: postgres:18.4-alpine
     profiles: [telemetry]
     environment:
-      PGHOST: ${GRAFANA_POSTGRES_PROVISION_HOST:-control-db}
-      PGPORT: ${GRAFANA_POSTGRES_PROVISION_PORT:-5432}
+      PGHOST: ${GRAFANA_POSTGRES_PROVISION_HOST}
+      PGPORT: ${GRAFANA_POSTGRES_PROVISION_PORT}
       PGDATABASE: cdnf
       PGUSER: cdnf
       PGPASSWORD: ${CONTROL_DB_PASSWORD:?CONTROL_DB_PASSWORD is required}
-      PGSSLMODE: ${DB_SSLMODE:-prefer}
+      PGSSLMODE: ${DB_SSLMODE}
       GRAFANA_POSTGRES_PASSWORD: ${GRAFANA_POSTGRES_PASSWORD:?GRAFANA_POSTGRES_PASSWORD is required}
     volumes:
       - ./docker/grafana/postgres:/provision:ro
@@ -398,9 +399,9 @@ services:
   grafana:
     image: ghcr.io/vaheed/cdnfoundry-grafana:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
     profiles: [telemetry]
-    ports: ["${GRAFANA_BIND:-127.0.0.1:3000}:3000"]
+    ports: ["${GRAFANA_BIND}:3000"]
     environment:
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
@@ -408,22 +409,22 @@ services:
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
       GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
-      GF_SECURITY_COOKIE_SECURE: ${GRAFANA_COOKIE_SECURE:-true}
+      GF_SECURITY_COOKIE_SECURE: ${GRAFANA_COOKIE_SECURE}
       GF_PATHS_PLUGINS: /usr/share/grafana/cdnfoundry-plugins
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/system-command-center.json
-      GRAFANA_LOKI_URL: ${GRAFANA_LOKI_URL:-http://loki:3100}
-      GRAFANA_CLICKHOUSE_HOST: ${GRAFANA_CLICKHOUSE_HOST:-clickhouse}
-      GRAFANA_CLICKHOUSE_PORT: ${GRAFANA_CLICKHOUSE_PORT:-9000}
-      GRAFANA_CLICKHOUSE_PROTOCOL: ${GRAFANA_CLICKHOUSE_PROTOCOL:-native}
-      GRAFANA_CLICKHOUSE_SECURE: ${GRAFANA_CLICKHOUSE_SECURE:-false}
-      GRAFANA_CLICKHOUSE_USER: ${GRAFANA_CLICKHOUSE_USER:-cdnf_grafana}
+      GRAFANA_LOKI_URL: ${GRAFANA_LOKI_URL}
+      GRAFANA_CLICKHOUSE_HOST: ${GRAFANA_CLICKHOUSE_HOST}
+      GRAFANA_CLICKHOUSE_PORT: ${GRAFANA_CLICKHOUSE_PORT}
+      GRAFANA_CLICKHOUSE_PROTOCOL: ${GRAFANA_CLICKHOUSE_PROTOCOL}
+      GRAFANA_CLICKHOUSE_SECURE: ${GRAFANA_CLICKHOUSE_SECURE}
+      GRAFANA_CLICKHOUSE_USER: ${GRAFANA_CLICKHOUSE_USER}
       GRAFANA_CLICKHOUSE_PASSWORD: ${GRAFANA_CLICKHOUSE_PASSWORD:?GRAFANA_CLICKHOUSE_PASSWORD is required}
-      GRAFANA_POSTGRES_HOST: ${GRAFANA_POSTGRES_HOST:-control-db}
-      GRAFANA_POSTGRES_PORT: ${GRAFANA_POSTGRES_PORT:-5432}
-      GRAFANA_POSTGRES_DATABASE: ${GRAFANA_POSTGRES_DATABASE:-cdnf}
-      GRAFANA_POSTGRES_USER: ${GRAFANA_POSTGRES_USER:-cdnf_grafana}
+      GRAFANA_POSTGRES_HOST: ${GRAFANA_POSTGRES_HOST}
+      GRAFANA_POSTGRES_PORT: ${GRAFANA_POSTGRES_PORT}
+      GRAFANA_POSTGRES_DATABASE: ${GRAFANA_POSTGRES_DATABASE}
+      GRAFANA_POSTGRES_USER: ${GRAFANA_POSTGRES_USER}
       GRAFANA_POSTGRES_PASSWORD: ${GRAFANA_POSTGRES_PASSWORD:?GRAFANA_POSTGRES_PASSWORD is required}
-      GRAFANA_POSTGRES_SSLMODE: ${GRAFANA_POSTGRES_SSLMODE:-disable}
+      GRAFANA_POSTGRES_SSLMODE: ${GRAFANA_POSTGRES_SSLMODE}
     volumes:
       - grafana-data:/var/lib/grafana
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -540,14 +541,14 @@ services:
     environment:
       EDGE_CONTROL_URL: ${EDGE_CONTROL_URL:?EDGE_CONTROL_URL is required}
       EDGE_CONTROL_CA_CERTIFICATE: /run/secrets/edge-control-ca.crt
-      EDGE_ID: ${EDGE_ID:-}
-      EDGE_BOOTSTRAP_TOKEN: ${EDGE_BOOTSTRAP_TOKEN:-}
+      EDGE_ID: ${EDGE_ID}
+      EDGE_BOOTSTRAP_TOKEN: ${EDGE_BOOTSTRAP_TOKEN}
       EDGE_STATE_DIR: /var/lib/cdnfoundry/agent
       EDGE_RUNTIME_DIR: /var/lib/cdnfoundry/runtime
-      EDGE_GATEWAY_STATUS_URL: ${EDGE_GATEWAY_STATUS_URL:-http://host-gateway:9105/metrics}
-      EDGE_GATEWAY_ADDRESS_MAP: ${EDGE_GATEWAY_ADDRESS_MAP:-{}}
+      EDGE_GATEWAY_STATUS_URL: ${EDGE_GATEWAY_STATUS_URL}
+      EDGE_GATEWAY_ADDRESS_MAP: ${EDGE_GATEWAY_ADDRESS_MAP}
       EDGE_GATEWAY_REQUIRE_ADDRESS_MAP: "true"
-      EDGE_RUNTIME_VERSIONS: ${EDGE_RUNTIME_VERSIONS:-{}}
+      EDGE_RUNTIME_VERSIONS: ${EDGE_RUNTIME_VERSIONS}
       EDGE_CELL_ASSIGNMENTS: '{"cell-01":"shared-default","cell-02":"quarantine-default","cell-03":"","cell-04":"","cell-05":"","cell-06":"","cell-07":"","cell-08":""}'
       EDGE_CELL_STATUS_URLS: http://cell-01:9080/passive-failures,http://cell-02:9080/passive-failures,http://cell-03:9080/passive-failures,http://cell-04:9080/passive-failures,http://cell-05:9080/passive-failures,http://cell-06:9080/passive-failures,http://cell-07:9080/passive-failures,http://cell-08:9080/passive-failures
       EDGE_STATUS_TOKEN: ${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}
@@ -580,8 +581,8 @@ services:
     environment:
       GATEWAY_CONFIG_FILE: /var/lib/cdnfoundry/runtime/current/gateway.json
       GATEWAY_STATE_DIR: /var/lib/cdnfoundry/gateway-state
-      GATEWAY_METRICS_ADDRESS: ${EDGE_GATEWAY_METRICS_ADDRESS:-0.0.0.0:9105}
-      GATEWAY_MAX_CONNECTIONS: ${EDGE_GATEWAY_MAX_CONNECTIONS:-8192}
+      GATEWAY_METRICS_ADDRESS: ${EDGE_GATEWAY_METRICS_ADDRESS}
+      GATEWAY_MAX_CONNECTIONS: ${EDGE_GATEWAY_MAX_CONNECTIONS}
     volumes:
       - edge-state:/var/lib/cdnfoundry/runtime:ro
       - edge-gateway-state:/var/lib/cdnfoundry/gateway-state
@@ -615,15 +616,15 @@ services:
 
   mmdb-updater:
     image: ghcr.io/vaheed/cdnfoundry-mmdb-updater:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
-    profiles: [dns, edge]
+    profiles: [control, dns, edge]
     environment:
-      MMDB_PROVIDER: ${MMDB_PROVIDER:-dbip-jsdelivr}
-      MMDB_TARGET_FILE: ${MMDB_TARGET_FILE:-GeoLite2-City.mmdb}
-      MMDB_DOWNLOAD_INTERVAL_SECONDS: ${MMDB_DOWNLOAD_INTERVAL_SECONDS:-86400}
-      MMDB_DOWNLOAD_RETRIES: ${MMDB_DOWNLOAD_RETRIES:-5}
-      MMDB_EXPECTED_SHA256: ${MMDB_EXPECTED_SHA256:-}
-      MMDB_DOWNLOAD_URL: ${MMDB_DOWNLOAD_URL:-}
-      MMDB_DOWNLOAD_HEADER: ${MMDB_DOWNLOAD_HEADER:-}
+      MMDB_PROVIDER: ${MMDB_PROVIDER}
+      MMDB_TARGET_FILE: ${MMDB_TARGET_FILE}
+      MMDB_DOWNLOAD_INTERVAL_SECONDS: ${MMDB_DOWNLOAD_INTERVAL_SECONDS}
+      MMDB_DOWNLOAD_RETRIES: ${MMDB_DOWNLOAD_RETRIES}
+      MMDB_EXPECTED_SHA256: ${MMDB_EXPECTED_SHA256}
+      MMDB_DOWNLOAD_URL: ${MMDB_DOWNLOAD_URL}
+      MMDB_DOWNLOAD_HEADER: ${MMDB_DOWNLOAD_HEADER}
     volumes: [mmdb:/mmdb]
     networks: [edge]
     restart: unless-stopped

@@ -10,6 +10,8 @@ optional files under `deploy/production/`. It does not build application images
 on production hosts and never migrates a database during container startup.
 
 ::: tip Recommended starting point
+For a new installation, use the [starter Fleet quick start](production-quick-start.md). It copies a JSON topology, validates it, and generates complete per-node bundles without editing deployment scripts.
+
 Use the [Production quick start](production-quick-start.md) for the
 complete three-host sequence: bootstrap DNS, private PKI, explicit migrations,
 cluster qualification, edge enrollment, acceptance checks, and diagnosis.
@@ -30,6 +32,8 @@ Before deploying, read:
 5. [Certificates](certificates.md) for the edge-control and DNS API PKI.
 6. [Configuration](../reference/configuration.md) for every `.env.prod` key.
 7. [Upgrade](upgrade.md) for schema, worker, DNS, and edge sequencing.
+
+For separated roles across several failure domains, continue with the [multi-region Fleet quick start](production-quick-start-multi-region.md). The [Fleet operator guide](production-fleet-operator-guide.md) and [configuration reference](production-fleet-config-reference.md) cover lifecycle operations and the JSON schema.
 
 The [Production quick start](production-quick-start.md) is the
 authoritative first-install procedure. The remaining deployment pages explain
