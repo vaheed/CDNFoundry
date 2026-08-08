@@ -32,9 +32,19 @@ def call(method: str, path: str, payload: object | None = None, token: str | Non
     if token:
         headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(BASE + path, data=body, headers=headers, method=method)
-    with urllib.request.urlopen(request, timeout=15) as response:
-        raw = response.read()
-        return response.status, json.loads(raw) if raw else {}
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            raw = response.read()
+            return response.status, json.loads(raw) if raw else {}
+    except urllib.error.HTTPError as error:
+        raw = error.read()
+        try:
+            details = json.loads(raw) if raw else {}
+        except json.JSONDecodeError:
+            details = raw.decode(errors="replace")
+        raise AssertionError(
+            f"{method} {path} returned HTTP {error.code}: {details}"
+        ) from error
 
 
 def artisan(expression: str) -> None:
@@ -128,7 +138,7 @@ def main() -> None:
     token = login["data"]["token"]
     settings = {
         "platform_domain": "cdnf.test", "proxy_hostname": "proxy.cdnf.test",
-        "nameservers": [{"hostname": "ns1.cdnf.test", "ipv4": "192.0.2.10", "ipv6": "2001:db8::10"}, {"hostname": "ns2.cdnf.test", "ipv4": "192.0.2.11", "ipv6": "2001:db8::11"}],
+        "nameservers": [{"hostname": "ns1.cdnf.test", "ipv4": "8.8.8.8", "ipv6": "2001:4860:4860::8888"}, {"hostname": "ns2.cdnf.test", "ipv4": "1.1.1.1", "ipv6": "2606:4700:4700::1111"}],
         "soa_primary": "ns1.cdnf.test", "soa_mailbox": "hostmaster.cdnf.test", "soa_refresh": 3600, "soa_retry": 600, "soa_expire": 1209600, "soa_minimum_ttl": 300, "default_ttl": 300, "cluster_targets": ["pdns-auth:8081"],
     }
     _, validated_settings = call("POST", "/api/admin/system/settings/dns/validate", settings, token)
