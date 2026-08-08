@@ -261,8 +261,8 @@ def apply_platform_identity(token: str) -> None:
         "platform_domain": "cdnf.test",
         "proxy_hostname": "proxy.cdnf.test",
         "nameservers": [
-            {"hostname": "ns1.cdnf.test", "ipv4": "192.0.2.10", "ipv6": "2001:db8::10"},
-            {"hostname": "ns2.cdnf.test", "ipv4": "192.0.2.11", "ipv6": "2001:db8::11"},
+            {"hostname": "ns1.cdnf.test", "ipv4": "8.8.8.8", "ipv6": "2001:4860:4860::8888"},
+            {"hostname": "ns2.cdnf.test", "ipv4": "1.1.1.1", "ipv6": "2606:4700:4700::1111"},
         ],
         "soa_primary": "ns1.cdnf.test",
         "soa_mailbox": "hostmaster.cdnf.test",
@@ -658,6 +658,10 @@ def main() -> None:
         pools = pools_response["data"]["data"]
         shared = next(pool for pool in pools if pool["name"] == "shared-default")
         quarantine = next(pool for pool in pools if pool["name"] == "quarantine-default")
+        service_addresses = [
+            ("9.9.9.9", "2620:fe::fe"),
+            ("149.112.112.112", "2620:fe::9"),
+        ]
         for index, edge in enumerate(edges):
             _, detail = call("GET", f"/api/admin/edges/{edge['id']}", token=token)
             rows = detail["data"]["cells"]
@@ -671,8 +675,8 @@ def main() -> None:
             call("PUT", f"/api/admin/edge-pools/{quarantine['id']}/cells/{quarantine_cell['id']}", {}, token)
             edge["quarantine_cell"] = quarantine_cell["name"]
             call("POST", f"/api/admin/edge-pools/{shared['id']}/edges/{edge['id']}/endpoint", {
-                "ipv4": f"198.51.100.{101 + index}",
-                "ipv6": f"2001:db8:40::{101 + index}",
+                "ipv4": service_addresses[index][0],
+                "ipv6": service_addresses[index][1],
             }, token)
             heartbeat(edge, 0)
             heartbeat(edge, 0)
@@ -680,8 +684,8 @@ def main() -> None:
             bindings = candidate["data"]["bindings"]
             assert len(bindings) == 2 and all(len(binding["cells"]) >= 1 for binding in bindings), candidate
         shared_global = f"pool-{shared['id']}.global.all.proxy.cdnf.test"
-        wait_answers(shared_global, "A", {"198.51.100.101", "198.51.100.102"})
-        wait_answers(shared_global, "AAAA", {"2001:db8:40::101", "2001:db8:40::102"})
+        wait_answers(shared_global, "A", {"9.9.9.9", "149.112.112.112"})
+        wait_answers(shared_global, "AAAA", {"2620:fe::fe", "2620:fe::9"})
         exercise_simple_anycast(token, edges)
 
         call("POST", f"/api/admin/edges/{edges[0]['id']}/drain", {}, token)
@@ -689,12 +693,12 @@ def main() -> None:
         drained_answers: set[str] = set()
         while time.monotonic() < deadline:
             drained_answers = set(dig(shared_global, "A"))
-            if "198.51.100.101" not in drained_answers and "198.51.100.102" in drained_answers:
+            if "9.9.9.9" not in drained_answers and "149.112.112.112" in drained_answers:
                 break
             time.sleep(0.5)
-        assert "198.51.100.101" not in drained_answers and "198.51.100.102" in drained_answers, drained_answers
+        assert "9.9.9.9" not in drained_answers and "149.112.112.112" in drained_answers, drained_answers
         call("POST", f"/api/admin/edges/{edges[0]['id']}/undrain", {}, token)
-        wait_answers(shared_global, "A", {"198.51.100.101", "198.51.100.102"})
+        wait_answers(shared_global, "A", {"9.9.9.9", "149.112.112.112"})
 
         _, created_domain = call("POST", "/api/domains", {"name": ZONE}, token)
         domain_id = created_domain["data"]["id"]
