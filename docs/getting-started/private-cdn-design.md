@@ -208,7 +208,7 @@ not enter serving, ingestion, or reconciliation paths.
 
 This is a reliability minimum, not a scale maximum. Larger ISPs can separate
 DNS, edge, telemetry, control workers, PostgreSQL, and Valkey using the shipped
-role overlays and external endpoints.
+role profiles, generated bundles, and external endpoints.
 
 ## Capacity planning for an ISP
 

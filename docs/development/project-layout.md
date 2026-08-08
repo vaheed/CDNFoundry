@@ -30,7 +30,7 @@ remain rebuildable rather than becoming hidden sources of truth.
 | `docker/prometheus`, `docker/alertmanager` | Metrics and alerts |
 | `compose.dev.yml` | Persistent full development topology |
 | `compose.prod.yml` | Role-based production service definitions |
-| `deploy/production/` | Public/split-host/IPv6/external-data overlays |
+| `deploy/production/` | Fleet examples and production deployment assets |
 | `scripts/` | PKI, environment, and Compose validation helpers |
 | `tests/e2e/` | Agent-owned non-UI real-runtime qualification |
 | `tests/docs/` | Documentation validation |

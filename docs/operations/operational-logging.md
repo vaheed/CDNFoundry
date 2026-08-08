@@ -39,14 +39,13 @@ adding the `logs` profile to that host's normal role command:
 ```sh
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f compose.prod.yml \
   --profile edge --profile logs up -d
 ```
 
 Set a stable `LOG_HOST`, `LOG_ROLE`, and globally unique `LOG_COLLECTOR_ID` in
 each host's environment copy. Set `LOKI_ENDPOINT` to the source-restricted
-telemetry gateway, for example `https://telemetry.example.com:8444`. The
-telemetry-host overlay uses private `http://loki:3100` locally. Do not run both
+telemetry gateway, for example `https://telemetry.ops.example.com:8444`. A
+collector colocated with telemetry may use private `http://loki:3100`. Do not run both
 the base collector and a second role-specific collector on one host.
 
 The default disk buffer is 2 GiB per production host and 256 MiB in development.
@@ -54,22 +53,11 @@ The default disk buffer is 2 GiB per production host and 256 MiB in development.
 Expose `LOG_METRICS_BIND` only on a private monitoring address and put remote
 `host:9599` targets in the file selected by `PROMETHEUS_LOG_TARGETS_FILE`.
 
-## Optional host journal
-
-On hosts with persistent systemd journals, add the overlay:
-
-```sh
-docker compose --env-file .env.prod \
-  -f compose.prod.yml \
-  -f compose.prod.yml \
-  -f compose.prod.yml \
-  --profile edge --profile logs up -d
-```
-
-It reads Docker/containerd units and kernel events for daemon failure, restart,
-OOM, disk/filesystem, and service-crash evidence. Omit this overlay on hosts
-without journald. Container lifecycle events not written to stdout or journald
-cannot be reconstructed by the base Docker log source.
+The committed collector reads Docker container logs. Host journal ingestion is
+not mounted or configured by `compose.prod.yml`; if an operator adds it, that is
+deployment-owned customization and must retain the same redaction, label, and
+bounded-buffer contract. Container lifecycle events absent from Docker logs
+cannot be reconstructed by the committed collector.
 
 The Docker socket is a privileged host trust boundary even when mounted
 read-only. Only the collector gets `/var/run/docker.sock`; never expose it over

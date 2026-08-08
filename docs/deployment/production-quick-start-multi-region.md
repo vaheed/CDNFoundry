@@ -7,14 +7,29 @@ description: Deploy a separated-role CDNFoundry fleet across multiple regions fr
 
 ```mermaid
 flowchart TB
-  CF[Cloudflare: ops.example.com] --> CP[Control and Grafana]
-  REG[example.net delegation] --> D1[DNS region A]
-  REG --> D2[DNS region B]
-  CP --> D1
-  CP --> D2
-  CP --> E1[Edge region A]
-  CP --> E2[Edge region B]
+  ExternalDNS["Independent external DNS provider<br/>operator zone"] --> CONTROL["CONTROL<br/>Laravel + workers"]
+  ExternalDNS --> EDGEAPI["edge-control.operator-zone<br/>mTLS ingress"]
+  ExternalDNS --> DNSAPIS["dns-api-N.operator-zone<br/>restricted DNS APIs"]
+  ExternalDNS --> TELEMETRY["telemetry.operator-zone<br/>Vector + ClickHouse + Grafana"]
+  CONTROL --> PG[("PostgreSQL<br/>desired state")]
+  CONTROL -->|"revisioned reconciliation"| DNSAPIS
+  DNSAPIS --> PDNS["Private PowerDNS on each DNS host"]
+  Resolvers["Recursive resolvers"] --> DNSDIST["DNSdist in each region"]
+  DNSDIST --> PDNS
+  Clients["HTTP clients"] --> GATEWAYS["Regional gateways + bounded OpenResty cells"]
+  GATEWAYS --> Origins["Validated origins"]
+  Agents["Edge agents"] -->|"outbound mTLS"| EDGEAPI
+  DNSDIST -. "bounded telemetry" .-> TELEMETRY
+  GATEWAYS -. "bounded telemetry" .-> TELEMETRY
 ```
+
+::: danger Keep management DNS outside CDNFoundry
+Publish `control.<operator-zone>`, `edge-control.<operator-zone>`,
+`telemetry.<operator-zone>`, and every `dns-api-N.<operator-zone>` through an
+independent external DNS provider. Do not put the operator zone in CDNFoundry
+PowerDNS. CDNFoundry PowerDNS contains derived platform/customer runtime state
+and must not be required to find the services that repair or manage it.
+:::
 
 This example models one control node, four authoritative DNS nodes, ten edge nodes, and three monitoring-role nodes. “Multi-region” describes its failure-domain design; it is not a special runtime mode or a fixed scale limit.
 

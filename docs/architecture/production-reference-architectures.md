@@ -42,18 +42,23 @@ domains.
 
 ```mermaid
 flowchart LR
+    ExternalDNS["Independent external DNS<br/>management records"] --> CONTROL
+    ExternalDNS --> DNSAPI["dns-api-N"]
+    ExternalDNS --> EC["edge-control"]
     Operators["Operators"] --> CONTROL["CONTROL<br>control plane"]
     CONTROL --> State[("PostgreSQL + Valkey")]
     Resolver["Resolvers"] --> EDGE1DNS["EDGE_1<br>DNSdist + PowerDNS"]
     Resolver --> EDGE2DNS["EDGE_2<br>DNSdist + PowerDNS"]
     Clients["HTTP clients"] --> EDGE1GW["EDGE_1<br>gateway + cells"]
     Clients --> EDGE2GW["EDGE_2<br>gateway + cells"]
-    CONTROL -. "restricted DNS API" .-> EDGE1DNS
-    CONTROL -. "restricted DNS API" .-> EDGE2DNS
+    CONTROL -. "revisioned reconciliation" .-> DNSAPI
+    DNSAPI --> EDGE1DNS
+    DNSAPI --> EDGE2DNS
     EDGE1GW --> Origins["Validated origins"]
     EDGE2GW --> Origins
-    EDGE1GW -->|"outbound mTLS"| CONTROL
-    EDGE2GW -->|"outbound mTLS"| CONTROL
+    EDGE1GW -->|"edge agent: outbound mTLS"| EC
+    EDGE2GW -->|"edge agent: outbound mTLS"| EC
+    EC --> CONTROL
 ```
 
 Best for:
@@ -116,7 +121,7 @@ Best for:
 - edge bandwidth or DNS load that should not compete on one host;
 - a dedicated database or observability team;
 - independent maintenance windows;
-- deployments using the external control-data or telemetry-data overlays.
+- deployments using owner-operated external control or telemetry data services.
 
 Tradeoffs:
 
@@ -125,7 +130,7 @@ Tradeoffs:
 - separating roles without separate failure domains mainly improves resource
   isolation, not site resilience.
 
-CDNFoundry supplies role overlays and external endpoints. It does not supply a
+CDNFoundry supplies role profiles, generated node bundles, and external endpoint settings. It does not supply a
 PostgreSQL, Valkey, or ClickHouse clustering product. The operator owns those
 systems' quorum, fencing, failover, consistency, and restore qualification.
 

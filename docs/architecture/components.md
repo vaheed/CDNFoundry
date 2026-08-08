@@ -34,7 +34,7 @@ startup creates writable directories but deliberately does not migrate.
 | `pdns-auth` | Private PowerDNS authoritative service |
 | `pdns-db` | Rebuildable PowerDNS runtime schema |
 | `pdns-migrate` | Explicit PowerDNS runtime migration tool |
-| `dns-api` overlay | Source-restricted TLS proxy for the private PowerDNS API |
+| `dns-api` | Source-restricted TLS proxy for the private PowerDNS API in the `dns` profile |
 
 PowerAdmin exists only in the development-tools profile and is diagnostic.
 Direct edits are drift.

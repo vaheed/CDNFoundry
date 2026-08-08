@@ -27,15 +27,21 @@ clients authenticate with Laravel Sanctum bearer tokens.
 
 ## Choose your path
 
-- If CDN concepts are new, begin with [CDN fundamentals](../concepts/cdn-fundamentals.md).
-- To understand the product end to end, read [How CDNFoundry works](../concepts/how-cdnfoundry-works.md).
-- To evaluate a company or ISP deployment, read [How to build a private CDN](private-cdn-design.md).
-- To run the repository locally, follow [Installation](installation.md).
-- To onboard a domain, follow [First domain](first-domain.md).
-- For common administrator, domain-user, and API tasks, use [Using CDNFoundry](using-cdnfoundry.md).
-- To understand state and failure guarantees, read [Desired state](../concepts/desired-state.md).
-- To deploy real hosts, start with the [Production quick start](../deployment/production-quick-start.md).
-- To integrate over HTTP, use the [API reference](../reference/api/index.md).
+| Audience | Start here | Continue with |
+| --- | --- | --- |
+| New to CDNs | [CDN fundamentals](../concepts/cdn-fundamentals.md) | [How CDNFoundry works](../concepts/how-cdnfoundry-works.md), then [Desired state](../concepts/desired-state.md) |
+| Developer or contributor | [Local installation](installation.md) | [Developer setup](../development/index.md) and [Testing](../development/testing.md) |
+| Administrator or domain user | [Using CDNFoundry](using-cdnfoundry.md) | [First domain](first-domain.md), then the [feature guides](../guides/index.md) |
+| Hosting provider or ISP architect | [Private CDN design](private-cdn-design.md) | [Production reference architectures](../architecture/production-reference-architectures.md) |
+| Production operator | [Production quick start](../deployment/production-quick-start.md) | [Production best practices](../operations/production-best-practices.md), then [Operations](../operations/index.md) |
+| API integrator | [API conventions](../reference/api/index.md) | [Endpoint catalog](../reference/api/endpoints.md) and [Errors](../reference/api/errors.md) |
+
+::: tip Recommended learning order
+For a first deployment, follow concepts → local installation → first domain →
+production quick start → operations. The quick start owns installation order;
+reference pages explain individual settings and should not be assembled into a
+second deployment procedure.
+:::
 
 ## Current product boundary
 

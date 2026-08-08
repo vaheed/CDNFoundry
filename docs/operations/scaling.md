@@ -41,7 +41,7 @@ Adding an edge does not require a new DNS cluster.
 
 1. prepare a distinct public IP, private PowerDNS data, valid MMDB, and DNS API certificate;
 2. run the separate PowerDNS migration;
-3. start DNSdist and PowerDNS with the DNS-only overlay;
+3. start DNSdist, private PowerDNS, and DNS API with the `dns` profile;
 4. register/test the cluster through its source-restricted HTTPS API;
 5. enable and reconcile;
 6. verify UDP/TCP, SOA, delegation, and Geo-DNS from outside.
@@ -50,15 +50,16 @@ Adding DNS capacity does not create an edge runtime.
 
 ## Move telemetry
 
-Use `compose.prod.yml` with an exact edge-source allowlist. Set control
+Use the `telemetry` profile or a generated monitoring-role bundle with an exact
+edge-source allowlist. Set control
 `CLICKHOUSE_URL` and edge Vector endpoints to verified TLS. Keep ClickHouse and
 Prometheus private. Prove that telemetry outage and backlog drain do not affect
 serving.
 
 ## External control data
 
-`compose.prod.yml` disables local PostgreSQL and Valkey. Set
-`DB_URL` and `REDIS_URL` to owner-operated replicated services with verified
+Set `DB_URL` and `REDIS_URL` in the generated control bundle to owner-operated
+replicated services with verified
 TLS, exact-source firewalls, backup, failover, and capacity plans. The repository
 does not configure database replication or automatic failover.
 

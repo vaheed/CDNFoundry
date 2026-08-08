@@ -22,18 +22,16 @@ telemetry internals off public networks.
 | `logs` | one `log-collector` on the current host; combine once with its role profile |
 | `tools` | explicit `migrate` and `pdns-migrate` one-shot services |
 
-`compose.prod.yml` replaces local
-`control-db` and `redis` with configured external endpoints. The control, DNS,
-edge, and telemetry host overlays add only role-specific publication and
-gateways.
-`compose.prod.yml` disables local
-ClickHouse when a verified external endpoint is configured.
+`compose.prod.yml` is the only production Compose source. Profiles select
+long-running roles; Fleet-generated per-node manifests filter those services
+and can point Laravel, Valkey clients, Vector, or Grafana at typed external
+data endpoints.
 
 ## Production listeners
 
 | Listener | Default host bind | Exposure |
 | --- | --- | --- |
-| Browser/API web | `127.0.0.1:8080` | Publish through the control Caddy overlay |
+| Browser/API web | `127.0.0.1:8080` | The `control` profile's Caddy service publishes HTTPS |
 | Edge control mTLS | `0.0.0.0:8443` | Restrict to registered edge sources |
 | DNSdist | `${DNS_BIND_V4}:53` TCP and UDP | Public authoritative DNS |
 | Cell slot host diagnostics | loopback `18081`–`18088`, `18444`–`18451`, `19081`–`19088` | HTTP, HTTPS, and status; never public |
@@ -48,9 +46,9 @@ ClickHouse when a verified external endpoint is configured.
 
 Host binds are deliberately separate from the public, routed, or NAT addresses
 advertised in DNS. The default IPv4 wildcard works when those addresses exist
-only on an external firewall or load balancer. IPv6 publication exists only
-when the matching `compose.*-host-ipv6.yml` overlay is supplied; omit the
-overlay on IPv4-only hosts.
+only on an external firewall or load balancer. Configure IPv6 only when the
+host has a working route, firewall policy, local bind, and externally published
+AAAA/service address; otherwise retain the documented nullable IPv6 values.
 
 The edge gateway is stricter than the shared host publications: every
 control-plane service endpoint must be mapped one-to-one to a distinct local
@@ -80,7 +78,7 @@ firewalls.
 
 The base production file defines `core-storage`, `control-db`, `redis`,
 `pdns-db`, `clickhouse`, `vector-data`, `operational-vector-data`, `loki-data`, `prometheus`, `grafana-data`, `edge-state`,
-`edge-agent-state`, and `mmdb`. Caddy overlays add their data/config volumes.
+`edge-agent-state`, `mmdb`, and Caddy data/config volumes.
 
 Do not remove these volumes during routine stop, upgrade, or testing. Recovery
 requires the control database plus its encryption/signing keys and external TLS

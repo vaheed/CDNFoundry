@@ -25,7 +25,8 @@ cluster qualification, edge enrollment, acceptance checks, and diagnosis.
 
 The minimum documented layout is one control/telemetry host plus two combined
 DNS/edge hosts. The base file also supports colocated development-like
-qualification, while overlays expose split roles with restricted TLS gateways.
+qualification, while Compose profiles and generated bundles expose split roles
+with restricted TLS gateways.
 
 Before deploying, read:
 
@@ -41,7 +42,7 @@ Before deploying, read:
 7. [Configuration](../reference/configuration.md) for every `.env.prod` key.
 8. [Upgrade](upgrade.md) for schema, worker, DNS, and edge sequencing.
 
-For separated roles across several failure domains, continue with the [multi-region Fleet quick start](production-quick-start-multi-region.md). The [Fleet operator guide](production-fleet-operator-guide.md) and [configuration reference](production-fleet-config-reference.md) cover lifecycle operations and the JSON schema.
+For separated roles across several failure domains, continue with the [multi-region Fleet quick start](production-quick-start-multi-region.md). The [Fleet operator guide](production-fleet-operator-guide.md), [configuration reference](production-fleet-config-reference.md), and [architecture reference](production-fleet.md) cover lifecycle operations, the JSON schema, and role boundaries.
 
 The [Production quick start](production-quick-start.md) is the
 authoritative first-install procedure. The remaining deployment pages explain
@@ -60,4 +61,4 @@ relevant.
 
 See [Production quick start](production-quick-start.md) for the
 verified command sequence and [Topology](topology.md) for the role and
-overlay model.
+profile and generated-bundle model.

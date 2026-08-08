@@ -12,9 +12,10 @@ current automated and owner-run qualification evidence.
 :::
 
 This documentation system was reconstructed on 2026-07-26 and re-audited on
-2026-08-01 against release `v0.9.1` plus the current working tree. The previous
-corpus is preserved verbatim under `docs/legacy/` and in Git history. It is
-excluded from current navigation, search, lint, build, and link guarantees.
+2026-08-08 against the current working tree. The superseded corpus remains
+under `docs/legacy/` for historical context, with prohibited vendor comparisons
+removed. It is excluded from current navigation, search, lint, build, and link
+guarantees and is not an operational instruction set.
 
 ## Audited implementation surfaces
 
@@ -32,16 +33,18 @@ The audit covered every tracked project area:
 | TLS/cache/security | controllers, support validators, jobs, runtime, feature and E2E tests |
 | Telemetry | Vector transforms/sinks, ClickHouse DDL, analytics queries, metrics and alerts |
 | Configuration | Laravel configs, both example environments, Compose interpolation, scripts |
-| Infrastructure | development/production Compose, every production overlay, Dockerfiles, Caddy |
+| Infrastructure | development/production Compose, generated role bundles, Dockerfiles, Caddy |
 | Development and CI | Make targets, shell scripts, PHP/Go/Python tests, GitHub workflow/forms |
 | Existing documentation | all legacy Markdown, generated OpenAPI, root guides, pull-request template |
 
 The audit used file inventories, route registry output, environment-key
 extraction, class/function indexes, migration constraints, Compose-rendered
-services, and targeted full-file review. The 2026-08-01 pass additionally
+services, and targeted full-file review. The 2026-08-08 pass additionally
 checked bounded cells, gateway ingress, Geo-Unicast and Simple Anycast pools,
 cache/compression/origin failover, managed WAF, fleet rollout, Grafana, Loki,
-production overlays, the environment generator, and every quick-start command.
+the single production Compose file, generated role bundles, the Fleet
+environment generator, management-DNS bootstrap independence, every current
+Mermaid diagram, and every quick-start command.
 Generated dependency lockfiles were treated as dependency evidence, not prose
 to paraphrase.
 
@@ -66,7 +69,7 @@ does not expand the implemented product boundary.
 | Historical phase test counts were current qualification status. | Counts such as 118 or 140 tests apply only to their recorded commits; the current suite contains more tests and must be rerun. |
 | Roadmap future stages, current operation, agent rules, and qualification evidence belonged in one public guide. | Governance and owner qualification are repository concerns, not public product documentation; legacy keeps the original proposal history. |
 | Telemetry retention settings automatically define runtime TTLs. | Masking/finalization are active application policy, while shipped ClickHouse TTLs are static in `docker/clickhouse/init.sql` and require an operator migration to change. |
-| A public address must exist on each host so Docker can bind it. | Public/NAT addresses are advertised identities. Shared production overlays bind `HOST_BIND_IPV4`/`HOST_BIND_IPV6`; the edge gateway requires a complete advertised-to-private `EDGE_GATEWAY_ADDRESS_MAP` behind NAT or a layer-4 load balancer. |
+| A public address must exist on each host so Docker can bind it. | Public/NAT addresses are advertised identities. Generated bundles set `HOST_BIND_IPV4`/`HOST_BIND_IPV6`; the edge gateway requires a complete advertised-to-private `EDGE_GATEWAY_ADDRESS_MAP` behind NAT or a layer-4 load balancer. |
 | Restic is required to render or start the control profile. | Built-in Restic backup is optional. Empty settings skip the daily job and fail backup requests explicitly while leaving serving available and backup health degraded. |
 | One-shot migrations can bootstrap their own databases during first install. | The supported first-install sequence starts and health-checks PostgreSQL/Valkey or PowerDNS PostgreSQL before running its explicit migration container. |
 

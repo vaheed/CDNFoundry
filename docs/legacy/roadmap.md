@@ -17,7 +17,7 @@ Part One is not an MVP. Features listed in Part Two are optional long-term addit
 
 ### 1. Product Definition
 
-CDNFoundry is a self-hosted CDN and authoritative DNS platform for companies and local providers that need a private CDN without the size, feature count, or operational complexity of Cloudflare, Akamai, or Fastly.
+CDNFoundry is a self-hosted CDN and authoritative DNS platform for companies and local providers that need a private CDN without hyperscale feature count or operational complexity.
 
 The system intentionally supports a small set of capabilities. Every capability that is included must be predictable, recoverable, observable, bounded, and safe under production load.
 
@@ -1134,7 +1134,7 @@ No origin is requested.
 
 ##### Domain DNS Page
 
-- Cloudflare-like table density and editing flow without copying branding
+- dense operational tables and a direct editing flow without copying another product's branding
 - Record type, name, content, TTL, and status
 - Bulk selection and bulk action
 - Import and export
@@ -3708,7 +3708,7 @@ This roadmap contains only the new work discussed after that baseline.
 
 CDNFoundry remains a simple but solid private CDN. It must stay understandable,
 bounded, production-safe, and easy to operate. It is not intended to become a
-general cloud platform or a Cloudflare replacement.
+general cloud platform or a replacement for a hyperscale public CDN.
 
 ## Project boundaries
 

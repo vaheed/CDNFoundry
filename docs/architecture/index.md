@@ -12,6 +12,10 @@ or rebuildable.
 
 ```mermaid
 flowchart TB
+    ExternalDNS["Independent external DNS<br/>management hostnames"] --> UI
+    ExternalDNS --> EdgeControl["edge-control<br/>mTLS ingress"]
+    ExternalDNS --> DNSAPI["dns-api-N<br/>restricted TLS"]
+    ExternalDNS --> TelemetryIngress["telemetry ingress"]
     subgraph Management["Management plane"]
       UI["Filament panels and Sanctum API"] --> Laravel["Laravel monolith"]
       Laravel --> Horizon["Horizon workers"]
@@ -24,6 +28,7 @@ flowchart TB
     subgraph DNS["Authoritative DNS plane"]
       DNSdist["DNSdist public ingress"] --> PowerDNS["Private PowerDNS"]
       PowerDNS --> PDNSDB[("Derived PowerDNS DB")]
+      DNSAPI --> PowerDNS
     end
     subgraph Edge["HTTP edge plane"]
       Agent["Edge agent"] --> Gateway["Destination + Host/SNI gateway"]
@@ -43,12 +48,30 @@ flowchart TB
     Laravel --> Valkey
     Horizon --> Valkey
     PG -->|"sanitized read-only metadata"| Grafana
-    Horizon -->|"versioned reconciliation"| PowerDNS
-    Agent -->|"outbound mTLS: pull artifacts/tasks, acknowledge"| Laravel
+    Horizon -->|"versioned reconciliation"| DNSAPI
+    Agent -->|"outbound mTLS: pull artifacts/tasks, acknowledge"| EdgeControl
+    EdgeControl --> Laravel
     DNSdist -.-> Vector
     Cell1 -.-> Vector
     Cell2 -.-> Vector
 ```
+
+## DNS namespaces and addresses
+
+| Namespace or address | Owner and purpose | CDNFoundry PowerDNS? |
+| --- | --- | --- |
+| `control.<operator-zone>`, `edge-control.<operator-zone>`, `telemetry.<operator-zone>`, `grafana.<operator-zone>`, `dns-api-N.<operator-zone>` | Independent external DNS provider; management and recovery reachability | Never |
+| `ns1.<platform-zone>`, `ns2.<platform-zone>` and glue | Parent/registrar delegation to public DNSdist addresses | Served by DNSdist from derived PowerDNS state after bootstrap |
+| Enrolled customer zones | PostgreSQL desired state reconciled into private PowerDNS databases | Yes |
+| Edge pool service addresses | Public HTTP/HTTPS addresses selected through platform/customer DNS | Stored as platform desired state, not management addresses |
+| Private PowerDNS, PostgreSQL, Valkey, ClickHouse, agent/status addresses | Host or private service networks | No public DNS required |
+
+::: danger Avoid a DNS bootstrap loop
+Management records must remain resolvable while CDNFoundry DNS is empty,
+degraded, or being restored. Hosting them in the platform's own PowerDNS can
+leave the DNS API and control plane unreachable precisely when operators need
+them for repair.
+:::
 
 | Plane | Components | Responsibility |
 | --- | --- | --- |
@@ -60,7 +83,7 @@ flowchart TB
 
 Only DNSdist, mapped edge-gateway service listeners, and the browser/API reverse proxy
 belong on public ingress. Edge control uses mutual TLS. Telemetry and PowerDNS
-API gateways are source restricted in the production overlays. Internal
+API gateways are source restricted by the production Caddy configuration. Internal
 databases, Valkey, ClickHouse, raw metrics, Grafana port 3000, and PowerDNS
 itself remain private. Remote Grafana access uses a deployment-owned
 authenticated HTTPS proxy or trusted tunnel.
