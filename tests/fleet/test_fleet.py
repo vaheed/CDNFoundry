@@ -352,11 +352,63 @@ def test_control_start_restricts_identity_ca_key_for_php_worker(store: FleetStat
     assert 'test "$(stat -c \'%u:%g\' pki/edge-identity-ca.key)" = "0:82"' in validate
 
 
+def test_production_control_validation_parses_caddyfile(store: FleetState, tmp_path: Path) -> None:
+    from cdnfoundry_fleet.compose import load_yaml
+
+    add(store, node("control-1", "control", "192.0.2.10"))
+    renderer = Renderer(REPO_PATCH, store, tmp_path / "bundles")
+    compose = load_yaml(REPO_PATCH / "compose.prod.yml")
+    validate = renderer._validate_script(store.load()["nodes"]["control-1"], compose)
+    assert "run --rm --no-deps caddy caddy adapt --adapter caddyfile" in validate
+
+
 def test_dry_run_does_not_create_state_or_secrets(tmp_path: Path) -> None:
     store = FleetState(tmp_path / "dry-state", dry_run=True)
     state = store.init({"operator_domain": "ops.example.com", "platform_domain": "example.net", "release": "v1.0.0"})
     assert state["schema_version"] == 1
     assert not store.state_dir.exists()
+
+
+def test_setup_dry_run_uses_in_memory_state(source_repo: Path, tmp_path: Path) -> None:
+    import subprocess
+
+    config = tmp_path / "starter.json"
+    config.write_text(
+        json.dumps(
+            {
+                "preset": "control-monitoring",
+                "global": {
+                    "operator_domain": "ops.example.com",
+                    "platform_domain": "example.net",
+                    "release": "v1.0.0",
+                },
+                "nodes": [node("control-1", "control", "192.0.2.10")],
+            }
+        ),
+        encoding="utf-8",
+    )
+    state_dir = tmp_path / "dry-state"
+    result = subprocess.run(
+        [
+            str(REPO_PATCH / "scripts/cdnfoundry-fleet"),
+            "--config",
+            str(config),
+            "--state-dir",
+            str(state_dir),
+            "--output-dir",
+            str(tmp_path / "dry-bundles"),
+            "--repo-root",
+            str(source_repo),
+            "--non-interactive",
+            "--dry-run",
+            "setup",
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    assert "Fleet validation passed (1 node(s))." in result.stdout
+    assert not state_dir.exists()
 
 
 def test_explicit_rotation_changes_only_target_dns_node(store: FleetState) -> None:

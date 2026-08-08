@@ -23,7 +23,11 @@ https://{$TELEMETRY_HOSTNAME}:8444 {
 
 {$GRAFANA_HOSTNAME} {
 	reverse_proxy grafana:3000
-	header { Strict-Transport-Security "max-age=31536000"; X-Content-Type-Options "nosniff"; -Server }
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
 }
 
 http://127.0.0.1:2019 {

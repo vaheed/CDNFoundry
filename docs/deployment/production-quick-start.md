@@ -104,7 +104,7 @@ sudo ./scripts/cdnfoundry-fleet \
   show-start-order
 ```
 
-For every bundle, verify `SHA256SUMS`, review `README.md`, and run `./validate.sh`. Production Compose has no deployment-value defaults: all interpolation comes from that bundle's generated `.env.prod`.
+For every bundle, verify `SHA256SUMS`, review `README.md`, and run `./validate.sh`. Validation uses the pinned Caddy images to parse every Caddyfile included in that node before activation, in addition to checking Compose interpolation, permissions, and certificate chains. It may pull a missing pinned image and create a short-lived validation container, but it does not start the application services. Production Compose has no deployment-value defaults: all interpolation comes from that bundle's generated `.env.prod`.
 
 ## 5. Start the control plane
 

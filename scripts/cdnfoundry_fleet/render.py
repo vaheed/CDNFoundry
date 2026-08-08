@@ -70,7 +70,7 @@ class Renderer:
             atomic_write(tmp / ".env.prod", self._format_env(env), 0o600)
             self._write_generated_configs(state, node, tmp, monitoring_host)
             atomic_write(tmp / "README.md", self._node_readme(state, node, filtered), 0o600)
-            atomic_write(tmp / "validate.sh", self._validate_script(node), 0o700)
+            atomic_write(tmp / "validate.sh", self._validate_script(node, filtered), 0o700)
             atomic_write(tmp / "start.sh", self._start_script(node), 0o700)
             self._write_manifest(tmp, state, node)
             previous = destination.with_name(destination.name + ".previous")
@@ -166,15 +166,15 @@ class Renderer:
             "CONTROL_HOSTNAME": f"control.{operator_domain}",
             "TELEMETRY_HOSTNAME": f"telemetry.{operator_domain}",
             "GRAFANA_HOSTNAME": f"grafana.{operator_domain}",
-            "APP_KEY": self.store.read_secret("app-key"),
-            "EDGE_ARTIFACT_SIGNING_KEY": self.store.read_secret("artifact-signing-key"),
-            "CONTROL_DB_PASSWORD": self.store.read_secret("control-db-password"),
-            "REDIS_PASSWORD": self.store.read_secret("valkey-password"),
-            "CLICKHOUSE_PASSWORD": self.store.read_secret("clickhouse-password"),
+            "APP_KEY": self._secret("app-key"),
+            "EDGE_ARTIFACT_SIGNING_KEY": self._secret("artifact-signing-key"),
+            "CONTROL_DB_PASSWORD": self._secret("control-db-password"),
+            "REDIS_PASSWORD": self._secret("valkey-password"),
+            "CLICKHOUSE_PASSWORD": self._secret("clickhouse-password"),
             "CLICKHOUSE_URL": self._clickhouse_url(state),
-            "GRAFANA_ADMIN_PASSWORD": self.store.read_secret("grafana-admin-password"),
-            "GRAFANA_CLICKHOUSE_PASSWORD": self.store.read_secret("grafana-clickhouse-password"),
-            "GRAFANA_POSTGRES_PASSWORD": self.store.read_secret("grafana-postgres-password"),
+            "GRAFANA_ADMIN_PASSWORD": self._secret("grafana-admin-password"),
+            "GRAFANA_CLICKHOUSE_PASSWORD": self._secret("grafana-clickhouse-password"),
+            "GRAFANA_POSTGRES_PASSWORD": self._secret("grafana-postgres-password"),
             "METRICS_TOKEN_FILE": "./secrets/metrics-token",
             # Production Compose PKI contract (control, edge and DNS roles).
             "EDGE_IDENTITY_CA_CERTIFICATE": "./pki/edge-identity-ca.crt",
@@ -200,7 +200,7 @@ class Renderer:
             "LOG_COLLECTOR_ID": node["name"],
             "LOKI_ENDPOINT": self._loki_url(state),
             "LOG_AUTH_TOKEN": self._optional_node_secret("log-auth-token", node),
-            "NODE_EXPORTER_TOKEN": self.store.read_secret("node-exporter-token", node=node["name"]),
+            "NODE_EXPORTER_TOKEN": self._secret("node-exporter-token", node=node["name"]),
             "EDGE_STATUS_TOKEN": self._optional_node_secret("edge-status-token", node),
             "EDGE_ID": node.get("edge_id") or "",
             "EDGE_BOOTSTRAP_TOKEN": self._optional_node_secret("edge-bootstrap-token", node),
@@ -208,8 +208,8 @@ class Renderer:
             "PDNS_API_KEY": self._optional_node_secret("pdns-api-key", node),
             "RESTIC_REPOSITORY": state["features"]["backups"].get("repository") or "",
             "RESTIC_PASSWORD_FILE": "./secrets/restic-password",
-            "BACKUP_ACCESS_KEY_ID": self.store.read_secret("backup-access-key"),
-            "BACKUP_SECRET_ACCESS_KEY": self.store.read_secret("backup-secret-key"),
+            "BACKUP_ACCESS_KEY_ID": self._secret("backup-access-key"),
+            "BACKUP_SECRET_ACCESS_KEY": self._secret("backup-secret-key"),
             "BACKUP_DEFAULT_REGION": state["features"]["backups"].get("region") or "us-east-1",
             "ACME_CONTACT_EMAIL": state["global"].get("acme_email", ""),
             "SESSION_SECURE_COOKIE": "true",
@@ -306,7 +306,14 @@ class Renderer:
             if key in values and (values[key] != "" or key in needed)
         }
 
+    def _secret(self, name: str, *, node: str | None = None) -> str:
+        if self.dry_run:
+            return f"dry-run-{name}-placeholder"
+        return self.store.read_secret(name, node=node)
+
     def _optional_node_secret(self, name: str, node: dict[str, Any]) -> str:
+        if self.dry_run:
+            return f"dry-run-{name}-placeholder"
         path = self.store.secret_path(name, node=node["name"])
         return self.store.read_secret(name, node=node["name"]) if path.exists() else ""
 
@@ -674,7 +681,7 @@ After successful validation and the retention period, securely remove obsolete t
             )
         return "# No database migration is required for this role."
 
-    def _validate_script(self, node: dict[str, Any]) -> str:
+    def _validate_script(self, node: dict[str, Any], compose: dict[str, Any]) -> str:
         identity_key_validation = ""
         if node["role"] == "control":
             identity_key_validation = """identity_key_mode="$(stat -c '%a' pki/edge-identity-ca.key)"
@@ -689,12 +696,25 @@ case "$identity_key_mode" in
         ;;
 esac
 """
+        caddy_validation = ""
+        caddy_configs = {
+            "caddy": "/etc/caddy/Caddyfile",
+            "dns-api": "/etc/caddy/Caddyfile",
+            "telemetry-gateway": "/etc/caddy/Caddyfile",
+        }
+        for service, config in caddy_configs.items():
+            if service in compose.get("services", {}):
+                caddy_validation += (
+                    f"docker compose --env-file .env.prod run --rm --no-deps {service} "
+                    f"caddy adapt --adapter caddyfile --config {config} >/dev/null\n"
+                )
         return f"""#!/usr/bin/env sh
 set -eu
 umask 077
 test "$(stat -c '%a' .env.prod)" = 600
 test "$(stat -c '%a' pki/node.key)" = 600
 {identity_key_validation}docker compose --env-file .env.prod config --quiet
+{caddy_validation}
 openssl verify -CAfile pki/edge-server-ca.crt pki/node.crt
 """
 
