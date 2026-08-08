@@ -1,5 +1,0 @@
-services:
-  dnsdist:
-    ports:
-      - "[${HOST_BIND_IPV6:-::}]:53:53/udp"
-      - "[${HOST_BIND_IPV6:-::}]:53:53/tcp"

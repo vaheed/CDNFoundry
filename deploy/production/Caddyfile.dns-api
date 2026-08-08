@@ -6,7 +6,7 @@
 https://{$DNS_API_HOSTNAME}:8444 {
 	tls /run/secrets/dns-api.crt /run/secrets/dns-api.key
 
-	@control_source remote_ip {$CONTROL_PUBLIC_IPV4_ALLOWLIST}
+	@control_source remote_ip {$CONTROL_PUBLIC_IPV4_ALLOWLIST} {$CONTROL_PUBLIC_IPV6_ALLOWLIST}
 
 	handle @control_source {
 		reverse_proxy pdns-auth:8081

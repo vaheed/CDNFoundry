@@ -1,5 +1,0 @@
-services:
-  telemetry-gateway:
-    ports:
-      - "[${HOST_BIND_IPV6:-::}]:80:80/tcp"
-      - "[${HOST_BIND_IPV6:-::}]:443:443/tcp"

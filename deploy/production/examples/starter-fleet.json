@@ -1,0 +1,62 @@
+{
+  "preset": "control-monitoring",
+  "global": {
+    "operator_domain": "ops.example.com",
+    "platform_domain": "example.net",
+    "release": "0000000000000000000000000000000000000000",
+    "acme_email": "cdn-operations@example.com",
+    "ipv6": false
+  },
+  "nodes": [
+    {
+      "name": "control-1",
+      "role": "control",
+      "region": "global",
+      "location": "primary",
+      "hostname": "control.ops.example.com",
+      "public_ipv4": "192.0.2.10",
+      "public_ipv6": null,
+      "bind_ipv4": "0.0.0.0",
+      "bind_ipv6": null,
+      "monitor_ipv4": null,
+      "monitor_ipv6": null,
+      "log_ipv4": null,
+      "log_ipv6": null
+    },
+    {
+      "name": "pop-1",
+      "role": "dns-edge",
+      "region": "region-a",
+      "location": "site-a",
+      "hostname": "pop-1.ops.example.com",
+      "public_ipv4": "198.51.100.20",
+      "public_ipv6": null,
+      "bind_ipv4": "0.0.0.0",
+      "bind_ipv6": null,
+      "monitor_ipv4": null,
+      "monitor_ipv6": null,
+      "log_ipv4": null,
+      "log_ipv6": null
+    },
+    {
+      "name": "pop-2",
+      "role": "dns-edge",
+      "region": "region-b",
+      "location": "site-b",
+      "hostname": "pop-2.ops.example.com",
+      "public_ipv4": "198.51.100.30",
+      "public_ipv6": null,
+      "bind_ipv4": "0.0.0.0",
+      "bind_ipv6": null,
+      "monitor_ipv4": null,
+      "monitor_ipv6": null,
+      "log_ipv4": null,
+      "log_ipv6": null
+    }
+  ],
+  "features": {
+    "monitoring": {"mode": "colocated", "host": "control-1"},
+    "logs": {"mode": "centralized", "host": "control-1", "endpoint": null},
+    "backups": {"mode": "disabled", "repository": null, "region": "us-east-1"}
+  }
+}

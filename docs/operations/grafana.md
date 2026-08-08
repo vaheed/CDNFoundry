@@ -83,8 +83,8 @@ provider's approved role workflow. `docker/grafana/postgres/provision.sql` is
 the exact PostgreSQL grant contract. Apply the ClickHouse grants listed above,
 including the bounded profile, then set the `GRAFANA_*_HOST`, port, protocol,
 TLS, user, and password variables. Use
-`deploy/production/compose.external-control-data.yml` for external PostgreSQL
-and `deploy/production/compose.external-telemetry-data.yml` for external
+`compose.prod.yml` for external PostgreSQL
+and `compose.prod.yml` for external
 ClickHouse. Verified TLS is required when endpoints cross hosts.
 
 ## Dashboard behavior

@@ -310,23 +310,23 @@ runs before long-lived workers start. Named volumes are preserved.
 cd /opt/cdnfoundry
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.control-host.yml \
+  -f compose.prod.yml \
   --profile control --profile telemetry config --quiet
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.control-host.yml \
+  -f compose.prod.yml \
   --profile control --profile telemetry pull
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.control-host.yml \
+  -f compose.prod.yml \
   --profile tools run --rm migrate
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.control-host.yml \
+  -f compose.prod.yml \
   --profile control --profile telemetry up -d
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.control-host.yml ps
+  -f compose.prod.yml ps
 ```
 
 Check the public path:
@@ -345,7 +345,7 @@ Create the first administrator; the command prompts for the password:
 ```sh
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.control-host.yml \
+  -f compose.prod.yml \
   exec -u www-data core php artisan cdnf:admin:create \
   --name="CDN Operations" --email="admin@example.com"
 ```
@@ -364,19 +364,19 @@ authoritative service without affecting public resolvers.
 cd /opt/cdnfoundry
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.dns-edge-host.yml \
+  -f compose.prod.yml \
   --profile dns config --quiet
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.dns-edge-host.yml \
+  -f compose.prod.yml \
   --profile dns --profile edge pull
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.dns-edge-host.yml \
+  -f compose.prod.yml \
   --profile tools run --rm pdns-migrate
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.dns-edge-host.yml \
+  -f compose.prod.yml \
   --profile dns up -d
 ```
 
@@ -453,11 +453,11 @@ Start the runtime on each edge:
 cd /opt/cdnfoundry
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.dns-edge-host.yml \
+  -f compose.prod.yml \
   --profile edge up -d
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.dns-edge-host.yml \
+  -f compose.prod.yml \
   ps edge edge-quarantine edge-agent vector mmdb-updater
 ```
 
@@ -469,7 +469,7 @@ sudo sed -i 's/^EDGE_BOOTSTRAP_TOKEN=.*/EDGE_BOOTSTRAP_TOKEN=/' \
   /opt/cdnfoundry/.env.prod
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.dns-edge-host.yml \
+  -f compose.prod.yml \
   --profile edge up -d --force-recreate edge-agent
 ```
 
@@ -503,13 +503,13 @@ curl -I --resolve CUSTOMER_DOMAIN:443:198.51.100.20 https://CUSTOMER_DOMAIN/
 
 ```sh
 docker compose --env-file .env.prod -f compose.prod.yml \
-  -f deploy/production/compose.control-host.yml ps
+  -f compose.prod.yml ps
 docker compose --env-file .env.prod -f compose.prod.yml \
-  -f deploy/production/compose.control-host.yml logs --tail=200 core caddy
+  -f compose.prod.yml logs --tail=200 core caddy
 ```
 
 On an edge, replace the override with
-`deploy/production/compose.dns-edge-host.yml` and inspect `dnsdist`,
+`compose.prod.yml` and inspect `dnsdist`,
 `pdns-auth`, `edge`, `edge-agent`, and `vector`.
 
 ### Upgrade
@@ -527,7 +527,7 @@ logs. Do not expose Caddy's administration endpoint.
 
 ```sh
 docker compose --env-file .env.prod -f compose.prod.yml \
-  -f deploy/production/compose.control-host.yml logs --tail=200 caddy
+  -f compose.prod.yml logs --tail=200 caddy
 ```
 
 If `core` is unhealthy, inspect its startup output and health result. The
@@ -536,10 +536,10 @@ making it writable.
 
 ```sh
 docker compose --env-file .env.prod -f compose.prod.yml \
-  -f deploy/production/compose.control-host.yml logs --tail=200 core
+  -f compose.prod.yml logs --tail=200 core
 docker inspect --format '{{json .State.Health}}' \
   "$(docker compose --env-file .env.prod -f compose.prod.yml \
-  -f deploy/production/compose.control-host.yml ps -q core)"
+  -f compose.prod.yml ps -q core)"
 ```
 
 Verify `/etc/cdnfoundry/pki/edge-identity-ca.key` is readable by container
@@ -596,16 +596,16 @@ matching AAAA/glue records, and append the relevant opt-in override:
 # Control host:
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.control-host.yml \
-  -f deploy/production/compose.control-host-ipv6.yml \
+  -f compose.prod.yml \
+  -f compose.prod.yml \
   --profile control --profile telemetry up -d
 
 # Combined DNS/edge host:
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.dns-edge-host.yml \
-  -f deploy/production/compose.dns-host-ipv6.yml \
-  -f deploy/production/compose.edge-host-ipv6.yml \
+  -f compose.prod.yml \
+  -f compose.prod.yml \
+  -f compose.prod.yml \
   --profile dns --profile edge up -d
 ```
 

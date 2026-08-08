@@ -122,15 +122,15 @@ and only then start application processes:
 ```sh
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.control-host.yml \
+  -f compose.prod.yml \
   --profile control up -d --wait --wait-timeout 120 control-db redis
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.control-host.yml \
+  -f compose.prod.yml \
   --profile tools run --rm migrate
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.control-host.yml \
+  -f compose.prod.yml \
   --profile control up -d
 ```
 
@@ -152,15 +152,15 @@ migration, then start the profiles:
 ```sh
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.dns-edge-host.yml \
+  -f compose.prod.yml \
   --profile dns up -d --wait --wait-timeout 120 pdns-db
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.dns-edge-host.yml \
+  -f compose.prod.yml \
   --profile tools run --rm pdns-migrate
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.dns-edge-host.yml \
+  -f compose.prod.yml \
   --profile dns --profile edge up -d
 ```
 
@@ -204,11 +204,11 @@ topology, operation IDs, certificate fingerprints, checks, and deviations.
 
 ## Split-role overlays
 
-- `compose.dns-host.yml` adds the DNS API gateway to a DNS-only host.
-- `compose.edge-host.yml` documents the base edge-only role; the base file owns its listeners.
-- `compose.telemetry-host.yml` adds public, source-restricted telemetry TLS.
-- `compose.external-control-data.yml` disables local PostgreSQL and Valkey.
-- `compose.external-telemetry-data.yml` disables local ClickHouse while Grafana
+- `compose.prod.yml` adds the DNS API gateway to a DNS-only host.
+- `compose.prod.yml` documents the base edge-only role; the base file owns its listeners.
+- `compose.prod.yml` adds public, source-restricted telemetry TLS.
+- `compose.prod.yml` disables local PostgreSQL and Valkey.
+- `compose.prod.yml` disables local ClickHouse while Grafana
   and Vector use the configured external telemetry endpoint.
 - `*-ipv6.yml` files explicitly add IPv6 publications.
 

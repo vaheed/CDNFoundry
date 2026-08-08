@@ -39,7 +39,7 @@ adding the `logs` profile to that host's normal role command:
 ```sh
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.edge-host.yml \
+  -f compose.prod.yml \
   --profile edge --profile logs up -d
 ```
 
@@ -61,8 +61,8 @@ On hosts with persistent systemd journals, add the overlay:
 ```sh
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.edge-host.yml \
-  -f deploy/production/compose.host-journal.yml \
+  -f compose.prod.yml \
+  -f compose.prod.yml \
   --profile edge --profile logs up -d
 ```
 

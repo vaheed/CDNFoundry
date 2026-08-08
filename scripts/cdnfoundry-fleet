@@ -1,0 +1,4 @@
+#!/usr/bin/env python3
+from cdnfoundry_fleet.cli import main
+
+raise SystemExit(main())
