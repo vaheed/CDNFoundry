@@ -194,16 +194,6 @@ def source_repo(tmp_path: Path) -> Path:
         },
     }
     (root / "compose.prod.yml").write_text(yaml.safe_dump(compose, sort_keys=False), encoding="utf-8")
-    for name in [
-        "compose.control-host.yml",
-        "compose.dns-host.yml",
-        "compose.edge-host.yml",
-        "compose.dns-edge-host.yml",
-        "compose.telemetry-host.yml",
-        "compose.external-control-data.yml",
-        "compose.host-journal.yml",
-    ]:
-        (root / "deploy/production" / name).write_text("services: {}\n", encoding="utf-8")
     return root
 
 

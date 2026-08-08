@@ -14,21 +14,11 @@ from .compose import (
     bind_mount_sources,
     dump_yaml,
     load_yaml,
-    merge_compose,
     prune_top_level,
     required_env,
     select_services,
 )
 from .state import FleetState
-
-ROLE_OVERLAYS = {
-    "control": ["deploy/production/compose.control-host.yml"],
-    "dns": ["deploy/production/compose.dns-host.yml"],
-    "edge": ["deploy/production/compose.edge-host.yml"],
-    "dns-edge": ["deploy/production/compose.dns-edge-host.yml"],
-    "monitoring": ["deploy/production/compose.telemetry-host.yml"],
-}
-
 
 class Renderer:
     def __init__(self, repo_root: Path, store: FleetState, output_dir: Path, *, dry_run: bool = False) -> None:
@@ -53,21 +43,11 @@ class Renderer:
 
     def _render_node(self, state: dict[str, Any], node: dict[str, Any]) -> Path:
         base = load_yaml(self.repo_root / "compose.prod.yml")
-        merged = base
-        for overlay in ROLE_OVERLAYS[node["role"]]:
-            path = self.repo_root / overlay
-            if path.exists():
-                merged = merge_compose(merged, load_yaml(path))
-        if state["features"]["logs"]["mode"] == "centralized":
-            journal = self.repo_root / "deploy/production/compose.host-journal.yml"
-            if journal.exists():
-                merged = merge_compose(merged, load_yaml(journal))
-
         monitoring_enabled = state["features"]["monitoring"]["mode"] != "disabled"
         monitoring_host = self._is_monitoring_host(state, node)
         logs_enabled = state["features"]["logs"]["mode"] == "centralized"
         filtered = select_services(
-            merged,
+            base,
             role=node["role"],
             monitoring_enabled=monitoring_enabled,
             logs_enabled=logs_enabled,
@@ -113,7 +93,12 @@ class Renderer:
         services = compose.get("services", {})
         if "node-exporter" in services:
             bind = node.get("monitor_ipv4") or node["bind_ipv4"]
-            services["node-exporter"]["ports"] = [f"{bind}:9100:9100/tcp"]
+            ports = [f"{bind}:9100:9100/tcp"]
+            if node.get("monitor_ipv6"):
+                ports.append(f"[{node['monitor_ipv6']}]:9100:9100/tcp")
+            services["node-exporter"]["ports"] = ports
+        if node.get("bind_ipv6"):
+            self._add_ipv6_publications(services, node["bind_ipv6"])
         if "log-collector" in services:
             service = services["log-collector"]
             service["command"] = ["--config", "/etc/vector/generated-node.yaml"]
@@ -180,6 +165,7 @@ class Renderer:
             "APP_URL": f"https://control.{operator_domain}",
             "CONTROL_HOSTNAME": f"control.{operator_domain}",
             "TELEMETRY_HOSTNAME": f"telemetry.{operator_domain}",
+            "GRAFANA_HOSTNAME": f"grafana.{operator_domain}",
             "APP_KEY": self.store.read_secret("app-key"),
             "EDGE_ARTIFACT_SIGNING_KEY": self.store.read_secret("artifact-signing-key"),
             "CONTROL_DB_PASSWORD": self.store.read_secret("control-db-password"),
@@ -206,6 +192,9 @@ class Renderer:
             "CONTROL_PUBLIC_IPV4_ALLOWLIST": self._control_allowlist(state),
             "EDGE_PUBLIC_IPV4_ALLOWLIST": self._edge_allowlist(state),
             "LOG_SOURCE_IPV4_ALLOWLIST": self._all_public_ipv4(state),
+            "CONTROL_PUBLIC_IPV6_ALLOWLIST": self._control_allowlist(state, family=6),
+            "EDGE_PUBLIC_IPV6_ALLOWLIST": self._edge_allowlist(state, family=6),
+            "LOG_SOURCE_IPV6_ALLOWLIST": self._all_public_ipv6(state),
             "LOG_ROLE": node["role"],
             "LOG_HOST": node["name"],
             "LOG_COLLECTOR_ID": node["name"],
@@ -235,7 +224,7 @@ class Renderer:
             "ACME_DIRECTORY_URL": "https://acme-v02.api.letsencrypt.org/directory",
             "ACME_ORDER_BUDGET_PER_HOUR": "20",
             "EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE": "",
-            "GRAFANA_EXPLORE_URL": "",
+            "GRAFANA_EXPLORE_URL": f"https://grafana.{operator_domain}/explore?left=%7B%22datasource%22:%22loki%22%7D",
             "EDGE_CONTROL_BIND": "0.0.0.0:8443",
             "EDGE_RUNTIME_VERSIONS": "{}",
             "EDGE_GATEWAY_METRICS_ADDRESS": "0.0.0.0:9105",
@@ -341,20 +330,40 @@ class Renderer:
         hostname = control["hostname"] if control else f"control.{state['global']['operator_domain']}"
         return f"https://{hostname}:8443"
 
-    def _control_allowlist(self, state: dict[str, Any]) -> str:
+    @staticmethod
+    def _add_ipv6_publications(services: dict[str, Any], bind: str) -> None:
+        mappings = {
+            "caddy": [(80, "tcp"), (443, "tcp"), (443, "udp"), (8444, "tcp")],
+            "dns-api": [(8444, "tcp")],
+            "telemetry-gateway": [(80, "tcp"), (443, "tcp"), (8444, "tcp")],
+            "dnsdist": [(53, "tcp"), (53, "udp")],
+            "edge-gateway": [(80, "tcp"), (443, "tcp"), (443, "udp")],
+        }
+        for service_name, ports in mappings.items():
+            if service_name in services:
+                current = services[service_name].setdefault("ports", [])
+                current.extend(f"[{bind}]:{port}:{port}/{protocol}" for port, protocol in ports)
+
+    def _control_allowlist(self, state: dict[str, Any], *, family: int = 4) -> str:
+        field = f"public_ipv{family}"
         return " ".join(
-            node["public_ipv4"] for node in state["nodes"].values() if node["role"] == "control" and node["enabled"]
+            node[field] for node in state["nodes"].values()
+            if node["role"] == "control" and node["enabled"] and node.get(field)
         )
 
-    def _edge_allowlist(self, state: dict[str, Any]) -> str:
+    def _edge_allowlist(self, state: dict[str, Any], *, family: int = 4) -> str:
+        field = f"public_ipv{family}"
         return " ".join(
-            node["public_ipv4"]
+            node[field]
             for node in state["nodes"].values()
-            if node["role"] in {"edge", "dns-edge"} and node["enabled"]
+            if node["role"] in {"edge", "dns-edge"} and node["enabled"] and node.get(field)
         )
 
     def _all_public_ipv4(self, state: dict[str, Any]) -> str:
         return " ".join(node["public_ipv4"] for node in state["nodes"].values() if node["enabled"])
+
+    def _all_public_ipv6(self, state: dict[str, Any]) -> str:
+        return " ".join(node["public_ipv6"] for node in state["nodes"].values() if node["enabled"] and node.get("public_ipv6"))
 
     def _feature_host(self, state: dict[str, Any], feature: str) -> dict[str, Any] | None:
         cfg = state["features"][feature]

@@ -34,7 +34,7 @@ SETUP_FEATURE_FIELDS = {
 }
 SETUP_NODE_FIELDS = {
     "name", "role", "region", "location", "hostname", "public_ipv4", "public_ipv6",
-    "bind_ipv4", "bind_ipv6", "monitor_ipv4", "log_ipv4", "release", "extra_env",
+    "bind_ipv4", "bind_ipv6", "monitor_ipv4", "monitor_ipv6", "log_ipv4", "log_ipv6", "release", "extra_env",
     "enabled", "draining", "health",
 }
 
@@ -226,7 +226,9 @@ def _node_arguments(
     target.add_argument("--bind-ipv4", default=None if optional else "0.0.0.0")
     target.add_argument("--bind-ipv6")
     target.add_argument("--monitor-ipv4")
+    target.add_argument("--monitor-ipv6")
     target.add_argument("--log-ipv4")
+    target.add_argument("--log-ipv6")
     target.add_argument("--release")
     target.add_argument("--extra-env", action="append", default=[])
     target.add_argument("--disabled", action="store_true", default=None if optional else False)
@@ -304,7 +306,9 @@ def _node_payload(args: argparse.Namespace, config: dict[str, Any], *, update: b
         "bind_ipv4": "bind_ipv4",
         "bind_ipv6": "bind_ipv6",
         "monitor_ipv4": "monitor_ipv4",
+        "monitor_ipv6": "monitor_ipv6",
         "log_ipv4": "log_ipv4",
+        "log_ipv6": "log_ipv6",
         "release": "release",
     }
     for target, arg_name in mapping.items():
@@ -370,7 +374,9 @@ def _interactive_node(state: dict[str, Any], *, role: str | None = None, default
         "bind_ipv4": defaults.get("bind_ipv4") or "0.0.0.0",
         "bind_ipv6": defaults.get("bind_ipv6"),
         "monitor_ipv4": defaults.get("monitor_ipv4"),
+        "monitor_ipv6": defaults.get("monitor_ipv6"),
         "log_ipv4": defaults.get("log_ipv4"),
+        "log_ipv6": defaults.get("log_ipv6"),
         "extra_env": defaults.get("extra_env", {}),
     }
 
@@ -556,11 +562,6 @@ def _doctor(args: argparse.Namespace, store: FleetState) -> int:
     root = Path(args.repo_root)
     required = [
         "compose.prod.yml",
-        "deploy/production/compose.control-host.yml",
-        "deploy/production/compose.dns-host.yml",
-        "deploy/production/compose.edge-host.yml",
-        "deploy/production/compose.dns-edge-host.yml",
-        "deploy/production/compose.telemetry-host.yml",
     ]
     checks: list[dict[str, Any]] = []
     for relative in required:
@@ -746,6 +747,11 @@ def execute(args: argparse.Namespace) -> int:
                 "public_ipv4": args.public_ipv4,
                 "public_ipv6": args.public_ipv6,
                 "bind_ipv4": args.bind_ipv4,
+                "bind_ipv6": args.bind_ipv6,
+                "monitor_ipv4": args.monitor_ipv4,
+                "monitor_ipv6": args.monitor_ipv6,
+                "log_ipv4": args.log_ipv4,
+                "log_ipv6": args.log_ipv6,
                 "extra_env": {k: v for k, v in env.items() if k not in secret_env_names()},
             }
             state = store.add_node(state, payload)

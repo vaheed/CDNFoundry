@@ -125,6 +125,10 @@ def select_services(
         if not profiles or profiles & active_profiles:
             if name == "vector" and not monitoring_enabled:
                 continue
+            # The control gateway already serves colocated telemetry and Grafana.
+            # The dedicated gateway owns the same public ports only on monitoring-role hosts.
+            if name == "telemetry-gateway" and role == "control":
+                continue
             selected.add(name)
 
     # Tool containers are role-specific and remain behind the tools profile.

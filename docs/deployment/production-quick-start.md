@@ -5,6 +5,20 @@ description: Deploy CDNFoundry with one control node and two combined DNS and ed
 
 # Production quick start: starter fleet
 
+```mermaid
+flowchart LR
+  CF[Cloudflare DNS: ops.example.com] --> C[control.ops.example.com]
+  CF --> G[grafana.ops.example.com]
+  CF --> P1[pop-1.ops.example.com]
+  CF --> P2[pop-2.ops.example.com]
+  R[example.net delegation] --> P1
+  R --> P2
+  C -->|mTLS control| P1
+  C -->|mTLS control| P2
+```
+
+`ops.example.com` and `example.net` are intentionally unrelated zones. Cloudflare remains authoritative for the operational zone: create DNS-only A and optional AAAA records for control, Grafana, telemetry, and every node. PowerDNS owns `example.net` and enrolled customer zones; never delegate `ops.example.com` to CDNFoundry.
+
 This runbook creates the smallest practical production CDNFoundry fleet:
 
 - one control-plane node with colocated monitoring and operational logs;
@@ -45,6 +59,8 @@ Edit `fleet.json` and replace every example value:
 - `acme_email`: monitored certificate contact;
 - every `hostname`, `public_ipv4`, region, and location;
 - `public_ipv6` and `bind_ipv6` when deploying dual stack.
+
+Keep `public_ipv6`, `bind_ipv6`, `monitor_ipv6`, and `log_ipv6` in every node object and set unavailable paths to JSON `null`. Set global `ipv6` to `true` only after Cloudflare AAAA records, host routes, firewalls, and external reachability are ready.
 
 The checked-in addresses are RFC documentation ranges and cannot serve production traffic. Keep `bind_ipv4` as `0.0.0.0` for normal routed/NAT hosts unless a specific local interface address is required.
 
@@ -108,6 +124,15 @@ The control bundle starts `mmdb-updater` before services that consume GeoIP data
 
 Sign in to the administrator panel, configure platform nameservers and DNS clusters using the two PoP hostnames, and verify registrar glue for their public addresses. DNSdist is the only public authoritative endpoint; PowerDNS and its database remain private.
 
+Use this exact order:
+
+1. Open `https://control.ops.example.com/admin`. In **Control plane → System settings**, configure `example.net`, `ns1.example.net`, `ns2.example.net`, and their A/optional AAAA glue.
+2. In **Infrastructure → DNS clusters**, create each PoP disabled with its generated `https://pop-N.ops.example.com:8444` endpoint and node-local API key. Test it, then enable it.
+3. In **Domains → Create domain**, add a delegated customer zone and its first DNS-only A/AAAA record. Wait for both cluster acknowledgements before registrar delegation.
+4. Verify UDP and TCP answers. Only then use **Edge network → Edges** to create edge inventory, capture each UUID and one-time bootstrap token, enroll it as described below, create/assign a service pool, add the origin endpoint, and enable proxying for the hostname.
+
+API automation follows the same sequence. Authenticate with `POST /api/v1/admin/login`, protect the returned bearer token, and use the DNS-cluster, domain, record, and edge endpoints in the live OpenAPI document. Send `Idempotency-Key` on mutations and poll the operation returned by `202 Accepted`. Never store an API token in Fleet JSON.
+
 Transfer and start each PoP bundle only after its replacement validates. Allow both UDP and TCP 53 and restrict DNS API, metrics, and management listeners to documented control/monitoring sources.
 
 ## 7. Enroll both edge nodes
@@ -136,6 +161,20 @@ sudo ./scripts/cdnfoundry-fleet --state-dir /var/lib/cdnfoundry-fleet \
 Transfer the token-free bundle and recreate only `edge-agent`. Never reuse or retain a consumed bootstrap token.
 
 ## 8. Acceptance and recovery gate
+
+Check public endpoints before delegation or traffic:
+
+```bash
+curl --fail https://control.ops.example.com/health
+curl --fail https://grafana.ops.example.com/api/health
+dig +short A control.ops.example.com @1.1.1.1
+dig +short AAAA control.ops.example.com @1.1.1.1 # empty is valid when IPv6 is null
+dig +tcp SOA example.net @ns1.example.net
+dig SOA example.net @ns2.example.net
+curl --fail --resolve www.example.net:443:EDGE_IP https://www.example.net/
+```
+
+Run `docker compose --env-file .env.prod ps` on every node. Long-running services must be healthy; completed migration helpers may be exited. Ports 8443/8444, metrics, PostgreSQL, Valkey, PowerDNS API, ClickHouse, and Loki are restricted interfaces, not general public endpoints.
 
 Confirm:
 

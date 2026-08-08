@@ -78,7 +78,6 @@ x-dev-cell: &dev-cell
   build:
     context: .
     dockerfile: docker/openresty/Dockerfile
-  profiles: [dev-edge]
   tmpfs:
     - /var/lib/nginx/tmp:rw,noexec,nosuid,size=64m
   mem_limit: 512m
@@ -179,7 +178,6 @@ services:
     <<: *core
     command: [php, artisan, migrate, --force]
     restart: "no"
-    profiles: [tools]
 
   control-db:
     image: postgres:18.4-alpine
@@ -248,7 +246,6 @@ services:
       pdns-db: { condition: service_healthy }
     networks: [dns]
     restart: "no"
-    profiles: [tools]
 
   dnsdist:
     image: powerdns/dnsdist-21:2.1.0
@@ -572,7 +569,6 @@ services:
 
   edge-agent-a:
     build: ./edge-agent
-    profiles: [dev-edge]
     environment:
       EDGE_CONTROL_URL: https://edge-control:8443
       EDGE_CONTROL_CA_CERTIFICATE: /run/dev-pki/edge-server-ca.crt
@@ -610,7 +606,6 @@ services:
 
   edge-gateway-a:
     build: ./edge-gateway
-    profiles: [dev-edge]
     environment:
       GATEWAY_CONFIG_FILE: /var/lib/cdnfoundry/runtime/current/gateway.json
       GATEWAY_STATE_DIR: /var/lib/cdnfoundry/gateway-state
@@ -644,7 +639,6 @@ services:
 
   edge-gateway-a-state-init:
     image: alpine:3.22
-    profiles: [dev-edge]
     command: [chown, "10101:10101", /state]
     volumes: [edge-a-gateway-state:/state]
     restart: "no"
@@ -742,7 +736,6 @@ services:
 
   edge-agent-b:
     build: ./edge-agent
-    profiles: [dev-edge]
     environment:
       EDGE_CONTROL_URL: https://edge-control:8443
       EDGE_CONTROL_CA_CERTIFICATE: /run/dev-pki/edge-server-ca.crt
@@ -780,7 +773,6 @@ services:
 
   edge-gateway-b:
     build: ./edge-gateway
-    profiles: [dev-edge]
     environment:
       GATEWAY_CONFIG_FILE: /var/lib/cdnfoundry/runtime/current/gateway.json
       GATEWAY_STATE_DIR: /var/lib/cdnfoundry/gateway-state
@@ -813,14 +805,12 @@ services:
 
   edge-gateway-b-state-init:
     image: alpine:3.22
-    profiles: [dev-edge]
     command: [chown, "10101:10101", /state]
     volumes: [edge-b-gateway-state:/state]
     restart: "no"
 
   poweradmin:
     image: poweradmin/poweradmin:4.3.3
-    profiles: [devtools]
     ports: ["9191:80"]
     environment:
       DB_TYPE: pgsql

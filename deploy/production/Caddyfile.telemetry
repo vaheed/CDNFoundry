@@ -4,10 +4,10 @@
 }
 
 https://{$TELEMETRY_HOSTNAME}:8444 {
-	@edge_sources remote_ip {$EDGE_PUBLIC_IPV4_ALLOWLIST}
+	@edge_sources remote_ip {$EDGE_PUBLIC_IPV4_ALLOWLIST} {$EDGE_PUBLIC_IPV6_ALLOWLIST}
 	@log_sources {
 		path /loki/api/v1/push
-		remote_ip {$EDGE_PUBLIC_IPV4_ALLOWLIST} {$LOG_SOURCE_IPV4_ALLOWLIST}
+		remote_ip {$EDGE_PUBLIC_IPV4_ALLOWLIST} {$EDGE_PUBLIC_IPV6_ALLOWLIST} {$LOG_SOURCE_IPV4_ALLOWLIST} {$LOG_SOURCE_IPV6_ALLOWLIST}
 	}
 
 	handle @log_sources {
@@ -19,6 +19,11 @@ https://{$TELEMETRY_HOSTNAME}:8444 {
 	}
 
 	respond 403
+}
+
+{$GRAFANA_HOSTNAME} {
+	reverse_proxy grafana:3000
+	header { Strict-Transport-Security "max-age=31536000"; X-Content-Type-Options "nosniff"; -Server }
 }
 
 http://127.0.0.1:2019 {

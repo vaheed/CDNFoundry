@@ -197,9 +197,9 @@ class FleetState:
             if hostname in hostnames:
                 raise ValidationError(f"Duplicate hostname: {hostname}")
             hostnames.add(hostname)
-            for field in ("public_ipv4", "public_ipv6", "bind_ipv4", "bind_ipv6", "monitor_ipv4", "log_ipv4"):
+            for field in ("public_ipv4", "public_ipv6", "bind_ipv4", "bind_ipv6", "monitor_ipv4", "monitor_ipv6", "log_ipv4", "log_ipv6"):
                 value = validate_ip(node.get(field), required=field in {"public_ipv4", "bind_ipv4"})
-                if value and field in {"public_ipv4", "public_ipv6", "monitor_ipv4", "log_ipv4"}:
+                if value and field in {"public_ipv4", "public_ipv6", "monitor_ipv4", "monitor_ipv6", "log_ipv4", "log_ipv6"}:
                     if value in ips:
                         raise ValidationError(f"Duplicate fleet IP address: {value}")
                     ips.add(value)
@@ -307,7 +307,9 @@ class FleetState:
             "bind_ipv4": validate_ip(node.get("bind_ipv4") or "0.0.0.0", required=True),
             "bind_ipv6": validate_ip(node.get("bind_ipv6") or ("::" if state["global"].get("ipv6") else None)),
             "monitor_ipv4": validate_ip(node.get("monitor_ipv4")),
+            "monitor_ipv6": validate_ip(node.get("monitor_ipv6")),
             "log_ipv4": validate_ip(node.get("log_ipv4")),
+            "log_ipv6": validate_ip(node.get("log_ipv6")),
             "release": validate_release(node.get("release") or state["global"]["release"]),
             "extra_env": validate_env_mapping(node.get("extra_env", {})),
             "enabled": bool(node.get("enabled", True)),

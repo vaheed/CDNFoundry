@@ -106,6 +106,63 @@ x-core: &core
     - ${RESTIC_PASSWORD_FILE}:/run/secrets/restic-password:ro
 
 services:
+  caddy:
+    image: caddy:2.11.4-alpine
+    profiles: [control]
+    environment:
+      CONTROL_HOSTNAME: ${CONTROL_HOSTNAME:?CONTROL_HOSTNAME is required}
+      TELEMETRY_HOSTNAME: ${TELEMETRY_HOSTNAME:?TELEMETRY_HOSTNAME is required}
+      GRAFANA_HOSTNAME: ${GRAFANA_HOSTNAME:?GRAFANA_HOSTNAME is required}
+      ACME_CONTACT_EMAIL: ${ACME_CONTACT_EMAIL:?ACME_CONTACT_EMAIL is required}
+      EDGE_PUBLIC_IPV4_ALLOWLIST: ${EDGE_PUBLIC_IPV4_ALLOWLIST}
+      EDGE_PUBLIC_IPV6_ALLOWLIST: ${EDGE_PUBLIC_IPV6_ALLOWLIST}
+      LOG_SOURCE_IPV4_ALLOWLIST: ${LOG_SOURCE_IPV4_ALLOWLIST}
+      LOG_SOURCE_IPV6_ALLOWLIST: ${LOG_SOURCE_IPV6_ALLOWLIST}
+    ports: ["${HOST_BIND_IPV4}:80:80/tcp", "${HOST_BIND_IPV4}:443:443/tcp", "${HOST_BIND_IPV4}:443:443/udp", "${HOST_BIND_IPV4}:8444:8444/tcp"]
+    volumes: [./deploy/production/Caddyfile:/etc/caddy/Caddyfile:ro, caddy-data:/data, caddy-config:/config]
+    depends_on: { web: { condition: service_healthy } }
+    networks: [ingress, telemetry]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    healthcheck: { test: [CMD, wget, -qO-, http://127.0.0.1:2019/healthz], interval: 10s, timeout: 3s, retries: 10 }
+
+  dns-api:
+    image: caddy:2.11.4-alpine
+    profiles: [dns]
+    environment:
+      DNS_API_HOSTNAME: ${DNS_API_HOSTNAME:?DNS_API_HOSTNAME is required}
+      CONTROL_PUBLIC_IPV4_ALLOWLIST: ${CONTROL_PUBLIC_IPV4_ALLOWLIST}
+      CONTROL_PUBLIC_IPV6_ALLOWLIST: ${CONTROL_PUBLIC_IPV6_ALLOWLIST}
+    ports: ["${HOST_BIND_IPV4}:8444:8444/tcp"]
+    volumes: [./deploy/production/Caddyfile.dns-api:/etc/caddy/Caddyfile:ro, "${DNS_API_SERVER_CERTIFICATE:?required}:/run/secrets/dns-api.crt:ro", "${DNS_API_SERVER_PRIVATE_KEY:?required}:/run/secrets/dns-api.key:ro", dns-api-caddy-data:/data, dns-api-caddy-config:/config]
+    depends_on: { pdns-auth: { condition: service_healthy } }
+    networks: [dns-private]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    healthcheck: { test: [CMD, wget, -qO-, http://127.0.0.1:2019/healthz], interval: 10s, timeout: 3s, retries: 10 }
+
+  telemetry-gateway:
+    image: caddy:2.11.4-alpine
+    profiles: [telemetry]
+    environment:
+      TELEMETRY_HOSTNAME: ${TELEMETRY_HOSTNAME:?TELEMETRY_HOSTNAME is required}
+      GRAFANA_HOSTNAME: ${GRAFANA_HOSTNAME:?GRAFANA_HOSTNAME is required}
+      ACME_CONTACT_EMAIL: ${ACME_CONTACT_EMAIL:?ACME_CONTACT_EMAIL is required}
+      EDGE_PUBLIC_IPV4_ALLOWLIST: ${EDGE_PUBLIC_IPV4_ALLOWLIST}
+      EDGE_PUBLIC_IPV6_ALLOWLIST: ${EDGE_PUBLIC_IPV6_ALLOWLIST}
+      LOG_SOURCE_IPV4_ALLOWLIST: ${LOG_SOURCE_IPV4_ALLOWLIST}
+      LOG_SOURCE_IPV6_ALLOWLIST: ${LOG_SOURCE_IPV6_ALLOWLIST}
+    ports: ["${HOST_BIND_IPV4}:80:80/tcp", "${HOST_BIND_IPV4}:443:443/tcp", "${HOST_BIND_IPV4}:8444:8444/tcp"]
+    volumes: [./deploy/production/Caddyfile.telemetry:/etc/caddy/Caddyfile:ro, telemetry-caddy-data:/data, telemetry-caddy-config:/config]
+    depends_on: { clickhouse: { condition: service_started }, loki: { condition: service_healthy }, grafana: { condition: service_healthy } }
+    networks: [telemetry]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    healthcheck: { test: [CMD, wget, -qO-, http://127.0.0.1:2019/healthz], interval: 10s, timeout: 3s, retries: 10 }
+
   core:
     <<: *core
     profiles: [control]
@@ -644,6 +701,12 @@ networks:
   egress: {}
 
 volumes:
+  caddy-data: {}
+  caddy-config: {}
+  dns-api-caddy-data: {}
+  dns-api-caddy-config: {}
+  telemetry-caddy-data: {}
+  telemetry-caddy-config: {}
   core-storage: {}
   control-db: {}
   redis: {}

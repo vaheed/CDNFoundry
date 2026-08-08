@@ -5,6 +5,16 @@ description: Complete lifecycle guide for CDNFoundry production fleets including
 
 # Production fleet operator guide
 
+```mermaid
+flowchart LR
+  A[Fleet authority] --> C[Control-only env and PKI]
+  A --> D[DNS-only env and PKI]
+  A --> E1[Edge A env and identity]
+  A --> E2[Edge B env and identity]
+```
+
+Each bundle is a security boundary. Never use a shared `env_file`: database, PowerDNS, bootstrap, identity, backup, and telemetry credentials are emitted only when that node's filtered services require them. Never copy a bundle, `.env.prod`, `pki/`, or `secrets/` directory between nodes.
+
 Work from an immutable checkout. For a fresh operator host:
 
 ```bash
@@ -65,7 +75,7 @@ Equivalent non-interactive command:
   --repo-root "$PWD" \
   setup \
   --operator-domain ops.example.com \
-  --platform-domain example.com \
+  --platform-domain example.net \
   --release v1.0.0 \
   --preset control-monitoring \
   --control-ipv4 192.0.2.10 \
@@ -104,7 +114,7 @@ For repeatable automation, use a JSON file:
   "preset": "control-monitoring",
   "global": {
     "operator_domain": "ops.example.com",
-    "platform_domain": "example.com",
+    "platform_domain": "example.net",
     "release": "v1.0.0",
     "acme_email": "operations@example.com",
     "ipv6": false

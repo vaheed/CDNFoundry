@@ -19,14 +19,14 @@ dev-control-up: dev-assets
 	$(COMPOSE_DEV) up -d --build control-db redis core web
 
 dev-up: dev-assets
-	$(COMPOSE_DEV) --profile devtools up -d --build
+	$(COMPOSE_DEV) up -d --build
 
 dev-edge-up: dev-assets
 	@test -f .env.dev || { echo 'Copy .env.dev.example to .env.dev and add the two UI edge IDs and one-time bootstrap tokens.' >&2; exit 1; }
-	docker compose --env-file .env.dev -f compose.dev.yml --profile dev-edge up -d --build edge-control edge-a edge-a-quarantine edge-agent-a edge-gateway-a edge-b edge-b-quarantine edge-agent-b edge-gateway-b
+	docker compose --env-file .env.dev -f compose.dev.yml up -d --build edge-control edge-a edge-a-quarantine edge-agent-a edge-gateway-a edge-b edge-b-quarantine edge-agent-b edge-gateway-b
 
 dev-edge-status:
-	docker compose --env-file .env.dev -f compose.dev.yml --profile dev-edge ps edge-control edge-a edge-a-quarantine edge-agent-a edge-gateway-a edge-b edge-b-quarantine edge-agent-b edge-gateway-b
+	docker compose --env-file .env.dev -f compose.dev.yml ps edge-control edge-a edge-a-quarantine edge-agent-a edge-gateway-a edge-b edge-b-quarantine edge-agent-b edge-gateway-b
 
 dev-scale-up: dev-control-up
 
@@ -34,10 +34,10 @@ dev-down:
 	$(COMPOSE_DEV) down
 
 dev-migrate:
-	$(COMPOSE_DEV) --profile tools run --rm migrate
+	$(COMPOSE_DEV) run --rm migrate
 
 dev-pdns-migrate:
-	$(COMPOSE_DEV) --profile tools run --rm pdns-migrate
+	$(COMPOSE_DEV) run --rm pdns-migrate
 
 dev-test: dev-assets
 	$(COMPOSE_DEV) run --rm -e APP_ENV=testing -e APP_CONFIG_CACHE=/tmp/cdnfoundry-test-config.php -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: -e CACHE_STORE=array -e QUEUE_CONNECTION=sync core php artisan test

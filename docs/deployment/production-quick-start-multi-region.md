@@ -5,6 +5,17 @@ description: Deploy a separated-role CDNFoundry fleet across multiple regions fr
 
 # Production quick start: multi-region fleet
 
+```mermaid
+flowchart TB
+  CF[Cloudflare: ops.example.com] --> CP[Control and Grafana]
+  REG[example.net delegation] --> D1[DNS region A]
+  REG --> D2[DNS region B]
+  CP --> D1
+  CP --> D2
+  CP --> E1[Edge region A]
+  CP --> E2[Edge region B]
+```
+
 This example models one control node, four authoritative DNS nodes, ten edge nodes, and three monitoring-role nodes. “Multi-region” describes its failure-domain design; it is not a special runtime mode or a fixed scale limit.
 
 Read and complete the [starter fleet quick start](production-quick-start.md) first. The same security, PKI, transfer, migration, enrollment, last-valid-state, backup, and acceptance rules apply.

@@ -85,16 +85,15 @@ database topology and are not inferred by CDNFoundry.
 
 | Host role | Compose files | Start target/profile |
 |---|---|---|
-| Three-host combined controller/telemetry | base + `compose.control-host.yml` | `control`, `telemetry` |
-| Control replica using external PostgreSQL/Valkey | base + `compose.external-control-data.yml` | selected `core`, `web`, `edge-control` services |
-| Worker host using external PostgreSQL/Valkey | base + `compose.external-control-data.yml` | selected `horizon`; one host may run `scheduler` |
-| DNS-only host | base + `compose.dns-host.yml` | `dns` |
-| Edge-only host | base + `compose.edge-host.yml` | `edge` |
-| Combined DNS/edge starter host | base + `compose.dns-edge-host.yml` | `dns`, `edge` |
-| Dedicated telemetry host | base + `compose.telemetry-host.yml` | `telemetry` |
+| Three-host combined controller/telemetry | `compose.prod.yml` | `control`, `telemetry` |
+| Control replica using external PostgreSQL/Valkey | base + `compose.prod.yml` | selected `core`, `web`, `edge-control` services |
+| Worker host using external PostgreSQL/Valkey | base + `compose.prod.yml` | selected `horizon`; one host may run `scheduler` |
+| DNS-only host | base + `compose.prod.yml` | `dns` |
+| Edge-only host | base + `compose.prod.yml` | `edge` |
+| Combined DNS/edge starter host | `compose.prod.yml` | `dns`, `edge` |
+| Dedicated telemetry host | base + `compose.prod.yml` | `telemetry` |
 
-Here, "base" means `compose.prod.yml`; override files are under
-`deploy/production/`.
+Production roles are selected from the single `compose.prod.yml` profile contract.
 
 ## Example fleet sizes
 
@@ -173,11 +172,11 @@ and IPv6 listeners.
 cd /opt/cdnfoundry
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.edge-host.yml \
+  -f compose.prod.yml \
   --profile edge config --quiet
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.edge-host.yml \
+  -f compose.prod.yml \
   --profile edge up -d
 ```
 
@@ -199,7 +198,7 @@ cd /opt/cdnfoundry
 sudoedit .env.prod
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.control-host.yml \
+  -f compose.prod.yml \
   --profile control --profile telemetry up -d --force-recreate caddy
 ```
 
@@ -239,15 +238,15 @@ Horizon/control workers. Mirror the list in UFW, provider firewall, and
 cd /opt/cdnfoundry
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.dns-host.yml \
+  -f compose.prod.yml \
   --profile dns config --quiet
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.dns-host.yml \
+  -f compose.prod.yml \
   --profile tools run --rm pdns-migrate
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.dns-host.yml \
+  -f compose.prod.yml \
   --profile dns up -d
 ```
 
@@ -273,11 +272,11 @@ ClickHouse port `8123`.
 cd /opt/cdnfoundry
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.telemetry-host.yml \
+  -f compose.prod.yml \
   --profile telemetry config --quiet
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.telemetry-host.yml \
+  -f compose.prod.yml \
   --profile telemetry up -d
 ```
 
@@ -313,11 +312,11 @@ services. The public load balancer is operator-owned and must health-check
 cd /opt/cdnfoundry
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.external-control-data.yml \
+  -f compose.prod.yml \
   --profile control config --quiet
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.external-control-data.yml \
+  -f compose.prod.yml \
   --profile control up -d core web edge-control
 ```
 
@@ -333,7 +332,7 @@ scheduler.
 cd /opt/cdnfoundry
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  -f deploy/production/compose.external-control-data.yml \
+  -f compose.prod.yml \
   --profile control up -d horizon
 ```
 

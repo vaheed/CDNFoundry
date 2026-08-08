@@ -5,6 +5,15 @@ description: Reference for CDNFoundry production fleet CLI options, setup config
 
 # Production fleet configuration reference
 
+```mermaid
+flowchart LR
+  JSON[Fleet JSON including nullable IPv6] --> STATE[Protected desired state]
+  STATE --> C[Control bundle]
+  STATE --> D[DNS bundles]
+  STATE --> E[Edge bundles]
+  STATE --> M[Monitoring bundle]
+```
+
 Copy `deploy/production/examples/starter-fleet.json` or `multi-region-fleet.json` to a protected local `fleet.json`, then change deployment data there. Checked-in examples are templates; repository scripts and generated Compose manifests are not configuration surfaces.
 
 ## Common command options
@@ -35,7 +44,7 @@ CDNFOUNDRY_FLEET_OUTPUT_DIR
   "preset": "control-monitoring",
   "global": {
     "operator_domain": "ops.example.com",
-    "platform_domain": "example.com",
+    "platform_domain": "example.net",
     "release": "v1.0.0",
     "acme_email": "operations@example.com",
     "ipv6": false
@@ -71,8 +80,8 @@ CDNFOUNDRY_FLEET_OUTPUT_DIR
 | `public_ipv6` | no | IPv6 service address |
 | `bind_ipv4` | no | Local listener bind, defaults to `0.0.0.0` |
 | `bind_ipv6` | no | IPv6 bind; defaults to `::` in dual-stack fleets |
-| `monitor_ipv4` | no | Private monitoring target; otherwise `public_ipv4` |
-| `log_ipv4` | no | Private log-source address metadata |
+| `monitor_ipv4` / `monitor_ipv6` | no | Private monitoring addresses; IPv4 otherwise uses `public_ipv4` |
+| `log_ipv4` / `log_ipv6` | no | Private log-source address metadata |
 | `release` | no | Per-node immutable override of the global release |
 | `extra_env` | no | Explicit per-node Compose overrides; always preserved in the generated `.env.prod`, including variables that have Compose defaults |
 | `enabled` | no | Exclude disabled nodes from rendering and targets |

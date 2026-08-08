@@ -22,11 +22,11 @@ telemetry internals off public networks.
 | `logs` | one `log-collector` on the current host; combine once with its role profile |
 | `tools` | explicit `migrate` and `pdns-migrate` one-shot services |
 
-`deploy/production/compose.external-control-data.yml` replaces local
+`compose.prod.yml` replaces local
 `control-db` and `redis` with configured external endpoints. The control, DNS,
 edge, and telemetry host overlays add only role-specific publication and
 gateways.
-`deploy/production/compose.external-telemetry-data.yml` disables local
+`compose.prod.yml` disables local
 ClickHouse when a verified external endpoint is configured.
 
 ## Production listeners

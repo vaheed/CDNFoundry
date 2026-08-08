@@ -28,7 +28,7 @@ cache directory, or reload per domain.
 1. prepare host firewall, immutable release, `.env.prod`, runtime certificate,
    server CA, status token, advertised service identities, and private local
    gateway address mappings;
-2. validate `compose.prod.yml` plus `compose.edge-host.yml`;
+2. validate `compose.prod.yml` plus `compose.prod.yml`;
 3. create the edge row and configure its cells;
 4. enroll its agent with the one-time token;
 5. wait for fresh heartbeat and ready cells;
@@ -50,14 +50,14 @@ Adding DNS capacity does not create an edge runtime.
 
 ## Move telemetry
 
-Use `compose.telemetry-host.yml` with an exact edge-source allowlist. Set control
+Use `compose.prod.yml` with an exact edge-source allowlist. Set control
 `CLICKHOUSE_URL` and edge Vector endpoints to verified TLS. Keep ClickHouse and
 Prometheus private. Prove that telemetry outage and backlog drain do not affect
 serving.
 
 ## External control data
 
-`compose.external-control-data.yml` disables local PostgreSQL and Valkey. Set
+`compose.prod.yml` disables local PostgreSQL and Valkey. Set
 `DB_URL` and `REDIS_URL` to owner-operated replicated services with verified
 TLS, exact-source firewalls, backup, failover, and capacity plans. The repository
 does not configure database replication or automatic failover.

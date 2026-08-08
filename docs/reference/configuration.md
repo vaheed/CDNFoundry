@@ -31,6 +31,9 @@ Runtime product policy is not an environment variable. Manage it through
 | `CONTROL_HOSTNAME` | control overlay | Public browser/API hostname |
 | `TELEMETRY_HOSTNAME` | control overlay | Public telemetry-ingest hostname |
 | `CONTROL_PUBLIC_IPV4_ALLOWLIST` | DNS API gateway | Exact control/worker sources allowed to call PowerDNS |
+| `CONTROL_PUBLIC_IPV6_ALLOWLIST` | DNS API gateway | Optional IPv6 control/worker sources allowed to call PowerDNS |
+| `EDGE_PUBLIC_IPV6_ALLOWLIST` | telemetry gateway | Optional IPv6 edge sources allowed to submit telemetry |
+| `LOG_SOURCE_IPV6_ALLOWLIST` | telemetry gateway | Optional IPv6 node sources allowed to submit operational logs |
 | `EDGE_PUBLIC_IPV4_ALLOWLIST` | telemetry gateway | Exact edge/Vector ingestion sources |
 | `CONTROL_DB_PASSWORD` | local control DB | PostgreSQL password for database `cdnf` |
 | `REDIS_PASSWORD` | local Valkey | Required Valkey password |
@@ -147,6 +150,7 @@ Grafana telemetry variables are:
 | `PROMETHEUS_EDGE_TARGETS_FILE` | telemetry | Private file_sd target file; production default is empty |
 | `PROMETHEUS_LOG_TARGETS_FILE` | telemetry | Private file_sd targets for remote collector metrics; production default is empty |
 | `GRAFANA_EXPLORE_URL` | control | Optional deployment fallback for the admin-only Live Logs link. The PostgreSQL-backed **Platform settings → Observability links → Grafana Explore URL** overrides it. Laravel supplies Loki, a safe selector, and a one-hour range when the chosen URL has no query; both empty hides the link |
+| `GRAFANA_HOSTNAME` | control/telemetry | Public Grafana hostname under the Cloudflare-managed operational domain |
 | `GRAFANA_LOKI_URL` | telemetry | Private Grafana-to-Loki endpoint; default `http://loki:3100` |
 | `LOKI_RETENTION_PERIOD` | telemetry | Loki retention; production default `336h` |
 | `LOKI_MAX_QUERY_LENGTH` | telemetry | Maximum query range; production default `336h` |

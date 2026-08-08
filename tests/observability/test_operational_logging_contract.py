@@ -48,7 +48,7 @@ class OperationalLoggingContractTest(unittest.TestCase):
 
     def test_combined_control_host_can_enable_monitoring_after_serving(self) -> None:
         caddy = (ROOT / "deploy/production/Caddyfile").read_text()
-        overlay = (ROOT / "deploy/production/compose.control-host.yml").read_text()
+        overlay = (ROOT / "compose.prod.yml").read_text()
         generator = (ROOT / "scripts/generate-production-env.sh").read_text()
         self.assertIn("path /loki/api/v1/push", caddy)
         self.assertIn("reverse_proxy loki:3100", caddy)
