@@ -62,19 +62,19 @@ workstream does not replace an earlier product checkpoint.
 
 ### System DNS, clusters, and domains
 
-1. Open **Infrastructure → System DNS identity**. Confirm **Public DNS
+1. Under **Infrastructure → DNS clusters**, create each cluster disabled. Confirm
+   the form groups **Cluster connection**, **Authoritative nameservers**, and
+   **Operator context**, with labels **API URL**, **API key**, **Server ID**, and
+   **Zone capacity**. Run **Test connection**, require verified TLS and a healthy
+   result, then enable it. A bad key, CA, name, or unreachable API must fail
+   without creating a usable deployment target.
+2. Open **Infrastructure → System DNS identity**. Confirm **Public DNS
    identity**, **Authoritative nameservers**, and **SOA and TTL policy** are
    full-width readable sections. Enter platform domain, proxy hostname, two
    nameservers with IPv4 and optional IPv6, SOA primary/mailbox, refresh, retry,
    expire, minimum TTL, and default TTL. Choose **Validate and preview**, inspect
    normalization, apply the exact confirmation, and record the asynchronous
    operation and active checksum on both clusters.
-2. Under **Infrastructure → DNS clusters**, create each cluster disabled. Confirm
-   the form groups **Cluster connection**, **Authoritative nameservers**, and
-   **Operator context**, with labels **API URL**, **API key**, **Server ID**, and
-   **Zone capacity**. Run **Test connection**, require
-   verified TLS and a healthy result, then enable it. A bad key, CA, name, or
-   unreachable API must fail without replacing an active zone.
 3. Create a domain, assign the user, verify nameservers, activate it, then cover
    DNS-only A, AAAA, CNAME, MX, TXT, NS, CAA, SRV, and reverse PTR records.
    Exercise BIND preview/import/export, duplicate/CNAME/zone-boundary failures,

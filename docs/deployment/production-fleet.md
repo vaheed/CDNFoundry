@@ -139,6 +139,11 @@ flowchart TD
 ```
 
 The generated `STARTUP-ORDER.md` lists actual configured nodes in this order.
+This is service startup order, not permission to create dependent desired
+state early. After DNS services and restricted APIs are healthy, register and
+test DNS clusters, enable them, and only then apply platform DNS identity. A
+combined `dns-edge` node starts its DNS profile before edge inventory exists;
+its edge profile starts only after one-time registration data is configured.
 
 ## Upgrade, rollback, and regional failure
 

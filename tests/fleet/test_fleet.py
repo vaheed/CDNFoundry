@@ -347,9 +347,31 @@ def test_control_start_restricts_identity_ca_key_for_php_worker(store: FleetStat
     assert 'if [ "$(id -u)" != "0" ]' in start
     assert "chown 0:82 pki/edge-identity-ca.key" in start
     assert "chmod 0640 pki/edge-identity-ca.key" in start
+    assert "docker compose --env-file .env.prod --profile control up -d" in start
     assert start.index("chmod 0640 pki/edge-identity-ca.key") < start.index("./validate.sh")
     validate = (output / "control-1/validate.sh").read_text(encoding="utf-8")
     assert 'test "$(stat -c \'%u:%g\' pki/edge-identity-ca.key)" = "0:82"' in validate
+
+
+def test_combined_node_starts_dns_before_edge_registration(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
+    add(store, node("pop-1", "dns-edge", "192.0.2.20"))
+    output = tmp_path / "bundles"
+    Renderer(source_repo, store, output).render(store.load())
+
+    start = (output / "pop-1/start.sh").read_text(encoding="utf-8")
+    assert "docker compose --env-file .env.prod --profile dns up -d" in start
+    assert "--profile edge" not in start
+
+    with store.locked():
+        store.update_node(
+            store.load(),
+            "pop-1",
+            {"extra_env": {"EDGE_ID": "11111111-2222-3333-4444-555555555555"}},
+        )
+    Renderer(source_repo, store, output).render(store.load(), node_name="pop-1")
+
+    start = (output / "pop-1/start.sh").read_text(encoding="utf-8")
+    assert "--profile dns --profile edge up -d" in start
 
 
 def test_production_control_validation_parses_caddyfile(store: FleetState, tmp_path: Path) -> None:

@@ -71,7 +71,7 @@ class Renderer:
             self._write_generated_configs(state, node, tmp, monitoring_host)
             atomic_write(tmp / "README.md", self._node_readme(state, node, filtered), 0o600)
             atomic_write(tmp / "validate.sh", self._validate_script(node, filtered), 0o700)
-            atomic_write(tmp / "start.sh", self._start_script(node), 0o700)
+            atomic_write(tmp / "start.sh", self._start_script(state, node), 0o700)
             self._write_manifest(tmp, state, node)
             previous = destination.with_name(destination.name + ".previous")
             if previous.exists():
@@ -626,10 +626,14 @@ Run on **{node['name']}**:
 ```sh
 cd /opt/cdnfoundry
 ./validate.sh
-{start_order}
-docker compose --env-file .env.prod up -d
+./start.sh
 docker compose --env-file .env.prod ps
 ```
+
+`start.sh` activates only this bundle's configured role profiles. A combined
+DNS/edge node without an edge UUID starts authoritative DNS but does not start
+the edge profile. After edge registration is configured and the bundle is
+rerendered, the same script activates both profiles.
 
 ## Listeners
 
@@ -718,8 +722,24 @@ test "$(stat -c '%a' pki/node.key)" = 600
 openssl verify -CAfile pki/edge-server-ca.crt pki/node.crt
 """
 
-    def _start_script(self, node: dict[str, Any]) -> str:
+    def _start_profiles(self, state: dict[str, Any], node: dict[str, Any]) -> str:
+        profiles: list[str] = []
+        if node["role"] == "control":
+            profiles.append("control")
+        if node["role"] in {"dns", "dns-edge"}:
+            profiles.append("dns")
+        edge_id = str(node.get("extra_env", {}).get("EDGE_ID", "")).strip()
+        if node["role"] in {"edge", "dns-edge"} and edge_id:
+            profiles.append("edge")
+        if self._is_monitoring_host(state, node):
+            profiles.append("telemetry")
+        if state["features"]["logs"]["mode"] == "centralized":
+            profiles.append("logs")
+        return " ".join(f"--profile {profile}" for profile in profiles)
+
+    def _start_script(self, state: dict[str, Any], node: dict[str, Any]) -> str:
         migration = self._node_start_order(node)
+        profiles = self._start_profiles(state, node)
         key_permissions = ""
         if node["role"] == "control":
             key_permissions = """if [ "$(id -u)" != "0" ]; then
@@ -734,7 +754,7 @@ set -eu
 {key_permissions}
 ./validate.sh
 {migration}
-docker compose --env-file .env.prod up -d
+docker compose --env-file .env.prod {profiles} up -d
 docker compose --env-file .env.prod ps
 """
 

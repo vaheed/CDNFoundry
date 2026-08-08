@@ -9,6 +9,7 @@ import pathlib
 import re
 import sys
 import urllib.parse
+import xml.etree.ElementTree as ET
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -16,6 +17,9 @@ DIST = ROOT / "docs" / ".vitepress" / "dist"
 SITE_ORIGIN = "https://docs.invalid"
 CONFIGURED_BASE = os.environ.get("DOCS_BASE", "/CDNFoundry/").strip("/")
 SITE_BASE = f"/{CONFIGURED_BASE}/" if CONFIGURED_BASE else "/"
+PUBLIC_SITE_URL = os.environ.get(
+    "DOCS_SITE_URL", "https://vaheed.github.io/CDNFoundry"
+).rstrip("/")
 SOURCE_DOCS = ROOT / "docs"
 UNPUBLISHED_DOCUMENTS = {"manual-browser-qualification.md", "roadmap.md"}
 
@@ -84,10 +88,42 @@ def main() -> int:
             'name="google-site-verification" '
             'content="5Vy61YITiNmNEK2ePkuwEyAL34Lq2UQ6C7xXGXt05uI"'
         ),
+        "canonical URL": f'<link rel="canonical" href="{PUBLIC_SITE_URL}/">',
+        "Open Graph image dimensions": '<meta property="og:image:width" content="1200">',
+        "homepage product summary": "What CDNFoundry includes",
     }
     for feature, marker in shell_markers.items():
         if marker not in home_markup:
             failures.append(f"index.html: missing {feature}")
+
+    sitemap = DIST / "sitemap.xml"
+    if not sitemap.is_file():
+        failures.append("sitemap.xml: missing generated sitemap")
+    else:
+        try:
+            root = ET.parse(sitemap).getroot()
+            namespace = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+            sitemap_urls = {
+                element.text
+                for element in root.findall("s:url/s:loc", namespace)
+                if element.text
+            }
+            expected_home = f"{PUBLIC_SITE_URL}/"
+            if expected_home not in sitemap_urls:
+                failures.append(f"sitemap.xml: missing homepage {expected_home}")
+            indexable_pages = sum(path.name != "404.html" for path in pages)
+            if len(sitemap_urls) != indexable_pages:
+                failures.append(
+                    f"sitemap.xml: {len(sitemap_urls)} URLs but rendered site has "
+                    f"{indexable_pages} indexable pages"
+                )
+        except ET.ParseError as error:
+            failures.append(f"sitemap.xml: invalid XML: {error}")
+
+    robots = DIST / "robots.txt"
+    expected_sitemap = f"Sitemap: {PUBLIC_SITE_URL}/sitemap.xml"
+    if not robots.is_file() or expected_sitemap not in robots.read_text(encoding="utf-8"):
+        failures.append(f"robots.txt: missing {expected_sitemap}")
 
     compiled_css = re.sub(
         r"\s+",

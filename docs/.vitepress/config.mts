@@ -38,8 +38,8 @@ function breadcrumbItems(relativePath: string): Array<Record<string, unknown>> {
 
 export default defineConfig({
   lang: 'en-US',
-  title: 'CDNFoundry Documentation',
-  description: 'Operate, deploy, use, and develop the CDNFoundry private CDN.',
+  title: 'CDNFoundry',
+  description: 'Build and operate a production private CDN with authoritative DNS, bounded edge delivery, TLS, caching, security, and telemetry.',
   base: siteBase,
   appearance: true,
   cleanUrls: true,
@@ -71,8 +71,7 @@ export default defineConfig({
       name: 'google-site-verification',
       content: '5Vy61YITiNmNEK2ePkuwEyAL34Lq2UQ6C7xXGXt05uI'
     }],
-    ['meta', { property: 'og:site_name', content: 'CDNFoundry Documentation' }],
-    ['meta', { property: 'og:type', content: 'website' }],
+    ['meta', { property: 'og:site_name', content: 'CDNFoundry' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
     ['link', { rel: 'icon', href: `${siteBase}favicon.svg`, type: 'image/svg+xml' }]
   ],
@@ -81,6 +80,7 @@ export default defineConfig({
     const description = pageData.frontmatter.description ?? 'CDNFoundry private CDN documentation.'
     const canonical = pageUrl(pageData.relativePath)
     const socialImage = `${siteUrl}/social-card.svg`
+    const isHome = pageData.relativePath === 'index.md'
     const keywords = pageData.frontmatter.keywords ?? [
       'private CDN',
       'self-hosted CDN',
@@ -92,7 +92,7 @@ export default defineConfig({
     ]
     const articleSchema = {
       '@context': 'https://schema.org',
-      '@type': pageData.relativePath === 'index.md' ? 'WebSite' : 'TechArticle',
+      '@type': isHome ? 'WebSite' : 'TechArticle',
       name: title,
       headline: title,
       description,
@@ -100,7 +100,7 @@ export default defineConfig({
       inLanguage: 'en-US',
       isPartOf: {
         '@type': 'WebSite',
-        name: 'CDNFoundry Documentation',
+        name: 'CDNFoundry',
         url: `${siteUrl}/`
       }
     }
@@ -115,14 +115,19 @@ export default defineConfig({
       ['meta', { name: 'description', content: description }],
       ['meta', { name: 'keywords', content: Array.isArray(keywords) ? keywords.join(', ') : keywords }],
       ['meta', { name: 'author', content: 'CDNFoundry contributors' }],
+      ['meta', { property: 'og:type', content: isHome ? 'website' : 'article' }],
       ['meta', { property: 'og:title', content: title }],
       ['meta', { property: 'og:description', content: description }],
       ['meta', { property: 'og:url', content: canonical }],
       ['meta', { property: 'og:image', content: socialImage }],
+      ['meta', { property: 'og:image:width', content: '1200' }],
+      ['meta', { property: 'og:image:height', content: '630' }],
+      ['meta', { property: 'og:image:alt', content: 'CDNFoundry private CDN documentation' }],
       ['meta', { property: 'og:locale', content: 'en_US' }],
       ['meta', { name: 'twitter:title', content: title }],
       ['meta', { name: 'twitter:description', content: description }],
       ['meta', { name: 'twitter:image', content: socialImage }],
+      ['meta', { name: 'twitter:image:alt', content: 'CDNFoundry private CDN documentation' }],
       ['script', { type: 'application/ld+json' }, JSON.stringify(articleSchema)],
       ['script', { type: 'application/ld+json' }, JSON.stringify(breadcrumbSchema)]
     ]

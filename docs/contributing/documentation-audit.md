@@ -12,7 +12,7 @@ current automated and owner-run qualification evidence.
 :::
 
 This documentation system was reconstructed on 2026-07-26 and re-audited on
-2026-08-08 against the current working tree. The superseded corpus remains
+2026-08-09 against the current working tree. The superseded corpus remains
 under `docs/legacy/` for historical context, with prohibited vendor comparisons
 removed. It is excluded from current navigation, search, lint, build, and link
 guarantees and is not an operational instruction set.
@@ -44,7 +44,11 @@ checked bounded cells, gateway ingress, Geo-Unicast and Simple Anycast pools,
 cache/compression/origin failover, managed WAF, fleet rollout, Grafana, Loki,
 the single production Compose file, generated role bundles, the Fleet
 environment generator, management-DNS bootstrap independence, every current
-Mermaid diagram, and every quick-start command.
+Mermaid diagram, and every quick-start command. The 2026-08-09 follow-up traced
+first-install dependencies across all current deployment, onboarding, operator,
+and manual-qualification pages: DNS runtime before cluster registration,
+healthy clusters before platform identity, acknowledged authoritative answers
+before delegation, and edge inventory before edge-profile activation.
 Generated dependency lockfiles were treated as dependency evidence, not prose
 to paraphrase.
 

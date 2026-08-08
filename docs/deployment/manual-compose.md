@@ -415,15 +415,16 @@ receive `403`. PowerDNS port 8081 and its PostgreSQL port must remain private.
 
 Sign in at `https://control.ops.example.com/admin` and use this order:
 
-1. Configure the platform domain, `ns1`/`ns2`, glue A records, optional AAAA
-   records, SOA defaults, and DNSSEC policy in **Control plane → System
-   settings**.
-2. Create both DNS clusters disabled. Use
+1. Create both DNS clusters disabled. Use
    `https://dns-api-N.ops.example.com:8444`, that host's `PDNS_API_KEY`, and the
    server CA trust configured on control. Test each cluster, then enable it.
-3. Create a delegated test domain and a DNS-only A/AAAA record. Wait until both
-   clusters acknowledge the revision. Verify both authoritative servers over
-   UDP and TCP before changing registrar delegation.
+2. Configure the platform domain, `ns1`/`ns2`, glue A records, optional AAAA
+   records, SOA defaults, and DNSSEC policy in **Control plane → System
+   settings**. Apply only after both clusters are healthy, then wait for both
+   platform deployments to acknowledge the revision.
+3. Create a test domain and a DNS-only A/AAAA record. Wait until both clusters
+   acknowledge the revision. Verify both authoritative servers over UDP and TCP,
+   then create registrar glue and change delegation.
 4. Create `pop-1` and `pop-2` in **Edge network → Edges**. Record each edge UUID
    and its one-time bootstrap token at the one-time display boundary.
 5. Create or verify shared and quarantine pools. Assign the fixed cell slots and

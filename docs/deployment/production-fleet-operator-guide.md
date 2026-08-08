@@ -255,14 +255,17 @@ DNS_API_SERVER_PRIVATE_KEY=./pki/node.key
 The generator does not create edge records in the control plane. Use this sequence for every edge-capable node:
 
 1. Start the control plane.
-2. In **Edge network → Edges**, create the edge and copy its UUID and one-time bootstrap token.
-3. Save the token in a protected mode-`0600` file.
-4. Store the UUID/token in fleet state with `configure-edge-registration`.
-5. Add the edge's complete `EDGE_GATEWAY_ADDRESS_MAP` with `update-node --extra-env`.
-6. Validate and render only that node.
-7. Transfer and start the node bundle.
-8. Wait for the registered identity and heartbeat.
-9. Clear the one-time token, rerender, and recreate only `edge-agent`.
+2. For a combined `dns-edge` node, transfer its initial bundle and run
+   `start.sh`; without an edge UUID it starts authoritative DNS only. Register,
+   test, and enable its DNS cluster before continuing.
+3. In **Edge network → Edges**, create the edge and copy its UUID and one-time bootstrap token.
+4. Save the token in a protected mode-`0600` file.
+5. Store the UUID/token in fleet state with `configure-edge-registration`.
+6. Add the edge's complete `EDGE_GATEWAY_ADDRESS_MAP` with `update-node --extra-env`.
+7. Validate and render only that node.
+8. Transfer and start the node bundle.
+9. Wait for the registered identity and heartbeat.
+10. Clear the one-time token, rerender, and recreate only `edge-agent`.
 
 Example on the control-plane machine:
 

@@ -144,22 +144,59 @@ Run the control bundle's `start.sh` as root. Before starting Compose, it keeps t
 
 The control bundle starts `mmdb-updater` before services that consume GeoIP data. Run migrations only through the generated `start.sh`/tools workflow; container startup never migrates the database.
 
-## 6. Configure DNS desired state
+## 6. Start authoritative DNS on both PoPs
+
+Transfer `bundles/pop-1` and `bundles/pop-2` over authenticated channels to
+`/opt/cdnfoundry` on their respective hosts. Preserve file modes. On each PoP:
+
+```bash
+cd /opt/cdnfoundry
+sha256sum -c SHA256SUMS
+./validate.sh
+sudo ./start.sh
+docker compose --env-file .env.prod ps
+```
+
+At this stage a combined `dns-edge` bundle has no edge UUID or bootstrap token.
+Its generated `start.sh` therefore activates the `dns` profile only: it starts
+the node-local PowerDNS database, applies the separate PowerDNS migration, and
+starts PowerDNS, DNSdist, and the restricted DNS API. It deliberately does not
+start the edge profile yet.
+
+Before adding either DNS cluster in the control panel, confirm that DNSdist
+answers locally over both transports and that the control host can reach the
+restricted DNS API with the generated certificate and API key. Allow public UDP
+and TCP 53; keep TCP 8444 restricted to the control-plane source addresses.
+
+```bash
+dig @127.0.0.1 version.bind TXT CH +short
+dig +tcp @127.0.0.1 version.bind TXT CH +short
+openssl s_client -connect pop-1.ops.example.com:8444 \
+  -servername pop-1.ops.example.com \
+  -CAfile pki/edge-server-ca.crt </dev/null
+```
+
+Do not delegate a customer zone yet. An empty PowerDNS runtime can be healthy;
+the control plane publishes desired state only after the clusters are registered
+in the next step.
+
+## 7. Configure DNS desired state
 
 Sign in to the administrator panel, configure platform nameservers and DNS clusters using the two PoP hostnames, and verify registrar glue for their public addresses. DNSdist is the only public authoritative endpoint; PowerDNS and its database remain private.
 
 Use this exact order:
 
-1. Open `https://control.ops.example.com/admin`. In **Control plane → System settings**, configure `example.net`, `ns1.example.net`, `ns2.example.net`, and their A/optional AAAA glue.
-2. In **Infrastructure → DNS clusters**, create each PoP disabled with its generated `https://pop-N.ops.example.com:8444` endpoint and node-local API key. Test it, then enable it.
-3. In **Domains → Create domain**, add a delegated customer zone and its first DNS-only A/AAAA record. Wait for both cluster acknowledgements before registrar delegation.
-4. Verify UDP and TCP answers. Only then use **Edge network → Edges** to create edge inventory, capture each UUID and one-time bootstrap token, enroll it as described below, create/assign a service pool, add the origin endpoint, and enable proxying for the hostname.
+1. In **Infrastructure → DNS clusters**, create each PoP disabled with its generated `https://pop-N.ops.example.com:8444` endpoint and node-local API key. Test it, then enable it. Do not apply platform identity until both targets are healthy.
+2. In **Infrastructure → System DNS identity**, configure `example.net`, `ns1.example.net`, `ns2.example.net`, and their A/optional AAAA glue. Validate and preview, apply the exact confirmation, and wait for both platform deployments to acknowledge the revision.
+3. In **Domains → Create domain**, add a test customer zone and its first DNS-only A/AAAA record. Wait for both cluster acknowledgements, then verify UDP and TCP answers from both authoritative hosts.
+4. Only after those answers are correct, create registrar glue and change customer delegation. Then use **Edge network → Edges** to create edge inventory, capture each UUID and one-time bootstrap token, enroll it as described below, create/assign a service pool, add the origin endpoint, and enable proxying for the hostname.
 
 API automation follows the same sequence. Authenticate with `POST /api/v1/admin/login`, protect the returned bearer token, and use the DNS-cluster, domain, record, and edge endpoints in the live OpenAPI document. Send `Idempotency-Key` on mutations and poll the operation returned by `202 Accepted`. Never store an API token in Fleet JSON.
 
-Transfer and start each PoP bundle only after its replacement validates. Allow both UDP and TCP 53 and restrict DNS API, metrics, and management listeners to documented control/monitoring sources.
+Both PoP DNS runtimes must already be healthy from step 6. If either cluster
+test fails, do not enable it and do not delegate the customer zone.
 
-## 7. Enroll both edge nodes
+## 8. Enroll and start both edge nodes
 
 Create each edge in the administrator panel and copy its UUID and one-time bootstrap token to protected local files. On the Fleet authority:
 
@@ -173,7 +210,9 @@ sudo ./scripts/cdnfoundry-fleet \
   --non-interactive
 ```
 
-Repeat for `pop-2`, rerender those bundles, validate, transfer, and activate them. After successful mTLS registration:
+Repeat for `pop-2`, rerender those bundles, validate, transfer, and activate
+them with `sudo ./start.sh`. The rerendered combined-node script now activates
+both `dns` and `edge` profiles. After successful mTLS registration:
 
 ```bash
 sudo ./scripts/cdnfoundry-fleet --state-dir /var/lib/cdnfoundry-fleet \
@@ -184,7 +223,7 @@ sudo ./scripts/cdnfoundry-fleet --state-dir /var/lib/cdnfoundry-fleet \
 
 Transfer the token-free bundle and recreate only `edge-agent`. Never reuse or retain a consumed bootstrap token.
 
-## 8. Acceptance and recovery gate
+## 9. Acceptance and recovery gate
 
 Check public endpoints before delegation or traffic:
 

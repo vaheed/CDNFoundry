@@ -213,6 +213,12 @@ referenced docker/...   # only runtime files used by selected services
 
 DNS nodes may additionally receive `reconcile-pdns-password.sh` and a pending password file during a staged rotation. Edge bundles receive `EDGE_ID` plus a one-time token only after `configure-edge-registration`; the token disappears after `clear-edge-bootstrap-token` and rerendering.
 
+Generated `start.sh` activates explicit Compose profiles. A combined `dns-edge`
+bundle starts only `dns` until `configure-edge-registration` stores a valid
+`EDGE_ID`; after rerendering it starts both `dns` and `edge`. This permits the
+authoritative runtime and restricted DNS API to become healthy before the
+control plane creates the edge row.
+
 ## Security properties
 
 - State directories use mode `0700`.

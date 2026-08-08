@@ -159,7 +159,7 @@ docker compose --env-file .env.prod \
   --profile tools run --rm pdns-migrate
 docker compose --env-file .env.prod \
   -f compose.prod.yml \
-  --profile dns --profile edge up -d
+  --profile dns up -d
 ```
 
 The MMDB updater must activate a valid database before PowerDNS becomes ready.
@@ -170,16 +170,18 @@ source-restricted TLS endpoint; never publish PowerDNS port 8081 directly.
 
 In the administrator panel:
 
-1. configure and apply system DNS identity;
-2. register each DNS API cluster, test it, then enable it;
+1. register each DNS API cluster disabled, test it, then enable it;
+2. configure and apply system DNS identity, then wait for every cluster to
+   acknowledge the platform revision;
 3. create shared and quarantine pools if they are not present;
 4. create the `EDGE_1` and `EDGE_2` rows and copy each one-time UUID/token;
 5. assign bounded cells to pools and create one public service endpoint pair for
    each participating edge/pool; keep management addresses distinct.
 
 Put `EDGE_ID` and `EDGE_BOOTSTRAP_TOKEN` into the corresponding edge host, start
-or restart `edge-agent`, wait for registered identity and fresh ready cells,
-then remove the bootstrap token from `.env.prod`.
+the edge profile with `--profile dns --profile edge up -d`, wait for registered
+identity and fresh ready cells, then remove the bootstrap token from
+`.env.prod` and recreate only `edge-agent`.
 
 ### 10. Qualify traffic
 

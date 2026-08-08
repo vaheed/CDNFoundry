@@ -75,7 +75,9 @@ sudo ./scripts/cdnfoundry-fleet \
 
 1. Start `control-1`, including its MMDB updater, database dependencies, migrations, control services, and health checks.
 2. Start the selected dedicated monitoring host and qualify Prometheus, Grafana, ClickHouse, Loki, and log ingestion.
-3. Start all four DNS nodes, configure NS/glue and DNS clusters, and qualify UDP/TCP answers before delegation.
+3. Start all four DNS nodes. Register, test, and enable their DNS clusters;
+   apply NS/glue platform identity only afterward and wait for every cluster to
+   acknowledge it. Qualify UDP/TCP answers before delegation.
 4. Create each edge in the control panel, configure its UUID/token through protected files, rerender, and start edge bundles one at a time.
 5. Remove every consumed bootstrap token, rerender, and recreate only the affected agent.
 6. Validate regional fallback, draining, node loss, control-plane outage, restart, telemetry loss, and previous-bundle rollback.

@@ -5,7 +5,9 @@ description: Configure system DNS, add a domain, delegate it, and activate servi
 
 # First domain
 
-This workflow assumes an administrator account and a healthy DNS cluster.
+This workflow assumes an administrator account and deployed, reachable
+authoritative DNS runtimes. It registers those runtimes as healthy clusters
+before applying platform identity.
 
 ::: warning Delegation is an external change
 Create and verify platform identity, authoritative clusters, glue, and direct
@@ -13,7 +15,23 @@ UDP/TCP answers before changing registrar delegation. CDNFoundry cannot roll
 back an incorrect parent-zone or registrar change.
 :::
 
-## Prepare platform identity
+## Register authoritative clusters first
+
+In **Infrastructure → DNS clusters**, create each private PowerDNS API target
+with:
+
+- a descriptive unique name and location;
+- the source-restricted HTTPS API URL;
+- its API key;
+- server ID, normally `localhost`;
+- the nameserver identities served by that target.
+
+A new cluster is disabled until its asynchronous connection test succeeds.
+Enable it only after the last health result is successful. The DNS runtime and
+restricted API must already be deployed; a control-plane row does not start
+PowerDNS or DNSdist.
+
+## Prepare and deploy platform identity
 
 In `/admin/system-dns-identity`, enter:
 
@@ -27,21 +45,10 @@ Preview first. The apply request requires the confirmation token bound to that
 exact normalized preview. Wait for its operation and every platform DNS
 deployment to succeed.
 
-At the parent registrar, create the required host/glue records and delegate the
-platform zone. CDNFoundry cannot automate registrar configuration.
-
-## Register authoritative clusters
-
-In **Control plane → DNS clusters**, create each private PowerDNS API target with:
-
-- a descriptive unique name and location;
-- the source-restricted HTTPS API URL;
-- its API key;
-- server ID, normally `localhost`;
-- the nameserver identities served by that target.
-
-A new cluster is disabled until its asynchronous connection test succeeds.
-Enable it only after the last health result is successful.
+Query each authoritative host directly over UDP and TCP. Only after both hosts
+serve the acknowledged platform revision should you create the required
+host/glue records and delegate the platform zone at the parent registrar.
+CDNFoundry cannot automate registrar configuration.
 
 ## Create the customer domain
 
