@@ -353,7 +353,7 @@ services:
 
   vector:
     image: timberio/vector:0.55.0-alpine
-    profiles: [telemetry, edge]
+    profiles: [telemetry, dns, edge]
     environment:
       CLICKHOUSE_ENDPOINT: ${CLICKHOUSE_URL:?CLICKHOUSE_URL is required}
       CLICKHOUSE_USER: cdnf
@@ -522,7 +522,7 @@ services:
 
   node-exporter:
     image: prom/node-exporter:v1.10.2
-    profiles: [telemetry]
+    profiles: [control, dns, edge, telemetry]
     command: [--path.procfs=/host/proc, --path.sysfs=/host/sys, --path.rootfs=/host/root, --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)]
     pid: host
     volumes:

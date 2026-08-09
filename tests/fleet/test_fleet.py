@@ -151,7 +151,7 @@ def source_repo(tmp_path: Path) -> Path:
             },
             "vector": {
                 "image": "vector:latest",
-                "profiles": ["telemetry", "edge"],
+                "profiles": ["telemetry", "dns", "edge"],
                 "environment": {
                     "CLICKHOUSE_ENDPOINT": "${CLICKHOUSE_URL:?required}",
                     "CLICKHOUSE_PASSWORD": "${CLICKHOUSE_PASSWORD:?required}",
@@ -170,7 +170,7 @@ def source_repo(tmp_path: Path) -> Path:
             },
             "node-exporter": {
                 "image": "node-exporter:latest",
-                "profiles": ["telemetry"],
+                "profiles": ["control", "dns", "edge", "telemetry"],
             },
             "log-collector": {
                 "image": "vector:latest",
@@ -279,6 +279,21 @@ def test_disabled_monitoring_does_not_require_clickhouse_credentials_on_edge(sto
     assert "CLICKHOUSE_PASSWORD" not in env
 
 
+def test_dns_profile_includes_vector_when_monitoring_is_enabled(
+    store: FleetState, source_repo: Path, tmp_path: Path
+) -> None:
+    add(store, node("control-1", "control", "192.0.2.31"))
+    add(store, node("dns-1", "dns", "192.0.2.32"))
+    with store.locked():
+        store.configure_feature(store.load(), "monitoring", {"mode": "colocated", "host": None})
+    output = tmp_path / "bundles"
+    Renderer(source_repo, store, output).render(store.load(), node_name="dns-1")
+    compose = yaml.safe_load((output / "dns-1/compose.yml").read_text(encoding="utf-8"))
+
+    assert "vector" in compose["services"]
+    assert set(compose["services"]["vector"]["profiles"]) == {"dns", "edge", "telemetry"}
+
+
 def test_duplicate_ip_and_malicious_node_input_are_rejected(store: FleetState) -> None:
     add(store, node("edge-one", "edge", "192.0.2.40"))
     with pytest.raises(ValidationError, match="Duplicate fleet IP"):
@@ -361,8 +376,11 @@ def test_combined_node_starts_dns_before_edge_registration(store: FleetState, so
     Renderer(source_repo, store, output).render(store.load())
 
     start = (output / "pop-1/start.sh").read_text(encoding="utf-8")
+    compose = yaml.safe_load((output / "pop-1/compose.yml").read_text(encoding="utf-8"))
     assert "docker compose --env-file .env.prod --profile dns up -d" in start
     assert "--profile edge" not in start
+    assert compose["services"]["pdns-auth"]["profiles"] == ["dns"]
+    assert compose["services"]["edge-agent"]["profiles"] == ["edge"]
 
     with store.locked():
         store.update_node(

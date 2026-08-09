@@ -148,9 +148,7 @@ def select_services(
     for name in sorted(selected):
         service = copy.deepcopy(services[name])
         profiles = profile_set(service)
-        if name not in {"migrate", "pdns-migrate"}:
-            service.pop("profiles", None)
-        elif "tools" not in profiles:
+        if name in {"migrate", "pdns-migrate"} and "tools" not in profiles:
             service["profiles"] = ["tools"]
         rendered_services[name] = service
 
