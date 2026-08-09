@@ -65,29 +65,24 @@ replace the last valid runtime state.
 ## How the stack is separated
 
 ```mermaid
-flowchart TB
-    ExternalDNS["Independent external DNS<br/>management hostnames"] --> Control
-    ExternalDNS --> DNSAPI["Restricted DNS API"]
-    ExternalDNS --> EdgeControl["Edge-control mTLS ingress"]
-    Users["Internet users"] -->|"DNS"| DNS["DNSdist + PowerDNS"]
-    Users -->|"HTTP/HTTPS"| Gateway["Edge gateway"]
-    Gateway --> Edge["Bounded OpenResty cells"]
-    Edge --> Origin["Validated customer origins"]
-    Admins["Administrators"] --> Control["Laravel + Filament"]
-    Control --> State[("PostgreSQL desired state")]
-    Control -->|"asynchronous reconciliation"| DNSAPI
-    DNSAPI --> DNS
-    EdgeAgent["Edge agent"] -->|"outbound mTLS"| EdgeControl
-    EdgeControl --> Control
-    Control -->|"signed snapshots through agent"| EdgeAgent
-    EdgeAgent --> Edge
-    DNS -. "best-effort telemetry" .-> Vector["Vector"]
-    Edge -. "best-effort telemetry" .-> Vector
-    Vector --> ClickHouse[("ClickHouse telemetry")]
-    Prometheus["Prometheus metrics"] --> Grafana["Grafana operations"]
-    ClickHouse -->|"bounded read-only queries"| Grafana
-    State -->|"sanitized read-only metadata"| Grafana
-    Admins -->|"separate operator access"| Grafana
+flowchart LR
+    subgraph Management["Management"]
+      Admins["Administrators"] --> Control["Control plane"] --> State[("Desired state")]
+      EdgeControl["edge-control"] --> Control
+    end
+    subgraph Traffic["Traffic planes"]
+      Agent["Edge agent"] -->|"outbound mTLS"| EdgeControl
+      Agent --> Edge["Gateway + bounded cells"]
+      Control -->|"async revisions"| DNS["Authoritative DNS"]
+      Users["Internet users"] -->|"DNS"| DNS
+      Users -->|"HTTP/S"| Edge --> Origin["Validated origins"]
+    end
+    subgraph Operations["Operations"]
+      DNS -. "best effort" .-> Observe["Telemetry"]
+      Edge -. "best effort" .-> Observe
+      Observe --> Grafana["Grafana"]
+      State -. "sanitized view" .-> Grafana
+    end
 ```
 
 The serving path does not depend on Laravel. DNS queries terminate at DNSdist

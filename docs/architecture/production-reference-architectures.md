@@ -42,23 +42,25 @@ domains.
 
 ```mermaid
 flowchart LR
-    ExternalDNS["Independent external DNS<br/>management records"] --> CONTROL
-    ExternalDNS --> DNSAPI["dns-api-N"]
-    ExternalDNS --> EC["edge-control"]
-    Operators["Operators"] --> CONTROL["CONTROL<br>control plane"]
-    CONTROL --> State[("PostgreSQL + Valkey")]
-    Resolver["Resolvers"] --> EDGE1DNS["EDGE_1<br>DNSdist + PowerDNS"]
-    Resolver --> EDGE2DNS["EDGE_2<br>DNSdist + PowerDNS"]
-    Clients["HTTP clients"] --> EDGE1GW["EDGE_1<br>gateway + cells"]
-    Clients --> EDGE2GW["EDGE_2<br>gateway + cells"]
-    CONTROL -. "revisioned reconciliation" .-> DNSAPI
-    DNSAPI --> EDGE1DNS
-    DNSAPI --> EDGE2DNS
+    subgraph Management["Control region"]
+      Operators["Operators"] --> CONTROL["Control plane"] --> State[("PostgreSQL + Valkey")]
+      EC["edge-control"] --> CONTROL
+      CONTROL -->|"revisions"| DNSAPI["DNS APIs"]
+    end
+    subgraph POP1["POP 1"]
+      DNSAPI --> EDGE1DNS["DNSdist + PowerDNS"]
+      EDGE1GW["Agent + gateway + cells"] -->|"outbound mTLS"| EC
+    end
+    subgraph POP2["POP 2"]
+      DNSAPI --> EDGE2DNS["DNSdist + PowerDNS"]
+      EDGE2GW["Agent + gateway + cells"] -->|"outbound mTLS"| EC
+    end
+    Resolver["Resolvers"] --> EDGE1DNS
+    Resolver --> EDGE2DNS
+    Clients["HTTP clients"] --> EDGE1GW
+    Clients --> EDGE2GW
     EDGE1GW --> Origins["Validated origins"]
     EDGE2GW --> Origins
-    EDGE1GW -->|"edge agent: outbound mTLS"| EC
-    EDGE2GW -->|"edge agent: outbound mTLS"| EC
-    EC --> CONTROL
 ```
 
 Best for:
@@ -143,15 +145,19 @@ formats shared.
 
 ```mermaid
 flowchart LR
-    DNS["Authoritative DNS"] -->|"Geo-Unicast answers"| POP1["POP 1 service addresses"]
-    DNS -->|"Geo-Unicast answers"| POP2["POP 2 service addresses"]
-    DNS -->|"fallback answers"| POP3["POP 3 service addresses"]
-    Client1["Region A clients"] --> POP1
-    Client2["Region B clients"] --> POP2
-    Client3["Other clients"] --> POP3
-    POP1 --> Origins["Public validated origins"]
-    POP2 --> Origins
-    POP3 --> Origins
+    subgraph Selection["Geo-Unicast selection"]
+      DNS["Authoritative DNS"] --> POP1["POP 1 address"]
+      DNS --> POP2["POP 2 address"]
+      DNS -->|"fallback"| POP3["POP 3 address"]
+    end
+    subgraph Delivery["Regional delivery"]
+      Client1["Region A"] --> POP1
+      Client2["Region B"] --> POP2
+      Client3["Other clients"] --> POP3
+      POP1 --> Origins["Validated origins"]
+      POP2 --> Origins
+      POP3 --> Origins
+    end
 ```
 
 Best for:
@@ -180,13 +186,19 @@ The network operator advertises and withdraws those routes outside CDNFoundry.
 
 ```mermaid
 flowchart TB
-    Clients["Internet clients"] --> Anycast["Shared service IPv4/IPv6"]
-    Anycast -->|"BGP chooses a route"| POPA["POP A gateway + cells"]
-    Anycast -->|"BGP chooses a route"| POPB["POP B gateway + cells"]
-    Anycast -->|"BGP chooses a route"| POPC["POP C gateway + cells"]
-    Control["CDNFoundry control plane"] -->|"runtime + readiness only"| POPA
-    Control -->|"runtime + readiness only"| POPB
-    Control -->|"runtime + readiness only"| POPC
+    subgraph Routing["Internet routing"]
+      Clients["Internet clients"] --> Anycast["Shared service IP"]
+    end
+    subgraph POPs["Anycast POPs"]
+      Anycast -->|"BGP"| POPA["POP A"]
+      Anycast -->|"BGP"| POPB["POP B"]
+      Anycast -->|"BGP"| POPC["POP C"]
+    end
+    subgraph ControlPlane["Control plane"]
+      Control["CDNFoundry"] -. "runtime + readiness" .-> POPA
+      Control -.-> POPB
+      Control -.-> POPC
+    end
 ```
 
 Use this only when the operator can prove:

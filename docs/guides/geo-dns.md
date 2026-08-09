@@ -25,13 +25,16 @@ continent overrides. Selection is deterministic:
 
 ```mermaid
 flowchart TD
-    Query["DNS query"] --> Address["ECS address when present;<br>otherwise recursive resolver"]
-    Address --> Lookup["Local MMDB lookup"]
-    Lookup --> Country{"Country override exists?"}
-    Country -->|Yes| CountrySet["Return country answers"]
-    Country -->|No| Continent{"Continent override exists?"}
-    Continent -->|Yes| ContinentSet["Return continent answers"]
-    Continent -->|No or unknown| DefaultSet["Return required default answers"]
+    subgraph Identify["Identify client location"]
+      Query["DNS query"] --> Address["ECS or resolver address"] --> Lookup["Local MMDB"]
+    end
+    subgraph Select["Select answer set"]
+      Lookup --> Country{"Country override?"}
+      Country -->|Yes| CountrySet["Country answers"]
+      Country -->|No| Continent{"Continent override?"}
+      Continent -->|Yes| ContinentSet["Continent answers"]
+      Continent -->|No| DefaultSet["Default answers"]
+    end
 ```
 
 For example, with country `IR`, continent `EU`, and default answer sets:

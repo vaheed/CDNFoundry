@@ -9,11 +9,15 @@ description: Follow DNS, HTTP, reconciliation, enrollment, TLS, and telemetry th
 
 ```mermaid
 sequenceDiagram
-    participant R as Recursive resolver
-    participant D as DNSdist
-    participant P as PowerDNS
-    participant M as Local MMDB
-    participant V as Vector
+    box Internet
+      participant R as Recursive resolver
+    end
+    box DNS host
+      participant D as DNSdist
+      participant P as PowerDNS
+      participant M as Local MMDB
+      participant V as Vector
+    end
     R->>D: UDP/TCP query
     D->>P: Private backend query
     opt Geo-DNS record
@@ -37,11 +41,15 @@ Laravel is absent from this path.
 
 ```mermaid
 sequenceDiagram
-    participant C as Client
-    participant E as OpenResty cell
-    participant Cache as Persistent per-cell bounded cache
-    participant O as Validated origin
-    participant V as Vector
+    box Internet
+      participant C as Client
+      participant O as Validated origin
+    end
+    box Edge cell
+      participant E as OpenResty
+      participant Cache as Bounded cache
+      participant V as Vector
+    end
     C->>E: HTTP/HTTPS request
     E->>E: Select domain, certificate, client IP, security policy
     E->>Cache: Deterministic cache-key lookup
@@ -69,18 +77,20 @@ Laravel and ClickHouse are absent from the serving decision.
 
 ```mermaid
 flowchart LR
-    Request["Authorized mutation"] --> Validate["Typed validation"]
-    Validate --> Tx["Transaction:<br/>state + revision + audit"]
-    Tx --> Job["Unique job after commit"]
-    Job --> Fresh{"Latest revision?"}
-    Fresh -- No --> Skip["Skip obsolete work"]
-    Fresh -- Yes --> Render["Deterministic render"]
-    Render --> Check["Checksum + validate"]
-    Check --> Activate["Atomic activation"]
-    Activate --> Verify["Verify + acknowledge"]
-    Verify --> Receipt["Deployment result"]
-    Check -- Invalid --> Preserve["Preserve active state"]
-    Activate -- Failed --> Preserve
+    subgraph Commit["Commit desired state"]
+      Request["Authorized mutation"] --> Validate["Typed validation"] --> Tx["State + revision + audit"]
+      Tx --> Job["Unique job"]
+    end
+    subgraph Candidate["Build candidate"]
+      Job --> Fresh{"Latest revision?"}
+      Fresh -- No --> Skip["Skip obsolete"]
+      Fresh -- Yes --> Render["Render"] --> Check["Checksum + validate"]
+    end
+    subgraph Activation["Activate safely"]
+      Check --> Activate["Atomic activation"] --> Verify["Verify + acknowledge"] --> Receipt["Result"]
+      Check -- Invalid --> Preserve["Keep active state"]
+      Activate -- Failed --> Preserve
+    end
 ```
 
 1. The API or Filament action validates and commits desired state.
@@ -126,11 +136,15 @@ path.
 
 ```mermaid
 sequenceDiagram
-    participant CP as Control worker
-    participant DNS as Desired DNS
-    participant PDNS as PowerDNS targets
-    participant CA as ACME CA
-    participant Edge as Edge agents
+    box Control plane
+      participant CP as Control worker
+      participant DNS as Desired DNS
+    end
+    box External systems
+      participant PDNS as PowerDNS targets
+      participant CA as ACME CA
+      participant Edge as Edge agents
+    end
     CP->>DNS: Add bounded DNS-01 TXT
     DNS->>PDNS: Reconcile revision
     PDNS-->>CP: Required acknowledgements
@@ -167,14 +181,20 @@ when exhausted, but telemetry backpressure must never enter DNS or HTTP paths.
 
 ```mermaid
 flowchart LR
-    Operator["Operations user"] -->|"authenticated HTTPS proxy or trusted tunnel"| Grafana["Grafana"]
-    Grafana -->|"PromQL"| Prometheus["Prometheus"]
-    Grafana -->|"bounded SELECT<br/>raw/hourly/daily"| ClickHouse[("ClickHouse")]
-    Grafana -->|"inventory + sanitized view"| PostgreSQL[("PostgreSQL")]
-    Grafana -->|"LogQL"| Loki[("Loki")]
-    Vector["Vector"] --> ClickHouse
-    HostCollectors["One Vector log collector per host"] -->|"bounded push"| Loki
-    Exporters["Control, gateway, DNS, host,<br/>Vector, ClickHouse exporters"] --> Prometheus
+    subgraph Collect["Collect"]
+      Vector["Traffic Vector"] --> ClickHouse[("ClickHouse")]
+      HostCollectors["Host collectors"] --> Loki[("Loki")]
+      Exporters["Exporters"] --> Prometheus["Prometheus"]
+    end
+    subgraph Query["Read-only query layer"]
+      Grafana["Grafana"] --> Prometheus
+      Grafana --> ClickHouse
+      Grafana --> PostgreSQL[("Sanitized PostgreSQL")]
+      Grafana --> Loki
+    end
+    subgraph Access["Operator access"]
+      Operator["Operations user"] -->|"authenticated HTTPS"| Grafana
+    end
 ```
 
 Grafana provisions exactly a system and a domain command center. The domain

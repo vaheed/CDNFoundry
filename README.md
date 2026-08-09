@@ -50,29 +50,24 @@ role-based Docker Compose deployments.
 ## Architecture
 
 ```mermaid
-flowchart TB
-    Operator["Administrators and domain users"] -->|"HTTPS"| Control["Laravel + Filament<br/>API, Horizon, Scheduler"]
-    Control --> State[("PostgreSQL<br/>desired state")]
-    Control --> Queue[("Valkey<br/>queues and sessions")]
-
-    Resolver["Recursive resolvers"] -->|"UDP/TCP 53"| DNSdist["DNSdist"]
-    DNSdist --> PowerDNS["Private PowerDNS"]
-    PowerDNS --> PDNSDB[("Derived DNS data")]
-
-    Visitors["Internet users"] -->|"HTTP/HTTPS"| Edge["Bounded OpenResty cells"]
-    Edge --> Origins["Validated customer origins"]
-
-    Control -->|"asynchronous DNS reconciliation"| PowerDNS
-    Agent["Go edge agent"] -->|"outbound mTLS"| EdgeControl["edge-control<br/>mTLS ingress"]
-    EdgeControl --> Control
-    Control -->|"signed revisioned artifacts"| EdgeControl
-    EdgeControl --> Agent
-    Agent -->|"atomic activation"| Edge
-
-    DNSdist -. "dnstap" .-> Vector["Vector"]
-    Edge -. "redacted JSON events" .-> Vector
-    Vector --> ClickHouse[("ClickHouse analytics")]
-    Metrics["Prometheus"] --> Alerts["Alertmanager"]
+flowchart LR
+    subgraph Management["Management"]
+      People["Operators + domain users"] --> Control["Laravel control plane"]
+      Control --> State[("PostgreSQL")]
+      Control --> Queue[("Valkey")]
+      EdgeControl["edge-control"] --> Control
+    end
+    subgraph Runtime["Traffic runtime"]
+      Agent["Edge agent"] -->|"outbound mTLS"| EdgeControl
+      Agent -->|"atomic activation"| Edge["Bounded edge cells"]
+      Resolvers["Resolvers"] --> DNS["DNSdist → PowerDNS"]
+      Visitors["Visitors"] --> Edge --> Origins["Validated origins"]
+    end
+    subgraph Operations["Operations"]
+      DNS -. "events" .-> Observe["Telemetry + metrics"]
+      Edge -. "events" .-> Observe
+    end
+    Control -. "revisioned state" .-> DNS
 ```
 
 | Plane | Source of truth | Runtime behavior |

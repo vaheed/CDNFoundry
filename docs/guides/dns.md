@@ -16,16 +16,19 @@ description: Manage records, zone import and export, clusters, reconciliation, a
 
 ```mermaid
 flowchart LR
-    Change["Record, import, or identity change"] --> Revision["Commit revision"]
-    Revision --> Render["Canonical RRsets + serial"]
-    Render --> Validate["Zone validation"]
-    Validate --> Target1["Cluster 1 candidate"]
-    Validate --> Target2["Cluster 2 candidate"]
-    Target1 --> Active1["Atomic active zone"]
-    Target2 --> Active2["Atomic active zone"]
-    Active1 --> Receipt["Acknowledgements"]
-    Active2 --> Receipt
-    Validate -- failure --> Preserve["Preserve previous zones"]
+    subgraph Desired["Desired state"]
+      Change["Record or import change"] --> Revision["Commit revision"]
+    end
+    subgraph Candidate["Build candidate"]
+      Revision --> Render["Canonical RRsets + serial"] --> Validate["Validate zone"]
+      Validate -- failure --> Preserve["Keep previous zones"]
+    end
+    subgraph Activate["Activate targets"]
+      Validate --> Target1["Cluster 1"] --> Active1["Active zone"]
+      Validate --> Target2["Cluster 2"] --> Active2["Active zone"]
+      Active1 --> Receipt["Acknowledgements"]
+      Active2 --> Receipt
+    end
 ```
 
 ::: danger Never expose PowerDNS directly

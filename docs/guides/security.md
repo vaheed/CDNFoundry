@@ -7,16 +7,19 @@ description: Configure ordered rules, bounded profiles, readiness states, quaran
 
 ```mermaid
 flowchart TD
-    Request["Incoming request"] --> Maintenance{"Maintenance?"}
-    Maintenance -- Yes --> Response["Return bounded HTTP 503"]
-    Maintenance -- No --> Client["Resolve trusted client IP"]
-    Client --> Rules["Ordered allow/block rules"]
-    Rules --> Profile["Profile ceilings"]
-    Profile --> Limits["Rate, concurrency, connection limits"]
-    Limits --> Method["Method and request bounds"]
-    Method --> Serve["Cache or origin"]
-    Response --> Event["Reason + telemetry"]
-    Serve --> Event
+    subgraph Gate["Availability gate"]
+      Request["Incoming request"] --> Maintenance{"Maintenance?"}
+      Maintenance -- Yes --> Response["Bounded HTTP 503"]
+    end
+    subgraph Enforce["Layered enforcement"]
+      Maintenance -- No --> Client["Trusted client IP"] --> Rules["Allow/block rules"]
+      Rules --> Profile["Profile ceilings"] --> Limits["Rate + concurrency"]
+      Limits --> Method["Method + size bounds"] --> Serve["Cache or origin"]
+    end
+    subgraph Observe["Outcome"]
+      Response --> Event["Reason + telemetry"]
+      Serve --> Event
+    end
 ```
 
 | Layer | Purpose |

@@ -15,13 +15,17 @@ description: Manage administrators, domain users, assignments, sessions, and API
 
 ```mermaid
 flowchart TD
-    Login["Session or bearer token"] --> Active{"Account active?"}
-    Active -- No --> Deny["Deny access"]
-    Active -- Yes --> Type{"User type"}
-    Type -- Admin --> Admin["Administrator policies"]
-    Type -- Domain user --> Assigned{"Assigned domain?"}
-    Assigned -- No --> Hidden["404/403 without tenant disclosure"]
-    Assigned -- Yes --> Domain["Domain-scoped policy"]
+    subgraph Authenticate["Authenticate"]
+      Login["Session or token"] --> Active{"Account active?"}
+      Active -- No --> Deny["Deny"]
+    end
+    subgraph Authorize["Authorize"]
+      Active -- Yes --> Type{"User type"}
+      Type -- Admin --> Admin["Administrator policy"]
+      Type -- Domain user --> Assigned{"Domain assigned?"}
+      Assigned -- No --> Hidden["404/403"]
+      Assigned -- Yes --> Domain["Domain policy"]
+    end
 ```
 
 ::: warning One-time secrets

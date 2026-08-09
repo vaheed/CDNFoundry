@@ -7,11 +7,15 @@ description: Reference for CDNFoundry production fleet CLI options, setup config
 
 ```mermaid
 flowchart LR
-  JSON["Fleet JSON<br/>roles, addresses, nullable IPv6"] --> STATE["Protected Fleet authority<br/>secrets + private PKI + topology"]
-  STATE --> C["CONTROL bundle<br/>Laravel + edge-control + PostgreSQL + Valkey"]
-  STATE --> D["DNS bundles<br/>DNSdist + private PowerDNS + DNS API"]
-  STATE --> E["Edge bundles<br/>agent + gateway + OpenResty cells"]
-  STATE --> M["Telemetry bundle<br/>Vector + ClickHouse + Grafana"]
+  subgraph Authority["Protected authority"]
+    JSON["Fleet JSON"] --> STATE["Secrets + PKI + topology"]
+  end
+  subgraph Bundles["Per-node bundles"]
+    STATE --> C["Control"]
+    STATE --> D["DNS"]
+    STATE --> E["Edge"]
+    STATE --> M["Telemetry"]
+  end
 ```
 
 Copy `deploy/production/examples/starter-fleet.json` or `multi-region-fleet.json` to a protected local `fleet.json`, then change deployment data there. Checked-in examples are templates; repository scripts and generated Compose manifests are not configuration surfaces.

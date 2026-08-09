@@ -15,19 +15,23 @@ description: Configure proxied hostnames, origin safety, forwarding, health chec
 
 ```mermaid
 flowchart LR
-    Request["Client request"] --> Host{"Known hostname?"}
-    Host -- No --> Reject["Reject"]
-    Host -- Yes --> Security["Client and security policy"]
-    Security --> Cache{"Cache hit?"}
-    Cache -- Yes --> Return["Return response"]
-    Cache -- No --> Resolve["Resolve explicit origin"]
-    Resolve --> Safe{"Safe public target?"}
-    Safe -- No --> Fail["Fail closed"]
-    Safe -- Yes --> Origin{"Locally active origin"}
-    Origin --> Primary["Bounded primary request"]
-    Origin --> Backup["Bounded backup request"]
-    Primary --> Return
-    Backup --> Return
+    subgraph Admit["Request admission"]
+      Request["Client request"] --> Host{"Known host?"}
+      Host -- No --> Reject["Reject"]
+      Host -- Yes --> Security["Security policy"] --> Cache{"Cache hit?"}
+      Cache -- Yes --> Return["Return response"]
+    end
+    subgraph Protect["Origin protection"]
+      Cache -- No --> Resolve["Resolve origin"] --> Safe{"Safe public target?"}
+      Safe -- No --> Fail["Fail closed"]
+    end
+    subgraph Fetch["Bounded fetch"]
+      Safe -- Yes --> Origin{"Active origin"}
+      Origin --> Primary["Primary"]
+      Origin --> Backup["Backup"]
+      Primary --> Return
+      Backup --> Return
+    end
 ```
 
 ::: warning Private origins are not implemented

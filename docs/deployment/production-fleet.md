@@ -21,24 +21,23 @@ For the complete command workflow and interactive setup, see [Production fleet o
 
 ```mermaid
 flowchart TB
-    ExternalDNS["Independent external DNS<br/>operator-zone management names"] --> CONTROL["CONTROL<br/>Laravel + Horizon + Scheduler"]
-    ExternalDNS --> EDGE_CONTROL["edge-control<br/>mTLS ingress"]
-    ExternalDNS --> DNS_API["dns-api-N<br/>restricted TLS"]
-    ExternalDNS --> TELEMETRY["telemetry/Grafana ingress"]
-    CONTROL --> PG[("PostgreSQL<br/>desired state")]
-    CONTROL --> V[("Valkey<br/>queues and locks")]
-    CONTROL -->|"revisioned reconciliation"| DNS_API
-    DNS_API --> PDNS["Private PowerDNS<br/>one derived DB per DNS host"]
-    Resolvers["Recursive resolvers"] -->|"UDP/TCP 53"| DNSDIST["DNSdist<br/>public authoritative ingress"]
-    DNSDIST --> PDNS
-    Agents["Edge agents"] -->|"outbound mTLS"| EDGE_CONTROL
-    EDGE_CONTROL --> CONTROL
-    Agents --> CELLS["Gateway + bounded OpenResty cells"]
-    Clients["HTTP/HTTPS clients"] --> CELLS
-    CELLS --> Origins["Validated origins"]
-    DNSDIST -. "bounded telemetry" .-> TELEMETRY
-    CELLS -. "bounded telemetry" .-> TELEMETRY
-    TELEMETRY --> CH[("ClickHouse + metrics + logs")]
+    subgraph Management["Management"]
+      CONTROL["Control plane"] --> PG[("PostgreSQL")]
+      CONTROL --> V[("Valkey")]
+      EDGE_CONTROL["edge-control"] --> CONTROL
+      CONTROL -->|"revisions"| DNS_API["Restricted DNS APIs"]
+      TELEMETRY["Telemetry + Grafana"]
+    end
+    subgraph Runtime["Regional runtime"]
+      Agents["Edge agents"] -->|"outbound mTLS"| EDGE_CONTROL
+      Agents --> CELLS["Gateway + bounded cells"] --> Origins["Validated origins"]
+      DNS_API --> PDNS["Private PowerDNS"]
+      DNSDIST["DNSdist"] --> PDNS
+    end
+    Resolvers["Resolvers"] --> DNSDIST
+    Clients["HTTP/S clients"] --> CELLS
+    DNSDIST -. "telemetry" .-> TELEMETRY
+    CELLS -. "telemetry" .-> TELEMETRY
 ```
 
 ::: danger Keep management DNS independent
@@ -52,18 +51,20 @@ and recovery dependency.
 
 ```mermaid
 flowchart TD
-    Q[Authoritative DNS query] --> ECS{Valid ECS present?}
-    ECS -->|Yes| C[ECS client subnet]
-    ECS -->|No| R[Recursive resolver IP]
-    C --> P[Country / ASN / region / network overrides]
-    R --> P
-    P --> H[Remove disabled, draining, unhealthy, stale, or incompatible edges]
-    H --> F{Preferred region has healthy address?}
-    F -->|Yes| S[Deterministic preferred healthy edge]
-    F -->|No| RF[Ordered regional fallbacks]
-    RF --> GF[Ordered global fallback]
-    S --> A[A or AAAA answer]
-    GF --> A
+    subgraph Locate["Locate requester"]
+      Q["DNS query"] --> ECS{"Valid ECS?"}
+      ECS -->|Yes| C["Client subnet"]
+      ECS -->|No| R["Resolver IP"]
+      C --> P["Geo + network policy"]
+      R --> P
+    end
+    subgraph Filter["Filter candidates"]
+      P --> H["Remove unavailable edges"] --> F{"Preferred region healthy?"}
+    end
+    subgraph Answer["Choose answer"]
+      F -->|Yes| S["Preferred edge"] --> A["A or AAAA"]
+      F -->|No| RF["Regional fallback"] --> GF["Global fallback"] --> A
+    end
 ```
 
 A and AAAA health are evaluated independently. Health state uses configurable consecutive-failure and consecutive-success thresholds to reduce flapping. DNS TTL creates eventual consistency; global changes are not instantaneous.
@@ -72,10 +73,16 @@ A and AAAA health are evaluated independently. Health state uses configurable co
 
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant DNS as Authoritative DNS
-    participant Edge
-    participant Origin
+    box Internet
+      participant Client
+      participant DNS as Authoritative DNS
+    end
+    box Delivery POP
+      participant Edge
+    end
+    box Customer
+      participant Origin
+    end
     Client->>DNS: A/AAAA query
     DNS-->>Client: deterministic healthy edge address
     Client->>Edge: HTTP/TLS request
@@ -94,16 +101,26 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    C[Control host] -->|node exporter metrics| P[Prometheus]
-    D[Every DNS host] -->|node exporter metrics| P
-    E[Every edge host] -->|node exporter metrics| P
-    MH[Monitoring host] -->|node exporter metrics| P
-    C -->|Vector: container/system/app logs| L[Loki or central log endpoint]
-    D -->|Vector: PowerDNS/system/container logs| L
-    E -->|Vector: access/error/system/container logs| L
-    MH -->|Vector: observability logs| L
-    P --> G[Grafana]
-    L --> G
+    subgraph Fleet["Every fleet host"]
+      C["Control"]
+      D["DNS"]
+      E["Edge"]
+      MH["Monitoring"]
+    end
+    subgraph Collect["Central collection"]
+      C --> P["Prometheus"]
+      D --> P
+      E --> P
+      MH --> P
+      C --> L["Loki"]
+      D --> L
+      E --> L
+      MH --> L
+    end
+    subgraph View["Operations"]
+      P --> G["Grafana"]
+      L --> G
+    end
 ```
 
 Vector uses authenticated transport configuration, bounded disk buffering, retries, health checks, role labels, and basic secret filtering. Every required host receives a unique log credential. Disabling centralized logs removes Vector and its credentials from bundles.
@@ -112,13 +129,19 @@ Vector uses authenticated transport configuration, bounded disk buffering, retri
 
 ```mermaid
 flowchart TB
-    ICA[Edge identity CA\nprivate key retained by control services]
-    SCA[Edge server CA\nprivate key in protected fleet state]
-    SCA --> CC[Control edge-control TLS certificate]
-    SCA --> DC[Per-DNS API TLS certificate]
-    SCA --> EC[Per-edge runtime TLS certificate]
-    SCA --> MC[Monitoring host certificate]
-    ICA --> EI[Issued edge identities]
+    subgraph Authority["Protected fleet authority"]
+      ICA["Edge identity CA"]
+      SCA["Edge server CA"]
+    end
+    subgraph Identities["Client identities"]
+      ICA --> EI["Edge-agent certificates"]
+    end
+    subgraph Servers["Server certificates"]
+      SCA --> CC["edge-control"]
+      SCA --> DC["DNS APIs"]
+      SCA --> EC["Edge runtime"]
+      SCA --> MC["Monitoring"]
+    end
 ```
 
 The generator follows the production repository's two-CA contract. The edge identity CA is used by the control plane for edge identities. The edge server CA signs edge-control, edge runtime, and DNS API TLS certificates. The server CA private key stays in protected fleet state; each node receives only its own keypair and the server CA certificate. The control bundle additionally receives the edge identity CA material required by the control service. Certificate SANs are regenerated when a node hostname or service address changes.
@@ -127,15 +150,19 @@ The generator follows the production repository's two-CA contract. The edge iden
 
 ```mermaid
 flowchart TD
-    V[Validate every bundle] --> M[Dedicated monitoring data services, if configured]
-    M --> CDB[Control PostgreSQL + Valkey]
-    CDB --> CM[Control migrations]
-    CM --> CS[Control services]
-    CS --> DDB[Each DNS host: local pdns-db]
-    DDB --> DM[Each DNS host: pdns-migrate]
-    DM --> DS[PowerDNS + DNSdist]
-    DS --> ES[Edge runtime and gateways]
-    ES --> O[Exporters and log collectors]
+    subgraph Prepare["Prepare"]
+      V["Validate bundles"] --> M["Monitoring data services"]
+    end
+    subgraph Control["Control host"]
+      M --> CDB["PostgreSQL + Valkey"] --> CM["Migrations"] --> CS["Control services"]
+    end
+    subgraph Runtime["Traffic hosts"]
+      CS --> DDB["DNS databases"] --> DM["DNS migrations"] --> DS["PowerDNS + DNSdist"]
+      DS --> ES["Edge gateways + cells"]
+    end
+    subgraph Observe["After runtime"]
+      ES --> O["Exporters + log collectors"]
+    end
 ```
 
 The generated `STARTUP-ORDER.md` lists actual configured nodes in this order.
@@ -149,16 +176,14 @@ its edge profile starts only after one-time registration data is configured.
 
 ```mermaid
 flowchart TD
-    R[Render new immutable release bundle] --> V[Validate Compose, paths, permissions, and certificate]
-    V --> T[Transfer to host as new directory]
-    T --> P[Pull images and start]
-    P --> H{Healthy?}
-    H -->|Yes| K[Keep previous bundle for retention window]
-    H -->|No| B[Restore previous bundle]
-    B --> S[Start previous release without deleting volumes]
-    RF[Regional failure] --> HF[Health filtering]
-    HF --> RR[Regional fallback]
-    RR --> GF[Global fallback]
+    subgraph Deploy["Release deployment"]
+      R["Render bundle"] --> V["Validate"] --> T["Transfer"] --> P["Start"] --> H{"Healthy?"}
+      H -->|Yes| K["Retain previous bundle"]
+      H -->|No| B["Restore previous bundle"] --> S["Restart without deleting volumes"]
+    end
+    subgraph Traffic["Independent traffic fallback"]
+      RF["Regional failure"] --> HF["Health filter"] --> RR["Regional fallback"] --> GF["Global fallback"]
+    end
 ```
 
 Never use `docker compose down -v` during rollback or credential recovery.

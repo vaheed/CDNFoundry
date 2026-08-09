@@ -7,21 +7,23 @@ description: Deploy a separated-role CDNFoundry fleet across multiple regions fr
 
 ```mermaid
 flowchart TB
-  ExternalDNS["Independent external DNS provider<br/>operator zone"] --> CONTROL["CONTROL<br/>Laravel + workers"]
-  ExternalDNS --> EDGEAPI["edge-control.operator-zone<br/>mTLS ingress"]
-  ExternalDNS --> DNSAPIS["dns-api-N.operator-zone<br/>restricted DNS APIs"]
-  ExternalDNS --> TELEMETRY["telemetry.operator-zone<br/>Vector + ClickHouse + Grafana"]
-  CONTROL --> PG[("PostgreSQL<br/>desired state")]
-  CONTROL -->|"revisioned reconciliation"| DNSAPIS
-  DNSAPIS --> PDNS["Private PowerDNS on each DNS host"]
-  Resolvers["Recursive resolvers"] --> DNSDIST["DNSdist in each region"]
-  DNSDIST --> PDNS
-  Clients["HTTP clients"] --> GATEWAYS["Regional gateways + bounded OpenResty cells"]
-  GATEWAYS --> Origins["Validated origins"]
-  Agents["Edge agents"] -->|"outbound mTLS"| EDGEAPI
-  EDGEAPI --> CONTROL
-  DNSDIST -. "bounded telemetry" .-> TELEMETRY
-  GATEWAYS -. "bounded telemetry" .-> TELEMETRY
+  ExternalDNS["External management DNS"] -. "publishes names" .-> CONTROL
+  subgraph Management["Management region"]
+    CONTROL["Control plane"] --> PG[("PostgreSQL")]
+    EDGEAPI["edge-control"] --> CONTROL
+    CONTROL -->|"revisions"| DNSAPIS["Restricted DNS APIs"]
+    TELEMETRY["Telemetry + Grafana"]
+  end
+  subgraph Regions["Regional POPs"]
+    Agents["Edge agents"] -->|"outbound mTLS"| EDGEAPI
+    DNSAPIS --> PDNS["Private PowerDNS"]
+    DNSDIST["DNSdist"] --> PDNS
+    GATEWAYS["Gateway + bounded cells"] --> Origins["Validated origins"]
+  end
+  Resolvers["Resolvers"] --> DNSDIST
+  Clients["HTTP clients"] --> GATEWAYS
+  DNSDIST -. "telemetry" .-> TELEMETRY
+  GATEWAYS -. "telemetry" .-> TELEMETRY
 ```
 
 ::: danger Keep management DNS outside CDNFoundry

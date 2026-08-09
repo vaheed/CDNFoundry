@@ -16,10 +16,14 @@ description: Create edge pools and hosts, enroll agents, manage cells, and move 
 
 ```mermaid
 sequenceDiagram
-    participant CP as Control plane
-    participant Source as Source cell
-    participant Target as Target cell
-    participant DNS as Platform DNS
+    box Control plane
+      participant CP as Control plane
+      participant DNS as Platform DNS
+    end
+    box Edge runtime
+      participant Source as Source cell
+      participant Target as Target cell
+    end
     CP->>Target: Publish signed current revision
     Target-->>CP: Activate and become listener-ready
     CP->>DNS: Publish target capacity

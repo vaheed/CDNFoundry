@@ -38,15 +38,19 @@ An HTTPS request normally crosses three distinct decisions:
 
 ```mermaid
 flowchart LR
-    Client["Client"] -->|"1. DNS query"| Resolver["Recursive resolver"]
-    Resolver -->|"authoritative query"| DNS["DNSdist + PowerDNS"]
-    DNS -->|"pool service address"| Resolver
-    Resolver -->|"answer cached by TTL"| Client
-    Client -->|"2. TCP + TLS"| Gateway["Edge gateway"]
-    Gateway -->|"destination + Host/SNI"| Cell["OpenResty cell"]
-    Cell -->|"3a. cache hit"| Client
-    Cell -->|"3b. bounded cache miss"| Origin["Validated origin"]
-    Origin --> Cell
+    subgraph Discover["1 · Discover"]
+      Client["Client"] -->|"DNS query"| Resolver["Resolver"]
+      Resolver --> DNS["DNSdist + PowerDNS"]
+      DNS -->|"service address"| Resolver
+    end
+    subgraph Deliver["2 · Connect and deliver"]
+      Resolver --> Client
+      Client -->|"TCP + TLS"| Gateway["Edge gateway"] --> Cell["OpenResty cell"]
+      Cell -->|"cache hit"| Client
+    end
+    subgraph Fetch["3 · Cache miss"]
+      Cell -->|"bounded request"| Origin["Validated origin"] --> Cell
+    end
 ```
 
 ### 1. DNS chooses a service address

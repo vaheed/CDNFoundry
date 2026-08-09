@@ -11,17 +11,21 @@ and metrics access.
 
 ```mermaid
 flowchart LR
-    Human["Human/API user"] -->|"session or hashed token"| Policy["Laravel policies"]
-    Policy --> Desired[("PostgreSQL desired state")]
-    Worker["Horizon"] -->|"verified HTTPS"| DNSAPI["DNS API gateway"]
-    Agent["Edge agent"] -->|"short-lived mTLS"| EdgeControl["Edge control"]
-    EdgeControl -->|"signed artifacts"| Agent
-    Agent -->|"separate status token"| Cell["OpenResty cell"]
-    Monitor["Monitoring client"] -->|"separate bearer token"| Metrics["Metrics"]
-    Vector["Edge Vector"] -->|"restricted HTTPS"| Telemetry["Telemetry gateway"]
-    Operator["Operations user"] -->|"authenticated HTTPS proxy"| Grafana["Grafana"]
-    Grafana -->|"private read-only"| Metrics
-    Grafana -->|"restricted SELECT"| ObservabilityData["ClickHouse + sanitized PostgreSQL view"]
+    subgraph Control["Control trust"]
+      Human["Human/API user"] -->|"session or token"| Policy["Laravel policies"]
+      Policy --> Desired[("Desired state")]
+      Worker["Worker"] -->|"verified HTTPS"| DNSAPI["DNS API"]
+    end
+    subgraph Edge["Edge trust"]
+      Agent["Edge agent"] <-->|"short-lived mTLS"| EdgeControl["edge-control"]
+      Agent -->|"status token"| Cell["OpenResty cell"]
+    end
+    subgraph Operations["Operations trust"]
+      Monitor["Prometheus"] -->|"bearer token"| Metrics["Metrics"]
+      Vector["Vector"] -->|"restricted HTTPS"| Telemetry["Telemetry"]
+      Operator["Operator"] --> Grafana["Grafana"]
+      Grafana -->|"read only"| Data["Metrics + bounded data"]
+    end
 ```
 
 Human and API authorization is policy based:

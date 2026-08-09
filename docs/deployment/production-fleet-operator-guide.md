@@ -7,10 +7,15 @@ description: Complete lifecycle guide for CDNFoundry production fleets including
 
 ```mermaid
 flowchart LR
-  A["Protected Fleet authority<br/>topology + secrets + private PKI"] --> C["CONTROL bundle<br/>Laravel + edge-control"]
-  A --> D["DNS bundle<br/>DNSdist + private PowerDNS + DNS API"]
-  A --> E1["Edge A bundle<br/>agent + gateway + cells"]
-  A --> E2["Edge B bundle<br/>agent + gateway + cells"]
+  subgraph Authority["Protected authority"]
+    A["Topology + secrets + PKI"]
+  end
+  subgraph Hosts["Generated host bundles"]
+    A --> C["Control + edge-control"]
+    A --> D["DNS"]
+    A --> E1["Edge A"]
+    A --> E2["Edge B"]
+  end
 ```
 
 Each bundle is a security boundary. Never use a shared `env_file`: database, PowerDNS, bootstrap, identity, backup, and telemetry credentials are emitted only when that node's filtered services require them. Never copy a bundle, `.env.prod`, `pki/`, or `secrets/` directory between nodes.

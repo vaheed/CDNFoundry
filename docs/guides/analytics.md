@@ -7,16 +7,18 @@ description: Query bounded telemetry, understand privacy and partial data, and e
 
 ```mermaid
 flowchart LR
-    DNS["DNSdist dnstap"] --> Vector["Vector"]
-    Edge["OpenResty JSON"] --> Vector
-    Vector --> Redact["Redact and bound"]
-    Redact --> Buffer["Bounded disk buffer"]
-    Buffer --> Raw[("ClickHouse raw")]
-    Raw --> Aggregate[("Aggregates")]
-    Aggregate --> API["Bounded analytics API"]
-    Aggregate --> Rollup["Hourly idempotent rollup"]
-    Rollup --> PG[("PostgreSQL usage")]
-    PG --> Export["JSON/CSV export"]
+    subgraph Collect["Collect and protect"]
+      DNS["DNSdist dnstap"] --> Vector["Vector"]
+      Edge["OpenResty JSON"] --> Vector
+      Vector --> Redact["Redact + bound"] --> Buffer["Disk buffer"]
+    end
+    subgraph Store["Store and aggregate"]
+      Buffer --> Raw[("ClickHouse raw")] --> Aggregate[("Aggregates")]
+    end
+    subgraph Consume["Consume"]
+      Aggregate --> API["Analytics API"]
+      Aggregate --> Rollup["Hourly rollup"] --> PG[("Usage totals")] --> Export["JSON/CSV"]
+    end
 ```
 
 | Data class | Contract |

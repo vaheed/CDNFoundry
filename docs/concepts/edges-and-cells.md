@@ -7,16 +7,19 @@ description: Understand CDNFoundry edge enrollment, runtime cells, placement, an
 
 ```mermaid
 flowchart TB
-    Domain["Domain desired state"] --> Placement["Stable placement"]
-    Placement --> Pool["shared, reserved, dedicated, or quarantine pool"]
-    Pool --> EdgeA["Edge A"]
-    Pool --> EdgeB["Edge B"]
-    EdgeA --> SharedA["cell-01 assigned to shared"]
-    EdgeA --> QuarantineA["cell-02 assigned to quarantine"]
-    EdgeB --> SharedB["cell-01 assigned to shared"]
-    EdgeB --> QuarantineB["cell-02 assigned to quarantine"]
-    SharedA -->|"assigned domains as data"| RuntimeA["One OpenResty runtime"]
-    SharedB -->|"assigned domains as data"| RuntimeB["One OpenResty runtime"]
+    subgraph Placement["Stable placement"]
+      Domain["Domain desired state"] --> Pool["Selected pool"]
+    end
+    subgraph EdgeA["Edge A"]
+      Pool --> SharedA["cell-01 · shared"]
+      Pool --> QuarantineA["cell-02 · quarantine"]
+      SharedA --> RuntimeA["One data-driven runtime"]
+    end
+    subgraph EdgeB["Edge B"]
+      Pool --> SharedB["cell-01 · shared"]
+      Pool --> QuarantineB["cell-02 · quarantine"]
+      SharedB --> RuntimeB["One data-driven runtime"]
+    end
 ```
 
 An edge is one enrolled agent identity and host. A pool is a stable service

@@ -21,17 +21,22 @@ the same as successful DNS or edge activation.
 
 ```mermaid
 flowchart TB
-    User["Administrator or domain user"] --> Domain["Domain"]
-    Domain --> Records["DNS records"]
-    Domain --> Proxy["Proxied hostname + origin"]
-    Domain --> Policy["TLS, cache, security"]
-    Proxy --> Pool["Active pool"]
-    Pool --> Endpoints["Public service endpoints"]
-    Pool --> Cells["Assigned cells on edges"]
-    Domain --> Revision["Monotonic revision"]
-    Revision --> DNSDeploy["DNS deployments"]
-    Revision --> Artifacts["Signed edge artifacts"]
-    Artifacts --> Cells
+    subgraph Intent["Operator intent"]
+      User["User"] --> Domain["Domain"]
+      Domain --> Records["DNS records"]
+      Domain --> Proxy["Hostname + origin"]
+      Domain --> Policy["TLS + cache + security"]
+    end
+    subgraph Placement["Placement"]
+      Proxy --> Pool["Active pool"]
+      Pool --> Endpoints["Service addresses"]
+      Pool --> Cells["Assigned cells"]
+    end
+    subgraph Delivery["Revisioned delivery"]
+      Domain --> Revision["Revision"]
+      Revision --> DNSDeploy["DNS deployment"]
+      Revision --> Artifacts["Signed artifacts"] --> Cells
+    end
 ```
 
 - A **domain** is the authorization and lifecycle boundary.
@@ -85,10 +90,14 @@ The DNS workflow is:
 
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant C as Control plane
-    participant W as Runtime worker
-    participant P as PowerDNS targets
+    box Request
+      participant U as User
+      participant C as Control plane
+    end
+    box Reconciliation
+      participant W as Runtime worker
+      participant P as PowerDNS targets
+    end
     U->>C: Authorized record mutation
     C->>C: Validate + commit revision + audit
     C-->>U: Operation receipt

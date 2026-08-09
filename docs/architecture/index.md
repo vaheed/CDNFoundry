@@ -11,49 +11,28 @@ runtime snapshots, cache contents, ClickHouse events, and aggregates are derived
 or rebuildable.
 
 ```mermaid
-flowchart TB
-    ExternalDNS["Independent external DNS<br/>management hostnames"] --> UI
-    ExternalDNS --> EdgeControl["edge-control<br/>mTLS ingress"]
-    ExternalDNS --> DNSAPI["dns-api-N<br/>restricted TLS"]
-    ExternalDNS --> TelemetryIngress["telemetry ingress"]
+flowchart LR
     subgraph Management["Management plane"]
-      UI["Filament panels and Sanctum API"] --> Laravel["Laravel monolith"]
-      Laravel --> Horizon["Horizon workers"]
-      Scheduler["Scheduler"] --> Horizon
+      UI["Panels + API"] --> App["Laravel + workers"]
+      App --> State[("PostgreSQL + Valkey")]
+      EdgeControl["edge-control"] --> App
     end
-    subgraph Durable["Durable control state"]
-      PG[("PostgreSQL")]
-      Valkey[("Valkey")]
+
+    subgraph Runtime["Traffic planes"]
+      DNS["DNSdist → PowerDNS"]
+      Agent["Edge agent"] --> Edge["Gateway + bounded cells"]
     end
-    subgraph DNS["Authoritative DNS plane"]
-      DNSdist["DNSdist public ingress"] --> PowerDNS["Private PowerDNS"]
-      PowerDNS --> PDNSDB[("Derived PowerDNS DB")]
-      DNSAPI --> PowerDNS
+
+    subgraph Operations["Observability plane"]
+      Collect["Vector + exporters"] --> Stores["ClickHouse + Prometheus + Loki"]
+      Stores --> Grafana["Grafana"]
     end
-    subgraph Edge["HTTP edge plane"]
-      Agent["Edge agent"] --> Gateway["Destination + Host/SNI gateway"]
-      Agent --> Cell1["cell-01"]
-      Agent --> Cell2["cell-02 through cell-08"]
-      Gateway --> Cell1
-      Gateway --> Cell2
-    end
-    subgraph Observe["Observability plane"]
-      Vector["Vector"] --> ClickHouse[("ClickHouse")]
-      Prometheus["Prometheus"] --> Alertmanager["Alertmanager"]
-      Prometheus --> Grafana["Grafana<br/>two command centers"]
-      ClickHouse -->|"bounded read-only"| Grafana
-    end
-    Laravel --> PG
-    Horizon --> PG
-    Laravel --> Valkey
-    Horizon --> Valkey
-    PG -->|"sanitized read-only metadata"| Grafana
-    Horizon -->|"versioned reconciliation"| DNSAPI
-    Agent -->|"outbound mTLS: pull artifacts/tasks, acknowledge"| EdgeControl
-    EdgeControl --> Laravel
-    DNSdist -.-> Vector
-    Cell1 -.-> Vector
-    Cell2 -.-> Vector
+
+    Agent -->|"outbound mTLS"| EdgeControl
+    App -->|"revisioned reconciliation"| DNS
+    DNS -. "telemetry" .-> Collect
+    Edge -. "telemetry" .-> Collect
+    State -. "sanitized metadata" .-> Grafana
 ```
 
 ## DNS namespaces and addresses

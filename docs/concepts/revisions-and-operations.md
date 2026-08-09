@@ -13,14 +13,17 @@ acknowledgement reaches the intended revision.
 
 ```mermaid
 flowchart LR
-    Mutation["Mutation + Idempotency-Key"] --> Receipt["Operation receipt"]
-    Receipt --> Pending
-    Pending --> Running
-    Running --> Succeeded
-    Running --> Failed
-    Failed -->|"supported retry"| Pending
-    Mutation -->|"same key and input"| Replay["Recorded response"]
-    Mutation -->|"same key, different input"| Conflict["409 conflict"]
+    subgraph Request["Idempotent request"]
+      Mutation["Mutation + key"] --> Receipt["Operation receipt"]
+      Mutation -->|"same input"| Replay["Recorded response"]
+      Mutation -->|"different input"| Conflict["409 conflict"]
+    end
+    subgraph Lifecycle["Asynchronous operation"]
+      Receipt --> Pending --> Running
+      Running --> Succeeded
+      Running --> Failed
+      Failed -->|"supported retry"| Pending
+    end
 ```
 
 Each domain revision is monotonic. DNS and edge deployments record desired and

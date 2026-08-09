@@ -43,17 +43,19 @@ keeping management outside customer request paths.
 
 ```mermaid
 flowchart TB
-    Intent["Operator intent"] --> Control["Control plane"]
-    Control --> Desired[("Durable desired state")]
-    Desired --> Reconcile["Asynchronous reconciliation"]
-    Reconcile --> DNS["Authoritative DNS runtime"]
-    Reconcile --> Edge["HTTP edge runtime"]
-    DNS --> Traffic["Customer traffic"]
-    Edge --> Traffic
-    DNS -. "events" .-> Observe["Telemetry"]
-    Edge -. "events" .-> Observe
-    Control -. "not in path" .-> Traffic
-    Observe -. "not in path" .-> Traffic
+    subgraph Control["Control plane · outside traffic path"]
+      Intent["Operator intent"] --> Desired[("Desired state")] --> Reconcile["Async reconciliation"]
+    end
+    subgraph Runtime["Traffic runtime"]
+      Reconcile --> DNS["Authoritative DNS"]
+      Reconcile --> Edge["HTTP edge"]
+      DNS --> Traffic["Customer traffic"]
+      Edge --> Traffic
+    end
+    subgraph Operations["Operations · outside traffic path"]
+      DNS -. "events" .-> Observe["Telemetry"]
+      Edge -. "events" .-> Observe
+    end
 ```
 
 ## The six systems you need

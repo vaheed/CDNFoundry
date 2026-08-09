@@ -6,28 +6,26 @@ description: Deploy CDNFoundry with one control node and two combined DNS and ed
 # Production quick start: starter fleet
 
 ```mermaid
-flowchart TB
-  ExternalDNS["Independent external DNS provider<br/>ops.example.com"] --> CONTROL["CONTROL<br/>control.ops.example.com<br/>Laravel + workers"]
-  ExternalDNS --> EC["edge-control.ops.example.com<br/>edge-agent mTLS ingress"]
-  ExternalDNS --> TI["telemetry.ops.example.com<br/>restricted telemetry ingress"]
-  ExternalDNS --> API1["dns-api-1.ops.example.com<br/>restricted DNS API"]
-  ExternalDNS --> API2["dns-api-2.ops.example.com<br/>restricted DNS API"]
-  CONTROL --> PG[("PostgreSQL<br/>desired state")]
-  CONTROL -->|"asynchronous DNS reconciliation"| API1
-  CONTROL -->|"asynchronous DNS reconciliation"| API2
-  API1 --> PDNS1["POP 1: private PowerDNS"]
-  API2 --> PDNS2["POP 2: private PowerDNS"]
-  Resolver["Recursive resolvers"] -->|"UDP/TCP 53"| DD1["POP 1: DNSdist"]
-  Resolver -->|"UDP/TCP 53"| DD2["POP 2: DNSdist"]
-  DD1 --> PDNS1
-  DD2 --> PDNS2
-  Client["HTTP clients"] --> GW1["POP 1: gateway + OpenResty cells"]
-  Client --> GW2["POP 2: gateway + OpenResty cells"]
-  GW1 --> Origins["Validated origins"]
-  GW2 --> Origins
-  GW1 -->|"edge agent: outbound mTLS"| EC
-  GW2 -->|"edge agent: outbound mTLS"| EC
-  EC --> CONTROL
+flowchart LR
+  MgmtDNS["External management DNS"] -. "publishes names" .-> Control
+
+  subgraph Management["Management"]
+    Control["Control plane"] --> State[("PostgreSQL")]
+    EdgeControl["edge-control"] --> Control
+    Control -->|"async revisions"| DNSAPI["Restricted DNS APIs"]
+  end
+
+  subgraph POPs["Regional POPs"]
+    Agents["Edge agents"] -->|"outbound mTLS"| EdgeControl
+    DNSAPI --> PowerDNS["Private PowerDNS"]
+    DNSdist["DNSdist"] --> PowerDNS
+    Edge["Gateway + bounded cells"] --> Origins["Validated origins"]
+  end
+
+  Resolvers["Resolvers"] -->|"DNS"| DNSdist
+  Clients["HTTP clients"] --> Edge
+  DNSdist -. "telemetry" .-> Observe["Telemetry"]
+  Edge -. "telemetry" .-> Observe
 ```
 
 ::: danger Keep management DNS independent

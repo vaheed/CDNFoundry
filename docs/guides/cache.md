@@ -16,17 +16,19 @@ description: Configure deterministic cache policy, development mode, URL purge, 
 
 ```mermaid
 flowchart LR
-    Request["Request"] --> Normalize["Normalize cache key"]
-    Normalize --> Epoch["Domain epoch"]
-    Epoch --> Lookup{"Fresh object?"}
-    Lookup -- Yes --> Hit["HIT"]
-    Lookup -- No --> Origin["Fetch origin"]
-    Origin --> Admit{"Eligible and bounded?"}
-    Admit -- Yes --> Store["Atomic store"]
-    Admit -- No --> Bypass["BYPASS"]
-    Full["Full purge"] --> Increment["Increment epoch"]
-    URL["URL purge"] --> Normalize
-    Normalize --> Task["Per-edge delete task"]
+    subgraph Read["Request path"]
+      Request["Request"] --> Normalize["Normalize key"] --> Epoch["Domain epoch"]
+      Epoch --> Lookup{"Fresh object?"}
+      Lookup -- Yes --> Hit["HIT"]
+      Lookup -- No --> Origin["Fetch origin"] --> Admit{"Eligible + bounded?"}
+      Admit -- Yes --> Store["Atomic store"]
+      Admit -- No --> Bypass["BYPASS"]
+    end
+    subgraph Purge["Purge path"]
+      Full["Full purge"] --> Increment["Increment epoch"]
+      URL["URL purge"] --> Normalize
+      Normalize --> Task["Per-edge delete"]
+    end
 ```
 
 ::: info Purge completion

@@ -15,10 +15,16 @@ description: Create, verify, activate, disable, deprovision, and re-create domai
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant CP as Control plane
-    participant PublicDNS as Public DNS
-    participant Targets as DNS and edge targets
+    box User boundary
+      participant User
+    end
+    box Control plane
+      participant CP as Control plane
+    end
+    box Runtime and DNS
+      participant PublicDNS as Public DNS
+      participant Targets as DNS and edge targets
+    end
     User->>CP: Create domain
     CP-->>User: pending_verification + revision
     User->>CP: Verify nameservers
