@@ -32,9 +32,9 @@ https://{$TELEMETRY_HOSTNAME}:8444 {
 		reverse_proxy loki:3100
 	}
 
-	@edge_sources remote_ip {$EDGE_PUBLIC_IPV4_ALLOWLIST} {$EDGE_PUBLIC_IPV6_ALLOWLIST}
+	@clickhouse_sources remote_ip {$EDGE_PUBLIC_IPV4_ALLOWLIST} {$EDGE_PUBLIC_IPV6_ALLOWLIST} {$CONTROL_PUBLIC_IPV4_ALLOWLIST} {$CONTROL_PUBLIC_IPV6_ALLOWLIST}
 
-	handle @edge_sources {
+	handle @clickhouse_sources {
 		reverse_proxy clickhouse:8123
 	}
 

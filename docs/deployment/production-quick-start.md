@@ -190,6 +190,41 @@ errors. A healthy `caddy` container only confirms its local process health; it
 does not confirm public DNS, certificate issuance, or the external TLS path.
 Do not proceed to PoP setup until the control health request succeeds.
 
+### Create the first administrator and sign in
+
+Create the initial administrator from the running control container. Choose
+the administrator's name and email on the command line; the command prompts
+for the password twice without placing it in shell history:
+
+```bash
+docker compose --env-file .env.prod exec core \
+  php artisan cdnf:admin:create \
+  --name='Operations Administrator' \
+  --email='admin@example.com'
+```
+
+Use a unique monitored email address and a password of at least 12 characters.
+Expect `Administrator admin@example.com created.` A duplicate or invalid email,
+short password, or confirmation mismatch is rejected without creating a user.
+Do not use Artisan Tinker or insert the administrator directly into PostgreSQL;
+the supported command applies validation, password hashing, and audit logging.
+
+Open the administrator panel in a browser:
+
+```text
+https://control.ops.example.com/admin
+```
+
+Replace the example hostname with your `control.<operator_domain>` name and
+sign in with the credentials just created. Expect the CDNFoundry operations
+overview after login. If the browser shows a certificate warning or cannot
+complete TLS, do not bypass it; return to the DNS, firewall, ACME-log, and
+public `curl` checks above.
+
+Create the bootstrap administrator only once. Additional administrators and
+domain users belong in the authenticated **Customers → Users** workflow so
+normal authorization and auditing apply.
+
 ## 6. Start authoritative DNS on both PoPs
 
 Transfer `bundles/pop-1` and `bundles/pop-2` over authenticated channels to

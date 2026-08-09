@@ -171,7 +171,7 @@ class Renderer:
             "CONTROL_DB_PASSWORD": self._secret("control-db-password"),
             "REDIS_PASSWORD": self._secret("valkey-password"),
             "CLICKHOUSE_PASSWORD": self._secret("clickhouse-password"),
-            "CLICKHOUSE_URL": self._clickhouse_url(state),
+            "CLICKHOUSE_URL": self._clickhouse_url(state, node),
             "GRAFANA_ADMIN_PASSWORD": self._secret("grafana-admin-password"),
             "GRAFANA_CLICKHOUSE_PASSWORD": self._secret("grafana-clickhouse-password"),
             "GRAFANA_POSTGRES_PASSWORD": self._secret("grafana-postgres-password"),
@@ -381,9 +381,13 @@ class Renderer:
         name = cfg.get("host")
         return state["nodes"].get(name) if name else None
 
-    def _clickhouse_url(self, state: dict[str, Any]) -> str:
+    def _clickhouse_url(self, state: dict[str, Any], node: dict[str, Any]) -> str:
         host = self._feature_host(state, "monitoring")
-        return f"https://{host['hostname']}:8444" if host else "http://127.0.0.1:8123"
+        if host is None:
+            return "http://127.0.0.1:8123"
+        if host["name"] == node["name"]:
+            return "http://clickhouse:8123"
+        return f"https://telemetry.{state['global']['operator_domain']}:8444"
 
     def _loki_url(self, state: dict[str, Any]) -> str:
         cfg = state["features"]["logs"]

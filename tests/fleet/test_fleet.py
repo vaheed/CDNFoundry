@@ -673,6 +673,9 @@ def test_production_docs_match_generated_bundle_workflow() -> None:
     assert "names point to the control node's public address" in quick
     assert "curl --fail --show-error https://control.ops.example.com/health" in quick
     assert "ERR_SSL_PROTOCOL_ERROR" in quick
+    assert "php artisan cdnf:admin:create" in quick
+    assert "https://control.ops.example.com/admin" in quick
+    assert "password twice without placing it in shell history" in quick
     assert "own local PostgreSQL" in reference
     assert "never uses the control-plane" in reference
     assert "docker compose down -v" in quick
@@ -739,6 +742,7 @@ def test_control_monitoring_bundle_uses_project_pki_contract(store: FleetState, 
     assert env["EDGE_IDENTITY_CA_PRIVATE_KEY"] == "./pki/edge-identity-ca.key"
     assert env["PDNS_CA_CERTIFICATE"] == "./pki/edge-server-ca.crt"
     assert env["EDGE_CONTROL_SERVER_CERTIFICATE"] == "./pki/node.crt"
+    assert env["CLICKHOUSE_URL"] == "http://clickhouse:8123"
     assert (bundle / "pki/edge-identity-ca.crt").exists()
     assert (bundle / "pki/edge-identity-ca.key").exists()
     assert (bundle / "pki/edge-server-ca.crt").exists()
@@ -748,6 +752,22 @@ def test_control_monitoring_bundle_uses_project_pki_contract(store: FleetState, 
     assert "prometheus" in compose["services"]
     assert "LOG_AUTH_TOKEN" in compose["services"]["log-collector"]["environment"]
     assert env["LOG_AUTH_TOKEN"]
+
+
+def test_dedicated_monitoring_uses_private_local_and_stable_remote_clickhouse_urls(
+    store: FleetState, source_repo: Path, tmp_path: Path
+) -> None:
+    add(store, node("control-1", "control", "192.0.2.145"))
+    add(store, node("monitor-1", "monitoring", "192.0.2.146"))
+    with store.locked():
+        store.configure_feature(store.load(), "monitoring", {"mode": "dedicated", "host": "monitor-1"})
+    output = tmp_path / "bundles"
+    state = store.load()
+    renderer = Renderer(source_repo, store, output)
+    renderer.render(state)
+
+    assert env_values(output / "monitor-1/.env.prod")["CLICKHOUSE_URL"] == "http://clickhouse:8123"
+    assert renderer._clickhouse_url(state, state["nodes"]["control-1"]) == "https://telemetry.ops.example.com:8444"
 
 
 def test_production_log_collector_passes_auth_token_to_vector() -> None:
