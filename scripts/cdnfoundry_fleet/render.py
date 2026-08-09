@@ -452,6 +452,20 @@ class Renderer:
                 shutil.copytree(source, target, dirs_exist_ok=True)
             else:
                 shutil.copy2(source, target)
+            self._make_runtime_path_readable(target)
+
+    @staticmethod
+    def _make_runtime_path_readable(path: Path) -> None:
+        """Make non-secret bind-mounted configuration readable by container users."""
+        paths = [path]
+        if path.is_dir():
+            paths.extend(path.rglob("*"))
+        for candidate in paths:
+            current_mode = candidate.stat().st_mode & 0o777
+            if candidate.is_dir():
+                candidate.chmod(current_mode | 0o555)
+            elif candidate.is_file():
+                candidate.chmod(current_mode | 0o444)
 
     def _write_generated_configs(
         self, state: dict[str, Any], node: dict[str, Any], destination: Path, monitoring_host: bool
@@ -850,6 +864,14 @@ chmod 0640 secrets/metrics-token
         return f"""#!/usr/bin/env sh
 set -eu
 {key_permissions}
+# Bundle hashes verify content, not Unix modes. Restore read/traverse access for
+# non-secret bind-mounted configuration in case transfer or extraction narrowed
+# its permissions. Private material under pki/ and secrets/ is handled above.
+for runtime_path in docker generated; do
+    if [ -e "$runtime_path" ]; then
+        chmod -R a+rX "$runtime_path"
+    fi
+done
 ./validate.sh
 {migration}
 docker compose --env-file .env.prod {profiles} up -d --wait --wait-timeout 300

@@ -175,6 +175,12 @@ docker compose --env-file .env.prod ps
 
 Run the control bundle's `start.sh` as root. Before starting Compose, it keeps the edge identity CA signing key restricted while changing it from the transfer-safe root-only mode to owner `root`, numeric group `82`, mode `0640`; group `82` is the PHP-FPM worker in the immutable core image. Without this activation step, `core` deliberately refuses to start because its worker cannot read the signing key. Other private keys remain mode `0600`.
 
+The activation script also restores read/traverse access on non-secret files
+under `docker/` and `generated/`. This protects startup when an authenticated
+transfer preserves file contents but narrows ordinary configuration files to
+mode `0600`. It does not broaden permissions on `.env.prod`, `pki/`, or
+`secrets/`.
+
 The control bundle starts `mmdb-updater` before services that consume GeoIP data. Run migrations only through the generated `start.sh`/tools workflow; container startup never migrates the database.
 
 Container health is not the completion gate for this step. Verify that Caddy

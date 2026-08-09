@@ -365,8 +365,11 @@ def test_monitoring_files_are_readable_by_non_root_consumers(
     Renderer(source_repo, store, output).render(store.load())
     bundle = output / "control-1"
     assert stat.S_IMODE((bundle / "secrets/metrics-token").stat().st_mode) == 0o640
+    assert stat.S_IMODE((bundle / "docker/prometheus/prometheus.yml").stat().st_mode) == 0o644
     for name in ("control", "node", "dns", "edge", "log"):
         assert stat.S_IMODE((bundle / f"generated/prometheus-{name}-targets.yml").stat().st_mode) == 0o644
+    start = (bundle / "start.sh").read_text(encoding="utf-8")
+    assert 'chmod -R a+rX "$runtime_path"' in start
 
 
 def test_control_start_restricts_identity_ca_key_for_php_worker(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
