@@ -132,20 +132,22 @@ queries. Loki Explore remains reserved for operational and error logs.
 ## Prometheus target inventory
 
 Development scrapes the two optional gateway containers through
-`edge-targets.dev.yml`. Production starts with an empty
-`edge-targets.prod.yml`: populate a deployment-owned copy with private
-`host:9105` endpoints and set `PROMETHEUS_EDGE_TARGETS_FILE`. Restrict port
-9105 at the host firewall. Per-edge heartbeat metrics remain available from
-the control plane even when direct gateway scraping is intentionally absent.
+`edge-targets.dev.yml`. Fleet writes valid generated production discovery files
+on the monitoring host. An enabled edge with `monitor_ipv4` contributes its
+private `monitor_ipv4:9105` gateway target; nodes without a private monitoring
+address are intentionally omitted. Restrict port 9105 at the host firewall.
+Per-edge heartbeat metrics remain available from the control plane even when
+direct gateway scraping is intentionally absent.
 
 ClickHouse's supported Prometheus exporter listens privately on port 9363.
 Prometheus also scrapes itself so zero firing-alert counts can be distinguished
 from a missing monitoring system.
 
-Prometheus scrapes Loki and the local operational collector. Populate the
-private target file selected by `PROMETHEUS_LOG_TARGETS_FILE` for collectors on
-other hosts. See [Operational logging](operational-logging.md) for identities,
-socket security, retention, saved queries, and outage recovery.
+Prometheus scrapes Loki and the local operational collector. Fleet adds remote
+collectors with `monitor_ipv4` to its generated discovery file at port 9599;
+nodes without that address are omitted rather than exposed publicly. See
+[Operational logging](operational-logging.md) for identities, socket security,
+retention, saved queries, and outage recovery.
 
 ## Troubleshooting
 

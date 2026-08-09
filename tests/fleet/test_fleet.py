@@ -777,6 +777,12 @@ def test_control_monitoring_bundle_uses_project_pki_contract(store: FleetState, 
     assert "clickhouse" in compose["services"]
     assert "prometheus" in compose["services"]
     assert "LOG_AUTH_TOKEN" in compose["services"]["log-collector"]["environment"]
+    collector = compose["services"]["log-collector"]
+    assert collector["command"] == ["--config", "/etc/vector/operational.yaml"]
+    assert all("generated-node" not in str(volume) for volume in collector["volumes"])
+    assert "type: journald" not in (bundle / "docker/vector/operational.yaml").read_text(encoding="utf-8")
+    assert yaml.safe_load(bundle.joinpath("generated/prometheus-edge-targets.yml").read_text(encoding="utf-8")) == []
+    assert yaml.safe_load(bundle.joinpath("generated/prometheus-log-targets.yml").read_text(encoding="utf-8")) == []
     assert env["LOG_AUTH_TOKEN"]
 
 

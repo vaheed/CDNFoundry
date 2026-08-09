@@ -104,12 +104,9 @@ class Renderer:
             self._add_ipv6_publications(services, node["bind_ipv6"])
         if "log-collector" in services:
             service = services["log-collector"]
-            service["command"] = ["--config", "/etc/vector/generated-node.yaml"]
-            volumes = [v for v in service.get("volumes", []) if "/etc/vector/operational.yaml" not in str(v)]
-            volumes.append("./generated/vector-node.yaml:/etc/vector/generated-node.yaml:ro")
-            service["volumes"] = volumes
+            service["command"] = ["--config", "/etc/vector/operational.yaml"]
             service["healthcheck"] = {
-                "test": ["CMD", "vector", "validate", "--no-environment", "/etc/vector/generated-node.yaml"],
+                "test": ["CMD", "vector", "validate", "--no-environment", "/etc/vector/operational.yaml"],
                 "interval": "30s",
                 "timeout": "5s",
                 "retries": 3,
@@ -242,11 +239,11 @@ class Renderer:
             "MMDB_DOWNLOAD_URL": "",
             "MMDB_DOWNLOAD_HEADER": "",
             "LOG_BUFFER_BYTES": "2147483648",
-            "LOG_METRICS_BIND": "127.0.0.1:9599",
+            "LOG_METRICS_BIND": f"{node['monitor_ipv4']}:9599" if node.get("monitor_ipv4") else "127.0.0.1:9599",
             "LOKI_RETENTION_PERIOD": "336h",
             "LOKI_MAX_QUERY_LENGTH": "336h",
-            "PROMETHEUS_EDGE_TARGETS_FILE": "./docker/prometheus/edge-targets.prod.yml",
-            "PROMETHEUS_LOG_TARGETS_FILE": "./docker/prometheus/operational-log-targets.prod.yml",
+            "PROMETHEUS_EDGE_TARGETS_FILE": "./generated/prometheus-edge-targets.yml",
+            "PROMETHEUS_LOG_TARGETS_FILE": "./generated/prometheus-log-targets.yml",
             "GRAFANA_ADMIN_USER": "admin",
             "GRAFANA_BIND": "127.0.0.1:3000",
             "GRAFANA_COOKIE_SECURE": "true",
@@ -424,8 +421,6 @@ class Renderer:
             atomic_write(secrets_dir / "metrics-token", self.store.read_secret("metrics-token") + "\n", 0o600)
         if state["features"]["backups"]["mode"] != "disabled":
             atomic_write(secrets_dir / "restic-password", self.store.read_secret("backup-password") + "\n", 0o600)
-        if state["features"]["logs"]["mode"] == "centralized":
-            atomic_write(destination / "generated/vector-node.yaml", self._vector_config(node), 0o600)
         if node["role"] in {"dns", "dns-edge"}:
             pending = self.store.pending_secret_path("pdns-db-password", node=node["name"])
             if pending.exists():
@@ -442,6 +437,8 @@ class Renderer:
         if monitoring_host:
             generated = destination / "generated"
             atomic_write(generated / "prometheus-node-targets.yml", self._prometheus_targets(state), 0o600)
+            atomic_write(generated / "prometheus-edge-targets.yml", self._prometheus_service_targets(state, "edge"), 0o600)
+            atomic_write(generated / "prometheus-log-targets.yml", self._prometheus_service_targets(state, "logs"), 0o600)
             atomic_write(generated / "geo-routing-policy.json", json.dumps(self._geo_policy(state), indent=2) + "\n", 0o600)
 
     def _pdns_reconciliation_script(self) -> str:
@@ -505,47 +502,6 @@ printf '%s\n' 'Local PostgreSQL and .env.prod now use the pending password.'
 printf '%s\n' 'On the control plane, commit the rotation, rerender this node, transfer the new bundle, and run docker compose up -d.'
 '''
 
-    def _vector_config(self, node: dict[str, Any]) -> str:
-        return f'''data_dir: /vector-data-dir
-sources:
-  docker:
-    type: docker_logs
-  journal:
-    type: journald
-    journal_directory: /var/log/journal
-transforms:
-  redact:
-    type: remap
-    inputs: [docker, journal]
-    source: |
-      .fleet_node = "{node['name']}"
-      .fleet_role = "{node['role']}"
-      del(.label.com_docker_compose_config_hash)
-      if exists(.message) {{ .message = redact(string!(.message), filters: [r'(?i)(password|token|secret|api[_-]?key)=\\S+']) }}
-sinks:
-  central:
-    type: loki
-    inputs: [redact]
-    endpoint: "${{LOKI_ENDPOINT}}"
-    auth:
-      strategy: bearer
-      token: "${{LOG_AUTH_TOKEN}}"
-    encoding:
-      codec: json
-    labels:
-      node: "{node['name']}"
-      role: "{node['role']}"
-    buffer:
-      type: disk
-      max_size: 1073741824
-      when_full: drop_newest
-    request:
-      retry_max_duration_secs: 300
-      timeout_secs: 10
-healthchecks:
-  enabled: true
-'''
-
     def _prometheus_targets(self, state: dict[str, Any]) -> str:
         groups = []
         for node in sorted(state["nodes"].values(), key=lambda item: item["name"]):
@@ -563,6 +519,24 @@ healthchecks:
                     },
                 }
             )
+        import yaml
+
+        return yaml.safe_dump(groups, sort_keys=False)
+
+    def _prometheus_service_targets(self, state: dict[str, Any], service: str) -> str:
+        groups = []
+        for node in sorted(state["nodes"].values(), key=lambda item: item["name"]):
+            address = node.get("monitor_ipv4")
+            if not node["enabled"] or not address:
+                continue
+            if service == "edge" and node["role"] not in {"edge", "dns-edge"}:
+                continue
+            if service == "logs" and state["features"]["logs"]["mode"] != "centralized":
+                continue
+            groups.append({
+                "targets": [f"{address}:{9105 if service == 'edge' else 9599}"],
+                "labels": {"node": node["name"], "role": node["role"]},
+            })
         import yaml
 
         return yaml.safe_dump(groups, sort_keys=False)

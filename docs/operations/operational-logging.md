@@ -50,8 +50,10 @@ the base collector and a second role-specific collector on one host.
 
 The default disk buffer is 2 GiB per production host and 256 MiB in development.
 `when_full: drop_newest`, ten retries, and bounded backoff make failure explicit.
-Expose `LOG_METRICS_BIND` only on a private monitoring address and put remote
-`host:9599` targets in the file selected by `PROMETHEUS_LOG_TARGETS_FILE`.
+When a Fleet node has `monitor_ipv4`, the collector binds metrics to that
+private address and Fleet adds `monitor_ipv4:9599` to the monitoring host's
+generated discovery file. Without `monitor_ipv4`, metrics remain loopback-only
+and the node is omitted from remote discovery.
 
 The committed collector reads Docker container logs. Host journal ingestion is
 not mounted or configured by `compose.prod.yml`; if an operator adds it, that is

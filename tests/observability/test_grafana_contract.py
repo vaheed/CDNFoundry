@@ -155,6 +155,7 @@ class GrafanaContractTest(unittest.TestCase):
 
         production_grafana = production["services"]["grafana"]
         self.assertEqual(["telemetry"], production_grafana["profiles"])
+        self.assertEqual("dashboard-service:warn", production_grafana["environment"]["GF_LOG_FILTERS"])
         self.assertTrue(production_grafana["read_only"])
         self.assertEqual("536870912", production_grafana["mem_limit"])
         self.assertEqual(128, production_grafana["pids_limit"])
