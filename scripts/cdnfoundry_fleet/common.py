@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import ipaddress
 import json
@@ -45,6 +46,11 @@ def utc_now() -> str:
 
 def random_secret(bytes_: int = 32) -> str:
     return secrets.token_hex(bytes_)
+
+
+def laravel_app_key() -> str:
+    """Return an AES-256 Laravel key containing exactly 32 decoded bytes."""
+    return "base64:" + base64.b64encode(secrets.token_bytes(32)).decode("ascii")
 
 
 def ensure_mode(path: Path, mode: int) -> None:

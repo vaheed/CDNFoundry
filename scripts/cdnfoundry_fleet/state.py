@@ -15,6 +15,7 @@ from .common import (
     atomic_write,
     ensure_mode,
     load_json,
+    laravel_app_key,
     random_secret,
     utc_now,
     validate_env_mapping,
@@ -375,7 +376,7 @@ class FleetState:
             return path
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         path.parent.chmod(0o700)
-        generated = value or ("base64:" + random_secret(32) if name == "app-key" else random_secret(32))
+        generated = value or (laravel_app_key() if name == "app-key" else random_secret(32))
         atomic_write(path, generated + "\n", 0o600)
         return path
 
@@ -466,7 +467,7 @@ class FleetState:
         archive.mkdir(parents=True, exist_ok=True, mode=0o700)
         archive.chmod(0o700)
         atomic_write(archive / f"{name}-{utc_now().replace(':', '')}", old, 0o600)
-        value = "base64:" + random_secret(32) if name == "app-key" else random_secret(32)
+        value = laravel_app_key() if name == "app-key" else random_secret(32)
         atomic_write(path, value + "\n", 0o600)
 
     def _ensure_global_secrets(self) -> None:

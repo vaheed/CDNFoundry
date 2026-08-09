@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import stat
@@ -991,6 +992,10 @@ def test_starter_json_example_builds_control_and_two_combined_pops(source_repo: 
     assert len([n for n in state["nodes"].values() if n["role"] == "dns-edge"]) == 2
     assert state["features"]["monitoring"]["mode"] == "colocated"
     assert state["features"]["logs"]["host"] == "control-1"
+
+    app_key = env_values(state_dir / "bundles/control-1/.env.prod")["APP_KEY"]
+    assert app_key.startswith("base64:")
+    assert len(base64.b64decode(app_key.removeprefix("base64:"), validate=True)) == 32
 
 
 def test_quick_starts_document_json_setup_mtls_and_remote_postgres() -> None:

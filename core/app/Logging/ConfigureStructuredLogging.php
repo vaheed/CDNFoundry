@@ -2,12 +2,12 @@
 
 namespace App\Logging;
 
-use Monolog\Logger;
+use Illuminate\Log\Logger;
 
 class ConfigureStructuredLogging
 {
     public function __invoke(Logger $logger): void
     {
-        $logger->pushProcessor(new OperationalContextProcessor);
+        $logger->getLogger()->pushProcessor(new OperationalContextProcessor);
     }
 }
