@@ -305,8 +305,33 @@ sudo ./scripts/cdnfoundry-fleet \
 ```
 
 Repeat for `pop-2`, rerender those bundles, validate, transfer, and activate
-them with `sudo ./start.sh`. The rerendered combined-node script now activates
-both `dns` and `edge` profiles. After successful mTLS registration:
+them with `sudo ./start.sh`. Before transfer, verify that the rerendered
+combined-node script contains both profiles:
+
+```bash
+grep 'docker compose.*up -d --wait' \
+  /var/lib/cdnfoundry-fleet/bundles/pop-1/start.sh
+```
+
+Expect its final activation command to include:
+
+```text
+--profile dns --profile edge --profile logs up -d --wait
+```
+
+The `logs` profile is present when centralized logging is enabled. The
+important transition from step 6 is the addition of `--profile edge`. If it is
+absent, do not edit `start.sh` manually. Confirm that
+`configure-edge-registration` used the same node name, then rerender that node.
+
+After transfer, `sudo ./start.sh` activates both DNS and edge services. Confirm
+that `edge-agent`, `edge-gateway`, and the bounded cells are running with:
+
+```bash
+docker compose --env-file .env.prod --profile edge ps
+```
+
+After successful mTLS registration:
 
 ```bash
 sudo ./scripts/cdnfoundry-fleet --state-dir /var/lib/cdnfoundry-fleet \
