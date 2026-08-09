@@ -21,6 +21,7 @@ from .common import (
     validate_env_mapping,
     validate_hostname,
     validate_ip,
+    validate_laravel_app_key,
     validate_node_name,
     validate_region,
     validate_release,
@@ -227,6 +228,7 @@ class FleetState:
                 if not path.exists():
                     raise ValidationError(f"Missing global secret: {secret}")
                 ensure_mode(path, 0o600)
+            validate_laravel_app_key(self.read_secret("app-key"))
 
     def _validate_node_secrets(self, node: dict[str, Any]) -> None:
         required = {"node-exporter-token"}
@@ -377,6 +379,8 @@ class FleetState:
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         path.parent.chmod(0o700)
         generated = value or (laravel_app_key() if name == "app-key" else random_secret(32))
+        if name == "app-key":
+            validate_laravel_app_key(generated)
         atomic_write(path, generated + "\n", 0o600)
         return path
 
@@ -398,6 +402,8 @@ class FleetState:
         clean = value.rstrip("\r\n")
         if not clean:
             raise ValidationError("Secret value must not be empty")
+        if name == "app-key":
+            validate_laravel_app_key(clean)
         path = self.secret_path(name, node=node)
         if self.dry_run:
             return path

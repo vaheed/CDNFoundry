@@ -5,6 +5,7 @@ import base64
 import json
 import os
 import stat
+import subprocess
 import sys
 from pathlib import Path
 
@@ -444,6 +445,19 @@ def test_explicit_rotation_changes_only_target_dns_node(store: FleetState) -> No
     assert store.read_secret("pdns-db-password", node="dns-two") == two_before
 
 
+def test_invalid_existing_laravel_key_fails_fleet_validation(store: FleetState) -> None:
+    store.secret_path("app-key").write_text("base64:" + ("a" * 64) + "\n", encoding="utf-8")
+    store.secret_path("app-key").chmod(0o600)
+
+    with pytest.raises(ValidationError, match="decode to exactly 32 bytes"):
+        store.validate(store.load())
+
+
+def test_set_secret_rejects_invalid_laravel_key(store: FleetState) -> None:
+    with pytest.raises(ValidationError, match="base64: format"):
+        store.write_secret("app-key", "not-a-laravel-key")
+
+
 def test_geo_policy_records_independent_address_families_and_flap_thresholds(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
     add(store, {**node("edge-tokyo", "edge", "192.0.2.110"), "public_ipv6": "2001:db8::110"})
     add(store, node("monitor-1", "monitoring", "192.0.2.111"))
@@ -670,8 +684,10 @@ def test_production_docs_match_generated_bundle_workflow() -> None:
     assert "git clone https://github.com/vaheed/CDNFoundry.git" in quick
     assert "starter-fleet.json" in quick
     assert "--config fleet.json" in quick
-    assert "names point to the control node's public address" in quick
-    assert "curl --fail --show-error https://control.ops.example.com/health" in quick
+    assert "all four" in quick
+    assert "edge-control.ops.example.com" in quick
+    assert "curl --fail --show-error https://control.ops.example.com/api/health" in quick
+    assert "curl --fail --show-error https://control.ops.example.com/api/ready" in quick
     assert "ERR_SSL_PROTOCOL_ERROR" in quick
     assert "php artisan cdnf:admin:create" in quick
     assert "https://control.ops.example.com/admin" in quick
@@ -743,9 +759,19 @@ def test_control_monitoring_bundle_uses_project_pki_contract(store: FleetState, 
     assert env["PDNS_CA_CERTIFICATE"] == "./pki/edge-server-ca.crt"
     assert env["EDGE_CONTROL_SERVER_CERTIFICATE"] == "./pki/node.crt"
     assert env["CLICKHOUSE_URL"] == "http://clickhouse:8123"
+    assert env["LOKI_ENDPOINT"] == "http://loki:3100"
     assert (bundle / "pki/edge-identity-ca.crt").exists()
     assert (bundle / "pki/edge-identity-ca.key").exists()
     assert (bundle / "pki/edge-server-ca.crt").exists()
+    certificate = subprocess.run(
+        ["openssl", "x509", "-in", str(bundle / "pki/node.crt"), "-noout", "-ext", "subjectAltName"],
+        check=True, text=True, capture_output=True,
+    ).stdout
+    assert "DNS:edge-control.ops.example.com" in certificate
+    readme = (bundle / "README.md").read_text(encoding="utf-8")
+    assert "edge-control.ops.example.com" in readme
+    assert "https://control.ops.example.com/api/ready" in readme
+    assert "php artisan cdnf:admin:create" in readme
     compose = yaml.safe_load((bundle / "compose.yml").read_text(encoding="utf-8"))
     assert "core" in compose["services"]
     assert "clickhouse" in compose["services"]
@@ -761,13 +787,18 @@ def test_dedicated_monitoring_uses_private_local_and_stable_remote_clickhouse_ur
     add(store, node("monitor-1", "monitoring", "192.0.2.146"))
     with store.locked():
         store.configure_feature(store.load(), "monitoring", {"mode": "dedicated", "host": "monitor-1"})
+        store.configure_feature(
+            store.load(), "logs", {"mode": "centralized", "host": "monitor-1", "endpoint": None}
+        )
     output = tmp_path / "bundles"
     state = store.load()
     renderer = Renderer(source_repo, store, output)
     renderer.render(state)
 
     assert env_values(output / "monitor-1/.env.prod")["CLICKHOUSE_URL"] == "http://clickhouse:8123"
+    assert env_values(output / "monitor-1/.env.prod")["LOKI_ENDPOINT"] == "http://loki:3100"
     assert renderer._clickhouse_url(state, state["nodes"]["control-1"]) == "https://telemetry.ops.example.com:8444"
+    assert env_values(output / "control-1/.env.prod")["LOKI_ENDPOINT"] == "https://telemetry.ops.example.com:8444"
 
 
 def test_production_log_collector_passes_auth_token_to_vector() -> None:
@@ -785,7 +816,7 @@ def test_edge_bundle_has_control_url_and_server_ca(store: FleetState, source_rep
     output = tmp_path / "bundles"
     Renderer(source_repo, store, output).render(store.load(), node_name="edge-1")
     env = env_values(output / "edge-1/.env.prod")
-    assert env["EDGE_CONTROL_URL"] == "https://control-1.ops.example.com:8443"
+    assert env["EDGE_CONTROL_URL"] == "https://edge-control.ops.example.com:8443"
     assert env["EDGE_CONTROL_CA_CERTIFICATE"] == "./pki/edge-server-ca.crt"
     assert (output / "edge-1/pki/edge-server-ca.crt").exists()
 

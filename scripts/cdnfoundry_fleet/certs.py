@@ -93,6 +93,9 @@ class PKI:
         self.ensure()
         name = str(node["name"])
         hostname = str(node["hostname"])
+        additional_dns_names = sorted({
+            str(value) for value in node.get("additional_dns_names", []) if str(value) != hostname
+        })
         node_dir = self.root / "nodes" / name
         key = node_dir / "node.key"
         cert = node_dir / "node.crt"
@@ -102,6 +105,7 @@ class PKI:
             "issuer": "edge-server-ca",
             "name": name,
             "hostname": hostname,
+            "additional_dns_names": additional_dns_names,
             "public_ipv4": node.get("public_ipv4"),
             "public_ipv6": node.get("public_ipv6"),
         }
@@ -124,7 +128,7 @@ class PKI:
             tmp_csr = tmp / "node.csr"
             tmp_cert = tmp / "node.crt"
             ext = tmp / "ext.cnf"
-            sans = [f"DNS:{hostname}"]
+            sans = [f"DNS:{hostname}", *(f"DNS:{value}" for value in additional_dns_names)]
             if node.get("public_ipv4"):
                 sans.append(f"IP:{node['public_ipv4']}")
             if node.get("public_ipv6"):

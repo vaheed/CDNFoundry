@@ -344,6 +344,12 @@ services:
       - ./docker/clickhouse/users.d/grafana.xml:/etc/clickhouse-server/users.d/grafana.xml:ro
     networks: [telemetry]
     restart: unless-stopped
+    healthcheck:
+      test: [CMD-SHELL, 'clickhouse-client --user cdnf --password "$${CLICKHOUSE_PASSWORD}" --query "SELECT 1" >/dev/null']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
 
   vector:
     image: timberio/vector:0.55.0-alpine

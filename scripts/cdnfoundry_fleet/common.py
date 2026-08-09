@@ -53,6 +53,18 @@ def laravel_app_key() -> str:
     return "base64:" + base64.b64encode(secrets.token_bytes(32)).decode("ascii")
 
 
+def validate_laravel_app_key(value: str) -> str:
+    if not value.startswith("base64:"):
+        raise ValidationError("Application key must use Laravel's base64: format")
+    try:
+        decoded = base64.b64decode(value.removeprefix("base64:"), validate=True)
+    except (ValueError, TypeError) as exc:
+        raise ValidationError("Application key contains invalid base64 data") from exc
+    if len(decoded) != 32:
+        raise ValidationError("Application key must decode to exactly 32 bytes for AES-256-CBC")
+    return value
+
+
 def ensure_mode(path: Path, mode: int) -> None:
     current = stat.S_IMODE(path.stat().st_mode)
     if current != mode:

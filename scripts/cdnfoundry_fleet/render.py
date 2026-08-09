@@ -65,7 +65,10 @@ class Renderer:
         with tempfile.TemporaryDirectory(prefix=f".{node['name']}.", dir=self.output_dir) as tmp_dir:
             tmp = Path(tmp_dir)
             self._copy_runtime_files(filtered, tmp)
-            self.pki.copy_node_material(node, tmp / "pki")
+            certificate_node = dict(node)
+            if node["role"] == "control":
+                certificate_node["additional_dns_names"] = [f"edge-control.{state['global']['operator_domain']}"]
+            self.pki.copy_node_material(certificate_node, tmp / "pki")
             atomic_write(tmp / "compose.yml", dump_yaml(filtered), 0o600)
             atomic_write(tmp / ".env.prod", self._format_env(env), 0o600)
             self._write_generated_configs(state, node, tmp, monitoring_host)
@@ -198,7 +201,7 @@ class Renderer:
             "LOG_ROLE": node["role"],
             "LOG_HOST": node["name"],
             "LOG_COLLECTOR_ID": node["name"],
-            "LOKI_ENDPOINT": self._loki_url(state),
+            "LOKI_ENDPOINT": self._loki_url(state, node),
             "LOG_AUTH_TOKEN": self._optional_node_secret("log-auth-token", node),
             "NODE_EXPORTER_TOKEN": self._secret("node-exporter-token", node=node["name"]),
             "EDGE_STATUS_TOKEN": self._optional_node_secret("edge-status-token", node),
@@ -326,16 +329,7 @@ class Renderer:
         return bool(host and host != "control-db")
 
     def _edge_control_url(self, state: dict[str, Any]) -> str:
-        control = next(
-            (
-                item
-                for item in state["nodes"].values()
-                if item["role"] == "control" and item.get("enabled", True)
-            ),
-            None,
-        )
-        hostname = control["hostname"] if control else f"control.{state['global']['operator_domain']}"
-        return f"https://{hostname}:8443"
+        return f"https://edge-control.{state['global']['operator_domain']}:8443"
 
     @staticmethod
     def _add_ipv6_publications(services: dict[str, Any], bind: str) -> None:
@@ -389,12 +383,16 @@ class Renderer:
             return "http://clickhouse:8123"
         return f"https://telemetry.{state['global']['operator_domain']}:8444"
 
-    def _loki_url(self, state: dict[str, Any]) -> str:
+    def _loki_url(self, state: dict[str, Any], node: dict[str, Any]) -> str:
         cfg = state["features"]["logs"]
         if cfg.get("endpoint"):
             return cfg["endpoint"]
         host = state["nodes"].get(cfg.get("host")) if cfg.get("host") else None
-        return f"https://{host['hostname']}:8444" if host else "http://127.0.0.1:3100"
+        if host is None:
+            return "http://127.0.0.1:3100"
+        if host["name"] == node["name"]:
+            return "http://loki:3100"
+        return f"https://telemetry.{state['global']['operator_domain']}:8444"
 
     def _format_env(self, env: dict[str, str]) -> str:
         return "".join(f"{key}={quote_env(value)}\n" for key, value in sorted(env.items()))
@@ -606,6 +604,31 @@ healthchecks:
         listeners = self._listeners(node)
         start_order = self._node_start_order(node)
         database_mode = "external PostgreSQL" if self._uses_remote_control_db(node) else "embedded PostgreSQL"
+        operator_domain = state["global"]["operator_domain"]
+        control_bootstrap = ""
+        if node["role"] == "control":
+            control_bootstrap = f"""
+## First administrator and public readiness
+
+Before startup, public `A` and optional `AAAA` records for
+`control.{operator_domain}`, `edge-control.{operator_domain}`,
+`telemetry.{operator_domain}`, and `grafana.{operator_domain}` must point to
+this control node. TCP 80, 443, and 8443 must reach their documented listeners.
+
+After `start.sh` succeeds, verify the application and create the bootstrap
+administrator. The password is prompted twice and is not stored in shell
+history:
+
+```sh
+curl --fail https://control.{operator_domain}/api/health
+curl --fail https://control.{operator_domain}/api/ready
+docker compose --env-file .env.prod exec core php artisan cdnf:admin:create \\
+  --name='Operations Administrator' --email='admin@example.com'
+```
+
+Then sign in at `https://control.{operator_domain}/admin`. Create the bootstrap
+administrator only once; create later users through the authenticated panel.
+"""
         return f"""# CDNFoundry node bundle: {node['name']}
 
 - Role: `{node['role']}`
@@ -638,6 +661,8 @@ docker compose --env-file .env.prod ps
 DNS/edge node without an edge UUID starts authoritative DNS but does not start
 the edge profile. After edge registration is configured and the bundle is
 rerendered, the same script activates both profiles.
+
+{control_bootstrap}
 
 ## Listeners
 
@@ -758,7 +783,7 @@ set -eu
 {key_permissions}
 ./validate.sh
 {migration}
-docker compose --env-file .env.prod {profiles} up -d
+docker compose --env-file .env.prod {profiles} up -d --wait --wait-timeout 300
 docker compose --env-file .env.prod ps
 """
 

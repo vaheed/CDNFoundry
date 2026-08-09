@@ -54,7 +54,7 @@ Before touching a host, record:
 - the exact release tag or 40-character commit SHA;
 - hostnames, public and private IPv4/IPv6 addresses, NAT mappings, and failure
   domains;
-- `control.ops.example.com`, `telemetry.ops.example.com`,
+- `control.ops.example.com`, `edge-control.ops.example.com`, `telemetry.ops.example.com`,
   `grafana.ops.example.com`, and one `dns-api-N.ops.example.com` per DNS host;
 - `ns1.example.net` and `ns2.example.net` plus registrar glue addresses;
 - the advertised-to-local address map for each edge;
@@ -247,7 +247,7 @@ SESSION_SECURE_COOKIE=true
 CONTROL_HOSTNAME=control.ops.example.com
 TELEMETRY_HOSTNAME=telemetry.ops.example.com
 GRAFANA_HOSTNAME=grafana.ops.example.com
-EDGE_CONTROL_URL=https://control.ops.example.com:8443
+EDGE_CONTROL_URL=https://edge-control.ops.example.com:8443
 METRICS_TOKEN_FILE=/etc/cdnfoundry/secrets/metrics-token
 ```
 

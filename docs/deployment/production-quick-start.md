@@ -98,13 +98,14 @@ The dry run performs topology, role, address, feature, and Compose validation wi
 ### Publish the control-host management records
 
 Before starting the control bundle, create these records at the independent
-DNS provider that hosts `operator_domain`. In the starter topology all three
-names point to the control node's public address because control, telemetry,
-and Grafana are colocated:
+DNS provider that hosts `operator_domain`. In the starter topology all four
+names point to the control node's public address because control, edge-control,
+telemetry, and Grafana are colocated:
 
 | Name | Record | Value |
 | --- | --- | --- |
 | `control.ops.example.com` | `A` | control node `public_ipv4` |
+| `edge-control.ops.example.com` | `A` | control node `public_ipv4` |
 | `telemetry.ops.example.com` | `A` | control node `public_ipv4` |
 | `grafana.ops.example.com` | `A` | control node `public_ipv4` |
 
@@ -118,6 +119,7 @@ resolvers return the control node address for every published name:
 
 ```bash
 dig +short A control.ops.example.com @1.1.1.1
+dig +short A edge-control.ops.example.com @1.1.1.1
 dig +short A telemetry.ops.example.com @1.1.1.1
 dig +short A grafana.ops.example.com @1.1.1.1
 ```
@@ -179,7 +181,8 @@ has obtained a certificate and that the public control endpoint completes a TLS
 handshake:
 
 ```bash
-curl --fail --show-error https://control.ops.example.com/health
+curl --fail --show-error https://control.ops.example.com/api/health
+curl --fail --show-error https://control.ops.example.com/api/ready
 curl --fail --show-error https://grafana.ops.example.com/api/health
 docker compose --env-file .env.prod logs --since 10m --no-color caddy
 ```
@@ -309,7 +312,8 @@ Transfer the token-free bundle and recreate only `edge-agent`. Never reuse or re
 Check public endpoints before delegation or traffic:
 
 ```bash
-curl --fail https://control.ops.example.com/health
+curl --fail https://control.ops.example.com/api/health
+curl --fail https://control.ops.example.com/api/ready
 curl --fail https://grafana.ops.example.com/api/health
 dig +short A control.ops.example.com @1.1.1.1
 dig +short AAAA control.ops.example.com @1.1.1.1 # empty is valid when IPv6 is null
