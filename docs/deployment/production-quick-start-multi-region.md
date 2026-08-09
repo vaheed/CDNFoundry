@@ -19,6 +19,7 @@ flowchart TB
   Clients["HTTP clients"] --> GATEWAYS["Regional gateways + bounded OpenResty cells"]
   GATEWAYS --> Origins["Validated origins"]
   Agents["Edge agents"] -->|"outbound mTLS"| EDGEAPI
+  EDGEAPI --> CONTROL
   DNSDIST -. "bounded telemetry" .-> TELEMETRY
   GATEWAYS -. "bounded telemetry" .-> TELEMETRY
 ```

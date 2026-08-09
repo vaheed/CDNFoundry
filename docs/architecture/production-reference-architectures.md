@@ -92,6 +92,7 @@ justifies independent scaling.
 flowchart TB
     subgraph Management["Private management network"]
       Control["Control applications + workers"]
+      EdgeControl["edge-control<br/>mTLS ingress"]
       ControlData[("PostgreSQL + Valkey")]
       Telemetry["Vector ingress + Grafana"]
       TelemetryData[("ClickHouse + metrics/log storage")]
@@ -108,8 +109,9 @@ flowchart TB
     end
     Control -->|"source-restricted DNS API"| DNS1
     Control -->|"source-restricted DNS API"| DNS2
-    Edge1 -->|"outbound mTLS"| Control
-    Edge2 -->|"outbound mTLS"| Control
+    Edge1 -->|"edge agent: outbound mTLS"| EdgeControl
+    Edge2 -->|"edge agent: outbound mTLS"| EdgeControl
+    EdgeControl --> Control
     DNS1 -. "bounded telemetry" .-> Telemetry
     DNS2 -. "bounded telemetry" .-> Telemetry
     Edge1 -. "bounded telemetry" .-> Telemetry

@@ -8,7 +8,7 @@ description: Reference for CDNFoundry production fleet CLI options, setup config
 ```mermaid
 flowchart LR
   JSON["Fleet JSON<br/>roles, addresses, nullable IPv6"] --> STATE["Protected Fleet authority<br/>secrets + private PKI + topology"]
-  STATE --> C["CONTROL bundle<br/>Laravel + PostgreSQL + Valkey"]
+  STATE --> C["CONTROL bundle<br/>Laravel + edge-control + PostgreSQL + Valkey"]
   STATE --> D["DNS bundles<br/>DNSdist + private PowerDNS + DNS API"]
   STATE --> E["Edge bundles<br/>agent + gateway + OpenResty cells"]
   STATE --> M["Telemetry bundle<br/>Vector + ClickHouse + Grafana"]

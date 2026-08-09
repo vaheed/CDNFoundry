@@ -44,7 +44,7 @@ Runtime product policy is not an environment variable. Manage it through
 | `REDIS_URL` | external Valkey | Full URL; empty uses host and port |
 | `REDIS_HOST` | control | Default `redis` |
 | `REDIS_PORT` | control | Default `6379` |
-| `METRICS_TOKEN_FILE` | control/telemetry | Absolute mode-`0600` bearer-token file |
+| `METRICS_TOKEN_FILE` | control/telemetry | Absolute root:`www-data` mode-`0640` bearer-token file shared with Prometheus group `82` |
 
 The Compose file fixes `APP_ENV=production`, `APP_DEBUG=false`,
 `DB_CONNECTION=pgsql`, database/user `cdnf`, `CACHE_STORE=redis`,
@@ -149,6 +149,9 @@ Grafana telemetry variables are:
 | `GRAFANA_POSTGRES_PROVISION_HOST`, `GRAFANA_POSTGRES_PROVISION_PORT` | local account provisioning | Privileged endpoint; external operators may apply the SQL separately |
 | `PROMETHEUS_EDGE_TARGETS_FILE` | telemetry | Private file_sd target file; production default is empty |
 | `PROMETHEUS_LOG_TARGETS_FILE` | telemetry | Private file_sd targets for remote collector metrics; production default is empty |
+| `PROMETHEUS_CONTROL_TARGETS_FILE` | telemetry | Generated file_sd targets for authenticated control-plane metrics |
+| `PROMETHEUS_NODE_TARGETS_FILE` | telemetry | Generated file_sd targets for node-exporter metrics on every fleet host |
+| `PROMETHEUS_DNS_TARGETS_FILE` | telemetry | Generated file_sd targets for DNSdist metrics on DNS hosts |
 | `GRAFANA_EXPLORE_URL` | control | Optional deployment fallback for the admin-only Live Logs link. The PostgreSQL-backed **Platform settings → Observability links → Grafana Explore URL** overrides it. Laravel supplies Loki, a safe selector, and a one-hour range when the chosen URL has no query; both empty hides the link |
 | `GRAFANA_HOSTNAME` | control/telemetry | Public Grafana hostname in the independently hosted operator DNS zone |
 | `GRAFANA_LOKI_URL` | telemetry | Private Grafana-to-Loki endpoint; default `http://loki:3100` |
@@ -176,6 +179,15 @@ the supported host collector.
 | Variable | Required | Meaning and default |
 | --- | --- | --- |
 | `CDNF_RELEASE` | every production host | Exact commit SHA or exact release tag |
+| `CDNF_CORE_IMAGE` | production control/edge support | Immutable core image reference from the release manifest |
+| `CDNF_WEB_IMAGE` | production control | Immutable web image reference from the release manifest |
+| `CDNF_EDGE_CONTROL_IMAGE` | production control | Immutable edge-control ingress image reference from the release manifest |
+| `CDNF_EDGE_RUNTIME_IMAGE` | production edge | Immutable OpenResty runtime image reference from the release manifest |
+| `CDNF_EDGE_AGENT_IMAGE` | production edge | Immutable edge-agent image reference from the release manifest |
+| `CDNF_EDGE_GATEWAY_IMAGE` | production edge | Immutable edge-gateway image reference from the release manifest |
+| `CDNF_MMDB_UPDATER_IMAGE` | production hosts using GeoIP | Immutable MMDB updater image reference from the release manifest |
+| `CDNF_GRAFANA_IMAGE` | production telemetry | Immutable provisioned Grafana image reference from the release manifest |
+| `CDNF_LOKI_IMAGE` | production telemetry | Immutable Loki image reference from the release manifest |
 | `HOST_BIND_IPV4` | generated multi-host bundle | Local listener address; default `0.0.0.0`, independent of public/NAT DNS addresses |
 | `HOST_BIND_IPV6` | generated dual-stack bundle | Local IPv6 listener; default `::`; publish only after end-to-end IPv6 qualification |
 | `EDGE_QUARANTINE_HTTP_BIND` | edge | Quarantine HTTP, default `127.0.0.1:18080` |

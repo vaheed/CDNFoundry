@@ -27,6 +27,7 @@ flowchart TB
   GW2 --> Origins
   GW1 -->|"edge agent: outbound mTLS"| EC
   GW2 -->|"edge agent: outbound mTLS"| EC
+  EC --> CONTROL
 ```
 
 ::: danger Keep management DNS independent

@@ -7,7 +7,7 @@ description: Complete lifecycle guide for CDNFoundry production fleets including
 
 ```mermaid
 flowchart LR
-  A["Protected Fleet authority<br/>topology + secrets + private PKI"] --> C["CONTROL bundle<br/>control profile"]
+  A["Protected Fleet authority<br/>topology + secrets + private PKI"] --> C["CONTROL bundle<br/>Laravel + edge-control"]
   A --> D["DNS bundle<br/>DNSdist + private PowerDNS + DNS API"]
   A --> E1["Edge A bundle<br/>agent + gateway + cells"]
   A --> E2["Edge B bundle<br/>agent + gateway + cells"]

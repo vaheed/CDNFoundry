@@ -63,7 +63,10 @@ flowchart TB
     Edge --> Origins["Validated customer origins"]
 
     Control -->|"asynchronous DNS reconciliation"| PowerDNS
-    Control -->|"signed revisioned artifacts"| Agent["Go edge agent"]
+    Agent["Go edge agent"] -->|"outbound mTLS"| EdgeControl["edge-control<br/>mTLS ingress"]
+    EdgeControl --> Control
+    Control -->|"signed revisioned artifacts"| EdgeControl
+    EdgeControl --> Agent
     Agent -->|"atomic activation"| Edge
 
     DNSdist -. "dnstap" .-> Vector["Vector"]

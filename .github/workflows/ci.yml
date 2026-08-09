@@ -142,7 +142,7 @@ jobs:
         run: sudo -E python3 tests/e2e/production_observability.py --release ci
 
   backend-e2e:
-    name: Python backend and runtime E2E
+    name: Backend and runtime E2E
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:

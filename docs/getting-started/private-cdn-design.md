@@ -174,6 +174,7 @@ flowchart LR
     subgraph ControlHost["Control and telemetry host"]
       Web["Panel/API"]
       Workers["Workers"]
+      EdgeControl["edge-control<br/>mTLS ingress"]
       ControlDB[("PostgreSQL")]
       Telemetry[("ClickHouse")]
       Metrics["Prometheus + Alertmanager"]
@@ -194,8 +195,9 @@ flowchart LR
     end
     Workers -->|"restricted DNS API"| NS1
     Workers -->|"restricted DNS API"| NS2
-    Workers -->|"signed desired state"| Edge1
-    Workers -->|"signed desired state"| Edge2
+    Edge1 -->|"edge agent: outbound mTLS"| EdgeControl
+    Edge2 -->|"edge agent: outbound mTLS"| EdgeControl
+    EdgeControl --> Workers
     NS1 -.-> Telemetry
     NS2 -.-> Telemetry
     Edge1 -.-> Telemetry
