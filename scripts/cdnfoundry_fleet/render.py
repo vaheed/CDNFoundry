@@ -249,7 +249,9 @@ class Renderer:
             "MMDB_DOWNLOAD_URL": "",
             "MMDB_DOWNLOAD_HEADER": "",
             "LOG_BUFFER_BYTES": "2147483648",
-            "LOG_METRICS_BIND": f"{node.get('monitor_ipv4') or node['public_ipv4']}:9599",
+            # Bind only addresses configured on the local host. public_ipv4 may be
+            # an advertised NAT or floating address and is not necessarily bindable.
+            "LOG_METRICS_BIND": f"{node.get('monitor_ipv4') or node['bind_ipv4']}:9599",
             "LOKI_RETENTION_PERIOD": "336h",
             "LOKI_MAX_QUERY_LENGTH": "336h",
             "PROMETHEUS_EDGE_TARGETS_FILE": "./generated/prometheus-edge-targets.yml",
@@ -327,7 +329,10 @@ class Renderer:
         # Minimal role environment: only variables referenced by the filtered Compose plus generated configs.
         always = {"CDNF_RELEASE", "HOST_BIND_IPV4", "HOST_BIND_IPV6"}
         if state["features"]["logs"]["mode"] == "centralized":
-            always |= {"LOG_ROLE", "LOG_HOST", "LOG_COLLECTOR_ID", "LOKI_ENDPOINT", "LOG_AUTH_TOKEN"}
+            always |= {
+                "LOG_ROLE", "LOG_HOST", "LOG_COLLECTOR_ID", "LOKI_ENDPOINT",
+                "LOG_AUTH_TOKEN", "LOG_METRICS_BIND",
+            }
         # Operator-supplied values are deliberate overrides. Include them even when
         # Compose gives the variable a default (`${VAR:-...}`), otherwise edge
         # enrollment, gateway address maps, MMDB tuning, and remote dependencies are
@@ -475,10 +480,10 @@ class Renderer:
         if monitoring_host:
             generated = destination / "generated"
             atomic_write(generated / "prometheus-control-targets.yml", self._prometheus_control_targets(state, node), 0o644)
-            atomic_write(generated / "prometheus-node-targets.yml", self._prometheus_targets(state), 0o644)
-            atomic_write(generated / "prometheus-dns-targets.yml", self._prometheus_service_targets(state, "dns"), 0o644)
-            atomic_write(generated / "prometheus-edge-targets.yml", self._prometheus_service_targets(state, "edge"), 0o644)
-            atomic_write(generated / "prometheus-log-targets.yml", self._prometheus_service_targets(state, "logs"), 0o644)
+            atomic_write(generated / "prometheus-node-targets.yml", self._prometheus_targets(state, node), 0o644)
+            atomic_write(generated / "prometheus-dns-targets.yml", self._prometheus_service_targets(state, "dns", node), 0o644)
+            atomic_write(generated / "prometheus-edge-targets.yml", self._prometheus_service_targets(state, "edge", node), 0o644)
+            atomic_write(generated / "prometheus-log-targets.yml", self._prometheus_service_targets(state, "logs", node), 0o644)
             atomic_write(generated / "geo-routing-policy.json", json.dumps(self._geo_policy(state), indent=2) + "\n", 0o600)
 
     def _pdns_reconciliation_script(self) -> str:
@@ -542,12 +547,12 @@ printf '%s\n' 'Local PostgreSQL and .env.prod now use the pending password.'
 printf '%s\n' 'On the control plane, commit the rotation, rerender this node, transfer the new bundle, and run docker compose up -d.'
 '''
 
-    def _prometheus_targets(self, state: dict[str, Any]) -> str:
+    def _prometheus_targets(self, state: dict[str, Any], monitoring_node: dict[str, Any]) -> str:
         groups = []
         for node in sorted(state["nodes"].values(), key=lambda item: item["name"]):
             if not node["enabled"]:
                 continue
-            address = node.get("monitor_ipv4") or node["public_ipv4"]
+            address = "node-exporter" if node["name"] == monitoring_node["name"] else node.get("monitor_ipv4") or node["public_ipv4"]
             groups.append(
                 {
                     "targets": [f"{address}:9100"],
@@ -580,7 +585,9 @@ printf '%s\n' 'On the control plane, commit the rotation, rerender this node, tr
 
         return yaml.safe_dump([{"targets": [target], "labels": labels}], sort_keys=False)
 
-    def _prometheus_service_targets(self, state: dict[str, Any], service: str) -> str:
+    def _prometheus_service_targets(
+        self, state: dict[str, Any], service: str, monitoring_node: dict[str, Any]
+    ) -> str:
         groups = []
         for node in sorted(state["nodes"].values(), key=lambda item: item["name"]):
             address = node.get("monitor_ipv4") or node["public_ipv4"]
@@ -592,6 +599,8 @@ printf '%s\n' 'On the control plane, commit the rotation, rerender this node, tr
                 continue
             if service == "logs" and state["features"]["logs"]["mode"] != "centralized":
                 continue
+            if node["name"] == monitoring_node["name"]:
+                address = "log-collector" if service == "logs" else "dnsdist" if service == "dns" else address
             groups.append({
                 "targets": [f"{address}:{'9105' if service == 'edge' else '8083' if service == 'dns' else '9599'}"],
                 "labels": {"node": node["name"], "role": node["role"]},

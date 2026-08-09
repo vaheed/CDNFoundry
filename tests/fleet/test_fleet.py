@@ -817,7 +817,11 @@ def test_control_monitoring_bundle_uses_project_pki_contract(store: FleetState, 
     assert "type: journald" not in (bundle / "docker/vector/operational.yaml").read_text(encoding="utf-8")
     assert yaml.safe_load(bundle.joinpath("generated/prometheus-edge-targets.yml").read_text(encoding="utf-8")) == []
     log_targets = yaml.safe_load(bundle.joinpath("generated/prometheus-log-targets.yml").read_text(encoding="utf-8"))
+    node_targets = yaml.safe_load(bundle.joinpath("generated/prometheus-node-targets.yml").read_text(encoding="utf-8"))
     assert log_targets[0]["labels"]["node"] == "control-1"
+    assert log_targets[0]["targets"] == ["log-collector:9599"]
+    assert node_targets[0]["targets"] == ["node-exporter:9100"]
+    assert env["LOG_METRICS_BIND"] == "0.0.0.0:9599"
     assert env["LOG_AUTH_TOKEN"]
 
 

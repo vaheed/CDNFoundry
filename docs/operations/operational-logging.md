@@ -52,8 +52,12 @@ The default disk buffer is 2 GiB per production host and 256 MiB in development.
 `when_full: drop_newest`, ten retries, and bounded backoff make failure explicit.
 When a Fleet node has `monitor_ipv4`, the collector binds metrics to that
 private address and Fleet adds `monitor_ipv4:9599` to the monitoring host's
-generated discovery file. Without `monitor_ipv4`, metrics remain loopback-only
-and the node is omitted from remote discovery.
+generated discovery file. Without `monitor_ipv4`, the collector binds the
+node's local `bind_ipv4`; discovery uses the advertised `public_ipv4` only from
+a remote monitoring host. On the monitoring host itself, Prometheus uses the
+private Compose target `log-collector:9599`, so NAT hairpin routing is not
+required. Set `monitor_ipv4` on every remote node when its advertised public
+address is not privately reachable from the monitoring host.
 
 The committed collector reads Docker container logs. Host journal ingestion is
 not mounted or configured by `compose.prod.yml`; if an operator adds it, that is

@@ -163,7 +163,7 @@ Grafana telemetry variables are:
 | `LOG_COLLECTOR_ID` | logs | Globally unique stable collector identity |
 | `LOG_AUTH_TOKEN` | logs | Secret bearer credential used by the per-host Vector collector when pushing to the source-restricted Loki gateway |
 | `LOG_BUFFER_BYTES` | logs | Per-host disk-buffer bytes; production default `2147483648` |
-| `LOG_METRICS_BIND` | logs | Host metrics bind; loopback default `127.0.0.1:9599` |
+| `LOG_METRICS_BIND` | logs | Host metrics publication; generated bundles use `monitor_ipv4` or the local `bind_ipv4`, never an advertised NAT-only address |
 | `LOG_SOURCE_IPV4_ALLOWLIST` | telemetry gateway | Exact non-edge host sources allowed to push logs |
 
 Vector receives `CLICKHOUSE_ENDPOINT`, `CLICKHOUSE_USER`, and
