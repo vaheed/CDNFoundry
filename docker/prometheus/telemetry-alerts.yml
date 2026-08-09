@@ -37,12 +37,6 @@ groups:
         labels: { severity: critical }
         annotations:
           summary: DNSdist authoritative ingress is unavailable
-      - alert: PowerDNSUnavailable
-        expr: up{job="powerdns"} == 0
-        for: 2m
-        labels: { severity: critical }
-        annotations:
-          summary: PowerDNS authoritative backend is unavailable
       - alert: EdgeGatewayUnready
         expr: cdnfoundry_edge_gateways_unready > 0
         for: 2m

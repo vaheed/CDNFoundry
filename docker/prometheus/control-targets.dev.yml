@@ -1,0 +1,5 @@
+- targets: [web:8080]
+  labels:
+    node: dev-control
+    role: control
+    __scheme__: http

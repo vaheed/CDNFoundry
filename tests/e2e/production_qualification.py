@@ -42,6 +42,8 @@ class Result:
 
 
 CHECKS = (
+    Check("production-observability", "Generated production bundle, authenticated metrics, discovery, and Grafana datasources",
+          ("python3", "tests/e2e/production_observability.py", "--build-images"), "agent"),
     Check("contracts", "Compose, production overrides, OpenAPI, and documentation contracts",
           ("make", "config-check", "openapi-check", "docs-check"), "agent"),
     Check("application", "Isolated Laravel unit and feature suite",

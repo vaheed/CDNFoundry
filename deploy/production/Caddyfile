@@ -26,6 +26,7 @@ https://{$TELEMETRY_HOSTNAME}:8444 {
 	@log_sources {
 		remote_ip {$LOG_SOURCE_IPV4_ALLOWLIST} {$LOG_SOURCE_IPV6_ALLOWLIST}
 		path /loki/api/v1/push
+		header Authorization "Bearer {$LOG_AUTH_TOKEN}"
 	}
 
 	handle @log_sources {

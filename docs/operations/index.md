@@ -28,7 +28,8 @@ cache, TLS, observability, backup, capacity, and change-control expectations.
 The administrator dashboard and `/api/admin/system/components` expose dependency,
 queue, scheduler, backup, MMDB, TLS, runtime-task, and edge-capacity state.
 Prometheus scrapes the token-protected `/metrics` endpoint plus Vector,
-DNSdist, PowerDNS, Alertmanager, and node-exporter.
+DNSdist, Alertmanager, and node-exporter. PowerDNS stays private and its backend
+state is observed through DNSdist metrics.
 
 Use [Laravel operations dashboard](laravel-operations-dashboard.md) for the
 administrator overview's investigation context, operational condition rules,

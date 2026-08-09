@@ -79,6 +79,7 @@ jobs:
             -e LOG_ENVIRONMENT=testing -e LOG_ROLE=test -e LOG_HOST=test-host \
             -e LOG_COLLECTOR_ID=test-01 -e LOG_BUFFER_BYTES=268435488 \
             -e LOG_METRICS_ADDRESS=127.0.0.1:9599 -e LOKI_ENDPOINT=http://127.0.0.1:3100 \
+            -e LOG_AUTH_TOKEN=test-only-bearer-token \
             -v "$PWD/docker/vector/operational.yaml:/etc/vector/operational.yaml:ro" \
             -v "$PWD/docker/vector/host-journal.yaml:/etc/vector/host-journal.yaml:ro" \
             -v /var/run/docker.sock:/var/run/docker.sock:ro \
@@ -89,6 +90,7 @@ jobs:
             -e LOG_ENVIRONMENT=testing -e LOG_ROLE=test -e LOG_HOST=test-host \
             -e LOG_COLLECTOR_ID=test-01 -e LOG_BUFFER_BYTES=268435488 \
             -e LOG_METRICS_ADDRESS=127.0.0.1:9599 -e LOKI_ENDPOINT=http://127.0.0.1:3100 \
+            -e LOG_AUTH_TOKEN=test-only-bearer-token \
             -v "$PWD/docker/vector/operational.yaml:/etc/vector/operational.yaml:ro" \
             -v /var/run/docker.sock:/var/run/docker.sock:ro \
             -v /tmp:/vector-data-dir \
@@ -101,6 +103,9 @@ jobs:
             -v "$PWD/docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
             -v "$PWD/docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro" \
             -v "$PWD/docker/prometheus/dev-metrics-token:/run/secrets/metrics-token:ro" \
+            -v "$PWD/docker/prometheus/control-targets.dev.yml:/etc/prometheus/control-targets.yml:ro" \
+            -v "$PWD/docker/prometheus/node-targets.dev.yml:/etc/prometheus/node-targets.yml:ro" \
+            -v "$PWD/docker/prometheus/dns-targets.dev.yml:/etc/prometheus/dns-targets.yml:ro" \
             -v "$PWD/docker/prometheus/edge-targets.dev.yml:/etc/prometheus/edge-targets.yml:ro" \
             -v "$PWD/docker/prometheus/operational-log-targets.dev.yml:/etc/prometheus/operational-log-targets.yml:ro" \
             prom/prometheus:v3.12.0 \
@@ -111,14 +116,15 @@ jobs:
         run: python3 -m compileall -q tests/e2e tests/docs
       - name: Build every production image from its pinned base
         run: |
-          docker build --target production -t cdnfoundry/core:ci core
-          docker build --build-arg CORE_IMAGE=cdnfoundry/core:ci --target web -t cdnfoundry/web:ci -f docker/nginx/Dockerfile.production .
-          docker build --build-arg CORE_IMAGE=cdnfoundry/core:ci --target edge-control -t cdnfoundry/edge-control:ci -f docker/nginx/Dockerfile.production .
-          docker build -t cdnfoundry/edge-runtime:ci -f docker/openresty/Dockerfile .
-          docker build -t cdnfoundry/edge-agent:ci edge-agent
-          docker build -t cdnfoundry/edge-gateway:ci edge-gateway
-          docker build -t cdnfoundry/mmdb-updater:ci docker/mmdb-updater
-          docker build -t cdnfoundry/loki:ci docker/loki
+          docker build --target production -t cdnfoundry/core:ci -t ghcr.io/vaheed/cdnfoundry-core:ci core
+          docker build --build-arg CORE_IMAGE=cdnfoundry/core:ci --target web -t ghcr.io/vaheed/cdnfoundry-web:ci -f docker/nginx/Dockerfile.production .
+          docker build --build-arg CORE_IMAGE=cdnfoundry/core:ci --target edge-control -t ghcr.io/vaheed/cdnfoundry-edge-control:ci -f docker/nginx/Dockerfile.production .
+          docker build -t ghcr.io/vaheed/cdnfoundry-edge-runtime:ci -f docker/openresty/Dockerfile .
+          docker build -t ghcr.io/vaheed/cdnfoundry-edge-agent:ci edge-agent
+          docker build -t ghcr.io/vaheed/cdnfoundry-edge-gateway:ci edge-gateway
+          docker build -t ghcr.io/vaheed/cdnfoundry-mmdb-updater:ci docker/mmdb-updater
+          docker build -t ghcr.io/vaheed/cdnfoundry-loki:ci docker/loki
+          docker build -t ghcr.io/vaheed/cdnfoundry-grafana:ci docker/grafana
       - name: Smoke-test the read-only core image
         shell: bash
         run: |
@@ -132,6 +138,8 @@ jobs:
             sleep 1
           done
           exit 1
+      - name: Qualify generated production observability topology
+        run: sudo -E python3 tests/e2e/production_observability.py --release ci
 
   backend-e2e:
     name: Python backend and runtime E2E

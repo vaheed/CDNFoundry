@@ -47,6 +47,7 @@ GLOBAL_SECRET_NAMES = {
     "backup-password",
     "backup-access-key",
     "backup-secret-key",
+    "log-auth-token",
 }
 
 NODE_SECRET_NAMES = {
@@ -54,8 +55,6 @@ NODE_SECRET_NAMES = {
     "pdns-api-key",
     "edge-status-token",
     "edge-bootstrap-token",
-    "log-auth-token",
-    "node-exporter-token",
 }
 
 
@@ -231,13 +230,11 @@ class FleetState:
             validate_laravel_app_key(self.read_secret("app-key"))
 
     def _validate_node_secrets(self, node: dict[str, Any]) -> None:
-        required = {"node-exporter-token"}
+        required: set[str] = set()
         if node["role"] in {"dns", "dns-edge"}:
             required |= {"pdns-db-password", "pdns-api-key"}
         if node["role"] in {"edge", "dns-edge"}:
             required |= {"edge-status-token"}
-        if self.load_feature_mode("logs") == "centralized":
-            required |= {"log-auth-token"}
         for secret in required:
             path = self.secret_path(secret, node=node["name"])
             if not path.exists():
@@ -341,8 +338,7 @@ class FleetState:
                 "endpoint": config.get("endpoint"),
             }
             if mode == "centralized" and not self.dry_run:
-                for node in candidate["nodes"].values():
-                    self.ensure_secret("log-auth-token", node=node["name"])
+                self.ensure_secret("log-auth-token")
         elif feature == "backups":
             mode = config["mode"]
             if mode not in BACKUP_MODES:
@@ -481,14 +477,11 @@ class FleetState:
             self.ensure_secret(name)
 
     def _ensure_node_secrets(self, node: dict[str, Any]) -> None:
-        self.ensure_secret("node-exporter-token", node=node["name"])
         if node["role"] in {"dns", "dns-edge"}:
             self.ensure_secret("pdns-db-password", node=node["name"])
             self.ensure_secret("pdns-api-key", node=node["name"])
         if node["role"] in {"edge", "dns-edge"}:
             self.ensure_secret("edge-status-token", node=node["name"])
-        if self.load_feature_mode("logs") == "centralized":
-            self.ensure_secret("log-auth-token", node=node["name"])
 
 
 class StateTransaction:

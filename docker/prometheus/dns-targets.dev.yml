@@ -1,0 +1,2 @@
+- targets: [dnsdist:8083]
+  labels: { node: dev-dns, role: dns }

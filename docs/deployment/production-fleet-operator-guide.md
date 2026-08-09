@@ -24,7 +24,12 @@ git checkout v1.0.0
 git rev-parse --verify HEAD
 ```
 
-Replace the example tag with the exact release or commit selected for the fleet. Never operate production from a moving branch.
+Replace the example tag with the exact release or commit selected for the fleet.
+For deployment, copy the nine verified digest references from
+`release-manifest.json` into the corresponding `CDNF_*_IMAGE` keys in each
+node's `extra_env`; the renderer otherwise emits commit-tag references for
+offline validation and pre-publication testing. Never operate production from a
+moving branch or deploy unverified tag references.
 
 This guide covers the full lifecycle of a CDNFoundry production fleet: first-time setup, control plus monitoring, additional DNS and edge nodes, validation, bundle transfer, operation, upgrades, recovery, and troubleshooting.
 
@@ -224,7 +229,7 @@ Combines the DNS and edge service sets on one host. It still uses its own local 
 
 ### Monitoring
 
-Runs a dedicated telemetry stack when monitoring mode is `dedicated`. It does not start a second control database. The project-specific Grafana control-database provisioning helper is intentionally omitted on a dedicated host; configure an externally reachable control datasource separately when those dashboards are required.
+Runs a dedicated telemetry stack when monitoring mode is `dedicated`. It does not start a second control database. Configure the control node with an externally reachable `DB_HOST`, or set `GRAFANA_POSTGRES_HOST` explicitly on the monitoring node. Rendering fails closed without that endpoint. The generated bundle retains the bounded provisioning helper so the read-only Grafana role and sanitized views exist before Grafana starts.
 
 ## PKI layout
 

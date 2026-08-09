@@ -158,7 +158,9 @@ else
     log_source_allowlist=
 fi
 
-for value in "$clickhouse_password" "$backup_secret_key"; do
+ask_secret log_auth_token 'Shared Loki bearer token from the password manager'
+
+for value in "$clickhouse_password" "$backup_secret_key" "$log_auth_token"; do
     [[ -z $value ]] || valid_simple "$value" || { printf 'Secret contains characters unsupported by the environment-file format.\n' >&2; exit 2; }
 done
 
@@ -204,6 +206,7 @@ awk -v app_key="$app_key" \
     -v log_host="$log_host" \
     -v log_collector_id="$log_collector_id" \
     -v loki_endpoint="$loki_endpoint" \
+    -v log_auth_token="$log_auth_token" \
     -v release="$release" \
     -v host_bind_ipv4="$host_bind_ipv4" \
     -v host_bind_ipv6="::" \
@@ -237,7 +240,17 @@ awk -v app_key="$app_key" \
       values["GRAFANA_POSTGRES_PASSWORD"]=grafana_postgres_password
       values["LOG_ROLE"]=log_role; values["LOG_HOST"]=log_host
       values["LOG_COLLECTOR_ID"]=log_collector_id; values["LOKI_ENDPOINT"]=loki_endpoint
+      values["LOG_AUTH_TOKEN"]=log_auth_token
       values["CDNF_RELEASE"]=release; values["HOST_BIND_IPV4"]=host_bind_ipv4
+      values["CDNF_CORE_IMAGE"]="ghcr.io/vaheed/cdnfoundry-core:" release
+      values["CDNF_WEB_IMAGE"]="ghcr.io/vaheed/cdnfoundry-web:" release
+      values["CDNF_EDGE_CONTROL_IMAGE"]="ghcr.io/vaheed/cdnfoundry-edge-control:" release
+      values["CDNF_EDGE_RUNTIME_IMAGE"]="ghcr.io/vaheed/cdnfoundry-edge-runtime:" release
+      values["CDNF_EDGE_AGENT_IMAGE"]="ghcr.io/vaheed/cdnfoundry-edge-agent:" release
+      values["CDNF_EDGE_GATEWAY_IMAGE"]="ghcr.io/vaheed/cdnfoundry-edge-gateway:" release
+      values["CDNF_MMDB_UPDATER_IMAGE"]="ghcr.io/vaheed/cdnfoundry-mmdb-updater:" release
+      values["CDNF_GRAFANA_IMAGE"]="ghcr.io/vaheed/cdnfoundry-grafana:" release
+      values["CDNF_LOKI_IMAGE"]="ghcr.io/vaheed/cdnfoundry-loki:" release
       values["HOST_BIND_IPV6"]=host_bind_ipv6; values["EDGE_CONTROL_URL"]=edge_control_url
       values["EDGE_CONTROL_BIND"]=edge_control_bind; values["EDGE_STATUS_TOKEN"]=edge_status_token
       values["DNS_API_HOSTNAME"]=dns_api_hostname

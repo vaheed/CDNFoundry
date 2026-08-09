@@ -78,6 +78,8 @@ Edit `fleet.json` and replace every example value:
 - `operator_domain`: independently hosted management DNS suffix for control, DNS API, edge-control, node, and telemetry names;
 - `platform_domain`: customer-facing CDN platform suffix;
 - `release`: the exact checked-out tag or 40-character commit SHA;
+- each required `CDNF_*_IMAGE` node `extra_env` value: the matching verified
+  `@sha256` reference from `release-manifest.json`;
 - `acme_email`: monitored certificate contact;
 - every `hostname`, `public_ipv4`, region, and location;
 - `public_ipv6` and `bind_ipv6` when deploying dual stack.

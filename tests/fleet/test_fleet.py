@@ -15,7 +15,7 @@ import yaml
 REPO_PATCH = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_PATCH / "scripts"))
 
-from cdnfoundry_fleet.common import ValidationError
+from cdnfoundry_fleet.common import RenderError, ValidationError
 from cdnfoundry_fleet.render import Renderer
 from cdnfoundry_fleet.state import FleetState
 
@@ -355,6 +355,20 @@ def test_file_permissions_and_redacted_metadata(store: FleetState, source_repo: 
     assert pdns_password not in metadata
 
 
+def test_monitoring_files_are_readable_by_non_root_consumers(
+    store: FleetState, source_repo: Path, tmp_path: Path
+) -> None:
+    add(store, node("control-1", "control", "192.0.2.91"))
+    with store.locked():
+        store.configure_feature(store.load(), "monitoring", {"mode": "colocated", "host": None})
+    output = tmp_path / "bundles"
+    Renderer(source_repo, store, output).render(store.load())
+    bundle = output / "control-1"
+    assert stat.S_IMODE((bundle / "secrets/metrics-token").stat().st_mode) == 0o640
+    for name in ("control", "node", "dns", "edge", "log"):
+        assert stat.S_IMODE((bundle / f"generated/prometheus-{name}-targets.yml").stat().st_mode) == 0o644
+
+
 def test_control_start_restricts_identity_ca_key_for_php_worker(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
     add(store, node("control-1", "control", "192.0.2.10"))
     output = tmp_path / "bundles"
@@ -364,6 +378,8 @@ def test_control_start_restricts_identity_ca_key_for_php_worker(store: FleetStat
     assert 'if [ "$(id -u)" != "0" ]' in start
     assert "chown 0:82 pki/edge-identity-ca.key" in start
     assert "chmod 0640 pki/edge-identity-ca.key" in start
+    assert "chown 0:82 secrets/metrics-token" in start
+    assert "chmod 0640 secrets/metrics-token" in start
     assert "docker compose --env-file .env.prod --profile control up -d" in start
     assert start.index("chmod 0640 pki/edge-identity-ca.key") < start.index("./validate.sh")
     validate = (output / "control-1/validate.sh").read_text(encoding="utf-8")
@@ -800,14 +816,17 @@ def test_control_monitoring_bundle_uses_project_pki_contract(store: FleetState, 
     assert all("generated-node" not in str(volume) for volume in collector["volumes"])
     assert "type: journald" not in (bundle / "docker/vector/operational.yaml").read_text(encoding="utf-8")
     assert yaml.safe_load(bundle.joinpath("generated/prometheus-edge-targets.yml").read_text(encoding="utf-8")) == []
-    assert yaml.safe_load(bundle.joinpath("generated/prometheus-log-targets.yml").read_text(encoding="utf-8")) == []
+    log_targets = yaml.safe_load(bundle.joinpath("generated/prometheus-log-targets.yml").read_text(encoding="utf-8"))
+    assert log_targets[0]["labels"]["node"] == "control-1"
     assert env["LOG_AUTH_TOKEN"]
 
 
 def test_dedicated_monitoring_uses_private_local_and_stable_remote_clickhouse_urls(
     store: FleetState, source_repo: Path, tmp_path: Path
 ) -> None:
-    add(store, node("control-1", "control", "192.0.2.145"))
+    add(store, {**node("control-1", "control", "192.0.2.145"), "extra_env": {
+        "DB_HOST": "postgres.ops.example.com", "DB_PORT": "5432", "DB_SSLMODE": "verify-full"
+    }})
     add(store, node("monitor-1", "monitoring", "192.0.2.146"))
     with store.locked():
         store.configure_feature(store.load(), "monitoring", {"mode": "dedicated", "host": "monitor-1"})
@@ -821,6 +840,10 @@ def test_dedicated_monitoring_uses_private_local_and_stable_remote_clickhouse_ur
 
     assert env_values(output / "monitor-1/.env.prod")["CLICKHOUSE_URL"] == "http://clickhouse:8123"
     assert env_values(output / "monitor-1/.env.prod")["LOKI_ENDPOINT"] == "http://loki:3100"
+    dedicated_env = renderer._environment(
+        state, state["nodes"]["monitor-1"], {"GRAFANA_POSTGRES_HOST"}, monitoring_host=True
+    )
+    assert dedicated_env["GRAFANA_POSTGRES_HOST"] == "postgres.ops.example.com"
     assert renderer._clickhouse_url(state, state["nodes"]["control-1"]) == "https://telemetry.ops.example.com:8444"
     assert env_values(output / "control-1/.env.prod")["LOKI_ENDPOINT"] == "https://telemetry.ops.example.com:8444"
 
@@ -832,6 +855,25 @@ def test_production_log_collector_passes_auth_token_to_vector() -> None:
     assert compose["services"]["log-collector"]["environment"]["LOG_AUTH_TOKEN"] == (
         "${LOG_AUTH_TOKEN:?LOG_AUTH_TOKEN is required for the logs profile}"
     )
+    vector = (REPO_PATCH / "docker/vector/operational.yaml").read_text(encoding="utf-8")
+    assert 'strategy: bearer' in vector
+    assert 'token: "${LOG_AUTH_TOKEN}"' in vector
+    assert 'header Authorization "Bearer {$LOG_AUTH_TOKEN}"' in (
+        REPO_PATCH / "deploy/production/Caddyfile.telemetry"
+    ).read_text(encoding="utf-8")
+
+
+def test_dedicated_monitoring_fails_closed_without_external_control_database(
+    store: FleetState, source_repo: Path, tmp_path: Path
+) -> None:
+    add(store, node("control-1", "control", "192.0.2.147"))
+    add(store, node("monitor-1", "monitoring", "192.0.2.148"))
+    monitor = store.load()["nodes"]["monitor-1"]
+    renderer = Renderer(source_repo, store, tmp_path / "bundles")
+    with pytest.raises(RenderError, match="externally reachable control PostgreSQL"):
+        renderer._environment(
+            store.load(), monitor, {"GRAFANA_POSTGRES_HOST"}, monitoring_host=True
+        )
 
 
 def test_edge_bundle_has_control_url_and_server_ca(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
@@ -1095,6 +1137,9 @@ def test_production_compose_uses_env_file_contract_and_control_has_mmdb_updater(
         compose_text += overlay.read_text(encoding="utf-8")
     assert "${" in compose_text
     assert ":-" not in compose_text
+    assert "${CDNF_CORE_IMAGE:?" in compose_text
+    assert "${CDNF_GRAFANA_IMAGE:?" in compose_text
+    assert "ghcr.io/vaheed/cdnfoundry-core:${CDNF_RELEASE" not in compose_text
 
     compose = yaml.safe_load((root / "compose.prod.yml").read_text(encoding="utf-8"))
     updater = compose["services"]["mmdb-updater"]

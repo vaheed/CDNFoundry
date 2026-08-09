@@ -81,7 +81,9 @@ profile's required values.
 
 ### 4. Create secret files
 
-Create the required metrics token at its absolute path with mode `0600`. If the
+Create the required metrics token at its absolute path as `root:www-data` with
+mode `0640`. The generated activation script enforces this ownership so both the
+PHP worker and the supplementary group assigned to Prometheus can read it. If the
 optional S3-compatible Restic integration is enabled, also create its separate
 password file, initialize the off-host repository, and restrict backup
 credentials to the CDNFoundry bucket/prefix. Empty backup settings do not block

@@ -240,6 +240,9 @@ Set the exact same release and installation-wide credentials on all hosts:
 
 ```dotenv
 CDNF_RELEASE=v1.0.0
+CDNF_CORE_IMAGE=ghcr.io/vaheed/cdnfoundry-core@sha256:REPLACE_FROM_RELEASE_MANIFEST
+CDNF_WEB_IMAGE=ghcr.io/vaheed/cdnfoundry-web@sha256:REPLACE_FROM_RELEASE_MANIFEST
+# Set every CDNF_*_IMAGE entry from release-manifest.json in the same way.
 APP_KEY=base64:REPLACE_WITH_32_BYTE_BASE64_VALUE
 EDGE_ARTIFACT_SIGNING_KEY=REPLACE_WITH_UNIQUE_VALUE
 APP_URL=https://control.ops.example.com
@@ -250,6 +253,11 @@ GRAFANA_HOSTNAME=grafana.ops.example.com
 EDGE_CONTROL_URL=https://edge-control.ops.example.com:8443
 METRICS_TOKEN_FILE=/etc/cdnfoundry/secrets/metrics-token
 ```
+
+`CDNF_RELEASE` is audit metadata and a coordinated rollout identifier. Compose
+pulls the separate `CDNF_*_IMAGE` references; production values must be the nine
+verified `@sha256` references from `release-manifest.json`, never reconstructed
+tags.
 
 Set all database, Valkey, PowerDNS, ClickHouse, Grafana, ACME, and backup values
 in the template. Do not reuse credentials. The base Compose topology expects
@@ -483,8 +491,9 @@ docker compose --env-file .env.prod -f compose.prod.yml \
 Run one operational log collector per host, with a unique `LOG_HOST`,
 `LOG_ROLE`, and `LOG_COLLECTOR_ID` in that host's environment. Set the shared
 Loki bearer credential as `LOG_AUTH_TOKEN`; Compose passes it only to the
-collector and the generated Vector configuration expands it inside that
-container:
+collector and the canonical Vector configuration expands it inside that
+container. The telemetry Caddy gateway requires the same bearer value in
+addition to its source-IP allowlist:
 
 ```bash
 docker compose --env-file .env.prod -f compose.prod.yml \

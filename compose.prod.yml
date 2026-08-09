@@ -50,7 +50,7 @@ x-core-env: &core-env
   GRAFANA_EXPLORE_URL: ${GRAFANA_EXPLORE_URL}
 
 x-edge-cell: &edge-cell
-  image: ghcr.io/vaheed/cdnfoundry-edge-runtime:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
+  image: ${CDNF_EDGE_RUNTIME_IMAGE:?CDNF_EDGE_RUNTIME_IMAGE must be an immutable image reference}
   profiles: [edge]
   volumes:
     - ${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro
@@ -78,7 +78,7 @@ x-edge-cell: &edge-cell
       limits: { memory: 512m, cpus: "0.5", pids: 128 }
 
 x-core: &core
-  image: ghcr.io/vaheed/cdnfoundry-core:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
+  image: ${CDNF_CORE_IMAGE:?CDNF_CORE_IMAGE must be an immutable image reference}
   environment: *core-env
   depends_on:
     control-db: { condition: service_healthy }
@@ -120,6 +120,7 @@ services:
       CONTROL_PUBLIC_IPV6_ALLOWLIST: ${CONTROL_PUBLIC_IPV6_ALLOWLIST}
       LOG_SOURCE_IPV4_ALLOWLIST: ${LOG_SOURCE_IPV4_ALLOWLIST}
       LOG_SOURCE_IPV6_ALLOWLIST: ${LOG_SOURCE_IPV6_ALLOWLIST}
+      LOG_AUTH_TOKEN: ${LOG_AUTH_TOKEN:?LOG_AUTH_TOKEN is required}
     ports: ["${HOST_BIND_IPV4}:80:80/tcp", "${HOST_BIND_IPV4}:443:443/tcp", "${HOST_BIND_IPV4}:443:443/udp", "${HOST_BIND_IPV4}:8444:8444/tcp"]
     volumes: [./deploy/production/Caddyfile:/etc/caddy/Caddyfile:ro, caddy-data:/data, caddy-config:/config]
     depends_on: { web: { condition: service_healthy } }
@@ -158,9 +159,10 @@ services:
       CONTROL_PUBLIC_IPV6_ALLOWLIST: ${CONTROL_PUBLIC_IPV6_ALLOWLIST}
       LOG_SOURCE_IPV4_ALLOWLIST: ${LOG_SOURCE_IPV4_ALLOWLIST}
       LOG_SOURCE_IPV6_ALLOWLIST: ${LOG_SOURCE_IPV6_ALLOWLIST}
+      LOG_AUTH_TOKEN: ${LOG_AUTH_TOKEN:?LOG_AUTH_TOKEN is required}
     ports: ["${HOST_BIND_IPV4}:80:80/tcp", "${HOST_BIND_IPV4}:443:443/tcp", "${HOST_BIND_IPV4}:8444:8444/tcp"]
     volumes: [./deploy/production/Caddyfile.telemetry:/etc/caddy/Caddyfile:ro, telemetry-caddy-data:/data, telemetry-caddy-config:/config]
-    depends_on: { clickhouse: { condition: service_started }, loki: { condition: service_healthy }, grafana: { condition: service_healthy } }
+    depends_on: { clickhouse: { condition: service_healthy }, loki: { condition: service_healthy }, grafana: { condition: service_healthy } }
     networks: [telemetry]
     restart: unless-stopped
     read_only: true
@@ -177,7 +179,7 @@ services:
       retries: 10
 
   web:
-    image: ghcr.io/vaheed/cdnfoundry-web:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
+    image: ${CDNF_WEB_IMAGE:?CDNF_WEB_IMAGE must be an immutable image reference}
     profiles: [control]
     ports: ["${CONTROL_BIND}:8080"]
     depends_on:
@@ -193,7 +195,7 @@ services:
       retries: 10
 
   edge-control:
-    image: ghcr.io/vaheed/cdnfoundry-edge-control:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
+    image: ${CDNF_EDGE_CONTROL_IMAGE:?CDNF_EDGE_CONTROL_IMAGE must be an immutable image reference}
     profiles: [control]
     ports: ["${EDGE_CONTROL_BIND}:8443"]
     volumes:
@@ -363,6 +365,11 @@ services:
       - vector-data:/vector-data-dir
     networks: [telemetry, edge, dns-private]
     restart: unless-stopped
+    healthcheck:
+      test: [CMD, vector, validate, --no-environment, /etc/vector/vector.yaml]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   loki-data-init:
     image: alpine:3.22
@@ -372,7 +379,7 @@ services:
     restart: "no"
 
   loki:
-    image: ghcr.io/vaheed/cdnfoundry-loki:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
+    image: ${CDNF_LOKI_IMAGE:?CDNF_LOKI_IMAGE must be an immutable image reference}
     profiles: [telemetry]
     environment:
       LOKI_RETENTION_PERIOD: ${LOKI_RETENTION_PERIOD}
@@ -400,7 +407,6 @@ services:
 
   log-collector:
     image: timberio/vector:0.55.0-debian@sha256:a4be1111b40303524aae2ffb02cd59cef2a4e9753bd13d265bf0233e921828d9
-    container_name: cdnfoundry-log-collector
     profiles: [logs]
     command: [--config, /etc/vector/operational.yaml]
     environment:
@@ -432,15 +438,25 @@ services:
   prometheus:
     image: prom/prometheus:v3.12.0
     profiles: [telemetry]
+    group_add: ["82"]
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro
+      - ${PROMETHEUS_CONTROL_TARGETS_FILE}:/etc/prometheus/control-targets.yml:ro
+      - ${PROMETHEUS_NODE_TARGETS_FILE}:/etc/prometheus/node-targets.yml:ro
+      - ${PROMETHEUS_DNS_TARGETS_FILE}:/etc/prometheus/dns-targets.yml:ro
       - ${PROMETHEUS_EDGE_TARGETS_FILE}:/etc/prometheus/edge-targets.yml:ro
       - ${PROMETHEUS_LOG_TARGETS_FILE}:/etc/prometheus/operational-log-targets.yml:ro
       - ${METRICS_TOKEN_FILE:?METRICS_TOKEN_FILE is required}:/run/secrets/metrics-token:ro
       - prometheus:/prometheus
     networks: [telemetry, control, dns-private]
     restart: unless-stopped
+    healthcheck:
+      test: [CMD, wget, -qO-, http://127.0.0.1:9090/-/ready]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
 
   grafana-control-db-provision:
     image: postgres:18.4-alpine
@@ -465,7 +481,7 @@ services:
     pids_limit: 32
 
   grafana:
-    image: ghcr.io/vaheed/cdnfoundry-grafana:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
+    image: ${CDNF_GRAFANA_IMAGE:?CDNF_GRAFANA_IMAGE must be an immutable image reference}
     profiles: [telemetry]
     ports: ["${GRAFANA_BIND}:3000"]
     environment:
@@ -499,9 +515,9 @@ services:
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
-      clickhouse: { condition: service_started }
+      clickhouse: { condition: service_healthy }
       grafana-control-db-provision: { condition: service_completed_successfully }
-      prometheus: { condition: service_started }
+      prometheus: { condition: service_healthy }
     networks: [telemetry, control, egress]
     restart: unless-stopped
     read_only: true
@@ -529,7 +545,7 @@ services:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/host/root:ro,rslave
-    networks: [telemetry]
+    networks: [telemetry, egress]
     read_only: true
     restart: unless-stopped
 
@@ -539,6 +555,11 @@ services:
     volumes: [./docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro]
     networks: [telemetry]
     restart: unless-stopped
+    healthcheck:
+      test: [CMD, wget, -qO-, http://127.0.0.1:9093/-/ready]
+      interval: 10s
+      timeout: 3s
+      retries: 20
 
   cell-01: &cell-01
     <<: *edge-cell
@@ -605,7 +626,7 @@ services:
     volumes: [edge-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-08-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   edge-agent:
-    image: ghcr.io/vaheed/cdnfoundry-edge-agent:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
+    image: ${CDNF_EDGE_AGENT_IMAGE:?CDNF_EDGE_AGENT_IMAGE must be an immutable image reference}
     profiles: [edge]
     environment:
       EDGE_CONTROL_URL: ${EDGE_CONTROL_URL:?EDGE_CONTROL_URL is required}
@@ -645,7 +666,7 @@ services:
           pids: 64
 
   edge-gateway:
-    image: ghcr.io/vaheed/cdnfoundry-edge-gateway:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
+    image: ${CDNF_EDGE_GATEWAY_IMAGE:?CDNF_EDGE_GATEWAY_IMAGE must be an immutable image reference}
     profiles: [edge]
     environment:
       GATEWAY_CONFIG_FILE: /var/lib/cdnfoundry/runtime/current/gateway.json
@@ -684,7 +705,7 @@ services:
     restart: "no"
 
   mmdb-updater:
-    image: ghcr.io/vaheed/cdnfoundry-mmdb-updater:${CDNF_RELEASE:?CDNF_RELEASE must be a published commit SHA or release tag}
+    image: ${CDNF_MMDB_UPDATER_IMAGE:?CDNF_MMDB_UPDATER_IMAGE must be an immutable image reference}
     profiles: [control, dns, edge]
     environment:
       MMDB_PROVIDER: ${MMDB_PROVIDER}

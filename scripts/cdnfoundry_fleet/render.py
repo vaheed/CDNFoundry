@@ -100,6 +100,12 @@ class Renderer:
             if node.get("monitor_ipv6"):
                 ports.append(f"[{node['monitor_ipv6']}]:9100:9100/tcp")
             services["node-exporter"]["ports"] = ports
+            networks = services["node-exporter"].setdefault("networks", [])
+            if "egress" not in networks:
+                networks.append("egress")
+        if "dnsdist" in services and state["features"]["monitoring"]["mode"] != "disabled":
+            bind = node.get("monitor_ipv4") or node["bind_ipv4"]
+            services["dnsdist"].setdefault("ports", []).append(f"{bind}:8083:8083/tcp")
         if node.get("bind_ipv6"):
             self._add_ipv6_publications(services, node["bind_ipv6"])
         if "log-collector" in services:
@@ -134,19 +140,15 @@ class Renderer:
 
         if node["role"] == "monitoring":
             # A dedicated telemetry host must not accidentally start a second control database.
-            # The repository's Grafana control-DB provisioning helper depends on control-db, so
-            # omit that helper on a dedicated host and leave telemetry dashboards operational.
-            services.pop("grafana-control-db-provision", None)
+            # The provisioning helper is retained and pointed at the external control database;
+            # this keeps the read-only role and views deterministic on first activation.
             services.pop("control-db", None)
             for service in services.values():
                 depends = service.get("depends_on")
                 if isinstance(depends, dict):
-                    depends.pop("grafana-control-db-provision", None)
                     depends.pop("control-db", None)
                 elif isinstance(depends, list):
-                    service["depends_on"] = [
-                        name for name in depends if name not in {"grafana-control-db-provision", "control-db"}
-                    ]
+                    service["depends_on"] = [name for name in depends if name != "control-db"]
 
     def _environment(
         self,
@@ -159,6 +161,15 @@ class Renderer:
         operator_domain = state["global"]["operator_domain"]
         values: dict[str, str] = {
             "CDNF_RELEASE": node["release"],
+            "CDNF_CORE_IMAGE": f"ghcr.io/vaheed/cdnfoundry-core:{node['release']}",
+            "CDNF_WEB_IMAGE": f"ghcr.io/vaheed/cdnfoundry-web:{node['release']}",
+            "CDNF_EDGE_CONTROL_IMAGE": f"ghcr.io/vaheed/cdnfoundry-edge-control:{node['release']}",
+            "CDNF_EDGE_RUNTIME_IMAGE": f"ghcr.io/vaheed/cdnfoundry-edge-runtime:{node['release']}",
+            "CDNF_EDGE_AGENT_IMAGE": f"ghcr.io/vaheed/cdnfoundry-edge-agent:{node['release']}",
+            "CDNF_EDGE_GATEWAY_IMAGE": f"ghcr.io/vaheed/cdnfoundry-edge-gateway:{node['release']}",
+            "CDNF_MMDB_UPDATER_IMAGE": f"ghcr.io/vaheed/cdnfoundry-mmdb-updater:{node['release']}",
+            "CDNF_GRAFANA_IMAGE": f"ghcr.io/vaheed/cdnfoundry-grafana:{node['release']}",
+            "CDNF_LOKI_IMAGE": f"ghcr.io/vaheed/cdnfoundry-loki:{node['release']}",
             "HOST_BIND_IPV4": node["bind_ipv4"],
             "HOST_BIND_IPV6": node.get("bind_ipv6") or "::",
             "DNS_BIND_V4": node["bind_ipv4"],
@@ -199,8 +210,7 @@ class Renderer:
             "LOG_HOST": node["name"],
             "LOG_COLLECTOR_ID": node["name"],
             "LOKI_ENDPOINT": self._loki_url(state, node),
-            "LOG_AUTH_TOKEN": self._optional_node_secret("log-auth-token", node),
-            "NODE_EXPORTER_TOKEN": self._secret("node-exporter-token", node=node["name"]),
+            "LOG_AUTH_TOKEN": self._secret("log-auth-token"),
             "EDGE_STATUS_TOKEN": self._optional_node_secret("edge-status-token", node),
             "EDGE_ID": node.get("edge_id") or "",
             "EDGE_BOOTSTRAP_TOKEN": self._optional_node_secret("edge-bootstrap-token", node),
@@ -239,11 +249,14 @@ class Renderer:
             "MMDB_DOWNLOAD_URL": "",
             "MMDB_DOWNLOAD_HEADER": "",
             "LOG_BUFFER_BYTES": "2147483648",
-            "LOG_METRICS_BIND": f"{node['monitor_ipv4']}:9599" if node.get("monitor_ipv4") else "127.0.0.1:9599",
+            "LOG_METRICS_BIND": f"{node.get('monitor_ipv4') or node['public_ipv4']}:9599",
             "LOKI_RETENTION_PERIOD": "336h",
             "LOKI_MAX_QUERY_LENGTH": "336h",
             "PROMETHEUS_EDGE_TARGETS_FILE": "./generated/prometheus-edge-targets.yml",
             "PROMETHEUS_LOG_TARGETS_FILE": "./generated/prometheus-log-targets.yml",
+            "PROMETHEUS_CONTROL_TARGETS_FILE": "./generated/prometheus-control-targets.yml",
+            "PROMETHEUS_NODE_TARGETS_FILE": "./generated/prometheus-node-targets.yml",
+            "PROMETHEUS_DNS_TARGETS_FILE": "./generated/prometheus-dns-targets.yml",
             "GRAFANA_ADMIN_USER": "admin",
             "GRAFANA_BIND": "127.0.0.1:3000",
             "GRAFANA_COOKIE_SECURE": "true",
@@ -282,6 +295,30 @@ class Renderer:
                     if key not in explicit_env:
                         values[key] = value
                         derived_env.add(key)
+        if node["role"] == "monitoring" and "GRAFANA_POSTGRES_HOST" in needed:
+            control = next((item for item in state["nodes"].values() if item["role"] == "control"), None)
+            control_env = control.get("extra_env", {}) if control else {}
+            remote_host = explicit_env.get("GRAFANA_POSTGRES_HOST") or control_env.get("DB_HOST")
+            if not remote_host or remote_host == "control-db":
+                raise RenderError(
+                    "Dedicated monitoring requires an externally reachable control PostgreSQL endpoint; "
+                    "set GRAFANA_POSTGRES_HOST on the monitoring node or DB_HOST on the control node"
+                )
+            defaults = {
+                "GRAFANA_POSTGRES_PROVISION_HOST": remote_host,
+                "GRAFANA_POSTGRES_HOST": remote_host,
+                "GRAFANA_POSTGRES_PROVISION_PORT": explicit_env.get("GRAFANA_POSTGRES_PORT")
+                or control_env.get("DB_PORT", "5432"),
+                "GRAFANA_POSTGRES_PORT": explicit_env.get("GRAFANA_POSTGRES_PORT")
+                or control_env.get("DB_PORT", "5432"),
+                "GRAFANA_POSTGRES_SSLMODE": explicit_env.get("GRAFANA_POSTGRES_SSLMODE")
+                or control_env.get("DB_SSLMODE", "verify-full"),
+                "DB_SSLMODE": control_env.get("DB_SSLMODE", "verify-full"),
+            }
+            for key, value in defaults.items():
+                if key not in explicit_env:
+                    values[key] = value
+                    derived_env.add(key)
         missing = sorted(key for key in needed if key not in values)
         if missing:
             raise RenderError(
@@ -291,8 +328,6 @@ class Renderer:
         always = {"CDNF_RELEASE", "HOST_BIND_IPV4", "HOST_BIND_IPV6"}
         if state["features"]["logs"]["mode"] == "centralized":
             always |= {"LOG_ROLE", "LOG_HOST", "LOG_COLLECTOR_ID", "LOKI_ENDPOINT", "LOG_AUTH_TOKEN"}
-        if state["features"]["monitoring"]["mode"] != "disabled":
-            always |= {"NODE_EXPORTER_TOKEN"}
         # Operator-supplied values are deliberate overrides. Include them even when
         # Compose gives the variable a default (`${VAR:-...}`), otherwise edge
         # enrollment, gateway address maps, MMDB tuning, and remote dependencies are
@@ -417,8 +452,11 @@ class Renderer:
     ) -> None:
         secrets_dir = destination / "secrets"
         secrets_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-        if state["features"]["monitoring"]["mode"] != "disabled":
-            atomic_write(secrets_dir / "metrics-token", self.store.read_secret("metrics-token") + "\n", 0o600)
+        if node["role"] == "control" or monitoring_host:
+            # The bundle directory is mode 0700. Group-read permission is required by
+            # the non-root PHP and Prometheus processes after start.sh restricts the
+            # file to the PHP worker group and grants Prometheus that same group.
+            atomic_write(secrets_dir / "metrics-token", self.store.read_secret("metrics-token") + "\n", 0o640)
         if state["features"]["backups"]["mode"] != "disabled":
             atomic_write(secrets_dir / "restic-password", self.store.read_secret("backup-password") + "\n", 0o600)
         if node["role"] in {"dns", "dns-edge"}:
@@ -436,9 +474,11 @@ class Renderer:
                 )
         if monitoring_host:
             generated = destination / "generated"
-            atomic_write(generated / "prometheus-node-targets.yml", self._prometheus_targets(state), 0o600)
-            atomic_write(generated / "prometheus-edge-targets.yml", self._prometheus_service_targets(state, "edge"), 0o600)
-            atomic_write(generated / "prometheus-log-targets.yml", self._prometheus_service_targets(state, "logs"), 0o600)
+            atomic_write(generated / "prometheus-control-targets.yml", self._prometheus_control_targets(state, node), 0o644)
+            atomic_write(generated / "prometheus-node-targets.yml", self._prometheus_targets(state), 0o644)
+            atomic_write(generated / "prometheus-dns-targets.yml", self._prometheus_service_targets(state, "dns"), 0o644)
+            atomic_write(generated / "prometheus-edge-targets.yml", self._prometheus_service_targets(state, "edge"), 0o644)
+            atomic_write(generated / "prometheus-log-targets.yml", self._prometheus_service_targets(state, "logs"), 0o644)
             atomic_write(generated / "geo-routing-policy.json", json.dumps(self._geo_policy(state), indent=2) + "\n", 0o600)
 
     def _pdns_reconciliation_script(self) -> str:
@@ -523,18 +563,37 @@ printf '%s\n' 'On the control plane, commit the rotation, rerender this node, tr
 
         return yaml.safe_dump(groups, sort_keys=False)
 
+    def _prometheus_control_targets(self, state: dict[str, Any], monitoring_node: dict[str, Any]) -> str:
+        control = next(
+            (node for node in state["nodes"].values() if node["enabled"] and node["role"] == "control"),
+            None,
+        )
+        if control is None:
+            return "[]\n"
+        if control["name"] == monitoring_node["name"]:
+            target = "web:8080"
+            labels = {"node": control["name"], "role": "control", "__scheme__": "http"}
+        else:
+            target = f"control.{state['global']['operator_domain']}:443"
+            labels = {"node": control["name"], "role": "control", "__scheme__": "https"}
+        import yaml
+
+        return yaml.safe_dump([{"targets": [target], "labels": labels}], sort_keys=False)
+
     def _prometheus_service_targets(self, state: dict[str, Any], service: str) -> str:
         groups = []
         for node in sorted(state["nodes"].values(), key=lambda item: item["name"]):
-            address = node.get("monitor_ipv4")
-            if not node["enabled"] or not address:
+            address = node.get("monitor_ipv4") or node["public_ipv4"]
+            if not node["enabled"]:
                 continue
             if service == "edge" and node["role"] not in {"edge", "dns-edge"}:
+                continue
+            if service == "dns" and node["role"] not in {"dns", "dns-edge"}:
                 continue
             if service == "logs" and state["features"]["logs"]["mode"] != "centralized":
                 continue
             groups.append({
-                "targets": [f"{address}:{9105 if service == 'edge' else 9599}"],
+                "targets": [f"{address}:{'9105' if service == 'edge' else '8083' if service == 'dns' else '9599'}"],
                 "labels": {"node": node["name"], "role": node["role"]},
             })
         import yaml
@@ -704,6 +763,11 @@ case "$identity_key_mode" in
 esac
 """
         caddy_validation = ""
+        metrics_validation = ""
+        if "prometheus" in compose.get("services", {}) or "core" in compose.get("services", {}):
+            metrics_validation = """test "$(stat -c '%a' secrets/metrics-token)" = "640"
+test "$(stat -c '%u:%g' secrets/metrics-token)" = "0:82"
+"""
         caddy_configs = {
             "caddy": "/etc/caddy/Caddyfile",
             "dns-api": "/etc/caddy/Caddyfile",
@@ -720,7 +784,7 @@ set -eu
 umask 077
 test "$(stat -c '%a' .env.prod)" = 600
 test "$(stat -c '%a' pki/node.key)" = 600
-{identity_key_validation}docker compose --env-file .env.prod config --quiet
+{identity_key_validation}{metrics_validation}docker compose --env-file .env.prod config --quiet
 {caddy_validation}
 openssl verify -CAfile pki/edge-server-ca.crt pki/node.crt
 """
@@ -751,6 +815,14 @@ openssl verify -CAfile pki/edge-server-ca.crt pki/node.crt
 fi
 chown 0:82 pki/edge-identity-ca.key
 chmod 0640 pki/edge-identity-ca.key
+"""
+        if self._is_monitoring_host(state, node) or node["role"] == "control":
+            key_permissions += """if [ "$(id -u)" != "0" ]; then
+    echo "Monitoring activation must run as root so the metrics token remains restricted and readable by its consumers." >&2
+    exit 1
+fi
+chown 0:82 secrets/metrics-token
+chmod 0640 secrets/metrics-token
 """
         return f"""#!/usr/bin/env sh
 set -eu

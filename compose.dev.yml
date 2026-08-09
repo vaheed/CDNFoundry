@@ -365,6 +365,9 @@ services:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro
       - ./docker/prometheus/alerts.test.yml:/etc/prometheus/alerts.test.yml:ro
+      - ./docker/prometheus/control-targets.dev.yml:/etc/prometheus/control-targets.yml:ro
+      - ./docker/prometheus/node-targets.dev.yml:/etc/prometheus/node-targets.yml:ro
+      - ./docker/prometheus/dns-targets.dev.yml:/etc/prometheus/dns-targets.yml:ro
       - ./docker/prometheus/edge-targets.dev.yml:/etc/prometheus/edge-targets.yml:ro
       - ./docker/prometheus/operational-log-targets.dev.yml:/etc/prometheus/operational-log-targets.yml:ro
       - ./docker/prometheus/dev-metrics-token:/run/secrets/metrics-token:ro

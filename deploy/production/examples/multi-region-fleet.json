@@ -21,7 +21,12 @@
       "monitor_ipv4": null,
       "monitor_ipv6": null,
       "log_ipv4": null,
-      "log_ipv6": null
+      "log_ipv6": null,
+      "extra_env": {
+        "DB_HOST": "postgres.ops.example.com",
+        "DB_PORT": "5432",
+        "DB_SSLMODE": "verify-full"
+      }
     },
     {
       "name": "monitoring-1",

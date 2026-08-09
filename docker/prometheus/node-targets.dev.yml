@@ -1,0 +1,2 @@
+- targets: [node-exporter:9100]
+  labels: { node: dev-host, role: development }

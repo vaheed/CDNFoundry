@@ -173,7 +173,7 @@ Global application secrets are distributed only when the rendered role's Compose
 | --- | --- |
 | DNS | `pdns-db-password`, `pdns-api-key` |
 | Edge | `edge-status-token` |
-| Monitoring enabled | `node-exporter-token` |
+| Monitoring enabled | Shared `metrics-token`; node-exporter is restricted by the private monitoring network and host firewall |
 | Centralized logs enabled | `log-auth-token` |
 
 A DNS node's database password is not shared with any other DNS node or the control plane.
@@ -223,8 +223,8 @@ Then verify on the **target host** that the populated persistent data exists and
 ## Monitoring modes
 
 - `disabled`: no full monitoring stack, no node exporter service, and no monitoring credentials in role bundles.
-- `colocated`: monitoring data services run on the control host; exporters cover all enabled production hosts.
-- `dedicated`: monitoring data services run on a monitoring-role host; exporters cover control, DNS, edge, combined, and monitoring hosts.
+- `colocated`: monitoring data services run on the control host; generated file discovery covers all enabled production hosts.
+- `dedicated`: monitoring data services run on a monitoring-role host; generated file discovery covers control, DNSdist, edge gateways, log collectors, and node exporters. An externally reachable control PostgreSQL endpoint is mandatory so the read-only Grafana role and views can be provisioned deterministically.
 
 Prometheus targets are regenerated automatically when nodes are added, updated, disabled, or removed.
 

@@ -14,8 +14,9 @@ scrape_configs:
     metrics_path: /metrics
     authorization:
       credentials_file: /run/secrets/metrics-token
-    static_configs:
-      - targets: [web:8080]
+    file_sd_configs:
+      - files: [/etc/prometheus/control-targets.yml]
+        refresh_interval: 30s
   - job_name: vector
     static_configs:
       - targets: [vector:9598]
@@ -30,14 +31,13 @@ scrape_configs:
     static_configs:
       - targets: [loki:3100]
   - job_name: node
-    static_configs:
-      - targets: [node-exporter:9100]
+    file_sd_configs:
+      - files: [/etc/prometheus/node-targets.yml]
+        refresh_interval: 30s
   - job_name: dnsdist
-    static_configs:
-      - targets: [dnsdist:8083]
-  - job_name: powerdns
-    static_configs:
-      - targets: [pdns-auth:8081]
+    file_sd_configs:
+      - files: [/etc/prometheus/dns-targets.yml]
+        refresh_interval: 30s
   - job_name: alertmanager
     static_configs:
       - targets: [alertmanager:9093]
