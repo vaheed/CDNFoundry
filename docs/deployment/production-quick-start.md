@@ -95,6 +95,36 @@ python3 -m json.tool fleet.json >/dev/null
 
 The dry run performs topology, role, address, feature, and Compose validation without writing Fleet state or bundles.
 
+### Publish the control-host management records
+
+Before starting the control bundle, create these records at the independent
+DNS provider that hosts `operator_domain`. In the starter topology all three
+names point to the control node's public address because control, telemetry,
+and Grafana are colocated:
+
+| Name | Record | Value |
+| --- | --- | --- |
+| `control.ops.example.com` | `A` | control node `public_ipv4` |
+| `telemetry.ops.example.com` | `A` | control node `public_ipv4` |
+| `grafana.ops.example.com` | `A` | control node `public_ipv4` |
+
+When the control node has a configured `public_ipv6`, publish matching `AAAA`
+records to that address. Otherwise do not publish `AAAA` records. Replace the
+example names with the names derived from your `operator_domain`.
+
+Caddy obtains public certificates for these names. It can be container-healthy
+while certificate issuance is failing, so do not continue until public DNS
+resolvers return the control node address for every published name:
+
+```bash
+dig +short A control.ops.example.com @1.1.1.1
+dig +short A telemetry.ops.example.com @1.1.1.1
+dig +short A grafana.ops.example.com @1.1.1.1
+```
+
+TCP ports 80 and 443 must also reach the control node during certificate
+issuance and normal operation. Do not point these records at a PoP address.
+
 ## 3. Generate protected state and bundles
 
 ```bash
@@ -143,6 +173,22 @@ docker compose --env-file .env.prod ps
 Run the control bundle's `start.sh` as root. Before starting Compose, it keeps the edge identity CA signing key restricted while changing it from the transfer-safe root-only mode to owner `root`, numeric group `82`, mode `0640`; group `82` is the PHP-FPM worker in the immutable core image. Without this activation step, `core` deliberately refuses to start because its worker cannot read the signing key. Other private keys remain mode `0600`.
 
 The control bundle starts `mmdb-updater` before services that consume GeoIP data. Run migrations only through the generated `start.sh`/tools workflow; container startup never migrates the database.
+
+Container health is not the completion gate for this step. Verify that Caddy
+has obtained a certificate and that the public control endpoint completes a TLS
+handshake:
+
+```bash
+curl --fail --show-error https://control.ops.example.com/health
+curl --fail --show-error https://grafana.ops.example.com/api/health
+docker compose --env-file .env.prod logs --since 10m --no-color caddy
+```
+
+If a browser reports `ERR_SSL_PROTOCOL_ERROR`, first recheck the three `A` and
+optional `AAAA` records above, inbound TCP 80/443, and the Caddy log for ACME
+errors. A healthy `caddy` container only confirms its local process health; it
+does not confirm public DNS, certificate issuance, or the external TLS path.
+Do not proceed to PoP setup until the control health request succeeds.
 
 ## 6. Start authoritative DNS on both PoPs
 

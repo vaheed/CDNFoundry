@@ -669,6 +669,9 @@ def test_production_docs_match_generated_bundle_workflow() -> None:
     assert "git clone https://github.com/vaheed/CDNFoundry.git" in quick
     assert "starter-fleet.json" in quick
     assert "--config fleet.json" in quick
+    assert "names point to the control node's public address" in quick
+    assert "curl --fail --show-error https://control.ops.example.com/health" in quick
+    assert "ERR_SSL_PROTOCOL_ERROR" in quick
     assert "own local PostgreSQL" in reference
     assert "never uses the control-plane" in reference
     assert "docker compose down -v" in quick
