@@ -335,7 +335,17 @@ def main() -> None:
             status(curl("geo.example", headers=("X-Forwarded-For: 8.8.8.8",)), 403, "domain_restricted")
             status(curl("quarantine.example"), 429, "domain_quarantined")
 
-            rate_results = run("docker", "run", "--rm", "--network", f"container:{NAME}", "--entrypoint", "sh", "curlimages/curl:8.16.0", "-c", "for n in 1 2 3 4 5 6; do curl -sS -D - -o /dev/null -H 'Host: rate.example' http://127.0.0.1:8080/; done", check=False)
+            # Send one concurrent burst so the assertion cannot straddle two
+            # one-second limiter buckets and accidentally place three requests
+            # in each bucket, which is exactly the configured rps + burst limit.
+            rate_results = run(
+                "docker", "run", "--rm", "--network", f"container:{NAME}",
+                "--entrypoint", "sh", "curlimages/curl:8.16.0", "-c",
+                "for n in 1 2 3 4 5 6; do "
+                "curl -sS -D /tmp/rate-$n -o /dev/null -H 'Host: rate.example' http://127.0.0.1:8080/ & "
+                "done; wait; cat /tmp/rate-*",
+                check=False,
+            )
             assert "client_rate_exceeded" in rate_results.stdout, rate_results.stdout
             status(curl("healthy.example"), 200)
 
