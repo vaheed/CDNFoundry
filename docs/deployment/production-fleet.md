@@ -208,10 +208,14 @@ A DNS node's database password is not shared with any other DNS node or the cont
 On each DNS-capable host:
 
 1. `pdns-db` starts from that host's persistent PostgreSQL volume.
-2. `pdns-migrate` uses the same node-specific stored credential.
-3. `pdns-auth` connects to hostname `pdns-db`, database `pdns`, user `pdns`, and that same credential.
-4. Health checks and future migrations use the same stable value.
-5. A normal render does not generate a new password.
+2. The activation workflow idempotently ensures the pinned base PowerDNS
+   schema and synchronizes the local `pdns` role password to the active bundle.
+   This repairs an interrupted first initialization without deleting data.
+3. `pdns-migrate` applies maintained runtime migrations using the same
+   node-specific stored credential.
+4. `pdns-auth` connects to hostname `pdns-db`, database `pdns`, user `pdns`, and that same credential.
+5. Health checks and future migrations use the same stable value.
+6. A normal render does not generate a new password.
 
 For an existing installation, use `adopt-existing` with the existing `.env.prod`; the importer stores `PDNS_DB_PASSWORD` under that node without printing it. The source database volume is not deleted.
 

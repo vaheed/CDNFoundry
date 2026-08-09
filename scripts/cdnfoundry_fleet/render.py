@@ -774,6 +774,8 @@ docker compose --env-file .env.prod --profile '*' ps
         if node["role"] in {"dns", "dns-edge"}:
             return (
                 "docker compose --env-file .env.prod up -d --wait pdns-db\n"
+                "docker compose --env-file .env.prod exec -T pdns-db "
+                "sh /usr/local/bin/ensure-pdns-runtime.sh\n"
                 "docker compose --env-file .env.prod --profile tools run --rm pdns-migrate"
             )
         if node["role"] == "control":

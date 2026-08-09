@@ -272,6 +272,7 @@ services:
     volumes:
       - pdns-db:/var/lib/postgresql
       - ./docker/postgres/pdns-schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+      - ./docker/postgres/ensure-pdns-runtime.sh:/usr/local/bin/ensure-pdns-runtime.sh:ro
     networks: [dns-private]
     restart: unless-stopped
     healthcheck:

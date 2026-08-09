@@ -1,5 +1,5 @@
 -- PowerDNS Authoritative 5.1 PostgreSQL schema, sourced from the pinned image.
-CREATE TABLE domains (
+CREATE TABLE IF NOT EXISTS domains (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   master VARCHAR(128) DEFAULT NULL,
@@ -11,10 +11,10 @@ CREATE TABLE domains (
   catalog TEXT DEFAULT NULL,
   CONSTRAINT c_lowercase_name CHECK (name::TEXT = LOWER(name::TEXT))
 );
-CREATE UNIQUE INDEX name_index ON domains(name);
-CREATE INDEX catalog_idx ON domains(catalog);
+CREATE UNIQUE INDEX IF NOT EXISTS name_index ON domains(name);
+CREATE INDEX IF NOT EXISTS catalog_idx ON domains(catalog);
 
-CREATE TABLE records (
+CREATE TABLE IF NOT EXISTS records (
   id BIGSERIAL PRIMARY KEY,
   domain_id INT DEFAULT NULL REFERENCES domains(id) ON DELETE CASCADE,
   name VARCHAR(255) DEFAULT NULL,
@@ -27,19 +27,19 @@ CREATE TABLE records (
   auth BOOL DEFAULT TRUE,
   CONSTRAINT c_lowercase_name CHECK (name::TEXT = LOWER(name::TEXT))
 );
-CREATE INDEX rec_name_index ON records(name);
-CREATE INDEX nametype_index ON records(name,type);
-CREATE INDEX domain_id ON records(domain_id);
-CREATE INDEX recordorder ON records (domain_id, ordername text_pattern_ops);
+CREATE INDEX IF NOT EXISTS rec_name_index ON records(name);
+CREATE INDEX IF NOT EXISTS nametype_index ON records(name,type);
+CREATE INDEX IF NOT EXISTS domain_id ON records(domain_id);
+CREATE INDEX IF NOT EXISTS recordorder ON records (domain_id, ordername text_pattern_ops);
 
-CREATE TABLE supermasters (
+CREATE TABLE IF NOT EXISTS supermasters (
   ip INET NOT NULL,
   nameserver VARCHAR(255) NOT NULL,
   account VARCHAR(40) NOT NULL,
   PRIMARY KEY(ip, nameserver)
 );
 
-CREATE TABLE comments (
+CREATE TABLE IF NOT EXISTS comments (
   id SERIAL PRIMARY KEY,
   domain_id INT NOT NULL REFERENCES domains(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
@@ -49,19 +49,19 @@ CREATE TABLE comments (
   comment VARCHAR(65535) NOT NULL,
   CONSTRAINT c_lowercase_name CHECK (name::TEXT = LOWER(name::TEXT))
 );
-CREATE INDEX comments_domain_id_idx ON comments(domain_id);
-CREATE INDEX comments_name_type_idx ON comments(name, type);
-CREATE INDEX comments_order_idx ON comments(domain_id, modified_at);
+CREATE INDEX IF NOT EXISTS comments_domain_id_idx ON comments(domain_id);
+CREATE INDEX IF NOT EXISTS comments_name_type_idx ON comments(name, type);
+CREATE INDEX IF NOT EXISTS comments_order_idx ON comments(domain_id, modified_at);
 
-CREATE TABLE domainmetadata (
+CREATE TABLE IF NOT EXISTS domainmetadata (
   id SERIAL PRIMARY KEY,
   domain_id INT REFERENCES domains(id) ON DELETE CASCADE,
   kind VARCHAR(32),
   content TEXT
 );
-CREATE INDEX domainidmetaindex ON domainmetadata(domain_id);
+CREATE INDEX IF NOT EXISTS domainidmetaindex ON domainmetadata(domain_id);
 
-CREATE TABLE cryptokeys (
+CREATE TABLE IF NOT EXISTS cryptokeys (
   id SERIAL PRIMARY KEY,
   domain_id INT REFERENCES domains(id) ON DELETE CASCADE,
   flags INT NOT NULL,
@@ -69,13 +69,13 @@ CREATE TABLE cryptokeys (
   published BOOL DEFAULT TRUE,
   content TEXT
 );
-CREATE INDEX domainidindex ON cryptokeys(domain_id);
+CREATE INDEX IF NOT EXISTS domainidindex ON cryptokeys(domain_id);
 
-CREATE TABLE tsigkeys (
+CREATE TABLE IF NOT EXISTS tsigkeys (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255),
   algorithm VARCHAR(50),
   secret VARCHAR(255),
   CONSTRAINT c_lowercase_name CHECK (name::TEXT = LOWER(name::TEXT))
 );
-CREATE UNIQUE INDEX namealgoindex ON tsigkeys(name, algorithm);
+CREATE UNIQUE INDEX IF NOT EXISTS namealgoindex ON tsigkeys(name, algorithm);

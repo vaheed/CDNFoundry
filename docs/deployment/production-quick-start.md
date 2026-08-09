@@ -250,9 +250,12 @@ docker compose --env-file .env.prod ps
 
 At this stage a combined `dns-edge` bundle has no edge UUID or bootstrap token.
 Its generated `start.sh` therefore activates the `dns` profile only: it starts
-the node-local PowerDNS database, applies the separate PowerDNS migration, and
-starts PowerDNS, DNSdist, and the restricted DNS API. It deliberately does not
-start the edge profile yet.
+the node-local PowerDNS database, idempotently ensures its base schema,
+synchronizes the local database role to the bundle's node-specific password,
+applies the separate PowerDNS migration, and starts PowerDNS, DNSdist, and the
+restricted DNS API. It deliberately does not start the edge profile yet. This
+activation can repair an interrupted first database initialization without
+deleting the persistent volume.
 
 Before adding either DNS cluster in the control panel, confirm that DNSdist
 answers locally over both transports and that the control host can reach the

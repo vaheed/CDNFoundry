@@ -32,6 +32,7 @@ def source_repo(tmp_path: Path) -> Path:
     (root / "docker/vector").mkdir(parents=True)
     for path in [
         "docker/postgres/pdns-schema.sql",
+        "docker/postgres/ensure-pdns-runtime.sh",
         "docker/pdns/pdns.conf",
         "docker/dnsdist/dnsdist.conf",
         "docker/prometheus/prometheus.yml",
@@ -96,7 +97,11 @@ def source_repo(tmp_path: Path) -> Path:
                     "POSTGRES_USER": "pdns",
                     "POSTGRES_PASSWORD": "${PDNS_DB_PASSWORD:?required}",
                 },
-                "volumes": ["pdns-db:/var/lib/postgresql", "./docker/postgres/pdns-schema.sql:/init.sql:ro"],
+                "volumes": [
+                    "pdns-db:/var/lib/postgresql",
+                    "./docker/postgres/pdns-schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro",
+                    "./docker/postgres/ensure-pdns-runtime.sh:/usr/local/bin/ensure-pdns-runtime.sh:ro",
+                ],
             },
             "mmdb-updater": {
                 "image": "mmdb:${CDNF_RELEASE:?required}",
@@ -401,6 +406,8 @@ def test_combined_node_starts_dns_before_edge_registration(store: FleetState, so
     start = (output / "pop-1/start.sh").read_text(encoding="utf-8")
     compose = yaml.safe_load((output / "pop-1/compose.yml").read_text(encoding="utf-8"))
     assert "docker compose --env-file .env.prod --profile dns up -d" in start
+    assert "sh /usr/local/bin/ensure-pdns-runtime.sh" in start
+    assert start.index("ensure-pdns-runtime.sh") < start.index("pdns-migrate")
     assert "--profile edge" not in start
     assert compose["services"]["pdns-auth"]["profiles"] == ["dns"]
     assert compose["services"]["edge-agent"]["profiles"] == ["edge"]
@@ -872,6 +879,27 @@ def test_production_log_collector_passes_auth_token_to_vector() -> None:
     assert 'header Authorization "Bearer {$LOG_AUTH_TOKEN}"' in (
         REPO_PATCH / "deploy/production/Caddyfile.telemetry"
     ).read_text(encoding="utf-8")
+
+
+def test_pdns_activation_repairs_interrupted_schema_and_reconciles_password() -> None:
+    import re
+
+    from cdnfoundry_fleet.compose import load_yaml
+
+    schema = (REPO_PATCH / "docker/postgres/pdns-schema.sql").read_text(encoding="utf-8")
+    assert not re.search(r"^CREATE TABLE (?!IF NOT EXISTS)", schema, re.MULTILINE)
+    assert not re.search(r"^CREATE (?:UNIQUE )?INDEX (?!IF NOT EXISTS)", schema, re.MULTILINE)
+
+    helper = (REPO_PATCH / "docker/postgres/ensure-pdns-runtime.sh").read_text(encoding="utf-8")
+    assert "-f /docker-entrypoint-initdb.d/10-schema.sql" in helper
+    assert "ALTER ROLE pdns PASSWORD :'new_password';" in helper
+    assert "set -x" not in helper
+
+    compose = load_yaml(REPO_PATCH / "compose.prod.yml")
+    assert (
+        "./docker/postgres/ensure-pdns-runtime.sh:/usr/local/bin/ensure-pdns-runtime.sh:ro"
+        in compose["services"]["pdns-db"]["volumes"]
+    )
 
 
 def test_dedicated_monitoring_fails_closed_without_external_control_database(
