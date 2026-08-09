@@ -75,6 +75,7 @@ class Renderer:
             atomic_write(tmp / "README.md", self._node_readme(state, node, filtered), 0o600)
             atomic_write(tmp / "validate.sh", self._validate_script(node, filtered), 0o700)
             atomic_write(tmp / "start.sh", self._start_script(state, node), 0o700)
+            atomic_write(tmp / "stop.sh", self._stop_script(), 0o700)
             self._write_manifest(tmp, state, node)
             previous = destination.with_name(destination.name + ".previous")
             if previous.exists():
@@ -704,6 +705,11 @@ DNS/edge node without an edge UUID starts authoritative DNS but does not start
 the edge profile. After edge registration is configured and the bundle is
 rerendered, the same script activates both profiles.
 
+For a planned stop, use `./stop.sh`. The bundle uses Compose profiles, so a
+plain `docker compose down` selects no profiled services and does nothing.
+`stop.sh` activates every profile and preserves all named volumes. Never add
+`-v` or `--volumes`.
+
 {control_bootstrap}
 
 ## Listeners
@@ -721,7 +727,7 @@ docker compose --env-file .env.prod logs --since 10m --no-color
 
 ## Upgrade and rollback
 
-Replace the bundle atomically, run `./validate.sh`, pull images, then use `docker compose --env-file .env.prod up -d`. If validation or startup fails, restore the `.previous` bundle and rerun the same command. Never use `docker compose down -v` and never delete PostgreSQL, Valkey, ClickHouse, Loki, Prometheus, Grafana, edge-state, cache, or MMDB volumes.
+Replace the bundle atomically, run `./validate.sh`, pull images, then use `./start.sh`. If validation or startup fails, restore the `.previous` bundle and rerun `./start.sh`. Never use `docker compose down -v` and never delete PostgreSQL, Valkey, ClickHouse, Loki, Prometheus, Grafana, edge-state, cache, or MMDB volumes.
 
 ## Cleanup
 
@@ -741,6 +747,14 @@ After successful validation and the retention period, securely remove obsolete t
             rows.append("| TCP 8443 | Edge nodes only |")
         rows.append("| TCP 9100 | Monitoring host/private monitoring network only |")
         return "\n".join(rows)
+
+    @staticmethod
+    def _stop_script() -> str:
+        return """#!/usr/bin/env sh
+set -eu
+docker compose --env-file .env.prod --profile '*' stop
+docker compose --env-file .env.prod --profile '*' ps
+"""
 
     def _node_start_order(self, node: dict[str, Any]) -> str:
         if node["role"] in {"dns", "dns-edge"}:

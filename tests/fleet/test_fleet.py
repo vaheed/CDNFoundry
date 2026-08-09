@@ -382,6 +382,10 @@ def test_control_start_restricts_identity_ca_key_for_php_worker(store: FleetStat
     assert "chmod 0640 secrets/metrics-token" in start
     assert "docker compose --env-file .env.prod --profile control up -d" in start
     assert start.index("chmod 0640 pki/edge-identity-ca.key") < start.index("./validate.sh")
+    stop = (output / "control-1/stop.sh").read_text(encoding="utf-8")
+    assert "--profile '*' stop" in stop
+    assert "-v" not in stop
+    assert stat.S_IMODE((output / "control-1/stop.sh").stat().st_mode) == 0o700
     validate = (output / "control-1/validate.sh").read_text(encoding="utf-8")
     assert 'test "$(stat -c \'%u:%g\' pki/edge-identity-ca.key)" = "0:82"' in validate
 

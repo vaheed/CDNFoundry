@@ -78,7 +78,7 @@ Key alert rules are:
 | `CDNFoundryQueueBacklog` | depth over 1,000 or age over 900 seconds for 5 minutes |
 | `CDNFoundryFailedOperations` | any failed operation for 10 minutes |
 | `CDNFoundryCertificateExpiry` | active certificate in alert window |
-| `DNSDistUnavailable`, `PowerDNSUnavailable` | scrape down for 2 minutes |
+| `DNSDistUnavailable` | DNSdist scrape down for 2 minutes |
 | `DNSDistBackendUnavailable` | DNSdist backend marked down |
 | `HostClockUnsynchronized` | node clock unsynchronized |
 | `HostClockDrift` | absolute offset over 5 seconds |
