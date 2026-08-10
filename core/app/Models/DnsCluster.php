@@ -13,7 +13,7 @@ class DnsCluster extends Model
     {
         $parts = parse_url($this->api_url);
         $host = strtolower((string) ($parts['host'] ?? ''));
-        if (str_contains($host, ':')) {
+        if (str_contains($host, ':') && ! str_starts_with($host, '[')) {
             $host = '['.$host.']';
         }
 
