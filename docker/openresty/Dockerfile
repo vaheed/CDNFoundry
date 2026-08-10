@@ -4,7 +4,7 @@ ARG NGX_BROTLI_COMMIT=a71f9312c2deb28875acc7bacfdd5695a111aa53
 ARG MODSECURITY_COMMIT=a555e5a44573e50f04ad997b3b24c214c42f8e29
 ARG MODSECURITY_NGINX_VERSION=v1.0.4
 ARG OWASP_CRS_VERSION=v4.26.0
-RUN apk add --no-cache autoconf automake build-base cmake curl-dev git libtool linux-headers lmdb-dev libxml2-dev openssl-dev pcre-dev pcre2-dev perl yajl-dev zlib-dev
+RUN apk add --no-cache autoconf automake build-base cmake curl curl-dev git libtool linux-headers lmdb-dev libxml2-dev openssl-dev pcre-dev pcre2-dev perl yajl-dev zlib-dev
 RUN git clone https://github.com/google/ngx_brotli.git /tmp/ngx_brotli \
     && git -C /tmp/ngx_brotli checkout "${NGX_BROTLI_COMMIT}" \
     && git -C /tmp/ngx_brotli submodule update --init --recursive \
@@ -29,7 +29,9 @@ RUN git clone https://github.com/owasp-modsecurity/ModSecurity-nginx.git /tmp/Mo
     && git -C /tmp/ModSecurity-nginx checkout "${MODSECURITY_NGINX_COMMIT}" \
     && git clone https://github.com/coreruleset/coreruleset.git /tmp/coreruleset \
     && git -C /tmp/coreruleset checkout "${OWASP_CRS_COMMIT}" \
-    && wget -q "https://openresty.org/download/openresty-1.31.1.1.tar.gz" -O /tmp/openresty.tar.gz \
+    && curl --fail --location --silent --show-error \
+       --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 20 \
+       "https://openresty.org/download/openresty-1.31.1.1.tar.gz" -o /tmp/openresty.tar.gz \
     && echo "${OPENRESTY_SHA256}  /tmp/openresty.tar.gz" | sha256sum -c - \
     && tar -xzf /tmp/openresty.tar.gz -C /tmp \
     && cd /tmp/openresty-1.31.1.1/bundle/nginx-1.31.1 \

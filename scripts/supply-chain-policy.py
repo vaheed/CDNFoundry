@@ -45,8 +45,12 @@ for path in DOCKERFILES:
         following = text[clone.end():clone.end() + 300]
         if not re.search(rf"git -C {re.escape(destination)} checkout \"?\$\{{?[A-Z0-9_]+\}}?\"?", following):
             fail(f"{path.relative_to(ROOT)} has a Git dependency without an explicit checkout")
-    if "openresty.org/download/" in text and "sha256sum -c" not in text:
-        fail("OpenResty source archive lacks checksum verification")
+    if "openresty.org/download/" in text:
+        if "sha256sum -c" not in text:
+            fail("OpenResty source archive lacks checksum verification")
+        for option in ["--fail", "--retry", "--retry-all-errors", "--connect-timeout"]:
+            if option not in text:
+                fail(f"OpenResty source archive download lacks {option}")
 
 for workflow in (ROOT / ".github/workflows").glob("*.yml"):
     text = workflow.read_text()
