@@ -5,12 +5,13 @@ namespace App\Filament\Admin\Pages;
 use App\Http\Requests\Admin\PlatformDnsSettingsRequest;
 use App\Jobs\ApplyPlatformDnsSettings;
 use App\Models\AuditLog;
+use App\Models\DnsCluster;
 use App\Models\Operation;
 use App\Models\PlatformDnsSetting;
 use App\Support\FilamentHelp;
 use App\Support\PlatformDnsConfirmation;
 use Filament\Forms\Components\Repeater;
-use Filament\Forms\Components\TagsInput;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -93,7 +94,14 @@ class SystemDnsIdentity extends Page
                         TextInput::make('ipv4')->label('IPv4')->required()->ipv4(),
                         TextInput::make('ipv6')->label(FilamentHelp::label('IPv6', 'Optional. Leave empty for IPv4-only authoritative DNS.'))->ipv6(),
                     ])->columns(['default' => 1, 'md' => 3]),
-                    TagsInput::make('cluster_targets')->label('DNS cluster targets')->required()->nestedRecursiveRules(['string', 'max:253']),
+                    Select::make('cluster_targets')
+                        ->label('DNS cluster targets')
+                        ->helperText('Select the registered clusters that should receive the platform SOA, NS, glue, and proxy records.')
+                        ->multiple()->required()->searchable()->preload()
+                        ->options(fn (): array => DnsCluster::query()->orderBy('name')->get()
+                            ->mapWithKeys(fn (DnsCluster $cluster): array => [
+                                $cluster->apiTarget() => "{$cluster->name} — {$cluster->location} — {$cluster->apiTarget()}",
+                            ])->all()),
                 ]),
             Section::make('SOA and TTL policy')
                 ->description('Zone authority identity and bounded default timers, in seconds.')

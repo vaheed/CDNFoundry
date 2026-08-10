@@ -9,6 +9,17 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable(['name', 'location', 'enabled', 'api_url', 'api_key', 'server_id', 'nameservers', 'capacity_zones', 'operational_notes', 'last_health_status', 'last_health_error', 'last_health_at', 'last_reconciled_revision'])]
 class DnsCluster extends Model
 {
+    public function apiTarget(): string
+    {
+        $parts = parse_url($this->api_url);
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        if (str_contains($host, ':')) {
+            $host = '['.$host.']';
+        }
+
+        return $host.(isset($parts['port']) ? ':'.$parts['port'] : '');
+    }
+
     public function deployments(): HasMany
     {
         return $this->hasMany(DnsDeployment::class);

@@ -72,9 +72,14 @@ workstream does not replace an earlier product checkpoint.
    identity**, **Authoritative nameservers**, and **SOA and TTL policy** are
    full-width readable sections. Enter platform domain, proxy hostname, two
    nameservers with IPv4 and optional IPv6, SOA primary/mailbox, refresh, retry,
-   expire, minimum TTL, and default TTL. Choose **Validate and preview**, inspect
-   normalization, apply the exact confirmation, and record the asynchronous
-   operation and active checksum on both clusters.
+   expire, minimum TTL, and default TTL. In **DNS cluster targets**, select the
+   registered cluster choices and confirm each option displays its name,
+   location, and normalized API host and port; free-form locations or cluster
+   names must not be accepted. Choose **Validate and preview**, inspect
+   normalization, apply the exact confirmation, and record an asynchronous
+   operation with a non-zero target count and active checksum on both clusters.
+   Disabling every matching cluster or otherwise producing zero healthy targets
+   must fail the operation without claiming success.
 3. Create a domain, assign the user, verify nameservers, activate it, then cover
    DNS-only A, AAAA, CNAME, MX, TXT, NS, CAA, SRV, and reverse PTR records.
    Exercise BIND preview/import/export, duplicate/CNAME/zone-boundary failures,

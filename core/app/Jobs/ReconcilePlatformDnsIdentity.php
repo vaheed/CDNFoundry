@@ -49,7 +49,7 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
 
         $configuredTargets = collect($settings->cluster_targets)->map(fn (string $target): string => strtolower($target))->flip();
         $clusters = DnsCluster::query()->where('enabled', true)->where('last_health_status', 'healthy')->orderBy('id')->get()
-            ->filter(fn (DnsCluster $cluster): bool => $configuredTargets->has(self::clusterTarget($cluster)));
+            ->filter(fn (DnsCluster $cluster): bool => $configuredTargets->has($cluster->apiTarget()));
         foreach ($clusters as $cluster) {
             $targets++;
             $deployment = PlatformDnsDeployment::query()->firstOrCreate(['dns_cluster_id' => $cluster->id]);
@@ -85,6 +85,10 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
             }
         }
 
+        if ($targets === 0) {
+            $failures[] = 'No enabled, healthy DNS cluster matches the configured platform DNS targets.';
+        }
+
         if ($failures !== []) {
             $message = implode('; ', $failures);
             $operation?->update(['status' => 'failed', 'error' => mb_substr($message, 0, 4000), 'finished_at' => now()]);
@@ -116,14 +120,4 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
         });
     }
 
-    private static function clusterTarget(DnsCluster $cluster): string
-    {
-        $parts = parse_url($cluster->api_url);
-        $host = strtolower((string) ($parts['host'] ?? ''));
-        if (str_contains($host, ':')) {
-            $host = '['.$host.']';
-        }
-
-        return $host.(isset($parts['port']) ? ':'.$parts['port'] : '');
-    }
 }

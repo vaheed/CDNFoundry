@@ -17,6 +17,7 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Tests\TestCase;
 
 class SystemIdentityApiTest extends TestCase
@@ -28,6 +29,16 @@ class SystemIdentityApiTest extends TestCase
         Queue::fake();
         $admin = User::factory()->admin()->create();
         $payload = $this->validPayload();
+        DnsCluster::query()->create([
+            'name' => 'dns-local', 'location' => 'test', 'enabled' => true, 'last_health_status' => 'healthy',
+            'api_url' => 'http://pdns-auth:8081', 'api_key' => 'private-test-key', 'server_id' => 'localhost',
+            'nameservers' => [['hostname' => 'ns1.cdnf.test'], ['hostname' => 'ns2.cdnf.test']],
+        ]);
+        Http::fake(fn (Request $request) => match ($request->method()) {
+            'GET' => Http::response([], 404),
+            'POST' => Http::response([], 201),
+            'PATCH' => Http::response([], 204),
+        });
 
         $validation = $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)
             ->assertOk()->assertJsonPath('data.valid', true);
@@ -79,6 +90,42 @@ class SystemIdentityApiTest extends TestCase
         $this->assertSame(['A', 'AAAA', 'NS', 'SOA'], collect($deployment->active_rrsets)->pluck('type')->unique()->sort()->values()->all());
         $this->assertSame('succeeded', $operation->refresh()->status);
         $this->assertSame(1, $operation->result['targets']);
+    }
+
+    public function test_platform_identity_fails_when_no_healthy_cluster_matches_the_configured_targets(): void
+    {
+        $admin = User::factory()->admin()->create();
+        DnsCluster::query()->create([
+            'name' => 'dns-local', 'location' => 'test', 'enabled' => true, 'last_health_status' => 'healthy',
+            'api_url' => 'https://dns-api.example.test:8444', 'api_key' => 'private-test-key', 'server_id' => 'localhost',
+            'nameservers' => [['hostname' => 'ns1.cdnf.test'], ['hostname' => 'ns2.cdnf.test']],
+        ]);
+        $operation = Operation::query()->create([
+            'actor_id' => $admin->id, 'type' => 'platform_dns_identity.update', 'status' => 'pending',
+            'input' => ['settings_id' => 1, 'revision' => 1],
+        ]);
+        PlatformDnsSetting::query()->create([
+            'id' => 1, ...$this->validPayload(), 'cluster_targets' => ['tehran'], 'revision' => 1,
+        ]);
+
+        try {
+            (new ApplyPlatformDnsSettings($operation->id))->handle(app(PowerDnsClient::class));
+            $this->fail('Expected reconciliation without a matching cluster to fail.');
+        } catch (RuntimeException $exception) {
+            $this->assertStringContainsString('No enabled, healthy DNS cluster matches', $exception->getMessage());
+        }
+
+        $this->assertSame('failed', $operation->refresh()->status);
+        $this->assertDatabaseCount('platform_dns_deployments', 0);
+    }
+
+    public function test_dns_cluster_normalizes_its_api_url_to_a_platform_target(): void
+    {
+        $cluster = new DnsCluster(['api_url' => 'https://DNS-API-1.ops.example.test:8444/path']);
+        $this->assertSame('dns-api-1.ops.example.test:8444', $cluster->apiTarget());
+
+        $cluster->api_url = 'https://[2001:db8::53]:8444';
+        $this->assertSame('[2001:db8::53]:8444', $cluster->apiTarget());
     }
 
     public function test_dns_identity_validates_configured_address_families(): void
