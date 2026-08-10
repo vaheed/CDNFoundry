@@ -119,5 +119,4 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
             self::dispatch()->afterCommit();
         });
     }
-
 }
