@@ -108,6 +108,19 @@ def login(email: str, password: str) -> str:
     return payload["data"]["token"]
 
 
+def wait_operation(token: str, operation_id: str, timeout: int = 30) -> dict:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        _, current = request("GET", f"/api/operations/{operation_id}", token=token)
+        status = current["data"]["status"]
+        if status == "succeeded":
+            return current["data"]
+        if status == "failed":
+            raise AssertionError(current)
+        time.sleep(0.5)
+    raise AssertionError(f"operation {operation_id} did not finish")
+
+
 def main() -> None:
     wait_for_api()
     _, ready = request("GET", "/api/ready")
@@ -197,6 +210,59 @@ def main() -> None:
     )
     user_token = login(USER_EMAIL, USER_PASSWORD)
 
+    _, clusters = request("GET", "/api/admin/dns/clusters", token=admin_token)
+    cluster = next(
+        (item for item in clusters["data"] if item["api_url"] == "http://pdns-auth:8081"),
+        None,
+    )
+    if cluster is None:
+        _, created = request(
+            "POST",
+            "/api/admin/dns/clusters",
+            {
+                "name": f"phase1-pdns-{RUN_ID}",
+                "location": "local-compose",
+                "api_url": "http://pdns-auth:8081",
+                "api_key": "pdns-dev-api-key",
+                "server_id": "localhost",
+                "nameservers": [
+                    {"hostname": "ns1.cdnf.test"},
+                    {"hostname": "ns2.cdnf.test"},
+                ],
+                "capacity_zones": 100000,
+            },
+            admin_token,
+            str(uuid.uuid4()),
+        )
+        cluster = created["data"]
+        wait_operation(admin_token, created["operation_id"])
+        _, refreshed = request(
+            "GET", f"/api/admin/dns/clusters/{cluster['id']}", token=admin_token
+        )
+        cluster = refreshed["data"]
+    elif cluster["last_health_status"] != "healthy":
+        _, testing = request(
+            "POST",
+            f"/api/admin/dns/clusters/{cluster['id']}/test",
+            {},
+            admin_token,
+            str(uuid.uuid4()),
+        )
+        wait_operation(admin_token, testing["data"]["id"])
+        _, refreshed = request(
+            "GET", f"/api/admin/dns/clusters/{cluster['id']}", token=admin_token
+        )
+        cluster = refreshed["data"]
+    if not cluster["enabled"]:
+        _, enabled = request(
+            "POST",
+            f"/api/admin/dns/clusters/{cluster['id']}/enable",
+            {},
+            admin_token,
+            str(uuid.uuid4()),
+        )
+        wait_operation(admin_token, enabled["operation_id"])
+
     dns_payload = {
         "platform_domain": "cdnf.test",
         "proxy_hostname": "proxy.cdnf.test",
@@ -224,17 +290,8 @@ def main() -> None:
     )
     assert status == 202
     operation_id = operation["data"]["id"]
-    deadline = time.monotonic() + 30
-    while time.monotonic() < deadline:
-        _, current = request("GET", f"/api/operations/{operation_id}", token=admin_token)
-        operation_status = current["data"]["status"]
-        if operation_status == "succeeded":
-            break
-        if operation_status == "failed":
-            raise AssertionError(current)
-        time.sleep(0.5)
-    else:
-        raise AssertionError(f"operation {operation_id} did not finish")
+    completed = wait_operation(admin_token, operation_id)
+    assert completed["result"]["targets"] == 1, completed
 
     request(
         "POST", f"/api/admin/users/{user_id}/disable", {}, admin_token, str(uuid.uuid4())

@@ -136,13 +136,6 @@ def main() -> None:
     artisan("App\\Models\\User::query()->create(['name'=>'Phase 2 E2E','email'=>" + quote(EMAIL) + ",'password'=>Illuminate\\Support\\Facades\\Hash::make(" + quote(PASSWORD) + "),'type'=>'admin']);")
     _, login = call("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD, "device_name": "phase2-e2e"})
     token = login["data"]["token"]
-    settings = {
-        "platform_domain": "cdnf.test", "proxy_hostname": "proxy.cdnf.test",
-        "nameservers": [{"hostname": "ns1.cdnf.test", "ipv4": "8.8.8.8", "ipv6": "2001:4860:4860::8888"}, {"hostname": "ns2.cdnf.test", "ipv4": "1.1.1.1", "ipv6": "2606:4700:4700::1111"}],
-        "soa_primary": "ns1.cdnf.test", "soa_mailbox": "hostmaster.cdnf.test", "soa_refresh": 3600, "soa_retry": 600, "soa_expire": 1209600, "soa_minimum_ttl": 300, "default_ttl": 300, "cluster_targets": ["pdns-auth:8081"],
-    }
-    _, validated_settings = call("POST", "/api/admin/system/settings/dns/validate", settings, token)
-    call("PATCH", "/api/admin/system/settings/dns", settings | {"confirmation_token": validated_settings["data"]["confirmation_token"]}, token)
     _, clusters = call("GET", "/api/admin/dns/clusters", token=token)
     cluster = next((item for item in clusters["data"] if item["api_url"] == "http://pdns-auth:8081"), None)
     if cluster is None:
@@ -159,6 +152,15 @@ def main() -> None:
     if not cluster["enabled"]:
         _, enabled = call("POST", f"/api/admin/dns/clusters/{cluster['id']}/enable", {}, token)
         wait_operation(token, enabled["operation_id"])
+    settings = {
+        "platform_domain": "cdnf.test", "proxy_hostname": "proxy.cdnf.test",
+        "nameservers": [{"hostname": "ns1.cdnf.test", "ipv4": "8.8.8.8", "ipv6": "2001:4860:4860::8888"}, {"hostname": "ns2.cdnf.test", "ipv4": "1.1.1.1", "ipv6": "2606:4700:4700::1111"}],
+        "soa_primary": "ns1.cdnf.test", "soa_mailbox": "hostmaster.cdnf.test", "soa_refresh": 3600, "soa_retry": 600, "soa_expire": 1209600, "soa_minimum_ttl": 300, "default_ttl": 300, "cluster_targets": ["pdns-auth:8081"],
+    }
+    _, validated_settings = call("POST", "/api/admin/system/settings/dns/validate", settings, token)
+    _, identity = call("PATCH", "/api/admin/system/settings/dns", settings | {"confirmation_token": validated_settings["data"]["confirmation_token"]}, token)
+    completed_identity = wait_operation(token, identity["data"]["id"])
+    assert completed_identity["result"]["targets"] == 1, completed_identity
     _, created_domain = call("POST", "/api/domains", {"name": ZONE}, token)
     domain_id = created_domain["data"]["id"]
     call("POST", f"/api/admin/domains/{domain_id}/force-verify", {}, token)
