@@ -284,9 +284,6 @@ services:
   pdns-auth:
     image: powerdns/pdns-auth-51:5.1.3
     profiles: [dns]
-    environment:
-      PDNS_gpgsql_password: ${PDNS_DB_PASSWORD}
-      PDNS_api_key: ${PDNS_API_KEY:?PDNS_API_KEY is required}
     volumes:
       - ./docker/pdns/pdns.conf:/etc/powerdns/pdns.conf:ro
       - ./docker/pdns/geoip-zones.yml:/etc/powerdns/geoip-zones.yml:ro

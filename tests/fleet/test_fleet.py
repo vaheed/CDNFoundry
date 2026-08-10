@@ -40,6 +40,9 @@ def source_repo(tmp_path: Path) -> Path:
     ]:
         target = root / path
         target.write_text("# fixture\n", encoding="utf-8")
+    (root / "docker/pdns/pdns.conf").write_text(
+        "gpgsql-password=pdns-dev-only\napi-key=pdns-dev-api-key\n", encoding="utf-8"
+    )
 
     compose = {
         "services": {
@@ -410,6 +413,14 @@ def test_combined_node_starts_dns_before_edge_registration(store: FleetState, so
     assert start.index("ensure-pdns-runtime.sh") < start.index("pdns-migrate")
     assert "--profile edge" not in start
     assert compose["services"]["pdns-auth"]["profiles"] == ["dns"]
+    assert "PDNS_gpgsql_password" not in compose["services"]["pdns-auth"]["environment"]
+    assert "PDNS_api_key" not in compose["services"]["pdns-auth"]["environment"]
+    pdns_config = (output / "pop-1/docker/pdns/pdns.conf").read_text(encoding="utf-8")
+    assert "pdns-dev-only" not in pdns_config
+    assert "pdns-dev-api-key" not in pdns_config
+    assert store.read_secret("pdns-db-password", node="pop-1") in pdns_config
+    assert store.read_secret("pdns-api-key", node="pop-1") in pdns_config
+    assert stat.S_IMODE((output / "pop-1/docker/pdns/pdns.conf").stat().st_mode) == 0o600
     assert compose["services"]["edge-agent"]["profiles"] == ["edge"]
 
     with store.locked():

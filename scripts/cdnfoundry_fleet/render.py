@@ -123,6 +123,12 @@ class Renderer:
                 raise RenderError(f"DNS node {node['name']} does not contain local pdns-db and pdns-auth services")
             # Explicitly prevent accidental use of the control database.
             pdns_env = services["pdns-auth"].setdefault("environment", {})
+            # The official PowerDNS image only consumes its documented API-key
+            # environment variable; arbitrary PDNS_<setting> values do not
+            # override a mounted pdns.conf.  Render both credentials into the
+            # node-private configuration instead.
+            pdns_env.pop("PDNS_gpgsql_password", None)
+            pdns_env.pop("PDNS_api_key", None)
             pdns_env["PDNS_gpgsql_host"] = "pdns-db"
             pdns_env["PDNS_gpgsql_dbname"] = "pdns"
             pdns_env["PDNS_gpgsql_user"] = "pdns"
@@ -329,6 +335,8 @@ class Renderer:
             )
         # Minimal role environment: only variables referenced by the filtered Compose plus generated configs.
         always = {"CDNF_RELEASE", "HOST_BIND_IPV4", "HOST_BIND_IPV6"}
+        if node["role"] in {"dns", "dns-edge"}:
+            always |= {"PDNS_DB_PASSWORD", "PDNS_API_KEY"}
         if state["features"]["logs"]["mode"] == "centralized":
             always |= {
                 "LOG_ROLE", "LOG_HOST", "LOG_COLLECTOR_ID", "LOKI_ENDPOINT",
@@ -480,6 +488,7 @@ class Renderer:
         if state["features"]["backups"]["mode"] != "disabled":
             atomic_write(secrets_dir / "restic-password", self.store.read_secret("backup-password") + "\n", 0o600)
         if node["role"] in {"dns", "dns-edge"}:
+            self._write_pdns_config(node, destination)
             pending = self.store.pending_secret_path("pdns-db-password", node=node["name"])
             if pending.exists():
                 atomic_write(
@@ -500,6 +509,23 @@ class Renderer:
             atomic_write(generated / "prometheus-edge-targets.yml", self._prometheus_service_targets(state, "edge", node), 0o644)
             atomic_write(generated / "prometheus-log-targets.yml", self._prometheus_service_targets(state, "logs", node), 0o644)
             atomic_write(generated / "geo-routing-policy.json", json.dumps(self._geo_policy(state), indent=2) + "\n", 0o600)
+
+    def _write_pdns_config(self, node: dict[str, Any], destination: Path) -> None:
+        path = destination / "docker/pdns/pdns.conf"
+        if not path.exists():
+            raise RenderError("PowerDNS configuration was not copied into the DNS bundle")
+        content = path.read_text(encoding="utf-8")
+        replacements = {
+            "gpgsql-password": self.store.read_secret("pdns-db-password", node=node["name"]),
+            "api-key": self.store.read_secret("pdns-api-key", node=node["name"]),
+        }
+        lines = content.splitlines()
+        for setting, value in replacements.items():
+            indexes = [index for index, line in enumerate(lines) if line.startswith(f"{setting}=")]
+            if len(indexes) != 1:
+                raise RenderError(f"PowerDNS configuration must contain exactly one {setting} setting")
+            lines[indexes[0]] = f"{setting}={value}"
+        atomic_write(path, "\n".join(lines) + "\n", 0o600)
 
     def _pdns_reconciliation_script(self) -> str:
         return r'''#!/usr/bin/env sh
