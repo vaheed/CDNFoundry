@@ -362,6 +362,22 @@ jobs:
           set -euo pipefail
           images=(core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater grafana loki)
           aliases=()
+          push_with_retry() {
+            local image="$1"
+            local attempt delay
+            for attempt in 1 2 3 4 5; do
+              if docker push "${image}"; then
+                return 0
+              fi
+              if (( attempt == 5 )); then
+                echo "Image push failed after ${attempt} attempts: ${image}" >&2
+                return 1
+              fi
+              delay=$((30 * (2 ** (attempt - 1))))
+              echo "Image push attempt ${attempt} failed; retrying ${image} in ${delay}s." >&2
+              sleep "${delay}"
+            done
+          }
           mkdir -p release-evidence
           printf '{"schema_version":1,"release_version":"%s","source_commit":"%s","created_at":"%s","workflow_run_id":"%s","runtime_schema_version":1,"database_migration":"2026_07_29_200000_add_observability_and_fleet_rollouts","images":[' \
             "${RELEASE_REF_NAME}" "${RELEASE}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${WORKFLOW_RUN_ID}" > release-evidence/release-manifest.json
@@ -386,7 +402,7 @@ jobs:
           first=true
           for component in "${images[@]}"; do
             image="ghcr.io/vaheed/cdnfoundry-${component}"
-            docker push "${image}:${RELEASE}"
+            push_with_retry "${image}:${RELEASE}"
             digest="$(docker inspect --format='{{index .RepoDigests 0}}' "${image}:${RELEASE}")"
             test "${digest}" != "${image}:${RELEASE}"
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}/release-evidence:/out" \
@@ -445,7 +461,7 @@ jobs:
             image="ghcr.io/vaheed/cdnfoundry-${component}"
             for alias in "${aliases[@]}"; do
               docker tag "${image}:${RELEASE}" "${image}:${alias}"
-              docker push "${image}:${alias}"
+              push_with_retry "${image}:${alias}"
             done
           done
       - name: Normalize release evidence permissions

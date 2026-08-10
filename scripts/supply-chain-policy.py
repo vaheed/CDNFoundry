@@ -69,6 +69,8 @@ release = (ROOT / ".github/workflows/ci.yml").read_text()
 for evidence in ["syft", "trivy", "sign --yes", "attest --yes", "release-manifest.json", "@sha256:"]:
     if evidence not in release:
         fail(f"release workflow lacks {evidence}")
+if "push_with_retry()" not in release or release.count('docker push "${image}"') != 1:
+    fail("release workflow does not route all image pushes through bounded retries")
 if re.search(r"\\[ \t]+(?:>>|>)", release):
     fail("release workflow has an escaped whitespace sequence before an output redirection")
 if "Normalize release evidence permissions" not in release:
