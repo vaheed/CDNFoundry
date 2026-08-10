@@ -898,6 +898,17 @@ def test_production_log_collector_passes_auth_token_to_vector() -> None:
     ).read_text(encoding="utf-8")
 
 
+def test_production_gateways_are_dual_homed_for_ingress_and_private_backends() -> None:
+    from cdnfoundry_fleet.compose import load_yaml
+
+    compose = load_yaml(REPO_PATCH / "compose.prod.yml")
+    assert set(compose["services"]["dns-api"]["networks"]) == {"ingress", "dns-private"}
+    assert set(compose["services"]["dnsdist"]["networks"]) == {"ingress", "dns-private"}
+    assert set(compose["services"]["telemetry-gateway"]["networks"]) == {"ingress", "telemetry"}
+    assert compose["networks"]["dns-private"]["internal"] is True
+    assert compose["networks"]["telemetry"]["internal"] is True
+
+
 def test_pdns_activation_repairs_interrupted_schema_and_reconciles_password() -> None:
     import re
 

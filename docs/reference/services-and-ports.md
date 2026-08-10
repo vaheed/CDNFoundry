@@ -33,13 +33,13 @@ data endpoints.
 | --- | --- | --- |
 | Browser/API web | `127.0.0.1:8080` | The `control` profile's Caddy service publishes HTTPS |
 | Edge control mTLS | `0.0.0.0:8443` | Restrict to registered edge sources |
-| DNSdist | `${DNS_BIND_V4}:53` TCP and UDP | Public authoritative DNS |
+| DNSdist | `${DNS_BIND_V4}:53` TCP and UDP | Dual-homed on `ingress` and `dns-private`; public authoritative DNS with a private PowerDNS backend |
 | Cell slot host diagnostics | loopback `18081`–`18088`, `18444`–`18451`, `19081`–`19088` | HTTP, HTTPS, and status; never public |
 | Edge gateway | mapped local service IPv4/IPv6 TCP `80`, `443` | Public/NAT ingress maps one-to-one to local listeners; TLS passes through |
 | Gateway metrics | TCP `9105` | Restrict to edge agent and monitoring |
 | Cell gateway contract | TCP `8081`, `8444` | Private gateway-to-cell network; PROXY protocol version 2 required |
-| DNS API Caddy | `${HOST_BIND_IPV4}:8444` | Local bind; exact-source allowlist and TLS protect external access |
-| Telemetry Caddy | `${HOST_BIND_IPV4}:8444` | Local bind; exact-source allowlist and TLS; routes Loki push and ClickHouse ingestion privately |
+| DNS API Caddy | `${HOST_BIND_IPV4}:8444` | Dual-homed on `ingress` and `dns-private`; exact-source allowlist and TLS protect external access |
+| Telemetry Caddy | `${HOST_BIND_IPV4}:8444` | Dual-homed on `ingress` and `telemetry`; exact-source allowlist and TLS; routes Loki push and ClickHouse ingestion privately |
 | Grafana | `127.0.0.1:3000` | Operator UI; publish only through an authenticated HTTPS reverse proxy |
 | Loki (development only) | `127.0.0.1:3100` | Direct diagnostics; production has no host publication |
 | Operational collector metrics | `127.0.0.1:9599` | Bind to a private monitoring address for remote scraping |

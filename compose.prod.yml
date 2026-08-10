@@ -140,7 +140,9 @@ services:
     ports: ["${HOST_BIND_IPV4}:8444:8444/tcp"]
     volumes: [./deploy/production/Caddyfile.dns-api:/etc/caddy/Caddyfile:ro, "${DNS_API_SERVER_CERTIFICATE:?required}:/run/secrets/dns-api.crt:ro", "${DNS_API_SERVER_PRIVATE_KEY:?required}:/run/secrets/dns-api.key:ro", dns-api-caddy-data:/data, dns-api-caddy-config:/config]
     depends_on: { pdns-auth: { condition: service_healthy } }
-    networks: [dns-private]
+    # The gateway must be dual-homed: ingress receives the published host
+    # traffic while dns-private is the only path to the PowerDNS API.
+    networks: [ingress, dns-private]
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
@@ -163,7 +165,9 @@ services:
     ports: ["${HOST_BIND_IPV4}:80:80/tcp", "${HOST_BIND_IPV4}:443:443/tcp", "${HOST_BIND_IPV4}:8444:8444/tcp"]
     volumes: [./deploy/production/Caddyfile.telemetry:/etc/caddy/Caddyfile:ro, telemetry-caddy-data:/data, telemetry-caddy-config:/config]
     depends_on: { clickhouse: { condition: service_healthy }, loki: { condition: service_healthy }, grafana: { condition: service_healthy } }
-    networks: [telemetry]
+    # The gateway must be dual-homed: ingress receives public HTTPS and
+    # telemetry keeps ClickHouse, Loki, and Grafana private.
+    networks: [ingress, telemetry]
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
@@ -319,7 +323,9 @@ services:
     volumes: [./docker/dnsdist/dnsdist.conf:/etc/dnsdist/dnsdist.conf:ro]
     depends_on:
       pdns-auth: { condition: service_healthy }
-    networks: [dns-private]
+    # Authoritative queries arrive through ingress; the PowerDNS backend stays
+    # reachable only through the internal dns-private network.
+    networks: [ingress, dns-private]
     restart: unless-stopped
     stop_grace_period: 30s
     healthcheck:
