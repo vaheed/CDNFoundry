@@ -219,7 +219,7 @@ On each DNS-capable host:
 
 For an existing installation, use `adopt-existing` with the existing `.env.prod`; the importer stores `PDNS_DB_PASSWORD` under that node without printing it. The source database volume is not deleted.
 
-Password rotation is staged. `--phase prepare` creates a pending credential while the active one stays unchanged. The rendered `reconcile-pdns-password.sh` changes only the selected DNS host's local PostgreSQL role and local environment. `--phase commit` makes the pending credential active in protected fleet state. `--phase abort` removes an unreconciled pending value.
+Password rotation is staged. `--phase prepare` creates a pending credential while the active one stays unchanged. The rendered `reconcile-pdns-password.sh` changes only the selected DNS host's local PostgreSQL role, rendered PowerDNS configuration, and local environment, then recreates and health-checks `pdns-auth`. `--phase commit` makes the pending credential active in protected fleet state. `--phase abort` removes an unreconciled pending value.
 
 ## Geo-routing policy
 

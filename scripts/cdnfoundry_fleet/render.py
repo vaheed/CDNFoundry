@@ -129,9 +129,9 @@ class Renderer:
             # node-private configuration instead.
             pdns_env.pop("PDNS_gpgsql_password", None)
             pdns_env.pop("PDNS_api_key", None)
-            pdns_env["PDNS_gpgsql_host"] = "pdns-db"
-            pdns_env["PDNS_gpgsql_dbname"] = "pdns"
-            pdns_env["PDNS_gpgsql_user"] = "pdns"
+            pdns_env.pop("PDNS_gpgsql_host", None)
+            pdns_env.pop("PDNS_gpgsql_dbname", None)
+            pdns_env.pop("PDNS_gpgsql_user", None)
         if node["role"] == "control" and self._uses_remote_control_db(node):
             # External PostgreSQL is selected with DB_URL or a DB_HOST other than the
             # Compose service name. Remove the embedded database and every dependency
@@ -543,6 +543,7 @@ set +a
 next_password=$(cat secrets/pdns-db-password.next)
 test -n "$PDNS_DB_PASSWORD"
 test -n "$next_password"
+export NEXT_PDNS_DB_PASSWORD="$next_password"
 
 cp -p .env.prod .env.prod.before-pdns-rotation
 chmod 600 .env.prod.before-pdns-rotation
@@ -558,34 +559,34 @@ docker compose --env-file .env.prod exec -T \
       -c "ALTER ROLE pdns PASSWORD :'"'"'next_password'"'"';"
   '
 
-python3 - "$next_password" <<'PY'
+python3 - <<'PY'
 import os
-import sys
 from pathlib import Path
 
-value = sys.argv[1]
-path = Path(".env.prod")
-tmp = path.with_name(".env.prod.next")
-lines = path.read_text(encoding="utf-8").splitlines()
-updated = False
-with tmp.open("w", encoding="utf-8", newline="\n") as handle:
-    for line in lines:
-        if line.startswith("PDNS_DB_PASSWORD="):
-            handle.write(f"PDNS_DB_PASSWORD={value}\n")
-            updated = True
-        else:
-            handle.write(line + "\n")
-    if not updated:
-        raise SystemExit("PDNS_DB_PASSWORD is missing from .env.prod")
-    handle.flush()
-    os.fsync(handle.fileno())
-os.chmod(tmp, 0o600)
-os.replace(tmp, path)
+value = os.environ["NEXT_PDNS_DB_PASSWORD"]
+
+def replace_setting(path: Path, prefix: str) -> None:
+    tmp = path.with_name(path.name + ".next")
+    lines = path.read_text(encoding="utf-8").splitlines()
+    matches = [index for index, line in enumerate(lines) if line.startswith(prefix)]
+    if len(matches) != 1:
+        raise SystemExit(f"{path} must contain exactly one {prefix[:-1]} setting")
+    lines[matches[0]] = prefix + value
+    with tmp.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write("\n".join(lines) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+
+replace_setting(Path(".env.prod"), "PDNS_DB_PASSWORD=")
+replace_setting(Path("docker/pdns/pdns.conf"), "gpgsql-password=")
 PY
 
 docker compose --env-file .env.prod config --quiet
-printf '%s\n' 'Local PostgreSQL and .env.prod now use the pending password.'
-printf '%s\n' 'On the control plane, commit the rotation, rerender this node, transfer the new bundle, and run docker compose up -d.'
+docker compose --env-file .env.prod up -d --force-recreate --wait --wait-timeout 180 pdns-auth
+printf '%s\n' 'Local PostgreSQL, PowerDNS configuration, and .env.prod now use the pending password.'
+printf '%s\n' 'On the control plane, commit the rotation and rerender this node to make protected fleet state authoritative.'
 '''
 
     def _prometheus_targets(self, state: dict[str, Any], monitoring_node: dict[str, Any]) -> str:

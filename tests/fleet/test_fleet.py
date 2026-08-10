@@ -270,7 +270,7 @@ def test_dns_bundle_uses_local_postgres_and_has_no_control_secrets(store: FleetS
     assert "pdns-db" in compose["services"]
     assert "pdns-auth" in compose["services"]
     assert "control-db" not in compose["services"]
-    assert compose["services"]["pdns-auth"]["environment"]["PDNS_gpgsql_host"] == "pdns-db"
+    assert not any(key.startswith("PDNS_gpgsql_") for key in compose["services"]["pdns-auth"]["environment"])
     assert "PDNS_DB_PASSWORD" in env
     assert "CONTROL_DB_PASSWORD" not in env
     assert "APP_KEY" not in env
@@ -612,6 +612,10 @@ def test_pdns_rotation_is_prepared_reconciled_and_committed(store: FleetState, s
     assert stat.S_IMODE((bundle / "reconcile-pdns-password.sh").stat().st_mode) == 0o700
     assert (bundle / "secrets/pdns-db-password.next").read_text(encoding="utf-8") == pending.read_text(encoding="utf-8")
     assert env_values(bundle / ".env.prod")["PDNS_DB_PASSWORD"] == current
+    reconcile = (bundle / "reconcile-pdns-password.sh").read_text(encoding="utf-8")
+    assert 'replace_setting(Path("docker/pdns/pdns.conf"), "gpgsql-password=")' in reconcile
+    assert 'python3 - "$next_password"' not in reconcile
+    assert "--force-recreate --wait --wait-timeout 180 pdns-auth" in reconcile
 
     next_value = pending.read_text(encoding="utf-8").strip()
     store.commit_secret_rotation("pdns-db-password", node="dns-rotate")
