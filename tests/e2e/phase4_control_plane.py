@@ -426,6 +426,7 @@ def converge_placement_artifacts(
     expected_state: str,
     expected_pools: set[str],
     drain_scheduled: bool,
+    payload_check=None,
 ) -> tuple[dict, dict[str, int]]:
     deadline = time.monotonic() + 120
     applied_revisions: dict[str, int] = {}
@@ -452,6 +453,8 @@ def converge_placement_artifacts(
                 continue
             revision = int(payload["revision"])
             assert set(payload["pools"]) == expected_pools, payload
+            if payload_check is not None:
+                payload_check(payload)
             sequences[edge_id] = sequence
             acknowledge(
                 edge,
@@ -523,28 +526,30 @@ def exercise_phase5_cache(token: str, domain_id: int, edges: list[dict], sequenc
     status, changed = call("PATCH", f"/api/domains/{domain_id}/cache", settings, token)
     assert status == 202 and changed["data"]["settings"]["query_policy"] == "include_all", changed
     assert all(changed["data"]["settings"][key] == value for key, value in settings.items() if key != "include_query_string"), changed
-    for edge in edges:
-        heartbeat(edge, sequences[edge["id"]])
-    for edge in edges:
-        sequence, payload = latest_artifact(edge, domain_id, sequences[edge["id"]])
+
+    def check_changed_cache(payload: dict) -> None:
         assert payload["cache"]["edge_ttl_seconds"] == 120, payload["cache"]
         assert payload["cache"]["bypass_cookie_names"] == ["session_id"], payload["cache"]
-        sequences[edge["id"]] = sequence
-        acknowledge(edge, sequence)
-    wait_isolation(token, domain_id, "active")
+
+    _, placement = call("GET", f"/api/admin/domains/{domain_id}/isolation", token=token)
+    converge_placement_artifacts(
+        token, domain_id, edges, sequences, int(placement["data"]["desired_revision"]),
+        "active", {"shared-default"}, drain_scheduled=False, payload_check=check_changed_cache,
+    )
 
     call("POST", f"/api/domains/{domain_id}/rollback", {"revision": baseline_revision}, token)
     rollback_epochs: set[int] = set()
-    for edge in edges:
-        heartbeat(edge, sequences[edge["id"]])
-    for edge in edges:
-        sequence, payload = latest_artifact(edge, domain_id, sequences[edge["id"]])
+
+    def check_rollback_cache(payload: dict) -> None:
         assert payload["cache"]["edge_ttl_seconds"] == 3600, payload["cache"]
         rollback_epochs.add(int(payload["cache"]["epoch"]))
-        sequences[edge["id"]] = sequence
-        acknowledge(edge, sequence)
+
+    _, placement = call("GET", f"/api/admin/domains/{domain_id}/isolation", token=token)
+    converge_placement_artifacts(
+        token, domain_id, edges, sequences, int(placement["data"]["desired_revision"]),
+        "active", {"shared-default"}, drain_scheduled=False, payload_check=check_rollback_cache,
+    )
     assert len(rollback_epochs) == 1, rollback_epochs
-    wait_isolation(token, domain_id, "active")
 
     replay_key = str(uuid.uuid4())
     headers = {"Idempotency-Key": replay_key}
@@ -566,14 +571,14 @@ def exercise_phase5_cache(token: str, domain_id: int, edges: list[dict], sequenc
     attempts = sql_value(f"SELECT attempts FROM edge_tasks WHERE id='{retried['id']}'")
     assert attempts == "2", attempts
 
-    for edge in edges:
-        heartbeat(edge, sequences[edge["id"]])
-    for edge in edges:
-        sequence, payload = latest_artifact(edge, domain_id, sequences[edge["id"]])
+    def check_purged_cache(payload: dict) -> None:
         assert int(payload["cache"]["epoch"]) == int(first["data"]["cache_epoch"]), payload["cache"]
-        sequences[edge["id"]] = sequence
-        acknowledge(edge, sequence)
-    wait_isolation(token, domain_id, "active")
+
+    _, placement = call("GET", f"/api/admin/domains/{domain_id}/isolation", token=token)
+    converge_placement_artifacts(
+        token, domain_id, edges, sequences, int(placement["data"]["desired_revision"]),
+        "active", {"shared-default"}, drain_scheduled=False, payload_check=check_purged_cache,
+    )
 
     status, url_purge = call("POST", f"/api/domains/{domain_id}/cache/purge", {
         "type": "urls",

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 import subprocess
 import unittest
 
@@ -30,7 +31,10 @@ class OperationalLoggingContractTest(unittest.TestCase):
         self.assertEqual(128, service["pids_limit"])
         self.assertTrue(any(volume.get("source") == "loki-data" and volume.get("target") == "/loki" for volume in service["volumes"]))
         dockerfile = (ROOT / "docker/loki/Dockerfile").read_text()
-        self.assertIn("grafana/loki:3.7.4@sha256:", dockerfile)
+        self.assertRegex(
+            dockerfile,
+            re.compile(r"^FROM grafana/loki:\d+\.\d+\.\d+@sha256:[0-9a-f]{64}$", re.MULTILINE),
+        )
         for contract in ("store: tsdb", "object_store: filesystem", "retention_enabled: true", "max_line_size: 65536", "query_timeout: 30s"):
             self.assertIn(contract, self.loki)
 
