@@ -83,9 +83,26 @@ class SystemIdentityApiTest extends TestCase
             ->test(SystemDnsIdentity::class)
             ->fillForm($payload)
             ->call('previewChanges')
-            ->assertHasNoFormErrors();
+            ->assertActionMounted('confirmDnsIdentity')
+            ->assertMountedActionModalSee([
+                'Review and save DNS identity',
+                'Validated — nothing has been saved yet',
+                'cdnf.test',
+                'proxy.cdnf.test',
+                'ns1.cdnf.test',
+                '8.8.8.8',
+                'pdns-auth:8081',
+                'Return to editing',
+                'Save DNS identity and queue update',
+            ]);
 
-        $component->call('save')->assertHasNoFormErrors();
+        $this->assertDatabaseCount('platform_dns_settings', 0);
+        Queue::assertNothingPushed();
+
+        $component
+            ->callMountedAction()
+            ->assertHasNoActionErrors()
+            ->assertActionNotMounted();
 
         $this->assertDatabaseHas('platform_dns_settings', ['id' => 1, 'platform_domain' => 'cdnf.test']);
         Queue::assertPushed(ApplyPlatformDnsSettings::class);

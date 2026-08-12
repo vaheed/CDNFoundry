@@ -10,9 +10,13 @@ use App\Models\Operation;
 use App\Models\PlatformDnsSetting;
 use App\Support\FilamentHelp;
 use App\Support\PlatformDnsConfirmation;
+use Filament\Actions\Action;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Infolists\Components\RepeatableEntry;
+use Filament\Infolists\Components\RepeatableEntry\TableColumn;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Section;
@@ -124,10 +128,113 @@ class SystemDnsIdentity extends Page
         $this->form->fill($data);
         $this->preview = $data;
         $this->confirmationToken = PlatformDnsConfirmation::issue($data);
-        Notification::make()->success()->title('DNS identity validated')->body('Review the normalized preview, then explicitly confirm within 15 minutes.')->send();
+        $this->mountAction('confirmDnsIdentity');
     }
 
-    public function save(): void
+    public function confirmDnsIdentityAction(): Action
+    {
+        return Action::make('confirmDnsIdentity')
+            ->modalHeading('Review and save DNS identity')
+            ->modalDescription('Validation succeeded. Review the normalized desired state before saving and queueing deployment.')
+            ->schema([
+                Section::make('Validated — nothing has been saved yet')
+                    ->description('The red button writes revisioned desired state and queues an asynchronous DNS deployment.')
+                    ->icon('heroicon-o-check-circle')
+                    ->iconColor('success')
+                    ->compact(),
+                Section::make('Public identity')
+                    ->description("These names become the platform's authoritative DNS and shared proxy identity.")
+                    ->icon('heroicon-o-globe-alt')
+                    ->schema([
+                        TextEntry::make('platform_domain')
+                            ->label('Platform domain')
+                            ->state(fn (): ?string => $this->preview['platform_domain'] ?? null)
+                            ->copyable(),
+                        TextEntry::make('proxy_hostname')
+                            ->label('Proxy hostname')
+                            ->state(fn (): ?string => $this->preview['proxy_hostname'] ?? null)
+                            ->copyable(),
+                        TextEntry::make('soa_primary')
+                            ->label('SOA primary')
+                            ->state(fn (): ?string => $this->preview['soa_primary'] ?? null),
+                        TextEntry::make('soa_mailbox')
+                            ->label('SOA mailbox')
+                            ->state(fn (): ?string => $this->preview['soa_mailbox'] ?? null),
+                    ])
+                    ->columns(['default' => 1, 'md' => 2]),
+                Section::make('Authoritative nameservers')
+                    ->description('Confirm every public hostname and glue address before deployment.')
+                    ->icon('heroicon-o-server-stack')
+                    ->schema([
+                        RepeatableEntry::make('nameservers')
+                            ->hiddenLabel()
+                            ->state(fn (): array => $this->preview['nameservers'] ?? [])
+                            ->table([
+                                TableColumn::make('Hostname'),
+                                TableColumn::make('IPv4 glue'),
+                                TableColumn::make('IPv6 glue'),
+                            ])
+                            ->schema([
+                                TextEntry::make('hostname')->placeholder('Not configured'),
+                                TextEntry::make('ipv4')->placeholder('Not configured'),
+                                TextEntry::make('ipv6')->placeholder('Not configured'),
+                            ]),
+                    ]),
+                Section::make('Deployment targets')
+                    ->description('Only these registered DNS clusters receive the desired state.')
+                    ->icon('heroicon-o-cloud-arrow-up')
+                    ->schema([
+                        TextEntry::make('cluster_targets')
+                            ->hiddenLabel()
+                            ->state(fn (): array => $this->preview['cluster_targets'] ?? [])
+                            ->badge()
+                            ->color('info')
+                            ->placeholder('No cluster targets selected'),
+                    ]),
+                Section::make('SOA and TTL timers')
+                    ->description('All values are normalized seconds.')
+                    ->icon('heroicon-o-clock')
+                    ->schema([
+                        TextEntry::make('soa_refresh')
+                            ->label('Refresh')
+                            ->state(fn (): mixed => $this->preview['soa_refresh'] ?? null)
+                            ->suffix(' seconds'),
+                        TextEntry::make('soa_retry')
+                            ->label('Retry')
+                            ->state(fn (): mixed => $this->preview['soa_retry'] ?? null)
+                            ->suffix(' seconds'),
+                        TextEntry::make('soa_expire')
+                            ->label('Expire')
+                            ->state(fn (): mixed => $this->preview['soa_expire'] ?? null)
+                            ->suffix(' seconds'),
+                        TextEntry::make('soa_minimum_ttl')
+                            ->label('Minimum TTL')
+                            ->state(fn (): mixed => $this->preview['soa_minimum_ttl'] ?? null)
+                            ->suffix(' seconds'),
+                        TextEntry::make('default_ttl')
+                            ->label('Default TTL')
+                            ->state(fn (): mixed => $this->preview['default_ttl'] ?? null)
+                            ->suffix(' seconds'),
+                    ])
+                    ->columns(['default' => 2, 'lg' => 5]),
+                Section::make('Before you save')
+                    ->description('Changing this identity can affect delegation, authoritative answers, and proxy routing. Return to editing if any value is unexpected.')
+                    ->icon('heroicon-o-exclamation-triangle')
+                    ->iconColor('danger')
+                    ->compact(),
+            ])
+            ->modalWidth('5xl')
+            ->stickyModalHeader()
+            ->stickyModalFooter()
+            ->closeModalByClickingAway(false)
+            ->modalCancelActionLabel('Return to editing')
+            ->modalSubmitAction(fn (Action $action): Action => $action
+                ->label('Save DNS identity and queue update')
+                ->color('danger'))
+            ->action(fn () => $this->saveDnsIdentity());
+    }
+
+    private function saveDnsIdentity(): void
     {
         $data = PlatformDnsSettingsRequest::validateInput($this->form->getState());
         abort_unless(PlatformDnsConfirmation::valid($this->confirmationToken, $data), 409, 'Preview and confirm this exact DNS identity payload before applying it.');

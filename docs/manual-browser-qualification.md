@@ -75,10 +75,11 @@ workstream does not replace an earlier product checkpoint.
    expire, minimum TTL, and default TTL. In **DNS cluster targets**, select the
    registered cluster choices and confirm each option displays its name,
    location, and normalized API host and port; free-form locations or cluster
-   names must not be accepted. Choose **Validate and preview**, inspect
-   normalization, confirm the bold warning says validation has not saved the
-   configuration, and click the red **Save DNS identity and queue update**
-   button. Record an asynchronous
+   names must not be accepted. Choose **Validate and preview** and confirm a
+   **Review and save DNS identity** modal opens immediately. Confirm it says
+   **Validated — nothing has been saved yet**, inspect the normalized public
+   identity, nameserver glue, cluster targets, and timers, then click the red
+   **Save DNS identity and queue update** button. Record an asynchronous
    operation with a non-zero target count and active checksum on both clusters.
    Disabling every matching cluster or otherwise producing zero healthy targets
    must fail the operation without claiming success.

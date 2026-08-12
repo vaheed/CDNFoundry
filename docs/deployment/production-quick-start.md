@@ -281,7 +281,7 @@ Sign in to the administrator panel, configure platform nameservers and DNS clust
 Use this exact order:
 
 1. In **Infrastructure → DNS clusters**, create each PoP disabled with its generated `https://pop-N.ops.example.com:8444` endpoint and node-local API key. Test it, then enable it. Do not apply platform identity until both targets are healthy.
-2. In **Infrastructure → System DNS identity**, configure `example.net`, `ns1.example.net`, `ns2.example.net`, and their A/optional AAAA glue. Click **Validate and preview** and inspect the normalized payload. **This has not saved anything yet: click the red _Save DNS identity and queue update_ button to save the desired state.** Wait for both platform deployments to acknowledge the revision before continuing.
+2. In **Infrastructure → System DNS identity**, configure `example.net`, `ns1.example.net`, `ns2.example.net`, and their A/optional AAAA glue. Click **Validate and preview**. A **Review and save DNS identity** modal opens with the normalized public identity, glue addresses, DNS cluster targets, and timers. **Validation has not saved anything yet: review the modal, then click the red _Save DNS identity and queue update_ button to save the desired state.** Wait for both platform deployments to acknowledge the revision before continuing.
 3. In **Domains → Create domain**, add a test customer zone and its first DNS-only A/AAAA record. Wait for both cluster acknowledgements, then verify UDP and TCP answers from both authoritative hosts.
 4. Only after those answers are correct, create registrar glue and change customer delegation. DNS desired-state setup is now complete. Edge creation and host changes begin in step 8; do not enable proxying yet.
 
