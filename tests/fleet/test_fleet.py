@@ -755,6 +755,12 @@ def test_production_docs_match_generated_bundle_workflow() -> None:
     assert "php artisan cdnf:admin:create" in quick
     assert "https://control.ops.example.com/admin" in quick
     assert "password twice without placing it in shell history" in quick
+    assert "click the red _Save DNS identity and queue update_ button" in quick
+    assert "The `dns-api` name refers to a container inside a PoP bundle" in quick
+    assert "it is not generated earlier and it is not located on the PoP" in quick
+    assert "EDGE_GATEWAY_ADDRESS_MAP" in quick
+    assert "copy the **entire**" in quick
+    assert "The second transfer is required to remove the consumed token" in quick
     assert "--profile dns --profile edge --profile logs up -d --wait" in quick
     assert "docker compose --env-file .env.prod --profile edge ps" in quick
     assert "own local PostgreSQL" in reference

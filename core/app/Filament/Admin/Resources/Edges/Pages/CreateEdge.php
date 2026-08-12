@@ -15,6 +15,8 @@ class CreateEdge extends CreateRecord
 {
     protected static string $resource = EdgeResource::class;
 
+    protected static bool $canCreateAnother = false;
+
     private string $bootstrapToken;
 
     protected function handleRecordCreation(array $data): Model
@@ -46,6 +48,16 @@ class CreateEdge extends CreateRecord
 
     protected function getCreatedNotification(): ?Notification
     {
-        return Notification::make()->success()->persistent()->title('Edge created — copy the one-time bootstrap token')->body($this->bootstrapToken);
+        return null;
+    }
+
+    protected function getRedirectUrl(): string
+    {
+        session()->flash('edge_enrollment', [
+            'edge_id' => (string) $this->getRecord()->getKey(),
+            'bootstrap_token' => $this->bootstrapToken,
+        ]);
+
+        return parent::getRedirectUrl();
     }
 }

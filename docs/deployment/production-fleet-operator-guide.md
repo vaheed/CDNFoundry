@@ -268,8 +268,12 @@ The generator does not create edge records in the control plane. Use this sequen
 2. For a combined `dns-edge` node, transfer its initial bundle and run
    `start.sh`; without an edge UUID it starts authoritative DNS only. Register,
    test, and enable its DNS cluster before continuing.
-3. In **Edge network → Edges**, create the edge and copy its UUID and one-time bootstrap token.
-4. Save the token in a protected mode-`0600` file.
+3. In **Infrastructure → Edges**, create the edge with a name that exactly
+   matches its Fleet node. The one-time enrollment modal displays its UUID,
+   bootstrap token, protected token-file command, and exact Fleet registration
+   command together.
+4. On the Fleet authority, run the modal's command to save the token in a
+   protected mode-`0600` temporary file.
 5. Store the UUID/token in fleet state with `configure-edge-registration`.
 6. Add the edge's complete `EDGE_GATEWAY_ADDRESS_MAP` with `update-node --extra-env`.
 7. Validate and render only that node.

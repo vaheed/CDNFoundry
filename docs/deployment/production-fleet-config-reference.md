@@ -114,7 +114,18 @@ Example:
 
 ## Manual edge registration fields
 
-Do not put bootstrap tokens in a version-controlled setup JSON. After creating the edge in the running control panel, use:
+Do not put bootstrap tokens in a version-controlled setup JSON. After creating
+the edge in **Infrastructure → Edges**, its one-time modal shows the UUID, token,
+and these commands with the real values filled in. On the Fleet authority,
+first create the temporary protected file; paste the displayed token at the
+hidden prompt and press Enter:
+
+```bash
+sudo install -m 0600 /dev/null /root/edge-1.bootstrap-token
+sudo bash -c 'read -rsp "Paste bootstrap token: " token; printf "\n"; printf "%s\n" "$token" > /root/edge-1.bootstrap-token'
+```
+
+Then store the registration in Fleet state:
 
 ```bash
 ./scripts/cdnfoundry-fleet --state-dir /var/lib/cdnfoundry-fleet \

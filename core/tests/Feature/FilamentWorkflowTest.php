@@ -7,8 +7,10 @@ use App\Filament\Admin\Pages\Telemetry;
 use App\Filament\Admin\Resources\DnsClusters\Pages\ListDnsClusters;
 use App\Filament\Admin\Resources\EdgePools\Pages\EditEdgePool as EditServicePool;
 use App\Filament\Admin\Resources\EdgePools\Pages\ListEdgePools;
+use App\Filament\Admin\Resources\Edges\Pages\CreateEdge;
 use App\Filament\Admin\Resources\Edges\Pages\EditEdge;
 use App\Filament\Admin\Resources\Edges\Pages\ListEdges;
+use App\Filament\Admin\Resources\Edges\Pages\ViewEdge;
 use App\Filament\Admin\Resources\Edges\RelationManagers\CellsRelationManager;
 use App\Filament\Admin\Resources\Operations\Pages\ListOperations;
 use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
@@ -37,6 +39,51 @@ use Tests\TestCase;
 class FilamentWorkflowTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_edge_creation_opens_a_one_time_enrollment_modal_with_exact_fleet_commands(): void
+    {
+        $admin = User::factory()->admin()->create();
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(CreateEdge::class)
+            ->fillForm([
+                'name' => 'pop-1',
+                'cell_slot_count' => 8,
+                'country_code' => 'IR',
+                'continent_code' => 'AS',
+                'management_ipv4' => '203.0.113.90',
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors()
+            ->assertRedirect();
+
+        $edge = Edge::query()->where('name', 'pop-1')->firstOrFail();
+        $enrollment = session('edge_enrollment');
+        $this->assertIsArray($enrollment);
+        $this->assertSame((string) $edge->id, $enrollment['edge_id']);
+        $this->assertSame(64, strlen($enrollment['bootstrap_token']));
+        $this->assertSame(hash('sha256', $enrollment['bootstrap_token']), $edge->bootstrap_token_hash);
+
+        Livewire::test(ViewEdge::class, ['record' => $edge->id])
+            ->assertSet('defaultAction', 'showEnrollment')
+            ->mountAction('showEnrollment')
+            ->assertActionMounted('showEnrollment')
+            ->assertMountedActionModalSee([
+                (string) $edge->id,
+                $enrollment['bootstrap_token'],
+                'Fleet authority',
+                '/root/pop-1.bootstrap-token',
+                "--node 'pop-1'",
+                '--edge-id '.((string) $edge->id),
+            ])
+            ->callMountedAction()
+            ->assertSet('bootstrapToken', null)
+            ->assertActionNotMounted()
+            ->assertActionHidden('showEnrollment');
+
+        $this->assertNull(session('edge_enrollment'));
+    }
 
     public function test_pool_policy_form_limits_replication_and_queues_reconciliation(): void
     {

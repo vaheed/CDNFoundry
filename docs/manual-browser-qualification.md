@@ -76,7 +76,9 @@ workstream does not replace an earlier product checkpoint.
    registered cluster choices and confirm each option displays its name,
    location, and normalized API host and port; free-form locations or cluster
    names must not be accepted. Choose **Validate and preview**, inspect
-   normalization, apply the exact confirmation, and record an asynchronous
+   normalization, confirm the bold warning says validation has not saved the
+   configuration, and click the red **Save DNS identity and queue update**
+   button. Record an asynchronous
    operation with a non-zero target count and active checksum on both clusters.
    Disabling every matching cluster or otherwise producing zero healthy targets
    must fail the operation without claiming success.
@@ -96,11 +98,17 @@ workstream does not replace an earlier product checkpoint.
    WAF capability, Routing mode, Minimum ready cells, Replicas per edge, and
    Maximum domains per cell. Confirm invalid replicas/capacity/address
    combinations fail before activation.
-2. Under **Infrastructure → Edges**, create two edges with **Cell slots = 8**,
-   country, continent, and optional management addresses. Enroll each agent with
-   its one-time token, remove that token after registration, and confirm fresh
-   heartbeat, current runtime versions, gateway process, traffic listener,
-   gateway revision/listeners/routes, capacity, and no deployment rejection.
+2. Under **Infrastructure → Edges**, create two edges with names that exactly
+   match their Fleet topology nodes, **Cell slots = 8**, country, continent, and
+   optional management addresses. Confirm creation opens a non-dismissible
+   enrollment modal—not a token toast—and that it displays the edge UUID,
+   one-time token, protected token-file command, exact Fleet registration
+   command, and the Fleet-authority host context. Acknowledge it only after
+   saving the values, then confirm neither UUID/token modal nor token is shown
+   again after navigation. Enroll each agent, remove its token after
+   registration, and confirm fresh heartbeat, current runtime versions, gateway
+   process, traffic listener, gateway revision/listeners/routes, capacity, and
+   no deployment rejection.
 3. In each edge's **Cells** relation, use **Assign service pool** for the
    intended stable slots. Exercise drain, undrain, restart, and unassign; confirm
    unrelated cells keep serving and active placement prevents unsafe removal.

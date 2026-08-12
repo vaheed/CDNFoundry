@@ -281,66 +281,179 @@ Sign in to the administrator panel, configure platform nameservers and DNS clust
 Use this exact order:
 
 1. In **Infrastructure → DNS clusters**, create each PoP disabled with its generated `https://pop-N.ops.example.com:8444` endpoint and node-local API key. Test it, then enable it. Do not apply platform identity until both targets are healthy.
-2. In **Infrastructure → System DNS identity**, configure `example.net`, `ns1.example.net`, `ns2.example.net`, and their A/optional AAAA glue. Validate and preview, apply the exact confirmation, and wait for both platform deployments to acknowledge the revision.
+2. In **Infrastructure → System DNS identity**, configure `example.net`, `ns1.example.net`, `ns2.example.net`, and their A/optional AAAA glue. Click **Validate and preview** and inspect the normalized payload. **This has not saved anything yet: click the red _Save DNS identity and queue update_ button to save the desired state.** Wait for both platform deployments to acknowledge the revision before continuing.
 3. In **Domains → Create domain**, add a test customer zone and its first DNS-only A/AAAA record. Wait for both cluster acknowledgements, then verify UDP and TCP answers from both authoritative hosts.
-4. Only after those answers are correct, create registrar glue and change customer delegation. Then use **Edge network → Edges** to create edge inventory, capture each UUID and one-time bootstrap token, enroll it as described below, create/assign a service pool, add the origin endpoint, and enable proxying for the hostname.
+4. Only after those answers are correct, create registrar glue and change customer delegation. DNS desired-state setup is now complete. Edge creation and host changes begin in step 8; do not enable proxying yet.
 
 API automation follows the same sequence. Authenticate with `POST /api/v1/admin/login`, protect the returned bearer token, and use the DNS-cluster, domain, record, and edge endpoints in the live OpenAPI document. Send `Idempotency-Key` on mutations and poll the operation returned by `202 Accepted`. Never store an API token in Fleet JSON.
 
 Both PoP DNS runtimes must already be healthy from step 6. If either cluster
 test fails, do not enable it and do not delegate the customer zone.
 
-## 8. Enroll and start both edge nodes
+## 8. Create, enroll, and start both edge roles
 
-Create each edge in the administrator panel and copy its UUID and one-time bootstrap token to protected local files. On the Fleet authority:
+There are two different machines in this step:
+
+| Label used below | Where commands run | What changes |
+| --- | --- | --- |
+| **Fleet authority** | The machine where step 3 created `/var/lib/cdnfoundry-fleet` (normally the control host) | Protected Fleet state and generated bundles |
+| **PoP host** | `pop-1` or `pop-2`, where step 6 already started DNS | `/opt/cdnfoundry` bundle and edge containers; existing DNS volumes stay in place |
+
+The `dns-api` name refers to a container inside a PoP bundle. It is not another
+machine and it never receives a separate copy.
+
+### 8.1 Create both edge records in the administrator panel
+
+Open **Infrastructure → Edges** and create an edge named `pop-1`. The name must
+exactly match the node name in `fleet.json`. After creation, the panel opens a
+modal that contains all three values needed for enrollment:
+
+- the edge UUID;
+- the one-time bootstrap token;
+- the exact `configure-edge-registration` command for that edge.
+
+The modal also gives a command that creates `/root/pop-1.bootstrap-token` on
+the **Fleet authority** and prompts you to paste the token without echoing it or
+putting it in shell history. That path is a temporary protected file you create
+at this point; it is not generated earlier and it is not located on the PoP.
+Keep the modal open until its commands have succeeded. Repeat for `pop-2`.
+
+If the modal was closed before the token was saved, the token cannot be shown
+again. Use **Rotate identity** for that still-unenrolled edge and capture the
+replacement one-time token; never try to recover it from the database.
+
+### 8.2 Rerender both combined-node bundles
+
+Before rendering, define the complete gateway address map for each PoP. Every
+future advertised service address needs one distinct private/local listener
+address already configured on that host. Replace all four example addresses;
+do not use the public address as the local value. Run on the **Fleet authority**:
 
 ```bash
 sudo ./scripts/cdnfoundry-fleet \
   --state-dir /var/lib/cdnfoundry-fleet \
-  configure-edge-registration \
-  --node pop-1 \
-  --edge-id EDGE_UUID \
-  --bootstrap-token-file /root/pop-1.bootstrap-token \
+  update-node --node pop-1 \
+  --extra-env 'EDGE_GATEWAY_ADDRESS_MAP={"198.51.100.20":"10.20.0.20"}' \
+  --non-interactive
+sudo ./scripts/cdnfoundry-fleet \
+  --state-dir /var/lib/cdnfoundry-fleet \
+  update-node --node pop-2 \
+  --extra-env 'EDGE_GATEWAY_ADDRESS_MAP={"198.51.100.30":"10.30.0.30"}' \
   --non-interactive
 ```
 
-Repeat for `pop-2`, rerender those bundles, validate, transfer, and activate
-them with `sudo ./start.sh`. Before transfer, verify that the rerendered
-combined-node script contains both profiles:
+The advertised keys must later be entered as the matching service-pool
+endpoints in the administrator panel. The private values are local bind
+addresses, not customer DNS answers. Configure and verify those addresses on
+the matching PoP hosts before starting the edge profile.
+
+Now rerender on the **Fleet authority**, after running each modal's registration
+command:
 
 ```bash
+sudo ./scripts/cdnfoundry-fleet \
+  --state-dir /var/lib/cdnfoundry-fleet \
+  --output-dir /var/lib/cdnfoundry-fleet/bundles \
+  render --node pop-1
+sudo ./scripts/cdnfoundry-fleet \
+  --state-dir /var/lib/cdnfoundry-fleet \
+  --output-dir /var/lib/cdnfoundry-fleet/bundles \
+  render --node pop-2
+```
+
+The rerendered bundle is the deployment unit. Its protected `.env.prod` now
+contains the edge UUID, one-time bootstrap value, and gateway address map;
+`start.sh` enables the edge profile,
+and `SHA256SUMS` covers the new complete bundle. Do not hand-edit or copy only
+`.env.prod`, `start.sh`, or the token file.
+
+Still on the **Fleet authority**, validate without printing either secret:
+
+```bash
+sudo ./scripts/cdnfoundry-fleet \
+  --state-dir /var/lib/cdnfoundry-fleet \
+  --output-dir /var/lib/cdnfoundry-fleet/bundles \
+  validate
+grep -q '^EDGE_ID=' /var/lib/cdnfoundry-fleet/bundles/pop-1/.env.prod
+grep -q '^EDGE_BOOTSTRAP_TOKEN=' /var/lib/cdnfoundry-fleet/bundles/pop-1/.env.prod
 grep 'docker compose.*up -d --wait' \
   /var/lib/cdnfoundry-fleet/bundles/pop-1/start.sh
 ```
 
-Expect its final activation command to include:
+Expect the last command to include:
 
 ```text
 --profile dns --profile edge --profile logs up -d --wait
 ```
 
-The `logs` profile is present when centralized logging is enabled. The
-important transition from step 6 is the addition of `--profile edge`. If it is
-absent, do not edit `start.sh` manually. Confirm that
-`configure-edge-registration` used the same node name, then rerender that node.
+The `logs` profile is present only when centralized logging is enabled. The
+required change from step 6 is `--profile edge`. If it is absent, confirm the
+modal command used the exact matching node name and rerender; never edit the
+generated script.
 
-After transfer, `sudo ./start.sh` activates both DNS and edge services. Confirm
-that `edge-agent`, `edge-gateway`, and the bounded cells are running with:
+### 8.3 Transfer and activate the complete bundles on the matching PoPs
+
+Using the same authenticated transfer method as step 6, copy the **entire**
+directory `/var/lib/cdnfoundry-fleet/bundles/pop-1/` from the Fleet authority
+over `/opt/cdnfoundry/` on the `pop-1` host. Copy the complete `pop-2` directory
+to `/opt/cdnfoundry/` on `pop-2`. Never cross-copy the node bundles. Preserve a
+recoverable copy of the previous directory and preserve file modes.
+
+On the **`pop-1` PoP host**:
 
 ```bash
+cd /opt/cdnfoundry
+sha256sum -c SHA256SUMS
+./validate.sh
+sudo ./start.sh
 docker compose --env-file .env.prod --profile edge ps
 ```
 
-After successful mTLS registration:
+Run the same four commands on the **`pop-2` PoP host**. `start.sh` converges the
+existing combined deployment and starts `edge-agent`, `edge-gateway`, and the
+bounded cells. It does not delete or rebuild the node-local PowerDNS database
+volume. Do not run `docker compose down`, and never use `down -v`.
+
+Back in **Infrastructure → Edges**, wait for each record to show an enrollment
+time, fresh heartbeat, reported agent version, and ready gateway. Do not create
+service-pool endpoints or enable proxied customer traffic until both records
+are enrolled and healthy.
+
+### 8.4 Remove the consumed tokens and redeploy only the agents
+
+After both agents have enrolled, run on the **Fleet authority**:
 
 ```bash
 sudo ./scripts/cdnfoundry-fleet --state-dir /var/lib/cdnfoundry-fleet \
   clear-edge-bootstrap-token --node pop-1 --non-interactive
 sudo ./scripts/cdnfoundry-fleet --state-dir /var/lib/cdnfoundry-fleet \
-  render --node pop-1
+  clear-edge-bootstrap-token --node pop-2 --non-interactive
+sudo ./scripts/cdnfoundry-fleet --state-dir /var/lib/cdnfoundry-fleet \
+  --output-dir /var/lib/cdnfoundry-fleet/bundles render --node pop-1
+sudo ./scripts/cdnfoundry-fleet --state-dir /var/lib/cdnfoundry-fleet \
+  --output-dir /var/lib/cdnfoundry-fleet/bundles render --node pop-2
+sudo rm -f /root/pop-1.bootstrap-token /root/pop-2.bootstrap-token
 ```
 
-Transfer the token-free bundle and recreate only `edge-agent`. Never reuse or retain a consumed bootstrap token.
+Transfer each complete token-free bundle to its matching PoP again. Then run on
+each **PoP host**:
+
+```bash
+cd /opt/cdnfoundry
+sha256sum -c SHA256SUMS
+./validate.sh
+docker compose --env-file .env.prod up -d --force-recreate edge-agent
+```
+
+The second transfer is required to remove the consumed token from the deployed
+`.env.prod`; only `edge-agent` must be recreated. The edge UUID and persistent
+mTLS identity remain. DNS containers and their volumes are not replaced.
+
+Finally, create and assign the service pool, add each PoP's advertised endpoint
+using the exact public keys configured in `EDGE_GATEWAY_ADDRESS_MAP`, add the
+validated origin, and enable proxying for the test hostname. Follow the bounded
+pool and address rules in the
+[Fleet operator guide](production-fleet-operator-guide.md).
 
 ## 9. Acceptance and recovery gate
 
