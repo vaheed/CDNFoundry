@@ -102,6 +102,13 @@ class PlatformDnsSettingsRequest extends FormRequest
 
     private static function normalize(array $input): array
     {
+        foreach (['soa_refresh', 'soa_retry', 'soa_expire', 'soa_minimum_ttl', 'default_ttl'] as $field) {
+            $value = $input[$field] ?? null;
+            if ((is_string($value) && preg_match('/^\d+$/', $value) === 1)
+                || (is_float($value) && is_finite($value) && floor($value) === $value)) {
+                $input[$field] = (int) $input[$field];
+            }
+        }
         foreach (['platform_domain', 'proxy_hostname', 'soa_primary', 'soa_mailbox'] as $field) {
             if (isset($input[$field]) && is_string($input[$field])) {
                 $input[$field] = mb_strtolower(rtrim(trim($input[$field]), '.'));

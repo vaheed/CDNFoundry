@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Admin\Pages\SystemDnsIdentity;
 use App\Jobs\ApplyPlatformDnsSettings;
 use App\Models\DnsCluster;
 use App\Models\Edge;
@@ -17,6 +18,7 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Livewire\Livewire;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -60,6 +62,33 @@ class SystemIdentityApiTest extends TestCase
         $this->actingAs($admin)->getJson("/api/operations/$operationId")->assertOk();
         $this->assertDatabaseHas('audit_logs', ['action' => 'platform_dns_settings.update_requested']);
         $this->assertDatabaseHas('audit_logs', ['action' => 'platform_dns_settings.applied']);
+    }
+
+    public function test_admin_can_confirm_dns_identity_after_filament_rehydrates_integer_fields(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        DnsCluster::query()->create([
+            'name' => 'dns-local', 'location' => 'test', 'enabled' => true, 'last_health_status' => 'healthy',
+            'api_url' => 'http://pdns-auth:8081', 'api_key' => 'private-test-key', 'server_id' => 'localhost',
+            'nameservers' => [['hostname' => 'ns1.cdnf.test'], ['hostname' => 'ns2.cdnf.test']],
+        ]);
+        $payload = collect($this->validPayload())->mapWithKeys(function (mixed $value, string $key): array {
+            return [$key => in_array($key, ['soa_refresh', 'soa_retry', 'soa_expire', 'soa_minimum_ttl', 'default_ttl'], true)
+                ? (string) $value
+                : $value];
+        })->all();
+
+        $component = Livewire::actingAs($admin)
+            ->test(SystemDnsIdentity::class)
+            ->fillForm($payload)
+            ->call('previewChanges')
+            ->assertHasNoFormErrors();
+
+        $component->call('save')->assertHasNoFormErrors();
+
+        $this->assertDatabaseHas('platform_dns_settings', ['id' => 1, 'platform_domain' => 'cdnf.test']);
+        Queue::assertPushed(ApplyPlatformDnsSettings::class);
     }
 
     public function test_platform_identity_deploys_soa_ns_and_nameserver_glue_to_healthy_clusters(): void
