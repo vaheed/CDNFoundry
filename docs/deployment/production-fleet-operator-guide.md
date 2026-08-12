@@ -333,6 +333,35 @@ docker compose --env-file .env.prod up -d --force-recreate edge-agent
 
 `EDGE_ID` remains in the generated environment. `EDGE_BOOTSTRAP_TOKEN` is removed.
 
+## Rotate an edge identity
+
+Use rotation when an agent identity or its persistent state is lost or
+suspected compromised. This is an immediate revocation, not an overlapping
+certificate renewal. Open the edge under **Infrastructure → Edges**, choose
+**Rotate identity**, read the impact statement, and confirm only when the Fleet
+authority and matching PoP are both available.
+
+The current certificate stops authenticating as soon as rotation is confirmed.
+The gateway and cells retain their last valid runtime, but agent heartbeat and
+configuration delivery pause until reenrollment. A second non-dismissible modal
+then displays the unchanged edge UUID, replacement one-time token, and commands
+for the exact edge name:
+
+1. On the **Fleet authority**, create the protected temporary token file, run
+   `configure-edge-registration`, and rerender only that node.
+2. Transfer that node's **complete bundle** to the matching PoP. On the **PoP**,
+   verify `SHA256SUMS`, run `validate.sh`, and recreate only `edge-agent`.
+3. Wait for a new enrollment time and fresh heartbeat in the panel.
+4. Expand the modal's cleanup section. On the **Fleet authority**, run
+   `clear-edge-bootstrap-token`, rerender, remove the temporary token file, and
+   transfer the complete token-free bundle.
+5. On the **PoP**, verify and validate the token-free bundle, then recreate only
+   `edge-agent` again.
+
+Do not run `start.sh` merely to rotate identity, and do not restart DNS,
+`edge-gateway`, or cells. If the one-time modal is left before its token is
+saved, rotate again and use only the newest replacement token.
+
 ## Embedded or remote control PostgreSQL
 
 Embedded mode is the default. The control bundle contains `control-db`, and `start.sh` waits for `control-db` and `redis` before running the migration.

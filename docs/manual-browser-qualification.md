@@ -103,22 +103,36 @@ workstream does not replace an earlier product checkpoint.
    optional management addresses. Confirm creation opens a non-dismissible
    enrollment modal—not a token toast—and that it displays the edge UUID,
    one-time token, protected token-file command, exact Fleet registration
-   command, and the Fleet-authority host context. Acknowledge it only after
-   saving the values, then confirm neither UUID/token modal nor token is shown
-   again after navigation. Enroll each agent, remove its token after
+   command, and the Fleet-authority host context in visually separated cards.
+   Confirm UUID, token, and both commands have working copy controls; long
+   commands scroll horizontally without colliding with other content; and the
+   final acknowledgement checkbox is required. Acknowledge it only after saving
+   the values, then confirm neither UUID/token modal nor token is shown again
+   after navigation. Enroll each agent, remove its token after
    registration, and confirm fresh heartbeat, current runtime versions, gateway
    process, traffic listener, gateway revision/listeners/routes, capacity, and
    no deployment rejection.
-3. In each edge's **Cells** relation, use **Assign service pool** for the
+3. From an edge record, choose **Rotate identity**. Confirm the first modal says
+   the current certificate is revoked immediately, last-valid runtime traffic
+   can continue, and heartbeat/configuration delivery will pause. Require the
+   readiness checkbox before rotation. After confirmation, require a second
+   non-dismissible modal—not a token toast—that uses exactly the same layout,
+   cards, spacing, copy controls, and expandable follow-up section as initial
+   edge enrollment. It must contain the unchanged UUID, replacement one-time
+   token, Fleet-authority registration/render commands, matching-PoP bundle and
+   agent commands, and post-heartbeat token cleanup. Verify the old
+   certificate is rejected, the new agent identity enrolls, heartbeat returns,
+   and only `edge-agent` is recreated; DNS, gateway, and cells remain running.
+4. In each edge's **Cells** relation, use **Assign service pool** for the
    intended stable slots. Exercise drain, undrain, restart, and unassign; confirm
    unrelated cells keep serving and active placement prevents unsafe removal.
-4. Create each Geo-Unicast pool endpoint with its distinct advertised service
+5. Create each Geo-Unicast pool endpoint with its distinct advertised service
    IPv4 and optional IPv6. Map every address to a distinct assigned local
    listener with `EDGE_GATEWAY_ADDRESS_MAP`. Confirm the gateway binds only the
    local pair, DNS publishes only ready advertised endpoints, Host/SNI routing
    reaches the intended cell, and management addresses are never published or
    bound for customer traffic.
-5. Where the provider approves BGP, create one **Simple Anycast** pool with a
+6. Where the provider approves BGP, create one **Simple Anycast** pool with a
    shared IPv4/optional IPv6 pair and explicit addressless participation on two
    POPs. Verify external route origin/path and three independent vantage points,
    POP drain/withdrawal/restoration, DNS state, HTTP/HTTPS POP selection, and

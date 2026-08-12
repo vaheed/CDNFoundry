@@ -7,6 +7,7 @@ use App\Filament\Admin\Pages\Telemetry;
 use App\Filament\Admin\Resources\DnsClusters\Pages\ListDnsClusters;
 use App\Filament\Admin\Resources\EdgePools\Pages\EditEdgePool as EditServicePool;
 use App\Filament\Admin\Resources\EdgePools\Pages\ListEdgePools;
+use App\Filament\Admin\Resources\Edges\EdgeResource;
 use App\Filament\Admin\Resources\Edges\Pages\CreateEdge;
 use App\Filament\Admin\Resources\Edges\Pages\EditEdge;
 use App\Filament\Admin\Resources\Edges\Pages\ListEdges;
@@ -20,6 +21,7 @@ use App\Jobs\ReconcileAllDnsZones;
 use App\Jobs\ReconcileAllEdgeDomains;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
+use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\Domain;
 use App\Models\DomainEdgeCell;
 use App\Models\DomainEdgePlacement;
@@ -77,12 +79,80 @@ class FilamentWorkflowTest extends TestCase
                 "--node 'pop-1'",
                 '--edge-id '.((string) $edge->id),
             ])
+            ->assertMountedActionModalSee('cdn-enrollment', false)
+            ->setActionData(['saved' => true])
             ->callMountedAction()
             ->assertSet('bootstrapToken', null)
             ->assertActionNotMounted()
             ->assertActionHidden('showEnrollment');
 
         $this->assertNull(session('edge_enrollment'));
+    }
+
+    public function test_identity_rotation_replaces_the_token_toast_with_guided_recovery_instructions(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        $edge = Edge::query()->create([
+            'name' => 'pop-rotate',
+            'country_code' => 'IR',
+            'continent_code' => 'AS',
+            'management_ipv4' => '203.0.113.91',
+            'identity_hash' => hash('sha256', 'old-identity'),
+            'identity_certificate_serial' => 'old-serial',
+            'registered_at' => now(),
+        ]);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(ListEdges::class)
+            ->assertTableActionHasUrl(
+                'rotateIdentity',
+                EdgeResource::getUrl('view', ['record' => $edge, 'action' => 'rotateIdentity']),
+                $edge,
+            );
+
+        $component = Livewire::test(ViewEdge::class, ['record' => $edge->id])
+            ->callAction('rotateIdentity', data: ['confirm_rotation' => true])
+            ->assertHasNoActionErrors()
+            ->assertActionMounted('showRotatedIdentity');
+
+        $mountedActions = $component->get('mountedActions');
+        $arguments = $mountedActions[array_key_last($mountedActions)]['arguments'];
+        $token = $arguments['bootstrapToken'];
+
+        $this->assertSame((string) $edge->id, $arguments['edgeId']);
+        $this->assertSame('pop-rotate', $arguments['nodeName']);
+        $this->assertSame(64, strlen($token));
+        $this->assertSame(hash('sha256', $token), $edge->refresh()->bootstrap_token_hash);
+        $this->assertNull($edge->identity_hash);
+        $this->assertNull($edge->identity_certificate_serial);
+        $this->assertNotNull($edge->identity_revoked_at);
+        $this->assertNull($edge->registered_at);
+
+        $component
+            ->assertMountedActionModalSee([
+                'The old certificate is revoked.',
+                (string) $edge->id,
+                $token,
+                '/root/pop-rotate.bootstrap-token',
+                "--node 'pop-rotate'",
+                'render --node',
+                '--force-recreate edge-agent',
+                'clear-edge-bootstrap-token',
+            ])
+            ->assertMountedActionModalSee('cdn-enrollment-layout', false)
+            ->assertMountedActionModalDontSee('cdn-rotation', false)
+            ->assertMountedActionModalDontSee('New one-time bootstrap token')
+            ->setActionData(['saved' => true])
+            ->callMountedAction()
+            ->assertActionNotMounted();
+
+        Queue::assertPushed(ReconcilePlatformDnsIdentity::class);
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'edge.identity_rotated',
+            'subject_id' => (string) $edge->id,
+        ]);
     }
 
     public function test_pool_policy_form_limits_replication_and_queues_reconciliation(): void

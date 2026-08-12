@@ -82,7 +82,7 @@ mutual TLS, Pebble, Vector, and ClickHouse. It does not inspect the rendered UI.
 The two OpenResty hosts run before the agents because edge IDs and one-time
 tokens must come from administrator-created edge rows.
 
-1. In **Edge network → Edges**, create edge A and edge B.
+1. In **Infrastructure → Edges**, create edge A and edge B.
 2. Copy the displayed UUID and bootstrap token for each.
 3. Create the ignored local environment:
 
@@ -103,8 +103,10 @@ make dev-edge-status
 1. After both identities are registered and heartbeats are fresh, remove both
    bootstrap-token values from `.env.dev`.
 
-Named agent volumes retain issued identities. Losing the volume requires the
-administrator **Rotate identity** action and a new token.
+Named agent volumes retain issued identities. Losing a volume requires the
+administrator **Rotate identity** workflow. Its one-time recovery modal provides
+the replacement token and separates Fleet-authority commands from the matching
+edge-host commands; never copy another edge's identity volume.
 
 ## Production
 
