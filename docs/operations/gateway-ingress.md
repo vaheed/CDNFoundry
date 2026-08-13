@@ -29,6 +29,18 @@ those artifacts, combines them with operator-owned service bindings, and writes
 one immutable routing table. It writes `last-valid.json` before activation and
 uses it when a candidate is absent or invalid at restart.
 
+On the first start of a new edge, neither file exists yet. The gateway remains
+running with no listeners and reports not-ready while polling for the agent's
+first atomic candidate. This fail-closed bootstrap state is normal and does not
+create a synthetic last-valid map. Other read or validation failures remain
+fatal when no valid fallback exists.
+
+An explicit candidate with zero listeners and zero routes is valid desired
+state for an edge with no eligible endpoints, or after every endpoint is
+withdrawn. Activating it closes any previous listeners and reports the empty
+revision as ready. A candidate with listeners but no routes, or routes but no
+listeners, remains invalid.
+
 The agent fetches the bounded, revisioned bindings generated from ready pool
 endpoints and participating cells over its mTLS control connection. Production
 cells use their loopback ports. Containerized development may set
@@ -154,7 +166,8 @@ gateway metrics and qualification tooling, never by editing the derived file.
 - Invalid candidate: retain the active table and increment rejection metrics.
 - Cell outage: only routes targeting that cell fail.
 - Control-plane outage: continue from local active state.
-- Gateway restart: load a valid candidate or `last-valid.json`.
+- Gateway restart: load a valid candidate or `last-valid.json`; on a clean
+  installation with neither file, remain not-ready and wait for the agent.
 - Agent restart: rebuild derived files from durable signed local state.
 
 If the gateway process is ready but an endpoint says `gateway_not_ready`, first

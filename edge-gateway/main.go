@@ -97,14 +97,28 @@ func main() {
 }
 
 func (g *gateway) loadInitial() error {
-	data, err := os.ReadFile(g.configPath)
-	if err != nil {
-		data, err = os.ReadFile(filepath.Join(g.stateDir, "last-valid.json"))
+	candidate, candidateErr := os.ReadFile(g.configPath)
+	if candidateErr == nil {
+		candidateErr = g.activate(candidate)
+		if candidateErr == nil {
+			return nil
+		}
 	}
-	if err != nil {
-		return fmt.Errorf("no gateway candidate or last-valid map: %w", err)
+	lastValid, lastValidErr := os.ReadFile(filepath.Join(g.stateDir, "last-valid.json"))
+	if lastValidErr == nil {
+		lastValidErr = g.activate(lastValid)
+		if lastValidErr == nil {
+			logger.Warn("gateway candidate unavailable at startup; last valid map activated", "event", "gateway_last_valid_activated", "error", candidateErr.Error())
+			return nil
+		}
 	}
-	return g.activate(data)
+	if errors.Is(candidateErr, os.ErrNotExist) && errors.Is(lastValidErr, os.ErrNotExist) {
+		g.table.Store(&routingTable{generationID: "bootstrap-unconfigured", routes: map[string]string{}})
+		logger.Warn("edge gateway waiting for its first candidate", "event", "gateway_bootstrap_waiting", "revision_id", 0)
+		return nil
+	}
+
+	return fmt.Errorf("no valid gateway candidate or last-valid map: candidate: %v; last-valid: %w", candidateErr, lastValidErr)
 }
 
 func (g *gateway) watch(ctx context.Context) {
@@ -188,7 +202,7 @@ func (g *gateway) logRejectionSummaries(ctx context.Context) {
 }
 
 func validate(candidate config) (*routingTable, error) {
-	if candidate.SchemaVersion != 1 || len(candidate.Listeners) == 0 || len(candidate.Listeners) > 64 || len(candidate.Routes) > 100000 {
+	if candidate.SchemaVersion != 1 || len(candidate.Listeners) > 64 || len(candidate.Routes) > 100000 || (len(candidate.Listeners) == 0) != (len(candidate.Routes) == 0) {
 		return nil, errors.New("invalid gateway map bounds")
 	}
 	listeners := map[string]bool{}
@@ -224,9 +238,6 @@ func validate(candidate config) (*routingTable, error) {
 			}
 			routes[key] = target
 		}
-	}
-	if len(routes) == 0 {
-		return nil, errors.New("gateway map has no routes")
 	}
 	if candidate.GenerationID == "" {
 		candidate.GenerationID = fmt.Sprintf("legacy-%020d", candidate.Revision)

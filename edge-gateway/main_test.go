@@ -3,10 +3,71 @@ package main
 import (
 	"crypto/tls"
 	"encoding/binary"
+	"encoding/json"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestLoadInitialWaitsForTheFirstCandidate(t *testing.T) {
+	stateDir := t.TempDir()
+	g := &gateway{
+		configPath: filepath.Join(stateDir, "missing-candidate.json"),
+		stateDir:   stateDir,
+		listeners:  map[string]net.Listener{},
+	}
+
+	if err := g.loadInitial(); err != nil {
+		t.Fatal(err)
+	}
+	table := g.table.Load()
+	if table == nil || table.revision != 0 || table.generationID != "bootstrap-unconfigured" || len(table.routes) != 0 {
+		t.Fatalf("unexpected bootstrap routing table: %#v", table)
+	}
+	if g.ready.Load() {
+		t.Fatal("gateway became ready before its first valid candidate")
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "last-valid.json")); !os.IsNotExist(err) {
+		t.Fatalf("bootstrap wait unexpectedly created last-valid state: %v", err)
+	}
+}
+
+func TestLoadInitialFallsBackFromAnInvalidCandidate(t *testing.T) {
+	stateDir := t.TempDir()
+	configPath := filepath.Join(stateDir, "candidate.json")
+	if err := os.WriteFile(configPath, []byte(`{"schema_version":1,"listeners":["192.0.2.10:80"]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	lastValid, err := json.Marshal(config{
+		SchemaVersion: 1, Revision: 4, GenerationID: "00000000000000000004-test",
+		Listeners: []string{"192.0.2.10:80"},
+		Routes:    []route{{Address: "192.0.2.10", Hostname: "www.example.test", HTTP: "cell-a:8081"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, "last-valid.json"), lastValid, 0600); err != nil {
+		t.Fatal(err)
+	}
+	g := &gateway{
+		configPath: configPath,
+		stateDir:   stateDir,
+		listeners:  map[string]net.Listener{},
+		listen: func(_, _ string) (net.Listener, error) {
+			return net.Listen("tcp4", "127.0.0.1:0")
+		},
+	}
+	defer g.close()
+
+	if err := g.loadInitial(); err != nil {
+		t.Fatal(err)
+	}
+	if table := g.table.Load(); table == nil || table.revision != 4 || !g.ready.Load() {
+		t.Fatalf("last-valid routing table was not restored: %#v", table)
+	}
+}
 
 func TestValidateAcceptsBoundedDualStackRoutes(t *testing.T) {
 	candidate := config{
@@ -27,6 +88,16 @@ func TestValidateAcceptsBoundedDualStackRoutes(t *testing.T) {
 	}
 }
 
+func TestValidateAcceptsAnEmptyFailClosedCandidate(t *testing.T) {
+	table, err := validate(config{SchemaVersion: 1, Revision: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if table.revision != 0 || len(table.routes) != 0 || table.generationID != "legacy-00000000000000000000" {
+		t.Fatalf("unexpected empty routing table: %#v", table)
+	}
+}
+
 func TestValidateRejectsDuplicateAndInvalidCandidates(t *testing.T) {
 	base := config{
 		SchemaVersion: 1, Revision: 1, Listeners: []string{"192.0.2.10:80"},
@@ -34,6 +105,8 @@ func TestValidateRejectsDuplicateAndInvalidCandidates(t *testing.T) {
 	}
 	tests := []config{
 		{SchemaVersion: 2, Revision: 1, Listeners: base.Listeners, Routes: base.Routes},
+		{SchemaVersion: 1, Revision: 1, Listeners: base.Listeners},
+		{SchemaVersion: 1, Revision: 1, Routes: base.Routes},
 		{SchemaVersion: 1, Revision: 1, Listeners: []string{"0.0.0.0:8080"}, Routes: base.Routes},
 		{SchemaVersion: 1, Revision: 1, Listeners: base.Listeners, Routes: append(base.Routes, base.Routes[0])},
 		{SchemaVersion: 1, Revision: 1, Listeners: base.Listeners, Routes: []route{{Address: "192.0.2.10", Hostname: "bad_name", HTTP: "cell-a:8081"}}},
