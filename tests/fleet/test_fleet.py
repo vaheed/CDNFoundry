@@ -308,6 +308,10 @@ def test_duplicate_ip_and_malicious_node_input_are_rejected(store: FleetState) -
         add(store, node("edge-two", "edge", "192.0.2.40"))
     with pytest.raises(ValidationError):
         add(store, node("bad;rm-rf", "edge", "192.0.2.41"))
+    invalid_gateway = node("edge-three", "edge", "192.0.2.42")
+    invalid_gateway["extra_env"] = {"EDGE_GATEWAY_ADDRESS_MAP": '{"192.0.2.42":"0.0.0.0"}'}
+    with pytest.raises(ValidationError, match="does not allow wildcard"):
+        add(store, invalid_gateway)
 
 
 def test_failed_update_preserves_previous_valid_state(store: FleetState) -> None:
@@ -1032,7 +1036,7 @@ def test_optional_extra_env_is_preserved_for_manual_edge_registration(store: Fle
     payload["extra_env"] = {
         "EDGE_ID": "11111111-2222-3333-4444-555555555555",
         "EDGE_BOOTSTRAP_TOKEN": "one-time-token",
-        "EDGE_GATEWAY_ADDRESS_MAP": '{"198.51.100.10":"10.20.0.10"}',
+        "EDGE_GATEWAY_ADDRESS_MAP": '{"198.51.100.10":"198.51.100.10"}',
     }
     add(store, payload)
     output = tmp_path / "bundles"
@@ -1040,7 +1044,7 @@ def test_optional_extra_env_is_preserved_for_manual_edge_registration(store: Fle
     env = env_values(output / "edge-1/.env.prod")
     assert env["EDGE_ID"] == "11111111-2222-3333-4444-555555555555"
     assert env["EDGE_BOOTSTRAP_TOKEN"] == "one-time-token"
-    assert json.loads(env["EDGE_GATEWAY_ADDRESS_MAP"]) == '{"198.51.100.10":"10.20.0.10"}'
+    assert json.loads(env["EDGE_GATEWAY_ADDRESS_MAP"]) == '{"198.51.100.10":"198.51.100.10"}'
 
 
 def test_edge_registration_command_uses_protected_token_file(source_repo: Path, tmp_path: Path) -> None:
@@ -1090,7 +1094,7 @@ def test_edge_registration_command_uses_protected_token_file(source_repo: Path, 
     subprocess.run(
         common + [
             "update-node", "--node", "edge-1",
-            "--extra-env", 'EDGE_GATEWAY_ADDRESS_MAP={"192.0.2.173":"0.0.0.0"}',
+            "--extra-env", 'EDGE_GATEWAY_ADDRESS_MAP={"192.0.2.173":"192.0.2.173"}',
             "--non-interactive",
         ],
         check=True,
@@ -1099,7 +1103,7 @@ def test_edge_registration_command_uses_protected_token_file(source_repo: Path, 
     env = env_values(output_dir / "edge-1/.env.prod")
     assert env["EDGE_ID"] == "11111111-2222-3333-4444-555555555555"
     assert env["EDGE_BOOTSTRAP_TOKEN"] == "protected-one-time-token"
-    assert json.loads(env["EDGE_GATEWAY_ADDRESS_MAP"]) == '{"192.0.2.173":"0.0.0.0"}'
+    assert json.loads(env["EDGE_GATEWAY_ADDRESS_MAP"]) == '{"192.0.2.173":"192.0.2.173"}'
     assert "--profile dns --profile edge" in (output_dir / "edge-1/start.sh").read_text(encoding="utf-8")
     secret_path = state_dir / "secrets/nodes/edge-1/edge-bootstrap-token"
     assert stat.S_IMODE(secret_path.stat().st_mode) == 0o600

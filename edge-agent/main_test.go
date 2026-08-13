@@ -375,6 +375,16 @@ func TestParseGatewayAddressMapRejectsUnsafeMappings(t *testing.T) {
 	}
 }
 
+func TestParseGatewayAddressMapAcceptsDirectlyAssignedPublicAddress(t *testing.T) {
+	addresses, err := parseGatewayAddressMap(`{"192.0.2.10":"192.0.2.10","2001:db8::10":"2001:db8::10"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if addresses["192.0.2.10"] != "192.0.2.10" || addresses["2001:db8::10"] != "2001:db8::10" {
+		t.Fatalf("direct public listener mapping was not preserved: %#v", addresses)
+	}
+}
+
 func TestStaticGatewayBindingsUseProductionAddressMap(t *testing.T) {
 	raw := `[{"address":"192.0.2.10","pool":"shared-default"}]`
 	rewritten, err := rewriteGatewayBindingsJSON(raw, map[string]string{"192.0.2.10": "10.20.0.10"}, true)

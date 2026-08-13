@@ -869,8 +869,9 @@ func parseGatewayAddressMap(raw string) (map[string]string, error) {
 	localAddresses := map[string]bool{}
 	for advertisedRaw, localRaw := range configured {
 		advertised, local := net.ParseIP(advertisedRaw), net.ParseIP(localRaw)
-		if advertised == nil || local == nil || advertised.IsUnspecified() || local.IsUnspecified() || !local.IsPrivate() {
-			return nil, errors.New("EDGE_GATEWAY_ADDRESS_MAP contains an invalid, public, or unspecified local IP address")
+		if advertised == nil || local == nil || advertised.IsUnspecified() || local.IsUnspecified() ||
+			(!local.IsPrivate() && !advertised.Equal(local)) {
+			return nil, errors.New("EDGE_GATEWAY_ADDRESS_MAP local IP must be private or exactly match its advertised IP")
 		}
 		if (advertised.To4() == nil) != (local.To4() == nil) {
 			return nil, errors.New("EDGE_GATEWAY_ADDRESS_MAP address pairs must use the same IP family")

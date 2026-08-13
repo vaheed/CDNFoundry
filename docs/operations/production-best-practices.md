@@ -43,9 +43,9 @@ Use [Fleet rollouts](fleet-rollouts.md) for the supported canary workflow.
 - Allow edge agents to initiate outbound mTLS; do not require inbound control
   access to every edge.
 - Separate management inventory addresses from customer service addresses.
-- Bind shared listeners to locally present private/wildcard addresses behind
-  NAT or a firewall; do not assume the advertised public address exists on the
-  host.
+- Bind shared listeners to the exact public address when it is assigned
+  directly to the host, or to a distinct private address behind one-to-one NAT.
+  Never use a wildcard as a service-address mapping.
 - Map each advertised edge service address one-to-one to a distinct locally
   assigned gateway address.
 - Document firewall owner, rule purpose, source, destination, port, protocol,

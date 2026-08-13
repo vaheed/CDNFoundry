@@ -335,15 +335,17 @@ replacement one-time token; never try to recover it from the database.
 ### 8.2 Rerender both combined-node bundles
 
 Before rendering, define the complete gateway address map for each PoP. Every
-future advertised service address needs one distinct private/local listener
-address already configured on that host. Replace all four example addresses;
-do not use the public address as the local value. Run on the **Fleet authority**:
+future advertised service address needs one exact listener address already
+configured on that host. If the public address is assigned directly to the
+host, map it to itself. If the host is behind one-to-one NAT, map the public
+address to its distinct private listener. Never use `0.0.0.0` or `::`. Replace
+the example addresses and run on the **Fleet authority**:
 
 ```bash
 sudo ./scripts/cdnfoundry-fleet \
   --state-dir /var/lib/cdnfoundry-fleet \
   update-node --node pop-1 \
-  --extra-env 'EDGE_GATEWAY_ADDRESS_MAP={"198.51.100.20":"10.20.0.20"}' \
+  --extra-env 'EDGE_GATEWAY_ADDRESS_MAP={"198.51.100.20":"198.51.100.20"}' \
   --non-interactive
 sudo ./scripts/cdnfoundry-fleet \
   --state-dir /var/lib/cdnfoundry-fleet \
@@ -358,9 +360,10 @@ environment overrides. It must preserve the `EDGE_ID` written by
 edit `start.sh`.
 
 The advertised keys must later be entered as the matching service-pool
-endpoints in the administrator panel. The private values are local bind
-addresses, not customer DNS answers. Configure and verify those addresses on
-the matching PoP hosts before starting the edge profile.
+endpoints in the administrator panel. Each value is the address actually bound
+on that PoP: the same public address for direct assignment, or a private address
+behind one-to-one NAT. Configure and verify it on the matching host before
+starting the edge profile.
 
 Now rerender on the **Fleet authority**, after running each modal's registration
 command:

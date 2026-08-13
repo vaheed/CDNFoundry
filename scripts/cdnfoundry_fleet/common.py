@@ -169,6 +169,44 @@ def validate_env_mapping(values: dict[str, Any]) -> dict[str, str]:
     return clean
 
 
+def validate_gateway_address_map(value: str) -> str:
+    try:
+        configured = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise ValidationError("EDGE_GATEWAY_ADDRESS_MAP must be a JSON object") from exc
+    if not isinstance(configured, dict) or len(configured) > 64:
+        raise ValidationError("EDGE_GATEWAY_ADDRESS_MAP must be a JSON object with at most 64 IP address pairs")
+
+    private_networks = (
+        ipaddress.ip_network("10.0.0.0/8"),
+        ipaddress.ip_network("172.16.0.0/12"),
+        ipaddress.ip_network("192.168.0.0/16"),
+        ipaddress.ip_network("fc00::/7"),
+    )
+    local_addresses: set[str] = set()
+    for advertised_raw, local_raw in configured.items():
+        if not isinstance(advertised_raw, str) or not isinstance(local_raw, str):
+            raise ValidationError("EDGE_GATEWAY_ADDRESS_MAP keys and values must be IP address strings")
+        try:
+            advertised = ipaddress.ip_address(advertised_raw)
+            local = ipaddress.ip_address(local_raw)
+        except ValueError as exc:
+            raise ValidationError("EDGE_GATEWAY_ADDRESS_MAP contains an invalid IP address") from exc
+        if advertised.is_unspecified or local.is_unspecified:
+            raise ValidationError("EDGE_GATEWAY_ADDRESS_MAP does not allow wildcard addresses")
+        if advertised.version != local.version:
+            raise ValidationError("EDGE_GATEWAY_ADDRESS_MAP address pairs must use the same IP family")
+        if advertised != local and not any(local in network for network in private_networks):
+            raise ValidationError(
+                "EDGE_GATEWAY_ADDRESS_MAP local IP must be private or exactly match its advertised IP"
+            )
+        canonical_local = str(local)
+        if canonical_local in local_addresses:
+            raise ValidationError("EDGE_GATEWAY_ADDRESS_MAP local addresses must be unique")
+        local_addresses.add(canonical_local)
+    return value
+
+
 def unique_nonempty(values: Iterable[str | None]) -> bool:
     items = [item for item in values if item]
     return len(items) == len(set(items))

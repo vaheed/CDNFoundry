@@ -296,15 +296,19 @@ DNS_API_SERVER_PRIVATE_KEY=/etc/cdnfoundry/pki/dns-api-1.key
 EDGE_CONTROL_CA_CERTIFICATE=/etc/cdnfoundry/pki/edge-server-ca.crt
 EDGE_RUNTIME_TLS_CERTIFICATE=/etc/cdnfoundry/pki/edge-runtime.crt
 EDGE_RUNTIME_TLS_PRIVATE_KEY=/etc/cdnfoundry/pki/edge-runtime.key
-EDGE_GATEWAY_ADDRESS_MAP={"198.51.100.40":"10.20.0.40"}
+EDGE_GATEWAY_ADDRESS_MAP={"198.51.100.40":"198.51.100.40"}
 EDGE_ID=
 EDGE_BOOTSTRAP_TOKEN=
 ```
 
-Use the real advertised and local addresses. Set
+The example is a direct-public host: the advertised address is assigned to a
+local interface, so it maps to itself. Behind one-to-one NAT, use the private
+listener instead, for example
+`EDGE_GATEWAY_ADDRESS_MAP={"198.51.100.40":"10.20.0.40"}`. Never use
+`0.0.0.0` or `::` in this map. Set
 `CONTROL_PUBLIC_*_ALLOWLIST` to the control worker's exact source address. JSON
 values in `.env.prod` remain on one line. `pop-2` uses its own API hostname,
-certificate, private local mapping, status token, log identity, edge UUID, and
+certificate, local mapping, status token, log identity, edge UUID, and
 bootstrap token.
 
 Keep IPv6 absent until routing, firewalling, DNS, and external reachability all

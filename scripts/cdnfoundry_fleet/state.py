@@ -19,6 +19,7 @@ from .common import (
     random_secret,
     utc_now,
     validate_env_mapping,
+    validate_gateway_address_map,
     validate_hostname,
     validate_ip,
     validate_laravel_app_key,
@@ -296,6 +297,9 @@ class FleetState:
         name = validate_node_name(node["name"])
         operator_domain = state["global"]["operator_domain"]
         hostname = node.get("hostname") or f"{name}.{operator_domain}"
+        extra_env = validate_env_mapping(node.get("extra_env", {}))
+        if "EDGE_GATEWAY_ADDRESS_MAP" in extra_env:
+            validate_gateway_address_map(extra_env["EDGE_GATEWAY_ADDRESS_MAP"])
         return {
             "name": name,
             "role": role,
@@ -311,7 +315,7 @@ class FleetState:
             "log_ipv4": validate_ip(node.get("log_ipv4")),
             "log_ipv6": validate_ip(node.get("log_ipv6")),
             "release": validate_release(node.get("release") or state["global"]["release"]),
-            "extra_env": validate_env_mapping(node.get("extra_env", {})),
+            "extra_env": extra_env,
             "enabled": bool(node.get("enabled", True)),
             "draining": bool(node.get("draining", False)),
             "health": {

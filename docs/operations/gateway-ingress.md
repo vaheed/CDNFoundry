@@ -6,9 +6,11 @@ description: Operate destination-address and Host/SNI routing to bounded OpenRes
 # Edge gateway ingress
 
 ::: danger Preserve layer-4 identity
-Public/NAT service addresses must map one-to-one to distinct private listener
-addresses. The firewall or load balancer must pass TCP and TLS through without
-terminating TLS or collapsing several advertised addresses onto one local IP.
+Every service address must map one-to-one to an exact local listener. When the
+public address is assigned directly to the host, map it to itself. Behind NAT,
+map it to one distinct private listener address. A firewall or load balancer
+must pass TCP and TLS through without terminating TLS or collapsing several
+advertised addresses onto one local IP.
 :::
 
 The edge gateway is the only process that binds customer HTTP and HTTPS
@@ -35,11 +37,14 @@ targets with private container DNS names and ports.
 
 Production keeps endpoint identity separate from host listeners. Set
 `EDGE_GATEWAY_ADDRESS_MAP` to an exact advertised-to-local JSON object, for
-example `{"198.51.100.40":"10.20.0.40"}`. The external firewall or layer-4
-load balancer forwards the advertised address to that local address without
-terminating TLS. The production profile requires complete coverage: an
-unmapped endpoint, cross-family pair, wildcard address, or reused local
-address rejects the candidate and preserves the previous valid map.
+example `{"198.51.100.40":"198.51.100.40"}` when that public address is
+assigned directly to the host, or `{"198.51.100.40":"10.20.0.40"}` behind
+one-to-one NAT. In the NAT case, the external firewall or layer-4 load balancer
+forwards the advertised address to that local address without terminating TLS.
+The production profile requires complete coverage: an unmapped endpoint,
+cross-family pair, wildcard address, public-to-different-public mapping, or
+reused local address rejects the candidate and preserves the previous valid
+map.
 
 `EDGE_GATEWAY_BINDINGS` remains an emergency rollout override. When set, its
 static JSON is authoritative and dynamic endpoint changes are intentionally
@@ -97,11 +102,12 @@ only `NET_BIND_SERVICE`; drop all other capabilities. Restrict port `9105` to
 the edge agent and monitoring source. Set `EDGE_GATEWAY_MAX_CONNECTIONS` from
 the qualified host ceiling; invalid or out-of-range values use 8,192.
 
-1. Allocate one distinct private/local IPv4 or IPv6 address for every
-   advertised service address and assign only the local addresses to the host.
-2. Configure one-to-one DNAT or layer-4 forwarding for TCP `80` and `443`,
-   preserving the connection and TLS stream. Put every pair in
-   `EDGE_GATEWAY_ADDRESS_MAP`.
+1. For a directly addressed host, confirm each advertised service address is
+   assigned to a local interface and map it to itself. Otherwise allocate one
+   distinct private/local address for every advertised service address.
+2. For the private-address case, configure one-to-one DNAT or layer-4
+   forwarding for TCP `80` and `443`, preserving the connection and TLS stream.
+   Put every direct or translated pair in `EDGE_GATEWAY_ADDRESS_MAP`.
 3. Confirm every ready endpoint and participating cell appears in the
    agent-fetched gateway candidate. Do not set the static override during
    normal operation.

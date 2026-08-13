@@ -299,7 +299,7 @@ sudo ./scripts/cdnfoundry-fleet \
 sudo ./scripts/cdnfoundry-fleet \
   --state-dir /var/lib/cdnfoundry-fleet \
   update-node --node edge-tokyo \
-  --extra-env 'EDGE_GATEWAY_ADDRESS_MAP={"203.0.113.40":"10.40.0.40","203.0.113.41":"10.40.0.41"}' \
+  --extra-env 'EDGE_GATEWAY_ADDRESS_MAP={"203.0.113.40":"203.0.113.40","203.0.113.41":"203.0.113.41"}' \
   --non-interactive
 
 sudo ./scripts/cdnfoundry-fleet \
@@ -307,6 +307,11 @@ sudo ./scripts/cdnfoundry-fleet \
   --output-dir /var/lib/cdnfoundry-fleet/bundles \
   --repo-root "$PWD" render --node edge-tokyo
 ```
+
+This example binds public service addresses assigned directly to the edge. For
+a host behind one-to-one NAT, map each advertised public key to its distinct
+private listener value instead. Wildcard values such as `0.0.0.0` and `::` are
+not valid service identities.
 
 The edge agent creates its private key locally, sends a CSR during one-time registration, receives an identity certificate from the edge identity CA, and persists the identity in `edge-agent-state`. Do not copy that volume to another host.
 
