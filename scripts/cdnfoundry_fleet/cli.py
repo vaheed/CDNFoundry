@@ -627,7 +627,12 @@ def execute(args: argparse.Namespace) -> int:
             state = store.add_node(state, _node_payload(args, config))
             print(json.dumps({"status": "added", "node": args.node or config.get("name")}))
         elif args.command == "update-node":
-            state = store.update_node(state, args.node, _node_payload(args, config, update=True))
+            changes = _node_payload(args, config, update=True)
+            if "extra_env" in changes and args.node in state["nodes"]:
+                extra = dict(state["nodes"][args.node].get("extra_env", {}))
+                extra.update(changes["extra_env"])
+                changes["extra_env"] = extra
+            state = store.update_node(state, args.node, changes)
             print(json.dumps({"status": "updated", "node": args.node}))
         elif args.command == "configure-edge-registration":
             if args.node not in state["nodes"]:

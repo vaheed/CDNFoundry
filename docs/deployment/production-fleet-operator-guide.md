@@ -275,7 +275,8 @@ The generator does not create edge records in the control plane. Use this sequen
 4. On the Fleet authority, run the modal's command to save the token in a
    protected mode-`0600` temporary file.
 5. Store the UUID/token in fleet state with `configure-edge-registration`.
-6. Add the edge's complete `EDGE_GATEWAY_ADDRESS_MAP` with `update-node --extra-env`.
+6. Add the edge's complete `EDGE_GATEWAY_ADDRESS_MAP` with `update-node --extra-env`;
+   this merges the supplied key and preserves the registered `EDGE_ID`.
 7. Validate and render only that node.
 8. Transfer and start the node bundle.
 9. Wait for the registered identity and heartbeat.

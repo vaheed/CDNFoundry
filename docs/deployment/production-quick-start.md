@@ -352,6 +352,11 @@ sudo ./scripts/cdnfoundry-fleet \
   --non-interactive
 ```
 
+`update-node --extra-env` merges the supplied keys into the node's existing
+environment overrides. It must preserve the `EDGE_ID` written by
+`configure-edge-registration`; do not add that ID manually to `.env.prod` or
+edit `start.sh`.
+
 The advertised keys must later be entered as the matching service-pool
 endpoints in the administrator panel. The private values are local bind
 addresses, not customer DNS answers. Configure and verify those addresses on
@@ -384,8 +389,8 @@ sudo ./scripts/cdnfoundry-fleet \
   --state-dir /var/lib/cdnfoundry-fleet \
   --output-dir /var/lib/cdnfoundry-fleet/bundles \
   validate
-grep -q '^EDGE_ID=' /var/lib/cdnfoundry-fleet/bundles/pop-1/.env.prod
-grep -q '^EDGE_BOOTSTRAP_TOKEN=' /var/lib/cdnfoundry-fleet/bundles/pop-1/.env.prod
+grep -Eq '^EDGE_ID=.+$' /var/lib/cdnfoundry-fleet/bundles/pop-1/.env.prod
+grep -Eq '^EDGE_BOOTSTRAP_TOKEN=.+$' /var/lib/cdnfoundry-fleet/bundles/pop-1/.env.prod
 grep 'docker compose.*up -d --wait' \
   /var/lib/cdnfoundry-fleet/bundles/pop-1/start.sh
 ```

@@ -1071,7 +1071,7 @@ def test_edge_registration_command_uses_protected_token_file(source_repo: Path, 
     )
     subprocess.run(
         common + [
-            "add-node", "--node", "edge-1", "--role", "edge", "--region", "eu",
+            "add-node", "--node", "edge-1", "--role", "dns-edge", "--region", "eu",
             "--location", "ams", "--public-ipv4", "192.0.2.173", "--non-interactive",
         ],
         check=True,
@@ -1087,10 +1087,20 @@ def test_edge_registration_command_uses_protected_token_file(source_repo: Path, 
         ],
         check=True,
     )
+    subprocess.run(
+        common + [
+            "update-node", "--node", "edge-1",
+            "--extra-env", 'EDGE_GATEWAY_ADDRESS_MAP={"192.0.2.173":"0.0.0.0"}',
+            "--non-interactive",
+        ],
+        check=True,
+    )
     subprocess.run(common + ["render", "--node", "edge-1"], check=True)
     env = env_values(output_dir / "edge-1/.env.prod")
     assert env["EDGE_ID"] == "11111111-2222-3333-4444-555555555555"
     assert env["EDGE_BOOTSTRAP_TOKEN"] == "protected-one-time-token"
+    assert json.loads(env["EDGE_GATEWAY_ADDRESS_MAP"]) == '{"192.0.2.173":"0.0.0.0"}'
+    assert "--profile dns --profile edge" in (output_dir / "edge-1/start.sh").read_text(encoding="utf-8")
     secret_path = state_dir / "secrets/nodes/edge-1/edge-bootstrap-token"
     assert stat.S_IMODE(secret_path.stat().st_mode) == 0o600
 
