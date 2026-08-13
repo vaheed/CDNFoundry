@@ -437,6 +437,11 @@ time, fresh heartbeat, reported agent version, and ready gateway. Do not create
 service-pool endpoints or enable proxied customer traffic until both records
 are enrolled and healthy.
 
+A newly enrolled edge with no domains is still expected to become healthy. Its
+first active state is an empty bootstrap generation with domain sequence `0`;
+the cells and gateway must stop reporting `runtime state unavailable`. Do not
+create a placeholder domain to make an edge start.
+
 ### 8.4 Remove the consumed tokens and redeploy only the agents
 
 After both agents have enrolled, run on the **Fleet authority**:
@@ -472,6 +477,12 @@ using the exact public keys configured in `EDGE_GATEWAY_ADDRESS_MAP`, add the
 validated origin, and enable proxying for the test hostname. Follow the bounded
 pool and address rules in the
 [Fleet operator guide](production-fleet-operator-guide.md).
+
+If a host's only public address will be its service endpoint, leave that edge's
+optional **Management IPv4/IPv6** blank. Management inventory addresses must be
+different from service endpoints. Assign a cell to the Geo-Unicast pool before
+creating the endpoint; the first endpoint is valid before any customer domain
+exists and activates an empty runtime for that assigned cell.
 
 ## 9. Acceptance and recovery gate
 

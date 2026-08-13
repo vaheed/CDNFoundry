@@ -33,6 +33,12 @@ duplicate, and empty pairs fail before desired state changes. Endpoint edits
 increment the endpoint revision and return it to `pending` until the gateway
 reports the active revision.
 
+The first endpoint may be created while the edge has no customer domains. The
+agent activates an empty runtime for each assigned cell, then publishes the
+gateway listener generation. If the service address is the host's only public
+address, leave the optional edge management address blank rather than reusing
+the service address as management inventory.
+
 ## Publication and fallback
 
 System DNS publishes an endpoint only when the pool and edge are enabled and

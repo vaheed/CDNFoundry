@@ -486,6 +486,128 @@ func TestFreshFullSnapshotThenIncrementalArtifact(t *testing.T) {
 	}
 }
 
+func TestFreshEmptyFullSnapshotActivatesBootstrapGeneration(t *testing.T) {
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicHex := hex.EncodeToString(public)
+	fullPayload, fullChecksum, fullSignature := signedGzipJSON(t, private, map[string]any{
+		"schema_version": 1, "minimum_agent_version": "1.0.0", "maximum_agent_version": "1.99.0",
+		"artifacts": []map[string]any{},
+	})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/edge/v1/config/full":
+			_ = json.NewEncoder(w).Encode(map[string]any{"encoded_snapshot": fullPayload, "checksum": fullChecksum, "signature": fullSignature, "signing_public_key": publicHex})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"accepted": true}})
+		}
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	runtimeDir := filepath.Join(dir, "runtime")
+	c := &client{
+		base: server.URL, dir: dir, runtimeDir: runtimeDir, http: server.Client(),
+		id: identity{PublicKey: publicHex}, gatewayBindings: "[]",
+		cellAssignments: map[string]string{"cell-01": ""},
+	}
+	if err := c.full(); err != nil {
+		t.Fatal(err)
+	}
+
+	active, err := loadState(filepath.Join(runtimeDir, "current", "state.json"))
+	if err != nil || active.Sequence != 0 || len(active.Domains) != 0 {
+		t.Fatalf("empty bootstrap snapshot was not activated: %#v, %v", active, err)
+	}
+	manifest, err := readGenerationPointer(runtimeDir, "current")
+	if err != nil || manifest.Revision != 0 {
+		t.Fatalf("bootstrap generation was not published at revision zero: %#v, %v", manifest, err)
+	}
+	var cellRuntime map[string]any
+	cellBody, err := os.ReadFile(filepath.Join(runtimeDir, "current", "cell-01.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(cellBody, &cellRuntime); err != nil {
+		t.Fatal(err)
+	}
+	if sequence, ok := cellRuntime["sequence"].(float64); !ok || sequence != 0 {
+		t.Fatalf("empty cell runtime has the wrong bootstrap sequence: %#v", cellRuntime)
+	}
+}
+
+func TestFirstGatewayEndpointRebuildsAnEmptyBootstrapGeneration(t *testing.T) {
+	runtimeDir := t.TempDir()
+	c := &client{
+		runtimeDir:      runtimeDir,
+		gatewayBindings: "[]",
+		cellAssignments: map[string]string{"cell-01": "shared-default"},
+	}
+	empty := state{Domains: map[string]json.RawMessage{}}
+	if err := c.activate(empty); err != nil {
+		t.Fatal(err)
+	}
+	bootstrap, err := readGenerationPointer(runtimeDir, "current")
+	if err != nil || bootstrap.Revision != 0 {
+		t.Fatalf("bootstrap generation was not active: %#v, %v", bootstrap, err)
+	}
+
+	c.gatewayBindings = `[{"address":"198.51.100.40","pool":"shared-default","cells":[{"name":"cell-01","http":"127.0.0.1:18081","https":"127.0.0.1:18444"}]}]`
+	c.gatewayRevision = 1
+	c.derivedEnsured = false
+	if err := c.ensureDerivedRuntime(empty); err != nil {
+		t.Fatal(err)
+	}
+	active, err := readGenerationPointer(runtimeDir, "current")
+	if err != nil || active.Revision != 1 || active.GenerationID == bootstrap.GenerationID {
+		t.Fatalf("first gateway endpoint did not replace the bootstrap generation: %#v, %v", active, err)
+	}
+	var gateway map[string]any
+	gatewayBody, err := os.ReadFile(filepath.Join(runtimeDir, "current", "gateway.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(gatewayBody, &gateway); err != nil {
+		t.Fatal(err)
+	}
+	if revision, ok := gateway["revision"].(float64); !ok || revision != 1 {
+		t.Fatalf("first gateway endpoint has the wrong active revision: %#v", gateway)
+	}
+}
+
+func TestFirstArtifactReplacesAnEqualGatewayGenerationRevision(t *testing.T) {
+	runtimeDir := t.TempDir()
+	c := &client{
+		runtimeDir:      runtimeDir,
+		gatewayBindings: "[]",
+		gatewayRevision: 1,
+		cellAssignments: map[string]string{"cell-01": "shared-default"},
+	}
+	if err := c.activate(state{Domains: map[string]json.RawMessage{}}); err != nil {
+		t.Fatal(err)
+	}
+	gatewayOnly, err := readGenerationPointer(runtimeDir, "current")
+	if err != nil || gatewayOnly.Revision != 1 {
+		t.Fatalf("gateway-only generation was not active: %#v, %v", gatewayOnly, err)
+	}
+
+	withDomain := state{Sequence: 1, Domains: map[string]json.RawMessage{"1": json.RawMessage(runtimeDomain(1))}}
+	if err := c.activate(withDomain); err != nil {
+		t.Fatal(err)
+	}
+	active, err := readGenerationPointer(runtimeDir, "current")
+	if err != nil || active.Revision != 1 || active.GenerationID == gatewayOnly.GenerationID {
+		t.Fatalf("equal source revisions did not publish the domain generation: %#v, %v", active, err)
+	}
+	stateOnDisk, err := loadState(filepath.Join(runtimeDir, "current", "state.json"))
+	if err != nil || stateOnDisk.Sequence != 1 || len(stateOnDisk.Domains) != 1 {
+		t.Fatalf("first domain artifact was not activated: %#v, %v", stateOnDisk, err)
+	}
+}
+
 func TestOriginTaskUsesApprovedAddressAndCanonicalHost(t *testing.T) {
 	listener, err := net.Listen("tcp4", "0.0.0.0:0")
 	if err != nil {

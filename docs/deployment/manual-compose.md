@@ -63,10 +63,11 @@ Before touching a host, record:
 - backup repository, retention, restoration owner, and recovery location for
   application keys and private PKI.
 
-The local side of every `EDGE_GATEWAY_ADDRESS_MAP` entry must be a distinct
-private address that exists on that edge host. A firewall, router, or layer-4
-load balancer must map the advertised address one-to-one to it. Do not use the
-host wildcard, loopback, or the public/NAT address as the local value.
+The local side of every `EDGE_GATEWAY_ADDRESS_MAP` entry must exist on that edge
+host. A public address assigned directly to the host maps to itself. Behind
+NAT, a firewall, router, or layer-4 load balancer must map the advertised
+address one-to-one to a distinct private listener. Do not use a wildcard or
+loopback address.
 
 ## 2. Prepare every host
 
@@ -443,6 +444,13 @@ Sign in at `https://control.ops.example.com/admin` and use this order:
    create the public service endpoints that correspond exactly to each host's
    `EDGE_GATEWAY_ADDRESS_MAP`.
 
+If the service endpoint is the host's only public address, leave the optional
+management address blank on the edge record; management inventory addresses
+cannot also be service endpoints. A correctly enrolled edge becomes healthy
+with zero domains by activating an empty sequence-`0` generation. Assign a cell
+before creating its Geo-Unicast endpoint; no placeholder customer domain is
+required.
+
 Never put an API bearer token in `.env.prod`. API-driven setup must use
 `Idempotency-Key` on mutations and poll operations returned with `202 Accepted`.
 
@@ -601,7 +609,9 @@ be rebuilt from desired state, but preserving them reduces recovery time.
 | Migration cannot connect | Dependency health, password, Docker network, disk | Leave old services/state intact; repair dependency and rerun the idempotent migration |
 | DNS API returns `403` | Actual control source IP and allowlist | Correct the narrow allowlist; do not expose PowerDNS directly |
 | Edge enrollment fails | URL SAN, server CA, UUID/token, clock, port 8443 | Fix trust/reachability; rotate a consumed token instead of reusing it |
-| Gateway refuses endpoints | `EDGE_GATEWAY_ADDRESS_MAP` and local IP assignment | Add exact one-to-one private mappings; do not weaken the check |
+| Empty edge repeats `generation revision must be positive` | Edge-agent release predates empty-bootstrap support | Deploy a release containing the empty-bootstrap fix; do not create a placeholder domain |
+| First endpoint remains unacknowledged on an empty edge | Agent generation log, assigned cell, exact address-map coverage, gateway log | Confirm an assigned cell has an empty runtime and the gateway activates the endpoint revision |
+| Gateway refuses endpoints | `EDGE_GATEWAY_ADDRESS_MAP` and local IP assignment | Map a directly assigned public address to itself, or add exact one-to-one private mappings behind NAT |
 | New runtime is rejected | Agent/cell logs, checksum/signature, status token, bounds | Keep the previous valid generation active and repair desired state |
 | Telemetry is unavailable | ClickHouse/Vector/Loki health, allowlists, buffers | Restore telemetry independently; do not stop serving traffic |
 

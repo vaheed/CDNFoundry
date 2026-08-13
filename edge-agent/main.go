@@ -191,36 +191,8 @@ func (c *client) ensureDerivedRuntime(current state) error {
 	if c.runtimeDir == "" || c.derivedEnsured {
 		return nil
 	}
-	if manifest, err := recoverGeneration(c.runtimeDir); err == nil && manifest.Revision == current.Sequence {
-		c.derivedEnsured = true
-		return nil
-	}
-	runtime, pools, err := compileRuntime(current)
-	if err != nil {
-		return err
-	}
-	if err := atomicJSON(filepath.Join(c.runtimeDir, "active.json"), runtime); err != nil {
-		return err
-	}
-	for name, pool := range pools {
-		if err := atomicJSON(filepath.Join(c.runtimeDir, name+".json"), pool); err != nil {
-			return err
-		}
-	}
-	if err := c.writeCellRuntimes(current.Sequence, pools); err != nil {
-		return err
-	}
-	if c.gatewayBindings != "" {
-		gateway, err := compileGateway(c.gatewayActiveRevision(current.Sequence), pools, c.gatewayBindings)
-		if err != nil {
-			return err
-		}
-		if err := atomicJSON(filepath.Join(c.runtimeDir, "gateway.json"), gateway); err != nil {
-			return err
-		}
-	}
-	c.derivedEnsured = true
-	return nil
+
+	return c.activate(current)
 }
 
 type edgeTask struct {
@@ -1026,7 +998,7 @@ func (c *client) activate(s state) error {
 	}
 	if c.runtimeDir != "" {
 		logger.Info("runtime generation activation started", "event", "runtime_generation_activation_started", "edge_id", c.id.EdgeID, "revision_id", s.Sequence)
-		manifest, err := publishGeneration(c.runtimeDir, c.gatewayActiveRevision(s.Sequence), func(candidate, generationID string) error {
+		manifest, err := replaceGeneration(c.runtimeDir, c.gatewayActiveRevision(s.Sequence), func(candidate, generationID string) error {
 			if err := atomicJSON(filepath.Join(candidate, "state.json"), s); err != nil {
 				return err
 			}
@@ -1149,6 +1121,7 @@ func (c *client) writeCellRuntimesAt(directory string, sequence uint64, pools ma
 		if runtime == nil {
 			runtime = map[string]any{"schema_version": 1, "sequence": sequence, "hosts": map[string]any{}, "certificates": map[string]any{}}
 		}
+		pools[cellName] = runtime
 		if err := atomicJSON(filepath.Join(directory, cellName+".json"), runtime); err != nil {
 			return err
 		}

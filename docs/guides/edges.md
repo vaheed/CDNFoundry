@@ -118,3 +118,9 @@ If the manifest gap is too large or local state is lost, the agent fetches
 `/edge/v1/config/full`. It validates the signed gzip snapshot, builds candidate
 pool files, preserves the previous active directory, and acknowledges only
 after activation. Invalid snapshots remain rejected and visible.
+
+For a new edge with no domain artifacts, the recovery snapshot is intentionally
+empty and has sequence `0`. The agent still publishes an atomic bootstrap
+generation and empty runtimes for configured cells. Later cell assignments and
+the first pool endpoint replace that generation without requiring a customer
+domain.

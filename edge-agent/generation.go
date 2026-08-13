@@ -43,15 +43,23 @@ func failGeneration(stage string) error {
 }
 
 func publishGeneration(root string, revision uint64, build func(string, string) error) (generationManifest, error) {
-	if revision == 0 {
-		return generationManifest{}, errors.New("generation revision must be positive")
-	}
+	return publishGenerationWithPolicy(root, revision, false, build)
+}
+
+func replaceGeneration(root string, revision uint64, build func(string, string) error) (generationManifest, error) {
+	return publishGenerationWithPolicy(root, revision, true, build)
+}
+
+func publishGenerationWithPolicy(root string, revision uint64, replaceEqual bool, build func(string, string) error) (generationManifest, error) {
 	if current, err := readGenerationPointer(root, "current"); err == nil {
-		if current.Revision == revision {
+		if current.Revision == revision && !replaceEqual {
 			return current, nil
 		}
 		if current.Revision > revision {
-			return generationManifest{}, errors.New("generation revision cannot move backwards")
+			if !replaceEqual {
+				return generationManifest{}, errors.New("generation revision cannot move backwards")
+			}
+			revision = current.Revision
 		}
 	}
 	if err := os.MkdirAll(filepath.Join(root, "generations"), 0750); err != nil {
@@ -192,7 +200,7 @@ func verifyGeneration(dir string) (generationManifest, error) {
 	if err := json.Unmarshal(body, &manifest); err != nil {
 		return manifest, err
 	}
-	if manifest.SchemaVersion != 1 || manifest.Revision == 0 || manifest.GenerationID == "" || len(manifest.Files) == 0 || len(manifest.Files) > 100 {
+	if manifest.SchemaVersion != 1 || manifest.GenerationID == "" || len(manifest.Files) == 0 || len(manifest.Files) > 100 {
 		return manifest, errors.New("invalid generation manifest bounds")
 	}
 	actual, err := generationFiles(dir)
