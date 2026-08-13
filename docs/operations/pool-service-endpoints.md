@@ -39,6 +39,11 @@ gateway listener generation. If the service address is the host's only public
 address, leave the optional edge management address blank rather than reusing
 the service address as management inventory.
 
+An endpoint with no non-drained cell assigned to its pool remains saved but is
+omitted from the gateway candidate. It cannot poison the edge's previous valid
+gateway generation and remains ineligible for DNS publication. Assign at least
+one cell on the same edge to the same pool before expecting a listener.
+
 ## Publication and fallback
 
 System DNS publishes an endpoint only when the pool and edge are enabled and

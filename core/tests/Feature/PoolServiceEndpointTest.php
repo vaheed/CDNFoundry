@@ -91,6 +91,20 @@ class PoolServiceEndpointTest extends TestCase
         $this->assertSame(88, $payload['revision']);
     }
 
+    public function test_endpoint_without_a_participating_cell_remains_out_of_the_gateway_candidate(): void
+    {
+        $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
+        $edge = $this->edge('gateway-candidate-empty', '203.0.113.31');
+        $pool->endpoints()->create(['edge_id' => $edge->id, 'ipv4' => '8.8.4.4', 'revision' => 3]);
+        $request = Request::create('/edge/v1/gateway/config');
+        $request->attributes->set('edge', $edge);
+
+        $payload = app(EdgeAgentController::class)->gatewayConfig($request)->getData(true)['data'];
+
+        $this->assertSame(3, $payload['revision']);
+        $this->assertSame([], $payload['bindings']);
+    }
+
     public function test_endpoint_address_families_can_be_removed_and_withdrawn_endpoint_can_be_deleted(): void
     {
         Queue::fake();

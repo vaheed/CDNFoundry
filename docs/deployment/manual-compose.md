@@ -610,7 +610,7 @@ be rebuilt from desired state, but preserving them reduces recovery time.
 | DNS API returns `403` | Actual control source IP and allowlist | Correct the narrow allowlist; do not expose PowerDNS directly |
 | Edge enrollment fails | URL SAN, server CA, UUID/token, clock, port 8443 | Fix trust/reachability; rotate a consumed token instead of reusing it |
 | Empty edge repeats `generation revision must be positive` | Edge-agent release predates empty-bootstrap support | Deploy a release containing the empty-bootstrap fix; do not create a placeholder domain |
-| First endpoint remains unacknowledged on an empty edge | Agent generation log, assigned cell, exact address-map coverage, gateway log | Confirm an assigned cell has an empty runtime and the gateway activates the endpoint revision |
+| First endpoint remains unacknowledged on an empty edge | Agent generation log, same-edge pool assignment, exact address-map coverage, gateway log | Assign a non-drained cell to the same pool, confirm its empty runtime, and verify gateway activation |
 | Gateway refuses endpoints | `EDGE_GATEWAY_ADDRESS_MAP` and local IP assignment | Map a directly assigned public address to itself, or add exact one-to-one private mappings behind NAT |
 | New runtime is rejected | Agent/cell logs, checksum/signature, status token, bounds | Keep the previous valid generation active and repair desired state |
 | Telemetry is unavailable | ClickHouse/Vector/Loki health, allowlists, buffers | Restore telemetry independently; do not stop serving traffic |
