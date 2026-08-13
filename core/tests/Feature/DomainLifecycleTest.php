@@ -14,6 +14,7 @@ use App\Models\DomainNameTombstone;
 use App\Models\Operation;
 use App\Models\PlatformDnsSetting;
 use App\Models\User;
+use App\Support\DnsRecordData;
 use App\Support\NameserverResolver;
 use App\Support\PowerDnsClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -37,6 +38,11 @@ class DomainLifecycleTest extends TestCase
         Queue::fake();
         $this->platformIdentity();
         [$user, $domain] = $this->ownedDomain();
+        $cluster = DnsCluster::query()->create($this->clusterData());
+        DnsDeployment::query()->create([
+            'domain_id' => $domain->id, 'dns_cluster_id' => $cluster->id,
+            'desired_revision' => 1, 'deployed_revision' => 1, 'status' => 'succeeded', 'active_rrsets' => [],
+        ]);
         $first = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/verify-nameservers")->assertAccepted();
         $second = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/verify-nameservers")->assertAccepted();
         $this->assertSame($first->json('data.id'), $second->json('data.id'));
@@ -53,6 +59,41 @@ class DomainLifecycleTest extends TestCase
         $this->assertNotNull($domain->refresh()->nameservers_verified_at);
         $this->assertNull($domain->nameservers_verified_by);
         $this->assertSame('succeeded', Operation::findOrFail($first->json('data.id'))->status);
+    }
+
+    public function test_verification_provisions_a_pending_zone_before_public_lookup(): void
+    {
+        Queue::fake();
+        $this->platformIdentity();
+        [$user, $domain] = $this->ownedDomain();
+        DnsCluster::query()->create($this->clusterData());
+        $domain->dnsRecords()->create(DnsRecordData::validate([
+            'type' => 'A', 'name' => 'www', 'content' => '192.0.2.10', 'ttl' => 300,
+        ], $domain->name));
+
+        $operation = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/verify-nameservers")
+            ->assertAccepted()
+            ->json('data.id');
+
+        Queue::assertPushed(ReconcileDnsZone::class, 1);
+        Queue::assertNotPushed(VerifyDomainNameservers::class);
+
+        Http::fake(function ($request) {
+            if ($request->method() === 'GET') {
+                return Http::response([], 404);
+            }
+
+            return Http::response([], $request->method() === 'POST' ? 201 : 204);
+        });
+        (new ReconcileDnsZone($domain->id))->handle(app(PowerDnsClient::class));
+
+        $deployment = DnsDeployment::query()->where('domain_id', $domain->id)->firstOrFail();
+        $this->assertSame('succeeded', $deployment->status);
+        $this->assertTrue(collect($deployment->active_rrsets)->contains(fn (array $rrset): bool => $rrset['type'] === 'SOA'));
+        $this->assertTrue(collect($deployment->active_rrsets)->contains(fn (array $rrset): bool => $rrset['type'] === 'NS'));
+        $this->assertFalse(collect($deployment->active_rrsets)->contains(fn (array $rrset): bool => $rrset['type'] === 'A'));
+        $this->assertSame('pending', Operation::query()->findOrFail($operation)->status);
+        Queue::assertPushed(VerifyDomainNameservers::class, 1);
     }
 
     public function test_failed_verification_preserves_pending_state_and_visible_failure(): void

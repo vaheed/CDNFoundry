@@ -33,14 +33,16 @@ class ReconcileDnsZone implements ShouldBeUniqueUntilProcessing, ShouldQueue
     public function handle(PowerDnsClient $client): void
     {
         $domain = Domain::query()->findOrFail($this->domainId);
-        if ($domain->lifecycle_state !== DomainLifecycleState::Active) {
-            $this->operations()->update(['status' => 'failed', 'error' => 'Only active domains can be reconciled.', 'finished_at' => now()]);
+        if (! in_array($domain->lifecycle_state, [DomainLifecycleState::PendingVerification, DomainLifecycleState::Active], true)) {
+            $this->operations()->update(['status' => 'failed', 'error' => 'Only pending-verification or active domains can be reconciled.', 'finished_at' => now()]);
 
             return;
         }
         $revision = $domain->revision;
         try {
-            $rrsets = PowerDnsZone::render($domain);
+            $rrsets = $domain->lifecycle_state === DomainLifecycleState::PendingVerification
+                ? PowerDnsZone::renderDelegation($domain)
+                : PowerDnsZone::render($domain);
         } catch (Throwable $exception) {
             $message = mb_substr($exception->getMessage(), 0, 4000);
             $this->operations()->update(['status' => 'failed', 'error' => $message, 'finished_at' => now()]);
@@ -102,6 +104,10 @@ class ReconcileDnsZone implements ShouldBeUniqueUntilProcessing, ShouldQueue
         $this->operations()->update(['status' => $status, 'result' => ['domain_id' => $domain->id, 'revision' => $revision], 'finished_at' => $status === 'succeeded' ? now() : null]);
         if ($latest !== $revision) {
             self::dispatch($domain->id)->afterCommit();
+        } elseif ($domain->lifecycle_state === DomainLifecycleState::PendingVerification && $domain->nameservers_verified_at === null
+            && Operation::query()->where('type', 'domain.nameservers_verify')->whereIn('status', ['pending', 'running'])
+                ->where('input->domain_id', $domain->id)->exists()) {
+            VerifyDomainNameservers::dispatch($domain->id)->afterCommit();
         }
     }
 

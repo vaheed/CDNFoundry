@@ -16,11 +16,11 @@ class NameserverResolver
         $previousAsync = pcntl_async_signals(true);
         $previousHandler = pcntl_signal_get_handler(SIGALRM);
         pcntl_signal(SIGALRM, fn () => throw new RuntimeException('Nameserver lookup timed out.'));
-        pcntl_alarm(5);
+        pcntl_alarm(8);
         try {
-            $records = dns_get_record($domain, DNS_NS);
+            $records = @dns_get_record($domain, DNS_NS);
             if ($records === false) {
-                throw new RuntimeException('Nameserver lookup failed.');
+                throw new RuntimeException('Public DNS could not resolve the domain nameservers. Confirm the authoritative zone is deployed and the registrar delegation is valid.');
             }
 
             return collect($records)->pluck('target')->filter()->map(fn (string $name): string => mb_strtolower(rtrim($name, '.')))->unique()->sort()->values()->all();

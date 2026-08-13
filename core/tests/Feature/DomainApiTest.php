@@ -3,15 +3,26 @@
 namespace Tests\Feature;
 
 use App\Enums\DomainLifecycleState;
+use App\Jobs\ReconcileDnsZone;
+use App\Jobs\VerifyDomainNameservers;
 use App\Models\Domain;
+use App\Models\Operation;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class DomainApiTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Queue::fake();
+    }
 
     public function test_user_adds_domain_without_origin_and_only_sees_assigned_domains(): void
     {
@@ -31,6 +42,10 @@ class DomainApiTest extends TestCase
         $this->actingAs($other)->getJson("/api/domains/{$domain->id}")->assertForbidden();
         $this->actingAs($other)->getJson('/api/domains')->assertOk()->assertJsonCount(0, 'data');
         $this->assertDatabaseHas('audit_logs', ['action' => 'domain.created', 'subject_id' => (string) $domain->id]);
+        $this->assertSame(1, Operation::query()->where('type', 'domain.nameservers_verify')->where('input->domain_id', $domain->id)->count());
+        $this->assertSame(1, Operation::query()->where('type', 'dns.zone_reconcile')->where('input->domain_id', $domain->id)->count());
+        Queue::assertPushed(ReconcileDnsZone::class, 1);
+        Queue::assertNotPushed(VerifyDomainNameservers::class);
     }
 
     public function test_canonical_duplicates_punycode_collisions_and_public_suffixes_are_rejected(): void

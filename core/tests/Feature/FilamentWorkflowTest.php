@@ -14,6 +14,7 @@ use App\Filament\Admin\Resources\Edges\Pages\ListEdges;
 use App\Filament\Admin\Resources\Edges\Pages\ViewEdge;
 use App\Filament\Admin\Resources\Edges\RelationManagers\CellsRelationManager;
 use App\Filament\Admin\Resources\Operations\Pages\ListOperations;
+use App\Filament\Domain\Resources\Domains\Pages\CreateDomain;
 use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
 use App\Filament\Domain\Resources\Domains\RelationManagers\DnsRecordsRelationManager;
 use App\Jobs\BuildUsageRollups;
@@ -22,6 +23,7 @@ use App\Jobs\ReconcileAllEdgeDomains;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Jobs\ReconcilePlatformDnsIdentity;
+use App\Jobs\VerifyDomainNameservers;
 use App\Models\Domain;
 use App\Models\DomainEdgeCell;
 use App\Models\DomainEdgePlacement;
@@ -41,6 +43,33 @@ use Tests\TestCase;
 class FilamentWorkflowTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_domain_creation_automatically_queues_zone_provisioning_and_nameserver_verification(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(CreateDomain::class)
+            ->fillForm(['name' => 'Onboarding.Example.COM.'])
+            ->call('create')
+            ->assertHasNoFormErrors()
+            ->assertRedirect();
+
+        $domain = Domain::query()->where('name', 'onboarding.example.com')->firstOrFail();
+        $this->assertSame(DomainLifecycleState::PendingVerification, $domain->lifecycle_state);
+        $this->assertDatabaseHas('operations', [
+            'type' => 'dns.zone_reconcile',
+            'status' => 'pending',
+        ]);
+        $this->assertDatabaseHas('operations', [
+            'type' => 'domain.nameservers_verify',
+            'status' => 'pending',
+        ]);
+        Queue::assertPushed(ReconcileDnsZone::class, 1);
+        Queue::assertNotPushed(VerifyDomainNameservers::class);
+    }
 
     public function test_edge_creation_opens_a_one_time_enrollment_modal_with_exact_fleet_commands(): void
     {

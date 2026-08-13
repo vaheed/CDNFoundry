@@ -7,8 +7,10 @@ use App\Filament\Domain\Resources\Domains\DomainResource;
 use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Support\DomainName;
+use App\Support\DomainNameserverVerification;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class CreateDomain extends CreateRecord
@@ -25,12 +27,16 @@ class CreateDomain extends CreateRecord
         if (Domain::query()->where('name', $name)->exists()) {
             throw ValidationException::withMessages(['data.name' => 'This canonical domain is already managed.']);
         }
-        $domain = Domain::query()->create(['name' => $name, 'display_name' => trim((string) $data['name']), 'lifecycle_state' => DomainLifecycleState::PendingVerification, 'revision' => 1]);
-        if (! auth()->user()->isAdmin()) {
-            $domain->users()->attach(auth()->id());
-        }
-        AuditLog::record(auth()->user(), 'domain.created', $domain, ['name' => $domain->name], request()->ip());
 
-        return $domain;
+        return DB::transaction(function () use ($data, $name): Domain {
+            $domain = Domain::query()->create(['name' => $name, 'display_name' => trim((string) $data['name']), 'lifecycle_state' => DomainLifecycleState::PendingVerification, 'revision' => 1]);
+            if (! auth()->user()->isAdmin()) {
+                $domain->users()->attach(auth()->id());
+            }
+            AuditLog::record(auth()->user(), 'domain.created', $domain, ['name' => $domain->name], request()->ip());
+            app(DomainNameserverVerification::class)->queue($domain, auth()->user(), request()->ip(), automatic: true);
+
+            return $domain;
+        });
     }
 }

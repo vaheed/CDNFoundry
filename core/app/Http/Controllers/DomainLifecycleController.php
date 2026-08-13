@@ -7,12 +7,12 @@ use App\Http\Resources\DomainResource;
 use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
-use App\Jobs\VerifyDomainNameservers;
 use App\Models\AuditLog;
 use App\Models\DnsCluster;
 use App\Models\Domain;
 use App\Models\EdgeArtifact;
 use App\Models\Operation;
+use App\Support\DomainNameserverVerification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -38,16 +38,8 @@ class DomainLifecycleController extends Controller
     {
         Gate::authorize('update', $domain);
         abort_if($domain->lifecycle_state === DomainLifecycleState::Deprovisioning, 409, 'A deprovisioning domain cannot be verified.');
-        $operation = Operation::query()->where('type', 'domain.nameservers_verify')->whereIn('status', ['pending', 'running'])
-            ->where('input->domain_id', $domain->id)->first();
-        if ($operation === null) {
-            $operation = Operation::query()->create([
-                'actor_id' => $request->user()->getKey(), 'type' => 'domain.nameservers_verify',
-                'status' => 'pending', 'input' => ['domain_id' => $domain->id],
-            ]);
-            AuditLog::record($request->user(), 'domain.nameserver_verification_requested', $domain, [], $request->ip());
-            VerifyDomainNameservers::dispatch($domain->id)->afterCommit();
-        }
+        $operation = app(DomainNameserverVerification::class)
+            ->queue($domain, $request->user(), $request->ip());
 
         return response()->json(['data' => $operation], 202);
     }

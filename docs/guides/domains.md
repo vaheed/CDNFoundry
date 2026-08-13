@@ -27,9 +27,11 @@ sequenceDiagram
     end
     User->>CP: Create domain
     CP-->>User: pending_verification + revision
-    User->>CP: Verify nameservers
+    CP->>Targets: Publish initial SOA/NS zone
+    Targets-->>CP: Per-target acknowledgement
     CP->>PublicDNS: Resolve exact NS set
     PublicDNS-->>CP: Delegation result
+    User->>CP: Retry verification if propagation was incomplete
     User->>CP: Activate
     CP->>Targets: Reconcile desired revision
     Targets-->>CP: Per-target acknowledgement
@@ -53,13 +55,16 @@ Creation:
 - assigns the creating domain user;
 - starts at `pending_verification`;
 - creates the initial revision;
-- queues DNS reconciliation;
+- queues initial DNS reconciliation and then public nameserver verification;
 - does not require an origin or certificate.
 
 ## Verify
 
-`POST /api/domains/{domain}/verify-nameservers` creates an asynchronous
-operation. The resolver compares public NS answers with the platform identity.
+Creation automatically creates an asynchronous verification operation and runs
+it after the initial SOA/NS zone deployment succeeds. If public delegation was
+not ready, `POST /api/domains/{domain}/verify-nameservers` retries the operation;
+for older or partially provisioned domains it first queues the missing zone
+deployment. The resolver compares public NS answers with the platform identity.
 Administrators have a force-verify route for controlled local tests.
 
 ## Activate

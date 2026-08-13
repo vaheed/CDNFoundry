@@ -57,15 +57,20 @@ normalizes it to lower-case ASCII/Punycode and rejects public suffixes, IP
 addresses, single labels, wildcards, URLs, ports, and names still inside reclaim
 cooldown.
 
-Creation writes desired DNS state only. It does not require an origin and does
-not issue a certificate.
+Creation writes desired DNS state, queues the initial SOA/NS zone deployment,
+and automatically queues public nameserver verification after that deployment
+succeeds. It does not require an origin and does not issue a certificate.
 
 ## Delegate and activate
 
 1. At the customer domain's registrar, replace its authoritative nameservers
    with the platform nameservers.
-2. Use **Verify nameservers** on the domain.
+2. Create the domain, then watch its DNS reconciliation and nameserver
+   verification operations. Verification starts automatically after the
+   authoritative zone is ready.
 3. Poll the operation and domain status until `nameservers_verified_at` is set.
+   If registrar propagation was not complete during the automatic attempt, use
+   **Verify nameservers** to retry; it also repairs a missing initial zone first.
 4. Use **Activate**.
 5. Confirm that each DNS deployment has acknowledged the domain revision.
 

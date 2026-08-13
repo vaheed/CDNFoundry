@@ -83,8 +83,15 @@ workstream does not replace an earlier product checkpoint.
    operation with a non-zero target count and active checksum on both clusters.
    Disabling every matching cluster or otherwise producing zero healthy targets
    must fail the operation without claiming success.
-3. Create a domain, assign the user, verify nameservers, activate it, then cover
-   DNS-only A, AAAA, CNAME, MX, TXT, NS, CAA, SRV, and reverse PTR records.
+3. Create a domain and confirm the initial authoritative DNS reconciliation is
+   queued automatically while its lifecycle remains **Pending verification**.
+   Confirm its SOA and platform NS records are acknowledged on every enabled
+   cluster, then confirm nameserver verification starts automatically without
+   clicking **Verify nameservers**. If delegation has not propagated, confirm a
+   visible failed verification result, then use **Verify nameservers** and
+   confirm the retry succeeds without creating duplicate pending operations.
+   Assign the user, activate the domain, then cover DNS-only A, AAAA, CNAME, MX,
+   TXT, NS, CAA, SRV, and reverse PTR records.
    Exercise BIND preview/import/export, duplicate/CNAME/zone-boundary failures,
    bulk bounds, and Geo-DNS country/continent/default preview. Confirm UDP and
    TCP answers externally on both authoritative hosts.

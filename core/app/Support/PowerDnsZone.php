@@ -5,25 +5,22 @@ namespace App\Support;
 use App\Models\Domain;
 use App\Models\DomainEdgePlacement;
 use App\Models\PlatformDnsSetting;
+use Illuminate\Support\Collection;
 use RuntimeException;
 
 final class PowerDnsZone
 {
     /** @return list<array{name:string,type:string,ttl:int,records:list<array{content:string,disabled:bool}>}> */
+    public static function renderDelegation(Domain $domain): array
+    {
+        return self::groupRows(self::delegationRows($domain, self::settings()));
+    }
+
+    /** @return list<array{name:string,type:string,ttl:int,records:list<array{content:string,disabled:bool}>}> */
     public static function render(Domain $domain): array
     {
-        $settings = PlatformDnsSetting::query()->find(1);
-        if ($settings === null) {
-            throw new RuntimeException('Platform DNS identity must be configured before zone reconciliation.');
-        }
-
-        $rows = collect([[
-            'name' => $domain->name.'.', 'type' => 'SOA', 'ttl' => $settings->soa_minimum_ttl,
-            'content' => implode(' ', [rtrim($settings->soa_primary, '.').'.', rtrim($settings->soa_mailbox, '.').'.', $domain->revision, $settings->soa_refresh, $settings->soa_retry, $settings->soa_expire, $settings->soa_minimum_ttl]),
-        ]]);
-        foreach ($settings->nameservers as $nameserver) {
-            $rows->push(['name' => $domain->name.'.', 'type' => 'NS', 'ttl' => $settings->default_ttl, 'content' => rtrim($nameserver['hostname'], '.').'.']);
-        }
+        $settings = self::settings();
+        $rows = self::delegationRows($domain, $settings);
         $placement = DomainEdgePlacement::query()->with(['activePool', 'targetPool'])->where('domain_id', $domain->id)->first();
         foreach ($domain->dnsRecords()->orderBy('id')->get() as $record) {
             if ($record->mode === 'proxied') {
@@ -72,6 +69,30 @@ final class PowerDnsZone
             }
         }
 
+        return self::groupRows($rows);
+    }
+
+    private static function settings(): PlatformDnsSetting
+    {
+        return PlatformDnsSetting::query()->find(1)
+            ?? throw new RuntimeException('Platform DNS identity must be configured before zone reconciliation.');
+    }
+
+    private static function delegationRows(Domain $domain, PlatformDnsSetting $settings): Collection
+    {
+        $rows = collect([[
+            'name' => $domain->name.'.', 'type' => 'SOA', 'ttl' => $settings->soa_minimum_ttl,
+            'content' => implode(' ', [rtrim($settings->soa_primary, '.').'.', rtrim($settings->soa_mailbox, '.').'.', $domain->revision, $settings->soa_refresh, $settings->soa_retry, $settings->soa_expire, $settings->soa_minimum_ttl]),
+        ]]);
+        foreach ($settings->nameservers as $nameserver) {
+            $rows->push(['name' => $domain->name.'.', 'type' => 'NS', 'ttl' => $settings->default_ttl, 'content' => rtrim($nameserver['hostname'], '.').'.']);
+        }
+
+        return $rows;
+    }
+
+    private static function groupRows(Collection $rows): array
+    {
         return $rows->groupBy(fn (array $row): string => $row['name'].'|'.$row['type'])
             ->map(function ($group): array {
                 $first = $group->first();

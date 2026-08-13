@@ -12,6 +12,7 @@ use App\Models\DnsDeployment;
 use App\Models\Domain;
 use App\Models\EdgeArtifact;
 use App\Models\Operation;
+use App\Support\DomainNameserverVerification;
 use App\Support\PlatformSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -44,6 +45,7 @@ class DomainController extends Controller
                 $domain->users()->attach($request->user()->getKey());
             }
             AuditLog::record($request->user(), 'domain.created', $domain, ['name' => $domain->name], $request->ip());
+            app(DomainNameserverVerification::class)->queue($domain, $request->user(), $request->ip(), automatic: true);
 
             return $domain;
         });
