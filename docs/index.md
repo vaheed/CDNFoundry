@@ -1,19 +1,19 @@
 ---
 layout: home
-title: CDNFoundry private CDN software
-description: Build and operate a production private CDN with authoritative DNS, bounded OpenResty edge delivery, TLS, caching, security, analytics, and multi-region operations.
+title: Self-hosted private CDN software
+description: Deploy and operate a self-hosted private CDN with authoritative DNS, bounded OpenResty edge delivery, TLS, caching, security, analytics, and multi-region operations.
 keywords: private CDN software, self-hosted CDN, ISP CDN, on-premises CDN, authoritative DNS, edge caching, PowerDNS, DNSdist, OpenResty, Laravel CDN
 hero:
   name: CDNFoundry
-  text: Build and operate your own private CDN
-  tagline: Production-oriented authoritative DNS, bounded edge delivery, TLS, caching, security, telemetry, and multi-region operations.
+  text: Self-hosted private CDN software
+  tagline: Run authoritative DNS, bounded edge delivery, TLS, caching, security, and telemetry on infrastructure you control.
   actions:
     - theme: brand
       text: Get started
       link: /getting-started/
     - theme: alt
-      text: Learn CDN fundamentals
-      link: /concepts/cdn-fundamentals
+      text: Plan a private CDN
+      link: /getting-started/private-cdn-design
     - theme: alt
       text: Production quick start
       link: /deployment/production-quick-start
@@ -44,11 +44,12 @@ features:
     link: /contributing/
 ---
 
-CDNFoundry is a small, production-oriented private CDN. A Laravel and Filament
-control plane owns desired state in PostgreSQL; DNS and HTTP traffic remain on
-PowerDNS, DNSdist, and bounded OpenResty cells. External changes run
-asynchronously through revisioned reconciliation, and invalid candidates never
-replace the last valid runtime state.
+CDNFoundry is open-source, production-oriented, self-hosted private CDN
+software. It gives companies, hosting providers, and ISPs a Laravel and
+Filament control plane while DNS and HTTP traffic remain on PowerDNS, DNSdist,
+and bounded OpenResty cells. External changes run asynchronously through
+revisioned reconciliation, and invalid candidates never replace the last valid
+runtime state.
 
 ## What CDNFoundry includes
 
@@ -112,6 +113,13 @@ their own authoritative DNS and edge capacity. It favors predictable failure,
 bounded resource use, explicit infrastructure ownership, and a small operational
 surface. It is not a hosted CDN service and does not claim upstream volumetric
 DDoS protection when network capacity is saturated.
+
+Choose a self-hosted CDN when infrastructure ownership, regional placement,
+data control, and explicit failure behavior justify operating DNS and edge
+capacity. Choose a managed CDN when a third party should own global capacity,
+transit, and day-to-day data-plane operations. The [private CDN design
+guide](getting-started/private-cdn-design.md) explains the tradeoffs and minimum
+production topology before installation.
 
 Grafana is a read-only operations component in the telemetry role. It has no
 request-path or reconciliation responsibility: an observability outage cannot

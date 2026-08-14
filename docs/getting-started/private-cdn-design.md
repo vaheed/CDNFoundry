@@ -1,15 +1,16 @@
 ---
-title: How to build a private CDN for a company or ISP
-description: Design a self-hosted private CDN with authoritative DNS, bounded edge proxying, cache, TLS, security, telemetry, and safe operations.
+title: How to build a self-hosted private CDN
+description: Design a self-hosted private CDN for a company or ISP with authoritative DNS, bounded edge proxying, cache, TLS, security, telemetry, and safe operations.
 keywords: build private CDN, private CDN for ISP, self-hosted CDN, on-premises CDN, company CDN, ISP edge cache, PowerDNS CDN, OpenResty CDN
 ---
 
-# How to build a private CDN for a company or ISP
+# How to build a self-hosted private CDN
 
-A private CDN is not just a reverse proxy installed in several locations. It is
-a control system for authoritative DNS, traffic placement, origin safety,
-certificate lifecycle, cache consistency, security, telemetry, upgrades, and
-recovery.
+A self-hosted private CDN runs its control plane, authoritative DNS, edge
+proxies, cache, TLS lifecycle, and telemetry on infrastructure you operate. It
+is not just a reverse proxy installed in several locations: it is a control
+system for traffic placement, origin safety, cache consistency, security,
+upgrades, and recovery.
 
 CDNFoundry provides those pieces as one bounded platform for organizations that
 operate their own servers or points of presence. This guide explains the design
@@ -20,6 +21,26 @@ Use this architecture when a private company, hosting provider, university,
 government network, or ISP needs control of DNS and edge infrastructure. It is
 not a replacement for upstream volumetric DDoS scrubbing or global transit.
 :::
+
+## Self-hosted CDN or managed CDN?
+
+The choice is primarily about operational ownership, not a checklist of proxy
+features.
+
+| Requirement | Self-hosted private CDN | Managed CDN |
+| --- | --- | --- |
+| Infrastructure | Your servers, networks, and points of presence | Provider-owned global network |
+| DNS and edge operations | Your team operates and qualifies them | Provider operates the data plane |
+| Placement | Explicitly limited to capacity you deploy | Broad provider footprint |
+| Data and telemetry | Remain in systems you control | Follow the provider's platform and contracts |
+| Failure response | Your runbooks, spares, and transit | Provider service levels and support |
+| Upstream DDoS capacity | Requires separate network or scrubbing arrangements | Often available as a provider service |
+
+Self-hosting fits organizations that already operate network capacity, need
+specific regional placement or data control, and can own DNS, TLS, upgrades,
+monitoring, and incident response. A managed CDN is usually the better choice
+when the goal is broad global reach without operating an authoritative DNS and
+edge fleet.
 
 ## Start with failure behavior
 
@@ -255,6 +276,35 @@ Docker Compose is an acceptable operational model. It deliberately does not
 include Kubernetes requirements, billing, reseller hierarchies, GraphQL,
 plugin runtimes, private-origin tunnels, or automatic global traffic
 orchestration.
+
+## Common evaluation questions
+
+### Is a reverse proxy enough to build a CDN?
+
+No. A reverse proxy can cache and forward requests, but a production CDN also
+needs traffic placement, authoritative DNS, certificate lifecycle, safe origin
+policy, configuration distribution, rollback, telemetry, capacity management,
+and failure recovery.
+
+### Can a self-hosted CDN run on one server?
+
+One server can support development or a controlled evaluation, but it is not a
+production failure-isolated CDN. The minimum documented production fleet uses
+one control and telemetry node plus two DNS and edge nodes in separate failure
+domains.
+
+### Does self-hosted mean the origin can be private?
+
+Not in the current CDNFoundry feature set. Proxied origins must resolve to
+allowed public destinations; private-origin tunnels are intentionally outside
+the verified product boundary.
+
+### Is a self-hosted CDN always cheaper?
+
+No. Compare servers, transit, storage, certificates, monitoring, on-call work,
+spares, upgrades, and incident response against managed-CDN pricing. Private
+CDN ownership is valuable when control or placement requirements justify that
+operational cost.
 
 ## Evaluation checklist
 

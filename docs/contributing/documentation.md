@@ -90,9 +90,18 @@ VitePress generates clean URLs, local search, metadata chunks, and a sitemap.
 `DOCS_SITE_URL` and `DOCS_BASE` to the production location; update
 `docs/public/robots.txt` if the canonical origin changes.
 
-The single `CI` GitHub Actions workflow validates the source and rendered
-output in its documentation stage, uploads `docs/.vitepress/dist`, and deploys
-that artifact to GitHub Pages after every validation stage passes on `main`.
+GitHub Pages project sites are published below a path such as `/CDNFoundry/`.
+Search crawlers only recognize `robots.txt` at the host root, so the project
+file cannot control `vaheed.github.io` or advertise the sitemap by itself.
+Submit the generated `sitemap.xml` through the matching Google Search Console
+URL-prefix property. A custom domain can serve an effective root-level
+`robots.txt`.
+
+The single `CI` GitHub Actions workflow checks out full Git history so VitePress
+can calculate accurate per-page modification dates, validates the source and
+rendered output in its documentation stage, uploads `docs/.vitepress/dist`, and
+deploys that artifact to GitHub Pages after every validation stage passes on
+`main`.
 Production uses:
 
 ```text
@@ -117,7 +126,10 @@ empty box. The rendered-site validator requires navigation, search, appearance
 control, a fallback for every diagram, rendered custom callouts, and the Google
 Search Console verification meta tag before an artifact can deploy.
 
-Pages with specific search intent should set a concise `keywords` frontmatter
-list. The generated head also contains `TechArticle` or `WebSite` and
-`BreadcrumbList` JSON-LD. Titles and descriptions must describe verified
-implementation rather than promise unsupported scale or security.
+Pages with specific search intent should express it naturally in the visible
+title, heading, introduction, and useful body content. The optional `keywords`
+frontmatter provides general metadata but is not a substitute for visible
+content and does not influence Google Search ranking. The generated head also
+contains `TechArticle` or `WebSite` and `BreadcrumbList` JSON-LD. Titles and
+descriptions must describe verified implementation rather than promise
+unsupported scale or security.

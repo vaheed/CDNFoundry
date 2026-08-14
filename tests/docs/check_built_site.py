@@ -29,6 +29,11 @@ class PageParser(HTMLParser):
         super().__init__()
         self.links: list[str] = []
         self.identifiers: set[str] = set()
+        self.canonicals: list[str] = []
+        self.descriptions: list[str] = []
+        self.h1_count = 0
+        self._in_title = False
+        self._title_parts: list[str] = []
 
     def handle_starttag(
         self, tag: str, attributes: list[tuple[str, str | None]]
@@ -39,16 +44,58 @@ class PageParser(HTMLParser):
             self.identifiers.add(identifier)
         if tag == "a" and values.get("href"):
             self.links.append(values["href"])
+        if (
+            tag == "link"
+            and values.get("rel") == "canonical"
+            and values.get("href")
+        ):
+            self.canonicals.append(values["href"])
+        if (
+            tag == "meta"
+            and values.get("name") == "description"
+            and values.get("content")
+        ):
+            self.descriptions.append(values["content"])
+        if tag == "h1":
+            self.h1_count += 1
+        if tag == "title":
+            self._in_title = True
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "title":
+            self._in_title = False
+
+    def handle_data(self, data: str) -> None:
+        if self._in_title:
+            self._title_parts.append(data)
+
+    @property
+    def title(self) -> str:
+        return "".join(self._title_parts).strip()
 
 
 def page_url(path: pathlib.Path) -> str:
     relative = path.relative_to(DIST)
     if relative.name == "index.html":
         route = relative.parent.as_posix().strip("/")
+        if route == ".":
+            route = ""
         suffix = f"{route}/" if route else ""
     else:
         suffix = relative.with_suffix("").as_posix()
     return f"{SITE_ORIGIN}{SITE_BASE}{suffix}"
+
+
+def public_page_url(path: pathlib.Path) -> str:
+    relative = path.relative_to(DIST)
+    if relative.name == "index.html":
+        route = relative.parent.as_posix().strip("/")
+        if route == ".":
+            route = ""
+        suffix = f"{route}/" if route else ""
+    else:
+        suffix = relative.with_suffix("").as_posix()
+    return f"{PUBLIC_SITE_URL}/{suffix}"
 
 
 def resolve_output(path: str) -> pathlib.Path | None:
@@ -74,6 +121,9 @@ def main() -> int:
 
     failures: list[str] = []
     link_count = 0
+    canonical_urls: set[str] = set()
+    title_owners: dict[str, pathlib.Path] = {}
+    description_owners: dict[str, pathlib.Path] = {}
     home = DIST / "index.html"
     home_markup = page_markup.get(home.resolve(), "")
     shell_markers = {
@@ -91,11 +141,13 @@ def main() -> int:
         "canonical URL": f'<link rel="canonical" href="{PUBLIC_SITE_URL}/">',
         "Open Graph image dimensions": '<meta property="og:image:width" content="1200">',
         "homepage product summary": "What CDNFoundry includes",
+        "self-hosted CDN heading": "Self-hosted private CDN software",
     }
     for feature, marker in shell_markers.items():
         if marker not in home_markup:
             failures.append(f"index.html: missing {feature}")
 
+    sitemap_urls: set[str] = set()
     sitemap = DIST / "sitemap.xml"
     if not sitemap.is_file():
         failures.append("sitemap.xml: missing generated sitemap")
@@ -183,6 +235,41 @@ def main() -> int:
 
     for source, parser in pages.items():
         markup = page_markup[source]
+        relative_source = source.relative_to(DIST)
+        if source.name != "404.html":
+            expected_canonical = public_page_url(source)
+            if parser.canonicals != [expected_canonical]:
+                failures.append(
+                    f"{relative_source}: expected one canonical {expected_canonical}, "
+                    f"found {parser.canonicals}"
+                )
+            else:
+                canonical_urls.add(expected_canonical)
+            if not parser.title:
+                failures.append(f"{relative_source}: missing non-empty title")
+            elif parser.title in title_owners:
+                failures.append(
+                    f"{relative_source}: duplicates title from "
+                    f"{title_owners[parser.title].relative_to(DIST)}"
+                )
+            else:
+                title_owners[parser.title] = source
+            if len(parser.descriptions) != 1:
+                failures.append(
+                    f"{relative_source}: expected one non-empty description, "
+                    f"found {len(parser.descriptions)}"
+                )
+            elif parser.descriptions[0] in description_owners:
+                failures.append(
+                    f"{relative_source}: duplicates description from "
+                    f"{description_owners[parser.descriptions[0]].relative_to(DIST)}"
+                )
+            else:
+                description_owners[parser.descriptions[0]] = source
+            if parser.h1_count != 1:
+                failures.append(
+                    f"{relative_source}: expected one h1, found {parser.h1_count}"
+                )
         if '<div class="mermaid"></div>' in markup:
             failures.append(
                 f"{source.relative_to(DIST)}: contains an empty Mermaid container"
@@ -230,6 +317,31 @@ def main() -> int:
                         f"{source.relative_to(DIST)}: missing rendered anchor "
                         f"#{target.fragment} in {resolved.relative_to(DIST)}"
                     )
+
+    if sitemap_urls and sitemap_urls != canonical_urls:
+        missing_from_sitemap = sorted(canonical_urls - sitemap_urls)
+        missing_canonical_pages = sorted(sitemap_urls - canonical_urls)
+        if missing_from_sitemap:
+            failures.append(
+                "sitemap.xml: missing canonical URLs " + ", ".join(missing_from_sitemap)
+            )
+        if missing_canonical_pages:
+            failures.append(
+                "sitemap.xml: contains URLs without canonical pages "
+                + ", ".join(missing_canonical_pages)
+            )
+
+    private_cdn_page = page_markup.get(
+        (DIST / "getting-started" / "private-cdn-design.html").resolve(), ""
+    )
+    if 'id="how-to-build-a-self-hosted-private-cdn"' not in private_cdn_page:
+        failures.append(
+            "getting-started/private-cdn-design.html: missing self-hosted CDN h1"
+        )
+    if "Self-hosted CDN or managed CDN?" not in private_cdn_page:
+        failures.append(
+            "getting-started/private-cdn-design.html: missing managed-CDN comparison"
+        )
 
     if failures:
         print("\n".join(failures), file=sys.stderr)

@@ -16,6 +16,11 @@ It combines a Laravel and Filament control plane with PowerDNS, DNSdist,
 OpenResty, a Go edge agent, Vector, ClickHouse, Prometheus, and bounded
 role-based Docker Compose deployments.
 
+Before deploying, read the [self-hosted private CDN design
+guide](https://vaheed.github.io/CDNFoundry/getting-started/private-cdn-design)
+to compare operational ownership, minimum topology, failure behavior, and the
+tradeoffs against a managed CDN.
+
 > [!IMPORTANT]
 > PostgreSQL owns desired state, but customer DNS and HTTP traffic never pass
 > through Laravel. Existing data planes continue from their last valid state
