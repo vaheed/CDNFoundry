@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .certs import PKI
-from .common import RenderError, atomic_json, atomic_write, quote_env, sha256_file, utc_now
+from .common import RenderError, atomic_write, quote_env
 from .compose import (
     bind_mount_sources,
     dump_yaml,
@@ -76,7 +76,6 @@ class Renderer:
             atomic_write(tmp / "validate.sh", self._validate_script(node, filtered), 0o700)
             atomic_write(tmp / "start.sh", self._start_script(state, node), 0o700)
             atomic_write(tmp / "stop.sh", self._stop_script(), 0o700)
-            self._write_manifest(tmp, state, node)
             previous = destination.with_name(destination.name + ".previous")
             if previous.exists():
                 shutil.rmtree(previous)
@@ -903,9 +902,9 @@ chmod 0640 secrets/metrics-token
         return f"""#!/usr/bin/env sh
 set -eu
 {key_permissions}
-# Bundle hashes verify content, not Unix modes. Restore read/traverse access for
-# non-secret bind-mounted configuration in case transfer or extraction narrowed
-# its permissions. Private material under pki/ and secrets/ is handled above.
+# Restore read/traverse access for non-secret bind-mounted configuration in case
+# transfer or extraction narrowed its permissions. Private material under pki/
+# and secrets/ is handled above.
 for runtime_path in docker generated; do
     if [ -e "$runtime_path" ]; then
         chmod -R a+rX "$runtime_path"
@@ -916,24 +915,6 @@ done
 {edge_profile_hint}docker compose --env-file .env.prod {profiles} up -d --wait --wait-timeout 300
 docker compose --env-file .env.prod ps
 """
-
-    def _write_manifest(self, root: Path, state: dict[str, Any], node: dict[str, Any]) -> None:
-        files = []
-        for path in sorted(p for p in root.rglob("*") if p.is_file()):
-            relative = path.relative_to(root).as_posix()
-            files.append({"path": relative, "sha256": sha256_file(path), "mode": oct(path.stat().st_mode & 0o777)})
-        metadata = {
-            "schema_version": 1,
-            "node": node["name"],
-            "role": node["role"],
-            "release": node["release"],
-            "rendered_at": utc_now(),
-            "fleet_generation": state["metadata"]["generation"],
-            "files": files,
-        }
-        atomic_json(root / "bundle-metadata.json", metadata, 0o600)
-        checksums = "".join(f"{entry['sha256']}  {entry['path']}\n" for entry in files)
-        atomic_write(root / "SHA256SUMS", checksums, 0o600)
 
     def _render_fleet_files(self, state: dict[str, Any]) -> None:
         if self.dry_run:

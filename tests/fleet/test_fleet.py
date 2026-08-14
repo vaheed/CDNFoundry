@@ -354,7 +354,7 @@ def test_multi_region_four_dns_ten_edge_topology_validates(store: FleetState) ->
     assert len([n for n in state["nodes"].values() if n["role"] == "edge"]) == 10
 
 
-def test_file_permissions_and_redacted_metadata(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
+def test_file_permissions_and_no_checksum_manifests(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
     add(store, node("dns-sydney", "dns", "192.0.2.90"))
     output = tmp_path / "bundles"
     Renderer(source_repo, store, output).render(store.load())
@@ -362,9 +362,8 @@ def test_file_permissions_and_redacted_metadata(store: FleetState, source_repo: 
     assert stat.S_IMODE((bundle / ".env.prod").stat().st_mode) == 0o600
     assert stat.S_IMODE((bundle / "pki/node.key").stat().st_mode) == 0o600
     assert stat.S_IMODE(store.state_file.stat().st_mode) == 0o600
-    metadata = (bundle / "bundle-metadata.json").read_text(encoding="utf-8")
-    pdns_password = env_values(bundle / ".env.prod")["PDNS_DB_PASSWORD"]
-    assert pdns_password not in metadata
+    assert not (bundle / "bundle-metadata.json").exists()
+    assert not (bundle / "SHA256SUMS").exists()
 
 
 def test_monitoring_files_are_readable_by_non_root_consumers(

@@ -43,7 +43,7 @@ This guide covers the full lifecycle of a CDNFoundry production fleet: first-tim
 The generator runs from a trusted checkout of the CDNFoundry repository and writes two protected outputs:
 
 - **Fleet state**: topology, feature modes, immutable release identifiers, credentials, certificate authorities, node certificates, and state history.
-- **Node bundles**: one minimal directory per host containing filtered Compose services, `.env.prod`, only the referenced runtime files, node-specific PKI, generated monitoring/logging files, validation/start scripts, checksums, and a node README.
+- **Node bundles**: one minimal directory per host containing filtered Compose services, `.env.prod`, only the referenced runtime files, node-specific PKI, generated monitoring/logging files, validation/start scripts, and a node README.
 
 Remote nodes do not need a repository clone. They receive only their own bundle.
 
@@ -378,7 +378,7 @@ Use both steps in CI or before a production rollout:
   --repo-root "$PWD" render
 ```
 
-Validation renders into a temporary directory and leaves active bundles unchanged. Rendering builds each node in a temporary directory, writes checksums and metadata, then atomically replaces the active bundle while retaining `.previous`.
+Validation renders into a temporary directory and leaves active bundles unchanged. Rendering builds each node in a temporary directory, then atomically replaces the active bundle while retaining `.previous`.
 
 ## Bundle transfer and activation
 
@@ -396,7 +396,6 @@ On the target host:
 install -d -m 0700 /opt/cdnfoundry.new
 tar -xzf /tmp/edge-frankfurt.tar.gz --strip-components=1 -C /opt/cdnfoundry.new
 cd /opt/cdnfoundry.new
-sha256sum -c SHA256SUMS
 ./validate.sh
 cd /opt
 mv cdnfoundry cdnfoundry.previous 2>/dev/null || true

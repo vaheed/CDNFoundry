@@ -213,8 +213,6 @@ generated Compose manifest
 README.md
 validate.sh
 start.sh
-bundle-metadata.json
-SHA256SUMS
 pki/
 secrets/
 generated/              # when required
@@ -237,6 +235,5 @@ The script does not inspect enrollment state or modify `.env.prod`.
 - Normal rendering does not rotate secrets.
 - DNS database credentials are node-scoped.
 - CA private keys remain in authoritative fleet state, except the edge identity CA key required by the control service in the control bundle.
-- Bundle metadata contains hashes and non-secret inventory only.
 - Every operator-controlled Compose interpolation value is present in the node's generated `.env.prod`; production Compose provides no fallback deployment values.
 - Compose `environment` mappings remain explicit per-service allowlists. Replacing them with a shared `env_file` entry would expose unrelated database, PKI, and API credentials to every container, so containers receive only the variables they own while Compose reads values through `--env-file .env.prod`.

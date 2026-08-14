@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import ipaddress
 import json
 import os
@@ -108,14 +107,6 @@ def load_json(path: Path) -> Any:
         raise StateError(f"Missing file: {path}") from exc
     except json.JSONDecodeError as exc:
         raise StateError(f"Invalid JSON in {path}: {exc}") from exc
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def validate_node_name(value: str) -> str:

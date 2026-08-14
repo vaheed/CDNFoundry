@@ -140,7 +140,7 @@ sudo ./scripts/cdnfoundry-fleet \
   setup
 ```
 
-The command creates secrets and private PKI once, validates the complete desired topology, renders bundles atomically, and prints start order. Each node bundle contains its filtered Compose manifest, complete `.env.prod`, required runtime files, certificates, secrets, checksums, and operator scripts.
+The command creates secrets and private PKI once, validates the complete desired topology, renders bundles atomically, and prints start order. Each node bundle contains its filtered Compose manifest, complete `.env.prod`, required runtime files, certificates, secrets, and operator scripts.
 
 Never commit `fleet.json`, Fleet state, generated bundles, `.env.prod`, or private keys.
 
@@ -159,7 +159,7 @@ sudo ./scripts/cdnfoundry-fleet \
   show-start-order
 ```
 
-For every bundle, verify `SHA256SUMS`, review `README.md`, and run `./validate.sh`. Validation uses the pinned Caddy images to parse every Caddyfile included in that node before activation, in addition to checking Compose interpolation, permissions, and certificate chains. It may pull a missing pinned image and create a short-lived validation container, but it does not start the application services. Production Compose has no deployment-value defaults: all interpolation comes from that bundle's generated `.env.prod`.
+For every bundle, review `README.md` and run `./validate.sh`. Validation uses the pinned Caddy images to parse every Caddyfile included in that node before activation, in addition to checking Compose interpolation, permissions, and certificate chains. It may pull a missing pinned image and create a short-lived validation container, but it does not start the application services. Production Compose has no deployment-value defaults: all interpolation comes from that bundle's generated `.env.prod`.
 
 ## 5. Start the control plane
 
@@ -167,7 +167,6 @@ Transfer `bundles/control-1` over an authenticated channel to `/opt/cdnfoundry` 
 
 ```bash
 cd /opt/cdnfoundry
-sha256sum -c SHA256SUMS
 ./validate.sh
 sudo ./start.sh
 docker compose --env-file .env.prod ps
@@ -242,7 +241,6 @@ Transfer `bundles/pop-1` and `bundles/pop-2` over authenticated channels to
 
 ```bash
 cd /opt/cdnfoundry
-sha256sum -c SHA256SUMS
 ./validate.sh
 sudo ./start.sh
 docker compose --env-file .env.prod ps
@@ -326,8 +324,7 @@ saved, use **Rotate identity** and use only the newest replacement token.
 
 On `pop-1`, replace the empty `EDGE_ID` and `EDGE_BOOTSTRAP_TOKEN` values in
 `/opt/cdnfoundry/.env.prod` with the values for that edge. Keep the file private,
-verify the unchanged bundle files before editing the enrollment boundary, and
-start the edge profile explicitly:
+then start the edge profile explicitly:
 
 ```bash
 cd /opt/cdnfoundry
