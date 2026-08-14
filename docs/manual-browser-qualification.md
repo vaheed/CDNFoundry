@@ -113,15 +113,16 @@ workstream does not replace an earlier product checkpoint.
    country, continent, and optional management addresses. Confirm creation opens
    a non-dismissible enrollment modal—not a token toast—and displays the edge
    UUID, one-time token, two-line `EDGE_ID`/`EDGE_BOOTSTRAP_TOKEN` environment
-   block, prepared-host context, and `sudo ./start.sh` command in visually
+   block, prepared-host context, and explicit `--profile edge up -d` command in visually
    separated cards. Confirm the modal contains no Fleet command or exact-name
    requirement. Confirm UUID, token, environment block, and start command have
    working copy controls; long values scroll without collision; and the final
    acknowledgement checkbox is required. Acknowledge only after saving the
    values, then confirm neither modal nor token is shown after navigation. On
    each prepared host, paste the two values into mode-`0600` `.env.prod`, run
-   `sudo ./start.sh`, and confirm enrollment, automatic token removal, one agent
-   recreation, and a fresh heartbeat without rerendering or a second transfer.
+   the displayed edge-profile command, and confirm enrollment and a fresh
+   heartbeat without rerendering or a second transfer. Inspect `start.sh` and
+   confirm it contains no enrollment polling or token-file mutation logic.
 3. From an edge record, choose **Rotate identity**. Confirm the first modal says
    the current certificate is revoked immediately, last-valid runtime traffic
    can continue, and heartbeat/configuration delivery will pause. Require the

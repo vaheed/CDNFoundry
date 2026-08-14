@@ -476,9 +476,11 @@ docker compose --env-file .env.prod -f compose.prod.yml \
 ```
 
 Wait until the administrator panel reports registered identity, a fresh
-heartbeat, ready assigned cells, and the expected runtime revision. This
-manual-Compose path does not use the generated bundle's automatic cleanup, so
-remove the token value from `.env.prod` and recreate only the agent:
+heartbeat, ready assigned cells, and the expected runtime revision. Enrollment
+is complete at that point. The token is spent and cannot enroll again. For
+secret hygiene, blank its value in `.env.prod`. No immediate restart is needed;
+the empty value is applied on the next agent recreate or upgrade. To remove it
+from the running container immediately, recreate only the agent:
 
 ```bash
 docker compose --env-file .env.prod -f compose.prod.yml \

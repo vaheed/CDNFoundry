@@ -78,15 +78,6 @@ func main() {
 		fmt.Println(version)
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == "--identity-token-hash" {
-		stored := identity{}
-		body, err := os.ReadFile(filepath.Join(env("EDGE_STATE_DIR", "/var/lib/cdnfoundry/agent"), "identity.json"))
-		if err != nil || json.Unmarshal(body, &stored) != nil || stored.BootstrapTokenHash == "" {
-			os.Exit(1)
-		}
-		fmt.Println(stored.BootstrapTokenHash)
-		return
-	}
 	c := &client{
 		base: strings.TrimRight(required("EDGE_CONTROL_URL"), "/"), dir: env("EDGE_STATE_DIR", "/var/lib/cdnfoundry/agent"),
 		runtimeDir: env("EDGE_RUNTIME_DIR", ""), statusToken: env("EDGE_STATUS_TOKEN", ""),

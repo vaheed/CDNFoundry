@@ -65,7 +65,7 @@ TLS, origin reachability, telemetry, and failure behavior over IPv6 first.
 - Store `APP_KEY`, signing keys, CA keys, edge identities, TLS material, metrics
   tokens, and backup credentials according to separate recovery roles.
 - Keep CA private keys off edge hosts.
-- Use generated `start.sh` so one-time edge bootstrap tokens are removed automatically after persisted identity issuance; verify the field is empty afterward.
+- Start the edge profile explicitly after adding its UUID/token. After a fresh heartbeat, blank the spent bootstrap token in `.env.prod`; generated `start.sh` never edits operator configuration.
 - Use one least-privilege API token per human or integration and revoke it when
   ownership changes.
 - Rotate identity through the documented workflow and prove both new success

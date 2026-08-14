@@ -209,7 +209,7 @@ the supported host collector.
 | `EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE` | optional core | CA-key passphrase |
 | `EDGE_STATUS_TOKEN` | edge host | Separate agent-to-cell control token |
 | `EDGE_ID` | first enrollment | Administrator-created edge UUID |
-| `EDGE_BOOTSTRAP_TOKEN` | first enrollment | One-time secret; generated `start.sh` removes it after persisted identity issuance |
+| `EDGE_BOOTSTRAP_TOKEN` | first enrollment | One-time secret; spent after successful identity issuance |
 
 The edge-agent binary also accepts these internal variables:
 

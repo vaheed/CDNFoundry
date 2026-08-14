@@ -122,10 +122,15 @@ EDGE_ID=11111111-2222-3333-4444-555555555555
 EDGE_BOOTSTRAP_TOKEN=the-one-time-token
 ```
 
-Paste them into the prepared host's mode-`0600` `.env.prod` and run
-`sudo ./start.sh`. The script activates the edge profile, waits for the
-persisted mTLS identity, removes the consumed token, and recreates only the
-agent. Edge and Fleet node names do not have to match.
+Paste them into the prepared host's mode-`0600` `.env.prod`, then start the
+edge profile explicitly:
+
+```bash
+sudo docker compose --env-file .env.prod --profile edge up -d
+```
+
+Alternatively, add `--profile edge` to that host's generated `start.sh`
+Compose `up` command. Edge and Fleet node names do not have to match.
 
 For Fleet-managed secrets, `configure-edge-registration` and
 `clear-edge-bootstrap-token` remain available as automation primitives. They
@@ -218,12 +223,11 @@ referenced docker/...   # only runtime files used by selected services
 
 DNS nodes may additionally receive `reconcile-pdns-password.sh` and a pending password file during a staged rotation.
 
-Generated `start.sh` activates explicit Compose profiles dynamically. A
-combined `dns-edge` bundle starts only DNS before enrollment. After an operator
-pastes `EDGE_ID` and `EDGE_BOOTSTRAP_TOKEN` into `.env.prod`, the same unchanged
-bundle starts both DNS and edge services. On later bundle revisions, a persisted
-identity in `edge-agent-state` is sufficient to activate the edge even if the
-new bundle contains empty enrollment fields.
+Generated `start.sh` contains a fixed list of Compose profiles. A combined
+`dns-edge` bundle rendered before enrollment starts only DNS. After an operator
+pastes `EDGE_ID` and `EDGE_BOOTSTRAP_TOKEN` into `.env.prod`, start the edge
+profile explicitly or add `--profile edge` to the script's Compose `up` command.
+The script does not inspect enrollment state or modify `.env.prod`.
 
 ## Security properties
 

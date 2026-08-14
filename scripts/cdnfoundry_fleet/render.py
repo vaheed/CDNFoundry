@@ -866,6 +866,9 @@ openssl verify -CAfile pki/edge-server-ca.crt pki/node.crt
             profiles.append("control")
         if node["role"] in {"dns", "dns-edge"}:
             profiles.append("dns")
+        edge_id = str(node.get("extra_env", {}).get("EDGE_ID", "")).strip()
+        if node["role"] in {"edge", "dns-edge"} and edge_id:
+            profiles.append("edge")
         if self._is_monitoring_host(state, node):
             profiles.append("telemetry")
         if state["features"]["logs"]["mode"] == "centralized":
@@ -875,8 +878,11 @@ openssl verify -CAfile pki/edge-server-ca.crt pki/node.crt
     def _start_script(self, state: dict[str, Any], node: dict[str, Any]) -> str:
         migration = self._node_start_order(node)
         profiles = self._start_profiles(state, node)
-        edge_capable = "true" if node["role"] in {"edge", "dns-edge"} else "false"
-        edge_required = "true" if node["role"] == "edge" else "false"
+        edge_profile_hint = ""
+        if node["role"] in {"edge", "dns-edge"} and not str(node.get("extra_env", {}).get("EDGE_ID", "")).strip():
+            edge_profile_hint = """# Edge is not enabled yet. After enrollment, add --profile edge to the
+# Compose up command below or start that profile manually.
+"""
         key_permissions = ""
         if node["role"] == "control":
             key_permissions = """if [ "$(id -u)" != "0" ]; then
@@ -907,70 +913,8 @@ for runtime_path in docker generated; do
 done
 ./validate.sh
 {migration}
-compose() {{
-    docker compose --env-file .env.prod "$@"
-}}
-env_value() {{
-    awk -v key="$1" 'index($0, key "=") == 1 {{ print substr($0, length(key) + 2); exit }}' .env.prod
-}}
-scrub_bootstrap_token() {{
-    temporary="$(mktemp ./.env.prod.XXXXXX)"
-    awk '
-        /^EDGE_BOOTSTRAP_TOKEN=/ {{ print "EDGE_BOOTSTRAP_TOKEN="; found=1; next }}
-        {{ print }}
-        END {{ if (! found) print "EDGE_BOOTSTRAP_TOKEN=" }}
-    ' .env.prod > "$temporary"
-    chmod 0600 "$temporary"
-    mv "$temporary" .env.prod
-}}
-
-profiles="{profiles}"
-edge_enabled=false
-edge_id=""
-bootstrap_token=""
-if [ "{edge_capable}" = "true" ]; then
-    edge_id="$(env_value EDGE_ID)"
-    bootstrap_token="$(env_value EDGE_BOOTSTRAP_TOKEN)"
-    if [ -n "$edge_id" ]; then
-        edge_enabled=true
-    elif compose run --rm --no-deps --entrypoint /usr/local/bin/edge-agent edge-agent --identity-token-hash >/dev/null 2>&1; then
-        edge_enabled=true
-    elif [ "{edge_required}" = "true" ]; then
-        echo "This edge host is not enrolled. Paste EDGE_ID and EDGE_BOOTSTRAP_TOKEN into .env.prod, then run ./start.sh again." >&2
-        exit 1
-    fi
-fi
-if [ "$edge_enabled" = "true" ]; then
-    profiles="$profiles --profile edge"
-fi
-
-# shellcheck disable=SC2086
-compose $profiles up -d --wait --wait-timeout 300
-
-if [ "$edge_enabled" = "true" ] && [ -n "$bootstrap_token" ]; then
-    token_hash="$(printf '%s' "$bootstrap_token" | sha256sum | awk '{{ print $1 }}')"
-    attempts=0
-    registered_hash=""
-    while [ "$attempts" -lt 60 ]; do
-        registered_hash="$(compose exec -T edge-agent /usr/local/bin/edge-agent --identity-token-hash 2>/dev/null || true)"
-        if [ "$registered_hash" = "$token_hash" ]; then
-            break
-        fi
-        attempts=$((attempts + 1))
-        sleep 2
-    done
-    if [ "$registered_hash" != "$token_hash" ]; then
-        echo "Edge enrollment did not complete within 120 seconds. The token was preserved for a safe retry." >&2
-        compose logs --tail 50 edge-agent >&2 || true
-        exit 1
-    fi
-    scrub_bootstrap_token
-    bootstrap_token=""
-    compose up -d --force-recreate edge-agent
-    echo "Edge identity enrolled; the consumed bootstrap token was removed from .env.prod."
-fi
-
-compose ps
+{edge_profile_hint}docker compose --env-file .env.prod {profiles} up -d --wait --wait-timeout 300
+docker compose --env-file .env.prod ps
 """
 
     def _write_manifest(self, root: Path, state: dict[str, Any], node: dict[str, Any]) -> None:

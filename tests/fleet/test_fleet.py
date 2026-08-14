@@ -395,8 +395,7 @@ def test_control_start_restricts_identity_ca_key_for_php_worker(store: FleetStat
     assert "chmod 0640 pki/edge-identity-ca.key" in start
     assert "chown 0:82 secrets/metrics-token" in start
     assert "chmod 0640 secrets/metrics-token" in start
-    assert 'profiles="--profile control"' in start
-    assert "compose $profiles up -d --wait" in start
+    assert "docker compose --env-file .env.prod --profile control up -d --wait" in start
     assert start.index("chmod 0640 pki/edge-identity-ca.key") < start.index("./validate.sh")
     stop = (output / "control-1/stop.sh").read_text(encoding="utf-8")
     assert "--profile '*' stop" in stop
@@ -414,12 +413,13 @@ def test_combined_node_starts_dns_before_edge_registration(store: FleetState, so
     start = (output / "pop-1/start.sh").read_text(encoding="utf-8")
     compose = yaml.safe_load((output / "pop-1/compose.yml").read_text(encoding="utf-8"))
     subprocess.run(["sh", "-n", str(output / "pop-1/start.sh")], check=True)
-    assert 'profiles="--profile dns"' in start
-    assert "compose $profiles up -d --wait" in start
+    assert "docker compose --env-file .env.prod --profile dns up -d --wait" in start
     assert "sh /usr/local/bin/ensure-pdns-runtime.sh" in start
     assert start.index("ensure-pdns-runtime.sh") < start.index("pdns-migrate")
-    assert 'profiles="$profiles --profile edge"' in start
-    assert 'elif [ "false" = "true" ]' in start
+    assert "docker compose --env-file .env.prod --profile dns --profile edge up" not in start
+    assert "After enrollment, add --profile edge" in start
+    assert "env_value" not in start
+    assert "scrub_bootstrap_token" not in start
     assert compose["services"]["pdns-auth"]["profiles"] == ["dns"]
     assert "PDNS_gpgsql_password" not in compose["services"]["pdns-auth"]["environment"]
     assert "PDNS_api_key" not in compose["services"]["pdns-auth"]["environment"]
@@ -440,10 +440,9 @@ def test_combined_node_starts_dns_before_edge_registration(store: FleetState, so
     Renderer(source_repo, store, output).render(store.load(), node_name="pop-1")
 
     start = (output / "pop-1/start.sh").read_text(encoding="utf-8")
-    assert 'profiles="--profile dns"' in start
-    assert 'profiles="$profiles --profile edge"' in start
-    assert "--identity-token-hash" in start
-    assert "scrub_bootstrap_token" in start
+    assert "docker compose --env-file .env.prod --profile dns --profile edge up -d --wait" in start
+    assert "env_value" not in start
+    assert "scrub_bootstrap_token" not in start
 
 
 def test_production_control_validation_parses_caddyfile(store: FleetState, tmp_path: Path) -> None:
@@ -773,8 +772,7 @@ def test_production_docs_match_generated_bundle_workflow() -> None:
     assert "EDGE_ID=11111111-2222-3333-4444-555555555555" in quick
     assert "EDGE_BOOTSTRAP_TOKEN=the-one-time-token" in quick
     assert "No second bundle transfer" in quick
-    assert "sudo ./start.sh" in quick
-    assert "removes the consumed bootstrap token automatically" in " ".join(quick.split())
+    assert "--profile edge up -d" in " ".join(quick.split())
     assert "own local PostgreSQL" in reference
     assert "never uses the control-plane" in reference
     assert "docker compose down -v" in quick
@@ -1113,9 +1111,8 @@ def test_edge_registration_command_uses_protected_token_file(source_repo: Path, 
     assert env["EDGE_BOOTSTRAP_TOKEN"] == "protected-one-time-token"
     assert json.loads(env["EDGE_GATEWAY_ADDRESS_MAP"]) == '{"192.0.2.173":"192.0.2.173"}'
     start = (output_dir / "edge-1/start.sh").read_text(encoding="utf-8")
-    assert 'profiles="--profile dns"' in start
-    assert 'profiles="$profiles --profile edge"' in start
-    assert "scrub_bootstrap_token" in start
+    assert "docker compose --env-file .env.prod --profile dns --profile edge up -d --wait" in start
+    assert "scrub_bootstrap_token" not in start
     secret_path = state_dir / "secrets/nodes/edge-1/edge-bootstrap-token"
     assert stat.S_IMODE(secret_path.stat().st_mode) == 0o600
 

@@ -101,10 +101,11 @@ The production profile supplies:
 | `EDGE_STATUS_TOKEN` | Shared agent-to-cell control token |
 | `EDGE_ONCE` | Optional one-cycle diagnostic mode; defaults to false |
 
-With a generated production bundle, run `sudo ./start.sh`; it removes
-`EDGE_BOOTSTRAP_TOKEN` after identity persistence and recreates only the agent.
-With another deployment system, provide equivalent bounded cleanup. Always keep
-the agent state volume.
+Start the role explicitly with
+`sudo docker compose --env-file .env.prod --profile edge up -d`, or add
+`--profile edge` to the generated `start.sh` Compose command. The script does
+not inspect enrollment state or edit `.env.prod`. Always keep the agent state
+volume.
 
 ## Drain and movement
 

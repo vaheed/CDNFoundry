@@ -44,7 +44,7 @@ class ViewEdge extends ViewRecord
                 ->label('Enrollment instructions')
                 ->visible(fn (): bool => filled($this->bootstrapToken))
                 ->modalHeading('Enroll this edge')
-                ->modalDescription('Copy the two environment values to the prepared edge host and run its start script. The token is shown only once.')
+                ->modalDescription('Copy the two environment values to the prepared edge host, then enable the edge Compose profile. The token is shown only once.')
                 ->modalContent(function () {
                     return view('filament.admin.resources.edges.enrollment-instructions', [
                         'edgeId' => (string) $this->getRecord()->getKey(),
@@ -86,7 +86,7 @@ class ViewEdge extends ViewRecord
             ->modalDescription('The current mTLS certificate is revoked immediately. Existing runtime traffic can continue with its last valid configuration, but heartbeats and configuration updates stop until the agent enrolls again.')
             ->schema([
                 Checkbox::make('confirm_rotation')
-                    ->label('I am ready to paste the replacement values on the edge host and run its start script immediately after rotation.')
+                    ->label('I am ready to paste the replacement values on the edge host and restart its edge Compose profile immediately after rotation.')
                     ->accepted()
                     ->required(),
             ])

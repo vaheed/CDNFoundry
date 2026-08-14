@@ -65,8 +65,8 @@
                 <div class="cdn-enrollment-step-heading">
                     <span class="cdn-enrollment-step-number">2</span>
                     <div>
-                        <strong>{{ $isRotation ? 'Re-enroll' : 'Start' }} the generated bundle</strong>
-                        <p>The generated script waits for the persisted mTLS identity, removes the consumed token, and recreates only the agent automatically.</p>
+                        <strong>{{ $isRotation ? 'Restart' : 'Start' }} the edge profile</strong>
+                        <p>Run this command now, or add <code>--profile edge</code> to the Compose <code>up</code> command in <code>start.sh</code> for future starts.</p>
                     </div>
                 </div>
                 <div class="cdn-enrollment-command-wrap">
@@ -75,7 +75,7 @@
                         <span x-show="! copied">Copy command</span><span x-show="copied" x-cloak>Copied</span>
                     </x-filament::button>
                     <pre x-ref="startCommand" class="cdn-enrollment-command">cd /opt/cdnfoundry
-sudo ./start.sh</pre>
+sudo docker compose --env-file .env.prod --profile edge up -d</pre>
                 </div>
             </section>
         </div>
@@ -83,14 +83,13 @@ sudo ./start.sh</pre>
 
     <div class="cdn-enrollment-next">
         <strong>Done:</strong>
-        wait for a fresh heartbeat on this page. No Fleet command, bundle rerender, second transfer, or manual token cleanup is required.
+        wait for a fresh heartbeat on this page. No Fleet command, bundle rerender, or second transfer is required.
     </div>
 
     <details class="cdn-enrollment-followup">
         <summary>Using another deployment system?</summary>
         <p class="cdn-enrollment-followup-intro">
-            Supply the same two environment variables through your secret manager or configuration tool and start the edge profile.
-            After identity persistence, stop injecting <code>EDGE_BOOTSTRAP_TOKEN</code> and restart only the agent.
+            Supply the same two environment variables through your secret manager or configuration tool and enable the edge role.
             The control plane does not require CDNFoundry Fleet or a particular deployment tool.
         </p>
     </details>

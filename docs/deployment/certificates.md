@@ -97,9 +97,11 @@ Confirm only while an operator has access to the matching edge host.
 After rotation, the non-dismissible modal uses the same deployment-neutral
 layout as initial enrollment and shows the unchanged `EDGE_ID` plus the new
 `EDGE_BOOTSTRAP_TOKEN`. Paste both values into the matching prepared host's
-mode-`0600` `.env.prod` and run `sudo ./start.sh`. The agent keeps the previous
-identity file until replacement issuance succeeds; the script then removes the
-consumed token and recreates only `edge-agent` automatically.
+mode-`0600` `.env.prod` and run
+`sudo docker compose --env-file .env.prod --profile edge up -d`. Compose
+recreates the agent when its environment changes. The agent keeps the previous
+identity file until replacement issuance succeeds. Blank the spent token after
+a fresh heartbeat.
 
 Do not stop DNS, the gateway, or cells, reuse the token, delete
 `edge-agent-state`, or copy another edge's identity volume. If the modal is left

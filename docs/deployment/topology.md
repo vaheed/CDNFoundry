@@ -181,10 +181,10 @@ In the administrator panel:
    each participating edge/pool; keep management addresses distinct.
 
 Put `EDGE_ID` and `EDGE_BOOTSTRAP_TOKEN` into the corresponding prepared edge
-host and run `sudo ./start.sh`. It enables the edge profile, waits for the
-persisted identity, removes the consumed token, and recreates only `edge-agent`
-automatically. Wait for registered identity and fresh ready cells before
-publishing the endpoint.
+host and run `sudo docker compose --env-file .env.prod --profile edge up -d`.
+Add `--profile edge` to the local `start.sh` Compose command if future
+whole-host starts should include the role. Wait for registered identity and
+fresh ready cells before publishing the endpoint.
 
 ### 10. Qualify traffic
 

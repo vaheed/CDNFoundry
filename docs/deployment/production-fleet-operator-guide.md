@@ -278,20 +278,23 @@ To enroll an edge:
    EDGE_BOOTSTRAP_TOKEN=the-one-time-token
    ```
 
-3. Keep `.env.prod` mode `0600`, then run:
+3. Keep `.env.prod` mode `0600`, then start the edge profile explicitly:
 
    ```bash
    cd /opt/cdnfoundry
    sudo chmod 0600 .env.prod
-   sudo ./start.sh
+   sudo docker compose --env-file .env.prod --profile edge up -d
    ```
 
-`start.sh` detects the new identity, starts the edge profile, waits at most 120
-seconds for the agent to persist its mTLS certificate, removes the consumed
-token from `.env.prod`, and recreates only `edge-agent` with the clean
-environment. No Fleet command, bundle rerender, second transfer, or manual token
-cleanup is required. If enrollment fails, the token is retained for a safe
-retry and the existing DNS/runtime services are not removed.
+For future whole-host starts, the operator may add `--profile edge` to the
+generated `start.sh` Compose `up` command. The script itself remains a fixed,
+transparent startup wrapper: it does not inspect enrollment state, wait for
+registration, edit `.env.prod`, or restart services. No Fleet command, bundle
+rerender, or second transfer is required.
+
+After a fresh heartbeat, the bootstrap token is spent and cannot enroll again.
+Blank it in `.env.prod` during normal secret hygiene. An immediate second
+restart is not required for correct operation.
 
 The agent creates its private key locally and persists the issued identity in
 `edge-agent-state`. Never copy or delete that volume. Directly assigned public
@@ -317,9 +320,10 @@ The current certificate stops authenticating as soon as rotation is confirmed.
 The gateway and cells retain their last valid runtime, but agent heartbeat and
 configuration delivery pause until reenrollment. The replacement modal shows
 the same two environment values as initial enrollment. Replace them in the
-host's `.env.prod` and run `sudo ./start.sh`. The agent keeps the previous local
-identity until the replacement certificate is issued, then atomically replaces
-it; `start.sh` removes the replacement token and recreates only `edge-agent`.
+host's `.env.prod` and run the explicit `--profile edge up -d` command above.
+Compose recreates the agent when its environment changes. The agent keeps the
+previous local identity until the replacement certificate is issued, then
+atomically replaces it. Blank the spent replacement token afterward.
 DNS, `edge-gateway`, cells, and their last-valid runtime remain in place. If the
 modal is left before its token is saved, rotate again and use only the newest
 replacement token.

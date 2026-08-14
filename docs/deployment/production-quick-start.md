@@ -322,28 +322,31 @@ EDGE_BOOTSTRAP_TOKEN=the-one-time-token
 Copy each block to its matching PoP. If the modal is closed before the token is
 saved, use **Rotate identity** and use only the newest replacement token.
 
-### 8.2 Paste two values and start
+### 8.2 Paste two values and start the edge profile
 
 On `pop-1`, replace the empty `EDGE_ID` and `EDGE_BOOTSTRAP_TOKEN` values in
 `/opt/cdnfoundry/.env.prod` with the values for that edge. Keep the file private,
 verify the unchanged bundle files before editing the enrollment boundary, and
-start:
+start the edge profile explicitly:
 
 ```bash
 cd /opt/cdnfoundry
 sudo chmod 0600 .env.prod
-sudo ./start.sh
+sudo docker compose --env-file .env.prod --profile edge up -d
 ```
 
-Repeat on `pop-2` with its own values. `start.sh` dynamically adds the edge
-profile, waits for the persisted mTLS identity, removes the consumed bootstrap
-token automatically, and recreates only `edge-agent`. No second bundle transfer,
-Fleet registration command, manual token file, or second operator restart is
-required. Existing PowerDNS containers and volumes stay running.
+Repeat on `pop-2` with its own values. For future whole-host starts, add
+`--profile edge` to the generated `start.sh` Compose `up` command. The script
+does not inspect enrollment state, edit `.env.prod`, wait for registration, or
+restart the agent. No second bundle transfer, Fleet registration command, or
+manual token file is required. Existing PowerDNS containers and volumes stay
+running.
 
-If enrollment does not complete within 120 seconds, `start.sh` exits with the
-last bounded agent logs and preserves the token for retry. Fix connectivity,
-CA, clock, UUID, or token errors and run the same command again.
+Wait for a fresh heartbeat in the administrator panel. If enrollment fails,
+inspect `docker compose --env-file .env.prod logs --tail=200 edge-agent`, fix
+connectivity, CA, clock, UUID, or token errors, and run the same profile command
+again. After success, the token is spent; blank it in `.env.prod` during normal
+secret hygiene. No immediate second restart is required.
 
 ### 8.3 Configure service addresses
 

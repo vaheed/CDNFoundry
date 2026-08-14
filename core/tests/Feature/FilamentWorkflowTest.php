@@ -106,7 +106,7 @@ class FilamentWorkflowTest extends TestCase
                 'Prepared edge host',
                 'EDGE_ID='.((string) $edge->id),
                 'EDGE_BOOTSTRAP_TOKEN='.$enrollment['bootstrap_token'],
-                'sudo ./start.sh',
+                'sudo docker compose --env-file .env.prod --profile edge up -d',
                 'No Fleet command',
             ])
             ->assertMountedActionModalDontSee('cdnfoundry-fleet')
@@ -169,8 +169,8 @@ class FilamentWorkflowTest extends TestCase
                 $token,
                 'EDGE_ID='.((string) $edge->id),
                 'EDGE_BOOTSTRAP_TOKEN='.$token,
-                'sudo ./start.sh',
-                'recreates only the agent automatically',
+                'sudo docker compose --env-file .env.prod --profile edge up -d',
+                'Restart the edge profile',
             ])
             ->assertMountedActionModalDontSee('cdnfoundry-fleet')
             ->assertMountedActionModalDontSee('clear-edge-bootstrap-token')
