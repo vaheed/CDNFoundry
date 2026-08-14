@@ -101,7 +101,10 @@ The production profile supplies:
 | `EDGE_STATUS_TOKEN` | Shared agent-to-cell control token |
 | `EDGE_ONCE` | Optional one-cycle diagnostic mode; defaults to false |
 
-After enrollment, remove `EDGE_BOOTSTRAP_TOKEN`. Keep the agent state volume.
+With a generated production bundle, run `sudo ./start.sh`; it removes
+`EDGE_BOOTSTRAP_TOKEN` after identity persistence and recreates only the agent.
+With another deployment system, provide equivalent bounded cleanup. Always keep
+the agent state volume.
 
 ## Drain and movement
 

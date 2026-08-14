@@ -112,38 +112,28 @@ Example:
 }
 ```
 
-## Manual edge registration fields
+## Edge registration fields
 
-Do not put bootstrap tokens in a version-controlled setup JSON. After creating
-the edge in **Infrastructure → Edges**, its one-time modal shows the UUID, token,
-and these commands with the real values filled in. On the Fleet authority,
-first create the temporary protected file; paste the displayed token at the
-hidden prompt and press Enter:
+Do not put bootstrap tokens in a version-controlled setup JSON. The control
+plane's one-time modal is deployment-neutral and returns exactly:
 
-```bash
-sudo install -m 0600 /dev/null /root/edge-1.bootstrap-token
-sudo bash -c 'read -rsp "Paste bootstrap token: " token; printf "\n"; printf "%s\n" "$token" > /root/edge-1.bootstrap-token'
+```dotenv
+EDGE_ID=11111111-2222-3333-4444-555555555555
+EDGE_BOOTSTRAP_TOKEN=the-one-time-token
 ```
 
-Then store the registration in Fleet state:
+Paste them into the prepared host's mode-`0600` `.env.prod` and run
+`sudo ./start.sh`. The script activates the edge profile, waits for the
+persisted mTLS identity, removes the consumed token, and recreates only the
+agent. Edge and Fleet node names do not have to match.
 
-```bash
-./scripts/cdnfoundry-fleet --state-dir /var/lib/cdnfoundry-fleet \
-  configure-edge-registration \
-  --node edge-1 \
-  --edge-id 11111111-2222-3333-4444-555555555555 \
-  --bootstrap-token-file /root/edge-1.bootstrap-token \
-  --non-interactive
-```
-
-This stores:
-
-- `EDGE_ID` in the protected node state;
-- the one-time token in `secrets/nodes/NODE/edge-bootstrap-token` with mode `0600`.
-
-After successful mTLS enrollment, run `clear-edge-bootstrap-token --node NODE`, rerender, and recreate only `edge-agent`.
-
-Optional edge overrides such as `EDGE_GATEWAY_ADDRESS_MAP`, `EDGE_RUNTIME_VERSIONS`, MMDB settings, and gateway capacity settings belong in `extra_env`. The renderer preserves explicitly supplied optional variables even when Compose uses `${VAR:-default}`.
+For Fleet-managed secrets, `configure-edge-registration` and
+`clear-edge-bootstrap-token` remain available as automation primitives. They
+are not a control-plane requirement. Optional host overrides such as
+`EDGE_GATEWAY_ADDRESS_MAP`, `EDGE_GATEWAY_REQUIRE_ADDRESS_MAP`, runtime versions,
+MMDB settings, and gateway capacity belong in `extra_env`. The address map is
+needed only for NAT/load-balancer translation; directly assigned service
+addresses bind without it.
 
 ## Control database selection
 
@@ -226,13 +216,14 @@ generated/              # when required
 referenced docker/...   # only runtime files used by selected services
 ```
 
-DNS nodes may additionally receive `reconcile-pdns-password.sh` and a pending password file during a staged rotation. Edge bundles receive `EDGE_ID` plus a one-time token only after `configure-edge-registration`; the token disappears after `clear-edge-bootstrap-token` and rerendering.
+DNS nodes may additionally receive `reconcile-pdns-password.sh` and a pending password file during a staged rotation.
 
-Generated `start.sh` activates explicit Compose profiles. A combined `dns-edge`
-bundle starts only `dns` until `configure-edge-registration` stores a valid
-`EDGE_ID`; after rerendering it starts both `dns` and `edge`. This permits the
-authoritative runtime and restricted DNS API to become healthy before the
-control plane creates the edge row.
+Generated `start.sh` activates explicit Compose profiles dynamically. A
+combined `dns-edge` bundle starts only DNS before enrollment. After an operator
+pastes `EDGE_ID` and `EDGE_BOOTSTRAP_TOKEN` into `.env.prod`, the same unchanged
+bundle starts both DNS and edge services. On later bundle revisions, a persisted
+identity in `edge-agent-state` is sufficient to activate the edge even if the
+new bundle contains empty enrollment fields.
 
 ## Security properties
 

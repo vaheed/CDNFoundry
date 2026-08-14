@@ -71,7 +71,7 @@ class FilamentWorkflowTest extends TestCase
         Queue::assertNotPushed(VerifyDomainNameservers::class);
     }
 
-    public function test_edge_creation_opens_a_one_time_enrollment_modal_with_exact_fleet_commands(): void
+    public function test_edge_creation_opens_a_one_time_deployment_neutral_enrollment_modal(): void
     {
         $admin = User::factory()->admin()->create();
         Filament::setCurrentPanel(Filament::getPanel('admin'));
@@ -103,11 +103,14 @@ class FilamentWorkflowTest extends TestCase
             ->assertMountedActionModalSee([
                 (string) $edge->id,
                 $enrollment['bootstrap_token'],
-                'Fleet authority',
-                '/root/pop-1.bootstrap-token',
-                "--node 'pop-1'",
-                '--edge-id '.((string) $edge->id),
+                'Prepared edge host',
+                'EDGE_ID='.((string) $edge->id),
+                'EDGE_BOOTSTRAP_TOKEN='.$enrollment['bootstrap_token'],
+                'sudo ./start.sh',
+                'No Fleet command',
             ])
+            ->assertMountedActionModalDontSee('cdnfoundry-fleet')
+            ->assertMountedActionModalDontSee('Fleet authority')
             ->assertMountedActionModalSee('cdn-enrollment', false)
             ->setActionData(['saved' => true])
             ->callMountedAction()
@@ -164,12 +167,13 @@ class FilamentWorkflowTest extends TestCase
                 'The old certificate is revoked.',
                 (string) $edge->id,
                 $token,
-                '/root/pop-rotate.bootstrap-token',
-                "--node 'pop-rotate'",
-                'render --node',
-                '--force-recreate edge-agent',
-                'clear-edge-bootstrap-token',
+                'EDGE_ID='.((string) $edge->id),
+                'EDGE_BOOTSTRAP_TOKEN='.$token,
+                'sudo ./start.sh',
+                'recreates only the agent automatically',
             ])
+            ->assertMountedActionModalDontSee('cdnfoundry-fleet')
+            ->assertMountedActionModalDontSee('clear-edge-bootstrap-token')
             ->assertMountedActionModalSee('cdn-enrollment-layout', false)
             ->assertMountedActionModalDontSee('cdn-rotation', false)
             ->assertMountedActionModalDontSee('New one-time bootstrap token')

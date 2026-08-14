@@ -260,113 +260,69 @@ DNS_API_SERVER_CERTIFICATE=./pki/node.crt
 DNS_API_SERVER_PRIVATE_KEY=./pki/node.key
 ```
 
-## Manual edge registration and mTLS enrollment
+## Edge registration and mTLS enrollment
 
-The generator does not create edge records in the control plane. Use this sequence for every edge-capable node:
+Fleet prepares the host bundle but is not part of control-plane enrollment. An
+edge display name may differ from its Fleet, Terraform, Ansible, or server name.
+Prepare and transfer each host bundle once. A combined `dns-edge` bundle starts
+DNS normally before an edge identity exists.
 
-1. Start the control plane.
-2. For a combined `dns-edge` node, transfer its initial bundle and run
-   `start.sh`; without an edge UUID it starts authoritative DNS only. Register,
-   test, and enable its DNS cluster before continuing.
-3. In **Infrastructure → Edges**, create the edge with a name that exactly
-   matches its Fleet node. The one-time enrollment modal displays its UUID,
-   bootstrap token, protected token-file command, and exact Fleet registration
-   command together.
-4. On the Fleet authority, run the modal's command to save the token in a
-   protected mode-`0600` temporary file.
-5. Store the UUID/token in fleet state with `configure-edge-registration`.
-6. Add the edge's complete `EDGE_GATEWAY_ADDRESS_MAP` with `update-node --extra-env`;
-   this merges the supplied key and preserves the registered `EDGE_ID`.
-7. Validate and render only that node.
-8. Transfer and start the node bundle.
-9. Wait for the registered identity and heartbeat.
-10. Clear the one-time token, rerender, and recreate only `edge-agent`.
+To enroll an edge:
 
-Example on the control-plane machine:
+1. In **Infrastructure → Edges**, create the edge and copy the two-line
+   environment block from the one-time modal.
+2. On the matching prepared host, replace the empty values in `.env.prod`:
 
-```bash
-sudo install -m 0600 /dev/null /root/edge-tokyo.bootstrap-token
-sudo sh -c 'read -r token; printf "%s\n" "$token" > /root/edge-tokyo.bootstrap-token'
+   ```dotenv
+   EDGE_ID=11111111-2222-3333-4444-555555555555
+   EDGE_BOOTSTRAP_TOKEN=the-one-time-token
+   ```
 
-sudo ./scripts/cdnfoundry-fleet \
-  --state-dir /var/lib/cdnfoundry-fleet \
-  configure-edge-registration \
-  --node edge-tokyo \
-  --edge-id 11111111-2222-3333-4444-555555555555 \
-  --bootstrap-token-file /root/edge-tokyo.bootstrap-token \
-  --non-interactive
+3. Keep `.env.prod` mode `0600`, then run:
 
-sudo ./scripts/cdnfoundry-fleet \
-  --state-dir /var/lib/cdnfoundry-fleet \
-  update-node --node edge-tokyo \
-  --extra-env 'EDGE_GATEWAY_ADDRESS_MAP={"203.0.113.40":"203.0.113.40","203.0.113.41":"203.0.113.41"}' \
-  --non-interactive
+   ```bash
+   cd /opt/cdnfoundry
+   sudo chmod 0600 .env.prod
+   sudo ./start.sh
+   ```
 
-sudo ./scripts/cdnfoundry-fleet \
-  --state-dir /var/lib/cdnfoundry-fleet \
-  --output-dir /var/lib/cdnfoundry-fleet/bundles \
-  --repo-root "$PWD" render --node edge-tokyo
-```
+`start.sh` detects the new identity, starts the edge profile, waits at most 120
+seconds for the agent to persist its mTLS certificate, removes the consumed
+token from `.env.prod`, and recreates only `edge-agent` with the clean
+environment. No Fleet command, bundle rerender, second transfer, or manual token
+cleanup is required. If enrollment fails, the token is retained for a safe
+retry and the existing DNS/runtime services are not removed.
 
-This example binds public service addresses assigned directly to the edge. For
-a host behind one-to-one NAT, map each advertised public key to its distinct
-private listener value instead. Wildcard values such as `0.0.0.0` and `::` are
-not valid service identities.
+The agent creates its private key locally and persists the issued identity in
+`edge-agent-state`. Never copy or delete that volume. Directly assigned public
+service addresses need no `EDGE_GATEWAY_ADDRESS_MAP`; the gateway binds them
+directly. Configure the map once as advanced host state only for NAT or a load
+balancer, mapping every advertised address to its distinct private listener.
+Set `EDGE_GATEWAY_REQUIRE_ADDRESS_MAP=true` only where local policy requires
+explicit coverage.
 
-The edge agent creates its private key locally, sends a CSR during one-time registration, receives an identity certificate from the edge identity CA, and persists the identity in `edge-agent-state`. Do not copy that volume to another host.
-
-After registration succeeds:
-
-```bash
-sudo ./scripts/cdnfoundry-fleet \
-  --state-dir /var/lib/cdnfoundry-fleet \
-  clear-edge-bootstrap-token --node edge-tokyo --non-interactive
-
-sudo ./scripts/cdnfoundry-fleet \
-  --state-dir /var/lib/cdnfoundry-fleet \
-  --output-dir /var/lib/cdnfoundry-fleet/bundles \
-  --repo-root "$PWD" render --node edge-tokyo
-
-sudo rm -f /root/edge-tokyo.bootstrap-token
-```
-
-Transfer the clean bundle and run on the edge:
-
-```bash
-cd /opt/cdnfoundry
-docker compose --env-file .env.prod up -d --force-recreate edge-agent
-```
-
-`EDGE_ID` remains in the generated environment. `EDGE_BOOTSTRAP_TOKEN` is removed.
+Fleet automation may still use `configure-edge-registration` and
+`clear-edge-bootstrap-token`, but those commands are Fleet-specific and are not
+shown by the administrator panel.
 
 ## Rotate an edge identity
 
 Use rotation when an agent identity or its persistent state is lost or
 suspected compromised. This is an immediate revocation, not an overlapping
 certificate renewal. Open the edge under **Infrastructure → Edges**, choose
-**Rotate identity**, read the impact statement, and confirm only when the Fleet
-authority and matching PoP are both available.
+**Rotate identity**, read the impact statement, and confirm only when the
+matching edge host is available.
 
 The current certificate stops authenticating as soon as rotation is confirmed.
 The gateway and cells retain their last valid runtime, but agent heartbeat and
-configuration delivery pause until reenrollment. A second non-dismissible modal
-then displays the unchanged edge UUID, replacement one-time token, and commands
-for the exact edge name:
-
-1. On the **Fleet authority**, create the protected temporary token file, run
-   `configure-edge-registration`, and rerender only that node.
-2. Transfer that node's **complete bundle** to the matching PoP. On the **PoP**,
-   verify `SHA256SUMS`, run `validate.sh`, and recreate only `edge-agent`.
-3. Wait for a new enrollment time and fresh heartbeat in the panel.
-4. Expand the modal's cleanup section. On the **Fleet authority**, run
-   `clear-edge-bootstrap-token`, rerender, remove the temporary token file, and
-   transfer the complete token-free bundle.
-5. On the **PoP**, verify and validate the token-free bundle, then recreate only
-   `edge-agent` again.
-
-Do not run `start.sh` merely to rotate identity, and do not restart DNS,
-`edge-gateway`, or cells. If the one-time modal is left before its token is
-saved, rotate again and use only the newest replacement token.
+configuration delivery pause until reenrollment. The replacement modal shows
+the same two environment values as initial enrollment. Replace them in the
+host's `.env.prod` and run `sudo ./start.sh`. The agent keeps the previous local
+identity until the replacement certificate is issued, then atomically replaces
+it; `start.sh` removes the replacement token and recreates only `edge-agent`.
+DNS, `edge-gateway`, cells, and their last-valid runtime remain in place. If the
+modal is left before its token is saved, rotate again and use only the newest
+replacement token.
 
 ## Embedded or remote control PostgreSQL
 

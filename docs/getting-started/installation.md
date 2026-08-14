@@ -105,8 +105,8 @@ make dev-edge-status
 
 Named agent volumes retain issued identities. Losing a volume requires the
 administrator **Rotate identity** workflow. Its one-time recovery modal provides
-the replacement token and separates Fleet-authority commands from the matching
-edge-host commands; never copy another edge's identity volume.
+the unchanged ID plus replacement token as a deployment-neutral environment
+block; never copy another edge's identity volume.
 
 ## Production
 

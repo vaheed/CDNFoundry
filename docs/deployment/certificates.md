@@ -92,22 +92,20 @@ For edge identity rotation, open the edge under **Infrastructure → Edges** and
 choose **Rotate identity**. The confirmation explains the immediate effect:
 the old certificate is rejected and heartbeat/configuration delivery pauses,
 while the gateway and cells can continue serving their previous valid runtime.
-Confirm only while an operator is ready to update Fleet state and the matching
-PoP immediately.
+Confirm only while an operator has access to the matching edge host.
 
-After rotation, a non-dismissible one-time recovery modal uses the same guided
-layout as initial edge enrollment and shows the unchanged edge UUID, replacement
-token, and exact commands in three distinct contexts:
+After rotation, the non-dismissible modal uses the same deployment-neutral
+layout as initial enrollment and shows the unchanged `EDGE_ID` plus the new
+`EDGE_BOOTSTRAP_TOKEN`. Paste both values into the matching prepared host's
+mode-`0600` `.env.prod` and run `sudo ./start.sh`. The agent keeps the previous
+identity file until replacement issuance succeeds; the script then removes the
+consumed token and recreates only `edge-agent` automatically.
 
-1. register and rerender on the Fleet authority;
-2. transfer the complete bundle and recreate only `edge-agent` on the named PoP;
-3. after heartbeat returns, clear the consumed token, rerender and transfer the
-   token-free bundle, then recreate only `edge-agent` once more.
-
-Do not stop DNS, the gateway, or cells, edit `.env.prod`, reuse the token, or
-copy another edge's identity volume. If the modal is left before the replacement
-token is saved, rotate again and use the newest token only. The complete command
-sequence is also documented in the [Fleet operator guide](production-fleet-operator-guide.md#rotate-an-edge-identity).
+Do not stop DNS, the gateway, or cells, reuse the token, delete
+`edge-agent-state`, or copy another edge's identity volume. If the modal is left
+before the replacement token is saved, rotate again and use the newest token
+only. The flow is also documented in the
+[Fleet operator guide](production-fleet-operator-guide.md#rotate-an-edge-identity).
 
 Public Caddy certificates are ACME-managed by Caddy and are separate from this
 private PKI.

@@ -6,8 +6,8 @@ description: Operate destination-address and Host/SNI routing to bounded OpenRes
 # Edge gateway ingress
 
 ::: danger Preserve layer-4 identity
-Every service address must map one-to-one to an exact local listener. When the
-public address is assigned directly to the host, map it to itself. Behind NAT,
+Every service address must resolve to one exact local listener. A public address
+assigned directly to the host binds as-is and needs no map entry. Behind NAT,
 map it to one distinct private listener address. A firewall or load balancer
 must pass TCP and TLS through without terminating TLS or collapsing several
 advertised addresses onto one local IP.
@@ -47,16 +47,15 @@ cells use their loopback ports. Containerized development may set
 `EDGE_CELL_TARGETS`, a bounded cell-name-to-HTTP/HTTPS-endpoint map, to replace
 targets with private container DNS names and ports.
 
-Production keeps endpoint identity separate from host listeners. Set
-`EDGE_GATEWAY_ADDRESS_MAP` to an exact advertised-to-local JSON object, for
-example `{"198.51.100.40":"198.51.100.40"}` when that public address is
-assigned directly to the host, or `{"198.51.100.40":"10.20.0.40"}` behind
-one-to-one NAT. In the NAT case, the external firewall or layer-4 load balancer
-forwards the advertised address to that local address without terminating TLS.
-The production profile requires complete coverage: an unmapped endpoint,
-cross-family pair, wildcard address, public-to-different-public mapping, or
-reused local address rejects the candidate and preserves the previous valid
-map.
+Production keeps endpoint identity separate from translated host listeners. A
+public address assigned directly to the host binds as-is with the default empty
+map. Behind one-to-one NAT, set `EDGE_GATEWAY_ADDRESS_MAP` to an exact mapping
+such as `{"198.51.100.40":"10.20.0.40"}`. The firewall or layer-4 load balancer
+forwards the advertised address without terminating TLS. Cross-family pairs,
+wildcards, public-to-different-public mappings, and reused local addresses reject
+the candidate and preserve the previous valid map. Set
+`EDGE_GATEWAY_REQUIRE_ADDRESS_MAP=true` only when policy requires complete
+explicit coverage.
 
 `EDGE_GATEWAY_BINDINGS` remains an emergency rollout override. When set, its
 static JSON is authoritative and dynamic endpoint changes are intentionally
@@ -79,9 +78,9 @@ ignored. Its shape is a JSON array with at most 32 entries:
 ]
 ```
 
-The address fields remain advertised identities; the production agent applies
-the same required `EDGE_GATEWAY_ADDRESS_MAP` before compiling this emergency
-override.
+The address fields remain advertised identities. The production agent applies
+the optional NAT translations in `EDGE_GATEWAY_ADDRESS_MAP` before compiling
+this emergency override; direct local addresses remain unchanged.
 
 For a multi-cell pool, replace the top-level `http` and `https` target with a
 bounded `cells` array. Each item has the stable `name`, `http`, and `https`
@@ -115,11 +114,11 @@ the edge agent and monitoring source. Set `EDGE_GATEWAY_MAX_CONNECTIONS` from
 the qualified host ceiling; invalid or out-of-range values use 8,192.
 
 1. For a directly addressed host, confirm each advertised service address is
-   assigned to a local interface and map it to itself. Otherwise allocate one
+   assigned to a local interface; no map entry is needed. Otherwise allocate one
    distinct private/local address for every advertised service address.
 2. For the private-address case, configure one-to-one DNAT or layer-4
    forwarding for TCP `80` and `443`, preserving the connection and TLS stream.
-   Put every direct or translated pair in `EDGE_GATEWAY_ADDRESS_MAP`.
+   Put every translated pair in `EDGE_GATEWAY_ADDRESS_MAP`.
 3. Confirm every ready endpoint and participating cell appears in the
    agent-fetched gateway candidate. Do not set the static override during
    normal operation.

@@ -64,7 +64,7 @@ Before touching a host, record:
   application keys and private PKI.
 
 The local side of every `EDGE_GATEWAY_ADDRESS_MAP` entry must exist on that edge
-host. A public address assigned directly to the host maps to itself. Behind
+host. A public address assigned directly to the host binds without a map. Behind
 NAT, a firewall, router, or layer-4 load balancer must map the advertised
 address one-to-one to a distinct private listener. Do not use a wildcard or
 loopback address.
@@ -297,14 +297,15 @@ DNS_API_SERVER_PRIVATE_KEY=/etc/cdnfoundry/pki/dns-api-1.key
 EDGE_CONTROL_CA_CERTIFICATE=/etc/cdnfoundry/pki/edge-server-ca.crt
 EDGE_RUNTIME_TLS_CERTIFICATE=/etc/cdnfoundry/pki/edge-runtime.crt
 EDGE_RUNTIME_TLS_PRIVATE_KEY=/etc/cdnfoundry/pki/edge-runtime.key
-EDGE_GATEWAY_ADDRESS_MAP={"198.51.100.40":"198.51.100.40"}
+EDGE_GATEWAY_ADDRESS_MAP={}
+EDGE_GATEWAY_REQUIRE_ADDRESS_MAP=false
 EDGE_ID=
 EDGE_BOOTSTRAP_TOKEN=
 ```
 
-The example is a direct-public host: the advertised address is assigned to a
-local interface, so it maps to itself. Behind one-to-one NAT, use the private
-listener instead, for example
+The example is a direct-public host: an advertised address assigned to a local
+interface binds directly and needs no map. Behind one-to-one NAT, add the private
+listener translation, for example
 `EDGE_GATEWAY_ADDRESS_MAP={"198.51.100.40":"10.20.0.40"}`. Never use
 `0.0.0.0` or `::` in this map. Set
 `CONTROL_PUBLIC_*_ALLOWLIST` to the control worker's exact source address. JSON
@@ -441,8 +442,8 @@ Sign in at `https://control.ops.example.com/admin` and use this order:
 4. Create `pop-1` and `pop-2` in **Edge network → Edges**. Record each edge UUID
    and its one-time bootstrap token at the one-time display boundary.
 5. Create or verify shared and quarantine pools. Assign the fixed cell slots and
-   create the public service endpoints that correspond exactly to each host's
-   `EDGE_GATEWAY_ADDRESS_MAP`.
+   create the public service endpoints that are directly assigned to the host or
+   correspond exactly to its NAT-only `EDGE_GATEWAY_ADDRESS_MAP` entries.
 
 If the service endpoint is the host's only public address, leave the optional
 management address blank on the edge record; management inventory addresses
@@ -475,8 +476,9 @@ docker compose --env-file .env.prod -f compose.prod.yml \
 ```
 
 Wait until the administrator panel reports registered identity, a fresh
-heartbeat, ready assigned cells, and the expected runtime revision. Then remove
-the token value from `.env.prod` and recreate only the agent:
+heartbeat, ready assigned cells, and the expected runtime revision. This
+manual-Compose path does not use the generated bundle's automatic cleanup, so
+remove the token value from `.env.prod` and recreate only the agent:
 
 ```bash
 docker compose --env-file .env.prod -f compose.prod.yml \
@@ -612,7 +614,7 @@ be rebuilt from desired state, but preserving them reduces recovery time.
 | Empty edge repeats `generation revision must be positive` | Edge-agent release predates empty-bootstrap support | Deploy a release containing the empty-bootstrap fix; do not create a placeholder domain |
 | New gateway exits because candidate and `last-valid.json` are absent | Gateway release predates clean-start waiting support | Deploy the clean-start fix; the gateway must remain not-ready until the agent publishes its first candidate |
 | First endpoint remains unacknowledged on an empty edge | Agent generation log, same-edge pool assignment, exact address-map coverage, gateway log | Assign a non-drained cell to the same pool, confirm its empty runtime, and verify gateway activation |
-| Gateway refuses endpoints | `EDGE_GATEWAY_ADDRESS_MAP` and local IP assignment | Map a directly assigned public address to itself, or add exact one-to-one private mappings behind NAT |
+| Gateway refuses endpoints | Local IP assignment, and `EDGE_GATEWAY_ADDRESS_MAP` for translated addresses | Assign a direct public address locally, or add exact one-to-one private mappings behind NAT |
 | New runtime is rejected | Agent/cell logs, checksum/signature, status token, bounds | Keep the previous valid generation active and repair desired state |
 | Telemetry is unavailable | ClickHouse/Vector/Loki health, allowlists, buffers | Restore telemetry independently; do not stop serving traffic |
 

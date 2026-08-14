@@ -44,18 +44,12 @@ class ViewEdge extends ViewRecord
                 ->label('Enrollment instructions')
                 ->visible(fn (): bool => filled($this->bootstrapToken))
                 ->modalHeading('Enroll this edge')
-                ->modalDescription('Copy the credentials and run both commands on the Fleet authority. The token is shown only once.')
+                ->modalDescription('Copy the two environment values to the prepared edge host and run its start script. The token is shown only once.')
                 ->modalContent(function () {
-                    $nodeName = (string) $this->getRecord()->name;
-                    $tokenFileName = (Str::slug($nodeName) ?: 'edge').'.bootstrap-token';
-                    $tokenPath = "/root/{$tokenFileName}";
-
                     return view('filament.admin.resources.edges.enrollment-instructions', [
                         'edgeId' => (string) $this->getRecord()->getKey(),
                         'bootstrapToken' => $this->bootstrapToken,
-                        'nodeName' => $nodeName,
-                        'shellNodeName' => escapeshellarg($nodeName),
-                        'tokenPath' => $tokenPath,
+                        'edgeName' => (string) $this->getRecord()->name,
                         'flow' => 'enrollment',
                     ]);
                 })
@@ -92,7 +86,7 @@ class ViewEdge extends ViewRecord
             ->modalDescription('The current mTLS certificate is revoked immediately. Existing runtime traffic can continue with its last valid configuration, but heartbeats and configuration updates stop until the agent enrolls again.')
             ->schema([
                 Checkbox::make('confirm_rotation')
-                    ->label('I am ready to update Fleet state and redeploy the edge agent immediately after rotation.')
+                    ->label('I am ready to paste the replacement values on the edge host and run its start script immediately after rotation.')
                     ->accepted()
                     ->required(),
             ])
@@ -129,15 +123,10 @@ class ViewEdge extends ViewRecord
                     ->modalHeading('Identity rotated — re-enroll this edge now')
                     ->modalDescription('The old certificate is revoked. Complete these steps before leaving this modal; the replacement token is shown only once.')
                     ->modalContent(function (array $arguments) {
-                        $nodeName = (string) $arguments['nodeName'];
-                        $tokenFileName = (Str::slug($nodeName) ?: 'edge').'.bootstrap-token';
-
                         return view('filament.admin.resources.edges.enrollment-instructions', [
                             'edgeId' => (string) $arguments['edgeId'],
                             'bootstrapToken' => (string) $arguments['bootstrapToken'],
-                            'nodeName' => $nodeName,
-                            'shellNodeName' => escapeshellarg($nodeName),
-                            'tokenPath' => "/root/{$tokenFileName}",
+                            'edgeName' => (string) $arguments['nodeName'],
                             'flow' => 'rotation',
                         ]);
                     })

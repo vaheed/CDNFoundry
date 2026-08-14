@@ -50,10 +50,11 @@ only on an external firewall or load balancer. Configure IPv6 only when the
 host has a working route, firewall policy, local bind, and externally published
 AAAA/service address; otherwise retain the documented nullable IPv6 values.
 
-The edge gateway is stricter than the shared host publications: every
-control-plane service endpoint must be mapped one-to-one to a distinct local
-address in `EDGE_GATEWAY_ADDRESS_MAP`. The production agent rejects an
-unmapped endpoint, so it never binds the advertised public/NAT address.
+The edge gateway binds a directly assigned advertised service address as-is.
+For NAT or a load balancer, map each advertised address one-to-one to a distinct
+private local listener with `EDGE_GATEWAY_ADDRESS_MAP`. Operators that require
+explicit translation for every endpoint can set
+`EDGE_GATEWAY_REQUIRE_ADDRESS_MAP=true`.
 
 PowerDNS `8081`, DNSdist statistics `8083`, Vector ingestion `8686`/`8687`,
 Vector traffic metrics `9598`, Loki `3100`, operational Vector metrics `9599`, ClickHouse `8123` and exporter `9363`, Prometheus `9090`, Alertmanager

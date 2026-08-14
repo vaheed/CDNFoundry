@@ -108,20 +108,20 @@ workstream does not replace an earlier product checkpoint.
    WAF capability, Routing mode, Minimum ready cells, Replicas per edge, and
    Maximum domains per cell. Confirm invalid replicas/capacity/address
    combinations fail before activation.
-2. Under **Infrastructure → Edges**, create two edges with names that exactly
-   match their Fleet topology nodes, **Cell slots = 8**, country, continent, and
-   optional management addresses. Confirm creation opens a non-dismissible
-   enrollment modal—not a token toast—and that it displays the edge UUID,
-   one-time token, protected token-file command, exact Fleet registration
-   command, and the Fleet-authority host context in visually separated cards.
-   Confirm UUID, token, and both commands have working copy controls; long
-   commands scroll horizontally without colliding with other content; and the
-   final acknowledgement checkbox is required. Acknowledge it only after saving
-   the values, then confirm neither UUID/token modal nor token is shown again
-   after navigation. Enroll each agent, remove its token after
-   registration, and confirm fresh heartbeat, current runtime versions, gateway
-   process, traffic listener, gateway revision/listeners/routes, capacity, and
-   no deployment rejection.
+2. Under **Infrastructure → Edges**, create two edges with display names that
+   deliberately differ from their Fleet/server names, **Cell slots = 8**,
+   country, continent, and optional management addresses. Confirm creation opens
+   a non-dismissible enrollment modal—not a token toast—and displays the edge
+   UUID, one-time token, two-line `EDGE_ID`/`EDGE_BOOTSTRAP_TOKEN` environment
+   block, prepared-host context, and `sudo ./start.sh` command in visually
+   separated cards. Confirm the modal contains no Fleet command or exact-name
+   requirement. Confirm UUID, token, environment block, and start command have
+   working copy controls; long values scroll without collision; and the final
+   acknowledgement checkbox is required. Acknowledge only after saving the
+   values, then confirm neither modal nor token is shown after navigation. On
+   each prepared host, paste the two values into mode-`0600` `.env.prod`, run
+   `sudo ./start.sh`, and confirm enrollment, automatic token removal, one agent
+   recreation, and a fresh heartbeat without rerendering or a second transfer.
 3. From an edge record, choose **Rotate identity**. Confirm the first modal says
    the current certificate is revoked immediately, last-valid runtime traffic
    can continue, and heartbeat/configuration delivery will pause. Require the
@@ -129,16 +129,18 @@ workstream does not replace an earlier product checkpoint.
    non-dismissible modal—not a token toast—that uses exactly the same layout,
    cards, spacing, copy controls, and expandable follow-up section as initial
    edge enrollment. It must contain the unchanged UUID, replacement one-time
-   token, Fleet-authority registration/render commands, matching-PoP bundle and
-   agent commands, and post-heartbeat token cleanup. Verify the old
-   certificate is rejected, the new agent identity enrolls, heartbeat returns,
-   and only `edge-agent` is recreated; DNS, gateway, and cells remain running.
+   token, deployment-neutral environment block, and prepared-host start command.
+   Verify the old certificate is rejected, the new identity is persisted before
+   the previous local identity is replaced, the token is removed automatically,
+   heartbeat returns, and only `edge-agent` is recreated; DNS, gateway, and cells
+   remain running.
 4. In each edge's **Cells** relation, use **Assign service pool** for the
    intended stable slots. Exercise drain, undrain, restart, and unassign; confirm
    unrelated cells keep serving and active placement prevents unsafe removal.
 5. Create each Geo-Unicast pool endpoint with its distinct advertised service
-   IPv4 and optional IPv6. Map every address to a distinct assigned local
-   listener with `EDGE_GATEWAY_ADDRESS_MAP`. Confirm the gateway binds only the
+   IPv4 and optional IPv6. For directly assigned addresses, leave
+   `EDGE_GATEWAY_ADDRESS_MAP={}` and confirm direct binding. For NAT, map every
+   advertised address to a distinct assigned private listener. Confirm the gateway binds only the
    local pair, DNS publishes only ready advertised endpoints, Host/SNI routing
    reaches the intended cell, and management addresses are never published or
    bound for customer traffic.

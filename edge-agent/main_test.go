@@ -48,6 +48,68 @@ func TestVersionCommand(t *testing.T) {
 	}
 }
 
+func TestRegistrationPersistsTokenHashAndRestartDoesNotReuseConsumedToken(t *testing.T) {
+	edgeID := "11111111-2222-3333-4444-555555555555"
+	token := strings.Repeat("a", 64)
+	registrations := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		registrations++
+		if r.URL.Path != "/edge/v1/register" {
+			t.Fatalf("unexpected registration path %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"edge_id":"` + edgeID + `","identity_certificate":"certificate","signing_public_key":"public-key"}}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("EDGE_ID", edgeID)
+	t.Setenv("EDGE_BOOTSTRAP_TOKEN", token)
+	dir := t.TempDir()
+	first := &client{base: server.URL, dir: dir, http: server.Client()}
+	if err := first.loadOrRegister(); err != nil {
+		t.Fatal(err)
+	}
+	if first.id.BootstrapTokenHash != hashToken(token) {
+		t.Fatal("registration did not persist the consumed token hash")
+	}
+	second := &client{base: server.URL, dir: dir, http: server.Client()}
+	if err := second.loadOrRegister(); err != nil {
+		t.Fatal(err)
+	}
+	if registrations != 1 {
+		t.Fatalf("consumed token was reused during restart: %d registrations", registrations)
+	}
+}
+
+func TestReplacementTokenReenrollsWithoutDeletingPreviousIdentityFirst(t *testing.T) {
+	edgeID := "11111111-2222-3333-4444-555555555555"
+	dir := t.TempDir()
+	old := identity{EdgeID: edgeID, Certificate: "old-certificate", PrivateKey: "old-private-key", BootstrapTokenHash: hashToken(strings.Repeat("a", 64))}
+	if err := atomicJSON(filepath.Join(dir, "identity.json"), old); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("EDGE_ID", edgeID)
+	t.Setenv("EDGE_BOOTSTRAP_TOKEN", strings.Repeat("b", 64))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "registration unavailable", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	c := &client{base: server.URL, dir: dir, http: server.Client()}
+	if err := c.loadOrRegister(); err == nil {
+		t.Fatal("replacement registration failure was ignored")
+	}
+	body, err := os.ReadFile(filepath.Join(dir, "identity.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	preserved := identity{}
+	if json.Unmarshal(body, &preserved) != nil || preserved.Certificate != old.Certificate || preserved.PrivateKey != old.PrivateKey {
+		t.Fatal("failed replacement removed the previous persisted identity")
+	}
+}
+
 func TestAcknowledgementBufferRetriesAfterRecovery(t *testing.T) {
 	failing := true
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -101,8 +101,8 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `EDGE_GATEWAY_BINDINGS` | edge agent | Optional rollout override. When absent, the agent fetches the bounded, revisioned edge/pool endpoint candidate over mTLS; when set, this static JSON remains authoritative. |
 | `EDGE_CELL_TARGETS` | edge agent | Optional development-only JSON map from stable cell names to private container HTTP/HTTPS endpoints; production host-network cells use control-plane loopback targets |
 | `EDGE_GATEWAY_ADDRESSES` | edge agent | Optional development-only JSON array of at most two gateway listener IPs; never set in production |
-| `EDGE_GATEWAY_ADDRESS_MAP` | production edge agent | Exact JSON object mapping every advertised service IPv4/IPv6 address to the address bound locally. A directly assigned public address maps to itself; behind NAT it maps to a distinct private address. Both sides use the same family; wildcard, public-to-different-public, and duplicate local values fail closed. Default `{}` permits startup before endpoints exist. |
-| `EDGE_GATEWAY_REQUIRE_ADDRESS_MAP` | production edge agent | Production Compose fixes this to `true`; every fetched endpoint must have a local mapping before activation. Do not override it. |
+| `EDGE_GATEWAY_ADDRESS_MAP` | production edge agent | Optional JSON object translating advertised service IPv4/IPv6 addresses to private local listeners for NAT/load-balancer hosts. Directly assigned public addresses bind without a map. Both sides use the same family; wildcard, public-to-different-public, and duplicate local values fail closed. Default `{}`. |
+| `EDGE_GATEWAY_REQUIRE_ADDRESS_MAP` | production edge agent | Set `true` only when local policy requires every fetched endpoint to have an explicit translation before activation. Default `false`. |
 | `EDGE_GATEWAY_STATUS_URL` | edge agent | Gateway metrics URL used for heartbeat readiness |
 | `EDGE_GATEWAY_METRICS_ADDRESS` | edge gateway | Restricted metrics listener; production default `0.0.0.0:9105` |
 | `EDGE_GATEWAY_MAX_CONNECTIONS` | edge gateway | Global accepted-connection bound, `128`–`65536` (default `8192`) |
@@ -209,7 +209,7 @@ the supported host collector.
 | `EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE` | optional core | CA-key passphrase |
 | `EDGE_STATUS_TOKEN` | edge host | Separate agent-to-cell control token |
 | `EDGE_ID` | first enrollment | Administrator-created edge UUID |
-| `EDGE_BOOTSTRAP_TOKEN` | first enrollment | One-time secret; remove after registration |
+| `EDGE_BOOTSTRAP_TOKEN` | first enrollment | One-time secret; generated `start.sh` removes it after persisted identity issuance |
 
 The edge-agent binary also accepts these internal variables:
 

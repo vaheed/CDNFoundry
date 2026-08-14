@@ -81,8 +81,8 @@ sudo ./scripts/cdnfoundry-fleet \
 3. Start all four DNS nodes. Register, test, and enable their DNS clusters;
    apply NS/glue platform identity only afterward and wait for every cluster to
    acknowledge it. Qualify UDP/TCP answers before delegation.
-4. Create each edge in the control panel, configure its UUID/token through protected files, rerender, and start edge bundles one at a time.
-5. Remove every consumed bootstrap token, rerender, and recreate only the affected agent.
+4. Create each edge in the control panel, paste its two-line UUID/token block into the matching prepared host, and run `sudo ./start.sh` one host at a time. Edge display and Fleet node names may differ.
+5. Confirm each script persisted the identity, removed the consumed token, and recreated only the affected agent; no rerender or second transfer is required.
 6. Validate regional fallback, draining, node loss, control-plane outage, restart, telemetry loss, and previous-bundle rollback.
 
 Do not activate all hosts simultaneously. A target must be valid and serving before any source is drained. Generated `.env.prod` is authoritative for every role bundle; do not add deployment defaults to Compose or edit rendered manifests on a host.

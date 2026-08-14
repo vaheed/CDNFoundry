@@ -21,11 +21,11 @@ addresses cannot be reused as service endpoint addresses.
 Several cells assigned to the same pool and edge are private gateway targets;
 they do not own additional public addresses.
 
-Endpoint addresses are advertised identities, never production host bind
-addresses. Before enabling an endpoint, allocate one distinct local address
-per advertised address, configure one-to-one DNAT or layer-4 forwarding, and
-record the pair in that host's `EDGE_GATEWAY_ADDRESS_MAP`. The agent rejects an
-unmapped endpoint and keeps the previous valid gateway map.
+Endpoint addresses are advertised identities. A directly assigned address may
+bind as-is without `EDGE_GATEWAY_ADDRESS_MAP`. For NAT or a load balancer,
+allocate one distinct private local listener per advertised address, configure
+one-to-one forwarding, and record the pair in the host map. Invalid translations
+are rejected while the previous valid gateway map remains active.
 
 Create endpoints under **Edge network → Edges → Pool endpoints** after assigning
 the pool's cells. Address ownership is globally unique and unsafe, management,

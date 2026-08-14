@@ -37,7 +37,10 @@ const version = "1.2.0"
 
 var logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-type identity struct{ EdgeID, Certificate, PrivateKey, PublicKey string }
+type identity struct {
+	EdgeID, Certificate, PrivateKey, PublicKey string
+	BootstrapTokenHash                         string `json:",omitempty"`
+}
 type state struct {
 	Sequence uint64                     `json:"sequence"`
 	Domains  map[string]json.RawMessage `json:"domains"`
@@ -73,6 +76,15 @@ type manifest struct {
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "--version" {
 		fmt.Println(version)
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == "--identity-token-hash" {
+		stored := identity{}
+		body, err := os.ReadFile(filepath.Join(env("EDGE_STATE_DIR", "/var/lib/cdnfoundry/agent"), "identity.json"))
+		if err != nil || json.Unmarshal(body, &stored) != nil || stored.BootstrapTokenHash == "" {
+			os.Exit(1)
+		}
+		fmt.Println(stored.BootstrapTokenHash)
 		return
 	}
 	c := &client{
@@ -605,6 +617,7 @@ func inNetworks(ip net.IP, cidrs []string) bool {
 
 func (c *client) loadOrRegister() error {
 	p := filepath.Join(c.dir, "identity.json")
+	bootstrapToken := env("EDGE_BOOTSTRAP_TOKEN", "")
 	if b, err := os.ReadFile(p); err == nil {
 		if err := json.Unmarshal(b, &c.id); err != nil {
 			return err
@@ -612,9 +625,17 @@ func (c *client) loadOrRegister() error {
 		if c.id.Certificate == "" || c.id.PrivateKey == "" {
 			return errors.New("legacy edge identity requires administrator rotation")
 		}
-		return nil
+		// A consumed token may briefly remain in the environment while the host
+		// activation script removes it. Remember its hash so a container restart
+		// during that boundary cannot accidentally request another identity.
+		if bootstrapToken == "" || c.id.BootstrapTokenHash != "" && hashToken(bootstrapToken) == c.id.BootstrapTokenHash {
+			return nil
+		}
 	}
 	edgeID := required("EDGE_ID")
+	if c.id.EdgeID != "" && c.id.EdgeID != edgeID {
+		return errors.New("EDGE_ID does not match the persisted edge identity")
+	}
 	pendingPath := filepath.Join(c.dir, "pending-registration.json")
 	var pending struct {
 		EdgeID, CSR, PrivateKey string
@@ -635,7 +656,8 @@ func (c *client) loadOrRegister() error {
 	} else {
 		return err
 	}
-	body := map[string]any{"edge_id": edgeID, "bootstrap_token": required("EDGE_BOOTSTRAP_TOKEN"), "agent_version": version, "certificate_request": pending.CSR}
+	bootstrapToken = required("EDGE_BOOTSTRAP_TOKEN")
+	body := map[string]any{"edge_id": edgeID, "bootstrap_token": bootstrapToken, "agent_version": version, "certificate_request": pending.CSR}
 	// Explicit decode avoids relying on field-name matching for snake_case.
 	var raw struct {
 		Data map[string]string `json:"data"`
@@ -643,7 +665,10 @@ func (c *client) loadOrRegister() error {
 	if err := c.request("POST", "/edge/v1/register", body, &raw, false); err != nil {
 		return err
 	}
-	c.id = identity{EdgeID: raw.Data["edge_id"], Certificate: raw.Data["identity_certificate"], PrivateKey: pending.PrivateKey, PublicKey: raw.Data["signing_public_key"]}
+	c.id = identity{
+		EdgeID: raw.Data["edge_id"], Certificate: raw.Data["identity_certificate"], PrivateKey: pending.PrivateKey,
+		PublicKey: raw.Data["signing_public_key"], BootstrapTokenHash: hashToken(bootstrapToken),
+	}
 	if err := atomicJSON(p, c.id); err != nil {
 		return err
 	}
@@ -651,6 +676,11 @@ func (c *client) loadOrRegister() error {
 		return err
 	}
 	return nil
+}
+
+func hashToken(token string) string {
+	digest := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(digest[:])
 }
 
 func certificateRequest(edgeID string) (string, string, error) {

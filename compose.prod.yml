@@ -641,7 +641,7 @@ services:
       EDGE_RUNTIME_DIR: /var/lib/cdnfoundry/runtime
       EDGE_GATEWAY_STATUS_URL: ${EDGE_GATEWAY_STATUS_URL}
       EDGE_GATEWAY_ADDRESS_MAP: ${EDGE_GATEWAY_ADDRESS_MAP}
-      EDGE_GATEWAY_REQUIRE_ADDRESS_MAP: "true"
+      EDGE_GATEWAY_REQUIRE_ADDRESS_MAP: ${EDGE_GATEWAY_REQUIRE_ADDRESS_MAP}
       EDGE_RUNTIME_VERSIONS: ${EDGE_RUNTIME_VERSIONS}
       EDGE_CELL_ASSIGNMENTS: '{"cell-01":"shared-default","cell-02":"quarantine-default","cell-03":"","cell-04":"","cell-05":"","cell-06":"","cell-07":"","cell-08":""}'
       EDGE_CELL_STATUS_URLS: http://cell-01:9080/passive-failures,http://cell-02:9080/passive-failures,http://cell-03:9080/passive-failures,http://cell-04:9080/passive-failures,http://cell-05:9080/passive-failures,http://cell-06:9080/passive-failures,http://cell-07:9080/passive-failures,http://cell-08:9080/passive-failures

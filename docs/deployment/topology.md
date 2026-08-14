@@ -180,10 +180,11 @@ In the administrator panel:
 5. assign bounded cells to pools and create one public service endpoint pair for
    each participating edge/pool; keep management addresses distinct.
 
-Put `EDGE_ID` and `EDGE_BOOTSTRAP_TOKEN` into the corresponding edge host, start
-the edge profile with `--profile dns --profile edge up -d`, wait for registered
-identity and fresh ready cells, then remove the bootstrap token from
-`.env.prod` and recreate only `edge-agent`.
+Put `EDGE_ID` and `EDGE_BOOTSTRAP_TOKEN` into the corresponding prepared edge
+host and run `sudo ./start.sh`. It enables the edge profile, waits for the
+persisted identity, removes the consumed token, and recreates only `edge-agent`
+automatically. Wait for registered identity and fresh ready cells before
+publishing the endpoint.
 
 ### 10. Qualify traffic
 
