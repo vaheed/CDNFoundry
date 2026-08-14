@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Domain;
 use App\Models\Operation;
 use App\Models\PlatformDnsSetting;
+use App\Support\DomainNameserverVerification;
 use App\Support\NameserverResolver;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -25,8 +26,9 @@ class VerifyDomainNameservers implements ShouldBeUnique, ShouldQueue
         $this->onQueue('runtime');
     }
 
-    public function handle(NameserverResolver $resolver): void
+    public function handle(NameserverResolver $resolver, ?DomainNameserverVerification $verification = null): void
     {
+        $verification ??= app(DomainNameserverVerification::class);
         $operation = $this->operation();
         $operation?->update(['status' => 'running', 'started_at' => now(), 'attempts' => ($operation->attempts ?? 0) + 1]);
         try {
@@ -40,11 +42,14 @@ class VerifyDomainNameservers implements ShouldBeUnique, ShouldQueue
             if ($observed !== $expected) {
                 throw new RuntimeException('Observed nameservers do not exactly match the required platform nameservers.');
             }
-            $domain->forceFill(['nameservers_verified_at' => now(), 'nameservers_verified_by' => null])->save();
-            $operation?->update(['status' => 'succeeded', 'result' => ['domain_id' => $domain->id, 'nameservers' => $observed], 'finished_at' => now(), 'error' => null]);
+            $actor = $operation?->actor()->first();
+            $activated = $verification->complete($domain, $actor, $operation, $observed);
         } catch (Throwable $exception) {
             $operation?->update(['status' => 'failed', 'error' => mb_substr($exception->getMessage(), 0, 4000), 'finished_at' => now()]);
             throw $exception;
+        }
+        if ($activated) {
+            $verification->dispatchActivation($domain->id, $actor?->getKey());
         }
     }
 

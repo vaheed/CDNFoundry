@@ -58,7 +58,14 @@ class DomainLifecycleTest extends TestCase
         (new VerifyDomainNameservers($domain->id))->handle($resolver);
         $this->assertNotNull($domain->refresh()->nameservers_verified_at);
         $this->assertNull($domain->nameservers_verified_by);
+        $this->assertSame(DomainLifecycleState::Active, $domain->lifecycle_state);
+        $this->assertSame(2, $domain->revision);
         $this->assertSame('succeeded', Operation::findOrFail($first->json('data.id'))->status);
+        $this->assertDatabaseHas('operations', [
+            'type' => 'dns.zone_reconcile',
+            'status' => 'pending',
+        ]);
+        Queue::assertPushed(ReconcileDnsZone::class, 1);
     }
 
     public function test_verification_provisions_a_pending_zone_before_public_lookup(): void
@@ -121,18 +128,21 @@ class DomainLifecycleTest extends TestCase
 
     public function test_force_verification_is_admin_only_audited_and_cannot_revive_deprovisioning(): void
     {
+        Queue::fake();
         $admin = User::factory()->admin()->create();
         [$user, $domain] = $this->ownedDomain();
+        DnsCluster::query()->create($this->clusterData());
         $this->actingAs($user)->postJson("/api/admin/domains/{$domain->id}/force-verify")->assertForbidden();
         $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/force-verify")->assertOk();
         $this->assertSame($admin->id, $domain->refresh()->nameservers_verified_by);
+        $this->assertSame(DomainLifecycleState::Active, $domain->lifecycle_state);
         $this->assertDatabaseHas('audit_logs', ['action' => 'domain.nameservers_force_verified', 'subject_id' => (string) $domain->id]);
 
         $domain->update(['lifecycle_state' => DomainLifecycleState::Deprovisioning, 'deprovision_after' => now()->addDay()]);
         $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/force-verify")->assertConflict();
     }
 
-    public function test_force_verification_bypasses_only_delegation_and_activation_still_reconciles_normally(): void
+    public function test_force_verification_atomically_activates_and_reconciles(): void
     {
         Queue::fake();
         $admin = User::factory()->admin()->create();
@@ -140,13 +150,39 @@ class DomainLifecycleTest extends TestCase
         DnsCluster::query()->create($this->clusterData());
 
         $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/force-verify")->assertOk();
-        $this->assertSame(DomainLifecycleState::PendingVerification, $domain->refresh()->lifecycle_state);
-        Queue::assertNothingPushed();
-
-        $response = $this->actingAs($admin)->postJson("/api/domains/{$domain->id}/activate")->assertAccepted();
-        $this->assertSame('pending', $response->json('data.status'));
         $this->assertSame(DomainLifecycleState::Active, $domain->refresh()->lifecycle_state);
+        $this->assertSame(2, $domain->revision);
+        $this->assertDatabaseHas('operations', ['type' => 'dns.zone_reconcile', 'status' => 'pending']);
         Queue::assertPushed(ReconcileDnsZone::class, 1);
+    }
+
+    public function test_verification_and_activation_roll_back_together_without_a_healthy_cluster(): void
+    {
+        Queue::fake();
+        $this->platformIdentity();
+        [, $domain] = $this->ownedDomain();
+        DnsCluster::query()->create([...$this->clusterData(), 'enabled' => false]);
+        $operation = Operation::query()->create(['type' => 'domain.nameservers_verify', 'status' => 'pending', 'input' => ['domain_id' => $domain->id]]);
+        $resolver = new class extends NameserverResolver
+        {
+            public function resolve(string $domain): array
+            {
+                return ['ns1.cdnf.test', 'ns2.cdnf.test'];
+            }
+        };
+
+        try {
+            (new VerifyDomainNameservers($domain->id))->handle($resolver);
+            $this->fail('Verification must not succeed without atomic activation.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('Enable at least one healthy DNS cluster before verification can activate the domain.', $exception->getMessage());
+        }
+
+        $this->assertNull($domain->refresh()->nameservers_verified_at);
+        $this->assertSame(DomainLifecycleState::PendingVerification, $domain->lifecycle_state);
+        $this->assertSame(1, $domain->revision);
+        $this->assertSame('failed', $operation->refresh()->status);
+        Queue::assertNothingPushed();
     }
 
     public function test_activation_requires_verification_and_is_idempotent(): void

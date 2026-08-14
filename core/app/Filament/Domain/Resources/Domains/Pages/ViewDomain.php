@@ -23,6 +23,7 @@ use App\Models\Operation;
 use App\Support\BindZone;
 use App\Support\CachePolicy;
 use App\Support\DnsZoneImporter;
+use App\Support\DomainNameserverVerification;
 use App\Support\FilamentHelp;
 use App\Support\ProxyRevisionRollback;
 use App\Support\SecurityConfig;
@@ -398,13 +399,14 @@ class ViewDomain extends ViewRecord
                     && $this->record->nameservers_verified_at === null
                     && $this->record->lifecycle_state !== DomainLifecycleState::Deprovisioning)
                 ->action(function (): void {
-                    $this->record->forceFill([
-                        'nameservers_verified_at' => now(),
-                        'nameservers_verified_by' => auth()->id(),
-                    ])->save();
-                    AuditLog::record(auth()->user(), 'domain.nameservers_force_verified', $this->record, ['name' => $this->record->name], request()->ip());
+                    $verification = app(DomainNameserverVerification::class);
+                    $activated = $verification->complete($this->record, auth()->user(), ipAddress: request()->ip(), forced: true);
+                    if ($activated) {
+                        $verification->dispatchActivation($this->record->id, auth()->id());
+                    }
+                    $this->record->refresh();
                     Notification::make()->warning()->title('Nameservers force verified')
-                        ->body('Local-test bypass recorded. Public delegation was not checked.')->send();
+                        ->body('Local-test bypass recorded and the domain activated. Public delegation was not checked.')->send();
                 }),
             Action::make('activate')->color('success')->requiresConfirmation()
                 ->visible(fn (): bool => $this->record->nameservers_verified_at !== null && $this->record->lifecycle_state !== DomainLifecycleState::Active && $this->record->lifecycle_state !== DomainLifecycleState::Deprovisioning)

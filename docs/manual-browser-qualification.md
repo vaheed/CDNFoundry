@@ -90,7 +90,9 @@ workstream does not replace an earlier product checkpoint.
    clicking **Verify nameservers**. If delegation has not propagated, confirm a
    visible failed verification result, then use **Verify nameservers** and
    confirm the retry succeeds without creating duplicate pending operations.
-   Assign the user, activate the domain, then cover DNS-only A, AAAA, CNAME, MX,
+   Assign the user and confirm successful nameserver verification atomically changes
+   the lifecycle to **Active** and increments the desired revision. Confirm the full
+   authoritative zone reconciliation is queued automatically, then cover DNS-only A, AAAA, CNAME, MX,
    TXT, NS, CAA, SRV, and reverse PTR records.
    Exercise BIND preview/import/export, duplicate/CNAME/zone-boundary failures,
    bulk bounds, and Geo-DNS country/continent/default preview. Confirm UDP and
