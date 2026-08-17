@@ -4,11 +4,13 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoadInitialWaitsForTheFirstCandidate(t *testing.T) {
@@ -37,7 +39,7 @@ func TestLoadInitialWaitsForTheFirstCandidate(t *testing.T) {
 func TestLoadInitialFallsBackFromAnInvalidCandidate(t *testing.T) {
 	stateDir := t.TempDir()
 	configPath := filepath.Join(stateDir, "candidate.json")
-	if err := os.WriteFile(configPath, []byte(`{"schema_version":1,"listeners":["192.0.2.10:80"]}`), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte(`{"schema_version":2}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	lastValid, err := json.Marshal(config{
@@ -73,7 +75,7 @@ func TestValidateAcceptsBoundedDualStackRoutes(t *testing.T) {
 	candidate := config{
 		SchemaVersion: 1,
 		Revision:      7,
-		Listeners:     []string{"192.0.2.10:80", "[2001:db8::10]:443"},
+		Listeners:     []string{"192.0.2.10:80", "192.0.2.10:443", "[2001:db8::10]:443"},
 		Routes: []route{{
 			Address: "192.0.2.10", Hostname: "www.example.test",
 			HTTP: "cell-a:8081", HTTPS: "cell-a:8444",
@@ -98,15 +100,30 @@ func TestValidateAcceptsAnEmptyFailClosedCandidate(t *testing.T) {
 	}
 }
 
+func TestValidateAcceptsListenersBeforeTheFirstHostnameRoute(t *testing.T) {
+	table, err := validate(config{
+		SchemaVersion: 1,
+		Revision:      1,
+		GenerationID:  "00000000000000000001-endpoint",
+		Listeners:     []string{"192.0.2.10:80", "192.0.2.10:443"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if table.revision != 1 || len(table.routes) != 0 {
+		t.Fatalf("unexpected listener-only routing table: %#v", table)
+	}
+}
+
 func TestValidateRejectsDuplicateAndInvalidCandidates(t *testing.T) {
 	base := config{
-		SchemaVersion: 1, Revision: 1, Listeners: []string{"192.0.2.10:80"},
+		SchemaVersion: 1, Revision: 1, Listeners: []string{"192.0.2.10:80", "192.0.2.10:443"},
 		Routes: []route{{Address: "192.0.2.10", Hostname: "www.example.test", HTTP: "cell-a:8081"}},
 	}
 	tests := []config{
 		{SchemaVersion: 2, Revision: 1, Listeners: base.Listeners, Routes: base.Routes},
-		{SchemaVersion: 1, Revision: 1, Listeners: base.Listeners},
 		{SchemaVersion: 1, Revision: 1, Routes: base.Routes},
+		{SchemaVersion: 1, Revision: 1, Listeners: []string{"192.0.2.11:80"}, Routes: base.Routes},
 		{SchemaVersion: 1, Revision: 1, Listeners: []string{"0.0.0.0:8080"}, Routes: base.Routes},
 		{SchemaVersion: 1, Revision: 1, Listeners: base.Listeners, Routes: append(base.Routes, base.Routes[0])},
 		{SchemaVersion: 1, Revision: 1, Listeners: base.Listeners, Routes: []route{{Address: "192.0.2.10", Hostname: "bad_name", HTTP: "cell-a:8081"}}},
@@ -115,6 +132,27 @@ func TestValidateRejectsDuplicateAndInvalidCandidates(t *testing.T) {
 		if _, err := validate(candidate); err == nil {
 			t.Fatalf("candidate %d unexpectedly passed", index)
 		}
+	}
+}
+
+func TestCandidateRejectionLoggingIsBoundedByErrorAndTime(t *testing.T) {
+	g := &gateway{}
+	now := time.Unix(1000, 0)
+	g.logCandidateRejection(errors.New("bind failed"), now)
+	if g.lastCandidateError != "bind failed" || g.suppressedCandidateFailures != 0 {
+		t.Fatalf("first rejection was not recorded: %#v", g)
+	}
+	g.logCandidateRejection(errors.New("bind failed"), now.Add(time.Second))
+	if g.suppressedCandidateFailures != 1 || !g.lastCandidateErrorAt.Equal(now) {
+		t.Fatalf("duplicate rejection was not suppressed: %#v", g)
+	}
+	g.logCandidateRejection(errors.New("different failure"), now.Add(2*time.Second))
+	if g.lastCandidateError != "different failure" || g.suppressedCandidateFailures != 0 {
+		t.Fatalf("changed rejection was not emitted immediately: %#v", g)
+	}
+	g.logCandidateRejection(errors.New("different failure"), now.Add(6*time.Minute))
+	if !g.lastCandidateErrorAt.Equal(now.Add(6 * time.Minute)) {
+		t.Fatalf("stable rejection was not re-emitted after the bound: %#v", g)
 	}
 }
 

@@ -112,6 +112,7 @@ def isolated_last_valid_test() -> None:
         run(
             "docker", "run", "-d", "--rm", "--name", container,
             "--cap-drop", "ALL", "--cap-add", "NET_BIND_SERVICE",
+            "--sysctl", "net.ipv4.ip_unprivileged_port_start=1024",
             "-v", f"{config_path}:/config", "-v", f"{state_path}:/state",
             "-e", "GATEWAY_CONFIG_FILE=/config/gateway.json",
             "-e", "GATEWAY_STATE_DIR=/state",
@@ -121,18 +122,37 @@ def isolated_last_valid_test() -> None:
         try:
             time.sleep(2)
             before = metrics(container)
-            (config_path / "gateway.json").write_text('{"schema_version":1,"revision":18,"listeners":[],"routes":[]}')
+            (config_path / "gateway.json").write_text(
+                '{"schema_version":1,"revision":18,'
+                '"generation_id":"00000000000000000018-listener-only",'
+                '"listeners":["127.0.0.50:80","127.0.0.50:443"],"routes":[]}'
+            )
+            time.sleep(2)
+            listener_only = metrics(container)
+            if (listener_only["cdnfoundry_gateway_active_revision"] != 18
+                    or listener_only["cdnfoundry_gateway_listeners"] != 2
+                    or listener_only["cdnfoundry_gateway_routes"] != 0):
+                raise RuntimeError("listener-only endpoint generation did not activate")
+            (config_path / "gateway.json").write_text('{"schema_version":2,"revision":19}')
             time.sleep(2)
             after = metrics(container)
-            if after["cdnfoundry_gateway_active_revision"] != 17:
+            if after["cdnfoundry_gateway_active_revision"] != 18:
                 raise RuntimeError("invalid candidate replaced the active gateway map")
             if after["cdnfoundry_gateway_candidate_rejections_total"] <= before["cdnfoundry_gateway_candidate_rejections_total"]:
                 raise RuntimeError("invalid candidate rejection was not observable")
+            rejection_logs = run("docker", "logs", container).stdout.count(
+                '"event":"gateway_candidate_rejected"'
+            )
+            if rejection_logs != 1:
+                raise RuntimeError(
+                    f"unchanged invalid candidate emitted {rejection_logs} rejection logs, expected one"
+                )
             run("docker", "stop", container)
             restart_container = container + "-restart"
             run(
                 "docker", "run", "-d", "--rm", "--name", restart_container,
                 "--cap-drop", "ALL", "--cap-add", "NET_BIND_SERVICE",
+                "--sysctl", "net.ipv4.ip_unprivileged_port_start=1024",
                 "-v", f"{config_path}:/config:ro", "-v", f"{state_path}:/state",
                 "-e", "GATEWAY_CONFIG_FILE=/config/missing.json",
                 "-e", "GATEWAY_STATE_DIR=/state",
@@ -140,7 +160,7 @@ def isolated_last_valid_test() -> None:
                 "cdnfoundry/edge-gateway:qualification",
             )
             time.sleep(2)
-            if metrics(restart_container)["cdnfoundry_gateway_active_revision"] != 17:
+            if metrics(restart_container)["cdnfoundry_gateway_active_revision"] != 18:
                 raise RuntimeError("gateway restart did not restore the last valid map")
         finally:
             run("docker", "stop", container, check=False)
@@ -169,7 +189,7 @@ def multi_cell_pool_test() -> None:
             state.chmod(0o777)
             candidate = {
                 "schema_version": 1, "revision": 23,
-                "listeners": ["127.0.0.50:80"],
+                "listeners": ["127.0.0.50:80", "127.0.0.50:443"],
                 "routes": [{
                     "address": "127.0.0.50", "hostname": f"domain-{slot}.example.test",
                     "http": f"{backend}:8080", "https": f"{backend}:8080",
@@ -178,6 +198,7 @@ def multi_cell_pool_test() -> None:
             (base / "gateway.json").write_text(json.dumps(candidate))
             run("docker", "run", "-d", "--rm", "--name", gateway, "--network", network,
                 "--cap-drop", "ALL", "--cap-add", "NET_BIND_SERVICE",
+                "--sysctl", "net.ipv4.ip_unprivileged_port_start=1024",
                 "-v", f"{base}:/config:ro", "-v", f"{state}:/state",
                 "-e", "GATEWAY_CONFIG_FILE=/config/gateway.json",
                 "-e", "GATEWAY_STATE_DIR=/state",

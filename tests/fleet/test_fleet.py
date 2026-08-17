@@ -924,6 +924,20 @@ def test_production_gateways_are_dual_homed_for_ingress_and_private_backends() -
     assert compose["networks"]["telemetry"]["internal"] is True
 
 
+def test_production_edge_gateway_keeps_narrow_privileged_port_capability() -> None:
+    from cdnfoundry_fleet.compose import load_yaml
+
+    compose = load_yaml(REPO_PATCH / "compose.prod.yml")
+    gateway = compose["services"]["edge-gateway"]
+    assert gateway["network_mode"] == "host"
+    assert gateway["cap_drop"] == ["ALL"]
+    assert gateway["cap_add"] == ["NET_BIND_SERVICE"]
+
+    dockerfile = (REPO_PATCH / "edge-gateway/Dockerfile").read_text(encoding="utf-8")
+    assert "setcap cap_net_bind_service=+ep /usr/local/bin/edge-gateway" in dockerfile
+    assert "USER gateway" in dockerfile
+
+
 def test_pdns_activation_repairs_interrupted_schema_and_reconciles_password() -> None:
     import re
 

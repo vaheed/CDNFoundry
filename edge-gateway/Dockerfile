@@ -11,5 +11,8 @@ LABEL org.opencontainers.image.source="https://github.com/vaheed/CDNFoundry" \
       org.opencontainers.image.licenses="Apache-2.0" org.opencontainers.image.documentation="https://vaheed.github.io/CDNFoundry/"
 RUN addgroup -S -g 10101 gateway && adduser -S -D -H -u 10101 -G gateway gateway
 COPY --from=build /edge-gateway /usr/local/bin/edge-gateway
+RUN apk add --no-cache libcap \
+    && setcap cap_net_bind_service=+ep /usr/local/bin/edge-gateway \
+    && apk del libcap
 USER gateway
 ENTRYPOINT ["edge-gateway"]

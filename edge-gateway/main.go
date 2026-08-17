@@ -50,21 +50,24 @@ type routingTable struct {
 }
 
 type gateway struct {
-	configPath string
-	stateDir   string
-	metrics    string
-	table      atomic.Pointer[routingTable]
-	ready      atomic.Bool
-	accepted   atomic.Uint64
-	rejected   atomic.Uint64
-	errors     atomic.Uint64
-	active     atomic.Int64
-	reloads    atomic.Uint64
-	rejects    atomic.Uint64
-	mu         sync.Mutex
-	listeners  map[string]net.Listener
-	listen     func(network, address string) (net.Listener, error)
-	slots      chan struct{}
+	configPath                  string
+	stateDir                    string
+	metrics                     string
+	table                       atomic.Pointer[routingTable]
+	ready                       atomic.Bool
+	accepted                    atomic.Uint64
+	rejected                    atomic.Uint64
+	errors                      atomic.Uint64
+	active                      atomic.Int64
+	reloads                     atomic.Uint64
+	rejects                     atomic.Uint64
+	lastCandidateError          string
+	lastCandidateErrorAt        time.Time
+	suppressedCandidateFailures uint64
+	mu                          sync.Mutex
+	listeners                   map[string]net.Listener
+	listen                      func(network, address string) (net.Listener, error)
+	slots                       chan struct{}
 }
 
 func main() {
@@ -144,12 +147,30 @@ func (g *gateway) watch(ctx context.Context) {
 			}
 			if err != nil {
 				g.rejects.Add(1)
-				logger.Error("gateway candidate rejected; last valid map preserved", "event", "gateway_candidate_rejected", "error_code", "candidate_validation_failed", "error", err.Error())
+				g.logCandidateRejection(err, time.Now())
 				continue
+			}
+			if g.lastCandidateError != "" {
+				logger.Info("gateway candidate activation recovered", "event", "gateway_candidate_recovered", "suppressed_rejections", g.suppressedCandidateFailures)
+				g.lastCandidateError = ""
+				g.lastCandidateErrorAt = time.Time{}
+				g.suppressedCandidateFailures = 0
 			}
 			signature = next
 		}
 	}
+}
+
+func (g *gateway) logCandidateRejection(err error, now time.Time) {
+	message := err.Error()
+	if message == g.lastCandidateError && now.Sub(g.lastCandidateErrorAt) < 5*time.Minute {
+		g.suppressedCandidateFailures++
+		return
+	}
+	logger.Error("gateway candidate rejected; last valid map preserved", "event", "gateway_candidate_rejected", "error_code", "candidate_validation_failed", "error", message, "suppressed_rejections", g.suppressedCandidateFailures)
+	g.lastCandidateError = message
+	g.lastCandidateErrorAt = now
+	g.suppressedCandidateFailures = 0
 }
 
 func (g *gateway) activate(data []byte) error {
@@ -202,7 +223,7 @@ func (g *gateway) logRejectionSummaries(ctx context.Context) {
 }
 
 func validate(candidate config) (*routingTable, error) {
-	if candidate.SchemaVersion != 1 || len(candidate.Listeners) > 64 || len(candidate.Routes) > 100000 || (len(candidate.Listeners) == 0) != (len(candidate.Routes) == 0) {
+	if candidate.SchemaVersion != 1 || len(candidate.Listeners) > 64 || len(candidate.Routes) > 100000 || (len(candidate.Listeners) == 0 && len(candidate.Routes) > 0) {
 		return nil, errors.New("invalid gateway map bounds")
 	}
 	listeners := map[string]bool{}
@@ -231,6 +252,13 @@ func validate(candidate config) (*routingTable, error) {
 			port, _ := strconv.Atoi(targetPort)
 			if port < 1 || port > 65535 {
 				return nil, errors.New("invalid gateway route target port")
+			}
+			listenerPort := "80"
+			if protocol == "https" {
+				listenerPort = "443"
+			}
+			if !listeners[net.JoinHostPort(ip.String(), listenerPort)] {
+				return nil, errors.New("gateway route has no matching listener")
 			}
 			key := protocol + "|" + ip.String() + "|" + host
 			if _, exists := routes[key]; exists {

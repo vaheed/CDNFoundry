@@ -234,6 +234,21 @@ Create the bootstrap administrator only once. Additional administrators and
 domain users belong in the authenticated **Customers → Users** workflow so
 normal authorization and auditing apply.
 
+### Use the role-specific login URL
+
+The two browser panels intentionally have different authorization boundaries:
+
+- administrators sign in at `https://control.ops.example.com/admin/login`;
+- domain users sign in at `https://control.ops.example.com/app/login`.
+
+Give every newly created domain user the `/app/login` URL. A domain user cannot
+sign in to `/admin/login`, and an administrator cannot sign in to `/app/login`.
+The login form deliberately returns the same generic credentials error for a
+wrong password and a valid account presented to the wrong panel, so first
+confirm the URL, user type, and active state before resetting a password. A
+domain assignment is not required merely to sign in; an unassigned domain user
+sees the bounded empty state.
+
 ## 6. Start authoritative DNS on both PoPs
 
 Transfer `bundles/pop-1` and `bundles/pop-2` over authenticated channels to
@@ -366,10 +381,21 @@ reported agent version, and a ready gateway. A new edge with no domains still
 activates an empty generation at sequence `0`; do not create a placeholder
 domain.
 
-Finally, create and assign the service pool, add each PoP's advertised endpoint
-and, only for NAT, the matching public key configured in
-`EDGE_GATEWAY_ADDRESS_MAP`. Add the validated origin and enable proxying for the
-test hostname. Follow the bounded pool and address rules in the
+Finish edge desired state in this order:
+
+1. Create and enable the service pool.
+2. Assign the intended non-drained cells on each edge.
+3. Add each PoP's advertised endpoint and, only for NAT, its matching public
+   key configured in `EDGE_GATEWAY_ADDRESS_MAP`.
+4. Wait for the gateway to acknowledge the listener-only endpoint generation.
+   No placeholder or proxied customer hostname is required, and this state must
+   not emit repeated candidate errors or generation-mismatch warnings.
+5. Add the validated origin and enable proxying for the test hostname, then
+   wait for its placement and route generation to become active.
+
+Creating the endpoint before assigning cells is also safe: it remains pending
+and omitted from the candidate until a cell participates, then converges to the
+same listener-only generation. Follow the bounded pool and address rules in the
 [Fleet operator guide](production-fleet-operator-guide.md).
 
 If a host's only public address will be its service endpoint, leave that edge's
@@ -377,6 +403,14 @@ optional **Management IPv4/IPv6** blank. Management inventory addresses must be
 different from service endpoints. Assign a cell to the Geo-Unicast pool before
 creating the endpoint; the first endpoint is valid before any customer domain
 exists and activates an empty runtime for that assigned cell.
+
+The gateway image runs as an unprivileged user and carries only the
+file capability required to bind ports 80 and 443; Compose drops every
+capability and adds only `NET_BIND_SERVICE`. A `bind ...:80` or
+`bind ...:443: permission denied` error with the generated Compose file is a
+gateway image or release defect. Do not run the container privileged, change it to root, or add
+broader capabilities. Keep the endpoint withdrawn until a corrected immutable
+gateway image is deployed.
 
 ## 9. Acceptance and recovery gate
 

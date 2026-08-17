@@ -10,7 +10,10 @@ qualification. It requires the development edge profile and the locally built
 `cdnfoundry/edge-gateway:qualification` image. Coding agents must not run the separate
 manual browser checklist. The same job creates a disposable three-backend
 shared-pool topology and verifies that three Host routes reach three distinct
-cells while an unrelated hostname is rejected.
+cells while an unrelated hostname is rejected. Its isolated gateway cases force
+the normal privileged-port threshold and verify the non-root file capability,
+listener-only first-endpoint activation, last-valid recovery, and unchanged
+candidate-error log suppression.
 
 Run `python3 tests/e2e/cell_inventory.py` for the eight-slot non-browser cell
 inventory, isolation, restart, storage-bound, and idle/active overhead

@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestVerifyAndCompatibility(t *testing.T) {
@@ -599,6 +600,9 @@ func TestFreshEmptyFullSnapshotActivatesBootstrapGeneration(t *testing.T) {
 	if sequence, ok := cellRuntime["sequence"].(float64); !ok || sequence != 0 {
 		t.Fatalf("empty cell runtime has the wrong bootstrap sequence: %#v", cellRuntime)
 	}
+	if cellRuntime["generation_id"] != manifest.GenerationID {
+		t.Fatalf("empty cell runtime is outside the bootstrap generation: %#v", cellRuntime)
+	}
 }
 
 func TestFirstGatewayEndpointRebuildsAnEmptyBootstrapGeneration(t *testing.T) {
@@ -637,6 +641,45 @@ func TestFirstGatewayEndpointRebuildsAnEmptyBootstrapGeneration(t *testing.T) {
 	}
 	if revision, ok := gateway["revision"].(float64); !ok || revision != 1 {
 		t.Fatalf("first gateway endpoint has the wrong active revision: %#v", gateway)
+	}
+	if len(gateway["listeners"].([]any)) != 2 || len(gateway["routes"].([]any)) != 0 {
+		t.Fatalf("first gateway endpoint did not produce a listener-only map: %#v", gateway)
+	}
+	var cellRuntime map[string]any
+	cellBody, err := os.ReadFile(filepath.Join(runtimeDir, "current", "cell-01.json"))
+	if err != nil || json.Unmarshal(cellBody, &cellRuntime) != nil {
+		t.Fatalf("first endpoint cell runtime is invalid: %v", err)
+	}
+	if cellRuntime["generation_id"] != active.GenerationID {
+		t.Fatalf("first endpoint cell runtime is outside the active generation: %#v", cellRuntime)
+	}
+}
+
+func TestGenerationMismatchReportingHasGraceAndRateBounds(t *testing.T) {
+	var tracker generationMismatchTracker
+	now := time.Unix(1000, 0)
+	counts := map[string]int{"legacy-1": 7, "previous": 1}
+	if report := tracker.observe(now, "current", counts); report != nil {
+		t.Fatalf("new mismatch logged without a convergence grace period: %#v", report)
+	}
+	if report := tracker.observe(now.Add(generationMismatchGrace-time.Second), "current", counts); report != nil {
+		t.Fatalf("mismatch logged inside the convergence grace period: %#v", report)
+	}
+	report := tracker.observe(now.Add(generationMismatchGrace), "current", counts)
+	if report == nil || report.total != 8 || report.suppressed != 1 || report.counts["legacy-1"] != 7 {
+		t.Fatalf("persistent mismatch was not summarized: %#v", report)
+	}
+	if report := tracker.observe(now.Add(time.Minute), "current", counts); report != nil {
+		t.Fatalf("stable mismatch bypassed the log interval: %#v", report)
+	}
+	if report := tracker.observe(now.Add(generationMismatchGrace+generationMismatchLogInterval), "current", counts); report == nil || report.suppressed != 1 {
+		t.Fatalf("stable mismatch was not summarized after the log interval: %#v", report)
+	}
+	if report := tracker.observe(now.Add(10*time.Minute), "next", counts); report != nil {
+		t.Fatalf("changed generation logged without a new grace period: %#v", report)
+	}
+	if report := tracker.observe(now.Add(11*time.Minute), "next", nil); report != nil || tracker.signature != "" {
+		t.Fatalf("convergence did not clear mismatch state: report=%#v tracker=%#v", report, tracker)
 	}
 }
 

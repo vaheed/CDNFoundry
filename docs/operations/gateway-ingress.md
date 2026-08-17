@@ -38,8 +38,10 @@ fatal when no valid fallback exists.
 An explicit candidate with zero listeners and zero routes is valid desired
 state for an edge with no eligible endpoints, or after every endpoint is
 withdrawn. Activating it closes any previous listeners and reports the empty
-revision as ready. A candidate with listeners but no routes, or routes but no
-listeners, remains invalid.
+revision as ready. A listener-only candidate is also valid when assigned cells
+back the first endpoint before any hostname is proxied; unmatched HTTP and TLS
+connections are rejected without dialing a cell. A route without its matching
+address/protocol listener remains invalid.
 
 The agent fetches the bounded, revisioned bindings generated from ready pool
 endpoints and participating cells over its mTLS control connection. Production
@@ -112,6 +114,9 @@ Production uses host networking so sockets see the destination address. Grant
 only `NET_BIND_SERVICE`; drop all other capabilities. Restrict port `9105` to
 the edge agent and monitoring source. Set `EDGE_GATEWAY_MAX_CONNECTIONS` from
 the qualified host ceiling; invalid or out-of-range values use 8,192.
+The immutable image remains non-root and applies `cap_net_bind_service` only to
+the gateway executable so the Compose capability is effective after `exec`.
+Never replace this boundary with a privileged or root container.
 
 1. For a directly addressed host, confirm each advertised service address is
    assigned to a local interface; no map entry is needed. Otherwise allocate one
@@ -168,6 +173,12 @@ gateway metrics and qualification tooling, never by editing the derived file.
 - Gateway restart: load a valid candidate or `last-valid.json`; on a clean
   installation with neither file, remain not-ready and wait for the agent.
 - Agent restart: rebuild derived files from durable signed local state.
+
+The first distinct candidate error is logged immediately. An unchanged error
+continues to be retried and counted in metrics but is summarized at most once
+per five minutes; successful activation emits one recovery event. Runtime-reader
+generation mismatches receive a short convergence grace and are logged as one
+bounded aggregate, also at most once per five minutes while unchanged.
 
 If the gateway process is ready but an endpoint says `gateway_not_ready`, first
 confirm the edge heartbeat is fresh. A stale panel snapshot can be distinguished

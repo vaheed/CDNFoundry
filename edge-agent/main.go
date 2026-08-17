@@ -35,6 +35,11 @@ import (
 
 const version = "1.2.0"
 
+const (
+	generationMismatchGrace       = 15 * time.Second
+	generationMismatchLogInterval = 5 * time.Minute
+)
+
 var logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 type identity struct {
@@ -49,6 +54,17 @@ type ack struct {
 	Sequence        uint64 `json:"sequence"`
 	Rejected        bool   `json:"rejected"`
 	Reason, Details string
+}
+type generationMismatchTracker struct {
+	signature  string
+	since      time.Time
+	lastLog    time.Time
+	suppressed uint64
+}
+type generationMismatchReport struct {
+	counts     map[string]int
+	total      int
+	suppressed uint64
 }
 type client struct {
 	base, dir, runtimeDir, statusToken string
@@ -65,6 +81,7 @@ type client struct {
 	gatewayAddressMapRequired          bool
 	http                               *http.Client
 	id                                 identity
+	generationMismatches               generationMismatchTracker
 }
 type manifest struct {
 	Sequence                              uint64  `json:"sequence"`
@@ -1042,7 +1059,7 @@ func (c *client) activate(s state) error {
 					return err
 				}
 			}
-			if err := c.writeCellRuntimesAt(candidate, s.Sequence, pools); err != nil {
+			if err := c.writeCellRuntimesAt(candidate, s.Sequence, generationID, pools); err != nil {
 				return err
 			}
 			if c.gatewayBindings != "" {
@@ -1130,10 +1147,10 @@ func (c *client) activate(s state) error {
 }
 
 func (c *client) writeCellRuntimes(sequence uint64, pools map[string]map[string]any) error {
-	return c.writeCellRuntimesAt(c.runtimeDir, sequence, pools)
+	return c.writeCellRuntimesAt(c.runtimeDir, sequence, "", pools)
 }
 
-func (c *client) writeCellRuntimesAt(directory string, sequence uint64, pools map[string]map[string]any) error {
+func (c *client) writeCellRuntimesAt(directory string, sequence uint64, generationID string, pools map[string]map[string]any) error {
 	for cellName, poolName := range c.resolvedCellAssignments(pools) {
 		runtime := pools[cellName]
 		if runtime == nil {
@@ -1141,6 +1158,9 @@ func (c *client) writeCellRuntimesAt(directory string, sequence uint64, pools ma
 		}
 		if runtime == nil {
 			runtime = map[string]any{"schema_version": 1, "sequence": sequence, "hosts": map[string]any{}, "certificates": map[string]any{}}
+		}
+		if generationID != "" {
+			runtime["generation_id"] = generationID
 		}
 		pools[cellName] = runtime
 		if err := atomicJSON(filepath.Join(directory, cellName+".json"), runtime); err != nil {
@@ -1447,14 +1467,21 @@ func (c *client) heartbeat(sequence uint64) error {
 			expectedGeneration = manifest.GenerationID
 		}
 	}
+	mismatchedGenerations := map[string]int{}
 	for _, cell := range cells {
 		capacity, _ := cell["capacity"].(map[string]any)
 		generation, _ := capacity["active_generation"].(string)
 		if cell["status"] == "ready" && (expectedGeneration == "" || generation == expectedGeneration) {
 			listenerReady = true
 		} else if expectedGeneration != "" && generation != expectedGeneration {
-			logger.Warn("runtime reader generation mismatch", "event", "runtime_reader_generation_mismatch", "edge_id", c.id.EdgeID, "expected_generation_id", expectedGeneration, "loaded_generation_id", generation)
+			if generation == "" {
+				generation = "unknown"
+			}
+			mismatchedGenerations[generation]++
 		}
+	}
+	if report := c.generationMismatches.observe(time.Now(), expectedGeneration, mismatchedGenerations); report != nil {
+		logger.Warn("runtime readers have not converged on the active generation", "event", "runtime_reader_generation_mismatch", "edge_id", c.id.EdgeID, "expected_generation_id", expectedGeneration, "mismatched_readers", report.total, "loaded_generation_counts", report.counts, "suppressed_heartbeats", report.suppressed)
 	}
 	gateway := c.gatewayStatus()
 	if c.gatewayStatusURL != "" {
@@ -1468,6 +1495,45 @@ func (c *client) heartbeat(sequence uint64) error {
 		payload["runtime_versions"] = versions
 	}
 	return c.request("POST", "/edge/v1/heartbeat", payload, &map[string]any{}, true)
+}
+
+func (tracker *generationMismatchTracker) observe(now time.Time, expected string, counts map[string]int) *generationMismatchReport {
+	if expected == "" || len(counts) == 0 {
+		*tracker = generationMismatchTracker{}
+		return nil
+	}
+	keys := make([]string, 0, len(counts))
+	for generation := range counts {
+		keys = append(keys, generation)
+	}
+	sort.Strings(keys)
+	var signature strings.Builder
+	signature.WriteString(expected)
+	total := 0
+	for _, generation := range keys {
+		count := counts[generation]
+		total += count
+		fmt.Fprintf(&signature, "|%s=%d", generation, count)
+	}
+	if signature.String() != tracker.signature {
+		tracker.signature = signature.String()
+		tracker.since = now
+		tracker.lastLog = time.Time{}
+		tracker.suppressed = 0
+		return nil
+	}
+	if now.Sub(tracker.since) < generationMismatchGrace || (!tracker.lastLog.IsZero() && now.Sub(tracker.lastLog) < generationMismatchLogInterval) {
+		tracker.suppressed++
+		return nil
+	}
+	reportCounts := make(map[string]int, len(counts))
+	for generation, count := range counts {
+		reportCounts[generation] = count
+	}
+	report := &generationMismatchReport{counts: reportCounts, total: total, suppressed: tracker.suppressed}
+	tracker.lastLog = now
+	tracker.suppressed = 0
+	return report
 }
 
 func (c *client) gatewayStatus() map[string]any {
