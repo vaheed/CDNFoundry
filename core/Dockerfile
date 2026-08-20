@@ -10,7 +10,15 @@ WORKDIR /app
 COPY --from=composer:2@sha256:629d4ef35e75349d452851637d37a40ac33a09d6ac010139020603d79713d9bf /usr/bin/composer /usr/bin/composer
 COPY composer.json composer.lock ./
 RUN --mount=type=cache,target=/tmp/composer-cache \
-    COMPOSER_CACHE_DIR=/tmp/composer-cache COMPOSER_MAX_PARALLEL_HTTP=4 COMPOSER_IPRESOLVE=4 composer install --no-dev --no-interaction --no-progress --prefer-dist --no-scripts --classmap-authoritative
+    set -eu; \
+    for attempt in 1 2 3 4 5; do \
+        if COMPOSER_CACHE_DIR=/tmp/composer-cache COMPOSER_MAX_PARALLEL_HTTP=4 COMPOSER_IPRESOLVE=4 \
+            composer install --no-dev --no-interaction --no-progress --prefer-install=auto --no-scripts --classmap-authoritative; then \
+            exit 0; \
+        fi; \
+        if [ "${attempt}" -eq 5 ]; then exit 1; fi; \
+        sleep $((attempt * 5)); \
+    done
 
 FROM node:26-alpine@sha256:233761595746769ebfdb6090f44fc7cdf818ae0ce62d2b37e0367723b9823e36 AS frontend-assets
 
@@ -50,7 +58,15 @@ CMD ["php-fpm", "-F"]
 
 FROM php-base AS development
 RUN --mount=type=cache,target=/tmp/composer-cache \
-    COMPOSER_CACHE_DIR=/tmp/composer-cache COMPOSER_MAX_PARALLEL_HTTP=4 COMPOSER_IPRESOLVE=4 composer install --no-interaction --no-progress --prefer-dist
+    set -eu; \
+    for attempt in 1 2 3 4 5; do \
+        if COMPOSER_CACHE_DIR=/tmp/composer-cache COMPOSER_MAX_PARALLEL_HTTP=4 COMPOSER_IPRESOLVE=4 \
+            composer install --no-interaction --no-progress --prefer-install=auto; then \
+            exit 0; \
+        fi; \
+        if [ "${attempt}" -eq 5 ]; then exit 1; fi; \
+        sleep $((attempt * 5)); \
+    done
 RUN mv /app/vendor /opt/cdnf-vendor
 
 FROM php-base AS production

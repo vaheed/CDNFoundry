@@ -41,7 +41,18 @@ jobs:
           cache: npm
           cache-dependency-path: core/package-lock.json
       - name: Install PHP dependencies
-        run: composer install --no-interaction --no-progress --prefer-dist
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if composer install --no-interaction --no-progress --prefer-install=auto; then
+              exit 0
+            fi
+            if (( attempt == 5 )); then
+              exit 1
+            fi
+            sleep $((attempt * 5))
+          done
       - name: Validate PHP dependency contract and advisories
         run: composer validate --strict && composer audit --locked --no-interaction
       - name: Install frontend dependencies
@@ -337,6 +348,17 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Initialize release evidence
+        env:
+          RELEASE: ${{ github.sha }}
+          RELEASE_REF_NAME: ${{ github.ref_name }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-evidence
+          printf 'release=%s\nref=%s\nworkflow_run_id=%s\nstatus=started\n' \
+            "${RELEASE}" "${RELEASE_REF_NAME}" "${WORKFLOW_RUN_ID}" \
+            > release-evidence/build-context.txt
       - name: Build commit-addressed images
         env:
           RELEASE: ${{ github.sha }}
