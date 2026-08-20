@@ -33,8 +33,12 @@ class TelemetryBrowserExportTest extends TestCase
             'status' => 'finalized',
         ]);
 
-        $domainUrl = route('app.analytics.usage.csv', $domain, false);
-        $adminUrl = route('admin.telemetry.usage.csv', [], false);
+        $range = http_build_query([
+            'from' => '2026-07-20T00:00:00Z',
+            'to' => '2026-07-21T00:00:00Z',
+        ]);
+        $domainUrl = route('app.analytics.usage.csv', $domain, false).'?'.$range;
+        $adminUrl = route('admin.telemetry.usage.csv', [], false).'?'.$range;
         $this->get($domainUrl)->assertRedirect('/');
         $this->actingAs($stranger)->get($domainUrl)->assertForbidden();
         $domainResponse = $this->actingAs($user)->get($domainUrl)->assertOk()
