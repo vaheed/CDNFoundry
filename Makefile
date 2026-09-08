@@ -13,6 +13,7 @@ supply-chain-check:
 	python3 scripts/supply-chain-policy.py
 
 dev-assets:
+	install -d -m 0755 ./core/public/build
 	docker build --target frontend-assets-export --output type=local,dest=./core/public/build ./core
 
 dev-control-up: dev-assets

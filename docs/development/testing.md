@@ -30,6 +30,12 @@ Laravel tests must use `APP_ENV=testing`, `DB_CONNECTION=sqlite`, and
 persistent development PostgreSQL volume.
 :::
 
+A fresh `make dev-assets` creates `core/public/build` with mode `0755` before
+exporting assets, so the non-root PHP worker can read the Vite manifest. The
+same preparation runs through `make dev-test` and the development startup
+targets. Application environment setup remains required; copy the documented
+example configuration before first startup.
+
 ## Laravel tests
 
 Use only:
