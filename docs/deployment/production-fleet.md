@@ -221,6 +221,24 @@ For an existing installation, use `adopt-existing` with the existing `.env.prod`
 
 Password rotation is staged. `--phase prepare` creates a pending credential while the active one stays unchanged. The rendered `reconcile-pdns-password.sh` changes only the selected DNS host's local PostgreSQL role, rendered PowerDNS configuration, and local environment, then recreates and health-checks `pdns-auth`. `--phase commit` makes the pending credential active in protected fleet state. `--phase abort` removes an unreconciled pending value.
 
+Run the generated reconciliation script as root (`sudo ./reconcile-pdns-password.sh`).
+It locks out concurrent rotations, validates and stages both configuration files
+before changing PostgreSQL, and retains a private `.env.prod.before-pdns-rotation`
+backup. PowerDNS configuration remains `root:82`, mode `0640`; the generated
+service grants its non-root process supplementary group `82`.
+Rotation recreates only `pdns-auth` with `--no-deps`; the database container and
+its existing volume stay in place even though `.env.prod` changes.
+
+If interrupted after the database password changes, preserve the pending file
+and rerun the same command. It accepts the already-applied pending credential
+and repairs both consumers before recreating PowerDNS. If activation fails,
+repair service health and retry with that same pending file. Do not abort or
+restore an old bundle after the credential has been applied: that can leave
+database and application passwords inconsistent. Commit only after PowerDNS is
+healthy, then render from the committed Fleet state. Keep the before-rotation
+backup protected until recovery is verified; archive it outside the next bundle
+before starting another rotation. No PostgreSQL volume is deleted.
+
 ## Geo-routing policy
 
 The generated policy records this decision pipeline:

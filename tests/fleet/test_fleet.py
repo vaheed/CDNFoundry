@@ -380,7 +380,7 @@ def test_monitoring_files_are_readable_by_non_root_consumers(
     for name in ("control", "node", "dns", "edge", "log"):
         assert stat.S_IMODE((bundle / f"generated/prometheus-{name}-targets.yml").stat().st_mode) == 0o644
     start = (bundle / "start.sh").read_text(encoding="utf-8")
-    assert 'chmod -R a+rX "$runtime_path"' in start
+    assert "! -path 'docker/pdns/pdns.conf' -exec chmod a+r" in start
 
 
 def test_control_start_restricts_identity_ca_key_for_php_worker(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
@@ -622,9 +622,11 @@ def test_pdns_rotation_is_prepared_reconciled_and_committed(store: FleetState, s
     assert (bundle / "secrets/pdns-db-password.next").read_text(encoding="utf-8") == pending.read_text(encoding="utf-8")
     assert env_values(bundle / ".env.prod")["PDNS_DB_PASSWORD"] == current
     reconcile = (bundle / "reconcile-pdns-password.sh").read_text(encoding="utf-8")
-    assert 'replace_setting(Path("docker/pdns/pdns.conf"), "gpgsql-password=")' in reconcile
+    implementation = (bundle / "reconcile-pdns-password.py").read_text(encoding="utf-8")
+    assert 'exec python3 ./reconcile-pdns-password.py' in reconcile
+    assert 'setting(config, "gpgsql-password=", pending)' in implementation
     assert 'python3 - "$next_password"' not in reconcile
-    assert "--force-recreate --wait --wait-timeout 180 pdns-auth" in reconcile
+    assert '"--force-recreate", "--wait", "--wait-timeout", "180", "pdns-auth"' in implementation
 
     next_value = pending.read_text(encoding="utf-8").strip()
     store.commit_secret_rotation("pdns-db-password", node="dns-rotate")

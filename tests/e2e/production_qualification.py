@@ -42,6 +42,8 @@ class Result:
 
 
 CHECKS = (
+    Check("fleet-pdns", "Generated PowerDNS credential permissions, rotation and interrupted-rotation recovery",
+          ("python3", "tests/e2e/fleet_pdns.py"), "agent"),
     Check("production-observability", "Generated production bundle, authenticated metrics, discovery, and Grafana datasources",
           ("python3", "tests/e2e/production_observability.py", "--build-images"), "agent"),
     Check("contracts", "Compose, production overrides, OpenAPI, and documentation contracts",

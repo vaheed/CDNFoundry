@@ -131,6 +131,8 @@ class Renderer:
             pdns_env.pop("PDNS_gpgsql_host", None)
             pdns_env.pop("PDNS_gpgsql_dbname", None)
             pdns_env.pop("PDNS_gpgsql_user", None)
+            # Read restricted credentials without changing the image service user.
+            services["pdns-auth"].setdefault("group_add", []).append("82")
         if node["role"] == "control" and self._uses_remote_control_db(node):
             # External PostgreSQL is selected with DB_URL or a DB_HOST other than the
             # Compose service name. Remove the embedded database and every dependency
@@ -501,6 +503,11 @@ class Renderer:
                     0o600,
                 )
                 atomic_write(
+                    destination / "reconcile-pdns-password.py",
+                    Path(__file__).with_name("pdns_rotation.py").read_text(encoding="utf-8"),
+                    0o600,
+                )
+                atomic_write(
                     destination / "reconcile-pdns-password.sh",
                     self._pdns_reconciliation_script(),
                     0o700,
@@ -532,65 +539,11 @@ class Renderer:
         atomic_write(path, "\n".join(lines) + "\n", 0o600)
 
     def _pdns_reconciliation_script(self) -> str:
-        return r'''#!/usr/bin/env sh
+        return '''#!/usr/bin/env sh
 set -eu
 umask 077
-
 cd "$(dirname "$0")"
-test -f .env.prod
-test -f secrets/pdns-db-password.next
-
-# The generated env file is shell-compatible and contains the currently active password.
-set -a
-. ./.env.prod
-set +a
-next_password=$(cat secrets/pdns-db-password.next)
-test -n "$PDNS_DB_PASSWORD"
-test -n "$next_password"
-export NEXT_PDNS_DB_PASSWORD="$next_password"
-
-cp -p .env.prod .env.prod.before-pdns-rotation
-chmod 600 .env.prod.before-pdns-rotation
-
-docker compose --env-file .env.prod exec -T \
-  -e PGPASSWORD="$PDNS_DB_PASSWORD" \
-  -e NEXT_PDNS_DB_PASSWORD="$next_password" \
-  pdns-db sh -eu -c '
-    psql -v ON_ERROR_STOP=1 \
-      -U "${POSTGRES_USER:-pdns}" \
-      -d "${POSTGRES_DB:-pdns}" \
-      -v next_password="$NEXT_PDNS_DB_PASSWORD" \
-      -c "ALTER ROLE pdns PASSWORD :'"'"'next_password'"'"';"
-  '
-
-python3 - <<'PY'
-import os
-from pathlib import Path
-
-value = os.environ["NEXT_PDNS_DB_PASSWORD"]
-
-def replace_setting(path: Path, prefix: str) -> None:
-    tmp = path.with_name(path.name + ".next")
-    lines = path.read_text(encoding="utf-8").splitlines()
-    matches = [index for index, line in enumerate(lines) if line.startswith(prefix)]
-    if len(matches) != 1:
-        raise SystemExit(f"{path} must contain exactly one {prefix[:-1]} setting")
-    lines[matches[0]] = prefix + value
-    with tmp.open("w", encoding="utf-8", newline="\n") as handle:
-        handle.write("\n".join(lines) + "\n")
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.chmod(tmp, 0o600)
-    os.replace(tmp, path)
-
-replace_setting(Path(".env.prod"), "PDNS_DB_PASSWORD=")
-replace_setting(Path("docker/pdns/pdns.conf"), "gpgsql-password=")
-PY
-
-docker compose --env-file .env.prod config --quiet
-docker compose --env-file .env.prod up -d --force-recreate --wait --wait-timeout 180 pdns-auth
-printf '%s\n' 'Local PostgreSQL, PowerDNS configuration, and .env.prod now use the pending password.'
-printf '%s\n' 'On the control plane, commit the rotation and rerender this node to make protected fleet state authoritative.'
+exec python3 ./reconcile-pdns-password.py
 '''
 
     def _prometheus_targets(self, state: dict[str, Any], monitoring_node: dict[str, Any]) -> str:
@@ -730,7 +683,7 @@ This bundle intentionally contains only files and credentials needed by this nod
 
 ## Requirements
 
-Docker Engine, Docker Compose v2, accurate system time, CA certificates, and sufficient disk for stateful volumes. Keep the directory mode `0700` and `.env.prod`, private keys, and secret files mode `0600`. On control nodes, `start.sh` restricts the edge identity CA key to mode `0640`, owner `root`, and numeric group `82` so only the PHP worker can read it.
+Docker Engine, Docker Compose v2, Python 3, accurate system time, CA certificates, and sufficient disk for stateful volumes. Keep the directory mode `0700` and `.env.prod`, private keys, and secret files mode `0600`. Run activation as root. On control nodes, `start.sh` restricts the edge identity CA key to mode `0640`, owner `root`, and numeric group `82` for the PHP worker. On DNS nodes it applies the same ownership and mode to `docker/pdns/pdns.conf`; the generated PowerDNS service receives group `82`. Other users must not read these credentials. Pending password rotations include a Python implementation invoked by `sudo ./reconcile-pdns-password.sh`; preserve its pending file and retry after an interruption before committing Fleet state.
 
 ## Validate and start
 
@@ -819,6 +772,15 @@ docker compose --env-file .env.prod --profile '*' ps
 
     def _validate_script(self, node: dict[str, Any], compose: dict[str, Any]) -> str:
         identity_key_validation = ""
+        pdns_validation = ""
+        if node["role"] in {"dns", "dns-edge"}:
+            pdns_validation = """pdns_mode="$(stat -c '%a' docker/pdns/pdns.conf)"
+case "$pdns_mode" in
+    600) ;;
+    640) test "$(stat -c '%u:%g' docker/pdns/pdns.conf)" = "0:82" ;;
+    *) echo "PowerDNS credentials must be transfer-safe mode 600 or activated as root:82 mode 640; rerun start.sh as root." >&2; exit 1 ;;
+esac
+"""
         if node["role"] == "control":
             identity_key_validation = """identity_key_mode="$(stat -c '%a' pki/edge-identity-ca.key)"
 case "$identity_key_mode" in
@@ -854,7 +816,7 @@ set -eu
 umask 077
 test "$(stat -c '%a' .env.prod)" = 600
 test "$(stat -c '%a' pki/node.key)" = 600
-{identity_key_validation}{metrics_validation}docker compose --env-file .env.prod config --quiet
+{identity_key_validation}{metrics_validation}{pdns_validation}docker compose --env-file .env.prod config --quiet
 {caddy_validation}
 openssl verify -CAfile pki/edge-server-ca.crt pki/node.crt
 """
@@ -883,6 +845,14 @@ openssl verify -CAfile pki/edge-server-ca.crt pki/node.crt
 # Compose up command below or start that profile manually.
 """
         key_permissions = ""
+        if node["role"] in {"dns", "dns-edge"}:
+            key_permissions = """if [ "$(id -u)" != "0" ]; then
+    echo "DNS activation must run as root to restrict PowerDNS credentials to their container reader group." >&2
+    exit 1
+fi
+chown 0:82 docker/pdns/pdns.conf
+chmod 0640 docker/pdns/pdns.conf
+"""
         if node["role"] == "control":
             key_permissions = """if [ "$(id -u)" != "0" ]; then
     echo "Control activation must run as root so the edge identity CA key can be restricted to the PHP worker group." >&2
@@ -904,10 +874,11 @@ set -eu
 {key_permissions}
 # Restore read/traverse access for non-secret bind-mounted configuration in case
 # transfer or extraction narrowed its permissions. Private material under pki/
-# and secrets/ is handled above.
+# and secrets/, and the credential-bearing pdns.conf, are handled above.
 for runtime_path in docker generated; do
     if [ -e "$runtime_path" ]; then
-        chmod -R a+rX "$runtime_path"
+        find "$runtime_path" -type d -exec chmod a+rx {{}} +
+        find "$runtime_path" -type f ! -path 'docker/pdns/pdns.conf' -exec chmod a+r {{}} +
     fi
 done
 ./validate.sh

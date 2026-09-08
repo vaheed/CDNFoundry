@@ -74,6 +74,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Fleet qualification dependencies
+        run: python3 -m pip install -r tests/fleet/requirements.txt
+      - name: Qualify generated PowerDNS credentials and rotation
+        run: sudo -E python3 tests/e2e/fleet_pdns.py
       - name: Enforce software supply-chain policy
         run: python3 scripts/supply-chain-policy.py
       - name: Validate development topology

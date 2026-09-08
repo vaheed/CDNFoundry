@@ -267,7 +267,7 @@ services:
       retries: 20
 
   pdns-db:
-    image: postgres:18.4-alpine
+    image: postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
     profiles: [dns]
     environment:
       POSTGRES_DB: pdns
@@ -286,7 +286,7 @@ services:
       retries: 20
 
   pdns-auth:
-    image: powerdns/pdns-auth-51:5.1.3
+    image: powerdns/pdns-auth-51:5.1.3@sha256:f976e753a1de8ec62636203ecb12ae5fa3d1055601be167de53f1f673e0abe59
     profiles: [dns]
     volumes:
       - ./docker/pdns/pdns.conf:/etc/powerdns/pdns.conf:ro
