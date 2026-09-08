@@ -2484,8 +2484,8 @@
     },
     {
       "path": "docker/openresty/runtime.lua",
-      "status": "pending",
-      "scope": "Inventory only; no whole-file completion claimed."
+      "status": "partial",
+      "scope": "AUD-033 origin address parsing/CIDR/peer selection traced and qualified with real IPv4/IPv6 HTTP/TLS, explicit exclusions, trusted-proxy/security CIDRs, restart and last-valid runtime-file state. DNS answer-set handling and the rest of this runtime remain under review."
     },
     {
       "path": "docker/openresty/waf.conf",
@@ -3636,6 +3636,11 @@
       "path": "tests/e2e/operational_logging.py",
       "status": "pending",
       "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/origin_destinations.py",
+      "status": "reviewed",
+      "scope": "Complete standalone fixture reviewed and executed against baseline and fixed runtime: 44 local real-network checks, unique resource ownership/cleanup, explicit image identity/current source mounts, required IPv6 and synthetic canary logs. No browser, public traffic or signed-agent activation claim."
     },
     {
       "path": "tests/e2e/origin_failover.py",

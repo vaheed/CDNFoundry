@@ -106,7 +106,11 @@ individual addresses can be blocked through platform settings.
 The private allowlist never overrides an explicit blocked network or address.
 Address exclusions compare IPv6 values regardless of compressed or expanded
 spelling. IPv4-mapped IPv6 origins are rejected, including expanded spellings;
-use a permitted native IPv4 address instead.
+use a permitted native IPv4 address instead. The edge applies these checks to
+parsed IP values before choosing a peer. Native IPv6 origins support HTTP and
+verified HTTPS; TLS SNI remains a DNS hostname. The shared-address range
+`100.64.0.0/10` needs an explicit private-origin allowlist entry, just like other
+supported private destinations.
 
 ## Proxy defaults
 

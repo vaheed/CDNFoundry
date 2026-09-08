@@ -176,7 +176,15 @@ workstream does not replace an earlier product checkpoint.
    and require a fresh test. **Manual status: Not run.**
 2. Exercise primary failure, bounded transition to backup, hold-down, failback,
    both-origin failure, WebSocket policy, forwarding headers, and control-plane
-   outage. Record `X-CDNFoundry-Origin`, request IDs, revisions, and comparison
+   outage. In the same DNS-record form, set **Origin server hostname or IP** to
+   a permitted native IPv6 literal. Select **Scheme → HTTP**, confirm the read-only
+   **Origin port** is `80`, and save. Expect the operation to complete and a
+   request to the proxied hostname to reach the IPv6 origin. Repeat with
+   **Scheme → HTTPS**, confirm **Origin port** is `443`, enter the correct
+   **TLS SNI** hostname and enable **Verify origin TLS**. Expect successful
+   verified TLS; changing **TLS SNI** to a wrong hostname must fail without
+   disabling verification. Use an origin that serves on these standard ports.
+   Record `X-CDNFoundry-Origin`, request IDs, revisions, and comparison
    traffic showing unrelated hosts remain available.
 3. Use **TLS mode** for managed DNS-01 and a valid custom certificate. Exercise
    **Renew managed certificate**, **Reissue managed certificate**, **Upload

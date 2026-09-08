@@ -85,6 +85,23 @@ unverified TLS reporting, and literal/AAAA-resolved IPv6 connections. The
 Go tests skip the required-IPv6 case when no private IPv6 interface is present;
 this qualification command fails if its IPv6 interface is unavailable.
 
+Run `python3 tests/e2e/origin_destinations.py` for the OpenResty address boundary.
+It builds the current edge runtime (or accepts `--image` for an already built
+compatible image), records its immutable local image ID, and mounts the current
+runtime/configuration sources. Two unique disposable networks provide RFC1918,
+ULA and carrier-grade origin addresses; IPv6 is required. The cell has 512 MiB,
+one CPU and 128 processes, with only a random loopback HTTP test port published.
+The real HTTP/TLS canary covers permitted destinations, explicit exclusions,
+expanded/mapped/malformed IPv6, verified TLS and wrong-name rejection, CIDR
+security rules, invalid runtime-file retention and container restart. No
+Laravel/database or signed-agent activation is implied by this fixture. CI runs
+it against the image it just built; the production runner calls it through
+`origin-destinations`.
+
+The cumulative `phase4_runtime.py` fixture resolves its syslog hostname to
+loopback explicitly. It verifies serving with telemetry unavailable and does
+not require a Vector container to exist on its test network.
+
 ## Non-browser real-runtime tests
 
 Start and migrate the persistent development stack, then:

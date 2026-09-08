@@ -629,3 +629,71 @@ qualification **Not run, owner-owned**. Grafana/Loki and third-party image scan
 failures remain release blockers. Full first-party review, starter/multi-host
 recovery, public delegation/IPv6 and a signed release bound to the final source
 remain outstanding. A clean Git worktree does not close those gates.
+
+## OpenResty origin address qualification — 2026-09-08
+
+AUD-033 (**Medium, confirmed runtime defense gap and availability defect**)
+affects `docker/openresty/runtime.lua` address matching and peer selection.
+Expanded IPv6 origins passed textual guards but failed at the balancer with
+`invalid port`: `origin_access` removed the brackets needed by peer selection.
+The real canary established failed HTTP and verified HTTPS to a permitted ULA
+origin. Its TLS-name failure also surfaced as 500 instead of the expected
+bounded origin failure. Separately, the runtime compared excluded IPv6 addresses
+as strings, accepted malformed forms past its guard, and rejected explicitly
+allowlisted carrier-grade addresses despite the control-plane policy.
+
+A directly supplied runtime host of `[::1]` reached the private loopback canary
+on the baseline. This fixture supplies runtime state directly: the API removes
+brackets before validating addresses, and customer mutations do not directly
+write this file. Therefore the result proves a runtime defense gap, not a
+customer-to-private-service exploit through signed artifact delivery. Expanded
+unbracketed loopback/mapped forms returned 500 without reaching the canary. The
+connection-format repair and guard repair must ship together.
+
+The fix uses libc `inet_pton` to compare packed address values and CIDR prefixes,
+rejects invalid/bracketed/scoped addresses at the runtime boundary, retains the
+IPv6 peer brackets after validation, and aligns private/explicit-deny precedence
+with the control plane. Hard exclusions are parsed once per worker. The shared
+CIDR helper also serves trusted-proxy and security-rule matching; real IPv4 and
+IPv6 matching/nonmatching requests are included in the regression corpus. No
+new runtime service, per-domain resource, artifact field or database migration
+is introduced. The Linux image already provides libc and LuaJIT FFI. Reference
+semantics are documented by [Linux inet_pton](https://www.man7.org/linux/man-pages/man3/inet_pton.3.html)
+and [OpenResty peer selection](https://github.com/openresty/lua-resty-core/blob/master/lib/ngx/balancer.md).
+
+`tests/e2e/origin_destinations.py` uses one 512-MiB / one-CPU / 128-process cell,
+two uniquely named private networks and a synthetic HTTP/TLS canary. The image
+is resolved to its local immutable ID; current runtime/config sources are
+mounted explicitly. IPv6 cannot be skipped. The complete baseline corpus at
+`222eefdd` failed **18 of 44 checks** in 39.279 seconds, including the carrier
+allowlist mismatch. It preserves the old runtime SHA and exact fixture SHA in
+local evidence. The rebuilt fixed runtime passed all **44 checks** in 39.133
+seconds, including denied-canary log assertions, trusted TLS/wrong SNI,
+invalid-file last-valid state, and container restart. Image ID:
+`sha256:5064a2ba9ce2fe5496830220d5906c2e8e9ae6292217dd23d7f980af7e4b82ab`.
+A first restart attempt used the old ephemeral Docker host port and failed the
+fixture readiness check; the fixture now reads the new published port after
+restart. This failed attempt is retained and is not counted as a runtime pass.
+
+The fixture runs in CI after image build and as the existing production runner's
+`origin-destinations` gate. CI itself was not run remotely. Operator rollout and
+owner-run IPv6 origin expectations were updated; manual browser status remains
+**Not run**. Runtime mixed DNS-answer handling, public IPv6, signed agent-to-cell
+activation for this corpus and the full production topology remain separate
+open gates. No persistent database, named volume or production deployment was
+changed.
+
+Broader regression qualification initially stopped because the cumulative
+OpenResty fixture assumed an unrelated Vector DNS name existed on its network.
+The fixture now supplies a loopback syslog-host mapping for each test cell;
+actual UDP telemetry delivery remains unavailable and must not stop serving.
+This does not replace Vector/ClickHouse delivery qualification. The isolated
+rerun passed in **164.928 seconds** on project `cdnf-origin-runtime-127f078cc3`,
+private subnet `172.16.250.0/24`, with no application database. It covered the
+existing cumulative cache/compression/TLS/isolation/restart/graceful-shutdown
+checks. Only documentation changed during this run; this is not signed final
+release evidence. Compose/OpenAPI, 19 observability contracts, seven supply-chain
+and eight qualification-tool tests also passed in 48.439 seconds. Documentation
+build/link checks passed 91 pages / 3,398 internal links; the subsequently
+corrected owner steps use the actual form labels and read-only port behavior.
+Full production qualification and manual browser execution remain incomplete.

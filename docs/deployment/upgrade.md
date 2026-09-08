@@ -60,6 +60,22 @@ repairing a failed canary. Rolling back to serial-only authentication restores
 the security defect. The claim migration deliberately refuses destructive
 rollback; use a forward repair and retain claim/tombstone evidence.
 
+## OpenResty origin-address correction
+
+The September origin-address fix changes cell runtime code, not the artifact
+schema or PostgreSQL. Build and qualify the complete edge-runtime image, then
+replace cells through the existing canary rollout. Test native IPv6 HTTP and
+verified HTTPS origins, including wrong-SNI rejection and blocked destinations,
+before advancing. Existing private origins remain subject to explicit allowlists;
+carrier-grade addresses now follow the same allowlist rule as the control plane.
+
+Keep the address parser and IPv6 peer-format change together. Earlier runtime
+code both stripped required peer brackets and matched unsafe IPv6 addresses by
+text. Applying only the connection-format correction would expose gaps in that
+old guard. Reverting the complete fix restores broken IPv6 origin connections
+and the weaker guard. Preserve active artifacts, certificates and cache data;
+this fix needs no customer-domain reload or data migration.
+
 ## Rollout order
 
 For additive migrations and compatible agents:

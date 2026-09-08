@@ -46,6 +46,8 @@ class Result:
 
 
 CHECKS = (
+    Check("origin-destinations", "Isolated OpenResty IP destination safety and required IPv4/IPv6 HTTP/TLS",
+          ("python3", "tests/e2e/origin_destinations.py"), "agent"),
     Check("origin-probes", "Isolated real DNS, HTTP/TLS, destination safety and required IPv6 origin probes",
           ("python3", "tests/e2e/origin_probes.py"), "agent"),
     Check("postgres-edge-tasks", "Isolated PostgreSQL task receipt and aggregate concurrency",

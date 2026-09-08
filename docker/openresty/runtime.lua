@@ -3,7 +3,10 @@ local resolver = require "resty.dns.resolver"
 local balancer = require "ngx.balancer"
 local bit = require "bit"
 local ffi = require "ffi"
-ffi.cdef[[int kill(int pid, int sig);]]
+ffi.cdef[[
+int kill(int pid, int sig);
+int inet_pton(int af, const char *src, void *dst);
+]]
 local M = {}
 local state = { hosts = {}, certificates = {}, sequence = 0, generation_id = "bootstrap" }
 local path = os.getenv("EDGE_RUNTIME_FILE") or "/var/lib/cdnfoundry/runtime/active.json"
@@ -37,95 +40,78 @@ local function ipv4_number(ip)
     return tonumber(a)*16777216 + tonumber(b)*65536 + tonumber(c)*256 + tonumber(d)
 end
 
+-- Runtime images are Linux. Parse address values with libc instead of testing
+-- textual IPv6 prefixes; expanded, mixed and compressed forms must agree.
+local function packed_address(address)
+    if type(address) ~= "string" or #address > 45 or address:find("%z") then return nil end
+    local ipv6 = address:find(":", 1, true) ~= nil
+    local bytes = ffi.new("unsigned char[16]")
+    if ffi.C.inet_pton(ipv6 and 10 or 2, address, bytes) ~= 1 then return nil end
+    return ffi.string(bytes, ipv6 and 16 or 4)
+end
+
+local function network_parts(cidr)
+    if type(cidr) ~= "string" then return nil end
+    local address, bits = cidr:match("^([^/]+)/(%d+)$")
+    local packed = packed_address(address or cidr)
+    if not packed then return nil end
+    bits = bits and tonumber(bits) or #packed * 8
+    if bits < 0 or bits > #packed * 8 then return nil end
+    return packed, bits
+end
+
+local function matches_prefix(address, network, bits)
+    if not address or not network or #address ~= #network then return false end
+    local whole, remainder = math.floor(bits / 8), bits % 8
+    if address:sub(1, whole) ~= network:sub(1, whole) then return false end
+    if remainder == 0 then return true end
+    local mask = bit.band(0xff, bit.lshift(0xff, 8 - remainder))
+    return bit.band(address:byte(whole + 1), mask) == bit.band(network:byte(whole + 1), mask)
+end
+
 local function allowed(ip, networks)
-    local value = ipv4_number(ip)
+    local address = packed_address(ip)
+    if not address then return false end
     for _, cidr in ipairs(networks or {}) do
-        local network, bits = cidr:match("^([^/]+)/(%d+)$")
-        local base = network and ipv4_number(network)
-        bits = tonumber(bits)
-        if value and base and bits and bits >= 0 and bits <= 32 then
-            local size = 2 ^ (32 - bits)
-            if math.floor(value / size) == math.floor(base / size) then return true end
-        end
-        if not value and network and bits and bits >= 0 and bits <= 128 then
-            local function ipv6_bytes(address)
-                address = address:lower():gsub("^%[", ""):gsub("%]$", "")
-                if address:find("%.") then return nil end
-                local left, right = address:match("^(.-)::(.-)$")
-                local groups = {}
-                local function append(part)
-                    if part == "" then return true end
-                    for group in part:gmatch("[^:]+") do
-                        local number = tonumber(group, 16)
-                        if not number or number > 65535 then return false end
-                        groups[#groups + 1] = number
-                    end
-                    return true
-                end
-                if left then
-                    if not append(left) then return nil end
-                    local left_count = #groups
-                    local tail = {}
-                    for group in right:gmatch("[^:]+") do
-                        local number = tonumber(group, 16)
-                        if not number or number > 65535 then return nil end
-                        tail[#tail + 1] = number
-                    end
-                    local missing = 8 - left_count - #tail
-                    if missing < 1 then return nil end
-                    for _ = 1, missing do groups[#groups + 1] = 0 end
-                    for _, number in ipairs(tail) do groups[#groups + 1] = number end
-                elseif not append(address) or #groups ~= 8 then
-                    return nil
-                end
-                if #groups ~= 8 then return nil end
-                local bytes = {}
-                for _, number in ipairs(groups) do
-                    bytes[#bytes + 1] = math.floor(number / 256)
-                    bytes[#bytes + 1] = number % 256
-                end
-                return bytes
-            end
-            local address_bytes, network_bytes = ipv6_bytes(ip), ipv6_bytes(network)
-            if address_bytes and network_bytes then
-                local whole, remainder = math.floor(bits / 8), bits % 8
-                local matches = true
-                for index = 1, whole do
-                    if address_bytes[index] ~= network_bytes[index] then matches = false; break end
-                end
-                if matches and remainder > 0 then
-                    local mask = bit.band(0xff, bit.lshift(0xff, 8 - remainder))
-                    matches = bit.band(address_bytes[whole + 1], mask) == bit.band(network_bytes[whole + 1], mask)
-                end
-                if matches then return true end
-            end
-        end
+        local network, bits = network_parts(cidr)
+        if network and matches_prefix(address, network, bits) then return true end
     end
     return false
 end
 
+local function compile_networks(networks)
+    local compiled = {}
+    for _, cidr in ipairs(networks) do
+        local address, bits = network_parts(cidr)
+        compiled[#compiled + 1] = {address, bits}
+    end
+    return compiled
+end
+
+local hard_origin_networks = compile_networks({
+    "0.0.0.0/8", "127.0.0.0/8", "169.254.0.0/16", "192.0.0.0/24", "192.0.2.0/24", "192.88.99.0/24",
+    "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4",
+    "::/128", "::1/128", "::ffff:0:0/96", "64:ff9b::/96", "64:ff9b:1::/48",
+    "fe80::/10", "fec0::/10", "ff00::/8", "2001:db8::/32",
+})
+local private_origin_networks = compile_networks({
+    "10.0.0.0/8", "100.64.0.0/10", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7",
+})
+
 local function blocked(ip, networks, blocked_networks, denied)
+    local packed = packed_address(ip)
+    if not packed then return true end
     for _, address in ipairs(denied or {}) do
-        if ip == address then return true end
+        if packed == packed_address(address) then return true end
     end
     if allowed(ip, blocked_networks) then return true end
-    if ip:lower():match("^::ffff:") then return true end
-    local a, b, c = ip:match("^(%d+)%.(%d+)%.(%d+)%.")
-    a, b, c = tonumber(a), tonumber(b), tonumber(c)
-    if a == 0 or a == 127 or a == 169 and b == 254 or (a and a >= 224) then return true end
-    if (a == 10 or a == 192 and b == 168 or a == 172 and b and b >= 16 and b <= 31) and not allowed(ip, networks) then return true end
-    if a == 100 and b and b >= 64 and b <= 127 then return true end
-    if a == 192 and (b == 0 or b == 2 or b == 88 and c == 99)
-        or a == 198 and (b == 18 or b == 19 or b == 51 and c == 100)
-        or a == 203 and b == 0 and c == 113 then return true end
-    local lower = ip:lower()
-    local hard_v6 = lower == "::" or lower == "::1" or lower:match("^fe[89ab]") ~= nil
-        or lower:match("^fe[c-f]") ~= nil or lower:match("^ff") ~= nil
-        or lower:match("^64:ff9b:") ~= nil or lower:match("^2001:db8:") ~= nil
-    if hard_v6 then return true end
-    local private_v6 = lower:match("^f[cd]") ~= nil
-    if private_v6 and allowed(ip, networks) then return false end
-    return private_v6
+    for _, network in ipairs(hard_origin_networks) do
+        if matches_prefix(packed, network[1], network[2]) then return true end
+    end
+    for _, network in ipairs(private_origin_networks) do
+        if matches_prefix(packed, network[1], network[2]) then return not allowed(ip, networks) end
+    end
+    return false
 end
 
 local function load()
@@ -686,7 +672,6 @@ function M.origin_access()
     ngx.var.origin_sni = origin.sni or origin.host_header
     ngx.var.origin_connection = ""
     ngx.var.origin_upgrade = ""
-    ngx.var.origin_address = address:gsub("^%[", ""):gsub("%]$", "")
     ngx.var.origin_connect_timeout = tostring(math.min((tonumber(limits.origin_connect_timeout) or 3) * 1000, math.max(100, math.min(10000, tonumber(origin.connect_timeout_ms) or 1000))))
     ngx.var.origin_response_timeout = tostring(math.min((tonumber(limits.origin_read_timeout) or 30) * 1000, math.max(500, math.min(60000, tonumber(origin.response_timeout_ms) or 5000))))
     local retry_limit = emergency.disable_origin_retries and 0 or (tonumber(limits.origin_retry_limit) or 0)
