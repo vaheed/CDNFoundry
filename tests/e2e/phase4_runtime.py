@@ -252,7 +252,10 @@ def main() -> None:
         dedicated_runtime = pathlib.Path(directory) / "dedicated-test.json"
         dedicated_runtime.write_text(json.dumps(state({"dedicated.example": "dedicated-origin.example"}, 1), separators=(",", ":")))
         dedicated_runtime.chmod(0o644)
-        run("docker", "run", "-d", "--name", NAME, "--network", EDGE_NETWORK,
+        # These cells exercise serving with telemetry unavailable. Resolve the
+        # configured syslog hostname locally so an unrelated Vector container is
+        # not a hidden prerequisite; failed UDP delivery must not stop serving.
+        run("docker", "run", "-d", "--name", NAME, "--network", EDGE_NETWORK, "--add-host", "vector:127.0.0.1",
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/shared-default.json",
             "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
             "-v", f"{ROOT / 'docker/nginx/openresty.conf'}:/usr/local/openresty/nginx/conf/nginx.conf:ro",
@@ -266,7 +269,7 @@ def main() -> None:
             "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
             "-v", f"{cache_directory}:/var/cache/nginx",
             "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro", "cdnfoundry/edge-runtime:test")
-        run("docker", "run", "-d", "--rm", "--name", QUARANTINE_NAME, "--network", EDGE_NETWORK, "--tmpfs", "/var/cache/nginx:rw,size=64m",
+        run("docker", "run", "-d", "--rm", "--name", QUARANTINE_NAME, "--network", EDGE_NETWORK, "--add-host", "vector:127.0.0.1", "--tmpfs", "/var/cache/nginx:rw,size=64m",
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/quarantine-default.json",
             "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
             "-v", f"{ROOT / 'docker/nginx/openresty.conf'}:/usr/local/openresty/nginx/conf/nginx.conf:ro",
@@ -282,7 +285,7 @@ def main() -> None:
         run("docker", "run", "-d", "--rm", "--name", AGENT_NAME, "--network", EDGE_NETWORK,
             "-e", "EDGE_CONTROL_URL=https://127.0.0.1:1", "-e", "EDGE_STATE_DIR=/state",
             "-v", f"{agent_state}:/state", "cdnfoundry/edge-agent:test")
-        run("docker", "run", "-d", "--rm", "--name", DEDICATED_NAME, "--network", EDGE_NETWORK, "--tmpfs", "/var/cache/nginx:rw,size=64m",
+        run("docker", "run", "-d", "--rm", "--name", DEDICATED_NAME, "--network", EDGE_NETWORK, "--add-host", "vector:127.0.0.1", "--tmpfs", "/var/cache/nginx:rw,size=64m",
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/dedicated-test.json", "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
             "-v", f"{ROOT / 'docker/nginx/openresty.conf'}:/usr/local/openresty/nginx/conf/nginx.conf:ro",
             "-v", f"{ROOT / 'docker/nginx/edge-runtime.conf'}:/etc/nginx/conf.d/default.conf:ro",
