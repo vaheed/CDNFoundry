@@ -57,6 +57,8 @@ class DomainLifecycleController extends Controller
 
         $operation = DB::transaction(function () use ($request, $domain): Operation {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
+            Gate::authorize('update', $locked);
+            abort_if($locked->lifecycle_state === DomainLifecycleState::Deprovisioning || $locked->nameservers_verified_at === null, 409, 'The domain is no longer eligible for activation.');
             if ($locked->lifecycle_state !== DomainLifecycleState::Active) {
                 $locked->forceFill(['lifecycle_state' => DomainLifecycleState::Active, 'disabled_at' => null, 'revision' => $locked->revision + 1])->save();
                 AuditLog::record($request->user(), 'domain.activated', $locked, ['revision' => $locked->revision], $request->ip());

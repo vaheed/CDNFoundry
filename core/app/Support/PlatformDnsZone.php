@@ -31,8 +31,10 @@ final class PlatformDnsZone
             $hostname = rtrim($nameserver['hostname'], '.').'.';
             $rows->push(['name' => $zone, 'type' => 'NS', 'ttl' => $settings->default_ttl, 'content' => $hostname]);
             $rows->push(['name' => $hostname, 'type' => 'A', 'ttl' => $settings->default_ttl, 'content' => $nameserver['ipv4']]);
+            $rows->push(['name' => '*.'.$hostname, 'type' => 'A', 'ttl' => $settings->default_ttl, 'content' => $nameserver['ipv4']]);
             if (filled($nameserver['ipv6'] ?? null)) {
                 $rows->push(['name' => $hostname, 'type' => 'AAAA', 'ttl' => $settings->default_ttl, 'content' => $nameserver['ipv6']]);
+                $rows->push(['name' => '*.'.$hostname, 'type' => 'AAAA', 'ttl' => $settings->default_ttl, 'content' => $nameserver['ipv6']]);
             }
         }
 

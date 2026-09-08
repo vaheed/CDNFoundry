@@ -4,12 +4,12 @@ namespace App\Jobs;
 
 use App\Models\Domain;
 use App\Models\Operation;
-use App\Models\PlatformDnsSetting;
 use App\Support\DomainNameserverVerification;
 use App\Support\NameserverResolver;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Gate;
 use RuntimeException;
 use Throwable;
 
@@ -18,6 +18,8 @@ class VerifyDomainNameservers implements ShouldBeUnique, ShouldQueue
     use Queueable;
 
     public int $tries = 3;
+
+    public int $timeout = 60;
 
     public int $uniqueFor = 300;
 
@@ -30,22 +32,35 @@ class VerifyDomainNameservers implements ShouldBeUnique, ShouldQueue
     {
         $verification ??= app(DomainNameserverVerification::class);
         $operation = $this->operation();
+        if ($operation === null) {
+            return;
+        }
         $operation?->update(['status' => 'running', 'started_at' => now(), 'attempts' => ($operation->attempts ?? 0) + 1]);
         try {
             $domain = Domain::query()->findOrFail($this->domainId);
-            if ($domain->lifecycle_state->value === 'deprovisioning') {
-                throw new RuntimeException('A deprovisioning domain cannot be verified.');
+            if (! in_array($domain->lifecycle_state->value, ['pending_verification', 'active'], true)) {
+                throw new RuntimeException('Only pending or active domains can be verified.');
             }
-            $settings = PlatformDnsSetting::query()->find(1) ?? throw new RuntimeException('Platform nameservers are not configured.');
-            $expected = collect($settings->nameservers)->pluck('hostname')->map(fn (string $name): string => mb_strtolower(rtrim($name, '.')))->unique()->sort()->values()->all();
+            $actor = $operation->actor()->first();
+            if ($actor === null || Gate::forUser($actor)->denies('update', $domain)) {
+                throw new RuntimeException('The applicant assignment is no longer authorized.');
+            }
+            if ($domain->nameservers_verified_at === null && ($domain->claim_expires_at?->isPast()
+                || ($operation->input['delegation_token'] ?? null) !== $domain->delegation_token)) {
+                throw new RuntimeException('The delegation claim expired or changed. Request verification again.');
+            }
+            $expected = $domain->assignedNameservers();
+            if (count($expected) < 2) {
+                throw new RuntimeException('Request nameserver verification again to initialize this delegation assignment.');
+            }
             $observed = $resolver->resolve($domain->name);
             if ($observed !== $expected) {
-                throw new RuntimeException('Observed nameservers do not exactly match the required platform nameservers.');
+                throw new RuntimeException('Observed nameservers do not exactly match the nameservers assigned to this claim.');
             }
-            $actor = $operation?->actor()->first();
             $activated = $verification->complete($domain, $actor, $operation, $observed);
         } catch (Throwable $exception) {
-            $operation?->update(['status' => 'failed', 'error' => mb_substr($exception->getMessage(), 0, 4000), 'finished_at' => now()]);
+            Operation::query()->whereKey($operation->id)->whereIn('status', ['pending', 'running'])
+                ->update(['status' => 'failed', 'error' => mb_substr($exception->getMessage(), 0, 4000), 'finished_at' => now()]);
             throw $exception;
         }
         if ($activated) {

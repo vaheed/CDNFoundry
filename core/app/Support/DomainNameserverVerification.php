@@ -15,6 +15,7 @@ use App\Models\EdgeArtifact;
 use App\Models\Operation;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use RuntimeException;
 
 class DomainNameserverVerification
@@ -22,10 +23,24 @@ class DomainNameserverVerification
     public function queue(Domain $domain, User $actor, ?string $ipAddress = null, bool $automatic = false): Operation
     {
         return DB::transaction(function () use ($domain, $actor, $ipAddress, $automatic): Operation {
+            $domain = Domain::query()->lockForUpdate()->findOrFail($domain->id);
+            Gate::forUser($actor)->authorize('update', $domain);
+            abort_if($domain->claim_expires_at?->isPast() && $domain->nameservers_verified_at === null, 409, 'This pending claim has expired; contact an administrator for recovery.');
+            $domain->initializeDelegationClaim();
+            abort_unless(in_array($domain->lifecycle_state, [DomainLifecycleState::PendingVerification, DomainLifecycleState::Active], true), 409, 'Only pending or active domains can be verified.');
             $operation = Operation::query()->where('type', 'domain.nameservers_verify')
                 ->whereIn('status', ['pending', 'running'])
                 ->where('input->domain_id', $domain->id)
+                ->lockForUpdate()
                 ->first();
+            if ($operation !== null) {
+                $previousActor = $operation->actor()->first();
+                if ($previousActor === null || Gate::forUser($previousActor)->denies('update', $domain)
+                    || ($domain->nameservers_verified_at === null && ($operation->input['delegation_token'] ?? null) !== $domain->delegation_token)) {
+                    $operation->update(['status' => 'cancelled', 'finished_at' => now(), 'error' => 'The applicant or delegation assignment changed.']);
+                    $operation = null;
+                }
+            }
             $verificationCreated = $operation === null;
 
             if ($operation === null) {
@@ -33,14 +48,14 @@ class DomainNameserverVerification
                     'actor_id' => $actor->getKey(),
                     'type' => 'domain.nameservers_verify',
                     'status' => 'pending',
-                    'input' => ['domain_id' => $domain->id],
+                    'input' => ['domain_id' => $domain->id, 'delegation_token' => $domain->delegation_token],
                 ]);
                 AuditLog::record($actor, 'domain.nameserver_verification_requested', $domain, [
                     'automatic' => $automatic,
                 ], $ipAddress);
             }
 
-            if ($this->zoneIsReady($domain)) {
+            if ($domain->hasManagedAncestor() || $this->zoneIsReady($domain)) {
                 if ($verificationCreated) {
                     VerifyDomainNameservers::dispatch($domain->id)->afterCommit();
                 }
@@ -80,8 +95,31 @@ class DomainNameserverVerification
     ): bool {
         return DB::transaction(function () use ($domain, $actor, $verification, $observedNameservers, $ipAddress, $forced): bool {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
-            if ($locked->lifecycle_state === DomainLifecycleState::Deprovisioning) {
-                throw new RuntimeException('A deprovisioning domain cannot be verified.');
+            if (! in_array($locked->lifecycle_state, [DomainLifecycleState::PendingVerification, DomainLifecycleState::Active], true)) {
+                throw new RuntimeException('Only pending or active domains can be verified.');
+            }
+            $actor = $actor === null ? null : User::query()->lockForUpdate()->find($actor->getKey());
+            if ($actor === null || $actor->isDisabled() || ($forced && ! $actor->isAdmin())) {
+                throw new RuntimeException('Verification requires a currently authorized actor.');
+            }
+            if (! $actor->isAdmin() && $locked->users()->whereKey($actor->id)->lockForUpdate()->first() === null) {
+                throw new RuntimeException('The applicant assignment has been revoked.');
+            }
+            Gate::forUser($actor)->authorize('update', $locked);
+            if ($locked->nameservers_verified_at === null && $locked->claim_expires_at?->isPast()) {
+                throw new RuntimeException('This pending delegation claim has expired.');
+            }
+            if (! $forced) {
+                $verification = $verification === null ? null : Operation::query()->lockForUpdate()->find($verification->id);
+                if ($verification === null || ! in_array($verification->status, ['pending', 'running'], true)
+                    || $verification->actor_id !== $actor->id || (int) ($verification->input['domain_id'] ?? 0) !== $locked->id) {
+                    throw new RuntimeException('The verification operation is no longer authorized.');
+                }
+                if ($locked->nameservers_verified_at === null && ($locked->delegation_token === null
+                    || ($verification->input['delegation_token'] ?? null) !== $locked->delegation_token
+                    || $observedNameservers !== $locked->assignedNameservers())) {
+                    throw new RuntimeException('Delegation does not match the current applicant assignment.');
+                }
             }
             if (! DnsCluster::query()->where('enabled', true)->where('last_health_status', 'healthy')->exists()) {
                 throw new RuntimeException('Enable at least one healthy DNS cluster before verification can activate the domain.');

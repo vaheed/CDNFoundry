@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Enums\UserType;
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;

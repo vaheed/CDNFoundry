@@ -84,8 +84,13 @@ final class PowerDnsZone
             'name' => $domain->name.'.', 'type' => 'SOA', 'ttl' => $settings->soa_minimum_ttl,
             'content' => implode(' ', [rtrim($settings->soa_primary, '.').'.', rtrim($settings->soa_mailbox, '.').'.', $domain->revision, $settings->soa_refresh, $settings->soa_retry, $settings->soa_expire, $settings->soa_minimum_ttl]),
         ]]);
-        foreach ($settings->nameservers as $nameserver) {
-            $rows->push(['name' => $domain->name.'.', 'type' => 'NS', 'ttl' => $settings->default_ttl, 'content' => rtrim($nameserver['hostname'], '.').'.']);
+        $nameservers = $domain->assignedNameservers();
+        // Bootstrap before assignment is limited to SOA/NS and cannot activate.
+        if ($nameservers === []) {
+            $nameservers = collect($settings->nameservers)->pluck('hostname')->all();
+        }
+        foreach ($nameservers as $nameserver) {
+            $rows->push(['name' => $domain->name.'.', 'type' => 'NS', 'ttl' => $settings->default_ttl, 'content' => rtrim($nameserver, '.').'.']);
         }
 
         return $rows;

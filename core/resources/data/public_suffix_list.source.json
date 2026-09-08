@@ -1,0 +1,7 @@
+{
+  "url": "https://raw.githubusercontent.com/publicsuffix/list/46ae48ceff01716409d78d38c2bbb36489cce68e/public_suffix_list.dat",
+  "commit": "46ae48ceff01716409d78d38c2bbb36489cce68e",
+  "sha256": "00dda6fa84060cca59415b5ba30bbe9d6700deb78d177f59fc83673531e30099",
+  "retrieved_at": "2026-09-05",
+  "license": "MPL-2.0"
+}

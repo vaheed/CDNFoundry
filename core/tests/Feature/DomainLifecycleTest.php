@@ -52,7 +52,7 @@ class DomainLifecycleTest extends TestCase
         {
             public function resolve(string $domain): array
             {
-                return ['ns1.cdnf.test', 'ns2.cdnf.test'];
+                return Domain::query()->where('name', $domain)->firstOrFail()->assignedNameservers();
             }
         };
         (new VerifyDomainNameservers($domain->id))->handle($resolver);
@@ -160,14 +160,15 @@ class DomainLifecycleTest extends TestCase
     {
         Queue::fake();
         $this->platformIdentity();
-        [, $domain] = $this->ownedDomain();
+        [$user, $domain] = $this->ownedDomain();
         DnsCluster::query()->create([...$this->clusterData(), 'enabled' => false]);
-        $operation = Operation::query()->create(['type' => 'domain.nameservers_verify', 'status' => 'pending', 'input' => ['domain_id' => $domain->id]]);
+        $domain->initializeDelegationClaim();
+        $operation = Operation::query()->create(['actor_id' => $user->id, 'type' => 'domain.nameservers_verify', 'status' => 'pending', 'input' => ['domain_id' => $domain->id, 'delegation_token' => $domain->delegation_token]]);
         $resolver = new class extends NameserverResolver
         {
             public function resolve(string $domain): array
             {
-                return ['ns1.cdnf.test', 'ns2.cdnf.test'];
+                return Domain::query()->where('name', $domain)->firstOrFail()->assignedNameservers();
             }
         };
 

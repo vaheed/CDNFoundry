@@ -70,6 +70,8 @@ class DomainResource extends Resource
                     TextEntry::make('lifecycle_state')->label('Lifecycle')->badge(),
                     TextEntry::make('revision')->label('Desired revision'),
                     TextEntry::make('revision_changed_at')->label('Desired revision changed')->dateTime()->placeholder('Unknown'),
+                    TextEntry::make('assigned_nameservers')->label('Assigned nameservers')->state(fn (Domain $record): array => $record->assignedNameservers())->listWithLineBreaks()->copyable()->placeholder('Configure platform DNS, then request verification'),
+                    TextEntry::make('claim_expires_at')->label('Pending claim expires')->dateTime()->placeholder('Previously verified domain'),
                     TextEntry::make('nameservers_verified_at')->label('Nameservers verified')->dateTime()->placeholder('Pending'),
                     TextEntry::make('nameserver_verification_status')->label('Latest verification')
                         ->state(fn (Domain $record): ?string => $record->nameservers_verified_by !== null

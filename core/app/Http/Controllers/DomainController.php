@@ -12,7 +12,6 @@ use App\Models\DnsDeployment;
 use App\Models\Domain;
 use App\Models\EdgeArtifact;
 use App\Models\Operation;
-use App\Support\DomainNameserverVerification;
 use App\Support\PlatformSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -34,21 +33,7 @@ class DomainController extends Controller
 
     public function store(StoreDomainRequest $request): JsonResponse
     {
-        $domain = DB::transaction(function () use ($request): Domain {
-            $domain = Domain::query()->create([
-                'name' => $request->validated('name'),
-                'display_name' => trim((string) $request->input('name')),
-                'lifecycle_state' => DomainLifecycleState::PendingVerification,
-                'revision' => 1,
-            ]);
-            if (! $request->user()->isAdmin()) {
-                $domain->users()->attach($request->user()->getKey());
-            }
-            AuditLog::record($request->user(), 'domain.created', $domain, ['name' => $domain->name], $request->ip());
-            app(DomainNameserverVerification::class)->queue($domain, $request->user(), $request->ip(), automatic: true);
-
-            return $domain;
-        });
+        $domain = Domain::createPendingFor($request->user(), $request->validated('name'), $request->ip());
 
         return DomainResource::make($domain)->response()->setStatusCode(201);
     }
@@ -79,11 +64,15 @@ class DomainController extends Controller
     public function disable(Request $request, Domain $domain): DomainResource
     {
         Gate::authorize('update', $domain);
-        if ($domain->lifecycle_state !== DomainLifecycleState::Deprovisioning && $domain->lifecycle_state !== DomainLifecycleState::Disabled) {
-            $domain->forceFill(['lifecycle_state' => DomainLifecycleState::Disabled, 'disabled_at' => now(), 'revision' => $domain->revision + 1])->save();
-            AuditLog::record($request->user(), 'domain.disabled', $domain, ['revision' => $domain->revision], $request->ip());
-            $this->queueEdgeState($domain, $request);
-        }
+        DB::transaction(function () use ($domain, $request): void {
+            $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
+            Gate::authorize('update', $locked);
+            if (! in_array($locked->lifecycle_state, [DomainLifecycleState::Deprovisioning, DomainLifecycleState::Disabled], true)) {
+                $locked->forceFill(['lifecycle_state' => DomainLifecycleState::Disabled, 'disabled_at' => now(), 'revision' => $locked->revision + 1])->save();
+                AuditLog::record($request->user(), 'domain.disabled', $locked, ['revision' => $locked->revision], $request->ip());
+                $this->queueEdgeState($locked, $request);
+            }
+        });
 
         return DomainResource::make($domain->refresh());
     }

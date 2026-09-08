@@ -11,7 +11,6 @@ use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\ImportDnsZone;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
-use App\Jobs\VerifyDomainNameservers;
 use App\Models\AuditLog;
 use App\Models\DnsCluster;
 use App\Models\DomainEdgePlacement;
@@ -41,6 +40,7 @@ use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -382,12 +382,7 @@ class ViewDomain extends ViewRecord
             Action::make('verifyNameservers')->label('Verify nameservers')->icon('heroicon-o-shield-check')
                 ->visible(fn (): bool => $this->record->nameservers_verified_at === null && $this->record->lifecycle_state !== DomainLifecycleState::Deprovisioning)
                 ->action(function (): void {
-                    $operation = Operation::query()->where('type', 'domain.nameservers_verify')->whereIn('status', ['pending', 'running'])->where('input->domain_id', $this->record->id)->first();
-                    if ($operation === null) {
-                        $operation = Operation::query()->create(['actor_id' => auth()->id(), 'type' => 'domain.nameservers_verify', 'status' => 'pending', 'input' => ['domain_id' => $this->record->id]]);
-                        AuditLog::record(auth()->user(), 'domain.nameserver_verification_requested', $this->record, [], request()->ip());
-                        VerifyDomainNameservers::dispatch($this->record->id)->afterCommit();
-                    }
+                    $operation = app(DomainNameserverVerification::class)->queue($this->record, auth()->user(), request()->ip());
                     Notification::make()->info()->title('Nameserver verification queued')
                         ->body("Operation {$operation->id} checks the public NS delegation. Refresh this page after the worker completes.")->send();
                 }),
@@ -418,6 +413,11 @@ class ViewDomain extends ViewRecord
                     );
                     DB::transaction(function (): void {
                         $domain = $this->record->newQuery()->lockForUpdate()->findOrFail($this->record->id);
+                        Gate::authorize('update', $domain);
+                        abort_if($domain->lifecycle_state === DomainLifecycleState::Deprovisioning || $domain->nameservers_verified_at === null, 409, 'The domain is no longer eligible for activation.');
+                        if ($domain->lifecycle_state === DomainLifecycleState::Active) {
+                            return;
+                        }
                         $domain->forceFill(['lifecycle_state' => DomainLifecycleState::Active, 'disabled_at' => null, 'revision' => $domain->revision + 1])->save();
                         AuditLog::record(auth()->user(), 'domain.activated', $domain, ['revision' => $domain->revision], request()->ip());
                     });
@@ -429,10 +429,14 @@ class ViewDomain extends ViewRecord
                     }
                 }),
             Action::make('disable')->color('danger')->requiresConfirmation()
-                ->visible(fn (): bool => $this->record->lifecycle_state === DomainLifecycleState::Active)
+                ->visible(fn (): bool => in_array($this->record->lifecycle_state, [DomainLifecycleState::PendingVerification, DomainLifecycleState::Active], true))
                 ->action(function (): void {
                     DB::transaction(function (): void {
                         $domain = $this->record->newQuery()->lockForUpdate()->findOrFail($this->record->id);
+                        Gate::authorize('update', $domain);
+                        if (! in_array($domain->lifecycle_state, [DomainLifecycleState::PendingVerification, DomainLifecycleState::Active], true)) {
+                            return;
+                        }
                         $domain->forceFill(['lifecycle_state' => DomainLifecycleState::Disabled, 'disabled_at' => now(), 'revision' => $domain->revision + 1])->save();
                         AuditLog::record(auth()->user(), 'domain.disabled', $domain, ['revision' => $domain->revision], request()->ip());
                     });
