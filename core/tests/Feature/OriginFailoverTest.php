@@ -6,6 +6,7 @@ use App\Jobs\ReconcileEdgeDomain;
 use App\Models\Domain;
 use App\Models\Edge;
 use App\Models\EdgeArtifact;
+use App\Models\EdgePool;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -96,6 +97,10 @@ class OriginFailoverTest extends TestCase
         ];
         $record->update(['origin' => $origin]);
         $domain->update(['lifecycle_state' => 'active', 'revision' => 2]);
+        $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
+        $edge->cells()->create(['slot' => 1, 'edge_pool_id' => $pool->id, 'status' => 'assigned']);
+        $pool->endpoints()->create(['edge_id' => $edge->id, 'ipv4' => '1.0.0.1']);
+        $domain->edgePlacement()->create(['target_pool_id' => $pool->id, 'desired_revision' => 2, 'state' => 'deploying']);
 
         (new ReconcileEdgeDomain($domain->id))->handle();
 

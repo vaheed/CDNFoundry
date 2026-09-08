@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\Domain;
 use App\Models\DomainEdgeCell;
@@ -15,6 +16,7 @@ use App\Models\Operation;
 use App\Models\PlatformDnsSetting;
 use App\Models\User;
 use App\Support\ArtifactSigner;
+use App\Support\EdgeCertificateAuthority;
 use App\Support\PowerDnsZone;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -23,6 +25,57 @@ use Tests\TestCase;
 class EdgeProxyTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_edge_identity_is_a_leaf_and_authentication_binds_the_enrolled_certificate(): void
+    {
+        $edge = Edge::query()->create(['name' => 'certificate-bound-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.19']);
+        $signed = EdgeCertificateAuthority::sign($this->certificateRequest($edge->id), $edge->id);
+        $parsed = openssl_x509_parse($signed['certificate']);
+        $this->assertSame('CA:FALSE', $parsed['extensions']['basicConstraints']);
+        $this->assertSame('Digital Signature', $parsed['extensions']['keyUsage']);
+        $this->assertStringContainsString('TLS Web Client Authentication', $parsed['extensions']['extendedKeyUsage']);
+        $edge->update(['identity_certificate' => $signed['certificate'], 'identity_certificate_serial' => $signed['serial'], 'identity_certificate_expires_at' => now()->addDay()]);
+        $headers = $this->edgeIdentityHeaders($signed['serial']);
+        $this->withHeaders($headers)->getJson('/edge/v1/tasks')->assertOk();
+        $other = EdgeCertificateAuthority::sign($this->certificateRequest($edge->id), $edge->id);
+        // A different valid certificate with the same claimed serial header
+        // must not impersonate the identity selected by that serial.
+        $this->withHeaders([...$headers, 'X-Edge-Certificate-Pem' => rawurlencode($other['certificate'])])
+            ->getJson('/edge/v1/tasks')->assertUnauthorized();
+        $this->withHeaders([...$headers, 'X-Edge-Certificate-Pem' => ''])->getJson('/edge/v1/tasks')->assertUnauthorized();
+    }
+
+    public function test_edge_telemetry_only_changes_domains_assigned_to_that_edge(): void
+    {
+        Queue::fake();
+        $edge = Edge::query()->create(['name' => 'telemetry-scope', 'country_code' => 'IR', 'continent_code' => 'AS']);
+        $signed = EdgeCertificateAuthority::sign($this->certificateRequest($edge->id), $edge->id);
+        $edge->update(['identity_certificate' => $signed['certificate'], 'identity_certificate_serial' => $signed['serial'], 'identity_certificate_expires_at' => now()->addDay()]);
+        $cell = $edge->cells()->create(['slot' => 1, 'status' => 'ready']);
+        $reports = [];
+        foreach (['assigned', 'unassigned'] as $scope) {
+            $domain = Domain::query()->create(['name' => $scope.'.test', 'display_name' => $scope, 'lifecycle_state' => 'active', 'revision' => 1]);
+            $record = $domain->dnsRecords()->create(['name' => $domain->name, 'type' => 'A', 'content' => '8.8.8.8', 'content_hash' => hash('sha256', '8.8.8.8'), 'mode' => 'proxied', 'ttl' => 60]);
+            if ($scope === 'assigned') {
+                DomainEdgeCell::query()->create(['domain_id' => $domain->id, 'edge_id' => $edge->id, 'replica' => 1, 'active_cell_id' => $cell->id, 'desired_revision' => 1, 'state' => 'active']);
+            }
+            $reports[$scope] = [$domain, $record];
+        }
+        $payload = [
+            'agent_version' => '1.2.0', 'listener_ready' => false, 'active_sequence' => 0, 'cells' => [['name' => 'cell-01', 'status' => 'stopped', 'capacity' => ['active_connections' => 0]]],
+            'noisy_domains' => array_map(fn ($pair) => ['domain_id' => $pair[0]->id, 'hostname' => $pair[0]->name, 'reason_code' => 'client_rate_exceeded', 'count' => 1, 'occurred_at' => now()->timestamp], array_values($reports)),
+            'passive_origins' => array_map(fn ($pair) => ['domain' => $pair[0]->name, 'hostname' => $pair[0]->name, 'failure_count' => 1, 'last_status' => 502, 'last_failed_at' => now()->timestamp], array_values($reports)),
+        ];
+        $this->withHeaders($this->edgeIdentityHeaders($signed['serial']))->postJson('/edge/v1/heartbeat', $payload)->assertOk();
+        $this->assertSame('unhealthy', $reports['assigned'][1]->refresh()->origin_health['status']);
+        $this->assertNull($reports['unassigned'][1]->refresh()->origin_health);
+        $this->assertDatabaseHas('security_events', ['domain_id' => $reports['assigned'][0]->id]);
+        $this->assertDatabaseMissing('security_events', ['domain_id' => $reports['unassigned'][0]->id]);
+        $payload['noisy_domains'] = [[...$payload['noisy_domains'][0], 'count' => 50]];
+        $this->postJson('/edge/v1/heartbeat', $payload)->assertOk();
+        $this->assertSame('suspected', $reports['assigned'][0]->refresh()->security_state);
+        Queue::assertPushed(ReconcileEdgeDomain::class);
+    }
 
     public function test_pool_move_publishes_latest_state_when_its_requested_revision_is_superseded(): void
     {
@@ -42,6 +95,10 @@ class EdgeProxyTest extends TestCase
             'name' => 'coalesced-move-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
             'management_ipv4' => '203.0.113.45',
         ]);
+        foreach ([$shared, $quarantine] as $slot => $pool) {
+            $edge->cells()->create(['slot' => $slot + 1, 'edge_pool_id' => $pool->id, 'status' => 'assigned']);
+            $pool->endpoints()->create(['edge_id' => $edge->id, 'ipv4' => $slot === 0 ? '1.0.0.1' : '9.9.9.9']);
+        }
         $admin = User::factory()->admin()->create();
         $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/move", ['pool_id' => $quarantine->id])->assertAccepted();
         $moveRevision = $domain->refresh()->revision;
@@ -78,6 +135,51 @@ class EdgeProxyTest extends TestCase
         ])->assertCreated()->assertJsonPath('data.content', '8.8.8.8')->assertJsonPath('data.origin.health_check', null);
     }
 
+    public function test_returning_to_previous_pool_policy_publishes_a_fresh_sequence(): void
+    {
+        Queue::fake();
+        [$user, $domain] = $this->ownedDomain();
+        $domain->update(['lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $this->record('www', '8.8.8.8'))->assertCreated();
+        $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
+        $edge = Edge::query()->create(['name' => 'repeated-policy', 'country_code' => 'IR', 'continent_code' => 'AS']);
+        $edge->cells()->create(['slot' => 1, 'edge_pool_id' => $pool->id, 'status' => 'assigned']);
+        $pool->endpoints()->create(['edge_id' => $edge->id, 'ipv4' => '1.0.0.1']);
+        $domain->edgePlacement()->create(['target_pool_id' => $pool->id, 'desired_revision' => $domain->refresh()->revision, 'state' => 'deploying']);
+        $artifacts = [];
+        foreach (['standard', 'small', 'standard'] as $profile) {
+            $pool->update(['cache_profile' => $profile, 'revision' => $pool->revision + 1]);
+            (new ReconcileEdgeDomain($domain->id))->handle();
+            // Drain the one coalesced follow-up after inherited policy advances revision.
+            (new ReconcileEdgeDomain($domain->id))->handle();
+            $artifacts[] = $edge->artifacts()->latest('sequence')->firstOrFail();
+        }
+        $this->assertGreaterThan($artifacts[0]->sequence, $artifacts[1]->sequence);
+        $this->assertGreaterThan($artifacts[1]->sequence, $artifacts[2]->sequence);
+        $this->assertGreaterThan($artifacts[1]->revision, $artifacts[2]->revision);
+        $this->assertSame($artifacts[0]->payload['cache'], $artifacts[2]->payload['cache']);
+        $this->assertSame(3, EdgeRevision::query()->where('domain_id', $domain->id)->count());
+        $this->assertSame('standard', $artifacts[2]->payload['cache']['profile_name']);
+        (new ReconcileEdgeDomain($domain->id))->handle();
+        $this->assertSame($artifacts[2]->sequence, $edge->artifacts()->max('sequence'));
+        $this->assertSame(3, $edge->artifacts()->count());
+    }
+
+    public function test_no_cell_assignment_cannot_receive_domain_artifacts(): void
+    {
+        Queue::fake();
+        [$user, $domain] = $this->ownedDomain();
+        $domain->update(['lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $this->record('private-origin', '8.8.8.8'))->assertCreated();
+        $edge = Edge::query()->create(['name' => 'unassigned-artifacts', 'country_code' => 'IR', 'continent_code' => 'AS']);
+        $signed = EdgeCertificateAuthority::sign($this->certificateRequest($edge->id), $edge->id);
+        $edge->update(['identity_certificate' => $signed['certificate'], 'identity_certificate_serial' => $signed['serial'], 'identity_certificate_expires_at' => now()->addDay()]);
+        (new ReconcileEdgeDomain($domain->id))->handle();
+        $this->assertDatabaseMissing('edge_artifacts', ['edge_id' => $edge->id, 'domain_id' => $domain->id]);
+        $this->withHeaders($this->edgeIdentityHeaders($signed['serial']))->getJson('/edge/v1/config/manifest')->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson('/edge/v1/config/full')->assertOk()->assertJsonPath('data.artifact_count', 0);
+    }
+
     public function test_first_edge_registration_backfills_proxy_state_saved_before_the_edge_existed(): void
     {
         [$user, $domain] = $this->ownedDomain();
@@ -91,6 +193,10 @@ class EdgeProxyTest extends TestCase
             'management_ipv4' => '203.0.113.40', 'management_ipv6' => '2001:db8::40',
         ])->assertCreated();
         $edgeId = $created->json('data.id');
+        $edge = Edge::query()->findOrFail($edgeId);
+        $poolId = $domain->edgePlacement()->sole()->target_pool_id;
+        $edge->cells()->orderBy('slot')->firstOrFail()->update(['edge_pool_id' => $poolId, 'status' => 'assigned']);
+        EdgePool::query()->findOrFail($poolId)->endpoints()->create(['edge_id' => $edgeId, 'ipv4' => '1.0.0.1']);
         $this->postJson('/edge/v1/register', [
             'edge_id' => $edgeId,
             'bootstrap_token' => $created->json('data.bootstrap_token'),
@@ -197,6 +303,9 @@ class EdgeProxyTest extends TestCase
 
     public function test_edge_bootstrap_is_one_time_and_artifacts_require_active_identity(): void
     {
+        // Managed issuance has its own real-runtime qualification; keep it
+        // asynchronous while this test exercises edge enrollment and delivery.
+        Queue::fake([EnsureManagedCertificates::class]);
         $admin = User::factory()->create(['type' => 'admin']);
         $created = $this->actingAs($admin)->postJson('/api/admin/edges', ['name' => 'edge-ir-1', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.10', 'management_ipv6' => '2001:db8::10'])
             ->assertCreated();
@@ -237,6 +346,7 @@ class EdgeProxyTest extends TestCase
         $this->assertSame(4, Edge::query()->findOrFail($id)->capacity['gateway']['listeners']);
 
         [$user, $domain] = $this->ownedDomain();
+        $domain->update(['lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         DomainEdgePlacement::query()->create([
             'domain_id' => $domain->id, 'target_pool_id' => $sharedPool->id,
             'desired_revision' => $domain->revision, 'state' => 'deploying',
@@ -441,7 +551,8 @@ class EdgeProxyTest extends TestCase
 
     private function edgeIdentityHeaders(string $serial): array
     {
-        return ['X-Edge-Certificate-Verify' => 'SUCCESS', 'X-Edge-Certificate-Serial' => $serial];
+        return ['X-Edge-Certificate-Verify' => 'SUCCESS', 'X-Edge-Certificate-Serial' => $serial,
+            'X-Edge-Certificate-Pem' => rawurlencode(Edge::query()->where('identity_certificate_serial', $serial)->sole()->identity_certificate)];
     }
 
     private function origin(string $host): array

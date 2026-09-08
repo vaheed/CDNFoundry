@@ -1,0 +1,11 @@
+[ req ]
+distinguished_name = identity_subject
+
+[ identity_subject ]
+
+[ edge_identity ]
+basicConstraints = critical,CA:FALSE
+keyUsage = critical,digitalSignature
+extendedKeyUsage = critical,clientAuth
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always

@@ -9,6 +9,7 @@ use App\Models\EdgeRevision;
 use App\Models\EdgeTask;
 use App\Models\User;
 use App\Support\CachePolicy;
+use App\Support\EdgeCertificateAuthority;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -83,7 +84,13 @@ class CacheApiTest extends TestCase
         ]);
         $purgeId = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/cache/purge", ['type' => 'all'])->assertAccepted()->json('data.id');
         $task = EdgeTask::query()->where('cache_purge_id', $purgeId)->firstOrFail();
-        $headers = ['X-Edge-Certificate-Verify' => 'SUCCESS', 'X-Edge-Certificate-Serial' => 'ABCD1234'];
+        $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
+        $csr = openssl_csr_new(['commonName' => $edge->id], $key);
+        openssl_csr_export($csr, $csrPem);
+        $signed = EdgeCertificateAuthority::sign($csrPem, $edge->id);
+        $edge->update(['identity_certificate_serial' => $signed['serial'], 'identity_certificate' => $signed['certificate']]);
+        $headers = ['X-Edge-Certificate-Verify' => 'SUCCESS', 'X-Edge-Certificate-Serial' => $signed['serial'],
+            'X-Edge-Certificate-Pem' => rawurlencode($signed['certificate'])];
 
         $this->withHeaders($headers)->postJson("/edge/v1/tasks/{$task->id}/result", ['status' => 'failed', 'result' => ['status' => 'failed', 'failure_reason' => 'cache_purge_control_failed']])->assertOk();
         $this->assertSame('pending', $task->refresh()->status);
