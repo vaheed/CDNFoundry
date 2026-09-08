@@ -787,8 +787,7 @@ concurrent deadline corpus. Image:
 `sha256:c037f85dfceabba70609d31ab374386b429e3f981307997abe0e87931a4e3c6d`.
 The final staged check records the exact tree separately in local evidence.
 
-The origin-slot lead is now confirmed below as AUD-036. First-versus-final
-upstream status during retries still requires adversarial runtime evidence.
+The origin-slot and retry-status leads are now confirmed below as AUD-036/037.
 The broader audit remains partial and manual browser qualification remains
 **Not run**.
 
@@ -839,3 +838,59 @@ are local regression evidence, not a signed final-source production release.
 No UI changes are involved; the existing owner
 manual browser checklist is retained and **Not run**. Full topology/recovery,
 production load, image advisories and whole-codebase review remain open gates.
+
+## Origin retry budget and health accounting
+
+AUD-037 (**Medium, confirmed retry amplification and false failover**) affects
+`M.balance`, `M.record_passive_failure`, `M.origin_done` in
+`docker/openresty/runtime.lua` and the shared origin server in
+`docker/nginx/edge-runtime.conf`. The roadmap forbids unbounded retries.
+The precondition is a proxied hostname with retries enabled and an origin
+returning retryable errors. Ordinary customer requests could amplify failing
+origin traffic beyond the configured retry count; recovered requests could
+unnecessarily activate backup. Other client, connection and I/O timeout limits
+remain in force. No tenant-data disclosure was observed.
+
+On parent `eae00912`, the balancer replenished the additional-attempt budget on
+every invocation. A one-retry request made **12** actual origin requests before
+the synthetic canary's safety ceiling returned 200, instead of stopping after
+two attempts. A stricter security limit was exceeded as well. Separately,
+503→200 and 503→503→200 sequences returned 200 to the client but recorded a
+503 passive failure and activated backup. Four of 92 checks failed in 55.329
+seconds in `runtime-retry-baseline`; disabled-retry controls passed. The earlier
+`runtime-retry-before` experiment also exposed a fixture observation limitation:
+the status endpoint's bounded key scan could omit receipts after the large
+destination corpus. Receipt assertions now run before that corpus; missing
+records are not treated as proof of correct health accounting.
+
+The correction grants the retry budget only once per origin request, clamps it
+to the existing supported maximum of two retries and adds a Nginx hard ceiling
+of three total attempts. Passive health and failover read the final upstream
+status, while preserving pre-connect DNS failure handling and single reservation
+release. This follows the documented semantics of
+[OpenResty's additional-attempt API](https://github.com/openresty/lua-resty-core/blob/master/lib/ngx/balancer.md#set_more_tries)
+and [Nginx's multiple upstream statuses](https://nginx.org/en/docs/http/ngx_http_upstream_module.html#var_upstream_status).
+These runtime changes do not alter desired state, authorization, task delivery,
+artifact schemas or database data. Use the existing canary image rollout with
+matching Lua and Nginx configuration; rollback restores the defects.
+
+The rebuilt runtime passed **96 checks** in 63.540 seconds, using image
+`sha256:a40b8584f1cf55491f5241b2bed51feb427b5a7e025ba48812f3d51da2db5f79`.
+Canary logs confirmed exactly one, two or three attempts according to the
+configured/security limit. A POST that received 503 was sent only once; verified
+IPv6 HTTPS passed both recovery and exhaustion cases. Final 200/404 responses
+left primary active with no passive failure; exhausted requests recorded one
+503 receipt and activated backup. All origin reservations returned to zero.
+The previous address, DNS, capacity, last-valid-state and restart checks also
+passed. No application database or browser was used. This does not qualify
+public infrastructure, production load or the whole release.
+
+The broader OpenResty suite passed in **164.430 seconds**, in disposable project
+`cdnf-origin-runtime-039bcd2d1e`. Compose/OpenAPI, 19 observability contracts,
+seven supply-chain fixtures and eight qualification-tool tests passed in
+39.130 seconds. Documentation was edited during these broader checks; the
+runtime/configuration and test sources were unchanged. The current CI and
+production `origin-destinations` gate automatically include the new corpus.
+Manual browser qualification remains **Not run**; existing UI steps are
+unchanged. Full Fleet topology/recovery, production load, release image
+advisories and the rest of the first-party audit remain open.

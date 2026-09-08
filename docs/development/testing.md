@@ -104,6 +104,13 @@ exercise a one-connection origin limit: repeated excess requests must return
 activating a configured backup. Completion must restore capacity to zero and
 admit the next request. No public DNS service
 is queried by the runtime corpus.
+Controlled origin responses qualify zero, one and two retries, stricter security
+limits, exhaustion, recovery to 200/404, verified IPv6 HTTPS and POST replay
+prevention. The canary log must contain the exact expected attempt count;
+successful retries must leave primary active with no passive failure receipt.
+Receipt assertions run before the large corpus fills the status endpoint's
+bounded key scan. A fixture-only twelfth-attempt success safely terminates a
+defective retry loop and fails the expected-count check.
 The real HTTP/TLS canary also covers permitted destinations, explicit exclusions,
 expanded/mapped/malformed IPv6, verified TLS and wrong-name rejection, CIDR
 security rules, invalid runtime-file retention and container restart. No

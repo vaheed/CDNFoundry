@@ -100,6 +100,13 @@ active for the greater of hold-down and failback delay, then requires
 This deliberately permits cells to transition at slightly different times
 according to their own bounded evidence.
 
+Retries use one budget per origin request: at most two additional attempts,
+further reduced by the security retry limit or emergency retry disablement.
+The budget is never renewed after a failed attempt. Passive health and failover
+use the final upstream response; a successful retry does not record an origin
+failure. Exhausting retries records one failed request. The existing Nginx
+restriction on replaying a POST already sent to an origin remains in effect.
+
 `X-CDNFoundry-Origin` reports `primary` or `backup`.
 `X-CDNFoundry-Origin-Transition` reports `none`,
 `primary_failure_threshold`, `backup_failure`, or

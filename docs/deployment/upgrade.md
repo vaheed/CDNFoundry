@@ -103,6 +103,16 @@ then return to normal after it finishes. No database or artifact-schema migratio
 is needed. Reverting restores the limit bypass and inaccurate connection counts;
 retain active artifacts and certificates during rollback.
 
+## Origin retry budgets
+
+The retry-budget correction likewise ships in the edge runtime/config image.
+Qualify configured retries of zero, one and two against a controlled failing
+origin, then a recovering origin. The hard ceiling is three total origin
+attempts; security policy may lower it. A recovered request must not activate
+backup or create a passive failure. No database, agent or artifact-schema
+migration is needed. Rolling back restores retry-budget replenishment and
+first-response health accounting.
+
 ## Rollout order
 
 For additive migrations and compatible agents:

@@ -62,7 +62,8 @@ def main() -> None:
             ca = run('docker', 'run', '--rm', '--entrypoint', 'cat', image, '/etc/ssl/certs/ca-certificates.crt').stdout
             (target / 'ca.crt').write_text(ca + (target / 'tls.crt').read_text())
             (target / 'runtime.json').write_text(json.dumps(fixture.state({}, 1)))
-            (target / 'canary.conf').write_text('''server {
+            (target / 'canary.conf').write_text('''lua_shared_dict origin_canary 1m;
+server {
     listen 18080;
     listen [::]:18080 ipv6only=on;
     listen 18443 ssl;
@@ -72,6 +73,19 @@ def main() -> None:
     access_log /tmp/origin-canary.log combined;
     location = /hold {
         content_by_lua_block { ngx.sleep(3); ngx.print("synthetic-origin-canary") }
+    }
+    location = /retry {
+        content_by_lua_block {
+            local attempt = ngx.shared.origin_canary:incr(ngx.var.arg_case, 1, 0)
+            ngx.sleep(0.01)
+            -- A fixture-only ceiling prevents a defective runtime from looping
+            -- indefinitely. Reaching it fails the exact attempt-count assertion.
+            if attempt <= tonumber(ngx.var.arg_failures) and attempt < 12 then
+                return ngx.exit(503)
+            end
+            if ngx.var.arg_terminal == "404" then return ngx.exit(404) end
+            ngx.print("synthetic-origin-canary")
+        }
     }
     location / { return 200 "synthetic-origin-canary"; }
 }
@@ -125,10 +139,11 @@ def main() -> None:
             assert ipv4 and ipv6, 'Both origin address families are required, never skipped'
             port = int(info['NetworkSettings']['Ports']['8080/tcp'][0]['HostPort'])
 
-            def request(host: str, path: str, headers: dict | None = None, response_headers: dict | None = None) -> tuple[int, str]:
+            def request(host: str, path: str, headers: dict | None = None, response_headers: dict | None = None,
+                        method: str = 'GET') -> tuple[int, str]:
                 client = http.client.HTTPConnection('127.0.0.1', port, timeout=8)
                 try:
-                    client.request('GET', path, headers={'Host': host, **(headers or {})})
+                    client.request(method, path, headers={'Host': host, **(headers or {})})
                     response = client.getresponse()
                     if response_headers is not None:
                         response_headers.update({key.lower(): value for key, value in response.getheaders()})
@@ -238,10 +253,90 @@ def main() -> None:
             capacity_failover['origin']['failover'] = {'failure_threshold': 1, 'recovery_threshold': 2,
                                                      'hold_down_seconds': 5, 'failback_delay_seconds': 5}
             current['hosts']['capacity-failover.example'] = capacity_failover
+            retry_cases = [
+                ('retry-disabled', 0, 2, 1, 502, 1),
+                ('retry-success', 1, 2, 1, 200, 2),
+                ('retry-second-success', 2, 2, 2, 200, 3),
+                ('retry-exhausted', 1, 2, 99, 502, 2),
+                ('retry-limit', 2, 1, 2, 502, 2),
+                ('retry-security-disabled', 2, 0, 1, 502, 1),
+                ('retry-client-status', 1, 2, 1, 404, 2),
+                ('retry-tls-success', 1, 2, 1, 200, 2),
+                ('retry-tls-exhausted', 2, 2, 99, 502, 3),
+                ('retry-post', 2, 2, 1, 502, 1),
+            ]
+            for label, retries, limit, _, _, _ in retry_cases:
+                config = copy.deepcopy(capacity_failover)
+                config['domain'] = label + '.example'
+                config['origin']['retry_count'] = retries
+                config['security']['limits']['origin_retry_limit'] = limit
+                if label.startswith('retry-tls-'):
+                    config['origin'].update(host=ipv6, scheme='https', port=18443, verify_tls=True)
+                current['hosts'][label + '.example'] = config
             candidate = target / 'runtime.next.json'
             candidate.write_text(json.dumps(current))
             candidate.replace(target / 'runtime.json')
             time.sleep(1.2)
+            # Inspect passive receipts before the larger destination corpus
+            # fills the status endpoint's deliberately bounded key scan.
+            def origin_diagnostics() -> dict:
+                return json.loads(run('docker', 'exec', instance, 'wget', '-q', '-O-',
+                    '--header=X-Edge-Status-Token: synthetic-qualification-only',
+                    'http://127.0.0.1:9080/passive-failures').stdout)
+
+            def origin_connections() -> int:
+                return origin_diagnostics()['cell']['capacity']['origin_connections']
+
+            for label, _, _, failures, expected, attempts in retry_cases:
+                method = 'POST' if label == 'retry-post' else 'GET'
+                status, body = request(label + '.example', f'/retry?case={label}&failures={failures}&terminal={expected}', method=method)
+                diagnostics = origin_diagnostics()
+                health = next(item for item in diagnostics['origins'] if item['hostname'] == label + '.example')
+                passive = [item for item in diagnostics['data'] if item['hostname'] == label + '.example']
+                active = diagnostics['cell']['capacity']['origin_connections']
+                results.append({'case': label, 'expected': expected, 'status': status,
+                    'expected_origin_attempts': attempts, 'method': method, 'failover': health, 'passive_failures': passive,
+                    'origin_connections': active,
+                    'passed': status == expected and ('synthetic-origin-canary' in body) == (expected == 200)
+                    and active == 0 and health['active'] == ('primary' if expected < 500 else 'backup')
+                    and (not passive if expected < 500 else len(passive) == 1
+                         and passive[0]['failure_count'] == 1 and passive[0]['last_status'] == 503)})
+
+            # A rejection must not release the slot held by an admitted request.
+            # The canary sleeps in real OpenResty while the other requests finish.
+            for label in ['capacity', 'capacity-failover']:
+                hostname = label + '.example'
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    held = executor.submit(request, hostname, '/hold?case=' + label + '-held')
+                    for _ in range(50):
+                        if origin_connections() == 1:
+                            break
+                        time.sleep(.02)
+                    else:
+                        raise AssertionError('Held request never acquired its origin slot')
+                    for index in range(3):
+                        case = f'{label}-rejected-{index}'
+                        status, body = request(hostname, '/?case=' + case)
+                        diagnostics = origin_diagnostics()
+                        active = diagnostics['cell']['capacity']['origin_connections']
+                        health = next((item for item in diagnostics['origins'] if item['hostname'] == hostname), None)
+                        passive = [item for item in diagnostics['data'] if item['hostname'] == hostname]
+                        results.append({'case': case, 'expected': 503, 'status': status, 'origin_connections': active,
+                            'failover': health, 'passive_failures': passive,
+                            'passed': status == 503 and active == 1 and not held.done() and 'synthetic-origin-canary' not in body
+                            and not passive and (health is None or (health['active'] == 'primary' and health['reason'] == 'none'))})
+                    status, body = held.result()
+                    active = origin_connections()
+                    results.append({'case': label + '-held', 'expected': 200, 'status': status, 'origin_connections': active,
+                        'passed': status == 200 and body == 'synthetic-origin-canary' and active == 0})
+                headers = {}
+                status, body = request(hostname, '/?case=' + label + '-recovered', response_headers=headers)
+                active = origin_connections()
+                results.append({'case': label + '-recovered', 'expected': 200, 'status': status, 'origin_connections': active,
+                    'origin_role': headers.get('x-cdnfoundry-origin'),
+                    'passed': status == 200 and body == 'synthetic-origin-canary' and active == 0
+                    and headers.get('x-cdnfoundry-origin') == 'primary'})
+
             for label, address, expected, overrides in cases:
                 headers = {'X-Forwarded-For': overrides['forwarded']} if 'forwarded' in overrides else {}
                 started = time.monotonic()
@@ -293,49 +388,6 @@ def main() -> None:
                 'http://127.0.0.1:9080/passive-failures').stdout)['cell']['capacity']['origin_connections']
             assert capacity == 0, f'Origin slots leaked after DNS deadlines: {capacity}'
 
-            def origin_diagnostics() -> dict:
-                return json.loads(run('docker', 'exec', instance, 'wget', '-q', '-O-',
-                    '--header=X-Edge-Status-Token: synthetic-qualification-only',
-                    'http://127.0.0.1:9080/passive-failures').stdout)
-
-            def origin_connections() -> int:
-                return origin_diagnostics()['cell']['capacity']['origin_connections']
-
-            # A rejection must not release the slot held by an admitted request.
-            # The canary sleeps in real OpenResty while the other requests finish.
-            for label in ['capacity', 'capacity-failover']:
-                hostname = label + '.example'
-                with ThreadPoolExecutor(max_workers=1) as executor:
-                    held = executor.submit(request, hostname, '/hold?case=' + label + '-held')
-                    for _ in range(50):
-                        if origin_connections() == 1:
-                            break
-                        time.sleep(.02)
-                    else:
-                        raise AssertionError('Held request never acquired its origin slot')
-                    for index in range(3):
-                        case = f'{label}-rejected-{index}'
-                        status, body = request(hostname, '/?case=' + case)
-                        diagnostics = origin_diagnostics()
-                        active = diagnostics['cell']['capacity']['origin_connections']
-                        health = next((item for item in diagnostics['origins'] if item['hostname'] == hostname), None)
-                        passive = [item for item in diagnostics['data'] if item['hostname'] == hostname]
-                        results.append({'case': case, 'expected': 503, 'status': status, 'origin_connections': active,
-                            'failover': health, 'passive_failures': passive,
-                            'passed': status == 503 and active == 1 and not held.done() and 'synthetic-origin-canary' not in body
-                            and not passive and (health is None or (health['active'] == 'primary' and health['reason'] == 'none'))})
-                    status, body = held.result()
-                    active = origin_connections()
-                    results.append({'case': label + '-held', 'expected': 200, 'status': status, 'origin_connections': active,
-                        'passed': status == 200 and body == 'synthetic-origin-canary' and active == 0})
-                headers = {}
-                status, body = request(hostname, '/?case=' + label + '-recovered', response_headers=headers)
-                active = origin_connections()
-                results.append({'case': label + '-recovered', 'expected': 200, 'status': status, 'origin_connections': active,
-                    'origin_role': headers.get('x-cdnfoundry-origin'),
-                    'passed': status == 200 and body == 'synthetic-origin-canary' and active == 0
-                    and headers.get('x-cdnfoundry-origin') == 'primary'})
-
             # A later request must resolve again, even with an existing origin
             # keepalive connection. No cached configuration change is involved.
             dns_records['dns-rebind.origin.test'] = {'A': [ipv4], 'AAAA': ['::1']}
@@ -370,6 +422,10 @@ def main() -> None:
             serving_checkpoint('restart')
             canary_log = run('docker', 'exec', instance, 'cat', '/tmp/origin-canary.log').stdout
             for result in results:
+                if 'expected_origin_attempts' in result:
+                    attempts = canary_log.count(result['method'] + ' /retry?case=' + result['case'] + '&')
+                    result['origin_attempts'] = attempts
+                    result['passed'] = result['passed'] and attempts == result['expected_origin_attempts']
                 if result['expected'] != 200 and '?case=' + result['case'] + ' ' in canary_log:
                     result['passed'] = False
                     result['unexpected_canary_connection'] = True

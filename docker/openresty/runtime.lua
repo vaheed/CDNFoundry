@@ -805,16 +805,24 @@ function M.balance()
     if not ok then error("unable to select origin: " .. (err or "unknown")) end
     local connect_timeout = tonumber(ngx.var.origin_connect_timeout) or 1000
     local response_timeout = tonumber(ngx.var.origin_response_timeout) or 5000
-    local retry_count = tonumber(ngx.var.origin_retry_count) or 0
+    local retry_count = math.max(0, math.min(2, tonumber(ngx.var.origin_retry_count) or 0))
     balancer.set_timeouts(connect_timeout / 1000, response_timeout / 1000, response_timeout / 1000)
     local keepalive_ok, keepalive_err = balancer.enable_keepalive(30, 1000)
     if not keepalive_ok then error("unable to enable origin keepalive: " .. (keepalive_err or "unknown")) end
-    if retry_count > 0 then balancer.set_more_tries(retry_count) end
+    -- The budget excludes the current attempt. Replenishing it on every
+    -- balancer invocation would allow a failing origin to retry indefinitely.
+    if not ngx.ctx.origin_retry_budget_set then
+        ngx.ctx.origin_retry_budget_set = true
+        if retry_count > 0 then
+            local retry_ok, retry_err = balancer.set_more_tries(retry_count)
+            if not retry_ok then error("unable to set origin retry budget: " .. (retry_err or "unknown")) end
+        end
+    end
 end
 
 function M.record_passive_failure()
     if (ngx.var.cdn_origin_connection_key or "") == "" then return end
-    local status = tonumber((ngx.var.upstream_status or ""):match("%d+"))
+    local status = tonumber((ngx.var.upstream_status or ""):match("(%d+)%s*$"))
     if status and status < 500 then
         M.origin_done()
         return
@@ -854,7 +862,7 @@ function M.origin_done()
     dictionary:incr(connection_key, -1, 0)
     dictionary:incr("capacity:origin_connections", -1, 0)
     if not domain then return end
-    local status = tonumber((ngx.var.upstream_status or ""):match("%d+")) or tonumber(ngx.status) or 0
+    local status = tonumber((ngx.var.upstream_status or ""):match("(%d+)%s*$")) or tonumber(ngx.status) or 0
     local failed = ngx.ctx.origin_failed == true or status >= 500 or status == 0
     local failover = (config and config.origin and config.origin.backup and config.origin.failover) or ngx.ctx.origin_failover
     if failover and host ~= "" then
