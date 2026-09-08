@@ -5,7 +5,7 @@ LABEL org.opencontainers.image.source="https://github.com/vaheed/CDNFoundry" \
       org.opencontainers.image.created="${BUILD_DATE}" org.opencontainers.image.description="CDNFoundry bounded MMDB updater" \
       org.opencontainers.image.licenses="Apache-2.0" org.opencontainers.image.documentation="https://vaheed.github.io/CDNFoundry/"
 
-RUN apk add --no-cache bash coreutils curl file gzip libmaxminddb tar unzip
+RUN apk add --no-cache --upgrade bash coreutils curl=8.22.0-r0 libcurl=8.22.0-r0 file gzip=1.14-r3 libmaxminddb tar unzip libcrypto3=3.5.8-r0 libssl3=3.5.8-r0
 
 COPY entrypoint.sh /usr/local/bin/mmdb-updater
 RUN chmod 0755 /usr/local/bin/mmdb-updater

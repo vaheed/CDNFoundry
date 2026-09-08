@@ -107,7 +107,7 @@ x-core: &core
 
 services:
   caddy:
-    image: caddy:2.11.4-alpine
+    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
     profiles: [control]
     environment:
       CONTROL_HOSTNAME: ${CONTROL_HOSTNAME:?CONTROL_HOSTNAME is required}
@@ -131,7 +131,7 @@ services:
     healthcheck: { test: [CMD, wget, -qO-, http://127.0.0.1:2019/healthz], interval: 10s, timeout: 3s, retries: 10 }
 
   dns-api:
-    image: caddy:2.11.4-alpine
+    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
     profiles: [dns]
     environment:
       DNS_API_HOSTNAME: ${DNS_API_HOSTNAME:?DNS_API_HOSTNAME is required}
@@ -149,7 +149,7 @@ services:
     healthcheck: { test: [CMD, wget, -qO-, http://127.0.0.1:2019/healthz], interval: 10s, timeout: 3s, retries: 10 }
 
   telemetry-gateway:
-    image: caddy:2.11.4-alpine
+    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
     profiles: [telemetry]
     environment:
       TELEMETRY_HOSTNAME: ${TELEMETRY_HOSTNAME:?TELEMETRY_HOSTNAME is required}
@@ -238,7 +238,7 @@ services:
     restart: "no"
 
   control-db:
-    image: postgres:18.4-alpine
+    image: postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
     profiles: [control]
     environment:
       POSTGRES_DB: cdnf
@@ -254,7 +254,7 @@ services:
       retries: 20
 
   redis:
-    image: valkey/valkey:9.1.0-alpine
+    image: valkey/valkey:9.1.0-alpine@sha256:c9b77919daeba2c02ad954d0c844cc4e7142069d177b89c5fd771f405daf9e02
     profiles: [control]
     command: [valkey-server, --appendonly, "yes", --requirepass, "${REDIS_PASSWORD}", --maxmemory, 1gb, --maxmemory-policy, noeviction]
     volumes: [redis:/data]
@@ -304,7 +304,7 @@ services:
       retries: 20
 
   pdns-migrate:
-    image: postgres:18.4-alpine
+    image: postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
     profiles: [tools]
     command: [psql, -v, ON_ERROR_STOP=1, -h, pdns-db, -U, pdns, -d, pdns, -f, /migrations/2026_07_17_000001_add_powerdns_metadata_tables.sql]
     environment: { PGPASSWORD: "${PDNS_DB_PASSWORD}" }
@@ -315,7 +315,7 @@ services:
     restart: "no"
 
   dnsdist:
-    image: powerdns/dnsdist-21:2.1.0
+    image: powerdns/dnsdist-21:2.1.0@sha256:2fc7ef0e0009a419e59082e31e2e42614fd0979c0b1929f72f4755f210c1e521
     profiles: [dns]
     ports:
       - "${DNS_BIND_V4}:53:53/udp"
@@ -335,7 +335,7 @@ services:
       retries: 10
 
   clickhouse:
-    image: clickhouse/clickhouse-server:26.3.12.3-alpine
+    image: clickhouse/clickhouse-server:26.3.12.3-alpine@sha256:c246f5c07d647c5b4f50e99609d1fe3a79e58880ef28c2043edc4bb55762a65d
     profiles: [telemetry]
     environment:
       CLICKHOUSE_DB: cdnf
@@ -358,7 +358,7 @@ services:
       start_period: 20s
 
   vector:
-    image: timberio/vector:0.55.0-alpine
+    image: timberio/vector:0.55.0-alpine@sha256:faf14cdafb5526a94b478b2a51055b774b92761c2a22ce3af1fa416a67b75939
     profiles: [telemetry, dns, edge]
     environment:
       CLICKHOUSE_ENDPOINT: ${CLICKHOUSE_URL:?CLICKHOUSE_URL is required}
@@ -376,7 +376,7 @@ services:
       retries: 3
 
   loki-data-init:
-    image: alpine:3.22
+    image: alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
     profiles: [telemetry]
     command: [chown, "10001:10001", /loki]
     volumes: [loki-data:/loki]
@@ -440,7 +440,7 @@ services:
         limits: { memory: 256m, cpus: "0.25", pids: 96 }
 
   prometheus:
-    image: prom/prometheus:v3.12.0
+    image: prom/prometheus:v3.12.0@sha256:69f5241418838263316593f7274a304b095c40bcf22e57272865da91bd60a8ac
     profiles: [telemetry]
     group_add: ["82"]
     volumes:
@@ -463,7 +463,7 @@ services:
       start_period: 10s
 
   grafana-control-db-provision:
-    image: postgres:18.4-alpine
+    image: postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
     profiles: [telemetry]
     environment:
       PGHOST: ${GRAFANA_POSTGRES_PROVISION_HOST}
@@ -541,7 +541,7 @@ services:
       retries: 20
 
   node-exporter:
-    image: prom/node-exporter:v1.10.2
+    image: prom/node-exporter:v1.10.2@sha256:3ac34ce007accad95afed72149e0d2b927b7e42fd1c866149b945b84737c62c3
     profiles: [control, dns, edge, telemetry]
     command: [--path.procfs=/host/proc, --path.sysfs=/host/sys, --path.rootfs=/host/root, --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)]
     pid: host
@@ -554,7 +554,7 @@ services:
     restart: unless-stopped
 
   alertmanager:
-    image: prom/alertmanager:v0.32.1
+    image: prom/alertmanager:v0.32.1@sha256:51a825c2a40acc3e338fdd00d622e01ec090f72be2b3ea46be0839cd47a4d286
     profiles: [telemetry]
     volumes: [./docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro]
     networks: [telemetry]
@@ -702,7 +702,7 @@ services:
           pids: 128
 
   edge-gateway-state-init:
-    image: alpine:3.22
+    image: alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
     profiles: [edge]
     command: [chown, "10101:10101", /state]
     volumes: [edge-gateway-state:/state]

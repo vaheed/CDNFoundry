@@ -97,9 +97,9 @@ class GrafanaContractTest(unittest.TestCase):
         provider = (ROOT / "docker/grafana/provisioning/dashboards/dashboards.yml").read_text()
         self.assertIn("folder: CDNFoundry Operations", provider)
         dockerfile = (ROOT / "docker/grafana/Dockerfile").read_text()
-        self.assertIn("grafana/grafana:12.4.6@sha256:", dockerfile)
-        self.assertIn("CLICKHOUSE_PLUGIN_VERSION=4.20.0", dockerfile)
-        self.assertIn("CLICKHOUSE_PLUGIN_SHA256=4da9c1803e753ad4", dockerfile)
+        self.assertIn("grafana/grafana:12.4.10@sha256:", dockerfile)
+        self.assertIn("CLICKHOUSE_PLUGIN_VERSION=4.21.2", dockerfile)
+        self.assertIn("CLICKHOUSE_PLUGIN_SHA256=3463d035a7dddef865e3ed6bc3baea3c5b4fba52fe1173a528535abb5840cd63", dockerfile)
 
     def test_clean_ci_migrates_before_grafana_database_provisioning(self) -> None:
         workflow = (ROOT / ".github/workflows/ci.yml").read_text()

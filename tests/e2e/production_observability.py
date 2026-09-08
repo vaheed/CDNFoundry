@@ -79,6 +79,12 @@ def main() -> int:
     os.environ["COMPOSE_PROJECT_NAME"] = PROJECT
     if args.build_images:
         build_images(args.release)
+    # Immutable local image IDs qualify the exact local build without requiring
+    # a registry push or treating mutable qualification tags as deployment pins.
+    local_images = {}
+    for component in ('core', 'web', 'edge-control', 'edge-runtime', 'edge-agent', 'edge-gateway', 'mmdb-updater', 'grafana', 'loki'):
+        tag = f'ghcr.io/vaheed/cdnfoundry-{component}:{args.release}'
+        local_images['CDNF_'+component.upper().replace('-', '_')+'_IMAGE'] = run('docker', 'image', 'inspect', tag, '--format', '{{.Id}}', cwd=ROOT, capture=True).stdout.strip()
 
     with tempfile.TemporaryDirectory(prefix="cdnf-production-observability.") as temporary:
         root = Path(temporary)
@@ -101,6 +107,7 @@ def main() -> int:
                 "bind_ipv4": LOOPBACK,
                 "monitor_ipv4": MONITOR_LOOPBACK,
                 "extra_env": {
+                    **local_images,
                     "CONTROL_BIND": f"{LOOPBACK}:18080",
                     "GRAFANA_BIND": f"{LOOPBACK}:13000",
                 },

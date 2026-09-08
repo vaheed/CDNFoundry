@@ -2,8 +2,6 @@ FROM openresty/openresty:1.31.1.1-2-alpine@sha256:5f621903212ed7194a6bd31de7a76c
 
 ARG NGX_BROTLI_COMMIT=a71f9312c2deb28875acc7bacfdd5695a111aa53
 ARG MODSECURITY_COMMIT=a555e5a44573e50f04ad997b3b24c214c42f8e29
-ARG MODSECURITY_NGINX_VERSION=v1.0.4
-ARG OWASP_CRS_VERSION=v4.26.0
 RUN apk add --no-cache autoconf automake build-base cmake curl curl-dev git libtool linux-headers lmdb-dev libxml2-dev openssl-dev pcre-dev pcre2-dev perl yajl-dev zlib-dev
 RUN git clone https://github.com/google/ngx_brotli.git /tmp/ngx_brotli \
     && git -C /tmp/ngx_brotli checkout "${NGX_BROTLI_COMMIT}" \
@@ -46,7 +44,7 @@ LABEL org.opencontainers.image.source="https://github.com/vaheed/CDNFoundry" \
       org.opencontainers.image.created="${BUILD_DATE}" org.opencontainers.image.description="CDNFoundry OpenResty edge runtime" \
       org.opencontainers.image.licenses="Apache-2.0" org.opencontainers.image.documentation="https://vaheed.github.io/CDNFoundry/"
 
-RUN apk add --no-cache libcurl libgcc libstdc++ lmdb lua5.1-maxminddb libxml2 pcre yajl \
+RUN apk add --no-cache --upgrade libcrypto3=3.5.8-r0 libssl3=3.5.8-r0 libuuid=2.41.6-r1 libcurl=8.22.0-r0 libgcc libstdc++ lmdb lua5.1-maxminddb libxml2 pcre yajl \
     && addgroup -S -g 10101 cdnf && adduser -S -D -H -u 10101 -G cdnf cdnf \
     && mkdir -p /var/cache/nginx/content/small /var/cache/nginx/content/standard /var/cache/nginx/content/large /var/cache/nginx/content/streaming /var/lib/cdnfoundry/runtime /var/lib/nginx/tmp/client_body /var/lib/nginx/tmp/proxy \
     && chown -R cdnf:cdnf /var/cache/nginx /var/lib/cdnfoundry/runtime /var/lib/nginx/tmp
