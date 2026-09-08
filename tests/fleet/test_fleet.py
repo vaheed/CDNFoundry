@@ -240,7 +240,8 @@ def add(store: FleetState, payload: dict[str, object]) -> dict[str, object]:
 
 
 def env_values(path: Path) -> dict[str, str]:
-    return dict(line.split("=", 1) for line in path.read_text(encoding="utf-8").splitlines() if line)
+    from cdnfoundry_fleet.cli import parse_env
+    return parse_env(path)
 
 
 def test_dns_hosts_get_unique_stable_local_database_credentials(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
@@ -443,6 +444,95 @@ def test_combined_node_starts_dns_before_edge_registration(store: FleetState, so
     assert "docker compose --env-file .env.prod --profile dns --profile edge up -d --wait" in start
     assert "env_value" not in start
     assert "scrub_bootstrap_token" not in start
+
+
+@pytest.mark.parametrize("config_backend", ["fixture", "compose"])
+def test_generated_start_uses_host_enrollment_without_editing_script(store: FleetState, source_repo: Path, tmp_path: Path, config_backend: str) -> None:
+    # The minimal renderer fixture needs the network used by its exporters
+    # when it is passed to the actual Compose parser.
+    source_compose = source_repo / "compose.prod.yml"
+    document = yaml.safe_load(source_compose.read_text())
+    document.setdefault("networks", {})["egress"] = {}
+    document["services"]["node-exporter"]["networks"] = ["egress"]
+    document["services"]["edge-agent"]["environment"]["EDGE_ID"] = "${EDGE_ID:-}"
+    source_compose.write_text(yaml.safe_dump(document))
+    add(store, node("pop-1", "dns-edge", "192.0.2.20"))
+    output = tmp_path / "bundles"
+    Renderer(source_repo, store, output).render(store.load())
+    bundle = output / "pop-1"
+    original = (bundle / "start.sh").read_text()
+    # Exercise generated activation and its Compose boundary. Configuration,
+    # PKI and actual service startup have their separate qualification jobs.
+    (bundle / "validate.sh").write_text("#!/bin/sh\nexit 0\n")
+    binary = tmp_path / "bin"
+    binary.mkdir()
+    # Host ownership is qualified against real container users in the runtime
+    # suite; keep this activation boundary test runnable without host root.
+    for name, body in {"id": "echo 0", "chown": "exit 0"}.items():
+        command = binary / name
+        command.write_text("#!/bin/sh\n"+body+"\n")
+        command.chmod(0o700)
+    docker = binary / "docker"
+    docker.write_text('''#!/usr/bin/env python3
+import json, os, pathlib, subprocess, sys
+args = sys.argv[1:]
+with pathlib.Path("calls.jsonl").open("a") as log:
+    log.write(json.dumps(args)+"\\n")
+if "config" in args and "--format" in args:
+    value = ""
+    for line in pathlib.Path(".env.prod").read_text().splitlines():
+        if line.startswith("EDGE_ID="):
+            value = line.split("=", 1)[1].strip("'\\\"")
+    if os.environ["QUALIFICATION_CONFIG_BACKEND"] == "compose":
+        result = subprocess.run([os.environ["QUALIFICATION_REAL_DOCKER"], *args], capture_output=True, text=True)
+        sys.stdout.write(result.stdout)
+        sys.stderr.write(result.stderr)
+        if result.returncode:
+            sys.exit(result.returncode)
+    else:
+        print(json.dumps({"services": {"edge-agent": {"environment": {"EDGE_ID": value}}}}))
+    if os.environ.get("QUALIFICATION_CONFIG_FAILURE"):
+        print("private-configuration-fixture", file=sys.stderr)
+        sys.exit(17)
+''')
+    docker.chmod(0o700)
+    environment = {**os.environ, "PATH": str(binary)+os.pathsep+os.environ["PATH"],
+                   "QUALIFICATION_REAL_DOCKER": shutil.which("docker") or "docker",
+                   "QUALIFICATION_CONFIG_BACKEND": config_backend}
+    for enrolled in (False, True):
+        env = (bundle / ".env.prod").read_text()
+        lines = [line for line in env.splitlines() if not line.startswith("EDGE_ID=")]
+        lines.append("EDGE_ID='11111111-2222-3333-4444-555555555555'" if enrolled else "EDGE_ID=''")
+        (bundle / ".env.prod").write_text("\n".join(lines)+"\n")
+        (bundle / "calls.jsonl").write_text("")
+        result = subprocess.run(["sh", "start.sh"], cwd=bundle, env=environment, capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+        calls = [json.loads(line) for line in (bundle / "calls.jsonl").read_text().splitlines()]
+        activation = [call for call in calls if "up" in call and "dns" in call]
+        assert len(activation) == 1
+        assert "dns" in activation[0]
+        assert ("edge" in activation[0]) is enrolled
+        assert (bundle / "start.sh").read_text() == original
+        assert stat.S_IMODE((bundle / "docker/pdns/pdns.conf").stat().st_mode) == 0o640
+
+    valid_environment = (bundle / ".env.prod").read_text()
+    (bundle / ".env.prod").write_text(valid_environment.replace("11111111-2222-3333-4444-555555555555", "invalid-uuid"))
+    (bundle / "calls.jsonl").write_text("")
+    result = subprocess.run(["sh", "start.sh"], cwd=bundle, env=environment, capture_output=True, text=True)
+    assert result.returncode != 0
+    assert "correct .env.prod before activation" in result.stderr
+    assert "invalid-uuid" not in result.stderr
+    calls = [json.loads(line) for line in (bundle / "calls.jsonl").read_text().splitlines()]
+    assert not any("up" in call or "exec" in call or "run" in call for call in calls)
+
+    (bundle / ".env.prod").write_text(valid_environment)
+    (bundle / "calls.jsonl").write_text("")
+    failed = subprocess.run(["sh", "start.sh"], cwd=bundle,
+                            env={**environment, "QUALIFICATION_CONFIG_FAILURE": "1"}, capture_output=True, text=True)
+    assert failed.returncode != 0
+    assert "private-configuration-fixture" not in failed.stdout+failed.stderr
+    calls = [json.loads(line) for line in (bundle / "calls.jsonl").read_text().splitlines()]
+    assert not any("up" in call or "exec" in call or "run" in call for call in calls)
 
 
 def test_production_control_validation_parses_caddyfile(store: FleetState, tmp_path: Path) -> None:
@@ -1066,7 +1156,7 @@ def test_optional_extra_env_is_preserved_for_manual_edge_registration(store: Fle
     env = env_values(output / "edge-1/.env.prod")
     assert env["EDGE_ID"] == "11111111-2222-3333-4444-555555555555"
     assert env["EDGE_BOOTSTRAP_TOKEN"] == "one-time-token"
-    assert json.loads(env["EDGE_GATEWAY_ADDRESS_MAP"]) == '{"198.51.100.10":"198.51.100.10"}'
+    assert json.loads(env["EDGE_GATEWAY_ADDRESS_MAP"]) == {"198.51.100.10": "198.51.100.10"}
 
 
 def test_edge_registration_command_uses_protected_token_file(source_repo: Path, tmp_path: Path) -> None:
@@ -1125,7 +1215,7 @@ def test_edge_registration_command_uses_protected_token_file(source_repo: Path, 
     env = env_values(output_dir / "edge-1/.env.prod")
     assert env["EDGE_ID"] == "11111111-2222-3333-4444-555555555555"
     assert env["EDGE_BOOTSTRAP_TOKEN"] == "protected-one-time-token"
-    assert json.loads(env["EDGE_GATEWAY_ADDRESS_MAP"]) == '{"192.0.2.173":"192.0.2.173"}'
+    assert json.loads(env["EDGE_GATEWAY_ADDRESS_MAP"]) == {"192.0.2.173": "192.0.2.173"}
     start = (output_dir / "edge-1/start.sh").read_text(encoding="utf-8")
     assert "docker compose --env-file .env.prod --profile dns --profile edge up -d --wait" in start
     assert "scrub_bootstrap_token" not in start
@@ -1284,90 +1374,135 @@ def test_setup_config_rejects_unknown_fields(source_repo: Path, tmp_path: Path) 
     assert "Unknown node 0 field(s): public_ip4" in result.stderr
 
 
-@pytest.mark.parametrize("config_backend", ["fixture", "compose"])
-def test_generated_start_uses_host_enrollment_without_editing_script(store: FleetState, source_repo: Path, tmp_path: Path, config_backend: str) -> None:
-    # The minimal renderer fixture needs the network used by its exporters
-    # when it is passed to the actual Compose parser.
-    source_compose = source_repo / "compose.prod.yml"
-    document = yaml.safe_load(source_compose.read_text())
-    document.setdefault("networks", {})["egress"] = {}
-    document["services"]["node-exporter"]["networks"] = ["egress"]
-    document["services"]["edge-agent"]["environment"]["EDGE_ID"] = "${EDGE_ID:-}"
-    source_compose.write_text(yaml.safe_dump(document))
-    add(store, node("pop-1", "dns-edge", "192.0.2.20"))
-    output = tmp_path / "bundles"
-    Renderer(source_repo, store, output).render(store.load())
-    bundle = output / "pop-1"
-    original = (bundle / "start.sh").read_text()
-    # Exercise generated activation and its Compose boundary. Configuration,
-    # PKI and actual service startup have their separate qualification jobs.
-    (bundle / "validate.sh").write_text("#!/bin/sh\nexit 0\n")
-    binary = tmp_path / "bin"
-    binary.mkdir()
-    # Host ownership is qualified against real container users in the runtime
-    # suite; keep this activation boundary test runnable without host root.
-    for name, body in {"id": "echo 0", "chown": "exit 0"}.items():
-        command = binary / name
-        command.write_text("#!/bin/sh\n"+body+"\n")
-        command.chmod(0o700)
-    docker = binary / "docker"
-    docker.write_text('''#!/usr/bin/env python3
-import json, os, pathlib, subprocess, sys
-args = sys.argv[1:]
-with pathlib.Path("calls.jsonl").open("a") as log:
-    log.write(json.dumps(args)+"\\n")
-if "config" in args and "--format" in args:
-    value = ""
-    for line in pathlib.Path(".env.prod").read_text().splitlines():
-        if line.startswith("EDGE_ID="):
-            value = line.split("=", 1)[1].strip("'\\\"")
-    if os.environ["QUALIFICATION_CONFIG_BACKEND"] == "compose":
-        result = subprocess.run([os.environ["QUALIFICATION_REAL_DOCKER"], *args], capture_output=True, text=True)
-        sys.stdout.write(result.stdout)
-        sys.stderr.write(result.stderr)
-        if result.returncode:
-            sys.exit(result.returncode)
-    else:
-        print(json.dumps({"services": {"edge-agent": {"environment": {"EDGE_ID": value}}}}))
-    if os.environ.get("QUALIFICATION_CONFIG_FAILURE"):
-        print("private-configuration-fixture", file=sys.stderr)
-        sys.exit(17)
-''')
-    docker.chmod(0o700)
-    environment = {**os.environ, "PATH": str(binary)+os.pathsep+os.environ["PATH"],
-                   "QUALIFICATION_REAL_DOCKER": shutil.which("docker") or "docker",
-                   "QUALIFICATION_CONFIG_BACKEND": config_backend}
-    for enrolled in (False, True):
-        env = (bundle / ".env.prod").read_text()
-        lines = [line for line in env.splitlines() if not line.startswith("EDGE_ID=")]
-        lines.append("EDGE_ID='11111111-2222-3333-4444-555555555555'" if enrolled else "EDGE_ID=''")
-        (bundle / ".env.prod").write_text("\n".join(lines)+"\n")
-        (bundle / "calls.jsonl").write_text("")
-        result = subprocess.run(["sh", "start.sh"], cwd=bundle, env=environment, capture_output=True, text=True)
-        assert result.returncode == 0, result.stderr
-        calls = [json.loads(line) for line in (bundle / "calls.jsonl").read_text().splitlines()]
-        activation = [call for call in calls if "up" in call and "dns" in call]
-        assert len(activation) == 1
-        assert "dns" in activation[0]
-        assert ("edge" in activation[0]) is enrolled
-        assert (bundle / "start.sh").read_text() == original
-        assert stat.S_IMODE((bundle / "docker/pdns/pdns.conf").stat().st_mode) == 0o640
+def test_literal_environment_survives_real_compose_and_adoption(tmp_path: Path) -> None:
+    from cdnfoundry_fleet.common import quote_env
+    from cdnfoundry_fleet.cli import parse_env
+    values = {'TOKEN': 'fixture-$CDNF_AUDIT_UNSET-${HOME}-value',
+              'QUOTED': "fixture 'quoted' # value", 'SLASH': r'fixture\path\\name',
+              'DOUBLE': 'fixture "text"', 'EMPTY': ''}
+    env = tmp_path / '.env.prod'
+    env.write_text(''.join(f'{key}={quote_env(value)}\n' for key, value in values.items()))
+    compose = tmp_path / 'compose.yml'
+    compose.write_text(yaml.safe_dump({'services': {'probe': {'image': 'postgres@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15', 'environment': {key: '${'+key+'}' for key in values}}}}))
+    result = subprocess.run(['docker', 'compose', '--env-file', str(env), '-f', str(compose), 'config', '--format', 'json'], check=True, capture_output=True, text=True)
+    # Compose config escapes literal dollars for reserialization. Observe the
+    # actual container environment rather than mistaking $$ output for mutation.
+    actual = subprocess.run(['docker', 'compose', '--env-file', str(env), '-f', str(compose), 'run', '--rm', '--no-deps', '--entrypoint', 'env', 'probe', '-0'], check=True, capture_output=True)
+    environment = dict(item.decode().split('=', 1) for item in actual.stdout.split(b'\0') if item)
+    assert {key: environment[key] for key in values} == values
+    assert parse_env(env) == values
 
-    valid_environment = (bundle / ".env.prod").read_text()
-    (bundle / ".env.prod").write_text(valid_environment.replace("11111111-2222-3333-4444-555555555555", "invalid-uuid"))
-    (bundle / "calls.jsonl").write_text("")
-    result = subprocess.run(["sh", "start.sh"], cwd=bundle, env=environment, capture_output=True, text=True)
-    assert result.returncode != 0
-    assert "correct .env.prod before activation" in result.stderr
-    assert "invalid-uuid" not in result.stderr
-    calls = [json.loads(line) for line in (bundle / "calls.jsonl").read_text().splitlines()]
-    assert not any("up" in call or "exec" in call or "run" in call for call in calls)
 
-    (bundle / ".env.prod").write_text(valid_environment)
-    (bundle / "calls.jsonl").write_text("")
-    failed = subprocess.run(["sh", "start.sh"], cwd=bundle,
-                            env={**environment, "QUALIFICATION_CONFIG_FAILURE": "1"}, capture_output=True, text=True)
-    assert failed.returncode != 0
-    assert "private-configuration-fixture" not in failed.stdout+failed.stderr
-    calls = [json.loads(line) for line in (bundle / "calls.jsonl").read_text().splitlines()]
-    assert not any("up" in call or "exec" in call or "run" in call for call in calls)
+def test_incomplete_ca_preserves_surviving_private_key(tmp_path: Path) -> None:
+    from cdnfoundry_fleet.certs import PKI
+    pki = PKI(tmp_path / 'pki')
+    pki.ensure()
+    key = pki.root / 'edge-server-ca.key'
+    original = key.read_bytes()
+    (pki.root / 'edge-server-ca.crt').unlink()
+    with pytest.raises(RenderError, match='restore'):
+        pki.ensure()
+    assert key.read_bytes() == original
+
+
+def test_render_failure_on_later_node_preserves_entire_active_fleet(store: FleetState, source_repo: Path, tmp_path: Path, monkeypatch) -> None:
+    with store.locked():
+        state = store.add_node(store.load(), node('dns-a', 'dns', '192.0.2.191'))
+        state = store.add_node(state, node('dns-b', 'dns', '192.0.2.192'))
+    renderer = Renderer(source_repo, store, tmp_path / 'bundles')
+    renderer.render(state)
+    def snapshot():
+        return {str(path.relative_to(renderer.output_dir)): path.read_bytes() for path in renderer.output_dir.rglob('*') if path.is_file()}
+    previous = snapshot()
+    original = renderer._render_node
+    def fail_later(state, candidate):
+        if candidate['name'] == 'dns-b':
+            raise RenderError('injected later-node failure')
+        return original(state, candidate)
+    monkeypatch.setattr(renderer, '_render_node', fail_later)
+    with pytest.raises(RenderError, match='injected'):
+        renderer.render(state)
+    assert snapshot() == previous
+
+
+def test_json_status_never_prints_extra_environment_credentials(store: FleetState, capsys) -> None:
+    from cdnfoundry_fleet.cli import _status
+    state = store.load()
+    state['nodes']['fixture'] = {'extra_env': {'DB_URL': 'postgres://private-fixture-secret', 'CUSTOM_TOKEN': 'fixture-token'}}
+    _status(state, Path('/bundles'), as_json=True)
+    output = capsys.readouterr().out
+    assert 'private-fixture-secret' not in output
+    assert 'fixture-token' not in output
+    assert '<redacted>' in output
+
+
+def test_post_exchange_fsync_failure_retains_recovery_generation(store: FleetState, source_repo: Path, tmp_path: Path, monkeypatch) -> None:
+    import cdnfoundry_fleet.render as rendering
+    with store.locked():
+        state = store.add_node(store.load(), node('dns-a', 'dns', '192.0.2.191'))
+    active = tmp_path / 'bundles'
+    renderer = Renderer(source_repo, store, active)
+    renderer.render(state)
+    marker = active / 'recovery-marker'
+    marker.write_text('previous usable fleet')
+    before = {str(path.relative_to(active)): path.read_bytes() for path in active.rglob('*') if path.is_file()}
+    def fail_sync(path):
+        raise OSError('injected directory fsync failure')
+    monkeypatch.setattr(rendering, 'sync_directory', fail_sync)
+    with pytest.raises(OSError, match='injected'):
+        renderer.render(state)
+    assert active.is_dir()
+    recovery = list(tmp_path.glob('.bundles.candidate-*'))
+    assert len(recovery) == 1
+    assert {str(path.relative_to(recovery[0])): path.read_bytes() for path in recovery[0].rglob('*') if path.is_file()} == before
+
+
+def test_invalid_later_setup_node_does_not_commit_earlier_updates(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
+    from cdnfoundry_fleet.cli import main
+    before = store.state_file.read_bytes()
+    config = tmp_path / 'candidate.json'
+    config.write_text(json.dumps({'nodes': [node('dns-a', 'dns', '192.0.2.210'), node('dns-b', 'dns', 'invalid-ip')]}))
+    assert main(['--config', str(config), '--state-dir', str(store.state_dir), '--repo-root', str(source_repo),
+                 '--output-dir', str(tmp_path / 'bundles'), '--non-interactive', 'setup']) == 3
+    assert store.state_file.read_bytes() == before
+    assert not store.secret_path('pdns-api-key', node='dns-a').exists()
+
+
+def test_generated_validation_rejects_mutable_images_before_starting_containers(tmp_path: Path) -> None:
+    # Execute the real generated script with a small Docker command boundary.
+    # A mutable reference must stop before even the Caddy validation container.
+    from cdnfoundry_fleet.render import Renderer
+    script = Renderer._validate_script(None, {'role': 'dns'}, {'services': {}})
+    (tmp_path / 'validate.sh').write_text(script)
+    (tmp_path / '.env.prod').touch(mode=0o600)
+    (tmp_path / 'pki').mkdir()
+    (tmp_path / 'pki/node.key').touch(mode=0o600)
+    (tmp_path / 'docker/pdns').mkdir(parents=True)
+    (tmp_path / 'docker/pdns/pdns.conf').touch(mode=0o600)
+    bin_dir = tmp_path / 'bin'
+    bin_dir.mkdir()
+    (bin_dir / 'docker').write_text('#!/bin/sh\ncase "$*" in *--images*) echo "alpine:latest";; *--quiet*) exit 0;; *) exit 99;; esac\n')
+    (bin_dir / 'docker').chmod(0o700)
+    result = subprocess.run(['sh', 'validate.sh'], cwd=tmp_path, env={**os.environ, 'PATH': str(bin_dir)+os.pathsep+os.environ['PATH']}, capture_output=True, text=True)
+    assert result.returncode == 1
+    assert 'Mutable bundle image rejected' in result.stderr
+
+
+def test_setup_rejects_conflicting_global_release_without_writing(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
+    from cdnfoundry_fleet.cli import main
+    before = store.state_file.read_bytes()
+    config = tmp_path / 'candidate.json'
+    config.write_text(json.dumps({'global': {'release': 'different-release'}}))
+    assert main(['--config', str(config), '--state-dir', str(store.state_dir), '--repo-root', str(source_repo),
+                 '--non-interactive', 'setup']) == 3
+    assert store.state_file.read_bytes() == before
+
+
+def test_fleet_rejects_wrong_address_families_and_string_booleans(store: FleetState) -> None:
+    before = store.state_file.read_bytes()
+    for field, value in [('public_ipv4', '2001:db8::1'), ('public_ipv6', '192.0.2.2'),
+                         ('enabled', 'false'), ('draining', 0)]:
+        payload = {**node('invalid-node', 'dns', '192.0.2.212'), field: value}
+        with pytest.raises(ValidationError):
+            store.add_node(store.load(), payload)
+        assert store.state_file.read_bytes() == before

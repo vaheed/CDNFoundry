@@ -52,7 +52,10 @@ class PKI:
     def _ensure_ca(self, stem: str, common_name: str) -> None:
         key = self.root / f"{stem}.key"
         cert = self.root / f"{stem}.crt"
+        if key.exists() != cert.exists():
+            raise RenderError(f'Incomplete {stem} CA material; restore its matching key and certificate from Fleet backup. Existing material was retained.')
         if key.exists() and cert.exists():
+            self._validate_pair(key, cert, ca=cert)
             ensure_mode(key, 0o600)
             ensure_mode(cert, 0o644)
             return
@@ -79,7 +82,7 @@ class PKI:
                     "-subj",
                     f"/CN={common_name}",
                     "-addext",
-                    "basicConstraints=critical,CA:TRUE",
+                    "basicConstraints=critical,CA:TRUE,pathlen:0",
                     "-addext",
                     "keyUsage=critical,keyCertSign,cRLSign",
                 ]
@@ -88,6 +91,15 @@ class PKI:
             os.chmod(tmp_cert, 0o644)
             os.replace(tmp_key, key)
             os.replace(tmp_cert, cert)
+
+    @staticmethod
+    def _validate_pair(key: Path, certificate: Path, *, ca: Path) -> None:
+        run_checked(["openssl", "verify", "-CAfile", str(ca), str(certificate)])
+        run_checked(["openssl", "x509", "-in", str(certificate), "-checkend", "86400", "-noout"])
+        public_key = subprocess.run(["openssl", "pkey", "-in", str(key), "-pubout"], check=True, capture_output=True).stdout
+        public_certificate = subprocess.run(["openssl", "x509", "-in", str(certificate), "-pubkey", "-noout"], check=True, capture_output=True).stdout
+        if public_key != public_certificate:
+            raise RenderError("PKI key and certificate do not match; restore matching material from Fleet backup")
 
     def ensure_node_certificate(self, node: dict[str, object]) -> tuple[Path, Path, Path]:
         self.ensure()
@@ -115,6 +127,7 @@ class PKI:
             except json.JSONDecodeError:
                 current = {}
             if all(current.get(k) == v for k, v in expected.items()):
+                self._validate_pair(key, cert, ca=ca)
                 ensure_mode(key, 0o600)
                 ensure_mode(cert, 0o644)
                 return ca, cert, key

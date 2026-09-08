@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .certs import PKI
-from .common import RenderError, atomic_write, quote_env
+from .common import RenderError, atomic_write, quote_env, sync_tree, sync_directory, exchange_directories
 from .compose import (
     bind_mount_sources,
     dump_yaml,
@@ -29,6 +29,41 @@ class Renderer:
         self.pki = PKI(store.pki_dir, dry_run=dry_run)
 
     def render(self, state: dict[str, Any], *, node_name: str | None = None) -> list[Path]:
+        if self.dry_run:
+            return self._render_generation(state, node_name=node_name)
+        active = self.output_dir
+        active.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        candidate = Path(tempfile.mkdtemp(prefix=f".{active.name}.candidate-", dir=active.parent))
+        activated = False
+        try:
+            if active.exists():
+                shutil.copytree(active, candidate, dirs_exist_ok=True, symlinks=True)
+            self.output_dir = candidate
+            paths = self._render_generation(state, node_name=node_name)
+            sync_tree(candidate)
+            if active.exists():
+                exchange_directories(candidate, active)
+                activated = True
+                sync_directory(active.parent)
+                # Keep a complete previous fleet generation, in addition to the
+                # existing per-node .previous compatibility layout.
+                previous = active.with_name(active.name + ".previous")
+                if previous.exists():
+                    shutil.rmtree(previous)
+                os.replace(candidate, previous)
+            else:
+                os.replace(candidate, active)
+                activated = True
+            sync_directory(active.parent)
+            return [active / path.relative_to(candidate) for path in paths]
+        finally:
+            self.output_dir = active
+            # After exchange, candidate contains recovery material. If archival
+            # failed, retain it for the operator instead of deleting it.
+            if not activated and candidate.exists():
+                shutil.rmtree(candidate)
+
+    def _render_generation(self, state: dict[str, Any], *, node_name: str | None = None) -> list[Path]:
         names = [node_name] if node_name else sorted(state["nodes"])
         rendered: list[Path] = []
         for name in names:
@@ -131,7 +166,8 @@ class Renderer:
             pdns_env.pop("PDNS_gpgsql_host", None)
             pdns_env.pop("PDNS_gpgsql_dbname", None)
             pdns_env.pop("PDNS_gpgsql_user", None)
-            # Read restricted credentials without changing the image service user.
+            # Supplementary group matches the activated secret file. Keep the
+            # image's non-root service user without exposing credentials to all users.
             services["pdns-auth"].setdefault("group_add", []).append("82")
         if node["role"] == "control" and self._uses_remote_control_db(node):
             # External PostgreSQL is selected with DB_URL or a DB_HOST other than the
@@ -367,9 +403,9 @@ class Renderer:
         return self.store.read_secret(name, node=node)
 
     def _optional_node_secret(self, name: str, node: dict[str, Any]) -> str:
-        if self.dry_run:
-            return f"dry-run-{name}-placeholder"
         path = self.store.secret_path(name, node=node["name"])
+        if self.dry_run:
+            return f"dry-run-{name}-placeholder" if path.exists() else ""
         return self.store.read_secret(name, node=node["name"]) if path.exists() else ""
 
     @staticmethod
@@ -818,6 +854,18 @@ umask 077
 test "$(stat -c '%a' .env.prod)" = 600
 test "$(stat -c '%a' pki/node.key)" = 600
 {identity_key_validation}{metrics_validation}{pdns_validation}docker compose --env-file .env.prod config --quiet
+images="$(docker compose --env-file .env.prod --profile '*' config --images)"
+printf '%s\n' "$images" | while IFS= read -r image; do
+    case "$image" in
+        *@sha256:*) digest="${{image##*@sha256:}}" ;;
+        sha256:*) digest="${{image#sha256:}}" ;;
+        *)
+            echo "Mutable bundle image rejected. Set CDNF_*_IMAGE in node extra_env from the verified release manifest and render again." >&2
+            exit 1
+            ;;
+    esac
+    printf '%s' "$digest" | grep -Eq '^[0-9a-f]{{64}}$' || {{ echo "Invalid image digest in bundle." >&2; exit 1; }}
+done
 {caddy_validation}
 openssl verify -CAfile pki/edge-server-ca.crt pki/node.crt
 """

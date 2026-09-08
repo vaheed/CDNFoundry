@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import copy
+import re
 import json
 import sys
 from pathlib import Path
@@ -407,6 +409,9 @@ def _apply_setup_features(store: FleetState, state: dict[str, Any], config: dict
 
 def _setup(args: argparse.Namespace, store: FleetState, output_dir: Path, config: dict[str, Any]) -> int:
     _validate_setup_config(config)
+    durable_store = store
+    # Assemble a complete candidate without persisting intermediate nodes.
+    store = FleetState(store.state_dir, dry_run=True)
     global_cfg = config.get("global", config)
     created = not store.exists()
     if created:
@@ -427,12 +432,23 @@ def _setup(args: argparse.Namespace, store: FleetState, output_dir: Path, config
                 "platform_domain": platform,
                 "release": release,
                 "acme_email": args.acme_email or global_cfg.get("acme_email", ""),
-                "ipv6": args.dual_stack or bool(global_cfg.get("ipv6", False)),
+                "ipv6": args.dual_stack or global_cfg.get("ipv6", False),
             }
         )
         print(f"Initialized fleet state: {store.state_file}")
     else:
         state = store.load()
+        # Setup is repeatable; it must not silently ignore conflicting identity
+        # or release values in the operator's input file.
+        supplied = {key: global_cfg[key] for key in SETUP_GLOBAL_FIELDS if key in global_cfg}
+        for key in ('operator_domain', 'platform_domain', 'release', 'acme_email'):
+            if getattr(args, key, None) is not None:
+                supplied[key] = getattr(args, key)
+        if args.dual_stack:
+            supplied['ipv6'] = True
+        for key, value in supplied.items():
+            if value != state['global'].get(key):
+                raise ValidationError(f"setup cannot change existing global {key}; retain the current identity and use update-node --release for a planned release change")
         print(f"Using existing fleet state: {store.state_file}")
 
     preset = args.preset or config.get("preset")
@@ -498,7 +514,17 @@ def _setup(args: argparse.Namespace, store: FleetState, output_dir: Path, config
                 print(f"Added node: {payload['name']}")
 
     state = _apply_setup_features(store, state, config, preset)
-    store.validate(state, require_secrets=not args.dry_run)
+    store.validate(state, require_secrets=False)
+    # Rendering preflight checks required role values before committing state.
+    if not args.no_render:
+        Renderer(Path(args.repo_root), store, output_dir, dry_run=True).render(state)
+    store = durable_store
+    if not args.dry_run:
+        store._prepare_dirs()
+        store._ensure_global_secrets()
+        for candidate_node in state["nodes"].values():
+            store._ensure_node_secrets(candidate_node)
+        store._write(state)
     print(f"Fleet validation passed ({len(state['nodes'])} node(s)).")
 
     paths: list[Path] = []
@@ -525,11 +551,18 @@ def _setup(args: argparse.Namespace, store: FleetState, output_dir: Path, config
 
 
 def _status(state: dict[str, Any], output_dir: Path, *, as_json: bool) -> None:
+    safe_state = copy.deepcopy(state)
+    for node in safe_state["nodes"].values():
+        node["extra_env"] = {key: "<redacted>" for key in node.get("extra_env", {})}
+    for feature in safe_state["features"].values():
+        for field in ("endpoint", "repository"):
+            if feature.get(field):
+                feature[field] = "<redacted>"
     payload = {
-        "global": state["global"],
-        "features": state["features"],
-        "metadata": state["metadata"],
-        "nodes": [state["nodes"][name] for name in sorted(state["nodes"])],
+        "global": safe_state["global"],
+        "features": safe_state["features"],
+        "metadata": safe_state["metadata"],
+        "nodes": [safe_state["nodes"][name] for name in sorted(safe_state["nodes"])],
         "output_dir": str(output_dir),
     }
     if as_json:
@@ -816,7 +849,20 @@ def parse_env(path: Path) -> dict[str, str]:
         if "=" not in stripped:
             raise ValidationError(f"Invalid env line {number} in {path}")
         key, value = stripped.split("=", 1)
-        values[key] = value.strip().strip('"').strip("'")
+        value = value.strip()
+        if value.startswith("'"):
+            if not re.fullmatch(r"'(?:\\'|[^'])*'", value):
+                raise ValidationError(f"Invalid single-quoted env value on line {number}")
+            value = value[1:-1].replace("\\'", "'")
+        elif value.startswith('"'):
+            if not re.fullmatch(r'"(?:\\.|[^"\\])*"', value):
+                raise ValidationError(f"Invalid double-quoted env value on line {number}")
+            value = re.sub(r'\\([\\"nrt$])', lambda match: {"n": "\n", "r": "\r", "t": "\t"}.get(match[1], match[1]), value[1:-1])
+        else:
+            value = re.split(r"\s+#", value, maxsplit=1)[0].rstrip()
+        if key in values:
+            raise ValidationError(f"Duplicate env key on line {number}")
+        values[key] = value
     return values
 
 

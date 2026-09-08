@@ -129,15 +129,26 @@ def validate_region(value: str, label: str = "region") -> str:
     return value
 
 
-def validate_ip(value: str | None, *, required: bool = False) -> str | None:
+def validate_ip(value: str | None, *, required: bool = False, family: int | None = None) -> str | None:
     if value in (None, ""):
         if required:
             raise ValidationError("An IP address is required")
         return None
+    if not isinstance(value, str):
+        raise ValidationError("An IP address must be a string")
     try:
-        return str(ipaddress.ip_address(value))
+        address = ipaddress.ip_address(value)
+        if family is not None and address.version != family:
+            raise ValidationError(f"An IPv{family} address is required for this field")
+        return str(address)
     except ValueError as exc:
         raise ValidationError(f"Invalid IP address: {value!r}") from exc
+
+
+def validate_bool(value: Any, label: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValidationError(f"{label} must be a JSON boolean (true or false)")
+    return value
 
 
 def validate_release(value: str) -> str:
@@ -204,8 +215,45 @@ def unique_nonempty(values: Iterable[str | None]) -> bool:
 
 
 def quote_env(value: str) -> str:
-    # Docker env files accept unquoted values; reject line breaks at validation time.
-    if value == "" or re.search(r"[\s#'\"\\]", value):
-        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-        return f'"{escaped}"'
-    return value
+    # Single quotes suppress Compose interpolation; only quote escapes are
+    # interpreted in this form. Never turn a literal credential into ${ENV}.
+    if any(character in value for character in ("\x00", "\n", "\r")):
+        raise ValidationError("Environment values must be single-line text")
+    if value and not re.search(r"[\s#$'\"\\]", value):
+        return value
+    return "'" + value.replace("'", "\\'") + "'"
+
+
+def sync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def sync_tree(root: Path) -> None:
+    for directory, _, names in os.walk(root, topdown=False):
+        for name in names:
+            path = Path(directory) / name
+            if path.is_symlink():
+                continue
+            with path.open("rb") as handle:
+                os.fsync(handle.fileno())
+        sync_directory(Path(directory))
+
+
+def exchange_directories(candidate: Path, active: Path) -> None:
+    """Linux renameat2 keeps the active generation continuously addressable."""
+    import ctypes
+    library = ctypes.CDLL(None, use_errno=True)
+    rename = getattr(library, "renameat2", None)
+    if rename is None:
+        raise RenderError("Atomic bundle exchange requires Linux renameat2; preserve the current bundle and use a supported Linux host")
+    rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    rename.restype = ctypes.c_int
+    if rename(-100, os.fsencode(candidate), -100, os.fsencode(active), 2) != 0:
+        error = ctypes.get_errno()
+        raise RenderError(f"Atomic bundle exchange failed ({os.strerror(error)}); current bundle retained")
+    # The caller must record that the exchange succeeded before fsync: a
+    # durability error must never cause cleanup to delete the old generation.

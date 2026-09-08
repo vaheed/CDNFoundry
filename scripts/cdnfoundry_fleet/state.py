@@ -26,6 +26,7 @@ from .common import (
     validate_node_name,
     validate_region,
     validate_release,
+    validate_bool,
 )
 
 SCHEMA_VERSION = 1
@@ -71,7 +72,7 @@ class FleetState:
 
     @contextmanager
     def locked(self, *, exclusive: bool = True) -> Iterator[None]:
-        if self.dry_run and not self.state_dir.exists():
+        if self.dry_run:
             yield
             return
         self.state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -111,7 +112,7 @@ class FleetState:
                 "platform_domain": validate_hostname(global_cfg["platform_domain"]),
                 "release": validate_release(global_cfg["release"]),
                 "acme_email": str(global_cfg.get("acme_email", "")),
-                "ipv6": bool(global_cfg.get("ipv6", False)),
+                "ipv6": validate_bool(global_cfg.get("ipv6", False), "global.ipv6"),
             },
             "features": {
                 "monitoring": {"mode": "disabled", "host": None},
@@ -145,7 +146,8 @@ class FleetState:
             return
         self._prepare_dirs()
         if backup and self.state_file.exists():
-            stamp = utc_now().replace(":", "").replace("+00:00", "Z")
+            import time
+            stamp = str(time.time_ns())
             target = self.backup_dir / f"fleet-{stamp}.json"
             shutil.copy2(self.state_file, target)
             target.chmod(0o600)
@@ -169,6 +171,7 @@ class FleetState:
         validate_hostname(global_cfg.get("operator_domain", ""))
         validate_hostname(global_cfg.get("platform_domain", ""))
         validate_release(global_cfg.get("release", ""))
+        validate_bool(global_cfg.get("ipv6", False), "global.ipv6")
         features = state.get("features", {})
         monitoring = features.get("monitoring", {})
         logs = features.get("logs", {})
@@ -185,6 +188,8 @@ class FleetState:
         ips: set[str] = set()
         monitoring_targets: set[str] = set()
         for key, node in state.get("nodes", {}).items():
+            validate_bool(node.get("enabled", True), "node.enabled")
+            validate_bool(node.get("draining", False), "node.draining")
             name = validate_node_name(key)
             if node.get("name") != name:
                 raise ValidationError(f"Node key/name mismatch for {key}")
@@ -200,7 +205,7 @@ class FleetState:
                 raise ValidationError(f"Duplicate hostname: {hostname}")
             hostnames.add(hostname)
             for field in ("public_ipv4", "public_ipv6", "bind_ipv4", "bind_ipv6", "monitor_ipv4", "monitor_ipv6", "log_ipv4", "log_ipv6"):
-                value = validate_ip(node.get(field), required=field in {"public_ipv4", "bind_ipv4"})
+                value = validate_ip(node.get(field), required=field in {"public_ipv4", "bind_ipv4"}, family=int(field[-1]))
                 if value and field in {"public_ipv4", "public_ipv6", "monitor_ipv4", "monitor_ipv6", "log_ipv4", "log_ipv6"}:
                     if value in ips:
                         raise ValidationError(f"Duplicate fleet IP address: {value}")
@@ -316,8 +321,8 @@ class FleetState:
             "log_ipv6": validate_ip(node.get("log_ipv6")),
             "release": validate_release(node.get("release") or state["global"]["release"]),
             "extra_env": extra_env,
-            "enabled": bool(node.get("enabled", True)),
-            "draining": bool(node.get("draining", False)),
+            "enabled": validate_bool(node.get("enabled", True), "node.enabled"),
+            "draining": validate_bool(node.get("draining", False), "node.draining"),
             "health": {
                 "failure_threshold": int(node.get("health", {}).get("failure_threshold", 3)),
                 "success_threshold": int(node.get("health", {}).get("success_threshold", 2)),
