@@ -348,8 +348,26 @@ class EdgeAgentController extends Controller
     public function taskResult(Request $request, string $task): JsonResponse
     {
         $edge = $request->attributes->get('edge');
-        $row = $edge->tasks()->findOrFail($task);
-        if (in_array($row->status, ['succeeded', 'failed'], true)) {
+
+        return DB::transaction(function () use ($request, $task, $edge): JsonResponse {
+            $row = $edge->tasks()->findOrFail($task);
+            // Serialize sibling receipts before taking a task lock so their
+            // aggregate observes all preceding committed results.
+            if (in_array($row->type, ['origin_test', 'emergency_mode'], true) && isset($row->payload['operation_id'])) {
+                Operation::query()->lockForUpdate()->find($row->payload['operation_id']);
+            } elseif ($row->type === 'cache_purge' && $row->cache_purge_id !== null) {
+                CachePurge::query()->lockForUpdate()->find($row->cache_purge_id);
+            }
+            $row = $edge->tasks()->lockForUpdate()->findOrFail($task);
+
+            return $this->applyTaskResult($request, $edge, $row);
+        }, 3);
+    }
+
+    private function applyTaskResult(Request $request, Edge $edge, EdgeTask $row): JsonResponse
+    {
+        if (in_array($row->status, ['succeeded', 'failed'], true)
+            || ($row->type === 'cache_purge' && $row->attempts > 0 && $row->available_at?->isFuture())) {
             return response()->json(['data' => ['accepted' => true, 'replayed' => true]]);
         }
         $rules = ['status' => ['required', 'in:succeeded,failed'], 'result' => ['required', 'array', 'max:30']];

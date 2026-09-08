@@ -42,6 +42,8 @@ class Result:
 
 
 CHECKS = (
+    Check("postgres-edge-tasks", "Isolated PostgreSQL task receipt and aggregate concurrency",
+          ("python3", "tests/e2e/postgres_edge_tasks.py"), "agent"),
     Check("fleet-pdns", "Generated PowerDNS credential permissions, rotation and interrupted-rotation recovery",
           ("python3", "tests/e2e/fleet_pdns.py"), "agent"),
     Check("production-observability", "Generated production bundle, authenticated metrics, discovery, and Grafana datasources",

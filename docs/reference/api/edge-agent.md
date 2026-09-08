@@ -66,5 +66,18 @@ internal control requests, persists drain/emergency state, and reports stable
 failure reasons such as `cell_not_found`, `control_request_failed`, or
 `invalid_cache_purge_task`.
 
+Task receipts are scoped to the authenticated edge and committed transactionally
+with their database effects. Concurrent reports serialize on the task and its
+operation or purge aggregate. A terminal task is immutable; later reports return
+`200` with `data.replayed=true`. A failed purge retries at most five times with
+backoff; duplicate failure reports during backoff return a replay receipt and
+do not consume another attempt. A database failure rolls back the receipt and
+its effects so the agent can report it again.
+
+The `postgres-edge-tasks` production qualification check exercises independent
+PHP processes against a fresh, isolated PostgreSQL database, including a late
+terminal report and simultaneous sibling completion. It requires Docker and
+host PHP with `pdo_pgsql` and installed application dependencies.
+
 This protocol is operator-internal. Do not expose it through the normal control
 hostname or reuse a user API token.

@@ -41,6 +41,11 @@ class ReconcileAllPurges implements ShouldBeUniqueUntilProcessing, ShouldQueue
         $operation->update(['status' => 'running', 'started_at' => $operation->started_at ?? now(), 'attempts' => $operation->attempts + 1]);
         foreach ($purges as $purge) {
             DB::transaction(function () use ($purge): void {
+                // Match receipt lock order: aggregate first, then its tasks.
+                $purge = CachePurge::query()->lockForUpdate()->find($purge->id);
+                if ($purge === null || $purge->status === 'succeeded') {
+                    return;
+                }
                 EdgeTask::query()->where('cache_purge_id', $purge->id)->where('status', 'failed')->update(['status' => 'pending', 'attempts' => 0, 'last_error' => null, 'available_at' => now()]);
                 $purge->update(['status' => $purge->tasks()->where('status', 'failed')->exists() ? 'failed' : 'running']);
             });

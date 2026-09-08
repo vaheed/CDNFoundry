@@ -65,6 +65,9 @@ jobs:
         run: npm run build
       - name: Run application tests
         run: php artisan test
+      - name: Qualify isolated PostgreSQL edge task receipts
+        working-directory: .
+        run: python3 tests/e2e/postgres_edge_tasks.py
       - name: Check OpenAPI contract
         run: php artisan cdnf:api:openapi --check
 
