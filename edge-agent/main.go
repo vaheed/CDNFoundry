@@ -23,6 +23,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -1766,9 +1767,16 @@ func (c *client) request(method, path string, body any, out any, auth bool) erro
 }
 
 func (c *client) requestLimit(method, path string, body any, out any, auth bool, responseLimit int64) error {
+	base, err := url.Parse(c.base)
+	if err != nil || base.Scheme != "https" || base.Hostname() == "" || base.User != nil || base.RawQuery != "" || base.ForceQuery || base.Fragment != "" || base.Path != "" {
+		return errors.New("EDGE_CONTROL_URL must be an HTTPS origin without credentials, path, query, or fragment")
+	}
 	var r io.Reader
 	if body != nil {
-		b, _ := json.Marshal(body)
+		b, err := json.Marshal(body)
+		if err != nil {
+			return err
+		}
 		r = bytes.NewReader(b)
 	}
 	req, e := http.NewRequest(method, c.base+path, r)
@@ -1776,7 +1784,11 @@ func (c *client) requestLimit(method, path string, body any, out any, auth bool,
 		return e
 	}
 	req.Header.Set("Content-Type", "application/json")
-	res, e := c.http.Do(req)
+	// Never forward registration bodies or mTLS identities through redirects.
+	// Copy the client so cell/status transports retain their separate behavior.
+	control := *c.http
+	control.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+	res, e := control.Do(req)
 	if e != nil {
 		return e
 	}
@@ -1799,6 +1811,9 @@ func verify(encoded, checksum, signature, public string) (json.RawMessage, error
 	pk, e := hex.DecodeString(public)
 	if e != nil {
 		return nil, e
+	}
+	if len(pk) != ed25519.PublicKeySize {
+		return nil, errors.New("invalid signing public key length")
 	}
 	sig, e := hex.DecodeString(signature)
 	if e != nil {

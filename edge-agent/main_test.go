@@ -43,6 +43,53 @@ func TestVerifyAndCompatibility(t *testing.T) {
 	}
 }
 
+func TestMalformedSigningKeyReturnsErrorWithoutPanicking(t *testing.T) {
+	payload := []byte(`{"domain_id":1}`)
+	sum := sha256.Sum256(payload)
+	for _, size := range []int{0, 1, 31, 33, 64} {
+		if _, err := verify(base64.StdEncoding.EncodeToString(payload), hex.EncodeToString(sum[:]), strings.Repeat("00", 64), strings.Repeat("00", size)); err == nil {
+			t.Fatalf("invalid public key size %d accepted", size)
+		}
+	}
+}
+
+func TestControlRequestsRejectPlaintextAndRedirects(t *testing.T) {
+	for _, code := range []int{http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
+		received := false
+		sink := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			received = true
+			w.Write([]byte(`{}`))
+		}))
+		control := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, sink.URL, code)
+		}))
+		c := &client{base: control.URL, http: control.Client()}
+		if err := c.request("POST", "/edge/v1/register", map[string]string{"bootstrap_token": "test-only"}, &map[string]any{}, false); err == nil {
+			t.Fatal("control redirect accepted")
+		}
+		if received {
+			t.Fatal("registration body forwarded to another origin")
+		}
+		control.Close()
+		sink.Close()
+	}
+	received := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received = true
+		w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+	for _, base := range []string{server.URL, "https://user:password@localhost", "https://localhost?secret=value", "https://localhost/#fragment", "https://localhost/prefix"} {
+		c := &client{base: base, http: server.Client()}
+		if err := c.request("POST", "/edge/v1/register", map[string]string{"bootstrap_token": "test-only"}, &map[string]any{}, false); err == nil {
+			t.Fatal("unsafe control URL accepted")
+		}
+	}
+	if received {
+		t.Fatal("registration sent over plaintext HTTP")
+	}
+}
+
 func TestVersionCommand(t *testing.T) {
 	if version != "1.2.0" {
 		t.Fatalf("unexpected release version %q", version)
@@ -53,7 +100,7 @@ func TestRegistrationPersistsTokenHashAndRestartDoesNotReuseConsumedToken(t *tes
 	edgeID := "11111111-2222-3333-4444-555555555555"
 	token := strings.Repeat("a", 64)
 	registrations := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		registrations++
 		if r.URL.Path != "/edge/v1/register" {
 			t.Fatalf("unexpected registration path %q", r.URL.Path)
@@ -92,7 +139,7 @@ func TestReplacementTokenReenrollsWithoutDeletingPreviousIdentityFirst(t *testin
 
 	t.Setenv("EDGE_ID", edgeID)
 	t.Setenv("EDGE_BOOTSTRAP_TOKEN", strings.Repeat("b", 64))
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "registration unavailable", http.StatusServiceUnavailable)
 	}))
 	defer server.Close()
@@ -113,7 +160,7 @@ func TestReplacementTokenReenrollsWithoutDeletingPreviousIdentityFirst(t *testin
 
 func TestAcknowledgementBufferRetriesAfterRecovery(t *testing.T) {
 	failing := true
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if failing {
 			http.Error(w, "offline", http.StatusServiceUnavailable)
 			return
@@ -513,7 +560,7 @@ func TestFreshFullSnapshotThenIncrementalArtifact(t *testing.T) {
 	incrementalChecksum := sha256.Sum256(incrementalPayload)
 	incrementalChecksumHex := hex.EncodeToString(incrementalChecksum[:])
 	incrementalSignature := hex.EncodeToString(ed25519.Sign(private, []byte(incrementalChecksumHex)))
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.URL.Path == "/edge/v1/config/full":
@@ -559,7 +606,7 @@ func TestFreshEmptyFullSnapshotActivatesBootstrapGeneration(t *testing.T) {
 		"schema_version": 1, "minimum_agent_version": "1.0.0", "maximum_agent_version": "1.99.0",
 		"artifacts": []map[string]any{},
 	})
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/edge/v1/config/full":

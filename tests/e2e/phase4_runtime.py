@@ -280,7 +280,7 @@ def main() -> None:
             "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
             "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro", "cdnfoundry/edge-runtime:test")
         run("docker", "run", "-d", "--rm", "--name", AGENT_NAME, "--network", EDGE_NETWORK,
-            "-e", "EDGE_CONTROL_URL=http://127.0.0.1:1", "-e", "EDGE_STATE_DIR=/state",
+            "-e", "EDGE_CONTROL_URL=https://127.0.0.1:1", "-e", "EDGE_STATE_DIR=/state",
             "-v", f"{agent_state}:/state", "cdnfoundry/edge-agent:test")
         run("docker", "run", "-d", "--rm", "--name", DEDICATED_NAME, "--network", EDGE_NETWORK, "--tmpfs", "/var/cache/nginx:rw,size=64m",
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/dedicated-test.json", "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
