@@ -3,10 +3,12 @@
 namespace Tests\Feature;
 
 use App\Enums\UserType;
+use App\Http\Middleware\IdempotentRequest;
 use App\Models\AuditLog;
 use App\Models\IdempotencyKey;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -82,6 +84,30 @@ class AccessApiTest extends TestCase
         $this->actingAs($admin)->withHeader('Idempotency-Key', $key)->postJson('/api/admin/users', [...$payload, 'name' => 'Changed'])
             ->assertConflict()->assertJsonPath('error.code', 'idempotency_conflict');
         $this->assertDatabaseCount('users', 2);
+    }
+
+    public function test_idempotency_storage_failure_rolls_back_the_mutation(): void
+    {
+        $user = User::factory()->create();
+        $request = Request::create('/api/me/tokens', 'POST', [], [], [], ['HTTP_IDEMPOTENCY_KEY' => (string) Str::uuid()]);
+        $request->setUserResolver(fn () => $user);
+        IdempotencyKey::creating(function (): void {
+            throw new \RuntimeException('injected receipt storage failure');
+        });
+        try {
+            (new IdempotentRequest)->handle($request, function () use ($user) {
+                $user->createToken('must-rollback');
+
+                return response()->json(['data' => ['created' => true]], 201);
+            });
+            $this->fail('Injected failure did not occur');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('injected receipt storage failure', $exception->getMessage());
+        } finally {
+            IdempotencyKey::flushEventListeners();
+        }
+        $this->assertDatabaseCount('personal_access_tokens', 0);
+        $this->assertDatabaseCount('idempotency_keys', 0);
     }
 
     public function test_token_is_shown_once_and_can_be_revoked(): void

@@ -5,9 +5,11 @@ namespace App\Http\Middleware;
 use App\Models\IdempotencyKey;
 use Closure;
 use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -24,14 +26,27 @@ class IdempotentRequest
         }
 
         $userId = $request->user()?->getKey();
-        $hash = hash('sha256', $request->method().'|'.$request->path().'|'.$request->getContent());
+        $hash = hash('sha256', $request->method().'|'.$request->path().'|'.$request->getQueryString().'|'.$request->getContent());
         $lock = Cache::lock('idempotency:'.hash('sha256', (string) $userId.'|'.$key), 15);
 
         try {
-            return $lock->block(5, function () use ($request, $next, $userId, $key, $hash): Response {
+            return $lock->block(5, fn (): Response => DB::transaction(function () use ($request, $next, $userId, $key, $hash): Response {
+                // The cache lease is a contention hint. PostgreSQL owns the
+                // transaction and lock until both mutation and receipt commit,
+                // even if a worker dies or the cache lease expires mid-request.
+                if (DB::getDriverName() === 'pgsql') {
+                    $acquired = DB::selectOne('SELECT pg_try_advisory_xact_lock(1128549959, hashtext(?)) AS acquired', [(string) $userId.'|'.$key])->acquired;
+                    if (! $acquired) {
+                        return response()->json(['error' => ['code' => 'idempotency_busy', 'message' => 'A request with this idempotency key is still being processed.']], 409);
+                    }
+                }
                 $existing = IdempotencyKey::query()->where('user_id', $userId)->where('key', $key)->first();
                 if ($existing !== null) {
-                    if (! hash_equals($existing->request_hash, $hash)) {
+                    // Retain compatibility with receipts written before query
+                    // parameters became part of request identity.
+                    $legacyHash = hash('sha256', $request->method().'|'.$request->path().'|'.$request->getContent());
+                    if (! hash_equals($existing->request_hash, $hash)
+                        && ($request->getQueryString() !== null || ! hash_equals($existing->request_hash, $legacyHash))) {
                         return response()->json(['error' => ['code' => 'idempotency_conflict', 'message' => 'This key was used with a different request.']], 409);
                     }
 
@@ -41,6 +56,9 @@ class IdempotentRequest
 
                 /** @var Response $response */
                 $response = $next($request);
+                if ($response->getStatusCode() >= 500) {
+                    throw new HttpResponseException($response);
+                }
                 if ($response instanceof JsonResponse && $response->getStatusCode() < 500) {
                     IdempotencyKey::query()->create([
                         'user_id' => $userId,
@@ -53,14 +71,17 @@ class IdempotentRequest
                 }
 
                 return $response;
-            });
+            }));
         } catch (LockTimeoutException) {
             return response()->json(['error' => ['code' => 'idempotency_busy', 'message' => 'A request with this idempotency key is still being processed.']], 409);
         }
     }
 
-    private function replaySafe(array $body): array
+    private function replaySafe(?array $body): ?array
     {
+        if ($body === null) {
+            return null;
+        }
         $omitted = false;
         $strip = function (array $value) use (&$strip, &$omitted): array {
             foreach ($value as $field => $item) {
