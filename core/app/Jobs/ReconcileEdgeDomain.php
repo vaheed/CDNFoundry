@@ -181,36 +181,60 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
         }
         $checksum = hash('sha256', $canonical);
         $activeEdgesQuery = Edge::query()->where('enabled', true)->whereNull('identity_revoked_at');
-        $hasCellPlacements = ! $records->isEmpty() && DomainEdgeCell::query()->where('domain_id', $domain->id)->exists();
-        if ($hasCellPlacements) {
-            $deliveryEdgeIds = DomainEdgeCell::query()->where('domain_id', $domain->id)->pluck('edge_id')
-                ->merge(EdgeArtifact::query()->where('domain_id', $domain->id)->pluck('edge_id'))->unique();
-            $activeEdgesQuery->whereIn('id', $deliveryEdgeIds);
-        }
+        // Deliver only to assigned targets or prior recipients that need a
+        // tombstone. An empty placement never authorizes a fleet-wide snapshot.
+        $deliveryEdgeIds = DomainEdgeCell::query()->where('domain_id', $domain->id)
+            ->where(fn ($query) => $query->whereNotNull('active_cell_id')->orWhereNotNull('target_cell_id'))->pluck('edge_id')
+            ->merge(EdgeArtifact::query()->where('domain_id', $domain->id)->pluck('edge_id'))->unique();
+        $activeEdgesQuery->whereIn('id', $deliveryEdgeIds);
         $activeEdges = $activeEdgesQuery->get();
-        $published = DB::transaction(function () use ($activeEdges, $checksum, $domain, $hasCellPlacements, $operation, $records, $revision, $snapshot): bool {
+        $published = DB::transaction(function () use ($activeEdges, $checksum, $domain, $operation, $records, $revision, $snapshot): bool {
             $currentDomain = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             if ($currentDomain->revision !== $revision) {
                 return false;
             }
-            EdgeRevision::query()->updateOrCreate(['domain_id' => $domain->id, 'revision' => $revision], [
-                'snapshot' => $snapshot, 'checksum' => $checksum, 'status' => 'validated', 'created_by' => $operation?->actor_id,
-            ]);
+            $existingRevision = EdgeRevision::query()->where('domain_id', $domain->id)->where('revision', $revision)->first();
+            if ($existingRevision !== null && $existingRevision->checksum !== $checksum) {
+                // Inherited policy changed without a customer edit. Preserve the
+                // immutable prior snapshot and compile once more at a new revision.
+                $currentDomain->update(['revision' => $revision + 1]);
+
+                return false;
+            }
+            $candidates = [];
             foreach ($activeEdges as $edge) {
-                $cellNames = $hasCellPlacements ? DomainEdgeCell::query()->where('domain_id', $domain->id)->where('edge_id', $edge->id)
+                $cellNames = DomainEdgeCell::query()->where('domain_id', $domain->id)->where('edge_id', $edge->id)
                     ->with(['activeCell:id,name', 'targetCell:id,name'])->get()
                     ->flatMap(fn (DomainEdgeCell $row) => [$row->activeCell?->name, $row->targetCell?->name])
-                    ->filter()->unique()->sort()->values()->all() : [];
-                $tombstone = $records->isEmpty() || ($hasCellPlacements && $cellNames === []);
+                    ->filter()->unique()->sort()->values()->all();
+                $tombstone = $records->isEmpty() || $cellNames === [];
                 $payload = $tombstone ? ['domain' => $domain->name, 'revision' => $revision] : [
                     ...$snapshot,
-                    ...($hasCellPlacements ? ['cells' => $cellNames] : []),
+                    'cells' => $cellNames,
                 ];
                 $artifactChecksum = hash('sha256', ArtifactSigner::encode($payload));
-                EdgeArtifact::query()->firstOrCreate([
+                $kind = $tombstone ? 'tombstone' : 'domain';
+                $latest = EdgeArtifact::query()->where('edge_id', $edge->id)->where('domain_id', $domain->id)->latest('sequence')->first();
+                if ($latest !== null && $latest->revision === $revision
+                    && ($latest->kind !== $kind || $latest->checksum !== $artifactChecksum)) {
+                    // Placement-only changes also need a new durable revision;
+                    // otherwise returning to a previous payload reuses an old sequence.
+                    $currentDomain->update(['revision' => $revision + 1]);
+
+                    return false;
+                }
+                $candidates[] = [
                     'edge_id' => $edge->id, 'domain_id' => $domain->id, 'revision' => $revision,
-                    'kind' => $tombstone ? 'tombstone' : 'domain', 'checksum' => $artifactChecksum,
-                ], ['payload' => $payload, 'signature' => ArtifactSigner::sign($artifactChecksum)]);
+                    'kind' => $kind, 'checksum' => $artifactChecksum, 'payload' => $payload,
+                ];
+            }
+            EdgeRevision::query()->firstOrCreate(['domain_id' => $domain->id, 'revision' => $revision], [
+                'snapshot' => $snapshot, 'checksum' => $checksum, 'status' => 'validated', 'created_by' => $operation?->actor_id,
+            ]);
+            foreach ($candidates as $candidate) {
+                $payload = $candidate['payload'];
+                unset($candidate['payload']);
+                EdgeArtifact::query()->firstOrCreate($candidate, ['payload' => $payload, 'signature' => ArtifactSigner::sign($candidate['checksum'])]);
             }
 
             return true;

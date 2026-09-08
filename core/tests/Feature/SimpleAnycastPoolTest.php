@@ -18,6 +18,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
 class SimpleAnycastPoolTest extends TestCase
@@ -207,6 +208,39 @@ class SimpleAnycastPoolTest extends TestCase
         $future->attributes->set('edge', $edge);
         $this->expectException(ValidationException::class);
         app(EdgeAgentController::class)->heartbeat($future);
+    }
+
+    public function test_stale_heartbeat_cannot_lower_a_newer_durable_sequence(): void
+    {
+        Queue::fake();
+        $edge = $this->edge('stale-heartbeat', 'IR', 'AS');
+        $edge->cells()->create(['slot' => 1, 'status' => 'unassigned']);
+        $artifact = $edge->artifacts()->create(['kind' => 'upsert', 'revision' => 1, 'payload' => [], 'checksum' => str_repeat('a', 64), 'signature' => str_repeat('b', 64)]);
+        $stale = $edge->fresh();
+        $edge->update(['active_sequence' => 42]);
+        $request = Request::create('/edge/v1/heartbeat', 'POST', [
+            'agent_version' => '1.2.0', 'listener_ready' => false, 'active_sequence' => $artifact->sequence, 'cells' => [['name' => 'cell-01', 'status' => 'stopped', 'capacity' => ['active_connections' => 0]]],
+        ]);
+        $request->attributes->set('edge', $stale);
+        app(EdgeAgentController::class)->heartbeat($request);
+        $this->assertSame(42, $edge->refresh()->active_sequence);
+    }
+
+    public function test_stale_applied_request_cannot_lower_a_newer_durable_sequence(): void
+    {
+        Queue::fake();
+        $edge = $this->edge('stale-applied', 'IR', 'AS');
+        $stale = $edge->fresh();
+        $edge->update(['active_sequence' => 42]);
+        $request = Request::create('/edge/v1/config/applied', 'POST', ['sequence' => 0]);
+        $request->attributes->set('edge', $stale);
+        try {
+            app(EdgeAgentController::class)->applied($request);
+            $this->fail('A stale acknowledgement must conflict.');
+        } catch (HttpException $exception) {
+            $this->assertSame(409, $exception->getStatusCode());
+        }
+        $this->assertSame(42, $edge->refresh()->active_sequence);
     }
 
     public function test_anycast_apex_follows_readiness_gated_pool_hostname(): void

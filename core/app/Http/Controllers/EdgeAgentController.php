@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Actions\PromoteReadyEdgePlacements;
 use App\Jobs\AdvanceFleetRollout;
 use App\Jobs\ReconcileAllEdgeDomains;
+use App\Jobs\ReconcileEdgeDomain;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\CachePurge;
 use App\Models\DnsRecord;
@@ -179,7 +180,8 @@ class EdgeAgentController extends Controller
         $listenerReady = $data['listener_ready'] && $computedReady;
         $edge->update([
             'last_heartbeat_at' => now(), 'agent_version' => $data['agent_version'],
-            'active_sequence' => max($edge->active_sequence, $data['active_sequence']),
+            // Evaluate against the durable row, not the middleware's stale model.
+            'active_sequence' => DB::raw('CASE WHEN active_sequence < '.(int) $data['active_sequence'].' THEN '.(int) $data['active_sequence'].' ELSE active_sequence END'),
             'bootstrap_token_hash' => null, 'bootstrap_consumed_at' => null,
             'capacity' => array_merge($edge->capacity ?? [], [
                 'listener_ready' => $listenerReady, 'gateway' => $data['gateway'] ?? null,
@@ -187,6 +189,7 @@ class EdgeAgentController extends Controller
             ]),
             ...(isset($data['runtime_versions']) ? ['runtime_versions' => $data['runtime_versions'], 'runtime_versions_reported_at' => now()] : []),
         ]);
+        $edge->refresh();
         $endpointRoutingChanged = false;
         if (isset($data['gateway'])) {
             $gatewayReady = (bool) ($data['gateway']['ready'] ?? false);
@@ -218,7 +221,9 @@ class EdgeAgentController extends Controller
             ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
         }
         foreach ($data['passive_origins'] ?? [] as $failure) {
-            DnsRecord::query()->where('name', $failure['hostname'])->whereHas('domain', fn ($query) => $query->where('name', $failure['domain']))
+            DnsRecord::query()->where('name', $failure['hostname'])->whereHas('domain', fn ($query) => $query->where('name', $failure['domain'])->where('lifecycle_state', 'active')
+                ->whereHas('edgeCells', fn ($cells) => $cells->where('edge_id', $edge->id)
+                    ->where(fn ($assigned) => $assigned->whereNotNull('active_cell_id')->orWhereNotNull('target_cell_id'))))
                 ->where('mode', 'proxied')->limit(1)->update(['origin_health' => [
                     'status' => 'unhealthy', 'source' => 'passive', 'edge_id' => $edge->id,
                     'failure_count' => $failure['failure_count'], 'http_status' => $failure['last_status'] ?: null,
@@ -226,27 +231,32 @@ class EdgeAgentController extends Controller
                 ]]);
         }
         foreach ($data['noisy_domains'] ?? [] as $event) {
-            $domain = Domain::query()->find($event['domain_id']);
-            if ($domain === null || ! $domain->dnsRecords()->where('mode', 'proxied')->where('name', $event['hostname'])->exists()) {
-                continue;
-            }
-            SecurityEvent::query()->create([
-                'domain_id' => $domain->id, 'edge_id' => $edge->id, 'hostname' => $event['hostname'],
-                'state' => $domain->security_state, 'reason_code' => $event['reason_code'],
-                'details' => ['count' => $event['count']], 'occurred_at' => CarbonImmutable::createFromTimestamp($event['occurred_at']),
-            ]);
-            $settings = $domain->security_settings ?? SecurityConfig::defaults();
-            if ($event['count'] >= 50 && $domain->security_state === 'normal') {
-                $domain->update(['security_state' => 'suspected', 'security_state_changed_at' => now(), 'revision' => $domain->revision + 1]);
-                Operation::coalesceDomain('edge.domain_reconcile', $domain->id);
-                ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
-            }
-            if ($event['count'] >= 100 && str_starts_with($settings['quarantine_policy'], 'automatic')
-                && in_array($domain->refresh()->security_state, ['normal', 'suspected'], true)) {
-                $domain->update(['security_state' => 'restricted', 'security_state_changed_at' => now(), 'revision' => $domain->revision + 1]);
-                Operation::coalesceDomain('edge.domain_reconcile', $domain->id);
-                ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
-            }
+            DB::transaction(function () use ($event, $edge): void {
+                $domain = Domain::query()->where('lifecycle_state', 'active')
+                    ->whereHas('edgeCells', fn ($cells) => $cells->where('edge_id', $edge->id)
+                        ->where(fn ($assigned) => $assigned->whereNotNull('active_cell_id')->orWhereNotNull('target_cell_id')))
+                    ->lockForUpdate()->find($event['domain_id']);
+                if ($domain === null || ! $domain->dnsRecords()->where('mode', 'proxied')->where('name', $event['hostname'])->exists()) {
+                    return;
+                }
+                SecurityEvent::query()->create([
+                    'domain_id' => $domain->id, 'edge_id' => $edge->id, 'hostname' => $event['hostname'],
+                    'state' => $domain->security_state, 'reason_code' => $event['reason_code'],
+                    'details' => ['count' => $event['count']], 'occurred_at' => CarbonImmutable::createFromTimestamp($event['occurred_at']),
+                ]);
+                $settings = $domain->security_settings ?? SecurityConfig::defaults();
+                if ($event['count'] >= 50 && $domain->security_state === 'normal') {
+                    $domain->update(['security_state' => 'suspected', 'security_state_changed_at' => now(), 'revision' => $domain->revision + 1]);
+                    Operation::coalesceDomain('edge.domain_reconcile', $domain->id);
+                    ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
+                }
+                if ($event['count'] >= 100 && str_starts_with($settings['quarantine_policy'], 'automatic')
+                    && in_array($domain->refresh()->security_state, ['normal', 'suspected'], true)) {
+                    $domain->update(['security_state' => 'restricted', 'security_state_changed_at' => now(), 'revision' => $domain->revision + 1]);
+                    Operation::coalesceDomain('edge.domain_reconcile', $domain->id);
+                    ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
+                }
+            });
         }
         PromoteReadyEdgePlacements::execute();
         $this->completeAcknowledgedTombstones();
@@ -301,9 +311,10 @@ class EdgeAgentController extends Controller
     {
         $edge = $request->attributes->get('edge');
         $data = $request->validate(['sequence' => ['required', 'integer', 'min:0']]);
-        abort_if($data['sequence'] < $edge->active_sequence, 409, 'An edge cannot acknowledge a sequence older than its active state.');
         abort_if($data['sequence'] > 0 && ! $edge->artifacts()->where('sequence', $data['sequence'])->exists(), 422, 'The applied sequence was not issued to this edge.');
-        $edge->update(['active_sequence' => $data['sequence']]);
+        $updated = Edge::query()->whereKey($edge->id)->where('active_sequence', '<=', $data['sequence'])
+            ->update(['active_sequence' => $data['sequence']]);
+        abort_unless($updated === 1, 409, 'An edge cannot acknowledge a sequence older than its active state.');
         PromoteReadyEdgePlacements::execute();
         $this->completeAcknowledgedTombstones();
 
