@@ -74,6 +74,7 @@ docker compose --env-file .env.prod -f compose.prod.yml exec core php artisan cd
 | Command and syntax | Purpose and effects | Scheduled |
 | --- | --- | --- |
 | `cdnf:dns:deprovision-due` | Dispatches at most 1,000 due DNS-zone deprovision jobs in chunks of 100. It does not wait for PowerDNS changes. | Every minute |
+| `cdnf:domains:expire-claims` | Retires at most 500 unverified claims older than seven days; runtime deletion remains asynchronous. | Every minute |
 | `cdnf:domains:finalize-deprovisioning {--limit=100}` | Dispatches finalization for due retired domains after runtime tombstones are safe. The effective limit is clamped to 1–1,000. | Every minute |
 
 ## Edge
@@ -128,6 +129,7 @@ or internal non-command work, which is intentionally not renamed here.
 | Scheduled command | Frequency | Purpose |
 | --- | --- | --- |
 | `cdnf:dns:deprovision-due` | Every minute | Queue due DNS removals |
+| `cdnf:domains:expire-claims` | Every minute | Deprovision at most 500 expired unverified claims; preserve verified ownership. |
 | `cdnf:domains:finalize-deprovisioning` | Every minute | Finalize safe domain retirement |
 | `cdnf:edge:complete-placement-drains` | Every minute | Complete ready placement drains |
 | `cdnf:edge:reconcile-stale-placements` | Every minute | Retry stale placements |

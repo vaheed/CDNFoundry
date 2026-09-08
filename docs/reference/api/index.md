@@ -59,9 +59,17 @@ stable identifier.
 ## Idempotency
 
 Mutations marked in the endpoint catalog accept a UUID `Idempotency-Key`.
-Replaying the same method, path, and body within 24 hours returns the recorded
+Replaying the same method, path, query string, and body within 24 hours returns the recorded
 JSON response and `Idempotency-Replayed: true`. Different input with the same
 key returns `409 idempotency_conflict`.
+
+Mutation and replay receipt commit in one PostgreSQL transaction. A concurrent
+request whose key is still locked receives `409 idempotency_busy`; retry the same
+request after the first finishes. Worker death before commit rolls back both.
+Domain authorization runs before replay, so revoked assignments cannot retrieve
+earlier cached domain responses. One-time tokens are omitted from receipts and
+replayed responses. Existing receipts without query parameters remain compatible
+during upgrades. Queue dispatch waits for commit.
 
 ```sh
 curl --fail --request POST \

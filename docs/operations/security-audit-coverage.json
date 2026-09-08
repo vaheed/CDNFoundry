@@ -1,0 +1,3796 @@
+{
+  "source_commit": "602c605b3f50551d18ddab442670d8fbc7e5f545",
+  "decision": "not_yet_qualified",
+  "coverage": "partial",
+  "exclusions": [
+    "Ignored vendor/node_modules and generated assets: dependency/build/image qualification, not first-party source review.",
+    "Owner-run browser qualification and public infrastructure evidence: not executed by coding agent."
+  ],
+  "files": [
+    {
+      "path": ".agents/skills/cdnf-api-endpoint/SKILL.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": ".agents/skills/cdnf-compose-operations/SKILL.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": ".agents/skills/cdnf-dns-runtime/SKILL.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": ".agents/skills/cdnf-edge-runtime/SKILL.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": ".agents/skills/cdnf-feature-module/SKILL.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": ".agents/skills/cdnf-filament-ui/SKILL.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": ".agents/skills/cdnf-production-qualification/SKILL.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": ".agents/skills/cdnf-reconciliation/SKILL.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": ".agents/skills/cdnf-telemetry-analytics/SKILL.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": ".agents/skills/cdnf-tls-lifecycle/SKILL.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": ".env.dev.example",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": ".env.prod.example",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/bug_report.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/config.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/feature_request.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": ".github/pull_request_template.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": ".gitignore",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "AGENTS.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "CODE_OF_CONDUCT.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "LICENSE",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "Makefile",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "README.md",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "SECURITY.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "compose.dev.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "compose.prod.yml",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/.dockerignore",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/.editorconfig",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/.env.example",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/.gitattributes",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/.gitignore",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/.npmrc",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/Dockerfile",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/README.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Actions/DispatchCachePurge.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Actions/DispatchEmergencyMode.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Actions/PlanDomainEdgeCells.php",
+      "status": "partial",
+      "scope": "Assignment boundary traced; full placement/capacity review pending."
+    },
+    {
+      "path": "core/app/Actions/PromoteReadyEdgePlacements.php",
+      "status": "partial",
+      "scope": "Acknowledgement dependencies traced; complete concurrency and placement review pending."
+    },
+    {
+      "path": "core/app/Console/Commands/CompleteEdgePlacementDrains.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Console/Commands/CreateAdministrator.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Console/Commands/CreateControlBackup.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Console/Commands/DispatchDueDnsDeprovisioning.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Console/Commands/DispatchManagedTlsMaintenance.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Console/Commands/DispatchScheduledOriginChecks.php",
+      "status": "partial",
+      "scope": "AUD-028: origin-test admission/configuration/lifecycle, delivery/result binding and dispatch concurrency reviewed with application and isolated PostgreSQL regression coverage; full file and runtime-flow review incomplete."
+    },
+    {
+      "path": "core/app/Console/Commands/ExpireDomainClaims.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Console/Commands/ExpireWafExclusions.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Console/Commands/FinalizeDueDomainDeprovisioning.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Console/Commands/FinalizeUsage.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Console/Commands/GenerateOpenApi.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Console/Commands/PruneAuditLogs.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Console/Commands/PruneEdgeRevisionHistory.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Console/Commands/ReconcileSecurityReadiness.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Console/Commands/ReconcileStaleEdgePlacements.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Console/Commands/RestoreControlBackup.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Console/Commands/SetPlatformSettings.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Console/Commands/ShowPlatformSettings.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Enums/DomainLifecycleState.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Enums/UserType.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Exceptions/AnalyticsUnavailableException.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Pages/AdminDashboard.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Pages/PlatformSettings.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Pages/SystemDnsIdentity.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Pages/Telemetry.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/AuditLogs/AuditLogResource.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/AuditLogs/Pages/ListAuditLogs.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/DnsClusters/DnsClusterResource.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/DnsClusters/Pages/CreateDnsCluster.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/DnsClusters/Pages/EditDnsCluster.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/DnsClusters/Pages/ListDnsClusters.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/EdgePools/EdgePoolResource.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/EdgePools/Pages/CreateEdgePool.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/EdgePools/Pages/EditEdgePool.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/EdgePools/Pages/ListEdgePools.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/Edges/EdgeResource.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/Edges/Pages/CreateEdge.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/Edges/Pages/EditEdge.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/Edges/Pages/ListEdges.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/Edges/Pages/ViewEdge.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/Edges/RelationManagers/CellsRelationManager.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/Edges/RelationManagers/PoolEndpointsRelationManager.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/Operations/OperationResource.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/Operations/Pages/ListOperations.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/Users/Pages/CreateUser.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/Users/Pages/EditUser.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/Users/Pages/ListUsers.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Resources/Users/UserResource.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Widgets/ActiveConditionsWidget.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Widgets/CacheEfficiencyWidget.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Widgets/Concerns/UsesOpsDashboardContext.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Widgets/DataFreshnessWidget.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Widgets/DnsHealthWidget.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Widgets/EdgeHealthTable.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Widgets/ErrorLatencyChart.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Widgets/OperationsTimelineWidget.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Widgets/OpsKpiOverview.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Widgets/QueueHealthWidget.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Widgets/ServiceStatusBanner.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Admin/Widgets/TrafficOverviewChart.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Domain/Pages/Analytics.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Domain/Pages/DomainDashboard.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Domain/Resources/Domains/DomainResource.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/app/Filament/Domain/Resources/Domains/Pages/CreateDomain.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/app/Filament/Domain/Resources/Domains/Pages/ListDomains.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/app/Filament/Domain/Resources/Domains/RelationManagers/DnsRecordsRelationManager.php",
+      "status": "partial",
+      "scope": "AUD-028: origin-test admission/configuration/lifecycle, delivery/result binding and dispatch concurrency reviewed with application and isolated PostgreSQL regression coverage; full file and runtime-flow review incomplete."
+    },
+    {
+      "path": "core/app/Filament/Domain/Resources/Domains/RelationManagers/SecurityRulesRelationManager.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Domain/Resources/Domains/RelationManagers/UsersRelationManager.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Domain/Resources/Domains/RelationManagers/WafExclusionsRelationManager.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Shared/Pages/ApiTokens.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Filament/Shared/Pages/EditProfile.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/AnalyticsController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/AuditLogController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/BackupController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/DnsClusterController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/DnsOperationController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/DomainUserController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/DomainVerificationController.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/EdgeController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/EdgeOperationsController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/EdgePoolController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/FailedJobController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/FleetRolloutController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/LogController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/PlatformDnsSettingsController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/ReconciliationController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/SecurityOperationsController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/SystemOperationsController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/SystemSettingsController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/UsageController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Admin/UserController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/AnalyticsController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/AuthController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/CacheController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/Controller.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/DnsDeploymentController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/DnsRecordController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/DnsZoneController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/DomainController.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/app/Http/Controllers/DomainLifecycleController.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/app/Http/Controllers/DomainLogController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/EdgeAgentController.php",
+      "status": "partial",
+      "scope": "AUD-028: origin-test admission/configuration/lifecycle, delivery/result binding and dispatch concurrency reviewed with application and isolated PostgreSQL regression coverage; full file and runtime-flow review incomplete."
+    },
+    {
+      "path": "core/app/Http/Controllers/GeoDnsController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/HealthController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/MetricsController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/NameserverController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/OperationController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/ProxyController.php",
+      "status": "partial",
+      "scope": "AUD-028: origin-test admission/configuration/lifecycle, delivery/result binding and dispatch concurrency reviewed with application and isolated PostgreSQL regression coverage; full file and runtime-flow review incomplete."
+    },
+    {
+      "path": "core/app/Http/Controllers/SecurityController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/TlsController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/TokenController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/UsageController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Controllers/WafController.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Middleware/AttachRequestContext.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Middleware/AuthenticateEdge.php",
+      "status": "partial",
+      "scope": "Chain provenance, enrolled certificate fingerprint, expiry/revocation and ingress isolation."
+    },
+    {
+      "path": "core/app/Http/Middleware/EnsureAccountIsActive.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Middleware/EnsureHorizonAdmin.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Middleware/EnsureUserIsAdmin.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Middleware/IdempotentRequest.php",
+      "status": "partial",
+      "scope": "Atomic receipts, concurrent exclusion, replay authorization/query identity and one-time secret response coverage."
+    },
+    {
+      "path": "core/app/Http/Requests/Admin/PlatformDnsSettingsRequest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Requests/Admin/StoreUserRequest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Requests/Admin/UpdateUserRequest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Requests/Auth/LoginRequest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Requests/StoreDomainRequest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Resources/DnsClusterResource.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Resources/DnsDeploymentResource.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Resources/DnsRecordResource.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Http/Resources/DomainResource.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/app/Http/Resources/UserResource.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Jobs/AdvanceFleetRollout.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Jobs/ApplyPlatformDnsSettings.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Jobs/BuildUsageRollups.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Jobs/CreateControlBackup.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Jobs/DeleteControlBackup.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Jobs/DeprovisionDnsZone.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Jobs/DispatchOriginTest.php",
+      "status": "partial",
+      "scope": "AUD-028: origin-test admission/configuration/lifecycle, delivery/result binding and dispatch concurrency reviewed with application and isolated PostgreSQL regression coverage; full file and runtime-flow review incomplete."
+    },
+    {
+      "path": "core/app/Jobs/EnsureManagedCertificates.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Jobs/FinalizeDomainDeprovisioning.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/app/Jobs/ImportDnsZone.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Jobs/IssueManagedCertificate.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Jobs/PreflightBackupRestore.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Jobs/ProvisionEdgePoolCells.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Jobs/ReconcileAllDnsZones.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Jobs/ReconcileAllEdgeDomains.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Jobs/ReconcileAllPurges.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Jobs/ReconcileAllTls.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Jobs/ReconcileDnsZone.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/app/Jobs/ReconcileEdgeDomain.php",
+      "status": "partial",
+      "scope": "Lifecycle disable defense and delivery scope traced. Unassigned fallback and artifact payload scope require further adversarial review."
+    },
+    {
+      "path": "core/app/Jobs/ReconcilePlatformDnsIdentity.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Jobs/TestDnsCluster.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Jobs/VerifyDomainNameservers.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/app/Logging/ConfigureStructuredLogging.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Logging/OperationalContextProcessor.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Logging/OperationalJsonFormatter.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/AcmeAccount.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/AcmeChallenge.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/AuditLog.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/Backup.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/CachePurge.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/DnsCluster.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/DnsDeployment.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/DnsRecord.php",
+      "status": "partial",
+      "scope": "AUD-028: origin-test admission/configuration/lifecycle, delivery/result binding and dispatch concurrency reviewed with application and isolated PostgreSQL regression coverage; full file and runtime-flow review incomplete."
+    },
+    {
+      "path": "core/app/Models/Domain.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/app/Models/DomainEdgeCell.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/DomainEdgePlacement.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/DomainNameTombstone.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/Edge.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/EdgeArtifact.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/EdgeCell.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/EdgePool.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/EdgePoolEndpoint.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/EdgeRevision.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/EdgeTask.php",
+      "status": "partial",
+      "scope": "AUD-028: origin-test admission/configuration/lifecycle, delivery/result binding and dispatch concurrency reviewed with application and isolated PostgreSQL regression coverage; full file and runtime-flow review incomplete."
+    },
+    {
+      "path": "core/app/Models/EmergencyMode.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/FleetRelease.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/FleetRollout.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/FleetRolloutEdge.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/IdempotencyKey.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/Operation.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/PlatformDnsDeployment.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/PlatformDnsSetting.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/SecurityEvent.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/SecurityRule.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/SystemSetting.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/TlsCertificate.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/TlsOrder.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/UsageRollup.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Models/User.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/app/Models/WafExclusion.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Ops/Data/OpsDashboardContext.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Ops/Services/MetricComparisonService.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Ops/Services/OpsDashboardService.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Ops/Support/MetricFormatter.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Policies/DomainPolicy.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/app/Providers/AppServiceProvider.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Providers/Filament/AdminPanelProvider.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Providers/Filament/DomainPanelProvider.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Providers/HorizonServiceProvider.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/AcmeClient.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/AnalyticsStore.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/ArtifactSigner.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/BindZone.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/CacheKey.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/CachePolicy.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/CompressionPolicy.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/DnsRecordData.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/DnsZoneImporter.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/DnsZoneValidator.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/DomainName.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/app/Support/DomainNameserverVerification.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/app/Support/EdgeCertificateAuthority.php",
+      "status": "partial",
+      "scope": "Explicit leaf extensions and enrolled identity test. CSR key constraints and CA/leaf expiry relationship require further review."
+    },
+    {
+      "path": "core/app/Support/EdgePoolEndpointData.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/EdgePoolRoutingData.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/EdgeRoutingCompiler.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/FilamentHelp.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/GeoDnsCompiler.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/GeoDnsConfig.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/GeoIpClassifier.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/GeoVocabulary.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/GrafanaExploreUrl.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/ManagedCertificateNames.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/ManagedWaf.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/NameserverResolver.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/app/Support/NetworkAddress.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/OriginData.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/PlatformDnsConfirmation.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/PlatformDnsZone.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/app/Support/PlatformSettings.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/PowerDnsClient.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/PowerDnsZone.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/app/Support/ProxyRevisionRollback.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/PublicSuffix.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/ResticBackupRepository.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/RuntimeVersions.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/SecurityConfig.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/SystemHealth.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/app/Support/UploadedCertificate.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/artisan",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/bootstrap/app.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/bootstrap/cache/.gitignore",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/bootstrap/providers.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/composer.json",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/composer.lock",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/config/app.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/config/auth.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/config/cache.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/config/database.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/config/edge.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/config/filesystems.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/config/horizon.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/config/logging.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/config/mail.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/config/platform.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/config/queue.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/config/sanctum.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/config/security.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/config/services.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/config/session.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/.gitignore",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/factories/UserFactory.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/0001_01_01_000000_create_users_table.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/0001_01_01_000001_create_cache_table.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/0001_01_01_000002_create_jobs_table.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_16_150027_create_personal_access_tokens_table.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_16_160000_add_access_fields_to_users_table.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_16_160100_create_audit_logs_table.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_16_160200_create_idempotency_keys_table.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_16_160300_create_operations_and_platform_settings_tables.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_16_160310_allow_uuid_audit_subjects.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_17_000100_create_domains_tables.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_17_000200_create_dns_records_table.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_17_000300_create_dns_clusters_and_deployments_tables.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_17_000400_add_dns_verification_and_tombstones.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_17_000400_create_platform_dns_deployments_table.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_17_180000_add_token_last_six_to_personal_access_tokens_table.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_17_200000_add_geo_dns_to_dns_records.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_17_210000_create_edge_proxy_tables.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_17_220000_expand_edge_artifact_signatures.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_17_230000_allow_edge_placement_artifacts.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_17_240000_add_edge_identity_certificate.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_18_010000_align_edge_cell_runtime_names.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_18_020000_allow_geo_dns_for_all_record_types.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_18_030000_restrict_geo_dns_to_runtime_types.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_18_040000_harden_edge_runtime_state.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_18_050000_add_domain_reclaim_state.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_18_060000_track_platform_dns_active_zone.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_18_070000_create_system_settings_table.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_18_080000_enforce_domain_proxy_settings_shape.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_19_000100_create_cache_purges.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_19_010000_create_tls_state.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_19_010100_add_managed_tls_workflow.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_19_010200_create_notifications_table.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_19_010300_convert_notification_data_to_jsonb.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_19_020000_configure_revision_history.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_20_000000_create_usage_rollups.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_20_000100_create_security_readiness_state.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_20_010000_add_operations_settings.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_20_020000_create_backups_table.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_20_030000_add_operational_health_indexes.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_27_000000_add_bounded_edge_cell_slots.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_28_000000_add_multi_cell_pool_placement.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_28_010000_create_edge_pool_endpoints.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_28_020000_remove_legacy_cell_addresses_and_name_management_addresses.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_28_030000_add_simple_anycast_pool_routing.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_28_100000_add_cache_profiles_to_edge_pools.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_29_000000_add_compression_profiles_to_edge_pools.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_29_100000_add_managed_waf.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_29_200000_add_observability_and_fleet_rollouts.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_07_30_000000_create_grafana_domain_operational_metadata_view.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_08_01_170000_add_observability_settings.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/migrations/2026_09_05_160000_add_domain_delegation_claims.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/database/seeders/DatabaseSeeder.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/docker/backup/create.sh",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/docker/backup/restore.sh",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/docker/nginx/default.conf",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/docker/php/entrypoint.sh",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/package-lock.json",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/package.json",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/phpunit.xml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/public/.htaccess",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/public/favicon.ico",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/public/favicon.svg",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/public/index.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/public/robots.txt",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/crypto/edge-identity.cnf",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/css/app.css",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/css/filament/shared/theme.css",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/data/public_suffix_list.dat",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/data/public_suffix_list.source.json",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/js/app.js",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/components/ui/data-table.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/components/ui/empty-state.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/components/ui/form-actions.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/components/ui/list-row.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/components/ui/stat-card.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/components/ui/status-pill.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/components/ui/widget-state.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/filament/admin/pages/platform-settings.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/filament/admin/pages/system-dns-identity.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/filament/admin/pages/telemetry.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/filament/admin/resources/edges/enrollment-instructions.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/filament/admin/widgets/active-conditions.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/filament/admin/widgets/cache-efficiency.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/filament/admin/widgets/data-freshness.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/filament/admin/widgets/dns-health.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/filament/admin/widgets/operations-timeline.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/filament/admin/widgets/ops-chart.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/filament/admin/widgets/queue-health.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/filament/admin/widgets/service-status-banner.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/filament/domain/pages/analytics.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/filament/domain/pages/dashboard.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/filament/shared/pages/api-tokens.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/resources/views/welcome.blade.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/routes/api.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/routes/console.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/routes/web.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/storage/app/.gitignore",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/storage/app/private/.gitignore",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/storage/app/public/.gitignore",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/storage/framework/.gitignore",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/storage/framework/cache/.gitignore",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/storage/framework/cache/data/.gitignore",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/storage/framework/sessions/.gitignore",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/storage/framework/testing/.gitignore",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/storage/framework/views/.gitignore",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/storage/logs/.gitignore",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/AccessApiTest.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/tests/Feature/AdminDnsOperationTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/AnalyticsApiTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/BackupApiTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/CacheApiTest.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/tests/Feature/CommandNamespaceTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/CompressionPolicyTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/CreateAdministratorCommandTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/DnsReconciliationTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/DnsRecordApiTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/DnsZoneImportExportTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/DomainApiTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/DomainClaimSecurityTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/DomainLifecycleTest.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/tests/Feature/EdgeProxyTest.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/tests/Feature/EdgeRevisionHistoryTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/EdgeTaskResultTest.php",
+      "status": "partial",
+      "scope": "Reviewed and executed rollback, backoff replay and edge ownership tests; no browser automation."
+    },
+    {
+      "path": "core/tests/Feature/FilamentPanelAccessTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/FilamentWorkflowTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/FleetRolloutTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/GeoDnsTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/HealthApiTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/ManagedTlsTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/ManagedWafTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/MultiCellPlacementTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/OpenApiContractTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/OperationsApiTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/OpsDashboardTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/OriginDestinationSafetyTest.php",
+      "status": "reviewed",
+      "scope": "Complete 68-line API regression corpus reviewed and executed: 16 primary/backup mapped IPv6, explicit deny precedence and equivalent IPv6 exclusion cases. Baseline failures and fixed validation/no-mutation assertions recorded; no whole-runtime SSRF qualification claimed."
+    },
+    {
+      "path": "core/tests/Feature/OriginFailoverTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/OriginTestLifecycleTest.php",
+      "status": "partial",
+      "scope": "AUD-028 origin lifecycle and dispatch regression coverage; full runtime-flow review incomplete."
+    },
+    {
+      "path": "core/tests/Feature/ParentDelegationTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/PoolServiceEndpointTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/RepositoryContractTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/SecurityApiTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/SimpleAnycastPoolTest.php",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "core/tests/Feature/SystemIdentityApiTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/SystemSettingsTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/TelemetryBrowserExportTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Feature/TlsApiTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/TestCase.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Unit/ExampleTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Unit/FilamentHelpTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Unit/NetworkAddressTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/tests/Unit/OperationalJsonFormatterTest.php",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "core/vite.config.js",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "deploy/production/Caddyfile",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "deploy/production/Caddyfile.dns-api",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "deploy/production/Caddyfile.telemetry",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "deploy/production/examples/multi-region-fleet.json",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "deploy/production/examples/starter-fleet.json",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/alertmanager/alertmanager.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/backup/dev-restic-password",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/clickhouse/config.d/prometheus.xml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/clickhouse/init.sql",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/clickhouse/migrations/2026_07_29_add_compression_telemetry.sql",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/clickhouse/migrations/2026_07_29_add_managed_waf_telemetry.sql",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/clickhouse/migrations/2026_07_29_add_origin_failover_telemetry.sql",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/clickhouse/users.d/grafana.xml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/dev-pki/Dockerfile",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/dnsdist/dnsdist.conf",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/grafana/Dockerfile",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docker/grafana/dashboards/domain-command-center.json",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/grafana/dashboards/system-command-center.json",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/grafana/postgres/provision.sh",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/grafana/postgres/provision.sql",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/grafana/provisioning/alerting/.gitkeep",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/grafana/provisioning/dashboards/dashboards.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/grafana/provisioning/datasources/datasources.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/grafana/provisioning/plugins/.gitkeep",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/loki/Dockerfile",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docker/loki/loki.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/mmdb-updater/Dockerfile",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docker/mmdb-updater/entrypoint.sh",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/nginx/Dockerfile.origin-https",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/nginx/Dockerfile.production",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docker/nginx/cache-upstream.conf",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/nginx/default.conf",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docker/nginx/edge-control.conf",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docker/nginx/edge-runtime.conf",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/nginx/edge.conf",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/nginx/openresty.conf",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/nginx/origin-https.conf",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/nginx/origin-proxy.conf",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/nginx/origin.conf",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/nginx/proxy-cache.conf",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/openresty/Dockerfile",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docker/openresty/entrypoint.sh",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/openresty/runtime.lua",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/openresty/waf.conf",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/pdns/geoip-zones.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/pdns/pdns.conf",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/postgres/ensure-pdns-runtime.sh",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/postgres/pdns-migrations/2026_07_17_000001_add_powerdns_metadata_tables.sql",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/postgres/pdns-schema.sql",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/prometheus/alerts.test.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/prometheus/control-targets.dev.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/prometheus/control-targets.prod.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/prometheus/dev-metrics-token",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/prometheus/dns-targets.dev.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/prometheus/dns-targets.prod.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/prometheus/edge-targets.dev.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/prometheus/edge-targets.prod.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/prometheus/node-targets.dev.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/prometheus/node-targets.prod.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/prometheus/operational-log-targets.dev.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/prometheus/operational-log-targets.prod.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/prometheus/prometheus.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/prometheus/telemetry-alerts.yml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/vector/host-journal.yaml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/vector/operational.yaml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docker/vector/vector.yaml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/.markdownlint-cli2.jsonc",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/.vitepress/config.mts",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/.vitepress/theme/MermaidDiagram.vue",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/.vitepress/theme/custom.css",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/.vitepress/theme/index.ts",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/architecture/components.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/architecture/data-flows.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/architecture/data-model.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/architecture/index.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/architecture/production-reference-architectures.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/concepts/cdn-fundamentals.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/concepts/desired-state.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/concepts/domains-and-dns.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/concepts/edges-and-cells.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/concepts/how-cdnfoundry-works.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/concepts/index.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/concepts/revisions-and-operations.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/contributing/documentation-audit.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/contributing/documentation.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/contributing/index.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/deployment/certificates.md",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docs/deployment/index.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/deployment/manual-compose.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/deployment/production-fleet-config-reference.md",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docs/deployment/production-fleet-operator-guide.md",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docs/deployment/production-fleet.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/deployment/production-quick-start-multi-region.md",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docs/deployment/production-quick-start.md",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docs/deployment/topology.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/deployment/upgrade.md",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docs/development/frontend.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/development/index.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/development/project-layout.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/development/scripts-and-ci.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/development/testing.md",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docs/getting-started/first-domain.md",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docs/getting-started/index.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/getting-started/installation.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/getting-started/private-cdn-design.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/getting-started/using-cdnfoundry.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/guides/analytics.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/guides/cache.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/guides/compression.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/guides/dns.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/guides/domains.md",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docs/guides/edges.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/guides/geo-dns.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/guides/index.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/guides/managed-waf.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/guides/proxy-and-origins.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/guides/security.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/guides/tls.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/guides/users-and-access.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/index.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/acme-failure-guide.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/analytics-reference.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/architecture.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/authentication-api.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/cache-development-mode.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/cache-purge-troubleshooting.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/cache-semantics.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/clickhouse-outage-runbook.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/coding-agent-skills.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/core/README.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/custom-certificates.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/ddos-readiness.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/development-stack.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/dns-cluster-runbook.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/dns-import-export.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/dns-record-reference.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/domain-onboarding.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/edge-drain-placement-and-failure.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/edge-emergency-mode-runbook.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/edge-installation-and-registration.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/frontend-route-coverage.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/geo-dns.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/github/pull_request_template.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/installation.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/log-schema.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/managed-tls-lifecycle.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/manual-browser-qualification.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/openapi.json",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/operations/operations-and-recovery.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/operations/production-certificates.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/origin-and-proxy-policy.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/phase-1-qualification.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/phase-2-qualification.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/phase-3-qualification.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/phase-4-qualification.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/phase-5-qualification.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/phase-6-qualification.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/phase-7-qualification.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/phase-8-qualification.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/platform-settings.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/production-layout.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/production-quick-start.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/production-scaling.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/quarantine-recovery-runbook.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/registrar-and-glue.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/request-origin-limits.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/revision-history.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/roadmap.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/root/CODE_OF_CONDUCT.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/root/CONTRIBUTING.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/root/README.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/root/SECURITY.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/security-reason-codes.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/security-rules.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/system-dns-identity.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/telemetry-retention-privacy.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/trusted-client-ip.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/legacy/usage-export-contract.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/manual-browser-qualification.md",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docs/operations/backup-and-recovery.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/operations/cell-inventory.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/operations/cli-commands.md",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docs/operations/fleet-rollouts.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/operations/gateway-ingress.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/operations/grafana.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/operations/index.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/operations/laravel-operations-dashboard.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/operations/monitoring.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/operations/multi-cell-pools.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/operations/operational-logging.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/operations/pool-service-endpoints.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/operations/production-best-practices.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/operations/production-qualification.md",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docs/operations/runbooks.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/operations/runtime-generations.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/operations/scaling.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/operations/security-audit-coverage.json",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/operations/security-audit.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/operations/simple-anycast-qualification.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/operations/simple-anycast.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/operations/software-supply-chain.md",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docs/package-lock.json",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/package.json",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/public/favicon.svg",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/public/images/screencapture-admin.png",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/public/images/screencapture-edges.png",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/public/images/screencapture-telemetry.png",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/public/openapi.json",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/public/robots.txt",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/public/social-card.svg",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/reference/api/edge-agent.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/reference/api/endpoints.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/reference/api/errors.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/reference/api/index.md",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docs/reference/cli-and-scheduler.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/reference/configuration.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/reference/dns-records.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/reference/index.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/reference/limits.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/reference/platform-settings.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/reference/services-and-ports.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/reference/telemetry-schema.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/roadmap.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/security/hardening.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/security/index.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/security/reporting.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/troubleshooting/dns.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/troubleshooting/edge-and-origin.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/troubleshooting/index.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/troubleshooting/telemetry.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "docs/troubleshooting/tls-and-cache.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "edge-agent/Dockerfile",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "edge-agent/generation.go",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "edge-agent/go.mod",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "edge-agent/main.go",
+      "status": "partial",
+      "scope": "AUD-030 origin probe DNS, destination sets, TLS diagnostics and bounds with real local IPv4/IPv6/DNS/HTTP/TLS regression coverage; remaining runtime and whole-file review incomplete."
+    },
+    {
+      "path": "edge-agent/main_test.go",
+      "status": "partial",
+      "scope": "AUD-030 origin probe DNS, destination sets, TLS diagnostics and bounds with real local IPv4/IPv6/DNS/HTTP/TLS regression coverage; remaining runtime and whole-file review incomplete."
+    },
+    {
+      "path": "edge-agent/origin_probe_test.go",
+      "status": "partial",
+      "scope": "AUD-030 origin probe runtime regression; broader release/topology qualification incomplete."
+    },
+    {
+      "path": "edge-gateway/Dockerfile",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "edge-gateway/go.mod",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "edge-gateway/main.go",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "edge-gateway/main_test.go",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "edge-gateway/scale_test.go",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "scripts/README.md",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "scripts/cdnfoundry-fleet",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "scripts/cdnfoundry_fleet/__init__.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "scripts/cdnfoundry_fleet/__main__.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "scripts/cdnfoundry_fleet/certs.py",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "scripts/cdnfoundry_fleet/cli.py",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "scripts/cdnfoundry_fleet/common.py",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "scripts/cdnfoundry_fleet/compose.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "scripts/cdnfoundry_fleet/pdns_rotation.py",
+      "status": "partial",
+      "scope": "Rotation source reviewed; actual PostgreSQL/PowerDNS authentication, locks, validation and retry qualified. Power-loss and full host restore pending."
+    },
+    {
+      "path": "scripts/cdnfoundry_fleet/render.py",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "scripts/cdnfoundry_fleet/state.py",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "scripts/ensure-development-certificates.sh",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "scripts/generate-production-certificates.sh",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "scripts/generate-production-env.sh",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "scripts/install-production-prerequisites.sh",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "scripts/issue-production-dns-api-certificate.sh",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "scripts/qualification/test-go.sh",
+      "status": "partial",
+      "scope": "AUD-030 origin probe DNS, destination sets, TLS diagnostics and bounds with real local IPv4/IPv6/DNS/HTTP/TLS regression coverage; remaining runtime and whole-file review incomplete."
+    },
+    {
+      "path": "scripts/supply-chain-policy.py",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "scripts/validate-production-overrides.sh",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "supply-chain/.trivyignore",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "supply-chain/release-manifest.example.json",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "supply-chain/trivy.yaml",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/config/generate-production-env.sh",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/docs/check_built_site.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/docs/check_links.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/cell_inventory.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/e2e.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/fleet_pdns.py",
+      "status": "partial",
+      "scope": "Reviewed and executed bounded secret/rotation runtime qualification; explicitly excludes public DNS/GeoIP and full installation."
+    },
+    {
+      "path": "tests/e2e/gateway_ingress.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/grafana_observability.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/operational_logging.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/origin_failover.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/origin_probes.py",
+      "status": "partial",
+      "scope": "AUD-030 origin probe runtime regression; broader release/topology qualification incomplete."
+    },
+    {
+      "path": "tests/e2e/parent_delegation.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/phase2_dns.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/phase2_scale.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/phase3_geo_dns.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/phase4_control_plane.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/phase4_mtls.py",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "tests/e2e/phase4_runtime.py",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "tests/e2e/phase5_tls.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/phase6_security.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/phase7_analytics.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/phase8_mmdb.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/phase8_operations.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/phase8_recovery.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/phase8_throughput.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/phase8_upgrade.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/phase9_waf.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/postgres_domain_claims.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/e2e/postgres_edge_tasks.py",
+      "status": "partial",
+      "scope": "AUD-028: origin-test admission/configuration/lifecycle, delivery/result binding and dispatch concurrency reviewed with application and isolated PostgreSQL regression coverage; full file and runtime-flow review incomplete."
+    },
+    {
+      "path": "tests/e2e/production_observability.py",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "tests/e2e/production_qualification.py",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "tests/fixtures/edge-runtime.json",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/fleet/requirements.txt",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/fleet/test_fleet.py",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "tests/observability/test_grafana_contract.py",
+      "status": "partial",
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "tests/observability/test_operational_logging_contract.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/qualification/test_evidence.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/qualification/test_go_ci.py",
+      "status": "reviewed",
+      "scope": "Complete 80-line fixture reviewed; actual CI shell parsing, isolated files, controlled first/last-module tool exits, annotations and success assertions executed against baseline and fixed staged tree. Remote CI execution not claimed."
+    },
+    {
+      "path": "tests/supply_chain/test_policy.py",
+      "status": "pending",
+      "scope": "Inventory only; no whole-file completion claimed."
+    },
+    {
+      "path": "tests/supply_chain/test_release_instructions.py",
+      "status": "partial",
+      "scope": "Documented release projection exercised with valid/invalid manifest inputs and real Fleet dry run."
+    }
+  ]
+}

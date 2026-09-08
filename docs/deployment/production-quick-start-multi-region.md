@@ -43,7 +43,9 @@ Read and complete the [starter fleet quick start](production-quick-start.md) fir
 ```bash
 git clone https://github.com/vaheed/CDNFoundry.git cdnfoundry
 cd cdnfoundry
-git checkout v1.0.0
+read -r -p 'Verified release source commit (40 hex characters): ' CDNF_SOURCE_COMMIT
+[[ "$CDNF_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || exit 1
+git checkout --detach "$CDNF_SOURCE_COMMIT"
 git rev-parse --verify HEAD
 sudo ./scripts/install-production-prerequisites.sh
 ```
@@ -63,11 +65,11 @@ python3 -m json.tool fleet.json >/dev/null
 ./scripts/cdnfoundry-fleet --config fleet.json --non-interactive --dry-run setup
 ```
 
-Create state and all node bundles:
+Complete [release verification and image projection](../operations/software-supply-chain.md#populate-fleet-image-references) to create `fleet.verified.json`. Create state and all node bundles from that verified candidate:
 
 ```bash
 sudo ./scripts/cdnfoundry-fleet \
-  --config fleet.json \
+  --config fleet.verified.json \
   --state-dir /var/lib/cdnfoundry-fleet \
   --output-dir /var/lib/cdnfoundry-fleet/bundles \
   --non-interactive \

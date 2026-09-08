@@ -245,6 +245,12 @@ The generator follows the production repositoryâ€™s two-CA model:
 
 CA private keys stay in the protected fleet state directory. Every node bundle receives the edge server CA certificate plus its own certificate and private key. Only the control bundle receives the edge identity CA private key because the control service requires it. The transferred key begins root-only; the generated control `start.sh` must run as root and changes only this key to owner `root`, numeric group `82`, mode `0640`, allowing the immutable image's PHP-FPM worker to read it without making it public.
 
+DNS activation also requires root: `start.sh` restricts the credential-bearing
+`docker/pdns/pdns.conf` to `root:82`, mode `0640`, and the generated PowerDNS
+service receives that supplementary reader group. Keep the bundle directory
+mode `0700`. Use the [staged password rotation procedure](production-fleet.md#per-node-dns-database-lifecycle)
+for existing databases; rerendering alone does not rotate a stored credential.
+
 Important generated environment paths include:
 
 ```text
@@ -499,3 +505,33 @@ You can still generate bundles and run Python-level validation. Run each bundleâ
 - [Production quick start: multi-region fleet](production-quick-start-multi-region.md)
 - [Production fleet reference](production-fleet.md)
 - [Fleet configuration reference](production-fleet-config-reference.md)
+
+## Atomic render and recovery guarantees
+
+Setup validates the complete candidate topology before persisting its nodes.
+Rendering prepares and fsyncs a complete fleet generation before activating it
+with Linux `renameat2` exchange. A later-node render failure leaves every active
+bundle unchanged. The output directory remains addressable during replacement;
+`<output-dir>.previous` retains the complete previous generation, and per-node
+`.previous` directories remain available for existing operator workflows.
+This is local bundle publication; remote host activation remains a separate
+rollout operation and requires its own acknowledgements.
+
+Use the supported Linux filesystem with same-filesystem rename and directory
+fsync. An unsupported atomic exchange fails with an actionable error instead
+of moving away the active bundle. If archival fails after exchange, retain the
+reported `.candidate-*` sibling directory: it contains the previous generation.
+Do not remove recovery material while diagnosing an interrupted render.
+
+Fleet refuses to regenerate a CA when only its key or certificate survives.
+Restore the matching pair from backup. Reused CA and node certificates must
+verify, match their keys and remain valid for at least 24 hours. Expired or
+mismatched material requires an explicit, coordinated PKI recovery; a render
+must not silently replace trust. Keep the CA keys, application encryption key,
+artifact signing key and TLS material with the database backup.
+
+Generated environment values preserve literal dollar signs, quotes and
+backslashes through Compose and Fleet adoption. JSON status redacts `extra_env`
+values and feature endpoints/repositories because they may contain credentials.
+Read protected state locally when an exact value is needed; do not copy it into
+logs or tickets. Dry runs do not create lock files or change state permissions.

@@ -57,12 +57,21 @@ On an administrative workstation or the future control node, clone an immutable 
 ```bash
 git clone https://github.com/vaheed/CDNFoundry.git cdnfoundry
 cd cdnfoundry
-git checkout v1.0.0
+read -r -p 'Verified release source commit (40 hex characters): ' CDNF_SOURCE_COMMIT
+[[ "$CDNF_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || exit 1
+git checkout --detach "$CDNF_SOURCE_COMMIT"
 git rev-parse --verify HEAD
 sudo ./scripts/install-production-prerequisites.sh
 ```
 
-Replace `v1.0.0` with a published release tag or exact commit SHA. Do not deploy from a moving branch or mutable image tag.
+Select the source commit from an available signed release manifest. Do not
+deploy from a moving branch or mutable image tag. The audit checkout currently
+has no established signed release evidence and is not production qualified.
+
+Before installation, complete [release verification and Fleet image projection](../operations/software-supply-chain.md#verify-a-release).
+Populate the topology below, then use that procedure to produce
+`fleet.verified.json` with all nine verified component digests. Use that file in
+subsequent setup commands. No published tag or example digest is assumed here.
 
 ## 2. Create your topology file
 
@@ -94,7 +103,7 @@ python3 -m json.tool fleet.json >/dev/null
 ./scripts/cdnfoundry-fleet --config fleet.json --non-interactive --dry-run setup
 ```
 
-The dry run performs topology, role, address, feature, and Compose validation without writing Fleet state or bundles.
+The dry run performs topology, role, address, feature, and Compose validation without writing Fleet state or bundles. It does not establish signatures, public DNS/TLS reachability, or production readiness; use the verified image projection before actual setup.
 
 ### Publish the control-host management records
 
@@ -133,7 +142,7 @@ issuance and normal operation. Do not point these records at a PoP address.
 ```bash
 sudo install -d -m 0700 /var/lib/cdnfoundry-fleet
 sudo ./scripts/cdnfoundry-fleet \
-  --config fleet.json \
+  --config fleet.verified.json \
   --state-dir /var/lib/cdnfoundry-fleet \
   --output-dir /var/lib/cdnfoundry-fleet/bundles \
   --non-interactive \

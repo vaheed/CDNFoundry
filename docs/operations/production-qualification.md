@@ -70,10 +70,11 @@ They may contain local topology identifiers. Review and sanitize before sharing.
 Coding agents do not automate browsers, operate public routing, or infer that a
 local container topology proves public traffic. Complete the exact
 [manual qualification](https://github.com/vaheed/CDNFoundry/blob/main/docs/manual-browser-qualification.md),
-then provide one non-empty sanitized evidence file for each owner-operated
-check:
+then provide one structured, sanitized JSON evidence file for each owner-operated
+check. A nonempty file alone is rejected:
 
 ```sh
+export CDNF_QUALIFY_ENVIRONMENT_ID=starter-qualification-01
 export CDNF_QUALIFY_EXTERNAL_IP_EVIDENCE=/absolute/path/ipv4-ipv6.json
 export CDNF_QUALIFY_ANYCAST_EVIDENCE=/absolute/path/anycast.json
 export CDNF_QUALIFY_EXTERNAL_LOAD_EVIDENCE=/absolute/path/load.json
@@ -82,10 +83,37 @@ export CDNF_QUALIFY_BROWSER_EVIDENCE=/absolute/path/browser.json
 make dev-production-qualification
 ```
 
-An evidence file records the commit, date, operator, topology, command or exact
-manual step, expected result, actual result, measurements, sanitized artifact
-links, and outcome. Never place passwords, tokens, private keys, certificate
-private material, customer data, or signing keys in evidence.
+Use `python3 tests/e2e/production_qualification.py --source-identity` to obtain
+`commit` and `source_sha256` for the exact checkout, including local edits and
+untracked implementation. Evidence must match both values and the explicit
+`CDNF_QUALIFY_ENVIRONMENT_ID`. A source change during a run blocks qualification.
+
+Each evidence object requires `schema: 1`, `check_id` (the runner identifier),
+`commit`, `source_sha256`, `environment_id`, `operator`, `topology`, a timezone
+qualified `recorded_at`, `images` (a nonempty list of tested digest references),
+`measurements` (an object), and `outcome` (`passed`, `failed`, `blocked`, or
+`not_run`). Each of the 1–1000 `steps` records `action`, `expected`, `actual`, and
+`outcome`. No failed or missing step can establish a pass. Files are limited to
+1 MiB. Keep sanitized logs and artifact links with the evidence in the protected
+store; do not include secrets or customer data.
+
+Set `kind` to `executed_check` only for recorded command execution; every step
+then requires an integer `exit_code`, with zero for passed steps. Set `kind` to
+`operator_attestation` for manual work. The report explicitly identifies that
+attestation and its operator; it does not describe it as execution by the runner.
+Structured evidence is an attributable operator assertion, not a cryptographic
+proof of execution. Review its accompanying artifacts before approving release.
+
+The report schema is now 2. It includes source identity, environment identity,
+source stability, command exit codes and evidence kind. Old nonempty evidence
+files must be replaced with the above records. Partial and early-stopped runs
+list every remaining check as `not_run`.
+
+Install the pinned Python test dependencies with
+`python3 -m pip install -r tests/fleet/requirements.txt` in an isolated Python
+environment. Fleet pytest and negative qualification-tool fixtures are required
+in CI and the production runner; `make fleet-test` and
+`make qualification-tools-check` run them independently.
 
 For an environment without approved Anycast routing, record the Anycast check
 as `blocked`; do not set its evidence variable and do not claim final release
@@ -127,3 +155,17 @@ claim volumetric DDoS scrubbing, general BGP management, HTTP/3, origin shield,
 or a warm standby. The current architecture provides bounded application-layer
 controls and continues serving only while the edge host, network, and upstream
 capacity remain available.
+
+The `production-dependencies` agent check invokes the existing supply-chain tool
+against all immutable production Compose dependencies and role overrides. It
+fails on High/Critical or end-of-life findings, retains complete JSON/table
+reports, and does not let first-party image scans substitute for dependency
+coverage. The `postgres-claims` check also exercises concurrent durable edge
+acknowledgements and idempotency process-death recovery on its disposable database.
+
+The `fleet-pdns` agent check runs `python3 tests/e2e/fleet_pdns.py` as root with
+Docker, Compose, Python and the Fleet requirements installed. It uses a unique
+Compose project and PostgreSQL tmpfs to qualify generated secret permissions,
+actual PowerDNS startup, password rotation, concurrency rejection and recovery
+after a database-only password change. It never removes existing data volumes.
+GeoIP, public DNS, enrollment and full multi-host installation are separate gates.

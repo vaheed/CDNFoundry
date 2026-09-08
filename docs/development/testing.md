@@ -148,3 +148,29 @@ Record the exact commands, revision, environment, result counts or terminal
 markers, migration activity, and limitations. Historical
 results in `docs/legacy/` are evidence for their recorded commits, not proof for
 the current tree.
+
+## Domain claim database qualification
+
+`python3 tests/e2e/postgres_domain_claims.py` runs actual application migrations
+and concurrent domain creation against its own named disposable PostgreSQL
+container, loopback port and tmpfs database. It uses no PHPUnit migration traits
+and touches no persistent database or named volume. It requires host PHP with
+PDO PostgreSQL and the installed `core/vendor` dependencies. The result records
+the image digest, instance name and observed name-lock wait.
+
+The PostgreSQL script also exercises idempotency locking with process-local
+caches, concurrent identical requests, and a killed process between mutation and
+receipt. For parent delegation, install host `bind9-dnsutils` (providing `dig`
+and `delv`) alongside PHP with intl and existing Composer dependencies, then run:
+
+```sh
+python3 tests/e2e/parent_delegation.py
+```
+
+This builds a pinned Alpine/BIND fixture, generates an ephemeral signed COM
+zone, and queries real UDP/TCP listeners over IPv4 and IPv6 loopback. It covers
+fresh/stale delegation, bogus signatures, existing DS and child-apex answers.
+A test-only process seam supplies the fixture trust anchor and redirects packets;
+production validation and bounds run unchanged. This does not qualify public
+DNS, registrar propagation or routed IPv6. No application database or existing
+container/volume changes. IPv6 loopback is required for the check.

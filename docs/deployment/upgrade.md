@@ -21,6 +21,45 @@ the proven schema compatibility envelope.
 5. Review migrations for expand/contract compatibility.
 6. Run the target's automated and real-runtime qualification.
 
+## September 2026 security changes
+
+This checkout is **not yet qualified for production**; see the
+[audit evidence](../operations/security-audit.md). The following order is required
+when qualifying an upgrade that includes these changes:
+
+1. Preserve the encrypted backup, existing PKI and previous image references.
+2. Deploy the updated `web` and `edge-control` Nginx configurations **before**
+   the updated Laravel core. Edge-control now forwards the TLS-verified client
+   certificate; ordinary ingress clears that header. The old core ignores this
+   extra header. The new core rejects missing or mismatched certificates with
+   HTTP 401, so deploying it behind an old edge-control image pauses enrollment
+   identity authentication and runtime delivery.
+3. Drain old nameserver-verification workers and pause new claim submissions
+   during the control-plane transition. Apply
+   `2026_09_05_160000_add_domain_delegation_claims` forward, then replace core,
+   Horizon and Scheduler together. Existing verified domains retain their
+   nameservers. Pending applicants receive fresh claim-specific nameservers;
+   an old queued verification must not run with the old shared-NS verifier.
+4. Confirm every serving domain has explicit pool/cell assignments. The old
+   no-placement artifact broadcast is removed; an unassigned edge receives no
+   new domain configuration. Preserve active generations while qualifying this
+   boundary. Verify edge heartbeats, issued artifact acknowledgements, and customer
+   serving before continuing. No identity fingerprint database migration is
+   needed: authentication compares the certificate already stored at enrollment.
+5. Rotate existing edge identities one canary at a time using
+   [the identity rotation procedure](certificates.md#rotation). Earlier issuance
+   could inherit `CA:TRUE` from the host OpenSSL configuration. New identities
+   explicitly use `CA:FALSE`, digital-signature use and client authentication.
+   Exact enrolled-certificate matching contains this flaw during rotation;
+   it does not retroactively change an old certificate's extensions.
+
+Do not regenerate an existing CA as an upgrade shortcut. Newly generated Fleet
+roots use `pathlen:0`; existing roots and recovery material remain intact.
+Keep the ingress provenance and exact-certificate authentication fixes when
+repairing a failed canary. Rolling back to serial-only authentication restores
+the security defect. The claim migration deliberately refuses destructive
+rollback; use a forward repair and retain claim/tombstone evidence.
+
 ## Rollout order
 
 For additive migrations and compatible agents:
@@ -69,8 +108,8 @@ behavior and does not undo an origin-health result already recorded.
 
 ## Application rollback
 
-If the target application is compatible with the already-applied schema, repin
-`CDNF_RELEASE` to the prior immutable image and replace services in reverse
+If the target application is compatible with the already-applied schema, restore
+the prior verified `CDNF_*_IMAGE` digest references and replace services in reverse
 order. Do not roll the database backward for a normal application rollback.
 Contract migrations must remove old columns only in a later release after every
 old binary is gone.

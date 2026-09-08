@@ -49,6 +49,21 @@ Management addresses may be absent or private. Pool endpoint addresses are
 customer traffic listeners. Neither is required for agent enrollment, task
 polling, heartbeats, or artifact acknowledgement.
 
+## Identity verification boundary
+
+Issued edge-agent certificates explicitly prohibit CA use and permit only
+client authentication with digital signatures. Edge-control passes its verified
+client certificate, verification result and serial directly to PHP-FPM. Laravel
+requires the SHA-256 fingerprint of that certificate to match the enrolled
+certificate stored for the edge. The ordinary web ingress clears all three
+identity headers and denies `/edge/v1/` routes.
+
+A valid chain or a caller-supplied serial alone does not authenticate an edge.
+Custom ingress configurations must preserve this boundary. Follow the
+[security upgrade order](upgrade.md#september-2026-security-changes) when updating
+existing listeners and identities. Fleet refuses incomplete CA pairs and reports
+which recovery material to restore; it does not replace a surviving CA key.
+
 ## Distribution
 
 - The control core needs the identity CA certificate and restricted private key.

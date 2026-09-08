@@ -219,7 +219,8 @@ generated/              # when required
 referenced docker/...   # only runtime files used by selected services
 ```
 
-DNS nodes may additionally receive `reconcile-pdns-password.sh` and a pending password file during a staged rotation.
+DNS nodes additionally receive `reconcile-pdns-password.sh`, its self-contained
+Python implementation, and a pending password file during a staged rotation.
 
 Generated `start.sh` selects base profiles from the node role and reads the host's
 current `EDGE_ID` through Compose. An unenrolled `dns-edge` node starts DNS;
@@ -233,7 +234,34 @@ required. Environment files are parsed as configuration, never sourced as shell.
 - State, secrets, environment files, manifests, and private keys use mode `0600` at render and transfer time. During control activation, generated `start.sh` changes only `pki/edge-identity-ca.key` to owner `root`, numeric group `82`, mode `0640`, so the core image's PHP-FPM worker can read the signing key.
 - Node bundles are assembled in temporary directories and activated atomically.
 - Normal rendering does not rotate secrets.
+- DNS activation requires root and sets `docker/pdns/pdns.conf` to `root:82`,
+  mode `0640`. PowerDNS receives supplementary group `82` while retaining its
+  non-root image user. This credential-bearing file is excluded from public
+  configuration permission repair. Rotation preserves the same ownership.
 - DNS database credentials are node-scoped.
 - CA private keys remain in authoritative fleet state, except the edge identity CA key required by the control service in the control bundle.
 - Every operator-controlled Compose interpolation value is present in the node's generated `.env.prod`; production Compose provides no fallback deployment values.
 - Compose `environment` mappings remain explicit per-service allowlists. Replacing them with a shared `env_file` entry would expose unrelated database, PKI, and API credentials to every container, so containers receive only the variables they own while Compose reads values through `--env-file .env.prod`.
+
+## Validation and repeated setup
+
+Boolean fields accept JSON `true` or `false`, not strings or numbers. IPv4
+fields require IPv4; IPv6 fields require IPv6. Preserve explicit JSON `null`
+for unused address families. `extra_env` secrets are redacted from status and
+quoted literally in generated Compose env files, including dollar signs.
+
+`setup` validates the complete proposed state before writing it. Repeating
+setup with conflicting existing global values fails with an actionable error;
+it does not silently ignore a changed operator domain, platform domain, release,
+ACME email or address-family mode. Use the documented per-node release update
+for upgrades. Global DNS/PKI/topology changes require a planned migration with
+existing state and recovery material preserved.
+
+Populate all required `CDNF_*_IMAGE` overrides from the
+[verified manifest](../operations/software-supply-chain.md#populate-fleet-image-references).
+A release label alone is insufficient: generated bundle validation rejects
+mutable image values before starting containers. Role filtering still controls
+which services run. Rendering stages a complete fleet generation and activates
+it with Linux atomic directory exchange. If a durability check fails after
+exchange, retain both the active and reported recovery generation and investigate;
+do not delete the surviving previous bundle or replace the CA.

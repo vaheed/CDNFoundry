@@ -103,7 +103,10 @@ for IPv4 and IPv6. Private destinations are rejected unless they fall inside a
 narrow `origin_safety.private_origin_allowlist`. Additional networks and
 individual addresses can be blocked through platform settings.
 
-The private allowlist cannot permit a built-in unsafe range.
+The private allowlist never overrides an explicit blocked network or address.
+Address exclusions compare IPv6 values regardless of compressed or expanded
+spelling. IPv4-mapped IPv6 origins are rejected, including expanded spellings;
+use a permitted native IPv4 address instead.
 
 ## Proxy defaults
 

@@ -539,3 +539,67 @@ Run the documented operator commands from a clean verification environment and a
 ## Record the result
 
 Record every failed or blocked checkpoint with an owner, stable evidence link, remediation, and retest result. Any broken flow, unauthorized access, false success, unexplained pending state, mixed runtime generation, last-valid-state regression, CRS behavior mismatch, sensitive-data leak, unverifiable artifact, mutable release identity, or missing required evidence fails qualification.
+
+## Domain claim security regression job
+
+Status: **Not run — owner execution required.** Run after the delegation-claim
+migration and worker upgrade in the isolated qualification installation.
+
+1. As administrator, confirm platform DNS contains the platform nameserver A
+   records and their wildcard assignment records; confirm the platform zone is
+   deployed on both DNS hosts. Keep management DNS at the independent provider.
+2. Sign in as user A, open **Domains → Create**, enter an owned test domain in
+   **Name**, and select **Create**. Expect **Pending verification**, two or more
+   **Assigned nameservers**, and a **Pending claim expires** timestamp seven days
+   after creation. Record the exact assignment. No TXT challenge is requested.
+3. At the registrar, set those exact assigned nameservers. Select **Verify
+   nameservers** on the domain. Expect a queued operation; after public parent
+   propagation and successful verification, expect **Active**. A DNSSEC error or
+   disagreement between parent authorities must leave the domain pending with
+   a visible failure. Correct stale DS records before retrying.
+4. Sign in as unrelated user B. Submit the same domain with upper case and a
+   trailing dot. Expect a field validation error and no new assignment. Visit
+   A's domain URL directly: expect denied access.
+5. Queue verification for another pending domain, then disable that domain as
+   an authorized user before the worker executes. Expect it to stay disabled
+   with no successful verification. Repeat with administrator disabling the
+   applicant and with administrator removing the applicant's assignment.
+6. Delete an isolated test domain and wait for DNS/edge deprovisioning and the
+   configured cooldown. During cooldown, submit its canonical, upper-case and
+   Unicode/Punycode variants through **Create**: each must fail. After cooldown,
+   a new claim must have different assigned nameservers. Old delegation alone
+   must leave it pending.
+7. Check an existing verified domain after upgrade: its nameservers, user
+   assignments, DNS answers and TLS certificate must remain unchanged.
+
+Completion gate: implementation and documentation present; automated and real
+runtime qualification recorded separately in the audit report; this manual job
+remains **Not run** until the owner records actual results and artifacts.
+
+## Edge identity security upgrade job
+
+Status: **Not run — owner execution required.** Use an isolated canary edge and
+follow [the ingress-before-core upgrade order](deployment/upgrade.md#september-2026-security-changes).
+
+1. Sign in as administrator. Open **Infrastructure → Edges**, open the canary
+   edge and record its edge UUID, heartbeat time and active revision. Confirm
+   customer HTTP/HTTPS serving from the canary using the operator's existing
+   non-browser traffic probe.
+2. Select **Rotate identity**. Read the immediate revocation warning; confirm
+   only with the matching host operator ready. Expect the existing certificate
+   to stop authorizing heartbeats/configuration while last-valid serving remains.
+3. In the enrollment modal, confirm `EDGE_ID` is unchanged. Transfer the new
+   one-time `EDGE_BOOTSTRAP_TOKEN` only into the matching host's mode-0600 env
+   file; do not include it in screenshots or qualification reports. Follow the
+   certificate runbook to recreate the agent and remove the spent token.
+4. On the canary host, rerun `sudo ./start.sh` after the new identity has enrolled.
+   Do not edit the script: its current Compose environment must select the edge
+   profile. Return to the edge page. Expect a fresh heartbeat and acknowledged runtime
+   revision after enrollment. Verify HTTP/HTTPS still serves. Record only the
+   edge UUID, operation outcome, timestamps and sanitized evidence reference.
+5. Sign in as a domain user and visit the administrator edge URL directly.
+   Expect denied access; no identity rotation or token disclosure is available.
+
+Completion gate: implementation and documentation present; automated mTLS and
+application evidence recorded separately; this manual job remains **Not run**
+until the owner records every applicable outcome.

@@ -37,7 +37,7 @@ In `/admin/system-dns-identity`, enter:
 
 - a platform zone such as `cdn.example.net`;
 - nameservers such as `ns1.cdn.example.net` and `ns2.cdn.example.net`;
-- one IPv4 and one IPv6 glue address for each nameserver;
+- one IPv4 glue address for each nameserver, and IPv6 only where reachable;
 - a proxy hostname such as `proxy.cdn.example.net`;
 - SOA values within the displayed validation bounds.
 
@@ -63,15 +63,17 @@ succeeds. It does not require an origin and does not issue a certificate.
 
 ## Delegate and activate
 
-1. At the customer domain's registrar, replace its authoritative nameservers
-   with the platform nameservers.
-2. Create the domain, then watch its DNS reconciliation and nameserver
-   verification operations. Verification starts automatically after the
-   authoritative zone is ready.
-3. Poll the operation and domain status until `nameservers_verified_at` is set.
-   If registrar propagation was not complete during the automatic attempt, use
-   **Verify nameservers** to retry; it also repairs a missing initial zone first.
-4. Use **Activate**.
+1. Create the customer domain and copy its **Assigned nameservers**. Each fresh
+   claim has its own assignment and a seven-day expiry; do not reuse the global
+   shared nameserver pair or a previous claim's assignment.
+2. At the registrar (or authoritative parent for a delegated subdomain), set
+   exactly those names. Remove stale DS records from the previous provider;
+   CDNFoundry customer zones are unsigned.
+3. Watch the verification operation. Use **Verify nameservers** after propagation
+   if the automatic attempt failed. Parent authorities must agree; DNSSEC errors
+   remain visible and leave the domain pending.
+4. Successful verification activates the domain automatically. **Activate** is
+   the deliberate action for re-enabling an already verified disabled domain.
 5. Confirm that each DNS deployment has acknowledged the domain revision.
 
 The administrator-only force-verify action exists for controlled local
