@@ -9,7 +9,14 @@ backend-test: dev-test
 contract-check: config-check openapi-check
 	python3 -m unittest tests/observability/test_grafana_contract.py tests/observability/test_operational_logging_contract.py
 
-supply-chain-check:
+fleet-test:
+	python3 -m pytest -q tests/fleet/test_fleet.py
+
+qualification-tools-check:
+	python3 -m unittest discover -s tests/supply_chain
+	python3 -m unittest discover -s tests/qualification
+
+supply-chain-check: qualification-tools-check
 	python3 scripts/supply-chain-policy.py
 
 dev-assets:

@@ -33,7 +33,7 @@ jobs:
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           php-version: '8.4'
-          extensions: mbstring, pdo_sqlite
+          extensions: mbstring, pdo_sqlite, pdo_pgsql, intl
           coverage: none
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -65,9 +65,18 @@ jobs:
         run: npm run build
       - name: Run application tests
         run: php artisan test
+      - name: Qualify isolated PostgreSQL domain claim concurrency
+        working-directory: .
+        run: python3 tests/e2e/postgres_domain_claims.py
       - name: Qualify isolated PostgreSQL edge task receipts
         working-directory: .
         run: python3 tests/e2e/postgres_edge_tasks.py
+      - name: Qualify signed parent delegation with real BIND
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bind9-dnsutils
+          python3 tests/e2e/parent_delegation.py
       - name: Check OpenAPI contract
         run: php artisan cdnf:api:openapi --check
 
@@ -79,10 +88,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Fleet qualification dependencies
         run: python3 -m pip install -r tests/fleet/requirements.txt
+      - name: Qualify Fleet configuration and generated bundles
+        run: make fleet-test
       - name: Qualify generated PowerDNS credentials and rotation
         run: sudo -E python3 tests/e2e/fleet_pdns.py
-      - name: Enforce software supply-chain policy
-        run: python3 scripts/supply-chain-policy.py
+      - name: Enforce software supply-chain policy and negative fixtures
+        run: make supply-chain-check
       - name: Validate development topology
         run: docker compose -f compose.dev.yml config --quiet
       - name: Validate production topology
@@ -131,7 +142,7 @@ jobs:
           docker run --rm --entrypoint /bin/promtool -v "$PWD/docker/prometheus:/etc/prometheus:ro" prom/prometheus:v3.12.0 \
             test rules /etc/prometheus/alerts.test.yml
       - name: Validate Python syntax
-        run: python3 -m compileall -q tests/e2e tests/docs
+        run: python3 -m compileall -q tests/e2e tests/docs tests/fleet tests/qualification tests/supply_chain scripts/cdnfoundry_fleet
       - name: Build every production image from its pinned base
         run: |
           docker build --target production -t cdnfoundry/core:ci -t ghcr.io/vaheed/cdnfoundry-core:ci core
@@ -329,7 +340,7 @@ jobs:
   deploy-docs:
     name: Deploy documentation
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [core, compose, backend-e2e, scale-e2e, go, docs]
+    needs: [core, compose, backend-e2e, scale-e2e, go, docs, production-dependencies]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
@@ -343,10 +354,29 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5
 
+  production-dependencies:
+    name: Scan immutable production dependency images
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install policy dependencies
+        run: python3 -m pip install -r tests/fleet/requirements.txt
+      - name: Scan every production Compose dependency, including role overrides
+        run: python3 scripts/supply-chain-policy.py --scan-production-dependencies --output storage/qualification/production-dependencies
+      - name: Retain complete dependency scan evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: production-dependency-scans
+          path: |
+            storage/qualification/production-dependencies/*.json
+            storage/qualification/production-dependencies/*.txt
+
   publish-images:
     name: Publish GHCR images
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/v'))
-    needs: [core, compose, backend-e2e, scale-e2e, go, docs]
+    needs: [core, compose, backend-e2e, scale-e2e, go, docs, production-dependencies]
     runs-on: ubuntu-latest
     timeout-minutes: 90
     environment: production
@@ -416,7 +446,7 @@ jobs:
             done
           }
           mkdir -p release-evidence
-          printf '{"schema_version":1,"release_version":"%s","source_commit":"%s","created_at":"%s","workflow_run_id":"%s","runtime_schema_version":1,"database_migration":"2026_07_29_200000_add_observability_and_fleet_rollouts","images":[' \
+          printf '{"schema_version":1,"release_version":"%s","source_commit":"%s","created_at":"%s","workflow_run_id":"%s","runtime_schema_version":1,"database_migration":"2026_09_05_160000_add_domain_delegation_claims","images":[' \
             "${RELEASE_REF_NAME}" "${RELEASE}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${WORKFLOW_RUN_ID}" > release-evidence/release-manifest.json
           if [[ "${RELEASE_REF}" == "refs/heads/main" ]]; then
             aliases+=(latest)
@@ -444,10 +474,16 @@ jobs:
             test "${digest}" != "${image}:${RELEASE}"
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}/release-evidence:/out" \
               anchore/syft:v1.33.0@sha256:f94e5d9fce1f2278491a8e3a63bd5f6ddb81fdfdbb8bf7a1637565c1d5344357 \
-              "${image}:${RELEASE}" -o "spdx-json=/out/${component}.spdx.json"
+              "${digest}" -o "spdx-json=/out/${component}.spdx.json"
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/work:ro" -v "${PWD}/release-evidence:/out" \
               aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e \
-              image --config /work/supply-chain/trivy.yaml --format json --output "/out/${component}.trivy.json" --exit-code 1 --severity CRITICAL "${image}:${RELEASE}"
+              image --config /work/supply-chain/trivy.yaml --format json --output "/out/${component}.trivy.json" --exit-code 0 "${digest}"
+            docker run --rm -v "${PWD}/release-evidence:/out" \
+              aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e \
+              convert --format table --output "/out/${component}.trivy.txt" "/out/${component}.trivy.json"
+            docker run --rm -v "${PWD}/release-evidence:/out:ro" \
+              aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e \
+              convert --exit-code 1 --exit-on-eol 1 --severity HIGH,CRITICAL "/out/${component}.trivy.json"
             jq -n --arg source "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" --arg commit "${RELEASE}" --arg workflow "${GITHUB_WORKFLOW_REF}" --arg builder "${GITHUB_SERVER_URL}/actions/runner" \
               '{buildDefinition:{buildType:"https://github.com/CDNFoundry/container-release/v1",externalParameters:{source:$source,commit:$commit,workflow:$workflow}},runDetails:{builder:{id:$builder}}}' \
               > "release-evidence/${component}.provenance.json"
@@ -486,7 +522,7 @@ jobs:
             ${first} || printf ',' >> release-evidence/release-manifest.json
             first=false
             jq -n --arg component "${component}" --arg image "${digest}" \
-              '{component:$component,image:$image,sbom:"oci-attestation:spdxjson",signature:"sigstore-keyless",provenance:"oci-attestation:slsaprovenance1",vulnerability_scan:"passed-critical-policy"}' \
+              '{component:$component,image:$image,sbom:"oci-attestation:spdxjson",signature:"sigstore-keyless",provenance:"oci-attestation:slsaprovenance1",vulnerability_scan:"passed-high-critical-policy"}' \
               >> release-evidence/release-manifest.json
           done
           printf ']}' >> release-evidence/release-manifest.json
