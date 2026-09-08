@@ -735,7 +735,7 @@ func TestOriginTaskUsesApprovedAddressAndCanonicalHost(t *testing.T) {
 	task := edgeTask{}
 	task.Payload.Addresses = []string{host}
 	task.Payload.Allowlist = []string{host + "/32"}
-	task.Payload.Origin.Host = "ignored.example"
+	task.Payload.Origin.Host = host
 	task.Payload.Origin.Scheme = "http"
 	task.Payload.Origin.HostHeader = "origin.example"
 	task.Payload.Origin.Port = portNumber

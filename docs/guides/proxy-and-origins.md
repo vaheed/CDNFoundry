@@ -66,9 +66,12 @@ as an origin.
 | `failover.failback_delay_seconds` | 5–86,400 seconds |
 
 The control plane resolves and validates the destination before saving. OpenResty
-revalidates destinations for customer traffic. Origin-test tasks currently carry
-the addresses approved by the control plane; fresh edge-side resolution for
-these probes remains an open qualification gate.
+revalidates destinations for customer traffic. Before an origin probe connects,
+the agent resolves the hostname again, validates every answer, and requires each
+to belong to that operation's approved address set. Mixed safe/unsafe answers,
+new unapproved answers, and failed resolution stop the probe. Request a fresh
+test after DNS changes so the control plane can apply its current platform and
+edge-address exclusions. Literal IP origins are checked without a DNS query.
 
 ## Active-passive failover
 
@@ -126,6 +129,16 @@ edge recipients. Dispatch and task delivery recheck permission, lifecycle, and
 configuration; obsolete pending tasks are cancelled. Retries preserve recipients
 and progress. Origin edits clear old health, and late results for a changed
 origin remain operation history without replacing current health.
+
+A probe admits at most 64 approved addresses and 64 fresh DNS answers, connects
+to one approved current address, and caps response headers at 64 KiB. DNS is
+bounded by the configured connection timeout and at most three seconds; the
+configured response timeout covers the complete DNS/HTTP/TLS operation. It
+never follows redirects. Successful HTTPS reports `tls_result=verified` only
+when certificate verification is enabled; otherwise it reports `unverified`.
+Existing tasks remain readable, but old agent builds retain their old probe
+behavior until upgraded. These probe checks do not qualify public IPv6 paths
+or replace customer-traffic runtime qualification.
 
 ## Forwarding and cache
 

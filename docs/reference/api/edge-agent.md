@@ -86,6 +86,12 @@ from `/tasks` and receives a failed receipt with `task_cancelled`. Late reports
 remain task history but cannot update health for a changed or unauthorized
 origin. Dispatch retries retain the operation's initial recipients and progress.
 This adds no task wire fields or agent-version requirement.
+Updated agents re-resolve origin hostnames before connection and reject answers
+outside the task's approved addresses. A new test is required after an answer
+changes. HTTPS success reports `tls_result=verified` when verification was
+enabled and `unverified` when disabled; failed probes retain the existing
+failure-reason protocol. No new task field is required, but the corrected
+runtime behavior requires upgrading the agent image.
 
 This protocol is operator-internal. Do not expose it through the normal control
 hostname or reuse a user API token.

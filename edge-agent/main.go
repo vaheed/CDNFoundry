@@ -22,6 +22,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -502,23 +503,64 @@ func (c *client) loadEmergencyControls() (map[string]emergencyControl, error) {
 	return controls, nil
 }
 
-func runOriginTest(task edgeTask) map[string]any {
+func runOriginTest(task edgeTask) (result map[string]any) {
 	started := time.Now()
-	result := map[string]any{"status": "unhealthy"}
-	if len(task.Payload.Addresses) == 0 {
+	result = map[string]any{"status": "unhealthy"}
+	defer func() { result["latency_ms"] = min(time.Since(started).Milliseconds(), int64(60000)) }()
+	if len(task.Payload.Addresses) == 0 || len(task.Payload.Addresses) > 64 {
 		result["failure_reason"] = "dns_resolution_failed"
 		return result
 	}
-	address := task.Payload.Addresses[0]
-	if blockedIP(address, task.Payload.Allowlist, task.Payload.BlockedNetworks) {
-		result["failure_reason"] = "blocked_destination"
-		return result
+	approved := make(map[netip.Addr]bool, len(task.Payload.Addresses))
+	for _, address := range task.Payload.Addresses {
+		if blockedIP(address, task.Payload.Allowlist, task.Payload.BlockedNetworks) {
+			result["failure_reason"] = "blocked_destination"
+			return result
+		}
+		ip, _ := netip.ParseAddr(address)
+		approved[ip] = true
 	}
 	origin := task.Payload.Origin
 	connectTimeout := boundedDuration(origin.ConnectTimeoutMS, 100, 10000)
 	responseTimeout := boundedDuration(origin.ResponseTimeoutMS, 500, 60000)
+	ctx, cancel := context.WithTimeout(context.Background(), responseTimeout)
+	defer cancel()
+	var resolved []netip.Addr
+	var err error
+	if literal, parseErr := netip.ParseAddr(origin.Host); parseErr == nil {
+		resolved = []netip.Addr{literal}
+	} else {
+		lookupCtx, cancelLookup := context.WithTimeout(ctx, min(connectTimeout, 3*time.Second))
+		resolved, err = net.DefaultResolver.LookupNetIP(lookupCtx, "ip", origin.Host)
+		cancelLookup()
+	}
+	if err != nil || len(resolved) == 0 || len(resolved) > 64 {
+		result["failure_reason"] = "dns_resolution_failed"
+		return result
+	}
+	current := make(map[netip.Addr]bool, len(resolved))
+	for _, address := range resolved {
+		// A probe may only contact an address approved for this operation.
+		// New answers require a fresh control-plane safety check, which also
+		// excludes platform/edge addresses unavailable to the agent.
+		if !approved[address] || blockedIP(address.String(), task.Payload.Allowlist, task.Payload.BlockedNetworks) {
+			result["failure_reason"] = "blocked_destination"
+			return result
+		}
+		current[address] = true
+	}
+	address := ""
+	for _, candidate := range task.Payload.Addresses {
+		ip, _ := netip.ParseAddr(candidate)
+		if current[ip] {
+			address = ip.String()
+			break
+		}
+	}
 	transport := &http.Transport{
-		DisableKeepAlives: true,
+		DisableKeepAlives:      true,
+		MaxResponseHeaderBytes: 64 * 1024,
+		TLSHandshakeTimeout:    connectTimeout,
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return (&net.Dialer{Timeout: connectTimeout}).DialContext(ctx, "tcp", net.JoinHostPort(address, strconv.Itoa(origin.Port)))
 		},
@@ -528,7 +570,7 @@ func runOriginTest(task edgeTask) map[string]any {
 	if origin.HealthCheck != nil && strings.HasPrefix(origin.HealthCheck.Path, "/") {
 		path = origin.HealthCheck.Path
 	}
-	req, err := http.NewRequest("GET", origin.Scheme+"://"+origin.Host+":"+strconv.Itoa(origin.Port)+path, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", origin.Scheme+"://"+net.JoinHostPort(origin.Host, strconv.Itoa(origin.Port))+path, nil)
 	if err == nil {
 		req.Host = origin.HostHeader
 		client := &http.Client{Transport: transport, Timeout: responseTimeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
@@ -545,11 +587,12 @@ func runOriginTest(task edgeTask) map[string]any {
 			}
 		}
 	}
-	result["latency_ms"] = time.Since(started).Milliseconds()
 	result["resolved_address"] = address
 	if origin.Scheme == "https" {
-		if err == nil {
+		if err == nil && origin.VerifyTLS {
 			result["tls_result"] = "verified"
+		} else if err == nil {
+			result["tls_result"] = "unverified"
 		} else {
 			result["tls_result"] = "failed"
 		}
@@ -586,11 +629,12 @@ func first(values ...string) string {
 }
 
 func blockedIP(address string, allowlist, blockedNetworks []string) bool {
-	ip := net.ParseIP(address)
-	if ip == nil {
+	parsed, err := netip.ParseAddr(address)
+	if err != nil || parsed.Is4In6() || parsed.Zone() != "" {
 		return true
 	}
-	if strings.HasPrefix(strings.ToLower(address), "::ffff:") || ip.IsUnspecified() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() {
+	ip := net.IP(parsed.AsSlice())
+	if ip.IsUnspecified() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() {
 		return true
 	}
 	if inNetworks(ip, blockedNetworks) {

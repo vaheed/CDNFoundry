@@ -169,7 +169,11 @@ workstream does not replace an earlier product checkpoint.
    verified-domain explanation. In a second administrator session remove the
    user's domain assignment, then invoke a test from the user's previously open
    page: access must be denied and no test operation created. Restore the
-   assignment before continuing. **Manual status: Not run.**
+   assignment before continuing. For HTTPS tests, record whether origin TLS
+   verification was enabled: a successful verified test must report `verified`,
+   and an explicitly unverified test must report `unverified`. Change the
+   origin's DNS before a queued test executes; new or unsafe answers must fail
+   and require a fresh test. **Manual status: Not run.**
 2. Exercise primary failure, bounded transition to backup, hold-down, failback,
    both-origin failure, WebSocket policy, forwarding headers, and control-plane
    outage. Record `X-CDNFoundry-Origin`, request IDs, revisions, and comparison

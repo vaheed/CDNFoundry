@@ -305,3 +305,13 @@ Laravel config files: `FILESYSTEM_DISK`, `CACHE_STORAGE_DISK`,
 Horizon accepts `HORIZON_NAME`, `HORIZON_DOMAIN`, and `HORIZON_PATH`. Production
 Compose intentionally fixes the supported drivers and does not expose most
 framework alternatives in `.env.prod.example`.
+
+## Origin-probe qualification fixtures
+
+These variables are set automatically by the non-browser test harness and its
+child process; they are not deployment settings.
+
+| Variable | Scope | Meaning |
+| --- | --- | --- |
+| `CDNF_QUALIFY_IPV6` | `tests/e2e/origin_probes.py` | Requires an isolated private IPv6 interface; a missing interface fails qualification |
+| `CDNF_PROBE_FIXTURE` | Go test child process | Synthetic origin-task JSON for trusted TLS verification in a fresh process |

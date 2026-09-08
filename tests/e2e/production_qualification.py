@@ -42,6 +42,8 @@ class Result:
 
 
 CHECKS = (
+    Check("origin-probes", "Isolated real DNS, HTTP/TLS, destination safety and required IPv6 origin probes",
+          ("python3", "tests/e2e/origin_probes.py"), "agent"),
     Check("postgres-edge-tasks", "Isolated PostgreSQL task receipt and aggregate concurrency",
           ("python3", "tests/e2e/postgres_edge_tasks.py"), "agent"),
     Check("fleet-pdns", "Generated PowerDNS credential permissions, rotation and interrupted-rotation recovery",

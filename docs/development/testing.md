@@ -69,6 +69,16 @@ go build ./...
 
 The agent Dockerfile also runs its tests during image build.
 
+Run `python3 tests/e2e/origin_probes.py` to require real origin-probe DNS,
+HTTP/TLS, and IPv6 checks. It creates a disposable Docker network with a unique
+private IPv6 subnet, runs the pinned Go image with 768 MiB / two CPUs, and
+removes only its own container/network. No persistent database is used. It
+checks stale/mixed DNS, timeout, header limits, certificate verification,
+unverified TLS reporting, and literal/AAAA-resolved IPv6 connections. The
+`origin-probes` production-runner gate and Go CI job run this check. Ordinary
+Go tests skip the required-IPv6 case when no private IPv6 interface is present;
+this qualification command fails if its IPv6 interface is unavailable.
+
 ## Non-browser real-runtime tests
 
 Start and migrate the persistent development stack, then:
