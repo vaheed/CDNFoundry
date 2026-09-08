@@ -55,7 +55,7 @@ The runner covers:
 
 - Compose, production override, OpenAPI, docs, Laravel, and Go contracts;
 - isolated origin-probe DNS, HTTP/TLS, destination safety and required private IPv6;
-- OpenResty origin address exclusions, IPv4/IPv6 HTTP/TLS, restart and last-valid runtime-file behavior;
+- OpenResty origin address exclusions, complete A/AAAA sets, bounded DNS retries/TCP, IPv4/IPv6 HTTP/TLS, restart and last-valid runtime-file behavior;
 - gateway Host/SNI routing, invalid candidates, restart, and last-valid state;
 - the bounded eight-slot inventory and cell isolation;
 - cumulative DNS, TLS, cache, purge, compression, origin, WAF, telemetry outage,

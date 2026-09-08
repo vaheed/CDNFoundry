@@ -76,6 +76,22 @@ old guard. Reverting the complete fix restores broken IPv6 origin connections
 and the weaker guard. Preserve active artifacts, certificates and cache data;
 this fix needs no customer-domain reload or data migration.
 
+## Complete origin DNS validation
+
+The origin DNS correction uses the same artifact schema and needs only an
+edge-runtime image update through the existing canary rollout. Confirm that
+operator DNS returns successful NODATA answers for absent address families.
+An AAAA resolver failure can no longer be hidden by a successful A answer, or
+vice versa. Keep answer sets within 64 combined answer records and qualify the
+three-second DNS ceiling (or a smaller configured response timeout) before
+advancing the canary. Cache hits retain their existing behavior; uncached origin
+attempts now validate both families even when an upstream keepalive connection
+exists. No database migration or per-domain reload is required.
+
+Reverting restores first-answer admission and the older timeout behavior. Retain
+active artifacts, certificates and cache data during any recovery; fix resolver
+health rather than bypassing destination checks or disabling IPv6 validation.
+
 ## Rollout order
 
 For additive migrations and compatible agents:

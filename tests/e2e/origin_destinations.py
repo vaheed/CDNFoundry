@@ -2,12 +2,15 @@
 """Exercise origin IP admission and IPv4/IPv6 HTTP/TLS in disposable OpenResty.
 
 No browser, application database, shared container or named volume is touched.
-The canary and all traffic stay on one unique, private Docker network. An image
-may be supplied with --image; current runtime/config files are always mounted.
+The canary and runtime DNS traffic stay on disposable private Docker networks.
+An image may be supplied with --image; current runtime/config files are always
+mounted. The synthetic DNS container is a test fixture, not a product service.
 """
 from __future__ import annotations
 
 import argparse
+import copy
+from concurrent.futures import ThreadPoolExecutor
 import http.client
 import importlib.util
 import ipaddress
@@ -19,6 +22,7 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
+DNS_IMAGE = 'python:3.13-alpine@sha256:399babc8b49529dabfd9c922f2b5eea81d611e4512e3ed250d75bd2e7683f4b0'
 
 
 def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -44,6 +48,7 @@ def main() -> None:
     spec.loader.exec_module(fixture)
     run('docker', 'network', 'create', '--ipv6', '--subnet', subnet,
         '--label', 'cdnfoundry.qualification=origin-destinations', instance)
+    dns_name = instance + '-dns'
     carrier_network = instance + '-carrier'
     carrier_created = False
     results = []
@@ -68,6 +73,22 @@ def main() -> None:
     location / { return 200 "synthetic-origin-canary"; }
 }
 ''')
+            dns_directory = target / 'dns'
+            dns_directory.mkdir(mode=0o755)
+            (dns_directory / 'records.json').write_text('{}')
+            run('docker', 'run', '-d', '--name', dns_name, '--network', instance,
+                '--memory', '64m', '--cpus', '0.5', '--pids-limit', '64',
+                '--mount', f'type=bind,source={dns_directory},target=/fixtures,readonly',
+                '--mount', f'type=bind,source={ROOT / "tests/e2e/origin_dns_fixture.py"},target=/dns.py,readonly',
+                DNS_IMAGE, 'python', '/dns.py')
+            dns_info = json.loads(run('docker', 'inspect', dns_name).stdout)[0]
+            dns_address = dns_info['NetworkSettings']['Networks'][instance]['IPAddress']
+            for _ in range(50):
+                if 'synthetic_dns_ready' in run('docker', 'logs', dns_name).stdout:
+                    break
+                time.sleep(.1)
+            else:
+                raise RuntimeError('Synthetic DNS server did not start')
             mounts = {
                 target: '/fixtures', target / 'tls.crt': '/run/edge/tls.crt', target / 'tls.key': '/run/edge/tls.key',
                 target / 'ca.crt': '/etc/ssl/certs/ca-certificates.crt',
@@ -80,7 +101,7 @@ def main() -> None:
                 ROOT / 'docker/nginx/cache-upstream.conf': '/etc/nginx/cache-upstream.conf',
             }
             command = ['docker', 'run', '-d', '--name', instance, '--network', instance,
-                       '--memory', '512m', '--cpus', '1', '--pids-limit', '128', '--add-host', 'vector:127.0.0.1',
+                       '--memory', '512m', '--cpus', '1', '--pids-limit', '128', '--add-host', 'vector:127.0.0.1', '--dns', dns_address,
                        '-p', '127.0.0.1::8080', '-e', 'EDGE_RUNTIME_FILE=/fixtures/runtime.json',
                        '-e', 'EDGE_STATUS_TOKEN=synthetic-qualification-only']
             for source, destination in mounts.items():
@@ -101,11 +122,13 @@ def main() -> None:
             assert ipv4 and ipv6, 'Both origin address families are required, never skipped'
             port = int(info['NetworkSettings']['Ports']['8080/tcp'][0]['HostPort'])
 
-            def request(host: str, path: str, headers: dict | None = None) -> tuple[int, str]:
+            def request(host: str, path: str, headers: dict | None = None, response_headers: dict | None = None) -> tuple[int, str]:
                 client = http.client.HTTPConnection('127.0.0.1', port, timeout=8)
                 try:
                     client.request('GET', path, headers={'Host': host, **(headers or {})})
                     response = client.getresponse()
+                    if response_headers is not None:
+                        response_headers.update({key.lower(): value for key, value in response.getheaders()})
                     return response.status, response.read(65536).decode(errors='replace')
                 finally:
                     client.close()
@@ -156,6 +179,36 @@ def main() -> None:
             ]:
                 cases.append((label, ipv4, expected, {'security': {'trusted_proxy_cidrs': ['0.0.0.0/0', '::/0'],
                     'rules': [{'match_type': 'cidr', 'value': cidr, 'action': 'block'}]}, 'forwarded': forwarded}))
+            dns_records = {
+                'dns-v4.origin.test': {'A': [ipv4], 'AAAA': []},
+                'dns-v6.origin.test': {'A': [], 'AAAA': [ipv6]},
+                'dns-dual.origin.test': {'A': [ipv4], 'AAAA': [ipv6]},
+                'dns-mixed-a.origin.test': {'A': [ipv4, '127.0.0.1']},
+                'dns-unsafe-first.origin.test': {'A': ['127.0.0.1', ipv4]},
+                'dns-mixed-family.origin.test': {'A': [ipv4], 'AAAA': ['::1']},
+                'dns-mapped-aaaa.origin.test': {'A': [ipv4], 'AAAA': ['::ffff:127.0.0.1']},
+                'dns-error-aaaa.origin.test': {'A': [ipv4], 'AAAA_options': {'error': 2}},
+                'dns-error-a.origin.test': {'A_options': {'error': 2}, 'AAAA': [ipv6]},
+                'dns-nxdomain.origin.test': {'error': 3},
+                'dns-empty.origin.test': {'A': [], 'AAAA': []},
+                'dns-limit.origin.test': {'A': [ipv4] * 65},
+                'dns-limit-both.origin.test': {'A': [ipv4] * 33, 'AAAA': [ipv6] * 32},
+                'dns-at-limit.origin.test': {'A': [ipv4] * 32, 'AAAA': [ipv6] * 32},
+                'dns-cname.origin.test': {'cname': 'target.origin.test', 'A': [ipv4], 'AAAA': [ipv6]},
+                'dns-cname-unsafe.origin.test': {'cname': 'target.origin.test', 'A': [ipv4], 'AAAA': ['::1']},
+                'dns-tcp.origin.test': {'tcp': True, 'A': [ipv4], 'AAAA': [ipv6]},
+                'dns-tcp-unsafe.origin.test': {'tcp': True, 'A': [ipv4, '127.0.0.1']},
+                'dns-deadline.origin.test': {'delay': .35, 'A': [], 'AAAA': [ipv6]},
+                'dns-deadline-tcp.origin.test': {'tcp': True, 'delay': .35, 'A': [ipv4], 'AAAA': [ipv6]},
+                'dns-deadline-cap.origin.test': {'delay': 1.75, 'A': [], 'AAAA': [ipv6]},
+                'dns-rebind.origin.test': {'A': [ipv4], 'AAAA': [ipv6]},
+            }
+            (dns_directory / 'records.json').write_text(json.dumps(dns_records))
+            passing = {'dns-v4', 'dns-v6', 'dns-dual', 'dns-at-limit', 'dns-cname', 'dns-tcp', 'dns-rebind'}
+            for host in dns_records:
+                label = host.split('.')[0]
+                options = {'response_timeout_ms': 500} if label in {'dns-deadline', 'dns-deadline-tcp'} else {}
+                cases.append((label, host, 200 if label in passing else 502, options))
             current = fixture.state({label + '.example': 'origin-canary.test' for label, _, _, _ in cases}, 2)
             for label, address, _, overrides in cases:
                 config = current['hosts'][label + '.example']
@@ -165,15 +218,80 @@ def main() -> None:
                 config['origin'].update({key: value for key, value in overrides.items() if key not in {'security', 'forwarded'}})
                 if 'security' in overrides:
                     config['security'] = overrides['security']
+            backup_config = copy.deepcopy(current['hosts']['dns-v4.example'])
+            backup_config['domain'] = 'dns-backup.example'
+            backup_config['origin']['host'] = 'dns-nxdomain.origin.test'
+            backup_config['origin']['backup'] = copy.deepcopy(current['hosts']['dns-v6.example']['origin'])
+            backup_config['origin']['failover'] = {'failure_threshold': 2, 'recovery_threshold': 2,
+                                                 'hold_down_seconds': 5, 'failback_delay_seconds': 5}
+            current['hosts']['dns-backup.example'] = backup_config
             candidate = target / 'runtime.next.json'
             candidate.write_text(json.dumps(current))
             candidate.replace(target / 'runtime.json')
             time.sleep(1.2)
             for label, address, expected, overrides in cases:
                 headers = {'X-Forwarded-For': overrides['forwarded']} if 'forwarded' in overrides else {}
+                started = time.monotonic()
                 status, body = request(label + '.example', '/?case=' + label, headers)
+                elapsed = time.monotonic() - started
                 passed = status == expected and (body == 'synthetic-origin-canary' if expected == 200 else 'synthetic-origin-canary' not in body)
-                results.append({'case': label, 'origin_address': address, 'expected': expected, 'status': status, 'passed': passed})
+                results.append({'case': label, 'origin_address': address, 'expected': expected, 'status': status, 'seconds': round(elapsed, 3), 'passed': passed and elapsed < (1.5 if label in {'dns-deadline', 'dns-deadline-tcp'} else 4.5 if label == 'dns-deadline-cap' else 8)})
+            for index, expected in enumerate([502, 502, 200]):
+                case = f'dns-backup-attempt-{index}'
+                headers = {}
+                status, body = request('dns-backup.example', '/?case=' + case, response_headers=headers)
+                role = headers.get('x-cdnfoundry-origin')
+                results.append({'case': case, 'expected': expected, 'status': status, 'origin_role': role,
+                    'passed': status == expected and ('synthetic-origin-canary' in body) == (expected == 200)
+                    and (expected != 200 or role == 'backup')})
+
+            for suffix, addresses, expected in [('failed', ['::1'], 502), ('restored', [ipv6], 200)]:
+                dns_records['dns-v6.origin.test']['AAAA'] = addresses
+                changed_dns = dns_directory / 'records.next.json'
+                changed_dns.write_text(json.dumps(dns_records))
+                changed_dns.replace(dns_directory / 'records.json')
+                case = 'dns-backup-' + suffix
+                headers = {}
+                status, body = request('dns-backup.example', '/?case=' + case, response_headers=headers)
+                role = headers.get('x-cdnfoundry-origin')
+                results.append({'case': case, 'expected': expected, 'status': status, 'origin_role': role,
+                    'passed': status == expected and ('synthetic-origin-canary' in body) == (expected == 200)
+                    and (expected != 200 or role == 'backup')})
+                if suffix == 'failed':
+                    diagnostics = json.loads(run('docker', 'exec', instance, 'wget', '-q', '-O-',
+                        '--header=X-Edge-Status-Token: synthetic-qualification-only',
+                        'http://127.0.0.1:9080/passive-failures').stdout)
+                    health = next(item for item in diagnostics['origins'] if item['hostname'] == 'dns-backup.example')
+                    results[-1]['failover'] = health
+                    results[-1]['passed'] = results[-1]['passed'] and health['active'] == 'backup' and health['reason'] == 'backup_failure'
+
+            def deadline_request(index: int) -> dict:
+                case = f'dns-deadline-concurrent-{index}'
+                started = time.monotonic()
+                status, body = request('dns-deadline.example', '/?case=' + case)
+                elapsed = time.monotonic() - started
+                return {'case': case, 'expected': 502, 'status': status, 'seconds': round(elapsed, 3),
+                        'passed': status == 502 and elapsed < 1.5 and 'synthetic-origin-canary' not in body}
+
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                results.extend(executor.map(deadline_request, range(4)))
+            capacity = json.loads(run('docker', 'exec', instance, 'wget', '-q', '-O-',
+                '--header=X-Edge-Status-Token: synthetic-qualification-only',
+                'http://127.0.0.1:9080/passive-failures').stdout)['cell']['capacity']['origin_connections']
+            assert capacity == 0, f'Origin slots leaked after DNS deadlines: {capacity}'
+
+            # A later request must resolve again, even with an existing origin
+            # keepalive connection. No cached configuration change is involved.
+            dns_records['dns-rebind.origin.test'] = {'A': [ipv4], 'AAAA': ['::1']}
+            dns_candidate = dns_directory / 'records.next.json'
+            dns_candidate.write_text(json.dumps(dns_records))
+            dns_candidate.replace(dns_directory / 'records.json')
+            status, body = request('dns-rebind.example', '/?case=dns-rebind-after')
+            results.append({'case': 'dns-rebind-after', 'expected': 502, 'status': status,
+                            'passed': status == 502 and 'synthetic-origin-canary' not in body})
+            dns_logs = run('docker', 'logs', dns_name).stdout
+            assert '"protocol": "tcp"' in dns_logs, 'Real TCP fallback was not exercised'
+
             def serving_checkpoint(label: str) -> None:
                 for host, expected in [('ipv6-tls', 200), ('ipv6-denied-expanded', 502)]:
                     case = label + '-' + host
@@ -199,16 +317,18 @@ def main() -> None:
                 if result['expected'] != 200 and '?case=' + result['case'] + ' ' in canary_log:
                     result['passed'] = False
                     result['unexpected_canary_connection'] = True
-            print(json.dumps({'qualification': 'origin_destinations', 'environment': instance, 'image': image,
-                              'ipv4': ipv4, 'ipv6': ipv6, 'cases': results}), flush=True)
+            print(json.dumps({'qualification': 'origin_destinations', 'environment': instance, 'image': image, 'dns_image': DNS_IMAGE,
+                              'ipv4': ipv4, 'ipv6': ipv6, 'origin_connections_after_deadlines': capacity, 'cases': results}), flush=True)
             if not all(result['passed'] for result in results):
                 raise AssertionError('Origin destination qualification failed')
     except Exception:
         logs = run('docker', 'logs', instance, check=False)
         print(logs.stderr[-16000:], flush=True)
+        print(run('docker', 'logs', dns_name, check=False).stdout[-12000:], flush=True)
         raise
     finally:
         run('docker', 'rm', '-f', instance, check=False)
+        run('docker', 'rm', '-f', dns_name, check=False)
         if carrier_created:
             run('docker', 'network', 'rm', carrier_network)
         run('docker', 'network', 'rm', instance)

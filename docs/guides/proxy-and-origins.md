@@ -73,10 +73,21 @@ new unapproved answers, and failed resolution stop the probe. Request a fresh
 test after DNS changes so the control plane can apply its current platform and
 edge-address exclusions. Literal IP origins are checked without a DNS query.
 
+For customer traffic, OpenResty checks the complete A and AAAA answer sets
+before choosing an address. A successful empty answer for one family is valid;
+a resolver error, unsafe address or incomplete resolution fails the origin
+attempt. The combined answer sections may contain at most 64 records, including
+CNAME records. The whole DNS lookup, including retries and TCP fallback, has a
+three-second ceiling, reduced to the configured origin response timeout when
+that timeout is smaller. This is a DNS budget; upstream connection and response
+limits still apply separately. Each uncached origin attempt resolves again,
+including when a keepalive connection exists. The configured bounded stale-cache
+policy may serve a cached response after an origin failure.
+
 ## Active-passive failover
 
 Failover is local to each OpenResty cell and never calls Laravel in the request
-path. A cell normally selects primary. Consecutive connection, timeout, or 5xx
+path. A cell normally selects primary. Consecutive DNS, connection, timeout, or 5xx
 evidence activates backup after `failure_threshold`. The cell keeps backup
 active for the greater of hold-down and failback delay, then requires
 `recovery_threshold` successful primary requests before returning to primary.

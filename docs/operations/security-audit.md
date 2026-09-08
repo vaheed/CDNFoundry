@@ -697,3 +697,97 @@ and eight qualification-tool tests also passed in 48.439 seconds. Documentation
 build/link checks passed 91 pages / 3,398 internal links; the subsequently
 corrected owner steps use the actual form labels and read-only port behavior.
 Full production qualification and manual browser execution remain incomplete.
+
+## Complete origin DNS answer validation — 2026-09-08
+
+AUD-034 (**Medium, confirmed runtime destination-policy and timeout defects**)
+affects `docker/openresty/runtime.lua::resolve`. The previous loop returned after
+its first address, before validating the rest of that answer or the other family.
+It also ignored DNS error codes while falling back to another query. Its resolver
+socket timeouts did not impose a deadline on the entire A/AAAA operation.
+Precondition: an origin hostname's DNS replies contain a later unsafe address,
+a family error, excessive answer records or slow responses. The baseline made
+requests to the permitted canary despite those incomplete/invalid results. It
+did not connect to the forbidden loopback address: this is not evidence of an
+arbitrary private-destination SSRF exploit.
+
+The real DNS fixture reached Docker's embedded resolver over UDP and TCP and
+returned controlled records with zero TTL. Against source `3bf0f472`, **11 of
+65 checks failed** in 42.807 seconds: mixed A records, mixed families, mapped
+AAAA, family errors, 65-record sets, unsafe CNAME/TCP responses, a cumulative
+lookup deadline and a change to unsafe DNS before another request. The baseline
+canary logs independently confirmed the unexpected origin requests. The
+original 44 address/TLS/restart tests continued to pass.
+
+The fix validates all addresses in both successful answer sections before
+selecting a pinned peer. Successful NODATA is accepted for an absent family;
+NXDOMAIN, other DNS errors, empty final resolution, any blocked address, or more
+than 64 combined answer records fails closed. CNAME records count toward that
+budget. There is no new CNAME chasing subsystem: normal recursive responses
+containing terminal addresses remain supported. At most one DNS worker coroutine
+and one deadline coroutine are created per lookup; the losing coroutine is
+cancelled and all resolver sockets are explicitly destroyed. Existing per-domain
+origin-connection bounds still apply before lookup starts. The deadline is the
+smaller of three seconds and the configured origin response timeout (whose valid
+minimum is 500 ms); upstream connection/response limits remain separate.
+
+The packaged [lua-resty-dns documentation](https://opm.openresty.org/package/openresty/lua-resty-dns/)
+and actual installed resolver source distinguish socket/retry limits from total
+elapsed time, and describe automatic TCP fallback. The implementation uses
+[OpenResty light-thread wait/cancellation](https://github.com/openresty/lua-nginx-module#ngxthreadwait)
+to bound the entire operation. New stable failure reasons distinguish resolution
+failure, response-limit rejection and deadline expiry. No database, signature,
+artifact schema or customer cache-key change is involved. A canary runtime-image
+replacement is required; rolling back restores the weaker admission behavior.
+
+The rebuilt runtime passed the extended corpus, followed by **71 checks** in
+48.538 seconds with additional TCP and maximum-deadline cases. The configured
+500-ms cases completed in 0.509/0.514 seconds; the three-second case completed in
+3.020 seconds. Four concurrent deadline requests completed in 0.507–0.512 seconds,
+and the authenticated cell counter returned to **zero origin connections**.
+The allowed 64-record set, A-only/AAAA-only names and valid recursive CNAME/TCP
+answers passed. Image ID:
+`sha256:1b3b2b0e5c820c4e8088dc68e9652f4032dfc525644bdf0836b156e35834c41a`.
+The DNS helper uses a pinned Python image with 64 MiB / half a CPU / 64 processes,
+private fixture networks and no published DNS port. It is test-only and does
+not add a product service or public resolver dependency.
+
+The broader OpenResty suite passed in 159.387 seconds in disposable project
+`cdnf-origin-runtime-643be25f90`; Compose/OpenAPI, 19 observability contracts,
+seven supply-chain fixtures and eight qualification-tool tests passed in 49.856
+seconds. The existing CI and production `origin-destinations` gate run the
+expanded corpus. Operator/user guidance and exact owner-run DNS checks were
+updated. Manual browser status remains **Not run**. Public resolver behavior,
+full production topology/recovery, throughput limits, complete first-party review
+and unresolved image advisories still prevent a production qualification claim.
+
+AUD-035 (**Medium, confirmed failover availability defect**) was exposed while
+qualifying the backup path for AUD-034. `M.origin_failure` converts an internal
+origin failure into a 444 response so the outer cache can apply stale policy.
+For pre-connect DNS failures, no upstream HTTP status exists, and `M.origin_done`
+treated that 444 as success. It reset primary failure counts instead of activating
+the backup. The origin-role variables were also assigned only after resolution,
+so backup DNS failures could be attributed to the primary.
+
+The NXDOMAIN-primary regression failed three of 76 checks in 47.947 seconds:
+backup never activated after two failures, backup failure attribution was absent,
+and restoring backup DNS did not restore serving. These failover functions were
+unchanged from `3bf0f472`; the reproduction included the DNS-validation patch.
+The fix preserves an internal failure flag for receipt accounting and records
+the selected role before resolution. The external cache failure protocol is
+unchanged. This also preserves release of the correct origin-role connection
+slot after an internal error redirect. No schema or artifact change is needed;
+rolling back restores the failover defect.
+
+The rebuilt image passed **all 76 checks** in 54.536 seconds. Two primary DNS
+failures activated the AAAA-only backup, a changed unsafe backup answer recorded
+`backup_failure` while remaining on backup, and restoring its DNS restored HTTP
+200 with the backup role. The origin-connection counter remained zero after the
+concurrent deadline corpus. Image:
+`sha256:c037f85dfceabba70609d31ab374386b429e3f981307997abe0e87931a4e3c6d`.
+The final staged check records the exact tree separately in local evidence.
+
+Further source leads are not yet classified as vulnerabilities: origin-slot
+release when a request is rejected before reservation, and first-versus-final
+upstream status during retries. They require adversarial runtime evidence. The
+broader audit remains partial and manual browser qualification remains **Not run**.

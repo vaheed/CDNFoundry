@@ -216,25 +216,45 @@ function M.select_certificate()
     if not ok then error("unable to select certificate key: " .. (err or "unknown")) end
 end
 
-local function resolve(host, networks, blocked_networks, denied)
+local function resolve(host, networks, blocked_networks, denied, response_timeout_ms)
     if host:match("^%d+%.%d+%.%d+%.%d+$") or host:find(":", 1, true) then
         if blocked(host, networks, blocked_networks, denied) then return nil, "blocked_destination" end
         return host
     end
-    local r, err = resolver:new{nameservers={"127.0.0.11"}, retrans=2, timeout=1000}
-    if not r then return nil, err end
-    for _, qtype in ipairs({r.TYPE_A, r.TYPE_AAAA}) do
-        local answers = r:query(host, {qtype=qtype})
-        if answers then
+    local r = resolver:new{nameservers={"127.0.0.11"}, retrans=2, timeout=1000}
+    if not r then return nil, "dns_resolution_failed" end
+    -- Individual resolver timeouts include retries and TCP fallback. Race the
+    -- complete A/AAAA lookup against one deadline, then close all its sockets.
+    local budget = math.min(3000, math.max(500, tonumber(response_timeout_ms) or 3000))
+    local query = ngx.thread.spawn(function()
+        local selected, record_count = nil, 0
+        for _, qtype in ipairs({r.TYPE_A, r.TYPE_AAAA}) do
+            local answers = r:query(host, {qtype=qtype})
+            if not answers or (answers.errcode and answers.errcode ~= 0) then
+                return nil, "dns_resolution_failed"
+            end
+            record_count = record_count + #answers
+            if record_count > 64 then return nil, "dns_response_limit" end
             for _, answer in ipairs(answers) do
                 if answer.address then
                     if blocked(answer.address, networks, blocked_networks, denied) then return nil, "blocked_destination" end
-                    return answer.address
+                    selected = selected or answer.address
                 end
             end
         end
-    end
-    return nil, "dns_resolution_failed"
+        if not selected then return nil, "dns_resolution_failed" end
+        return selected
+    end)
+    local deadline = ngx.thread.spawn(function()
+        ngx.sleep(budget / 1000)
+        return nil, "dns_resolution_timeout"
+    end)
+    local ok, address, failure = ngx.thread.wait(query, deadline)
+    if coroutine.status(query) ~= "dead" then ngx.thread.kill(query) end
+    if coroutine.status(deadline) ~= "dead" then ngx.thread.kill(deadline) end
+    r:destroy()
+    if not ok then return nil, "dns_resolution_failed" end
+    return address, failure
 end
 
 local function reject(status)
@@ -651,11 +671,14 @@ function M.origin_access()
     ngx.ctx.origin_domain = tostring(config.domain)
     ngx.ctx.origin_hostname = host
     ngx.ctx.origin_role = role
+    -- Named error locations retain variables after ngx.ctx is replaced.
+    ngx.var.cdn_origin_role = role
+    ngx.var.cdn_origin_transition = transition
     ngx.ctx.origin_failover = failover
     ngx.ctx.origin_failure_threshold = tonumber(limits.origin_failure_threshold) or 10
     ngx.ctx.origin_recovery_timeout = tonumber(limits.origin_recovery_timeout) or 30
     dictionary:incr("capacity:origin_connections", 1, 0)
-    local address, err = resolve(origin.host, origin.private_allowlist, origin.blocked_networks, origin.blocked_addresses)
+    local address, err = resolve(origin.host, origin.private_allowlist, origin.blocked_networks, origin.blocked_addresses, origin.response_timeout_ms)
     if not address then
         ngx.log(ngx.WARN, "origin rejected: ", err)
         ngx.header["X-CDNFoundry-Error"] = err
@@ -676,8 +699,6 @@ function M.origin_access()
     ngx.var.origin_response_timeout = tostring(math.min((tonumber(limits.origin_read_timeout) or 30) * 1000, math.max(500, math.min(60000, tonumber(origin.response_timeout_ms) or 5000))))
     local retry_limit = emergency.disable_origin_retries and 0 or (tonumber(limits.origin_retry_limit) or 0)
     ngx.var.origin_retry_count = tostring(math.max(0, math.min(retry_limit, tonumber(origin.retry_count) or tonumber(config.settings and config.settings.retry_count) or 0)))
-    ngx.var.cdn_origin_role = role
-    ngx.var.cdn_origin_transition = transition
     ngx.header["X-CDNFoundry-Origin"] = role
     ngx.header["X-CDNFoundry-Origin-Transition"] = transition
     if origin.websocket == true and (ngx.var.http_upgrade or ""):lower() == "websocket" then
@@ -833,7 +854,7 @@ function M.origin_done()
     end
     if not domain then return end
     local status = tonumber((ngx.var.upstream_status or ""):match("%d+")) or tonumber(ngx.status) or 0
-    local failed = status >= 500 or status == 0
+    local failed = ngx.ctx.origin_failed == true or status >= 500 or status == 0
     local failover = (config and config.origin and config.origin.backup and config.origin.failover) or ngx.ctx.origin_failover
     if failover and host ~= "" then
         local prefix = "origin:failover:" .. host
@@ -883,6 +904,9 @@ function M.origin_failure()
         ngx.header["X-CDNFoundry-Security-Reason"] = ngx.var.cdn_security_reason
         return ngx.exit(503)
     end
+    -- The internal 444 lets the outer cache apply stale-if-error. It must
+    -- not turn a pre-connect DNS failure into a successful origin receipt.
+    ngx.ctx.origin_failed = true
     return ngx.exit(444)
 end
 

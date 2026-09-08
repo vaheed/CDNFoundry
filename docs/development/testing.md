@@ -91,7 +91,16 @@ compatible image), records its immutable local image ID, and mounts the current
 runtime/configuration sources. Two unique disposable networks provide RFC1918,
 ULA and carrier-grade origin addresses; IPv6 is required. The cell has 512 MiB,
 one CPU and 128 processes, with only a random loopback HTTP test port published.
-The real HTTP/TLS canary covers permitted destinations, explicit exclusions,
+A pinned, 64-MiB / half-CPU / 64-process Python DNS fixture supplies UDP/TCP
+responses through Docker's embedded resolver. It covers A-only, AAAA-only and
+dual-stack names, mixed unsafe sets, family errors, 64/65-record boundaries,
+recursive CNAME answers, truncation/TCP, concurrent deadlines and DNS changes
+between requests. DNS-failed primaries must activate the configured backup;
+backup DNS failure and recovery must retain correct role attribution. The
+fixture records elapsed times and checks that origin
+connection slots return to zero after timed-out lookups. No public DNS service
+is queried by the runtime corpus.
+The real HTTP/TLS canary also covers permitted destinations, explicit exclusions,
 expanded/mapped/malformed IPv6, verified TLS and wrong-name rejection, CIDR
 security rules, invalid runtime-file retention and container restart. No
 Laravel/database or signed-agent activation is implied by this fixture. CI runs

@@ -184,6 +184,11 @@ workstream does not replace an earlier product checkpoint.
    **TLS SNI** hostname and enable **Verify origin TLS**. Expect successful
    verified TLS; changing **TLS SNI** to a wrong hostname must fail without
    disabling verification. Use an origin that serves on these standard ports.
+   For an owned DNS origin, publish a safe A answer and a loopback AAAA answer.
+   After DNS propagation, request a fresh uncached URL on the proxied hostname:
+   expect an origin failure, with no request reaching the origin. Restore the
+   safe AAAA answer (or successful NODATA for IPv4-only service) and expect serving
+   to recover. Record the DNS observations and actual request results.
    Record `X-CDNFoundry-Origin`, request IDs, revisions, and comparison
    traffic showing unrelated hosts remain available.
 3. Use **TLS mode** for managed DNS-01 and a valid custom certificate. Exercise
