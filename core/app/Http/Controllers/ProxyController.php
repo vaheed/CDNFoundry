@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DomainLifecycleState;
-use App\Jobs\DispatchOriginTest;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
@@ -18,7 +17,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Str;
 
 class ProxyController extends Controller
 {
@@ -86,15 +84,7 @@ class ProxyController extends Controller
             'edge_ids' => ['sometimes', 'array', 'max:20'], 'edge_ids.*' => ['uuid', 'distinct', 'exists:edges,id'],
             'origin_role' => ['sometimes', 'in:primary,backup'],
         ]);
-        $role = $selected['origin_role'] ?? 'primary';
-        abort_if($role === 'backup' && ! is_array($record->origin['backup'] ?? null), 422, 'This hostname has no backup origin.');
-        $testedOrigin = $role === 'backup' ? $record->origin['backup'] : $record->origin;
-        $addresses = OriginData::resolveAndValidate($testedOrigin['host']);
-        $operation = Operation::query()->create(['id' => (string) Str::uuid(), 'type' => 'edge.origin_test', 'status' => 'pending', 'actor_id' => $request->user()->id, 'input' => [
-            'domain_id' => $domain->id, 'record_id' => $record->id, 'origin_role' => $role,
-            'addresses' => $addresses, 'edge_ids' => $selected['edge_ids'] ?? [],
-        ]]);
-        DispatchOriginTest::dispatch($operation->id)->afterCommit();
+        $operation = $record->requestOriginTest($request->user(), $selected['origin_role'] ?? 'primary', $selected['edge_ids'] ?? []);
 
         return response()->json(['data' => ['operation_id' => $operation->id, 'status' => 'pending']], 202);
     }

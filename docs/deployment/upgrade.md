@@ -55,6 +55,18 @@ agent rejects the candidate and keeps its active state. The upgrade qualificatio
 builds prior and current core/agent images, migrates a temporary PostgreSQL
 database forward, verifies old state, and exercises signed compatibility.
 
+## Queued origin tests
+
+The control plane now binds new origin-test operations to the selected origin
+configuration and rechecks domain verification and actor access at dispatch and
+delivery. An operation queued by older code without this binding fails with an
+instruction to request a new test. Existing task payloads already include their
+origin and remain readable; obsolete tasks are cancelled when polled. No schema
+migration, agent wire change, or runtime restart is needed for this change.
+Upgrade core and queue workers together; drain older workers so they cannot
+continue dispatching unbound tests. Reverting core restores the old dispatch
+behavior and does not undo an origin-health result already recorded.
+
 ## Application rollback
 
 If the target application is compatible with the already-applied schema, repin

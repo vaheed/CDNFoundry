@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Jobs\DispatchOriginTest;
 use App\Models\DnsRecord;
 use App\Models\Operation;
+use App\Support\ArtifactSigner;
 use App\Support\OriginData;
 use Illuminate\Console\Command;
 
@@ -20,6 +21,7 @@ class DispatchScheduledOriginChecks extends Command
         $dispatched = 0;
         $perDomain = [];
         DnsRecord::query()->where('mode', 'proxied')->where('origin->health_check->enabled', true)
+            ->whereHas('domain', fn ($query) => $query->where('lifecycle_state', 'active')->whereNotNull('nameservers_verified_at')->whereNull('disabled_at'))
             ->orderBy('id')->limit($limit * 5)->get()->each(function (DnsRecord $record) use ($limit, &$dispatched, &$perDomain): void {
                 if ($dispatched >= $limit || ($perDomain[$record->domain_id] ?? 0) >= 5 || ! $this->due($record)) {
                     return;
@@ -31,6 +33,7 @@ class DispatchScheduledOriginChecks extends Command
                 }
                 $operation = Operation::query()->create(['type' => 'edge.origin_test', 'status' => 'pending', 'input' => [
                     'domain_id' => $record->domain_id, 'record_id' => $record->id, 'addresses' => $addresses, 'edge_ids' => [], 'scheduled' => true,
+                    'origin_checksum' => hash('sha256', ArtifactSigner::encode($record->origin)),
                 ]]);
                 DispatchOriginTest::dispatch($operation->id);
                 $perDomain[$record->domain_id] = ($perDomain[$record->domain_id] ?? 0) + 1;

@@ -161,6 +161,15 @@ workstream does not replace an earlier product checkpoint.
    and optional backup origin plus failure/recovery thresholds and hold-down.
    Run **Test origin** and **Test backup**; unsafe, mixed safe/unsafe, metadata,
    internal-service, and proxy-loop destinations must fail closed.
+   Start with an active domain whose nameservers are verified. In **Domains** →
+   the domain → **DNS records**, set a valid primary and backup origin, save,
+   then run each test and record its operation ID and result. Change the origin
+   while a test is queued: its result must not replace the new origin's health.
+   On a pending domain, confirm both test actions are disabled with the active,
+   verified-domain explanation. In a second administrator session remove the
+   user's domain assignment, then invoke a test from the user's previously open
+   page: access must be denied and no test operation created. Restore the
+   assignment before continuing. **Manual status: Not run.**
 2. Exercise primary failure, bounded transition to backup, hold-down, failback,
    both-origin failure, WebSocket policy, forwarding headers, and control-plane
    outage. Record `X-CDNFoundry-Origin`, request IDs, revisions, and comparison

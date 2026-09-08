@@ -64,6 +64,33 @@ if ($mode === 'init') {
     $operation = App\Models\Operation::query()->findOrFail($argv[2]);
     echo json_encode(['status' => $operation->status, 'reported_completed' => $operation->result['completed'] ?? null,
         'completed_tasks' => App\Models\EdgeTask::query()->where('type', 'origin_test')->where('status', 'succeeded')->count()])."\n";
+} elseif ($mode === 'dispatch-init') {
+    $owner = App\Models\User::factory()->create();
+    $domain = App\Models\Domain::query()->create(['name' => 'dispatch.example.com', 'display_name' => 'Dispatch',
+        'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
+    $domain->users()->attach($owner);
+    $record = $domain->dnsRecords()->create(['type' => 'A', 'mode' => 'proxied', 'name' => $domain->name, 'content' => '8.8.8.8',
+        'ttl' => 60, 'content_hash' => hash('sha256', '8.8.8.8'), 'origin' => ['host' => '8.8.8.8', 'port' => 80, 'scheme' => 'http']]);
+    App\Models\Edge::query()->where('name', 'task-qualification')->update(['registered_at' => now(), 'last_heartbeat_at' => now()]);
+    $operation = App\Models\Operation::query()->create(['type' => 'edge.origin_test', 'status' => 'pending', 'actor_id' => $owner->id,
+        'input' => ['domain_id' => $domain->id, 'record_id' => $record->id, 'addresses' => ['8.8.8.8'],
+            'origin_checksum' => hash('sha256', App\Support\ArtifactSigner::encode($record->origin))]]);
+    echo $operation->id."\n";
+} elseif ($mode === 'dispatch') {
+    if (($argv[3] ?? '') === 'pause-presence') {
+        $paused = false;
+        Illuminate\Support\Facades\DB::listen(function ($query) use (&$paused): void {
+            $presence = str_starts_with($query->sql, 'select exists(')
+                || str_starts_with($query->sql, 'select * from "edge_tasks" where "type" =');
+            if (! $paused && $presence && str_contains($query->sql, '"edge_tasks"')) {
+                $paused = true;
+                echo "presence-read\n"; flush();
+                fgets(STDIN);
+            }
+        });
+    }
+    (new App\Jobs\DispatchOriginTest($argv[2]))->handle();
+    echo App\Models\EdgeTask::query()->where('payload->operation_id', $argv[2])->count()."\n";
 }
 '''
 
@@ -89,7 +116,7 @@ def main() -> None:
         try:
             port = subprocess.check_output(['docker', 'port', identifier, '5432/tcp'], text=True).strip().rsplit(':', 1)[1]
             for _ in range(60):
-                if subprocess.run(['docker', 'exec', identifier, 'pg_isready', '-U', 'postgres'], capture_output=True).returncode == 0:
+                if subprocess.run(['docker', 'exec', identifier, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres'], capture_output=True).returncode == 0:
                     break
                 time.sleep(0.5)
             else:
@@ -130,6 +157,24 @@ def main() -> None:
             require(terminal['task_status'] == 'succeeded' and terminal['attempts'] == 1 and terminal['body']['data'].get('replayed') is True,
                     'Concurrent task result overwrote a terminal receipt.')
             require(aggregate == {'status': 'succeeded', 'reported_completed': 2, 'completed_tasks': 2}, 'Concurrent task results left a stale aggregate.')
+            operation = subprocess.check_output(command('dispatch-init'), env=env, text=True).strip()
+            first = subprocess.Popen(command('dispatch', operation, 'pause-presence'), env=env, stdin=subprocess.PIPE,
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            require(first.stdout.readline().strip() == 'presence-read', 'Dispatcher did not reach its task-presence boundary.')
+            second = subprocess.Popen(command('dispatch', operation), env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            try:
+                second.communicate(timeout=2)
+                dispatch_waited = False
+            except subprocess.TimeoutExpired:
+                dispatch_waited = True
+            first.stdin.write('continue\n')
+            first.stdin.flush()
+            for process in (first, second):
+                output, error = process.communicate(timeout=15)
+                require(process.returncode == 0, 'Dispatcher failed: '+error)
+            task_count = int(subprocess.check_output(command('dispatch', operation), env=env, text=True).strip())
+            print(json.dumps({'origin_dispatch_waited': dispatch_waited, 'origin_dispatch_task_count': task_count}))
+            require(task_count == 1, 'Concurrent origin dispatch created duplicate tasks.')
         finally:
             subprocess.run(['docker', 'rm', '-f', identifier], check=True, capture_output=True)
 

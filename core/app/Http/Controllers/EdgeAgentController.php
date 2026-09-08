@@ -340,9 +340,32 @@ class EdgeAgentController extends Controller
     {
         $edge = $request->attributes->get('edge');
 
-        return response()->json(['data' => $edge->tasks()->where('status', 'pending')
+        $tasks = $edge->tasks()->where('status', 'pending')
             ->where(fn ($query) => $query->whereNull('available_at')->orWhere('available_at', '<=', now()))
-            ->orderBy('created_at')->limit(100)->get()]);
+            ->orderBy('created_at')->limit(100)->get()->filter(function (EdgeTask $task) use ($edge): bool {
+                if ($task->type !== 'origin_test') {
+                    return true;
+                }
+
+                return DB::transaction(function () use ($task, $edge): bool {
+                    Operation::query()->lockForUpdate()->find($task->payload['operation_id'] ?? null);
+                    $current = $edge->tasks()->lockForUpdate()->find($task->id);
+                    if ($current === null || $current->status !== 'pending') {
+                        return false;
+                    }
+                    if ($current->currentOriginRecord() !== null) {
+                        return true;
+                    }
+                    $cancel = Request::create('/edge/v1/tasks/'.$task->id.'/result', 'POST', [
+                        'status' => 'failed', 'result' => ['status' => 'unhealthy', 'failure_reason' => 'task_cancelled'],
+                    ]);
+                    $this->applyTaskResult($cancel, $edge, $current);
+
+                    return false;
+                }, 3);
+            })->values();
+
+        return response()->json(['data' => $tasks]);
     }
 
     public function taskResult(Request $request, string $task): JsonResponse
@@ -406,9 +429,12 @@ class EdgeAgentController extends Controller
             }
         }
         if ($row->type === 'origin_test' && isset($row->payload['record_id'])) {
-            DnsRecord::query()->whereKey($row->payload['record_id'])->update(['origin_health' => $result]);
+            $record = $row->currentOriginRecord(lock: true);
+            if ($record !== null) {
+                $record->update(['origin_health' => $result]);
+            }
             $operation = Operation::query()->find($row->payload['operation_id'] ?? null);
-            if ($operation !== null) {
+            if ($operation !== null && in_array($operation->status, ['pending', 'running'], true)) {
                 $tasks = EdgeTask::query()->where('type', 'origin_test')->where('payload->operation_id', $operation->id)->get();
                 $completed = $tasks->whereIn('status', ['succeeded', 'failed']);
                 $terminal = $tasks->isNotEmpty() && $completed->count() === $tasks->count();

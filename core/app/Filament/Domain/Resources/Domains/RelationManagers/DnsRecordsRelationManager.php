@@ -3,7 +3,6 @@
 namespace App\Filament\Domain\Resources\Domains\RelationManagers;
 
 use App\Enums\DomainLifecycleState;
-use App\Jobs\DispatchOriginTest;
 use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
@@ -20,7 +19,6 @@ use App\Support\EdgeRoutingCompiler;
 use App\Support\FilamentHelp;
 use App\Support\GeoDnsConfig;
 use App\Support\GeoIpClassifier;
-use App\Support\OriginData;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -41,7 +39,6 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class DnsRecordsRelationManager extends RelationManager
@@ -212,25 +209,18 @@ class DnsRecordsRelationManager extends RelationManager
         ])->recordActions([
             Action::make('testOrigin')->label('Test origin')->icon('heroicon-o-signal')
                 ->visible(fn (DnsRecord $record): bool => $record->mode === 'proxied')
+                ->disabled(fn (): bool => ! $this->originTestingAvailable())
+                ->tooltip('Requires an active, verified domain.')
                 ->action(function (DnsRecord $record): void {
-                    $operation = Operation::query()->create([
-                        'id' => (string) Str::uuid(), 'type' => 'edge.origin_test', 'status' => 'pending', 'actor_id' => auth()->id(),
-                        'input' => ['domain_id' => $record->domain_id, 'record_id' => $record->id, 'addresses' => OriginData::resolveAndValidate($record->origin['host']), 'edge_ids' => []],
-                    ]);
-                    DispatchOriginTest::dispatch($operation->id)->afterCommit();
+                    $operation = $record->requestOriginTest(auth()->user());
                     Notification::make()->info()->title('Origin test queued')->body("Operation {$operation->id} will run on qualified edges.")->send();
                 }),
             Action::make('testBackupOrigin')->label('Test backup')->icon('heroicon-o-signal')
                 ->visible(fn (DnsRecord $record): bool => $record->mode === 'proxied' && is_array($record->origin['backup'] ?? null))
+                ->disabled(fn (): bool => ! $this->originTestingAvailable())
+                ->tooltip('Requires an active, verified domain.')
                 ->action(function (DnsRecord $record): void {
-                    $operation = Operation::query()->create([
-                        'id' => (string) Str::uuid(), 'type' => 'edge.origin_test', 'status' => 'pending', 'actor_id' => auth()->id(),
-                        'input' => [
-                            'domain_id' => $record->domain_id, 'record_id' => $record->id, 'origin_role' => 'backup',
-                            'addresses' => OriginData::resolveAndValidate($record->origin['backup']['host']), 'edge_ids' => [],
-                        ],
-                    ]);
-                    DispatchOriginTest::dispatch($operation->id)->afterCommit();
+                    $operation = $record->requestOriginTest(auth()->user(), 'backup');
                     Notification::make()->info()->title('Backup origin test queued')->body("Operation {$operation->id} will run on qualified edges.")->send();
                 }),
             Action::make('previewGeo')->label('Preview')->visible(fn (DnsRecord $record): bool => $record->mode === 'geo_dns')
@@ -271,6 +261,14 @@ class DnsRecordsRelationManager extends RelationManager
                     }),
             ]),
         ])->defaultSort('id');
+    }
+
+    private function originTestingAvailable(): bool
+    {
+        $domain = $this->getOwnerRecord();
+
+        return $domain->lifecycle_state === DomainLifecycleState::Active
+            && $domain->nameservers_verified_at !== null && $domain->disabled_at === null;
     }
 
     private function createRecord(array $input): DnsRecord

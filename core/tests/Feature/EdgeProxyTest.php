@@ -405,6 +405,7 @@ class EdgeProxyTest extends TestCase
 
         [$user, $domain] = $this->ownedDomain();
         $record = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $this->record('www', '8.8.8.8'))->assertCreated()->json('data.id');
+        $domain->update(['lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $scheduledOrigin = $domain->dnsRecords()->findOrFail($record)->origin;
         $scheduledOrigin['health_check'] = ['enabled' => true, 'path' => '/', 'interval_seconds' => 60];
         $domain->dnsRecords()->whereKey($record)->update(['origin' => $scheduledOrigin, 'created_at' => now()->subHour()]);

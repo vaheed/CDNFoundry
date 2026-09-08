@@ -65,9 +65,10 @@ as an origin.
 | `failover.hold_down_seconds` | 5–3,600 seconds |
 | `failover.failback_delay_seconds` | 5–86,400 seconds |
 
-The control plane resolves and validates the destination before saving. The edge
-agent resolves and validates again immediately before an origin test or runtime
-connection.
+The control plane resolves and validates the destination before saving. OpenResty
+revalidates destinations for customer traffic. Origin-test tasks currently carry
+the addresses approved by the control plane; fresh edge-side resolution for
+these probes remains an open qualification gate.
 
 ## Active-passive failover
 
@@ -111,11 +112,20 @@ settings are revisioned and delivered as signed artifacts.
 ## Origin tests
 
 `POST .../origin/test` is rate limited and asynchronous. Set `origin_role` to
-`primary` (the default) or `backup`. A runtime task resolves the selected
-destination, connects with bounded timeouts, does not follow redirects, and
+`primary` (the default) or `backup`. A runtime task connects to the approved
+address with bounded timeouts, does not follow redirects, and
 records status, address, latency, HTTP status, or a stable failure reason.
 Scheduled health checks run only when explicitly enabled and are dispatched in
 batches of at most 100 per minute.
+
+Tests require an active domain with verified nameservers and current update
+permission. API and **Test origin** / **Test backup** panel actions use the same
+checks. Pending, disabled, and deprovisioning domains cannot start probes.
+Each operation binds the selected origin configuration and fixes at most 20
+edge recipients. Dispatch and task delivery recheck permission, lifecycle, and
+configuration; obsolete pending tasks are cancelled. Retries preserve recipients
+and progress. Origin edits clear old health, and late results for a changed
+origin remain operation history without replacing current health.
 
 ## Forwarding and cache
 

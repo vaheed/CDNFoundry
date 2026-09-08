@@ -76,8 +76,16 @@ its effects so the agent can report it again.
 
 The `postgres-edge-tasks` production qualification check exercises independent
 PHP processes against a fresh, isolated PostgreSQL database, including a late
-terminal report and simultaneous sibling completion. It requires Docker and
+terminal report, simultaneous sibling completion, and competing origin-test
+dispatchers. It requires Docker and
 host PHP with `pdo_pgsql` and installed application dependencies.
+
+Origin-test delivery checks current domain authorization, active/verified state,
+and the selected origin configuration. An obsolete pending probe is omitted
+from `/tasks` and receives a failed receipt with `task_cancelled`. Late reports
+remain task history but cannot update health for a changed or unauthorized
+origin. Dispatch retries retain the operation's initial recipients and progress.
+This adds no task wire fields or agent-version requirement.
 
 This protocol is operator-internal. Do not expose it through the normal control
 hostname or reuse a user API token.
