@@ -69,6 +69,12 @@ go build ./...
 
 The agent Dockerfile also runs its tests during image build.
 
+The Go CI job runs both modules with failure propagation inside its logging
+pipeline. `tests/qualification/test_go_ci.py` executes that job's shell with
+controlled tool failures in the first and last module, covering formatting,
+vet, tests, and build. A later success cannot hide an earlier failure. These
+shell regressions supplement the real Go test/build and origin-runtime checks.
+
 Run `python3 tests/e2e/origin_probes.py` to require real origin-probe DNS,
 HTTP/TLS, and IPv6 checks. It creates a disposable Docker network with a unique
 private IPv6 subnet, runs the pinned Go image with 768 MiB / two CPUs, and

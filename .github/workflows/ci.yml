@@ -261,11 +261,14 @@ jobs:
         with:
           go-version: '1.26.8'
           cache: false
+      - name: Check Go CI failure propagation
+        run: python3 -m unittest discover -s tests/qualification -p test_go_ci.py
       - name: Test and build every Go module
         shell: bash
         run: |
           set +e
           {
+            set -e -o pipefail
             mapfile -t modules < <(find . -name go.mod -not -path './.git/*' -printf '%h\n' | sort -u)
             if (( ${#modules[@]} == 0 )); then
               echo 'No Go modules are present yet; nothing to test or build.'
