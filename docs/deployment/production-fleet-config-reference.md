@@ -221,11 +221,11 @@ referenced docker/...   # only runtime files used by selected services
 
 DNS nodes may additionally receive `reconcile-pdns-password.sh` and a pending password file during a staged rotation.
 
-Generated `start.sh` contains a fixed list of Compose profiles. A combined
-`dns-edge` bundle rendered before enrollment starts only DNS. After an operator
-pastes `EDGE_ID` and `EDGE_BOOTSTRAP_TOKEN` into `.env.prod`, start the edge
-profile explicitly or add `--profile edge` to the script's Compose `up` command.
-The script does not inspect enrollment state or modify `.env.prod`.
+Generated `start.sh` selects base profiles from the node role and reads the host's
+current `EDGE_ID` through Compose. An unenrolled `dns-edge` node starts DNS;
+after enrollment, the same script also starts edge services. An invalid UUID
+fails before migrations or activation. No script edit or second transfer is
+required. Environment files are parsed as configuration, never sourced as shell.
 
 ## Security properties
 

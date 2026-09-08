@@ -700,8 +700,9 @@ docker compose --env-file .env.prod ps
 
 `start.sh` activates only this bundle's configured role profiles. A combined
 DNS/edge node without an edge UUID starts authoritative DNS but does not start
-the edge profile. After edge registration is configured and the bundle is
-rerendered, the same script activates both profiles.
+the edge profile. After the host operator sets its edge UUID and one-time token
+in `.env.prod`, the same script reads the current Compose environment and
+activates both profiles. No script edit or rerender is required.
 
 For a planned stop, use `./stop.sh`. The bundle uses Compose profiles, so a
 plain `docker compose down` selects no profiled services and does nothing.
@@ -827,9 +828,6 @@ openssl verify -CAfile pki/edge-server-ca.crt pki/node.crt
             profiles.append("control")
         if node["role"] in {"dns", "dns-edge"}:
             profiles.append("dns")
-        edge_id = str(node.get("extra_env", {}).get("EDGE_ID", "")).strip()
-        if node["role"] in {"edge", "dns-edge"} and edge_id:
-            profiles.append("edge")
         if self._is_monitoring_host(state, node):
             profiles.append("telemetry")
         if state["features"]["logs"]["mode"] == "centralized":
@@ -839,11 +837,29 @@ openssl verify -CAfile pki/edge-server-ca.crt pki/node.crt
     def _start_script(self, state: dict[str, Any], node: dict[str, Any]) -> str:
         migration = self._node_start_order(node)
         profiles = self._start_profiles(state, node)
-        edge_profile_hint = ""
-        if node["role"] in {"edge", "dns-edge"} and not str(node.get("extra_env", {}).get("EDGE_ID", "")).strip():
-            edge_profile_hint = """# Edge is not enabled yet. After enrollment, add --profile edge to the
-# Compose up command below or start that profile manually.
+        activation = f"docker compose --env-file .env.prod {profiles} up -d --wait --wait-timeout 300" if profiles else ":"
+        enrollment_validation = ""
+        if node["role"] in {"edge", "dns-edge"}:
+            enrollment_validation = """# Resolve the host's current enrollment through Compose; never source env files.
+edge_identity_state="$(python3 -c '
+import json, subprocess, sys, uuid
+try:
+    result = subprocess.run(["docker", "compose", "--env-file", ".env.prod", "--profile", "edge", "config", "--format", "json"],
+                            check=True, capture_output=True, text=True, timeout=30)
+    value = str(json.loads(result.stdout)["services"]["edge-agent"]["environment"].get("EDGE_ID", "")).strip()
+    if value:
+        uuid.UUID(value)
+except (KeyError, ValueError, TypeError, OSError, subprocess.SubprocessError):
+    sys.exit("Cannot read a valid EDGE_ID from Compose configuration; correct .env.prod before activation.")
+print("configured" if value else "pending")
+')"
 """
+            activation = """if [ "$edge_identity_state" = "configured" ]; then
+    """ + f"docker compose --env-file .env.prod {profiles+' ' if profiles else ''}--profile edge up -d --wait --wait-timeout 300" + """
+else
+    echo "Edge enrollment is pending; set EDGE_ID and its one-time bootstrap token in .env.prod, then rerun start.sh."
+    """ + activation + """
+fi"""
         key_permissions = ""
         if node["role"] in {"dns", "dns-edge"}:
             key_permissions = """if [ "$(id -u)" != "0" ]; then
@@ -882,8 +898,8 @@ for runtime_path in docker generated; do
     fi
 done
 ./validate.sh
-{migration}
-{edge_profile_hint}docker compose --env-file .env.prod {profiles} up -d --wait --wait-timeout 300
+{enrollment_validation}{migration}
+{activation}
 docker compose --env-file .env.prod ps
 """
 

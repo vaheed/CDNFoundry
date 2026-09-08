@@ -82,7 +82,7 @@ sudo ./scripts/cdnfoundry-fleet \
    apply NS/glue platform identity only afterward and wait for every cluster to
    acknowledge it. Qualify UDP/TCP answers before delegation.
 4. Create each edge in the control panel, paste its two-line UUID/token block into the matching prepared host, and run `sudo docker compose --env-file .env.prod --profile edge up -d` one host at a time. Edge display and Fleet node names may differ.
-5. Confirm each agent persisted its identity and sent a fresh heartbeat; no rerender or second transfer is required. Add `--profile edge` to the local `start.sh` Compose command for future whole-host starts if desired.
+5. Confirm each agent persisted its identity and sent a fresh heartbeat; no rerender or second transfer is required. For future whole-host starts, run `sudo ./start.sh`; it reads the current host enrollment through Compose and selects the edge profile automatically.
 6. Validate regional fallback, draining, node loss, control-plane outage, restart, telemetry loss, and previous-bundle rollback.
 
 Do not activate all hosts simultaneously. A target must be valid and serving before any source is drained. Generated `.env.prod` is authoritative for every role bundle; do not add deployment defaults to Compose or edit rendered manifests on a host.

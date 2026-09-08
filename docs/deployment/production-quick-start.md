@@ -347,12 +347,13 @@ sudo chmod 0600 .env.prod
 sudo docker compose --env-file .env.prod --profile edge up -d
 ```
 
-Repeat on `pop-2` with its own values. For future whole-host starts, add
-`--profile edge` to the generated `start.sh` Compose `up` command. The script
-does not inspect enrollment state, edit `.env.prod`, wait for registration, or
-restart the agent. No second bundle transfer, Fleet registration command, or
-manual token file is required. Existing PowerDNS containers and volumes stay
-running.
+Repeat on `pop-2` with its own values. For subsequent whole-host starts, run
+`sudo ./start.sh`. It reads the current `EDGE_ID` through Compose and includes
+the edge profile after enrollment without editing the script or rerendering the
+bundle. No second bundle transfer is required. Invalid UUID/configuration fails before migrations or activation. Keep
+the spent bootstrap token blank after a fresh heartbeat; the persisted identity
+continues to authenticate the agent. Existing PowerDNS containers and volumes
+remain in place.
 
 Wait for a fresh heartbeat in the administrator panel. If enrollment fails,
 inspect `docker compose --env-file .env.prod logs --tail=200 edge-agent`, fix

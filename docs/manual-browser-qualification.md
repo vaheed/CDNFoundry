@@ -121,8 +121,10 @@ workstream does not replace an earlier product checkpoint.
    values, then confirm neither modal nor token is shown after navigation. On
    each prepared host, paste the two values into mode-`0600` `.env.prod`, run
    the displayed edge-profile command, and confirm enrollment and a fresh
-   heartbeat without rerendering or a second transfer. Inspect `start.sh` and
-   confirm it contains no enrollment polling or token-file mutation logic.
+   heartbeat without rerendering or a second transfer. Rerun `sudo ./start.sh`
+   on that host without editing the script; confirm the edge profile is included
+   and the edge page shows a fresh heartbeat. Inspect `start.sh` and confirm it
+   contains no enrollment polling or token-file mutation logic.
 3. From an edge record, choose **Rotate identity**. Confirm the first modal says
    the current certificate is revoked immediately, last-valid runtime traffic
    can continue, and heartbeat/configuration delivery will pause. Require the

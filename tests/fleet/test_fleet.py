@@ -4,6 +4,7 @@ import argparse
 import base64
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -415,8 +416,8 @@ def test_combined_node_starts_dns_before_edge_registration(store: FleetState, so
     assert "docker compose --env-file .env.prod --profile dns up -d --wait" in start
     assert "sh /usr/local/bin/ensure-pdns-runtime.sh" in start
     assert start.index("ensure-pdns-runtime.sh") < start.index("pdns-migrate")
-    assert "docker compose --env-file .env.prod --profile dns --profile edge up" not in start
-    assert "After enrollment, add --profile edge" in start
+    assert 'if [ "$edge_identity_state" = "configured" ]; then' in start
+    assert '"--profile", "edge", "config", "--format", "json"' in start
     assert "env_value" not in start
     assert "scrub_bootstrap_token" not in start
     assert compose["services"]["pdns-auth"]["profiles"] == ["dns"]
@@ -1281,3 +1282,92 @@ def test_setup_config_rejects_unknown_fields(source_repo: Path, tmp_path: Path) 
     )
     assert result.returncode == 3
     assert "Unknown node 0 field(s): public_ip4" in result.stderr
+
+
+@pytest.mark.parametrize("config_backend", ["fixture", "compose"])
+def test_generated_start_uses_host_enrollment_without_editing_script(store: FleetState, source_repo: Path, tmp_path: Path, config_backend: str) -> None:
+    # The minimal renderer fixture needs the network used by its exporters
+    # when it is passed to the actual Compose parser.
+    source_compose = source_repo / "compose.prod.yml"
+    document = yaml.safe_load(source_compose.read_text())
+    document.setdefault("networks", {})["egress"] = {}
+    document["services"]["node-exporter"]["networks"] = ["egress"]
+    document["services"]["edge-agent"]["environment"]["EDGE_ID"] = "${EDGE_ID:-}"
+    source_compose.write_text(yaml.safe_dump(document))
+    add(store, node("pop-1", "dns-edge", "192.0.2.20"))
+    output = tmp_path / "bundles"
+    Renderer(source_repo, store, output).render(store.load())
+    bundle = output / "pop-1"
+    original = (bundle / "start.sh").read_text()
+    # Exercise generated activation and its Compose boundary. Configuration,
+    # PKI and actual service startup have their separate qualification jobs.
+    (bundle / "validate.sh").write_text("#!/bin/sh\nexit 0\n")
+    binary = tmp_path / "bin"
+    binary.mkdir()
+    # Host ownership is qualified against real container users in the runtime
+    # suite; keep this activation boundary test runnable without host root.
+    for name, body in {"id": "echo 0", "chown": "exit 0"}.items():
+        command = binary / name
+        command.write_text("#!/bin/sh\n"+body+"\n")
+        command.chmod(0o700)
+    docker = binary / "docker"
+    docker.write_text('''#!/usr/bin/env python3
+import json, os, pathlib, subprocess, sys
+args = sys.argv[1:]
+with pathlib.Path("calls.jsonl").open("a") as log:
+    log.write(json.dumps(args)+"\\n")
+if "config" in args and "--format" in args:
+    value = ""
+    for line in pathlib.Path(".env.prod").read_text().splitlines():
+        if line.startswith("EDGE_ID="):
+            value = line.split("=", 1)[1].strip("'\\\"")
+    if os.environ["QUALIFICATION_CONFIG_BACKEND"] == "compose":
+        result = subprocess.run([os.environ["QUALIFICATION_REAL_DOCKER"], *args], capture_output=True, text=True)
+        sys.stdout.write(result.stdout)
+        sys.stderr.write(result.stderr)
+        if result.returncode:
+            sys.exit(result.returncode)
+    else:
+        print(json.dumps({"services": {"edge-agent": {"environment": {"EDGE_ID": value}}}}))
+    if os.environ.get("QUALIFICATION_CONFIG_FAILURE"):
+        print("private-configuration-fixture", file=sys.stderr)
+        sys.exit(17)
+''')
+    docker.chmod(0o700)
+    environment = {**os.environ, "PATH": str(binary)+os.pathsep+os.environ["PATH"],
+                   "QUALIFICATION_REAL_DOCKER": shutil.which("docker") or "docker",
+                   "QUALIFICATION_CONFIG_BACKEND": config_backend}
+    for enrolled in (False, True):
+        env = (bundle / ".env.prod").read_text()
+        lines = [line for line in env.splitlines() if not line.startswith("EDGE_ID=")]
+        lines.append("EDGE_ID='11111111-2222-3333-4444-555555555555'" if enrolled else "EDGE_ID=''")
+        (bundle / ".env.prod").write_text("\n".join(lines)+"\n")
+        (bundle / "calls.jsonl").write_text("")
+        result = subprocess.run(["sh", "start.sh"], cwd=bundle, env=environment, capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+        calls = [json.loads(line) for line in (bundle / "calls.jsonl").read_text().splitlines()]
+        activation = [call for call in calls if "up" in call and "dns" in call]
+        assert len(activation) == 1
+        assert "dns" in activation[0]
+        assert ("edge" in activation[0]) is enrolled
+        assert (bundle / "start.sh").read_text() == original
+        assert stat.S_IMODE((bundle / "docker/pdns/pdns.conf").stat().st_mode) == 0o640
+
+    valid_environment = (bundle / ".env.prod").read_text()
+    (bundle / ".env.prod").write_text(valid_environment.replace("11111111-2222-3333-4444-555555555555", "invalid-uuid"))
+    (bundle / "calls.jsonl").write_text("")
+    result = subprocess.run(["sh", "start.sh"], cwd=bundle, env=environment, capture_output=True, text=True)
+    assert result.returncode != 0
+    assert "correct .env.prod before activation" in result.stderr
+    assert "invalid-uuid" not in result.stderr
+    calls = [json.loads(line) for line in (bundle / "calls.jsonl").read_text().splitlines()]
+    assert not any("up" in call or "exec" in call or "run" in call for call in calls)
+
+    (bundle / ".env.prod").write_text(valid_environment)
+    (bundle / "calls.jsonl").write_text("")
+    failed = subprocess.run(["sh", "start.sh"], cwd=bundle,
+                            env={**environment, "QUALIFICATION_CONFIG_FAILURE": "1"}, capture_output=True, text=True)
+    assert failed.returncode != 0
+    assert "private-configuration-fixture" not in failed.stdout+failed.stderr
+    calls = [json.loads(line) for line in (bundle / "calls.jsonl").read_text().splitlines()]
+    assert not any("up" in call or "exec" in call or "run" in call for call in calls)
