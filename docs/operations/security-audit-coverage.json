@@ -2440,7 +2440,7 @@
     {
       "path": "docker/nginx/edge-runtime.conf",
       "status": "pending",
-      "scope": "Inventory only; no whole-file completion claimed."
+      "scope": "Inventory only; no whole-file completion claimed. AUD-036: reservation variable and real held-request/capacity-rejection regression reviewed."
     },
     {
       "path": "docker/nginx/edge.conf",
@@ -2485,7 +2485,7 @@
     {
       "path": "docker/openresty/runtime.lua",
       "status": "partial",
-      "scope": "AUD-033/034/035 address parsing, CIDR/peer selection and complete A/AAAA admission traced and qualified with real IPv4/IPv6 HTTP/TLS, UDP/TCP DNS, answer bounds, errors, concurrent deadlines, changed DNS, pre-connect failure/backup role accounting, restart and last-valid state. The rest of this runtime remains under review."
+      "scope": "AUD-033/034/035/036 address parsing, CIDR/peer selection and complete A/AAAA admission traced and qualified with real IPv4/IPv6 HTTP/TLS, UDP/TCP DNS, answer bounds, errors, concurrent deadlines, changed DNS, pre-connect failure/backup role accounting, reservation ownership under concurrent capacity rejection, restart and last-valid state. The rest of this runtime remains under review."
     },
     {
       "path": "docker/openresty/waf.conf",
@@ -3640,7 +3640,7 @@
     {
       "path": "tests/e2e/origin_destinations.py",
       "status": "reviewed",
-      "scope": "Complete expanded fixture reviewed and executed: 76 real address/DNS/HTTP/TLS checks, pinned image identities, private resource cleanup, required IPv6, canary logs and DNS-failure backup activation/attribution/recovery and zero occupied origin slots after concurrent deadlines. No browser/public traffic or signed-agent activation claim."
+      "scope": "Complete expanded fixture reviewed and executed: 76 real address/DNS/HTTP/TLS checks, pinned image identities, private resource cleanup, required IPv6, canary logs and DNS-failure backup activation/attribution/recovery and zero occupied origin slots after concurrent deadlines. No browser/public traffic or signed-agent activation claim. AUD-036: reservation variable and real held-request/capacity-rejection regression reviewed."
     },
     {
       "path": "tests/e2e/origin_dns_fixture.py",

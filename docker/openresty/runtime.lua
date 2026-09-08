@@ -667,7 +667,9 @@ function M.origin_access()
         dictionary:incr(origin_key, -1, 0)
         return security_reject(503, "origin_capacity_exceeded")
     end
-    ngx.ctx.origin_connection_key = origin_key
+    -- Keep the acquired reservation across named proxy/error redirects, which
+    -- replace ngx.ctx. Rejected requests must never synthesize a reservation.
+    ngx.var.cdn_origin_connection_key = origin_key
     ngx.ctx.origin_domain = tostring(config.domain)
     ngx.ctx.origin_hostname = host
     ngx.ctx.origin_role = role
@@ -811,6 +813,7 @@ function M.balance()
 end
 
 function M.record_passive_failure()
+    if (ngx.var.cdn_origin_connection_key or "") == "" then return end
     local status = tonumber((ngx.var.upstream_status or ""):match("%d+"))
     if status and status < 500 then
         M.origin_done()
@@ -840,18 +843,16 @@ function M.finish()
 end
 
 function M.origin_done()
+    local connection_key = ngx.var.cdn_origin_connection_key
+    if not connection_key or connection_key == "" then return end
+    ngx.var.cdn_origin_connection_key = ""
     local dictionary = ngx.shared.runtime_limits
     local host = (ngx.var.host or ""):lower():gsub("%.$", "")
     local config = state.hosts[host]
     local role = (ngx.var.cdn_origin_role ~= "" and ngx.var.cdn_origin_role) or ngx.ctx.origin_role or "primary"
     local domain = config and tostring(config.domain) or ngx.ctx.origin_domain
-    local connection_key = ngx.ctx.origin_connection_key
-        or (domain and ("security:origin:connections:" .. domain .. ":" .. role))
-    if connection_key then
-        local current = dictionary:incr(connection_key, -1, 0)
-        if current and current <= 0 then dictionary:delete(connection_key) end
-        dictionary:incr("capacity:origin_connections", -1, 0)
-    end
+    dictionary:incr(connection_key, -1, 0)
+    dictionary:incr("capacity:origin_connections", -1, 0)
     if not domain then return end
     local status = tonumber((ngx.var.upstream_status or ""):match("%d+")) or tonumber(ngx.status) or 0
     local failed = ngx.ctx.origin_failed == true or status >= 500 or status == 0

@@ -84,6 +84,12 @@ limits still apply separately. Each uncached origin attempt resolves again,
 including when a keepalive connection exists. The configured bounded stale-cache
 policy may serve a cached response after an origin failure.
 
+The origin connection limit applies to in-flight attempts in each domain and
+selected origin role within a cell, including DNS lookup time. Capacity
+rejections return 503 and do not count as origin failures or trigger failover.
+Rejected requests leave occupied slots intact; an admitted attempt releases
+its reservation when it finishes.
+
 ## Active-passive failover
 
 Failover is local to each OpenResty cell and never calls Laravel in the request

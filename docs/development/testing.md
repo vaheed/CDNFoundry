@@ -98,7 +98,11 @@ recursive CNAME answers, truncation/TCP, concurrent deadlines and DNS changes
 between requests. DNS-failed primaries must activate the configured backup;
 backup DNS failure and recovery must retain correct role attribution. The
 fixture records elapsed times and checks that origin
-connection slots return to zero after timed-out lookups. No public DNS service
+connection slots return to zero after timed-out lookups. Held HTTP requests also
+exercise a one-connection origin limit: repeated excess requests must return
+503 without releasing the occupied slot, recording passive origin failures, or
+activating a configured backup. Completion must restore capacity to zero and
+admit the next request. No public DNS service
 is queried by the runtime corpus.
 The real HTTP/TLS canary also covers permitted destinations, explicit exclusions,
 expanded/mapped/malformed IPv6, verified TLS and wrong-name rejection, CIDR

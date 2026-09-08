@@ -92,6 +92,17 @@ Reverting restores first-answer admission and the older timeout behavior. Retain
 active artifacts, certificates and cache data during any recovery; fix resolver
 health rather than bypassing destination checks or disabling IPv6 validation.
 
+## Origin connection accounting
+
+The origin-capacity accounting correction requires the matching OpenResty Lua
+runtime and Nginx configuration from the same rebuilt image: the configuration
+declares the request reservation variable used across internal redirects. Use
+the existing canary rollout and run `tests/e2e/origin_destinations.py` before
+advancing. Confirm excess requests remain 503 while the origin slot is occupied,
+then return to normal after it finishes. No database or artifact-schema migration
+is needed. Reverting restores the limit bypass and inaccurate connection counts;
+retain active artifacts and certificates during rollback.
+
 ## Rollout order
 
 For additive migrations and compatible agents:

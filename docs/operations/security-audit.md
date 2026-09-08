@@ -787,7 +787,55 @@ concurrent deadline corpus. Image:
 `sha256:c037f85dfceabba70609d31ab374386b429e3f981307997abe0e87931a4e3c6d`.
 The final staged check records the exact tree separately in local evidence.
 
-Further source leads are not yet classified as vulnerabilities: origin-slot
-release when a request is rejected before reservation, and first-versus-final
-upstream status during retries. They require adversarial runtime evidence. The
-broader audit remains partial and manual browser qualification remains **Not run**.
+The origin-slot lead is now confirmed below as AUD-036. First-versus-final
+upstream status during retries still requires adversarial runtime evidence.
+The broader audit remains partial and manual browser qualification remains
+**Not run**.
+
+## Origin reservation accounting
+
+AUD-036 (**Medium, confirmed origin-limit bypass and incorrect diagnostics**)
+affects `docker/openresty/runtime.lua` and `docker/nginx/edge-runtime.conf`.
+The roadmap requires bounded origin connections and predictable local rejection.
+On parent `922e5250`, `M.origin_done` reconstructed a connection key from the
+hostname even when access rejected the request before acquiring a reservation.
+Internal error redirects discard `ngx.ctx`, so the reconstruction also masked
+whether acquisition had happened. An unauthenticated requester reaching a
+configured proxied hostname could repeatedly release another request's slot.
+Other cell/client limits remain applicable; this is not evidence of unlimited
+host capacity or a cross-tenant data disclosure.
+
+The disposable runtime reproduction held one real HTTP origin request under a
+one-connection limit. The first excess request returned 503 but changed the
+reported active count from one to zero. The next two reached the canary with
+HTTP 200 while the first request still ran. Completing the held request left
+the cell counter at **−1**. Five of 81 checks failed in 51.931 seconds; the
+source and synthetic request/canary evidence are recorded in the local
+`runtime-capacity-before` checkpoint. No application database was used.
+
+The fix stores the acquired key in a request variable that survives named
+redirects, clears it before releasing the slot, and never infers a reservation
+from current hostname configuration. Local rejections also skip passive origin
+failure and failover accounting. Zero-valued reservation counters are retained
+in the existing bounded shared dictionary, avoiding a decrement-then-delete
+window that could erase another worker's newly incremented counter. Durable
+desired state, permissions and artifact schemas are unchanged; runtime effects
+are local shared-memory accounting only. Roll out a matching runtime/config
+image through the existing canary process. A rollback restores the defect;
+there is no migration or persisted-data reversal.
+
+The rebuilt image passed the initial **81 checks** in 55.860 seconds: all three
+excess requests remained 503 with one active connection, completion returned the
+count to zero, and the next request succeeded. The extended regression also
+checks the same behavior with a configured backup and verifies no passive
+failure or false failover is recorded: **86 checks passed** in 58.414 seconds
+using image `sha256:bb5402982dd3d5d5a712a119b369ef5abae6fc3de714afaf3151afb70305a46d`.
+The broader OpenResty runtime suite passed in 158.732 seconds in disposable
+project `cdnf-origin-runtime-02fbbfab6b`. Compose/OpenAPI, observability contracts,
+supply-chain/qualification-tool tests and documentation validation also passed.
+Documentation and the additional backup-capacity test were edited during the
+broader run; its runtime Lua/Nginx sources were unchanged. These checkpoints
+are local regression evidence, not a signed final-source production release.
+No UI changes are involved; the existing owner
+manual browser checklist is retained and **Not run**. Full topology/recovery,
+production load, image advisories and whole-codebase review remain open gates.

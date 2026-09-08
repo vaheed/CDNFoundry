@@ -70,6 +70,9 @@ def main() -> None:
     ssl_certificate /fixtures/tls.crt;
     ssl_certificate_key /fixtures/tls.key;
     access_log /tmp/origin-canary.log combined;
+    location = /hold {
+        content_by_lua_block { ngx.sleep(3); ngx.print("synthetic-origin-canary") }
+    }
     location / { return 200 "synthetic-origin-canary"; }
 }
 ''')
@@ -225,6 +228,16 @@ def main() -> None:
             backup_config['origin']['failover'] = {'failure_threshold': 2, 'recovery_threshold': 2,
                                                  'hold_down_seconds': 5, 'failback_delay_seconds': 5}
             current['hosts']['dns-backup.example'] = backup_config
+            capacity_config = copy.deepcopy(current['hosts']['ipv4.example'])
+            capacity_config['domain'] = 'capacity.example'
+            capacity_config['security'] = {'limits': {'origin_max_connections': 1}}
+            current['hosts']['capacity.example'] = capacity_config
+            capacity_failover = copy.deepcopy(capacity_config)
+            capacity_failover['domain'] = 'capacity-failover.example'
+            capacity_failover['origin']['backup'] = copy.deepcopy(current['hosts']['ipv6.example']['origin'])
+            capacity_failover['origin']['failover'] = {'failure_threshold': 1, 'recovery_threshold': 2,
+                                                     'hold_down_seconds': 5, 'failback_delay_seconds': 5}
+            current['hosts']['capacity-failover.example'] = capacity_failover
             candidate = target / 'runtime.next.json'
             candidate.write_text(json.dumps(current))
             candidate.replace(target / 'runtime.json')
@@ -279,6 +292,49 @@ def main() -> None:
                 '--header=X-Edge-Status-Token: synthetic-qualification-only',
                 'http://127.0.0.1:9080/passive-failures').stdout)['cell']['capacity']['origin_connections']
             assert capacity == 0, f'Origin slots leaked after DNS deadlines: {capacity}'
+
+            def origin_diagnostics() -> dict:
+                return json.loads(run('docker', 'exec', instance, 'wget', '-q', '-O-',
+                    '--header=X-Edge-Status-Token: synthetic-qualification-only',
+                    'http://127.0.0.1:9080/passive-failures').stdout)
+
+            def origin_connections() -> int:
+                return origin_diagnostics()['cell']['capacity']['origin_connections']
+
+            # A rejection must not release the slot held by an admitted request.
+            # The canary sleeps in real OpenResty while the other requests finish.
+            for label in ['capacity', 'capacity-failover']:
+                hostname = label + '.example'
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    held = executor.submit(request, hostname, '/hold?case=' + label + '-held')
+                    for _ in range(50):
+                        if origin_connections() == 1:
+                            break
+                        time.sleep(.02)
+                    else:
+                        raise AssertionError('Held request never acquired its origin slot')
+                    for index in range(3):
+                        case = f'{label}-rejected-{index}'
+                        status, body = request(hostname, '/?case=' + case)
+                        diagnostics = origin_diagnostics()
+                        active = diagnostics['cell']['capacity']['origin_connections']
+                        health = next((item for item in diagnostics['origins'] if item['hostname'] == hostname), None)
+                        passive = [item for item in diagnostics['data'] if item['hostname'] == hostname]
+                        results.append({'case': case, 'expected': 503, 'status': status, 'origin_connections': active,
+                            'failover': health, 'passive_failures': passive,
+                            'passed': status == 503 and active == 1 and not held.done() and 'synthetic-origin-canary' not in body
+                            and not passive and (health is None or (health['active'] == 'primary' and health['reason'] == 'none'))})
+                    status, body = held.result()
+                    active = origin_connections()
+                    results.append({'case': label + '-held', 'expected': 200, 'status': status, 'origin_connections': active,
+                        'passed': status == 200 and body == 'synthetic-origin-canary' and active == 0})
+                headers = {}
+                status, body = request(hostname, '/?case=' + label + '-recovered', response_headers=headers)
+                active = origin_connections()
+                results.append({'case': label + '-recovered', 'expected': 200, 'status': status, 'origin_connections': active,
+                    'origin_role': headers.get('x-cdnfoundry-origin'),
+                    'passed': status == 200 and body == 'synthetic-origin-canary' and active == 0
+                    and headers.get('x-cdnfoundry-origin') == 'primary'})
 
             # A later request must resolve again, even with an existing origin
             # keepalive connection. No cached configuration change is involved.
