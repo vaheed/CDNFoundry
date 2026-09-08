@@ -153,8 +153,14 @@ final class OriginData
         }
         if (Edge::query()->where('management_ipv4', $address)->orWhere('management_ipv6', $address)->exists()
             || EdgePoolEndpoint::query()->where('ipv4', $address)->orWhere('ipv6', $address)->exists()
-            || in_array($address, app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_addresses'), true)) {
+            || collect(app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_addresses'))
+                ->contains(fn (string $denied): bool => NetworkAddress::inCidr($address, $denied))) {
             return true;
+        }
+        foreach (app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_networks') as $cidr) {
+            if (NetworkAddress::inCidr($address, $cidr)) {
+                return true;
+            }
         }
         if (NetworkAddress::isUnsafe($address)) {
             if (NetworkAddress::isPrivate($address)) {
@@ -166,11 +172,6 @@ final class OriginData
             }
 
             return true;
-        }
-        foreach (app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_networks') as $cidr) {
-            if (NetworkAddress::inCidr($address, $cidr)) {
-                return true;
-            }
         }
 
         return false;
