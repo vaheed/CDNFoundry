@@ -894,3 +894,44 @@ production `origin-destinations` gate automatically include the new corpus.
 Manual browser qualification remains **Not run**; existing UI steps are
 unchanged. Full Fleet topology/recovery, production load, release image
 advisories and the rest of the first-party audit remain open.
+
+## Origin cleanup during hostname removal
+
+AUD-038 (**Medium, confirmed reservation leak during runtime updates**) affects
+`docker/openresty/runtime.lua::M.record_passive_failure`. An origin response
+can finish after an asynchronous runtime snapshot removes its hostname. The
+failure path returned early when current configuration was absent, bypassing
+release of the request's acquired connection reservation. Desired state and
+authorization were unchanged, but the stale counter could consume capacity
+after a hostname was restored and inflate cell diagnostics. This requires an
+in-flight failure overlapping removal; ordinary successful responses already
+released correctly. No tenant-data disclosure was observed.
+
+The real OpenResty reproduction on parent `872bafce` held a request at a
+synthetic origin, atomically published a snapshot without the hostname, and
+confirmed new requests returned 421 before releasing the held response. The
+successful-response control returned its counter to zero. The failing response
+left **one occupied slot**; restoring that hostname under a one-connection limit
+then returned **503 instead of 200**. Two of 102 checks failed in 65.167 seconds
+in local checkpoint `runtime-lifecycle-before`. The canary log proved exactly
+one origin attempt for each held request. No database or shared volume was used.
+
+The correction invokes reservation cleanup even when current hostname
+configuration is absent. It records no new passive receipt for a removed host.
+The existing request-owned key determines which slot to release, independently
+of the new snapshot. Permissions, durable desired state, artifact schema and
+runtime activation remain unchanged. Roll out the updated runtime image through
+the existing canary process; no database migration is needed. Rolling back
+restores the leak. This fixture exercises runtime snapshot replacement directly,
+not end-to-end control-plane deletion or signed agent delivery.
+
+The rebuilt runtime passed **102 checks** in 73.367 seconds, including both
+removal outcomes, restored HTTP 200, and zero occupied slots after completion.
+Image: `sha256:f9835db95a10c4ca5e533cc6470faf1c3495867d549fb3fb395881bbd40fa89b`.
+Compose and production-environment/override validation passed in 5.587 seconds.
+Documentation changed during those checks; the runtime and fixture sources
+were unchanged. The broader OpenResty suite was not repeated for this branch
+correction; its preceding result is recorded under AUD-037. Manual browser
+qualification remains **Not run**, with no UI changes. Full topology/recovery,
+production load, unresolved image advisories and remaining first-party review
+still prevent production qualification.

@@ -103,6 +103,13 @@ then return to normal after it finishes. No database or artifact-schema migratio
 is needed. Reverting restores the limit bypass and inaccurate connection counts;
 retain active artifacts and certificates during rollback.
 
+The follow-up lifecycle correction releases an in-flight failed request's
+reservation even if its hostname has already left the runtime snapshot. Canary
+qualification must cover removal during an origin response and subsequent
+restoration without a cell restart. It requires an updated runtime image only;
+no data migration is needed. Rolling back can leave occupied slots after such
+removals, preventing restored traffic when the configured limit is exhausted.
+
 ## Origin retry budgets
 
 The retry-budget correction likewise ships in the edge runtime/config image.

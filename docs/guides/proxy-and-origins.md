@@ -89,6 +89,9 @@ selected origin role within a cell, including DNS lookup time. Capacity
 rejections return 503 and do not count as origin failures or trigger failover.
 Rejected requests leave occupied slots intact; an admitted attempt releases
 its reservation when it finishes.
+Removing a hostname from a cell stops new requests for that hostname. Requests
+already in flight still release their origin reservations when they finish,
+including after failed responses, so a later restoration retains usable capacity.
 
 ## Active-passive failover
 

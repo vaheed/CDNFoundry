@@ -72,7 +72,11 @@ server {
     ssl_certificate_key /fixtures/tls.key;
     access_log /tmp/origin-canary.log combined;
     location = /hold {
-        content_by_lua_block { ngx.sleep(3); ngx.print("synthetic-origin-canary") }
+        content_by_lua_block {
+            ngx.sleep(3)
+            if ngx.var.arg_failure == "1" then return ngx.exit(503) end
+            ngx.print("synthetic-origin-canary")
+        }
     }
     location = /retry {
         content_by_lua_block {
@@ -273,6 +277,10 @@ server {
                 if label.startswith('retry-tls-'):
                     config['origin'].update(host=ipv6, scheme='https', port=18443, verify_tls=True)
                 current['hosts'][label + '.example'] = config
+            for label in ['lifecycle-success', 'lifecycle-failure']:
+                config = copy.deepcopy(capacity_config)
+                config['domain'] = label + '.example'
+                current['hosts'][label + '.example'] = config
             candidate = target / 'runtime.next.json'
             candidate.write_text(json.dumps(current))
             candidate.replace(target / 'runtime.json')
@@ -295,7 +303,8 @@ server {
                 passive = [item for item in diagnostics['data'] if item['hostname'] == label + '.example']
                 active = diagnostics['cell']['capacity']['origin_connections']
                 results.append({'case': label, 'expected': expected, 'status': status,
-                    'expected_origin_attempts': attempts, 'method': method, 'failover': health, 'passive_failures': passive,
+                    'expected_origin_attempts': attempts, 'canary_request': method + ' /retry?case=' + label + '&',
+                    'method': method, 'failover': health, 'passive_failures': passive,
                     'origin_connections': active,
                     'passed': status == expected and ('synthetic-origin-canary' in body) == (expected == 200)
                     and active == 0 and health['active'] == ('primary' if expected < 500 else 'backup')
@@ -400,6 +409,42 @@ server {
             dns_logs = run('docker', 'logs', dns_name).stdout
             assert '"protocol": "tcp"' in dns_logs, 'Real TCP fallback was not exercised'
 
+            # Removal must not leak reservations held by in-flight requests,
+            # whether their actual origin response succeeds or fails.
+            for label, expected in [('lifecycle-success', 200), ('lifecycle-failure', 502)]:
+                hostname = label + '.example'
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    held = executor.submit(request, hostname, f'/hold?case={label}&failure={int(expected == 502)}')
+                    for _ in range(50):
+                        if origin_connections() == 1:
+                            break
+                        time.sleep(.02)
+                    else:
+                        raise AssertionError('Lifecycle request never acquired its origin slot')
+                    config = current['hosts'].pop(hostname)
+                    current['sequence'] += 1
+                    candidate.write_text(json.dumps(current))
+                    candidate.replace(target / 'runtime.json')
+                    time.sleep(1.2)
+                    status, _ = request(hostname, '/?case=' + label + '-removed')
+                    results.append({'case': label + '-removed', 'expected': 421, 'status': status,
+                        'passed': status == 421 and not held.done()})
+                    status, body = held.result()
+                    active = origin_connections()
+                    results.append({'case': label, 'expected': expected, 'status': status, 'origin_connections': active,
+                        'expected_origin_attempts': 1, 'canary_request': 'GET /hold?case=' + label + '&',
+                        'passed': status == expected and active == 0
+                        and ('synthetic-origin-canary' in body) == (expected == 200)})
+                current['hosts'][hostname] = config
+                current['sequence'] += 1
+                candidate.write_text(json.dumps(current))
+                candidate.replace(target / 'runtime.json')
+                time.sleep(1.2)
+                status, body = request(hostname, '/?case=' + label + '-restored')
+                active = origin_connections()
+                results.append({'case': label + '-restored', 'expected': 200, 'status': status, 'origin_connections': active,
+                    'passed': status == 200 and body == 'synthetic-origin-canary' and active == 0})
+
             def serving_checkpoint(label: str) -> None:
                 for host, expected in [('ipv6-tls', 200), ('ipv6-denied-expanded', 502)]:
                     case = label + '-' + host
@@ -423,7 +468,7 @@ server {
             canary_log = run('docker', 'exec', instance, 'cat', '/tmp/origin-canary.log').stdout
             for result in results:
                 if 'expected_origin_attempts' in result:
-                    attempts = canary_log.count(result['method'] + ' /retry?case=' + result['case'] + '&')
+                    attempts = canary_log.count(result['canary_request'])
                     result['origin_attempts'] = attempts
                     result['passed'] = result['passed'] and attempts == result['expected_origin_attempts']
                 if result['expected'] != 200 and '?case=' + result['case'] + ' ' in canary_log:

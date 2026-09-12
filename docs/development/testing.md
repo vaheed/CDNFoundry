@@ -111,6 +111,10 @@ successful retries must leave primary active with no passive failure receipt.
 Receipt assertions run before the large corpus fills the status endpoint's
 bounded key scan. A fixture-only twelfth-attempt success safely terminates a
 defective retry loop and fails the expected-count check.
+The lifecycle cases remove a hostname while a real HTTP origin response is
+held open, require new requests to return 421, and then restore the hostname.
+Both successful and failed in-flight responses must release their reservation;
+restored traffic must succeed without a cell restart.
 The real HTTP/TLS canary also covers permitted destinations, explicit exclusions,
 expanded/mapped/malformed IPv6, verified TLS and wrong-name rejection, CIDR
 security rules, invalid runtime-file retention and container restart. No

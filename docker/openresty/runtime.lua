@@ -829,7 +829,12 @@ function M.record_passive_failure()
     end
     local host = (ngx.var.host or ""):lower():gsub("%.$", "")
     local config = state.hosts[host]
-    if not config then return end
+    if not config then
+        -- A runtime update can remove this hostname while its origin request
+        -- is in flight. The acquired reservation still belongs to the request.
+        M.origin_done()
+        return
+    end
     local dictionary = ngx.shared.runtime_limits
     dictionary:incr("passive:" .. host, 1, 0)
     dictionary:set("passive-status:" .. host, status or 0)
