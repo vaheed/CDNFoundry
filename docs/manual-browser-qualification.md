@@ -217,6 +217,12 @@ workstream does not replace an earlier product checkpoint.
    the old dialog. Expect access denied and unchanged TLS state. This browser
    checkpoint is **Not run**; the timing-sensitive upload/DNS race is separately
    exercised by the agent-owned PostgreSQL qualification.
+   After saving **TLS mode** as custom, record the selected certificate
+   fingerprint. Allow pending managed-certificate planning to finish, reload
+   the domain, and confirm the mode and fingerprint remain custom with verified
+   HTTPS still serving that certificate. Record operation IDs and runtime
+   acknowledgements. This owner-run checkpoint is **Not run**; deterministic
+   job/DNS/mode contention is covered separately by the PostgreSQL gate.
 4. Use **Cache settings** to cover TTLs, object bound, origin-header policy,
    query policy/selected parameters, bypass cookies, status TTLs, admission,
    stale windows, and variant bounds. Prove MISS then HIT, development-mode

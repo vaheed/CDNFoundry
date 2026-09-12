@@ -48,6 +48,13 @@ the apex and wildcard; deep hostnames that a wildcard cannot cover use a
 supplemental order. A valid existing certificate is reused where it covers the
 required names.
 
+Managed planning reads the current domain under its database lock. Reusing a
+certificate cannot overwrite a newer custom-certificate selection, and
+activation advances from the latest desired revision. Certificate activation,
+orders and their operation records commit together; queued issuance and edge
+reconciliation are released after commit. A failed write rolls back the plan
+so the job can retry without leaving a partial activation.
+
 The workflow writes DNS-01 challenges as desired TXT state, waits for every
 required DNS acknowledgement, validates with the ACME server, stores the
 encrypted private key and certificate, publishes a new edge revision, and

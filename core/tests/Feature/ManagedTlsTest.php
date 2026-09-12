@@ -7,6 +7,7 @@ use App\Enums\UserType;
 use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\IssueManagedCertificate;
 use App\Jobs\ReconcileDnsZone;
+use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AcmeAccount;
 use App\Models\DnsCluster;
 use App\Models\DnsDeployment;
@@ -181,6 +182,43 @@ PEM,
         TlsOrder::query()->delete();
         (new EnsureManagedCertificates($domain->id))->handle();
         $this->assertSame([['a.b.example.test']], TlsOrder::query()->get()->pluck('names')->all());
+    }
+
+    public function test_reusing_a_managed_certificate_rolls_back_if_operation_persistence_fails(): void
+    {
+        Queue::fake();
+        $domain = $this->proxiedDomain();
+        $domain->tlsCertificates()->create([
+            'kind' => 'managed', 'status' => 'active', 'certificate_pem' => 'synthetic-unused-pem', 'chain_pem' => '',
+            'private_key_ciphertext' => 'synthetic-unused-key', 'names' => ['example.test', '*.example.test'],
+            'fingerprint_sha256' => str_repeat('b', 64), 'not_before' => now()->subDay(),
+            'expires_at' => now()->addDays(60), 'activated_at' => now(),
+        ]);
+        $failOnce = true;
+        Operation::creating(function (Operation $operation) use (&$failOnce): void {
+            if ($failOnce && $operation->type === 'edge.domain_reconcile') {
+                $failOnce = false;
+                throw new RuntimeException('Injected operation persistence failure.');
+            }
+        });
+
+        try {
+            (new EnsureManagedCertificates($domain->id))->handle();
+            $this->fail('The injected operation failure must propagate.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('Injected operation persistence failure.', $exception->getMessage());
+        }
+
+        $this->assertSame(1, $domain->refresh()->revision);
+        $this->assertNull($domain->active_tls_certificate_id);
+        $this->assertDatabaseCount('operations', 0);
+        Queue::assertNotPushed(ReconcileEdgeDomain::class);
+
+        (new EnsureManagedCertificates($domain->id))->handle();
+        $this->assertSame(2, $domain->refresh()->revision);
+        $this->assertNotNull($domain->active_tls_certificate_id);
+        $this->assertDatabaseCount('operations', 1);
+        Queue::assertPushed(ReconcileEdgeDomain::class);
     }
 
     public function test_expiring_and_failed_certificates_create_deduplicated_administrator_alerts(): void

@@ -899,8 +899,8 @@
     },
     {
       "path": "core/app/Jobs/EnsureManagedCertificates.php",
-      "status": "pending",
-      "scope": "Inventory only; no whole-file completion claimed."
+      "status": "partial",
+      "scope": "AUD-044: managed activation under the domain lock, current revision/custom-mode preservation, atomic operation failure and retry; real PostgreSQL interleavings passed. Remaining lifecycle and whole-file review incomplete."
     },
     {
       "path": "core/app/Jobs/FinalizeDomainDeprovisioning.php",
@@ -2159,8 +2159,8 @@
     },
     {
       "path": "core/tests/Feature/ManagedTlsTest.php",
-      "status": "pending",
-      "scope": "Inventory only; no whole-file completion claimed."
+      "status": "partial",
+      "scope": "AUD-044: managed activation under the domain lock, current revision/custom-mode preservation, atomic operation failure and retry; real PostgreSQL interleavings passed. Remaining lifecycle and whole-file review incomplete."
     },
     {
       "path": "core/tests/Feature/ManagedWafTest.php",
@@ -3750,7 +3750,7 @@
     {
       "path": "tests/e2e/postgres_domain_claims.py",
       "status": "partial",
-      "scope": "Inventory only; no whole-file completion claimed. AUD-043: TLS upload revision guards and real PostgreSQL interleaving; mounted-panel access revocation verified; remaining transitions still under review."
+      "scope": "AUD-043: TLS upload revision guards and real PostgreSQL interleaving; mounted-panel access revocation verified; remaining transitions still under review. AUD-044: managed activation under the domain lock, current revision/custom-mode preservation, atomic operation failure and retry; real PostgreSQL interleavings passed. Remaining lifecycle and whole-file review incomplete."
     },
     {
       "path": "tests/e2e/postgres_edge_tasks.py",

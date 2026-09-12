@@ -249,6 +249,14 @@ stays in a mode-0600 temporary file and is never printed. This is an actual
 PostgreSQL/process interleaving; the API/Filament feature tests separately inject
 a revision change at the verifier boundary to check each entry point.
 
+The gate also holds the domain row while the actual managed-certificate job
+contends with either a custom-mode selection or a proxied DNS-record addition.
+It confirms lock contention through PostgreSQL activity before releasing the
+writer. The worker must retain the custom selection or activate its reusable
+managed certificate at the DNS writer's revision plus one, respectively.
+The application suite separately injects an operation-persistence failure,
+asserts unchanged activation/revision and no dispatch, then verifies a retry.
+
 The PostgreSQL script also exercises idempotency locking with process-local
 caches, concurrent identical requests, and a killed process between mutation and
 receipt. For parent delegation, install host `bind9-dnsutils` (providing `dig`

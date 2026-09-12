@@ -56,7 +56,39 @@ if ($mode === 'init') {
         chmod(getenv('CDNF_TLS_BUNDLE'), 0600);
     } else {
         $domain = App\Models\Domain::query()->where('name', 'example.test')->sole();
-        if ($mode === 'tls-upload') {
+        if ($mode === 'tls-managed-init') {
+            $managed = $domain->tlsCertificates()->where('kind', 'managed')->first();
+            if ($managed === null) {
+                $bundle = Tests\Support\CertificateChain::make('valid', ['example.test', '*.example.test']);
+                $validated = App\Support\UploadedCertificate::validate($domain, $bundle['certificate'], $bundle['chain'], $bundle['private_key']);
+                $managed = $domain->tlsCertificates()->create([
+                    'kind' => 'managed', 'status' => 'active', 'certificate_pem' => $validated['certificate_pem'],
+                    'chain_pem' => $validated['chain_pem'], 'private_key_ciphertext' => $validated['private_key'],
+                    'names' => $validated['names'], 'fingerprint_sha256' => $validated['fingerprint_sha256'],
+                    'not_before' => $validated['not_before'], 'expires_at' => $validated['expires_at'], 'activated_at' => now(),
+                ]);
+            }
+            $domain->update(['tls_mode' => 'managed', 'active_tls_certificate_id' => null, 'revision' => $domain->revision + 1]);
+            echo json_encode(['revision' => $domain->revision, 'managed_id' => $managed->id])."\n";
+        } elseif ($mode === 'tls-managed-hold') {
+            Illuminate\Support\Facades\DB::transaction(function () use ($domain, $request, $argv): void {
+                $locked = App\Models\Domain::query()->lockForUpdate()->findOrFail($domain->id);
+                if ($argv[2] === 'custom') {
+                    app(App\Http\Controllers\TlsController::class)->update($request(['mode' => 'custom']), $locked);
+                } else {
+                    $data = $locked->dnsRecords()->firstOrFail()->only(['type', 'content', 'ttl', 'mode', 'origin']);
+                    $data['name'] = 'managed-race';
+                    app(App\Http\Controllers\DnsRecordController::class)->store($request($data), $locked);
+                }
+                echo "locked\n"; flush();
+                fgets(STDIN);
+                echo json_encode($locked->refresh()->only(['revision', 'tls_mode', 'active_tls_certificate_id']))."\n";
+            });
+        } elseif ($mode === 'tls-managed-run') {
+            config(['services.acme.renew_before_days' => 1]);
+            (new App\Jobs\EnsureManagedCertificates($domain->id))->handle();
+            echo json_encode($domain->refresh()->only(['revision', 'tls_mode', 'active_tls_certificate_id']))."\n";
+        } elseif ($mode === 'tls-upload') {
             try {
                 $status = app(App\Http\Controllers\TlsController::class)->upload(
                     $request(json_decode(file_get_contents(getenv('CDNF_TLS_BUNDLE')), true)), $domain)->getStatusCode();
@@ -311,6 +343,44 @@ def main() -> None:
                 if uploader.poll() is None:
                     uploader.kill()
                 uploader.communicate(timeout=10)
+            managed_races = {}
+            for change in ('custom', 'dns'):
+                initialized = json.loads(subprocess.check_output(command('tls-managed-init'), env=tls_env, text=True))
+                holder = subprocess.Popen(command('tls-managed-hold', change), env=tls_env, stdin=subprocess.PIPE,
+                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                worker = None
+                try:
+                    assert holder.stdout.readline().strip() == 'locked'
+                    worker = subprocess.Popen(command('tls-managed-run'), env=tls_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    for _ in range(60):
+                        blocked = subprocess.check_output(['docker', 'exec', identifier, 'psql', '-U', 'postgres',
+                            '-d', 'cdnf_claim_qualification', '-Atc',
+                            "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%domains%'"], text=True)
+                        if int(blocked.strip()) > 0:
+                            break
+                        assert worker.poll() is None, 'Managed worker exited without contending on the domain'
+                        time.sleep(.02)
+                    else:
+                        raise AssertionError('Managed worker did not contend on the domain row')
+                    writer_output, writer_error = holder.communicate(input='continue\n', timeout=10)
+                    assert holder.returncode == 0, writer_error
+                    output, error = worker.communicate(timeout=15)
+                    assert worker.returncode == 0, error
+                    written = json.loads(writer_output)
+                    actual = json.loads(output)
+                    expected = written if change == 'custom' else {
+                        **written, 'revision': written['revision'] + 1, 'active_tls_certificate_id': initialized['managed_id'],
+                    }
+                    managed_races[change] = {'writer': written, 'worker': actual, 'expected': expected, 'passed': actual == expected}
+                finally:
+                    if holder.poll() is None:
+                        holder.kill()
+                    holder.communicate(timeout=10)
+                    if worker is not None:
+                        if worker.poll() is None:
+                            worker.kill()
+                        worker.communicate(timeout=10)
+            assert all(case['passed'] for case in managed_races.values()), managed_races
             digest = subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{json .RepoDigests}}'], text=True).strip()
             print(json.dumps({'postgres_domain_claims': 'passed', 'instance': identifier, 'image_digests': json.loads(digest),
                               'concurrent_applicants': 2, 'active_configurations': 1, 'lock_wait_seconds': round(waited, 3),
@@ -320,6 +390,7 @@ def main() -> None:
                               'tls_upload_concurrent_hostname_change': 'passed',
                               'tls_upload_revision_before_and_after_dns_change': [initial_tls['revision'], final_tls['revision']],
                               'tls_upload_retained_certificate_count': final_tls['certificate_count'],
+                              'managed_tls_activation_concurrency': managed_races,
                               'database': 'disposable tmpfs, actual migrations; no PHPUnit or persistent volumes'}))
         finally:
             subprocess.run(['docker', 'rm', '-f', identifier], check=True, capture_output=True)

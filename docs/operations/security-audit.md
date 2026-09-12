@@ -1242,3 +1242,72 @@ Documentation lint/build/link checks passed in **43.982 seconds**
 (`tls-concurrency-docs`), covering 91 built pages and 3,410 internal links before
 this result annotation. Final relevant PHP/PostgreSQL fixture diffs were also
 compared with their completed test evidence and matched.
+
+## Managed TLS activation concurrency and rollback
+
+AUD-044 (**Medium, confirmed same-domain integrity and availability defect**)
+affects `core/app/Jobs/EnsureManagedCertificates.php`. The job read desired
+state without locking the domain, then wrote a certificate activation and
+revision separately from its operation record. A delayed job could overwrite a
+newer custom-certificate selection or reuse a revision already committed by a
+DNS writer. An operation-write failure could leave an activation committed
+without the corresponding reconciliation operation. This requires competing
+authorized work or a persistence failure; cross-tenant access was not shown.
+
+On parent `c186cae3`, the extended real PostgreSQL fixture reproduced both races
+in **62.241 seconds** (`managed-tls-concurrency-before`). Separate PHP processes
+run the actual TLS/DNS controllers and managed job; PostgreSQL activity confirms
+domain-row lock contention before the writer is released. In the custom case,
+the job replaced the writer's custom certificate with a managed certificate
+while leaving mode `custom`. In the DNS case it activated at revision 7, already
+used by the writer, instead of 8. The application failure-injection regression
+also failed before correction in **9.311 seconds**
+(`managed-tls-rollback-before`): revision 2 survived the operation failure when
+revision 1 and no activation should have remained.
+
+Managed planning now runs in a database transaction after locking and rereading
+the domain. Eligibility, mode, certificate reuse and revision decisions use
+current desired state. Activation, orders and operation records commit together;
+issuance and edge jobs dispatch after commit. No ACME/network call was moved
+inside the transaction. Existing name sets, order limits, jitter and job
+uniqueness remain unchanged. No schema migration or stored-data rewrite is
+required. Deploy through the normal control-plane image and worker rollout;
+rolling back the code restores these races and partial-write behavior.
+
+`managed-tls-concurrency-after` passed in **60.830 seconds**, instance
+`cdnf-claim-qualification-4c84ea043e3e`, using
+`postgres@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15`.
+The custom writer's mode, certificate ID and revision 5 were preserved. The DNS
+writer committed revision 7 and managed activation used revision 8. Existing
+claim, idempotency/process-death, edge-sequence, policy and TLS-upload races also
+passed. The fixture used its own 512-MiB tmpfs PostgreSQL, one CPU and random
+loopback port, then removed only its container. No persistent database or named
+volume was changed.
+
+The supported isolated Compose application command passed **320 tests / 12,436
+assertions**, 66.20 seconds inside PHPUnit and **72.550 seconds** total
+(`managed-tls-application`). The injected operation failure now preserves the
+prior revision and null activation, creates no operation and queues no edge
+job; retry commits activation, its operation and dispatch. The recorded source
+hash was unchanged throughout both successful runs. Evidence files retain
+commands, parent commit, source hashes and source diffs under the ignored
+`storage/qualification/security-audit/` directory.
+
+The coverage inventory now records **763 files: 658 pending, 101 partial and
+four reviewed**. These entries remain partial; operation-receipt semantics,
+other TLS transitions and broader lifecycle bounds still need review. The owner
+browser checklist was extended and remains **Not run**. Signed edge delivery,
+full production image builds, Fleet recovery and external production gates are
+not qualified by these transaction tests. The overall audit remains active and
+production remains **not yet qualified**.
+
+Compose validation, OpenAPI and the seven supply-chain/eight qualification-tool
+regressions passed in **52.384 seconds** (`managed-tls-contracts`). Pint passed
+for both changed PHP files and Python compilation passed for the PostgreSQL
+fixture. Final implementation and regression diffs matched both successful
+application/PostgreSQL test records; subsequent edits only document results.
+
+Documentation lint, build and link checks passed in **45.121 seconds**
+(`managed-tls-docs`), covering 91 built pages and 3,411 internal links before
+this result annotation. No implementation or regression source changed after
+its successful qualification.
