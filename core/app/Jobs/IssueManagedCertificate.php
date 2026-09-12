@@ -83,9 +83,9 @@ class IssueManagedCertificate implements ShouldQueue
         }
         $message = mb_substr($exception?->getMessage() ?? $order->last_error ?? 'Managed certificate issuance exhausted its retry budget.', 0, 4000);
         DB::transaction(function () use ($order, $message): void {
+            $domain = Domain::query()->lockForUpdate()->find($order->domain_id);
             $order->forceFill(['status' => 'failed', 'last_error' => $message, 'finished_at' => now()])->save();
             $order->challenges()->whereNull('cleaned_at')->update(['status' => 'cleaned', 'cleaned_at' => now()]);
-            $domain = Domain::query()->lockForUpdate()->find($order->domain_id);
             if ($domain !== null && $order->dns_revision !== null) {
                 $domain->forceFill(['revision' => $domain->revision + 1])->save();
                 ReconcileDnsZone::dispatch($domain->id)->afterCommit();
@@ -122,8 +122,8 @@ class IssueManagedCertificate implements ShouldQueue
             }
         }
         DB::transaction(function () use ($order, $account, $remote, $challenges): void {
+            $domain = Domain::query()->lockForUpdate()->findOrFail($order->domain_id);
             $locked = TlsOrder::query()->lockForUpdate()->findOrFail($order->id);
-            $domain = Domain::query()->lockForUpdate()->findOrFail($locked->domain_id);
             if ($challenges !== []) {
                 $domain->forceFill(['revision' => $domain->revision + 1])->save();
             }
@@ -231,8 +231,8 @@ class IssueManagedCertificate implements ShouldQueue
             throw new RuntimeException('The issued certificate does not match its generated private key.');
         }
         DB::transaction(function () use ($order, $bundle, $parsed, $remote): void {
+            $domain = Domain::query()->lockForUpdate()->findOrFail($order->domain_id);
             $locked = TlsOrder::query()->lockForUpdate()->findOrFail($order->id);
-            $domain = Domain::query()->lockForUpdate()->findOrFail($locked->domain_id);
             $certificate = $domain->tlsCertificates()->create([
                 'kind' => 'managed', 'status' => 'active', 'certificate_pem' => $bundle['certificate_pem'],
                 'chain_pem' => $bundle['chain_pem'], 'private_key_ciphertext' => $locked->private_key_ciphertext,
@@ -266,10 +266,10 @@ class IssueManagedCertificate implements ShouldQueue
     private function obsolete(TlsOrder $order): void
     {
         DB::transaction(function () use ($order): void {
+            $domain = Domain::query()->lockForUpdate()->find($order->domain_id);
             $order->update(['status' => 'obsolete', 'finished_at' => now(), 'last_error' => 'The proxied hostname set changed before issuance completed.']);
             if ($order->challenges()->whereNull('cleaned_at')->exists()) {
                 $order->challenges()->whereNull('cleaned_at')->update(['status' => 'cleaned', 'cleaned_at' => now()]);
-                $domain = Domain::query()->lockForUpdate()->find($order->domain_id);
                 if ($domain !== null) {
                     $domain->forceFill(['revision' => $domain->revision + 1])->save();
                     ReconcileDnsZone::dispatch($domain->id)->afterCommit();

@@ -248,6 +248,14 @@ workstream does not replace an earlier product checkpoint.
    running and verify that existing HTTPS continues serving during renewal.
    This owner-run checkpoint is **Not run**; bounded selection, shared-cache
    progress and failure cases are separately covered by automated tests.
+   After managed issuance in the isolated operator environment, record the
+   final certificate fingerprint, domain revision and runtime acknowledgement.
+   Run the maintenance command again, then reload TLS status and administrator
+   operations. Already-cleaned challenges must not produce another cleanup
+   revision or DNS reconciliation operation, and verified HTTPS must continue
+   using the valid certificate. New expired-challenge cleanup should have a
+   traceable DNS reconciliation operation. This owner-run checkpoint remains
+   **Not run**; the finalization/cleanup interleaving is automated separately.
 4. Use **Cache settings** to cover TTLs, object bound, origin-header policy,
    query policy/selected parameters, bypass cookies, status TTLs, admission,
    stale windows, and variant bounds. Prove MISS then HIT, development-mode

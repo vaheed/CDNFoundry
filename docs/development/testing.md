@@ -279,6 +279,17 @@ dispatch while another process holds the scan lease, then distinct bounded
 batches and wraparound. This establishes shared-cache progress/locking for that
 driver; it does not qualify production Redis outages or CA throughput.
 
+The same PostgreSQL gate overlaps expired-challenge maintenance with the actual
+certificate-finalization job. The job uses synthetic valid certificate material
+and fixture HTTP responses for the CA; all row locks, writes and commit behavior
+use the real application and database. The test pauses finalization under the
+domain lock and confirms that maintenance contends before releasing it. Both
+must complete without deadlock, clean the challenge and leave one revision
+increment with the issued certificate selected. Application tests cover the
+cleanup operation record, live-challenge preservation, repeated cleanup and
+rollback/retry when operation persistence fails. This is transaction
+qualification, not a live-CA issuance or public-DNS serving test.
+
 The PostgreSQL script also exercises idempotency locking with process-local
 caches, concurrent identical requests, and a killed process between mutation and
 receipt. For parent delegation, install host `bind9-dnsutils` (providing `dig`

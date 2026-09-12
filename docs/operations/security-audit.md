@@ -1518,3 +1518,80 @@ This qualifies bounded scheduling with the tested cache driver and workload,
 not production Redis outage recovery, complete issuance throughput, signed edge
 delivery or the wider Fleet topology. No new migration or operator data rewrite
 is required. Production remains **not yet qualified** and the audit stays active.
+
+## ACME cleanup lock ordering and reconciliation receipts
+
+AUD-048 (**Medium, confirmed concurrency and operation-traceability defects**)
+affects `DispatchManagedTlsMaintenance` and `IssueManagedCertificate`. Maintenance
+updated challenge rows before locking their domain; finalization locked an order
+and domain before updating challenges. This allowed a lock cycle during an
+expired-challenge/finalization overlap. Maintenance also incremented revisions
+without a corresponding DNS reconciliation operation, and did not check whether
+another worker had already cleaned its selected candidates.
+
+On parent `2b5f6fa7`, `tls-cleanup-locks-reproduced` failed in **74.540 seconds**
+with actual PostgreSQL error **40P01 / deadlock detected** from maintenance while
+the actual finalization job succeeded. The finalizer paused after acquiring
+the domain lock; PostgreSQL activity confirmed the cleaner was waiting before
+release. The fixture uses real synthetic certificate parsing/key matching and
+application transactions, with only CA HTTP responses supplied by fixtures.
+This proves the database conflict, not live-CA or public-DNS behavior.
+
+Two preliminary fixture attempts were unsuccessful: `tls-cleanup-deadlock-before`
+(**74.199 seconds**) omitted mandatory ACME directory fields and stopped before
+the lock overlap; `tls-cleanup-locks-before` (**76.065 seconds**) reached the
+contended path but its JSON reader could not consume the console exception
+output. The corrected fixture reports only status, SQLSTATE and a deadlock
+flag, avoiding SQL parameter or private-material dumps. These runs are retained
+as failed setup/diagnostic evidence, not passes.
+
+The operation regression independently failed in **8.888 seconds**
+(`tls-cleanup-operation-before`): cleanup advanced revision 1 to 2 and cleaned
+the expired challenge, but the operations table remained empty. The rollback
+regression also failed in **7.618 seconds** before correction because no
+operation write occurred at which to inject its failure; this does not establish
+that the old cleanup transaction itself lacked rollback.
+
+Maintenance and issuance transactions now acquire the domain lock before order
+or challenge writes, matching domain deletion's parent-first lock order. Remote
+CA requests and certificate parsing remain outside these transactions.
+Maintenance rechecks expiry and `cleaned_at`, advances the revision only when
+rows changed, coalesces its DNS reconciliation operation in the same transaction,
+and dispatches after commit. Parent eager loading fetches only order ID/domain
+ID, and candidates whose parent disappeared are ignored. Existing per-command
+limits, lease/cursor behavior and certificate-selection rules are retained.
+No schema migration, key rewrite, new service or per-domain infrastructure is
+introduced. Roll out the control-plane image and workers normally; code rollback
+restores the conflicting lock order and missing cleanup receipt. Repeating
+maintenance after rollout safely picks up remaining expired challenges.
+
+`tls-cleanup-locks-after` passed in **72.811 seconds**, instance
+`cdnf-claim-qualification-9b8cc320eecd`, using
+`postgres@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15`.
+Finalization and maintenance both succeeded, the order/challenge reached their
+completed states, and revision 10 advanced only once to 11. The selected
+certificate matched the finalized order's certificate. All previous PostgreSQL
+claim, idempotency/process-death, policy, edge-sequence, TLS-race and maintenance
+coverage cases also passed. Existing tmpfs/CPU/memory and random loopback-port
+bounds were retained; the fixture removed only its own disposable container.
+
+The isolated application suite passed **329 tests / 12,530 assertions**, 75.82
+seconds inside PHPUnit and **83.172 seconds** total (`tls-cleanup-application`).
+Cleanup retained the live challenge, recorded one reconciliation operation,
+made no extra revision on repeat, and rolled back/retried correctly when that
+operation write failed. Compose, OpenAPI, seven supply-chain fixtures and eight
+qualification-tool regressions passed in **48.100 seconds**
+(`tls-cleanup-contracts`). Pint passed the three changed PHP files and Python
+compilation passed. Final implementation and regression diffs matched the
+captured successful application/PostgreSQL evidence.
+
+Manual browser status remains **Not run**. Coverage is **763 files: 656 pending,
+103 partial and four reviewed**. These changes do not qualify every stale
+issuance transition, CA admission check, alert path, or Fleet/recovery scenario;
+those reviews and the external production gates remain open. Production is
+still **not yet qualified**, and the overall audit remains active.
+
+Documentation lint/build/link checks passed in **42.408 seconds**
+(`tls-cleanup-docs`), covering 91 built pages and 3,415 internal links before
+this result annotation. Final source-link validation and lint are checked after
+annotation; no application or fixture source changed after qualification.

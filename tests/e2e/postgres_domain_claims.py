@@ -58,7 +58,68 @@ if ($mode === 'init') {
         chmod(getenv('CDNF_TLS_BUNDLE'), 0600);
     } else {
         $domain = App\Models\Domain::query()->where('name', 'example.test')->sole();
-        if ($mode === 'tls-maintenance-init') {
+        if ($mode === 'tls-cleanup-init') {
+            $bundle = Tests\Support\CertificateChain::make('valid', ['example.test', '*.example.test']);
+            $accountKey = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
+            openssl_pkey_export($accountKey, $accountPem);
+            $account = App\Models\AcmeAccount::query()->create([
+                'directory_url' => 'https://acme.test/directory', 'contact_email' => 'operator@example.test',
+                'account_url' => 'https://acme.test/account', 'private_key_ciphertext' => $accountPem,
+            ]);
+            $order = App\Models\TlsOrder::query()->create([
+                'domain_id' => $domain->id, 'acme_account_id' => $account->id, 'status' => 'finalizing',
+                'names' => ['example.test', '*.example.test'], 'names_hash' => hash('sha256', "example.test\0*.example.test"),
+                'private_key_ciphertext' => $bundle['private_key'], 'acme_order_url' => 'https://acme.test/order',
+                'dns_revision' => $domain->revision,
+            ]);
+            $order->challenges()->create([
+                'hostname' => 'example.test', 'record_name' => '_acme-challenge.example.test',
+                'record_value' => 'synthetic-expired-challenge', 'status' => 'valid', 'expires_at' => now()->subMinute(),
+            ]);
+            file_put_contents(getenv('CDNF_TLS_CLEANUP_CHAIN'), $bundle['certificate']."\n".$bundle['chain']);
+            chmod(getenv('CDNF_TLS_CLEANUP_CHAIN'), 0600);
+            echo json_encode(['order_id' => $order->id, 'revision' => $domain->revision])."\n";
+        } elseif ($mode === 'tls-cleanup-finalize') {
+            config(['services.acme.directory_url' => 'https://acme.test/directory']);
+            Illuminate\Support\Facades\Http::preventStrayRequests();
+            Illuminate\Support\Facades\Http::fake([
+                'https://acme.test/directory' => Illuminate\Support\Facades\Http::response([
+                    'newNonce' => 'https://acme.test/nonce', 'newAccount' => 'https://acme.test/accounts', 'newOrder' => 'https://acme.test/orders',
+                ]),
+                'https://acme.test/nonce' => Illuminate\Support\Facades\Http::response('', 200, ['Replay-Nonce' => 'synthetic-nonce']),
+                'https://acme.test/order' => Illuminate\Support\Facades\Http::response(['status' => 'valid', 'certificate' => 'https://acme.test/certificate']),
+                'https://acme.test/certificate' => Illuminate\Support\Facades\Http::response(file_get_contents(getenv('CDNF_TLS_CLEANUP_CHAIN'))),
+            ]);
+            $paused = false;
+            App\Models\Domain::retrieved(function ($loaded) use ($domain, &$paused): void {
+                if (! $paused && $loaded->id === $domain->id && Illuminate\Support\Facades\DB::transactionLevel() > 0) {
+                    $paused = true;
+                    echo "locked\n"; flush();
+                    fgets(STDIN);
+                }
+            });
+            try {
+                (new App\Jobs\IssueManagedCertificate($argv[2]))->handle(app(App\Support\AcmeClient::class));
+                echo json_encode(['status' => 'succeeded'])."\n";
+            } catch (Throwable $exception) {
+                echo json_encode(['status' => 'failed', 'sqlstate' => $exception->getCode(),
+                    'deadlock' => str_contains($exception->getMessage(), 'deadlock detected')])."\n";
+            }
+        } elseif ($mode === 'tls-cleanup-run') {
+            try {
+                $status = Illuminate\Support\Facades\Artisan::call('cdnf:tls:dispatch-maintenance', ['--limit' => 2]);
+                $deadlock = str_contains(Illuminate\Support\Facades\Artisan::output(), 'deadlock detected');
+                echo json_encode(['status' => $status, 'deadlock' => $deadlock])."\n";
+            } catch (Throwable $exception) {
+                echo json_encode(['status' => 1, 'sqlstate' => $exception->getCode(),
+                    'deadlock' => str_contains($exception->getMessage(), 'deadlock detected')])."\n";
+            }
+        } elseif ($mode === 'tls-cleanup-state') {
+            $order = App\Models\TlsOrder::query()->findOrFail($argv[2]);
+            echo json_encode(['revision' => $domain->revision, 'order_status' => $order->status,
+                'active_certificate_id' => $domain->active_tls_certificate_id, 'order_certificate_id' => $order->certificate_id,
+                'uncleaned_challenges' => $order->challenges()->whereNull('cleaned_at')->count()])."\n";
+        } elseif ($mode === 'tls-maintenance-init') {
             // The preceding policy gate also leaves an eligible domain.
             $ids = [App\Models\Domain::query()->where('name', 'policy.example.com')->sole()->id, $domain->id];
             for ($index = 0; $index < 3; $index++) {
@@ -445,6 +506,42 @@ def main() -> None:
                 batch = json.loads(subprocess.check_output(command('tls-maintenance-run', str(tick)), env=maintenance_env, text=True))
                 assert batch['queued'] == expected, {'expected': expected, 'actual': batch, 'previous': maintenance_batches}
                 maintenance_batches.append(batch)
+            cleanup_env = {**env, 'CDNF_TLS_CLEANUP_CHAIN': str(root / 'cleanup-public-chain.pem')}
+            cleanup_initial = json.loads(subprocess.check_output(command('tls-cleanup-init'), env=cleanup_env, text=True))
+            finalizer = subprocess.Popen(command('tls-cleanup-finalize', cleanup_initial['order_id']), env=cleanup_env,
+                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            cleaner = None
+            try:
+                ready = finalizer.stdout.readline().strip()
+                assert ready == 'locked', ready
+                cleaner = subprocess.Popen(command('tls-cleanup-run'), env=cleanup_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                for _ in range(90):
+                    blocked = subprocess.check_output(['docker', 'exec', identifier, 'psql', '-U', 'postgres',
+                        '-d', 'cdnf_claim_qualification', '-Atc',
+                        "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND (query LIKE '%domains%' OR query LIKE '%tls_orders%')"], text=True)
+                    if int(blocked.strip()) > 0:
+                        break
+                    assert cleaner.poll() is None, 'Cleanup exited before lock contention'
+                    time.sleep(.02)
+                else:
+                    raise AssertionError('Cleanup did not contend with finalization')
+                finalized, finalizer_error = finalizer.communicate(input='continue\n', timeout=15)
+                cleaned, cleaner_error = cleaner.communicate(timeout=15)
+                assert finalizer.returncode == 0 and cleaner.returncode == 0, (finalizer_error, cleaner_error)
+                cleanup_state = json.loads(subprocess.check_output(command('tls-cleanup-state', cleanup_initial['order_id']), env=cleanup_env, text=True))
+                cleanup_result = {'finalizer': json.loads(finalized), 'cleaner': json.loads(cleaned), 'state': cleanup_state}
+                assert cleanup_result['finalizer']['status'] == 'succeeded' and cleanup_result['cleaner']['status'] == 0, cleanup_result
+                assert cleanup_state['revision'] == cleanup_initial['revision'] + 1, cleanup_result
+                assert cleanup_state['order_status'] == 'succeeded' and cleanup_state['uncleaned_challenges'] == 0, cleanup_result
+                assert cleanup_state['active_certificate_id'] == cleanup_state['order_certificate_id'] is not None, cleanup_result
+            finally:
+                if finalizer.poll() is None:
+                    finalizer.kill()
+                finalizer.communicate(timeout=10)
+                if cleaner is not None:
+                    if cleaner.poll() is None:
+                        cleaner.kill()
+                    cleaner.communicate(timeout=10)
             digest = subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{json .RepoDigests}}'], text=True).strip()
             print(json.dumps({'postgres_domain_claims': 'passed', 'instance': identifier, 'image_digests': json.loads(digest),
                               'concurrent_applicants': 2, 'active_configurations': 1, 'lock_wait_seconds': round(waited, 3),
@@ -458,6 +555,7 @@ def main() -> None:
                               'tls_mode_concurrent_custom_removal': managed_races['removal'],
                               'tls_maintenance_batches_across_processes': maintenance_batches,
                               'tls_maintenance_shared_lock': 'passed with isolated PostgreSQL cache store',
+                              'tls_cleanup_finalization_concurrency': cleanup_result,
                               'database': 'disposable tmpfs, actual migrations; no PHPUnit or persistent volumes'}))
         finally:
             subprocess.run(['docker', 'rm', '-f', identifier], check=True, capture_output=True)

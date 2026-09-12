@@ -88,6 +88,13 @@ At the default hourly cadence, 10,000 eligible domains therefore need up to
 qualification or an issuance-time guarantee. Queue delay, retries and CA/DNS
 work require additional margin.
 
+Expired-challenge cleanup shares the domain lock with issuance and finalization.
+It rechecks whether each selected challenge is still expired and uncleaned;
+another worker's completed cleanup does not create an extra revision. Challenge
+cleanup, the revision increment and its DNS reconciliation operation commit
+together, with dispatch after commit. A persistence failure rolls them back
+for retry. Certificate material is not removed by this maintenance step.
+
 ## Manual managed actions
 
 - **Renew** creates work only when renewal is due.

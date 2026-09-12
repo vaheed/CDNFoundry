@@ -8,6 +8,7 @@ use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\ReconcileDnsZone;
 use App\Models\AcmeChallenge;
 use App\Models\Domain;
+use App\Models\Operation;
 use App\Models\TlsCertificate;
 use App\Models\TlsOrder;
 use App\Models\User;
@@ -26,15 +27,22 @@ class DispatchManagedTlsMaintenance extends Command
     public function handle(): int
     {
         $limit = min(2000, max(1, (int) $this->option('limit')));
-        AcmeChallenge::query()->whereNull('cleaned_at')->where('expires_at', '<=', now())->with('order')->limit($limit)->get()
+        AcmeChallenge::query()->whereNull('cleaned_at')->where('expires_at', '<=', now())->with('order:id,domain_id')->limit($limit)->get()
+            ->filter(fn (AcmeChallenge $challenge): bool => $challenge->order !== null)
             ->groupBy(fn (AcmeChallenge $challenge): int => $challenge->order->domain_id)->each(function ($challenges, int $domainId): void {
                 DB::transaction(function () use ($challenges, $domainId): void {
-                    AcmeChallenge::query()->whereIn('id', $challenges->pluck('id'))->whereNull('cleaned_at')->update(['status' => 'cleaned', 'cleaned_at' => now()]);
                     $domain = Domain::query()->lockForUpdate()->find($domainId);
-                    if ($domain !== null) {
-                        $domain->forceFill(['revision' => $domain->revision + 1])->save();
-                        ReconcileDnsZone::dispatch($domain->id)->afterCommit();
+                    if ($domain === null) {
+                        return;
                     }
+                    $changed = AcmeChallenge::query()->whereIn('id', $challenges->pluck('id'))->whereNull('cleaned_at')
+                        ->where('expires_at', '<=', now())->update(['status' => 'cleaned', 'cleaned_at' => now()]);
+                    if ($changed === 0) {
+                        return;
+                    }
+                    $domain->forceFill(['revision' => $domain->revision + 1])->save();
+                    Operation::coalesceDomain('dns.zone_reconcile', $domain->id);
+                    ReconcileDnsZone::dispatch($domain->id)->afterCommit();
                 });
             });
         $this->queueDomains($limit);

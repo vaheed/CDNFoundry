@@ -325,6 +325,75 @@ PEM,
         }
     }
 
+    public function test_expired_challenge_cleanup_records_one_revision_and_operation(): void
+    {
+        Queue::fake();
+        $domain = $this->proxiedDomain();
+        $order = TlsOrder::query()->create([
+            'domain_id' => $domain->id, 'status' => 'validating', 'names' => ['example.test', '*.example.test'],
+            'names_hash' => hash('sha256', 'cleanup'), 'dns_revision' => 1,
+        ]);
+        $expired = $order->challenges()->create([
+            'hostname' => 'example.test', 'record_name' => '_acme-challenge.example.test',
+            'record_value' => 'synthetic-expired-token', 'status' => 'valid', 'expires_at' => now()->subMinute(),
+        ]);
+        $live = $order->challenges()->create([
+            'hostname' => '*.example.test', 'record_name' => '_acme-challenge.example.test',
+            'record_value' => 'synthetic-live-token', 'status' => 'validating', 'expires_at' => now()->addMinutes(30),
+        ]);
+
+        $this->artisan('cdnf:tls:dispatch-maintenance')->assertSuccessful();
+        $this->assertSame(2, $domain->refresh()->revision);
+        $this->assertNotNull($expired->refresh()->cleaned_at);
+        $this->assertNull($live->refresh()->cleaned_at);
+        $this->assertDatabaseHas('operations', ['type' => 'dns.zone_reconcile', 'status' => 'pending']);
+        Queue::assertPushed(ReconcileDnsZone::class, fn ($job): bool => $job->domainId === $domain->id);
+
+        Queue::fake();
+        $this->artisan('cdnf:tls:dispatch-maintenance')->assertSuccessful();
+        $this->assertSame(2, $domain->refresh()->revision);
+        $this->assertDatabaseCount('operations', 1);
+        Queue::assertNotPushed(ReconcileDnsZone::class);
+    }
+
+    public function test_challenge_cleanup_rolls_back_when_its_operation_cannot_be_written(): void
+    {
+        Queue::fake();
+        $domain = $this->proxiedDomain();
+        $order = TlsOrder::query()->create([
+            'domain_id' => $domain->id, 'status' => 'validating', 'names' => ['example.test', '*.example.test'],
+            'names_hash' => hash('sha256', 'cleanup-rollback'), 'dns_revision' => 1,
+        ]);
+        $challenge = $order->challenges()->create([
+            'hostname' => 'example.test', 'record_name' => '_acme-challenge.example.test',
+            'record_value' => 'synthetic-expired-token', 'status' => 'valid', 'expires_at' => now()->subMinute(),
+        ]);
+        $failOnce = true;
+        Operation::creating(function (Operation $operation) use (&$failOnce): void {
+            if ($failOnce && $operation->type === 'dns.zone_reconcile') {
+                $failOnce = false;
+                throw new RuntimeException('Injected cleanup operation failure.');
+            }
+        });
+        try {
+            $this->artisan('cdnf:tls:dispatch-maintenance');
+            $this->fail('The operation failure must roll back cleanup.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('Injected cleanup operation failure.', $exception->getMessage());
+        }
+        $this->assertSame(1, $domain->refresh()->revision);
+        $this->assertNull($challenge->refresh()->cleaned_at);
+        $this->assertSame('valid', $challenge->status);
+        $this->assertDatabaseCount('operations', 0);
+        Queue::assertNotPushed(ReconcileDnsZone::class);
+
+        $this->artisan('cdnf:tls:dispatch-maintenance')->assertSuccessful();
+        $this->assertSame(2, $domain->refresh()->revision);
+        $this->assertNotNull($challenge->refresh()->cleaned_at);
+        $this->assertDatabaseCount('operations', 1);
+        Queue::assertPushed(ReconcileDnsZone::class);
+    }
+
     public function test_maintenance_retries_an_undispatched_batch_and_recovers_from_lost_progress(): void
     {
         Queue::fake();
