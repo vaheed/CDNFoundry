@@ -139,10 +139,21 @@ IDs. Current validator and runtime sources are mounted explicitly. A PHP process
 with no network or database generates synthetic private-CA chains and invokes
 the chain validator. A disposable OpenResty cell then serves those certificates
 to a real verifying Python TLS client. The valid control must return HTTP 200;
-eight invalid CA/usage/time/path/purpose/name/critical-extension cases must be
-rejected by admission and by the TLS client when deliberately forced into a
-runtime snapshot. Restoring the valid snapshot must restore its fingerprint
+twelve invalid CA/usage/time/path/purpose/name/critical-extension/strength cases must be
+rejected by admission and fail TLS when deliberately forced into a runtime
+snapshot. Failure must be a client verification error or a fresh, observed
+OpenResty weak-chain installation error at the candidate revision. Restoring
+the valid snapshot must restore its fingerprint
 and HTTP 200. Each publication waits for the runtime's per-worker refresh.
+The strength cases include 1024-bit RSA issuer/root keys and SHA-1 signatures
+on the leaf/intermediate. The current validator invokes the real OpenSSL
+command with authentication level 2, explicit uploaded-root trust and a
+five-second deadline. The PHP compile-time OpenSSL constant and command/library
+versions are recorded.
+The preliminary peer-identity observation disables verification and lowers only
+that diagnostic client's security level; qualification requests explicitly use
+security level 2 and trust/name verification. Server installation errors must
+be tied to the current revision and fresh matching diagnostics.
 No browser or existing database, container or named volume is used. Synthetic
 private material is never included in the result log. PHP has 256 MiB/one CPU/64
 processes and bounded tmpfs; the cell has 512 MiB/one CPU/128 processes and a

@@ -201,7 +201,8 @@ workstream does not replace an earlier product checkpoint.
    test-CA bundle covering the proxied hostname. Submit and record its fingerprint,
    revision, acknowledgement and verified HTTPS result using a client that
    trusts that test CA. Repeat with a non-CA issuer, expired issuer/root,
-   client-only leaf or name-constrained issuer excluding the hostname. Expect
+   client-only leaf, name-constrained issuer excluding the hostname, 1024-bit
+   RSA issuer/root key or SHA-1 leaf/intermediate signature. Expect
    a chain validation error, no successful-upload notification, unchanged
    fingerprint/revision and continuing HTTPS on the prior certificate. Restore
    the valid fields and submit the same leaf with its valid chain again: expect

@@ -66,6 +66,7 @@ Historical docs are retained evidence, not qualification of this checkout.
 | Qualification nonempty-file evidence rule | Replaced insufficient evidence contract | Structured attributable operator evidence required | Six tool regressions passed |
 | Laravel test dependency/storage mounts | Replaced implicit runtime startup and writable development storage with `compose.test.yml` | Same `make dev-test` entry point; no data or volume deletion | Effective SQLite-memory preflight, 310-test checkpoint and Compose/docs validation passed; commit `094bbcaa` |
 | Synthetic custom-chain PKI generator | Consolidated API and real-TLS fixtures in `core/tests/Support/CertificateChain.php` | Test-only helper, mounted explicitly into the PHP runtime fixture | Shared eight-case negative corpus and valid private-CA control |
+| PHP purpose-only uploaded-chain check | Replaced by bounded native OpenSSL verification with explicit authentication strength | Same upload contract and private-CA support; pinned CLI required by the image | AUD-042: four new weak-chain regressions plus the original corpus, full application and real TLS restoration checks |
 | Ignored `storage/qualification/security-audit/trivy-cache/` | Removed on 2026-09-12: duplicate reproducible scanner cache, not repository source | Retained `dependency-gate/cache/`, all scan reports and test evidence | Both 1,348,702,208-byte databases had SHA-256 `7a77cf4af9afbb891eb6e94d74968a36065fe71b0c56ce16e30d7081fc5cfab4`; neither cache was mounted by a running container. Removed 1,352,896,665 file bytes. |
 
 ## Qualification gates
@@ -1061,3 +1062,105 @@ for this bounded correction are present; manual browser steps are updated and
 **Not run**. Whole-source review, image advisories, complete Fleet topology/
 recovery, public traffic and production load remain open. **Not yet qualified
 for production.**
+
+## Uploaded chain cryptographic strength
+
+AUD-042 (**Medium, confirmed authenticated-domain availability defect**) affects
+`UploadedCertificate::validateChain`. The PHP purpose check added in AUD-040
+enforces chain constraints but exposes no authentication-strength option.
+An authorized uploader could still submit a leaf with a 1024-bit RSA issuer or
+root, or a SHA-1 signature on the leaf/intermediate. A valid chain relationship
+alone does not make those certificates usable by the serving TLS stack.
+No cross-tenant access or practical key-recovery attack is claimed.
+
+On `12ea51bc` plus the recorded regression diff, `tls-strength-before` failed
+**four of 20 tests** in 22.269 seconds. Every new weak-chain case returned 202
+instead of 422. All 16 existing upload tests passed.
+The same assertions check that rejected uploads preserve the previous active
+certificate, domain revision and edge artifact count.
+
+The validator now runs the local OpenSSL command with `verify -purpose sslserver
+-auth_level 2`, the uploaded root as its only trust anchor and a five-second
+process timeout. Public leaf PEM arrives through stdin; public issuer/root PEM
+uses the existing two temporary files, closed on every outcome. No private key
+enters the command, its arguments or its input. Canonical PEM persistence,
+hostname coverage, existing bounds and asynchronous runtime publication remain
+unchanged. Authentication level 2 enforces at least 112-bit strength across
+chain keys and non-root signatures. Root self-signatures are not evidence of
+trust. The native verifier handles algorithm parameters rather than adding a
+custom signature parser. See the
+[OpenSSL authentication-level and explicit-trust options](https://docs.openssl.org/3.5/man1/openssl-verification-options/)
+and [standard-input verification contract](https://docs.openssl.org/3.5/man1/openssl-verify/).
+
+`core/Dockerfile` now explicitly installs `openssl=3.5.8-r0` alongside the
+already-pinned libraries. The existing compatible image contained OpenSSL
+3.5.7. An isolated qualification layer upgraded its CLI and both libraries to
+3.5.8 successfully in **9.132 seconds** (`tls-strength-image`); this small layer
+does not qualify a rebuild of the complete production image.
+
+The supported `make dev-test` invocation invalidated the frontend export's PHP
+dependency layer after the Dockerfile edit. It was deliberately cancelled while
+installing compiler dependencies: ordinary available disk was zero and
+root-reserved free space had fallen to about 1.43 GB. Checkpoint
+`tls-strength-application` exited 2 after 181.960 seconds, before PHPUnit ran.
+No migration or database cleanup was performed. Application qualification
+continues through the same `compose.test.yml` isolation with already-built
+assets; a complete fresh image/build gate still needs sufficient disk.
+
+Compose, OpenAPI, seven supply-chain and eight qualification-tool regressions,
+and immutable-source policy passed in **50.489 seconds**
+(`tls-strength-contracts`). This is not a new image vulnerability scan. Pint and
+Python compilation passed. No schema migration is needed. Roll out the updated
+control-plane image; rollback restores weak-chain admission. Existing installed
+weak chains need a newly issued strong replacement; do not downgrade client or
+server security levels. Owner-run browser steps are extended and **Not run**.
+
+The isolated full application command was:
+
+```sh
+docker compose -f compose.dev.yml -f compose.test.yml run --rm --no-deps core php artisan test
+```
+
+It passed **316 tests / 12,403 assertions**, with 67.70 seconds inside PHPUnit
+and 74.109 seconds total (`tls-strength-application-isolated`). It used the
+existing vendor/assets preparation and the same forced testing/SQLite-memory
+environment and disposable storage as `make dev-test`. The cancelled build is
+not counted as passed. PHP application/test sources stayed unchanged during the
+completed run; runtime-fixture and documentation changes account for the
+recorded overall source-hash change.
+
+The first strength runtime attempts required every bad certificate to reach
+the client's verification step. The weak-issuer case instead failed inside
+OpenResty's certificate callback with `SSL_add0_chain_cert() failed`, before a
+peer certificate could be observed. That is an actual serving failure from the
+accepted weak bundle, not successful rejection at the upload boundary. The
+fixture now accepts that distinct result only after observing the candidate's
+active revision and a new matching certificate-installation diagnostic. An
+unrelated TLS alert or old log line cannot satisfy that assertion. After every
+negative case, the original valid fingerprint and HTTP 200 must be restored.
+
+`tls-strength-runtime-qualified` passed in **54.345 seconds**, instance
+`cdnf-uploaded-tls-0c1aa11a5fed`. All twelve invalid chains were rejected by the
+actual upload validator. Forced weak-chain snapshots produced fresh server
+certificate-installation failures; the original eight constraint cases failed
+client verification. Every restoration returned the original fingerprint and
+HTTP 200. The CLI and its loaded library report OpenSSL 3.5.8; PHP's compile-time
+constant still reports 3.5.7 in this existing-image derivative. The Python client
+reports OpenSSL 3.0.13. Images were:
+
+- qualification PHP layer: `sha256:c1c6cd6efb496f847e06738e81bf4e812aff5a2815a88a2b339de3d2ec55070d`;
+- OpenResty: `sha256:f9835db95a10c4ca5e533cc6470faf1c3495867d549fb3fb395881bbd40fa89b`.
+
+Current validator/runtime sources were mounted explicitly. Only documentation
+changed during this completed runtime run. Its disposable container/network
+were removed. The superseded PHP purpose-only call is replaced by the bounded
+native verifier; API fields, uploaded private-CA support and encrypted-key
+custody are preserved. This is a scoped correction, not full deployment or
+image-advisory qualification. Full first-party review, adequate build disk,
+Fleet topology/recovery, public traffic/load and owner browser evidence remain
+open; the overall goal is active and production remains unqualified.
+
+Documentation lint/build/link checks passed in **46.823 seconds**
+(`tls-strength-docs`), covering 91 built pages and 3,409 internal links before
+the final result annotations. Final annotation lint and source-link validation
+are checked separately. No runtime/application code changed afterward.

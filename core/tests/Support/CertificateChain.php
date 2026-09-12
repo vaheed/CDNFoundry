@@ -6,14 +6,18 @@ final class CertificateChain
 {
     public static function make(string $constraint): array
     {
-        $issue = function (string $name, ?\OpenSSLCertificate $issuer, ?\OpenSSLAsymmetricKey $issuerKey, int $days, string $extensions): array {
-            $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_RSA, 'private_key_bits' => 2048]);
+        $issue = function (string $name, ?\OpenSSLCertificate $issuer, ?\OpenSSLAsymmetricKey $issuerKey, int $days, string $extensions) use ($constraint): array {
+            $weak = ($constraint === 'weak_issuer_key' && $name === 'Synthetic Test Issuer')
+                || ($constraint === 'weak_root_key' && $name === 'Synthetic Test Root');
+            $digest = (($constraint === 'weak_leaf_signature' && $name === 'www.example.test')
+                || ($constraint === 'weak_issuer_signature' && $name === 'Synthetic Test Issuer')) ? 'sha1' : 'sha256';
+            $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_RSA, 'private_key_bits' => $weak ? 1024 : 2048]);
             $configuration = tempnam(sys_get_temp_dir(), 'cdnf-chain-fixture-');
             try {
                 file_put_contents($configuration, "[ req ]\ndistinguished_name = dn\nprompt = no\n[ dn ]\nCN = {$name}\n[ extensions ]\n{$extensions}\n");
                 $request = openssl_csr_new(['commonName' => $name], $key, ['digest_alg' => 'sha256', 'config' => $configuration]);
                 $certificate = openssl_csr_sign($request, $issuer, $issuerKey ?? $key, $days,
-                    ['digest_alg' => 'sha256', 'config' => $configuration, 'x509_extensions' => 'extensions'], random_int(1, 1000000));
+                    ['digest_alg' => $digest, 'config' => $configuration, 'x509_extensions' => 'extensions'], random_int(1, 1000000));
                 if ($certificate === false) {
                     throw new \RuntimeException('Synthetic certificate signing failed.');
                 }

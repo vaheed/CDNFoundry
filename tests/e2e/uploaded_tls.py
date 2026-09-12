@@ -64,7 +64,8 @@ def main() -> None:
     data = json.loads(run(*producer, '--entrypoint', 'php', core, '/fixtures/producer.php').stdout)
     cases = data['cases']
     assert set(cases) == {'valid', 'issuer_not_ca', 'issuer_key_usage', 'expired_issuer', 'expired_root',
-                          'path_length', 'server_purpose', 'name_constraint', 'critical_extension'}
+                          'path_length', 'server_purpose', 'name_constraint', 'critical_extension',
+                          'weak_issuer_key', 'weak_root_key', 'weak_leaf_signature', 'weak_issuer_signature'}
     for name, case in cases.items():
         assert case['accepted'] is (name == 'valid'), f'Incorrect chain admission for {name}'
 
@@ -105,7 +106,7 @@ def main() -> None:
             port = int(info['NetworkSettings']['Ports']['8443/tcp'][0]['HostPort'])
             sequence = 1
 
-            def publish(name: str) -> None:
+            def publish(name: str) -> str | None:
                 nonlocal sequence
                 sequence += 1
                 bundle = cases[name]['bundle']
@@ -121,6 +122,7 @@ def main() -> None:
                 }
                 staging = target / 'candidate.json'
                 staging.write_text(json.dumps(candidate))
+                logs_before = run('docker', 'logs', instance).stderr
                 staging.replace(target / 'runtime.json')
                 # Each worker reloads on its one-second timer. One matching
                 # handshake alone does not establish that every worker refreshed.
@@ -131,13 +133,26 @@ def main() -> None:
                     try:
                         if request(name, verify=False)[0] == expected:
                             return
+                    except ssl.SSLError:
+                        if name.startswith('weak_'):
+                            receipt = json.loads(run('docker', 'exec', instance, 'wget', '-q', '-O-',
+                                '--header=X-Edge-Status-Token: synthetic-qualification-only',
+                                'http://127.0.0.1:9080/passive-failures').stdout)
+                            logs = run('docker', 'logs', instance).stderr
+                            for reason in ('ca key too small', 'ca md too weak',
+                                           'SSL_add0_chain_cert() failed', 'SSL_use_certificate() failed'):
+                                if (receipt['cell']['capacity']['active_revision'] == sequence
+                                        and logs.count(reason) > logs_before.count(reason)):
+                                    return 'OpenResty certificate installation failed: ' + reason
                     except (OSError, http.client.HTTPException):
                         pass
                     time.sleep(.2)
-                raise AssertionError(f'Runtime failed to activate synthetic {name} certificate')
+                logs = run('docker', 'logs', instance).stderr
+                raise AssertionError(f'Runtime failed to activate synthetic {name} certificate: {logs[-2000:]}')
 
             def request(name: str, verify: bool = True) -> tuple[str, int, bytes]:
                 context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                context.set_ciphers('DEFAULT:@SECLEVEL=2')
                 if verify:
                     roots = re.findall(r'-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----',
                                        cases[name]['bundle']['chain'], re.S)
@@ -146,6 +161,7 @@ def main() -> None:
                     # Deliberate negative-fixture observation, never an admission check.
                     context.check_hostname = False
                     context.verify_mode = ssl.CERT_NONE
+                    context.set_ciphers('DEFAULT:@SECLEVEL=0')
                 with socket.create_connection(('127.0.0.1', port), timeout=5) as connection:
                     with context.wrap_socket(connection, server_hostname=HOST) as tls:
                         fingerprint = hashlib.sha256(tls.getpeercert(binary_form=True)).hexdigest()
@@ -162,11 +178,15 @@ def main() -> None:
                 if name == 'valid':
                     continue
                 # Bypass admission only to prove why rejecting this candidate matters.
-                publish(name)
+                server_failure = publish(name)
                 try:
                     request(name)
                 except ssl.SSLCertVerificationError as error:
                     reason = error.verify_message
+                except ssl.SSLError:
+                    if server_failure is None:
+                        raise
+                    reason = server_failure
                 else:
                     raise AssertionError(f'TLS client incorrectly trusted {name}')
                 publish('valid')
@@ -175,7 +195,7 @@ def main() -> None:
                 results.append({'case': name, 'admission': 'rejected', 'client_failure': reason,
                                 'restored_fingerprint_matches': True, 'restored_http_status': status})
             print(json.dumps({'instance': instance, 'core_image': core, 'edge_image': edge,
-                              'php_openssl': data['openssl'], 'client_openssl': ssl.OPENSSL_VERSION,
+                              'php_openssl': data['openssl'], 'openssl_cli': data['openssl_cli'], 'client_openssl': ssl.OPENSSL_VERSION,
                               'results': results}, sort_keys=True))
     finally:
         run('docker', 'rm', '-f', instance, check=False)

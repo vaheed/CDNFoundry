@@ -2,6 +2,7 @@
 
 use App\Support\UploadedCertificate;
 use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Validation\ValidationException;
 use Tests\Support\CertificateChain;
 
@@ -19,7 +20,8 @@ if (! app()->environment('testing') || config('database.default') !== 'sqlite'
 // No database is connected or migrated. API transactions are covered by TlsApiTest.
 $validator = new ReflectionMethod(UploadedCertificate::class, 'validateChain');
 $cases = [];
-foreach (['valid', 'issuer_not_ca', 'issuer_key_usage', 'expired_issuer', 'expired_root', 'path_length', 'server_purpose', 'name_constraint', 'critical_extension'] as $name) {
+foreach (['valid', 'issuer_not_ca', 'issuer_key_usage', 'expired_issuer', 'expired_root', 'path_length', 'server_purpose', 'name_constraint', 'critical_extension',
+    'weak_issuer_key', 'weak_root_key', 'weak_leaf_signature', 'weak_issuer_signature'] as $name) {
     $bundle = CertificateChain::make($name);
     try {
         $validator->invoke(null, openssl_x509_read($bundle['certificate']), $bundle['chain']);
@@ -29,4 +31,4 @@ foreach (['valid', 'issuer_not_ca', 'issuer_key_usage', 'expired_issuer', 'expir
     }
     $cases[$name] = ['accepted' => $accepted, 'bundle' => $bundle];
 }
-echo json_encode(['openssl' => OPENSSL_VERSION_TEXT, 'cases' => $cases], JSON_THROW_ON_ERROR);
+echo json_encode(['openssl' => OPENSSL_VERSION_TEXT, 'openssl_cli' => trim(Process::run(['openssl', 'version'])->throw()->output()), 'cases' => $cases], JSON_THROW_ON_ERROR);

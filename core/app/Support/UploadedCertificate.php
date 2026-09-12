@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Domain;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Validation\ValidationException;
 
 final class UploadedCertificate
@@ -128,9 +129,14 @@ final class UploadedCertificate
             $chainFile = self::temporaryCertificates($normalizedChain);
             $rootPath = stream_get_meta_data($rootFile)['uri'];
             $chainPath = stream_get_meta_data($chainFile)['uri'];
-            // Explicit trust preserves private CAs; native verification enforces the
-            // full chain's constraints and validity, not just matching signatures.
-            if (openssl_x509_checkpurpose($leaf, X509_PURPOSE_SSL_SERVER, [$rootPath], $chainPath) !== true) {
+            openssl_x509_export($leaf, $normalizedLeaf);
+            // PHP's purpose check exposes no authentication strength setting.
+            // Only public PEM enters this bounded local verifier, through stdin.
+            $result = Process::timeout(5)->input($normalizedLeaf)->run([
+                'openssl', 'verify', '-purpose', 'sslserver', '-auth_level', '2',
+                '-trusted', $rootPath, '-untrusted', $chainPath,
+            ]);
+            if (! $result->successful()) {
                 throw ValidationException::withMessages(['chain' => 'The certificate chain is not currently valid for TLS server authentication.']);
             }
         } finally {

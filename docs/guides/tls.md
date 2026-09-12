@@ -77,6 +77,9 @@ Upload a leaf certificate, issuing chain, and private key in PEM. Bounds are
   self-signed root and verifies for TLS server authentication;
 - CA constraints, signing key usage, path length, server purpose, name
   constraints and critical extensions permit the leaf;
+- chain keys and non-root signatures satisfy OpenSSL authentication level 2
+  (at least 112-bit security), rejecting 1024-bit RSA and SHA-1 leaf/issuer
+  signatures; root self-signatures do not establish trust;
 - the leaf, issuers and root are currently valid;
 - names cover every required proxied hostname.
 
@@ -95,6 +98,10 @@ The supplied root is the explicit trust anchor for validation, so a valid
 private CA is supported. This does not install that CA into visitors' trust
 stores or prove public-browser trust. Supply the appropriate chain for your
 clients. Validation performs no remote CA or revocation lookup.
+The control-plane image includes the pinned OpenSSL command-line verifier.
+It checks public certificate PEM locally with a five-second timeout; private
+keys never enter its input or command arguments. Custom non-container PHP
+test environments also need the OpenSSL 3 command available on `PATH`.
 
 When upgrading from an earlier validator, review existing custom bundles in a
 restricted environment without printing their contents. Re-upload a complete,

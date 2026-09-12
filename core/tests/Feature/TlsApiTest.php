@@ -149,7 +149,8 @@ class TlsApiTest extends TestCase
 
     public static function invalidChainConstraints(): array
     {
-        $names = ['issuer_not_ca', 'issuer_key_usage', 'expired_issuer', 'expired_root', 'path_length', 'server_purpose', 'name_constraint', 'critical_extension'];
+        $names = ['issuer_not_ca', 'issuer_key_usage', 'expired_issuer', 'expired_root', 'path_length', 'server_purpose', 'name_constraint', 'critical_extension',
+            'weak_issuer_key', 'weak_root_key', 'weak_leaf_signature', 'weak_issuer_signature'];
 
         return array_combine($names, array_map(fn (string $name): array => [$name], $names));
     }

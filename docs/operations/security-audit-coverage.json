@@ -185,7 +185,7 @@
     {
       "path": "core/Dockerfile",
       "status": "partial",
-      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established. AUD-042: explicit chain authentication strength, weak RSA/SHA-1 corpus and pinned OpenSSL verifier; whole-file review remains partial."
     },
     {
       "path": "core/README.md",
@@ -1400,7 +1400,7 @@
     {
       "path": "core/app/Support/UploadedCertificate.php",
       "status": "partial",
-      "scope": "AUD-040/041: verified chain constraints and normalized public PEM; remaining whole-file security review pending."
+      "scope": "AUD-040/041: verified chain constraints and normalized public PEM; remaining whole-file security review pending. AUD-042: explicit chain authentication strength, weak RSA/SHA-1 corpus and pinned OpenSSL verifier; whole-file review remains partial."
     },
     {
       "path": "core/artisan",
@@ -2245,12 +2245,12 @@
     {
       "path": "core/tests/Feature/TlsApiTest.php",
       "status": "partial",
-      "scope": "AUD-040/041: synthetic chain constraints, plaintext-chain prevention, last-valid state and repeat uploads."
+      "scope": "AUD-040/041: synthetic chain constraints, plaintext-chain prevention, last-valid state and repeat uploads. AUD-042: explicit chain authentication strength, weak RSA/SHA-1 corpus and pinned OpenSSL verifier; whole-file review remains partial."
     },
     {
       "path": "core/tests/Support/CertificateChain.php",
       "status": "partial",
-      "scope": "Shared synthetic private-CA generator for API and actual TLS-client negative cases; no real certificate material."
+      "scope": "Shared synthetic private-CA generator for API and actual TLS-client negative cases; no real certificate material. AUD-042: explicit chain authentication strength, weak RSA/SHA-1 corpus and pinned OpenSSL verifier; whole-file review remains partial."
     },
     {
       "path": "core/tests/TestCase.php",
@@ -3770,12 +3770,12 @@
     {
       "path": "tests/e2e/uploaded_tls.py",
       "status": "partial",
-      "scope": "AUD-040: isolated PHP/OpenResty chain admission, client rejection and restored serving; signed agent/ACME/public infrastructure excluded."
+      "scope": "AUD-040: isolated PHP/OpenResty chain admission, client rejection and restored serving; signed agent/ACME/public infrastructure excluded. AUD-042: explicit chain authentication strength, weak RSA/SHA-1 corpus and pinned OpenSSL verifier; whole-file review remains partial."
     },
     {
       "path": "tests/e2e/uploaded_tls_fixture.php",
       "status": "partial",
-      "scope": "AUD-040: synthetic PHP chain producer, no network/database, current validator mounted; private output consumed only by owning Python process."
+      "scope": "AUD-040: synthetic PHP chain producer, no network/database, current validator mounted; private output consumed only by owning Python process. AUD-042: explicit chain authentication strength, weak RSA/SHA-1 corpus and pinned OpenSSL verifier; whole-file review remains partial."
     },
     {
       "path": "tests/fixtures/edge-runtime.json",
