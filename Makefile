@@ -154,7 +154,8 @@ config-check:
 	./scripts/validate-production-overrides.sh
 
 openapi-check:
-	$(COMPOSE_DEV) run --rm core php artisan cdnf:api:openapi --check
+	$(COMPOSE_DEV) run --rm --no-deps vendor-init
+	$(COMPOSE_TEST) run --rm --no-deps core php artisan cdnf:api:openapi --check
 
 docs-dev:
 	npm --prefix docs run dev
