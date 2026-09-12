@@ -298,6 +298,13 @@ single finalization revision, without retry metadata or errors. The application
 suite also repeats an exhausted-issuance callback and requires unchanged
 completion time, error and revision, with no duplicate DNS dispatch.
 
+The PostgreSQL gate also holds a successful CA order response while another
+process finalizes, fails or obsoletes the order. After releasing the response,
+the delayed job must exit without a duplicate-certificate error and preserve
+the completed order/operation, completion time, certificate count, selected
+certificate and revision. Obsolescence uses the actual job after removing the
+disposable domain's proxy records; no persistent domain is altered.
+
 The PostgreSQL script also exercises idempotency locking with process-local
 caches, concurrent identical requests, and a killed process between mutation and
 receipt. For parent delegation, install host `bind9-dnsutils` (providing `dig`

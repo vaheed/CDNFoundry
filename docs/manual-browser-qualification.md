@@ -263,6 +263,14 @@ workstream does not replace an earlier product checkpoint.
    extra cleanup revision from a late failure. Verify HTTPS still serves the
    recorded certificate. This owner-run checkpoint remains **Not run**; the
    three delayed-worker interleavings are automated separately.
+   For an order recorded as failed or obsolete in the isolated operator
+   environment, record its completion time, operation status, selected
+   certificate fingerprint and domain revision. Reload those views after
+   delayed worker completion: that old order must remain failed or obsolete
+   and must not select a replacement certificate or add a revision. A new
+   eligible issuance has its own order ID. Record verified HTTPS continuity.
+   This owner-run checkpoint is **Not run**; automated PostgreSQL cases cover
+   late successful responses after all three terminal outcomes.
 4. Use **Cache settings** to cover TTLs, object bound, origin-header policy,
    query policy/selected parameters, bypass cookies, status TTLs, admission,
    stale windows, and variant bounds. Prove MISS then HIT, development-mode

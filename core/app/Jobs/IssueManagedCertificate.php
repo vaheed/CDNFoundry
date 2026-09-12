@@ -260,6 +260,9 @@ class IssueManagedCertificate implements ShouldQueue
         DB::transaction(function () use ($order, $bundle, $parsed, $remote): void {
             $domain = Domain::query()->lockForUpdate()->findOrFail($order->domain_id);
             $locked = TlsOrder::query()->lockForUpdate()->findOrFail($order->id);
+            if ($locked->status !== 'finalizing') {
+                return;
+            }
             $certificate = $domain->tlsCertificates()->create([
                 'kind' => 'managed', 'status' => 'active', 'certificate_pem' => $bundle['certificate_pem'],
                 'chain_pem' => $bundle['chain_pem'], 'private_key_ciphertext' => $locked->private_key_ciphertext,

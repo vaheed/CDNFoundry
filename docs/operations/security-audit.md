@@ -1671,3 +1671,74 @@ passed. Documentation lint/build/link checks passed in **49.368 seconds**
 (`tls-stale-docs`), covering 91 built pages and 3,416 internal links before this
 result annotation. Final source-link validation and lint follow the annotation;
 application and fixture sources remain the qualified versions.
+
+## Successful finalization cannot reopen a terminal order
+
+AUD-050 (**Medium, confirmed with high confidence**) affects
+`core/app/Jobs/IssueManagedCertificate.php`. Certificate finalization locked the
+domain and order but did not recheck the order's state after CA requests and
+certificate validation. A response already in flight could activate a
+certificate after another worker failed or obsoleted the order, replacing the
+selected certificate, erasing failure details and adding an unwanted revision.
+The required overlap was reproduced with actual application jobs in separate
+PHP processes and the isolated PostgreSQL database.
+
+On parent `2daefb57`, `tls-stale-success-before` failed in **94.195 seconds**
+on PostgreSQL **23505** when a second finalizer attempted to store the identical
+certificate. The existing unique domain/kind/fingerprint constraint prevented
+duplicate storage; duplicate certificate rows were **not** reproduced. The
+fixture initially stopped on that exception. It was extended to collect all
+three terminal cases before asserting, without changing production code.
+
+`tls-stale-success-reproduced` failed in **106.339 seconds**:
+
+| State committed while the response was delayed | Observed late-finalization result |
+| --- | --- |
+| Succeeded | Unique-constraint error 23505; existing order, certificate and revision preserved. |
+| Failed | Changed order and operation to succeeded, cleared errors, selected a new certificate, advanced revision 16 to 17 and certificate count 7 to 8. |
+| Obsolete after proxy-record removal | Changed order and operation to succeeded, cleared errors, selected a new certificate, advanced revision 19 to 20 and certificate count 8 to 9. |
+
+Finalization now returns without writes unless the freshly locked order is still
+`finalizing`. The domain-first lock order, certificate parsing/key matching,
+encrypted key storage, transactional activation and after-commit DNS/edge
+dispatch remain unchanged. Existing uniqueness constraints remain intact.
+There is no schema migration, new service, key rewrite or historical-data
+cleanup. Deploy the control-plane code and restart workers normally. A code
+rollback requires no data rollback but restores the stale activation behavior.
+
+The expanded regression remains part of the existing `postgres-claims` CI and
+release qualification gate. It compares state before and after releasing a
+successful CA response: order and operation outcome, error flags, completion
+time, result, certificate count and selection, retry metadata, cleaned challenges
+and revision. The CA response and certificate material are synthetic; this is
+real transaction qualification, not public DNS, live-CA or edge-delivery evidence.
+
+Other nonterminal issuance transitions, changing inputs while a state remains
+`finalizing`, lifecycle admission and stale obsolete-job writes remain under
+review. Manual browser status is **Not run**. The full audit and production
+qualification remain incomplete.
+
+`tls-stale-success-after` passed in **110.092 seconds**, instance
+`cdnf-claim-qualification-6212169d0ded`, using
+`postgres@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15`.
+All three late successful responses exited normally and preserved the exact
+recorded state: revisions stayed at 15, 16 and 18 respectively, and the
+certificate count stayed at seven throughout. All previous PostgreSQL cases
+also passed. The existing disposable 512-MiB tmpfs database, one-CPU and
+512-MiB memory limits and random loopback port were retained; only its own
+container was removed. Persistent data and named volumes were preserved.
+
+The isolated application suite passed **329 tests / 12,536 assertions** in
+**85.599 seconds** total, 77.54 seconds inside PHPUnit
+(`tls-finalization-application`). Pint passed the changed PHP file; Python
+compilation passed. Compose/configuration, OpenAPI, seven supply-chain fixtures
+and eight qualification-tool regressions passed in **62.050 seconds**
+(`tls-finalization-contracts`). Application/fixture diffs matched their captured
+successful evidence; only documentation changed during those runs.
+
+Documentation lint/build/link checks passed in **49.300 seconds**
+(`tls-finalization-docs`), covering 91 built pages and 3,417 internal links before
+this result annotation. Final source-link validation and lint follow annotation.
+AUD-050 is **fixed for the reproduced terminal-state paths**. Coverage remains
+**763 files: 656 pending, 103 partial and four reviewed**. Production remains
+**not yet qualified**; this checkpoint does not complete the wider audit.

@@ -103,6 +103,12 @@ challenges and records any resulting DNS reconciliation in the same transaction.
 Inspect the current TLS order and runtime acknowledgement when diagnosing an
 older worker error.
 
+Certificate finalization also rechecks the locked order's state before writing.
+A response arriving after the order succeeded, failed or became obsolete leaves
+that outcome, certificate selection and revision intact. Retrying a completed
+finalization does not insert another certificate. Failed or obsolete work must
+go through eligible managed planning to create a new order.
+
 ## Manual managed actions
 
 - **Renew** creates work only when renewal is due.
