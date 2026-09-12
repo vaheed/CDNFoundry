@@ -1377,3 +1377,48 @@ Documentation lint/build/link checks passed in **43.222 seconds**
 (`tls-mode-docs`), covering 91 built pages and 3,412 internal links before this
 result annotation. Final implementation/regression diffs matched both passed
 application and PostgreSQL evidence records.
+
+## Managed TLS operation type isolation
+
+AUD-046 (**Low, confirmed operation-reporting defect**) affects
+`EnsureManagedCertificates::handle`. With healthy managed coverage and pending
+renew/reissue requests, the ordinary planner completed both operation types
+without creating an order. The forced job could later create an order, but
+could not update the already-completed reissue receipt. This falsely reported
+forced planning success and lost its order association; certificate disclosure
+or issuance bypass was not demonstrated.
+
+The regression submits both actual API requests, runs the ordinary job first
+and reads their operation resources. On parent `fb18fff8`,
+`tls-operation-type-before` failed in **8.307 seconds**: reissue was `succeeded`
+where it should still be `pending`. The job now completes only the operation
+type corresponding to its force flag. Existing domain scoping, pending-status
+filter, transaction, coalescing and certificate/order behavior are unchanged.
+The regression continues through forced planning and retry, requiring the
+correct order ID, no duplicate order and unchanged active certificate/revision.
+
+No schema migration, API response shape or runtime artifact changes are needed.
+Roll out the control-plane image and workers normally; rollback restores the
+incorrect receipt completion. Existing completed receipts are not rewritten:
+operators should inspect actual TLS orders before relying on older reissue
+results. Planning success does not establish CA issuance or edge activation.
+Remaining receipt/admission races, ineligible-domain outcomes and maintenance
+coverage still require review. No ACME or edge-runtime qualification is claimed
+for this operation-state correction.
+
+The isolated application suite passed **323 tests / 12,480 assertions**, 71.69
+seconds inside PHPUnit and **78.425 seconds** total (`tls-operation-application`).
+The forced request stayed pending through ordinary renewal, then recorded its
+new order ID; retry retained that ID and did not duplicate the order. The
+completed renewal receipt and active certificate/revision stayed unchanged.
+Final PHP diffs matched the captured successful source evidence.
+Compose, OpenAPI, seven supply-chain fixtures and eight qualification-tool
+regressions passed in **48.366 seconds** (`tls-operation-contracts`); Pint passed
+both changed PHP files. No migration, browser automation or persistent database
+mutation was performed. Manual browser status remains **Not run** and the wider
+audit/production gates remain open.
+
+Documentation lint/build/link checks passed in **49.001 seconds**
+(`tls-operation-docs`), covering 91 built pages and 3,413 internal links before
+the result annotations. Coverage remains 763 files: 658 pending, 101 partial and
+four reviewed. Production remains **not yet qualified**.

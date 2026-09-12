@@ -63,7 +63,7 @@ class EnsureManagedCertificates implements ShouldBeUnique, ShouldQueue
                 ]);
                 IssueManagedCertificate::dispatch($order->id)->delay($order->available_at)->afterCommit();
             }
-            Operation::query()->whereIn('type', ['tls.managed_reissue', 'tls.managed_renew'])->where('status', 'pending')
+            Operation::query()->where('type', $this->force ? 'tls.managed_reissue' : 'tls.managed_renew')->where('status', 'pending')
                 ->where('input->domain_id', $domain->id)->update([
                     'status' => 'succeeded', 'result' => ['domain_id' => $domain->id, 'queued_order_ids' => $queued],
                     'finished_at' => now(),

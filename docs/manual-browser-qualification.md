@@ -231,6 +231,15 @@ workstream does not replace an earlier product checkpoint.
    change. Reload and confirm the removal's saved state is retained. Upload a
    valid replacement and confirm custom mode can be selected again. This
    owner-run checkpoint remains **Not run**.
+   With healthy managed coverage, request **Reissue managed certificate** and
+   **Renew managed certificate**. Record both operation IDs. Inspect their
+   operation results through the authenticated API or administrator operations
+   view: renewal may complete with no new order, but must not complete a
+   pending reissue. Once reissue planning finishes, inspect the resulting TLS
+   order and its progress separately from the planning receipt. Record runtime
+   acknowledgement and verified HTTPS after issuance. This owner-run
+   checkpoint remains **Not run**; deterministic worker ordering is checked by
+   the application suite.
 4. Use **Cache settings** to cover TTLs, object bound, origin-header policy,
    query policy/selected parameters, bypass cookies, status TTLs, admission,
    stale windows, and variant bounds. Prove MISS then HIT, development-mode

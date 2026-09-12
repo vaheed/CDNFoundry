@@ -221,6 +221,47 @@ PEM,
         Queue::assertPushed(ReconcileEdgeDomain::class);
     }
 
+    public function test_renewal_does_not_complete_a_pending_forced_reissue(): void
+    {
+        Queue::fake();
+        $domain = $this->proxiedDomain();
+        $user = User::factory()->create();
+        $domain->users()->attach($user);
+        $certificate = $domain->tlsCertificates()->create([
+            'kind' => 'managed', 'status' => 'active', 'certificate_pem' => 'synthetic-unused-pem', 'chain_pem' => '',
+            'private_key_ciphertext' => 'synthetic-unused-key', 'names' => ['example.test', '*.example.test'],
+            'fingerprint_sha256' => str_repeat('c', 64), 'not_before' => now()->subDay(),
+            'expires_at' => now()->addDays(60), 'activated_at' => now(),
+        ]);
+        $domain->update(['active_tls_certificate_id' => $certificate->id]);
+        $reissueId = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/tls/reissue")
+            ->assertAccepted()->json('data.operation_id');
+        $renewalId = $this->postJson("/api/domains/{$domain->id}/tls/renew")
+            ->assertAccepted()->json('data.operation_id');
+
+        (new EnsureManagedCertificates($domain->id))->handle();
+
+        $this->getJson("/api/operations/{$renewalId}")->assertOk()
+            ->assertJsonPath('data.status', 'succeeded')->assertJsonPath('data.result.queued_order_ids', []);
+        $this->getJson("/api/operations/{$reissueId}")->assertOk()
+            ->assertJsonPath('data.status', 'pending')->assertJsonPath('data.finished_at', null);
+        $this->assertDatabaseCount('tls_orders', 0);
+        Queue::assertNotPushed(IssueManagedCertificate::class);
+
+        $job = new EnsureManagedCertificates($domain->id, true);
+        $job->handle();
+        $order = TlsOrder::query()->sole();
+        $this->getJson("/api/operations/{$reissueId}")->assertOk()
+            ->assertJsonPath('data.status', 'succeeded')->assertJsonPath('data.result.queued_order_ids', [$order->id]);
+        Queue::assertPushed(IssueManagedCertificate::class, fn ($queued): bool => $queued->orderId === $order->id);
+        $job->handle();
+        $this->assertDatabaseCount('tls_orders', 1);
+        $this->assertSame([$order->id], Operation::query()->findOrFail($reissueId)->result['queued_order_ids']);
+        $this->assertSame([], Operation::query()->findOrFail($renewalId)->result['queued_order_ids']);
+        $this->assertSame($certificate->id, $domain->refresh()->active_tls_certificate_id);
+        $this->assertSame(1, $domain->revision);
+    }
+
     public function test_expiring_and_failed_certificates_create_deduplicated_administrator_alerts(): void
     {
         Queue::fake([EnsureManagedCertificates::class]);

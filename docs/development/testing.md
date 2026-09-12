@@ -264,6 +264,12 @@ separately advance the clock past certificate expiry when the action rereads
 the domain in its transaction, then require a conflict/field error without a
 new revision, operation, audit entry or edge dispatch.
 
+`ManagedTlsTest` also submits renew and reissue API requests for a domain with
+valid managed coverage, runs the ordinary planner first, and reads both
+operation resources. Renewal must not complete the forced-reissue receipt.
+The subsequent forced job must record its new order ID, while a retry creates
+no duplicate order and preserves that result and the active certificate.
+
 The PostgreSQL script also exercises idempotency locking with process-local
 caches, concurrent identical requests, and a killed process between mutation and
 receipt. For parent delegation, install host `bind9-dnsutils` (providing `dig`

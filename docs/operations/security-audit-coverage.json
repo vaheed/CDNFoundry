@@ -900,7 +900,7 @@
     {
       "path": "core/app/Jobs/EnsureManagedCertificates.php",
       "status": "partial",
-      "scope": "AUD-044: managed activation under the domain lock, current revision/custom-mode preservation, atomic operation failure and retry; real PostgreSQL interleavings passed. Remaining lifecycle and whole-file review incomplete."
+      "scope": "AUD-044: managed activation under the domain lock, current revision/custom-mode preservation, atomic operation failure and retry; real PostgreSQL interleavings passed. Remaining lifecycle and whole-file review incomplete. AUD-046: renew/reissue receipt type isolation, API-observable completion and forced-job retry; remaining receipt/lifecycle review incomplete."
     },
     {
       "path": "core/app/Jobs/FinalizeDomainDeprovisioning.php",
@@ -2160,7 +2160,7 @@
     {
       "path": "core/tests/Feature/ManagedTlsTest.php",
       "status": "partial",
-      "scope": "AUD-044: managed activation under the domain lock, current revision/custom-mode preservation, atomic operation failure and retry; real PostgreSQL interleavings passed. Remaining lifecycle and whole-file review incomplete."
+      "scope": "AUD-044: managed activation under the domain lock, current revision/custom-mode preservation, atomic operation failure and retry; real PostgreSQL interleavings passed. Remaining lifecycle and whole-file review incomplete. AUD-046: renew/reissue receipt type isolation, API-observable completion and forced-job retry; remaining receipt/lifecycle review incomplete."
     },
     {
       "path": "core/tests/Feature/ManagedWafTest.php",

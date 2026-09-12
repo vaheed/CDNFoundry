@@ -80,6 +80,14 @@ administrator alerts for failures or impending expiry.
 
 Both actions return `202` and an operation UUID.
 
+Each action's operation reports completion of its planning job. Renewal may
+reuse valid coverage and return an empty `queued_order_ids` list. A pending
+reissue remains pending until its forced planning job runs; ordinary renewal
+does not complete it. When reissue creates an order, its receipt records the
+order ID and retains that result on retry. Planning success does not establish
+certificate issuance or edge activation: inspect TLS order status, runtime
+acknowledgements and verified HTTPS separately.
+
 ## Custom certificates
 
 Upload a leaf certificate, issuing chain, and private key in PEM. Bounds are
