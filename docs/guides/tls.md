@@ -93,6 +93,11 @@ paste the private key only into **Private key PEM**. Re-uploading the same leaf
 updates its validated chain without changing the certificate ID and queues a
 new domain revision. A rejected upload changes neither the active certificate
 nor the domain revision or edge artifact.
+If another request changes the domain during certificate validation, the API
+returns `409` with code `conflict`; the panel shows a validation error on
+**Leaf certificate PEM**. Reload current domain state and retry with a bundle
+covering its current proxied hostnames. The conflicting upload leaves the
+active certificate and other request's committed revision intact.
 
 The supplied root is the explicit trust anchor for validation, so a valid
 private CA is supported. This does not install that CA into visitors' trust

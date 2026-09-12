@@ -236,8 +236,18 @@ the current tree.
 and concurrent domain creation against its own named disposable PostgreSQL
 container, loopback port and tmpfs database. It uses no PHPUnit migration traits
 and touches no persistent database or named volume. It requires host PHP with
-PDO PostgreSQL and the installed `core/vendor` dependencies. The result records
+PDO PostgreSQL, OpenSSL 3 on `PATH`, and the installed `core/vendor` dependencies. The result records
 the image digest, instance name and observed name-lock wait.
+
+The same PostgreSQL gate pauses the real OpenSSL verifier after a custom TLS
+upload has read hostname coverage. A second PHP process adds a proxied hostname
+through the DNS controller and commits its new revision before validation
+resumes. The stale upload must return 409, retain the original covering
+certificate and preserve the DNS writer's revision. Retrying the now-incomplete
+certificate against current names must return 422. Synthetic private material
+stays in a mode-0600 temporary file and is never printed. This is an actual
+PostgreSQL/process interleaving; the API/Filament feature tests separately inject
+a revision change at the verifier boundary to check each entry point.
 
 The PostgreSQL script also exercises idempotency locking with process-local
 caches, concurrent identical requests, and a killed process between mutation and

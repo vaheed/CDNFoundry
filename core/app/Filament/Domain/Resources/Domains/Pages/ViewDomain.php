@@ -120,9 +120,15 @@ class ViewDomain extends ViewRecord
                 Textarea::make('chain')->label('Issuing chain PEM')->rows(8)->maxLength(65536)->required(),
                 Textarea::make('private_key')->label('Private key PEM')->rows(8)->maxLength(16384)->required(),
             ])->action(function (array $data): void {
+                $expectedRevision = (int) $this->record->revision;
                 $validated = UploadedCertificate::validate($this->record, $data['certificate'], $data['chain'], $data['private_key']);
-                DB::transaction(function () use ($validated): void {
+                DB::transaction(function () use ($validated, $expectedRevision): void {
                     $domain = $this->record->newQuery()->lockForUpdate()->findOrFail($this->record->id);
+                    if ((int) $domain->revision !== $expectedRevision) {
+                        throw ValidationException::withMessages([
+                            'mountedActions.0.data.certificate' => 'The domain changed while validating the certificate. Reload and retry the upload.',
+                        ]);
+                    }
                     $certificate = $domain->tlsCertificates()->where('kind', 'custom')->where('fingerprint_sha256', $validated['fingerprint_sha256'])->first();
                     if ($certificate === null) {
                         $certificate = $domain->tlsCertificates()->create([

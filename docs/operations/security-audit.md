@@ -1164,3 +1164,81 @@ Documentation lint/build/link checks passed in **46.823 seconds**
 (`tls-strength-docs`), covering 91 built pages and 3,409 internal links before
 the final result annotations. Final annotation lint and source-link validation
 are checked separately. No runtime/application code changed afterward.
+
+## TLS upload revision races and panel authorization
+
+AUD-043 (**Medium, confirmed PostgreSQL concurrency defect**) affects the API
+and Filament custom-upload actions. Hostname coverage was checked before the
+bounded OpenSSL verification, then the later transaction accepted that result
+without binding it to the domain revision. Another authorized request could
+add a proxied hostname during validation; the stale candidate could replace a
+certificate that covered the new name. This is an authenticated same-domain
+configuration race, not a cross-tenant certificate disclosure.
+
+The extended `postgres_domain_claims.py` uses actual application migrations on
+its own disposable PostgreSQL and two PHP processes. A test-only PATH wrapper
+pauses the real OpenSSL command after the upload reads hostname coverage. The
+other process adds `api.example.test` through the actual DNS controller and
+commits revision 3, while the pending upload was validated against revision 2.
+The original certificate covers both names; the candidate covers only
+`www.example.test`. On parent `ac8b6641`, `tls-concurrency-before` failed in
+**54.688 seconds** because that stale upload returned **202 instead of 409**.
+Separate deterministic API and Filament regressions both failed in 10.172
+seconds before correction. Those feature tests inject a revision change at the
+verifier boundary; they do not substitute for the real PostgreSQL interleaving.
+
+Both upload entry points now capture the revision used for validation and
+compare it after acquiring the existing domain row lock, before any certificate
+or domain mutation. DNS controller mutations use that same lock. A mismatch
+returns API `409` / `conflict`, or a field validation error in the panel, with
+instructions to reload and retry. No certificate is superseded, new revision
+written, or reconciliation dispatched by the rejected upload. Current-state
+validation still runs on retry. Cryptographic verification remains outside
+the transaction; no new synchronous runtime effect, abstraction, schema or
+migration is introduced. Rollback restores the race. Deploy through the normal
+control-plane image/worker rollout; no installed data needs rewriting for this
+correction.
+
+`tls-concurrency-after` passed the real PostgreSQL suite in **53.665 seconds**,
+instance `cdnf-claim-qualification-6d81a6a8451d`, using
+`postgres@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15`.
+The stale upload returned 409, preserved revision 3 and the original certificate
+ID/count, and retained both proxied names. Retrying the insufficient bundle
+returned 422. Existing claim uniqueness/reclaim, idempotency/process-death,
+edge sequence and policy-revision concurrency cases also passed. The fixture
+used a 512-MiB tmpfs database and one CPU, with a random loopback port, and
+removed its own container. No development database, named volume or browser
+was used. This qualifies the transaction boundary, not signed edge delivery
+or a fresh production-image build.
+
+The separate concern about submitting a previously mounted upload dialog after
+domain access revocation was **not reproduced**. The installed Filament
+`ViewRecord::hydrate` reauthorizes access on subsequent requests, and the
+current domain policy queries the assignment. A filled-dialog regression
+passed on the unchanged implementation in **9.763 seconds**
+(`tls-revocation-panel`): submission after detachment returned 403 with unchanged
+revision, no active certificate and no certificate/operation rows. That
+between-request scenario needs no production authorization change. This does
+not qualify every other action or in-flight authorization transition.
+
+The isolated application command recorded under AUD-042 passed **319 tests /
+12,427 assertions**, 71.19 seconds inside PHPUnit and **77.589 seconds** total
+(`tls-concurrency-application`). API conflict and panel field-error behavior,
+normal uploads and revoked access all passed. Current PHP/test sources were
+unchanged during the run; documentation/coverage edits explain the overall
+source-hash change. Compose, OpenAPI, seven supply-chain fixtures and eight
+qualification-tool regressions passed in **49.697 seconds**
+(`tls-concurrency-contracts`). Pint and Python compilation passed. The existing
+CI and production `postgres-claims` gate includes the new scenario without a
+second qualification system.
+
+Operator and owner-browser instructions now explain conflicts, retry coverage
+and revoked-dialog behavior. Manual browser execution remains **Not run**.
+Review of remaining TLS mode/renewal transitions and the wider first-party
+inventory continues. Full image builds, Fleet topology/recovery and external
+production evidence remain open; production is still unqualified.
+
+Documentation lint/build/link checks passed in **43.982 seconds**
+(`tls-concurrency-docs`), covering 91 built pages and 3,410 internal links before
+this result annotation. Final relevant PHP/PostgreSQL fixture diffs were also
+compared with their completed test evidence and matched.

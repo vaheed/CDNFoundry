@@ -67,9 +67,11 @@ class TlsController extends Controller
             'certificate' => ['required', 'string', 'max:16384'], 'chain' => ['required', 'string', 'max:65536'],
             'private_key' => ['required', 'string', 'max:16384'],
         ]);
+        $expectedRevision = (int) $domain->revision;
         $validated = UploadedCertificate::validate($domain, $data['certificate'], $data['chain'], $data['private_key']);
-        $certificate = DB::transaction(function () use ($domain, $validated, $request): TlsCertificate {
+        $certificate = DB::transaction(function () use ($domain, $validated, $request, $expectedRevision): TlsCertificate {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
+            abort_unless((int) $locked->revision === $expectedRevision, 409, 'The domain changed while validating the certificate. Reload and retry the upload.');
             $existing = $locked->tlsCertificates()->where('kind', 'custom')->where('fingerprint_sha256', $validated['fingerprint_sha256'])->first();
             if ($existing !== null && $existing->expires_at->isFuture()) {
                 $certificate = $existing;

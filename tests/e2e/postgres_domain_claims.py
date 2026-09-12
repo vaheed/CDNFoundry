@@ -33,7 +33,50 @@ if ($mode === 'init') {
     App\Models\User::factory()->create(['email' => 'owner-a@example.test']);
     App\Models\User::factory()->create(['email' => 'owner-b@example.test']);
     echo "initialized\n";
- } elseif ($mode === 'policy-init') {
+} elseif (str_starts_with($mode, 'tls-')) {
+    $user = App\Models\User::findOrFail(1);
+    auth()->login($user);
+    $request = function (array $data) use ($user) {
+        $request = Illuminate\Http\Request::create('/api/qualification/tls', 'POST', $data);
+        $request->setUserResolver(fn () => $user);
+        return $request;
+    };
+    if ($mode === 'tls-init') {
+        $domain = App\Models\Domain::query()->create(['name' => 'example.test', 'display_name' => 'TLS race',
+            'lifecycle_state' => 'active', 'nameservers_verified_at' => now(), 'revision' => 1]);
+        $domain->users()->attach($user);
+        $domain->dnsRecords()->create(['name' => 'www.example.test', 'type' => 'A', 'mode' => 'proxied', 'ttl' => 300,
+            'content' => '8.8.8.8', 'content_hash' => hash('sha256', 'tls-initial'), 'origin' => [
+                'host' => '8.8.8.8', 'port' => 80, 'scheme' => 'http', 'host_header' => 'www.example.test', 'sni' => null,
+                'verify_tls' => false, 'connect_timeout_ms' => 1000, 'response_timeout_ms' => 5000, 'retry_count' => 0,
+            ]]);
+        $initial = Tests\Support\CertificateChain::make('valid', ['www.example.test', 'api.example.test']);
+        app(App\Http\Controllers\TlsController::class)->upload($request($initial), $domain);
+        file_put_contents(getenv('CDNF_TLS_BUNDLE'), json_encode(Tests\Support\CertificateChain::make('valid')));
+        chmod(getenv('CDNF_TLS_BUNDLE'), 0600);
+    } else {
+        $domain = App\Models\Domain::query()->where('name', 'example.test')->sole();
+        if ($mode === 'tls-upload') {
+            try {
+                $status = app(App\Http\Controllers\TlsController::class)->upload(
+                    $request(json_decode(file_get_contents(getenv('CDNF_TLS_BUNDLE')), true)), $domain)->getStatusCode();
+            } catch (Illuminate\Validation\ValidationException) {
+                $status = 422;
+            } catch (Symfony\Component\HttpKernel\Exception\HttpException $exception) {
+                $status = $exception->getStatusCode();
+            }
+            echo json_encode(['status' => $status])."\n";
+        } elseif ($mode === 'tls-change') {
+            $data = $domain->dnsRecords()->firstOrFail()->only(['type', 'content', 'ttl', 'mode', 'origin']);
+            $data['name'] = 'api';
+            app(App\Http\Controllers\DnsRecordController::class)->store($request($data), $domain);
+        } elseif ($mode === 'tls-state') {
+            echo json_encode(['revision' => $domain->revision, 'certificate_id' => $domain->active_tls_certificate_id,
+                'certificate_count' => $domain->tlsCertificates()->count(), 'names' => $domain->activeTlsCertificate->names,
+                'proxied_names' => $domain->dnsRecords()->where('mode', 'proxied')->orderBy('name')->pluck('name')])."\n";
+        }
+    }
+} elseif ($mode === 'policy-init') {
     $domain = App\Models\Domain::query()->create(['name' => 'policy.example.com', 'display_name' => 'policy', 'lifecycle_state' => 'active', 'nameservers_verified_at' => now(), 'revision' => 1]);
     $domain->dnsRecords()->create(['name' => $domain->name, 'type' => 'A', 'mode' => 'proxied', 'ttl' => 60,
         'content' => '8.8.8.8', 'content_hash' => hash('sha256', '8.8.8.8'), 'origin' => [
@@ -225,12 +268,58 @@ def main() -> None:
             assert [len(result['artifacts']) for result in policy_results] == [1, 2, 3], policy_results
             assert policy_results[-1]['snapshots'] == 3
             assert policy_results[-1]['artifacts'][:2] == policy_results[1]['artifacts'], policy_results
+            # Pause the real OpenSSL executable after the application has read
+            # hostname coverage. A second PHP/PG process commits an actual DNS
+            # controller mutation before the TLS upload may acquire its row lock.
+            tls_env = {**env, 'CDNF_TLS_BUNDLE': str(root / 'tls-bundle.json'),
+                       'CDNF_TLS_READY': str(root / 'tls-ready'), 'CDNF_TLS_RELEASE': str(root / 'tls-release')}
+            subprocess.run(command('tls-init'), env=tls_env, check=True, capture_output=True)
+            initial_tls = json.loads(subprocess.check_output(command('tls-state'), env=tls_env, text=True))
+            assert set(initial_tls['names']) == {'api.example.test', 'www.example.test'}
+            shim = root / 'bin'
+            shim.mkdir()
+            (shim / 'openssl').write_text('#!/bin/sh\nif [ "$1" = "verify" ]; then\n'
+                '  touch "$CDNF_TLS_READY"\n  while [ ! -f "$CDNF_TLS_RELEASE" ]; do sleep 0.02; done\nfi\n'
+                'exec /usr/bin/openssl "$@"\n')
+            (shim / 'openssl').chmod(0o700)
+            uploader = subprocess.Popen(command('tls-upload'), env={**tls_env, 'PATH': str(shim) + ':' + env['PATH']},
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            try:
+                for _ in range(150):
+                    if Path(tls_env['CDNF_TLS_READY']).exists():
+                        break
+                    assert uploader.poll() is None, 'TLS upload terminated before validation barrier'
+                    time.sleep(.02)
+                else:
+                    raise AssertionError('TLS upload did not reach real OpenSSL validation')
+                subprocess.run(command('tls-change'), env=tls_env, check=True, capture_output=True, timeout=2)
+                changed_tls = json.loads(subprocess.check_output(command('tls-state'), env=tls_env, text=True))
+                assert changed_tls['revision'] == initial_tls['revision'] + 1
+                Path(tls_env['CDNF_TLS_RELEASE']).touch()
+                output, error = uploader.communicate(timeout=10)
+                assert uploader.returncode == 0, error
+                final_tls = json.loads(subprocess.check_output(command('tls-state'), env=tls_env, text=True))
+                assert json.loads(output)['status'] == 409, {'response': json.loads(output), 'before': changed_tls, 'after': final_tls}
+                assert final_tls == changed_tls, final_tls
+                assert final_tls['certificate_id'] == initial_tls['certificate_id']
+                assert final_tls['certificate_count'] == 1
+                assert final_tls['proxied_names'] == ['api.example.test', 'www.example.test']
+                retried_tls = json.loads(subprocess.check_output(command('tls-upload'), env=tls_env, text=True))
+                assert retried_tls['status'] == 422, retried_tls
+            finally:
+                Path(tls_env['CDNF_TLS_RELEASE']).touch()
+                if uploader.poll() is None:
+                    uploader.kill()
+                uploader.communicate(timeout=10)
             digest = subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{json .RepoDigests}}'], text=True).strip()
             print(json.dumps({'postgres_domain_claims': 'passed', 'instance': identifier, 'image_digests': json.loads(digest),
                               'concurrent_applicants': 2, 'active_configurations': 1, 'lock_wait_seconds': round(waited, 3),
                               'idempotency_concurrency_and_process_death': 'passed',
                               'edge_sequence_concurrent_wait_seconds': sequence_waits,
                               'pool_policy_restore_and_duplicate_workers': 'passed',
+                              'tls_upload_concurrent_hostname_change': 'passed',
+                              'tls_upload_revision_before_and_after_dns_change': [initial_tls['revision'], final_tls['revision']],
+                              'tls_upload_retained_certificate_count': final_tls['certificate_count'],
                               'database': 'disposable tmpfs, actual migrations; no PHPUnit or persistent volumes'}))
         finally:
             subprocess.run(['docker', 'rm', '-f', identifier], check=True, capture_output=True)

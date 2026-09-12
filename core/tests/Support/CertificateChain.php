@@ -4,7 +4,7 @@ namespace Tests\Support;
 
 final class CertificateChain
 {
-    public static function make(string $constraint): array
+    public static function make(string $constraint, array $names = ['www.example.test']): array
     {
         $issue = function (string $name, ?\OpenSSLCertificate $issuer, ?\OpenSSLAsymmetricKey $issuerKey, int $days, string $extensions) use ($constraint): array {
             $weak = ($constraint === 'weak_issuer_key' && $name === 'Synthetic Test Issuer')
@@ -38,8 +38,9 @@ final class CertificateChain
             "basicConstraints = critical,{$issuerCa}\nkeyUsage = critical,{$issuerUsage}\n{$identifiers}{$constraints}");
         $purpose = $constraint === 'server_purpose' ? 'clientAuth' : 'serverAuth';
         $unknown = $constraint === 'critical_extension' ? "\n1.2.3.4 = critical,ASN1:UTF8String:synthetic-test" : '';
+        $san = implode(',', array_map(fn (string $name): string => 'DNS:'.$name, $names));
         [, $key, $leafPem] = $issue('www.example.test', $issuer, $issuerKey, 10,
-            "basicConstraints = critical,CA:false\nkeyUsage = critical,digitalSignature,keyEncipherment\nextendedKeyUsage = {$purpose}\nsubjectAltName = DNS:www.example.test\n{$identifiers}{$unknown}");
+            "basicConstraints = critical,CA:false\nkeyUsage = critical,digitalSignature,keyEncipherment\nextendedKeyUsage = {$purpose}\nsubjectAltName = {$san}\n{$identifiers}{$unknown}");
         if (in_array($constraint, ['expired_root', 'expired_issuer'], true)) {
             sleep(1); // A zero-day issuer must be expired before the real OpenSSL check.
         }

@@ -13,6 +13,7 @@ use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -145,6 +146,58 @@ class TlsApiTest extends TestCase
     public static function uploadEntrypoints(): array
     {
         return ['api' => [false], 'panel' => [true]];
+    }
+
+    public function test_mounted_panel_upload_rechecks_revoked_domain_access(): void
+    {
+        [$user, $domain] = $this->proxiedDomain();
+        Filament::setCurrentPanel(Filament::getPanel('app'));
+        $this->actingAs($user);
+        $component = Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->mountAction('uploadCertificate')
+            ->set('mountedActions.0.data', CertificateChain::make('valid'));
+        $domain->users()->detach($user);
+
+        $component->callMountedAction()->assertForbidden();
+
+        $this->assertSame(1, $domain->refresh()->revision);
+        $this->assertNull($domain->active_tls_certificate_id);
+        $this->assertDatabaseCount('tls_certificates', 0);
+        $this->assertDatabaseCount('operations', 0);
+    }
+
+    #[DataProvider('uploadEntrypoints')]
+    public function test_upload_does_not_commit_after_the_validated_domain_revision_changes(bool $panel): void
+    {
+        [$user, $domain] = $this->proxiedDomain();
+        $domain->update(['lifecycle_state' => DomainLifecycleState::Active, 'nameservers_verified_at' => now()]);
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/tls/upload", CertificateChain::make('valid'))->assertAccepted();
+        $domain->refresh();
+        $id = $domain->active_tls_certificate_id;
+        $revision = $domain->revision;
+        $artifacts = EdgeRevision::query()->where('domain_id', $domain->id)->count();
+        $bundle = CertificateChain::make('valid');
+        // Deterministic entry-point regression; postgres_domain_claims.py
+        // separately interleaves real processes and the real OpenSSL verifier.
+        Process::fake(function () use ($domain) {
+            Domain::query()->whereKey($domain->id)->increment('revision');
+
+            return Process::result();
+        });
+
+        if ($panel) {
+            Filament::setCurrentPanel(Filament::getPanel('app'));
+            Livewire::test(ViewDomain::class, ['record' => $domain->id])
+                ->callAction('uploadCertificate', data: $bundle)->assertHasActionErrors(['certificate']);
+        } else {
+            $this->postJson("/api/domains/{$domain->id}/tls/upload", $bundle)
+                ->assertConflict()->assertJsonPath('code', 'conflict');
+        }
+
+        $this->assertSame($revision + 1, $domain->refresh()->revision);
+        $this->assertSame($id, $domain->active_tls_certificate_id);
+        $this->assertSame(1, $domain->tlsCertificates()->count());
+        $this->assertSame($artifacts, EdgeRevision::query()->where('domain_id', $domain->id)->count());
     }
 
     public static function invalidChainConstraints(): array

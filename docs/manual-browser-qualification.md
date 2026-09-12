@@ -208,6 +208,15 @@ workstream does not replace an earlier product checkpoint.
    the valid fields and submit the same leaf with its valid chain again: expect
    acceptance, the same certificate ID and an incremented revision. Keep keys
    out of screenshots and evidence. This owner-run checkpoint is **Not run**.
+   If **Leaf certificate PEM** reports that the domain changed during
+   validation, reload the domain, review **Proxied hostnames** and submit a
+   certificate covering the current names. The failed attempt must not replace
+   the active certificate or undo another editor's saved DNS change. For access
+   revocation, open and fill the upload dialog as an assigned user, remove that
+   user's assignment from a separate administrator session, then submit from
+   the old dialog. Expect access denied and unchanged TLS state. This browser
+   checkpoint is **Not run**; the timing-sensitive upload/DNS race is separately
+   exercised by the agent-owned PostgreSQL qualification.
 4. Use **Cache settings** to cover TTLs, object bound, origin-header policy,
    query policy/selected parameters, bypass cookies, status TTLs, admission,
    stale windows, and variant bounds. Prove MISS then HIT, development-mode
