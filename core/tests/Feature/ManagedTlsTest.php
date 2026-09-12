@@ -19,6 +19,8 @@ use App\Models\User;
 use App\Support\AcmeClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -285,6 +287,119 @@ PEM,
         $this->assertCount(2, $admin->notifications()->get());
     }
 
+    public function test_bounded_maintenance_rotates_through_all_eligible_domains(): void
+    {
+        Queue::fake();
+        $eligible = [];
+        foreach (['active', 'disabled', 'active', 'unverified', 'dns-only', 'active'] as $index => $state) {
+            $name = "maintenance-{$index}.example.test";
+            $domain = Domain::query()->create([
+                'name' => $name, 'display_name' => $name, 'revision' => 1,
+                'lifecycle_state' => $state === 'disabled' ? DomainLifecycleState::Disabled : DomainLifecycleState::Active,
+                'nameservers_verified_at' => $state === 'unverified' ? null : now(),
+            ]);
+            $domain->dnsRecords()->create([
+                'type' => 'A', 'name' => $name, 'content' => '8.8.8.8', 'ttl' => 300,
+                'mode' => $state === 'dns-only' ? 'dns_only' : 'proxied',
+                'origin' => ['host' => '8.8.8.8'], 'content_hash' => hash('sha256', $name),
+            ]);
+            if ($state === 'active') {
+                $eligible[] = $domain->id;
+            }
+        }
+
+        for ($batch = 0; $batch < 4; $batch++) {
+            $expected = match ($batch) {
+                0, 2 => array_slice($eligible, 0, 2),
+                1 => [$eligible[2]],
+                3 => array_slice($eligible, 2),
+            };
+            Queue::fake();
+            $this->artisan('cdnf:tls:dispatch-maintenance', ['--limit' => 2])->assertSuccessful();
+            $this->assertSame($expected, Queue::pushed(EnsureManagedCertificates::class)
+                ->map(fn (EnsureManagedCertificates $job): int => $job->domainId)->all());
+            if ($batch === 0) {
+                $eligible[] = $this->proxiedDomain('www.arrival.test', 'arrival.test')->id;
+            }
+            $this->travel(1)->hours();
+        }
+    }
+
+    public function test_maintenance_retries_an_undispatched_batch_and_recovers_from_lost_progress(): void
+    {
+        Queue::fake();
+        $first = $this->proxiedDomain();
+        $second = $this->proxiedDomain('www.second.test', 'second.test');
+        $dispatcher = Bus::getFacadeRoot();
+        Bus::partialMock()->shouldReceive('dispatch')->once()->andThrow(new RuntimeException('Injected queue failure.'));
+        try {
+            $this->artisan('cdnf:tls:dispatch-maintenance', ['--limit' => 1]);
+            $this->fail('The queue failure must propagate.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('Injected queue failure.', $exception->getMessage());
+        } finally {
+            Bus::swap($dispatcher);
+        }
+        $this->travel(1)->hours();
+        foreach ([$first->id, $second->id] as $expected) {
+            Queue::fake();
+            $this->artisan('cdnf:tls:dispatch-maintenance', ['--limit' => 1])->assertSuccessful();
+            $this->assertSame([$expected], Queue::pushed(EnsureManagedCertificates::class)
+                ->map(fn (EnsureManagedCertificates $job): int => $job->domainId)->all());
+            $this->travel(1)->hours();
+        }
+        $this->artisan('cdnf:tls:dispatch-maintenance', ['--limit' => 1])->assertSuccessful();
+        Cache::forget('tls-maintenance-domain-progress');
+        $this->travel(1)->hours();
+        Queue::fake();
+        $this->artisan('cdnf:tls:dispatch-maintenance', ['--limit' => 1])->assertSuccessful();
+        Queue::assertPushed(EnsureManagedCertificates::class, fn ($job): bool => $job->domainId === $first->id);
+        Queue::assertNotPushed(EnsureManagedCertificates::class, fn ($job): bool => $job->domainId === $second->id);
+    }
+
+    public function test_maintenance_skips_a_domain_scan_held_by_another_invocation(): void
+    {
+        Queue::fake();
+        $domain = $this->proxiedDomain();
+        $lock = Cache::lock('tls-maintenance-domain-scan', 300);
+        $this->assertTrue($lock->get());
+        try {
+            $this->artisan('cdnf:tls:dispatch-maintenance')->assertSuccessful();
+            Queue::assertNotPushed(EnsureManagedCertificates::class);
+        } finally {
+            $lock->release();
+        }
+        $this->artisan('cdnf:tls:dispatch-maintenance')->assertSuccessful();
+        Queue::assertPushed(EnsureManagedCertificates::class, fn ($job): bool => $job->domainId === $domain->id);
+    }
+
+    public function test_maintenance_does_not_publish_progress_after_losing_its_scan_lease(): void
+    {
+        Queue::fake();
+        $first = $this->proxiedDomain();
+        $this->proxiedDomain('www.second.test', 'second.test');
+        $dispatcher = Bus::getFacadeRoot();
+        $replacement = null;
+        Bus::partialMock()->shouldReceive('dispatch')->once()->andReturnUsing(function () use (&$replacement): void {
+            $this->travel(301)->seconds();
+            $replacement = Cache::lock('tls-maintenance-domain-scan', 300);
+            $this->assertTrue($replacement->get());
+        });
+        try {
+            $this->artisan('cdnf:tls:dispatch-maintenance', ['--limit' => 1]);
+            $this->fail('The lost scan lease must stop progress publication.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('TLS maintenance scan lease was lost; retry the command.', $exception->getMessage());
+            $this->assertTrue($replacement->isOwnedByCurrentProcess());
+        } finally {
+            Bus::swap($dispatcher);
+            $replacement?->release();
+        }
+        $this->travel(1)->hours();
+        $this->artisan('cdnf:tls:dispatch-maintenance', ['--limit' => 1])->assertSuccessful();
+        Queue::assertPushed(EnsureManagedCertificates::class, fn ($job): bool => $job->domainId === $first->id);
+    }
+
     public function test_exhausted_issuance_cleans_dns_state_and_preserves_the_active_certificate(): void
     {
         Queue::fake();
@@ -322,10 +437,10 @@ PEM,
         $this->assertSame($revision + 1, $domain->revision);
     }
 
-    private function proxiedDomain(string $hostname = 'www.example.test'): Domain
+    private function proxiedDomain(string $hostname = 'www.example.test', string $zone = 'example.test'): Domain
     {
         $domain = Domain::query()->create([
-            'name' => 'example.test', 'display_name' => 'Example', 'revision' => 1,
+            'name' => $zone, 'display_name' => 'Example', 'revision' => 1,
             'lifecycle_state' => DomainLifecycleState::Active, 'nameservers_verified_at' => now(),
         ]);
         $domain->dnsRecords()->create([

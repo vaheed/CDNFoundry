@@ -29,7 +29,9 @@ if (app()->environment() !== 'qualification' || config('database.default') !== '
 Illuminate\Support\Facades\Queue::fake();
 $mode = $argv[1];
 if ($mode === 'init') {
-    Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+    if (Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]) !== 0) {
+        throw new RuntimeException('Disposable PostgreSQL migration failed: '.Illuminate\Support\Facades\Artisan::output());
+    }
     App\Models\User::factory()->create(['email' => 'owner-a@example.test']);
     App\Models\User::factory()->create(['email' => 'owner-b@example.test']);
     echo "initialized\n";
@@ -56,7 +58,36 @@ if ($mode === 'init') {
         chmod(getenv('CDNF_TLS_BUNDLE'), 0600);
     } else {
         $domain = App\Models\Domain::query()->where('name', 'example.test')->sole();
-        if ($mode === 'tls-managed-init') {
+        if ($mode === 'tls-maintenance-init') {
+            // The preceding policy gate also leaves an eligible domain.
+            $ids = [App\Models\Domain::query()->where('name', 'policy.example.com')->sole()->id, $domain->id];
+            for ($index = 0; $index < 3; $index++) {
+                $name = "rotation-{$index}.test";
+                $created = App\Models\Domain::query()->create([
+                    'name' => $name, 'display_name' => $name, 'revision' => 1,
+                    'lifecycle_state' => 'active', 'nameservers_verified_at' => now(),
+                ]);
+                $record = $domain->dnsRecords()->firstOrFail()->only(['type', 'content', 'ttl', 'mode', 'origin']);
+                $created->dnsRecords()->create([...$record, 'name' => 'www.'.$name, 'content_hash' => hash('sha256', $name)]);
+                $ids[] = $created->id;
+            }
+            sort($ids);
+            echo json_encode($ids)."\n";
+        } elseif ($mode === 'tls-maintenance-lock') {
+            Illuminate\Support\Facades\Cache::lock('tls-maintenance-domain-scan', 300)->get(function (): void {
+                echo "locked\n"; flush();
+                fgets(STDIN);
+            });
+        } elseif ($mode === 'tls-maintenance-run') {
+            // Model hourly scheduler ticks without waiting an hour or removing
+            // the real shared-cache uniqueness locks held by the queued jobs.
+            Illuminate\Support\Facades\Date::setTestNow(now()->addHours((int) ($argv[2] ?? 0)));
+            $before = Illuminate\Support\Facades\Cache::get('tls-maintenance-domain-progress');
+            Illuminate\Support\Facades\Artisan::call('cdnf:tls:dispatch-maintenance', ['--limit' => 2]);
+            echo json_encode(['queued' => Illuminate\Support\Facades\Queue::pushed(App\Jobs\EnsureManagedCertificates::class)
+                ->map(fn ($job): int => $job->domainId)->all(),
+                'before' => $before, 'after' => Illuminate\Support\Facades\Cache::get('tls-maintenance-domain-progress')])."\n";
+        } elseif ($mode === 'tls-managed-init') {
             $managed = $domain->tlsCertificates()->where('kind', 'managed')->first();
             if ($managed === null) {
                 $bundle = Tests\Support\CertificateChain::make('valid', ['example.test', '*.example.test']);
@@ -229,7 +260,7 @@ def main() -> None:
         try:
             port = subprocess.check_output(['docker', 'port', identifier, '5432/tcp'], text=True).strip().rsplit(':', 1)[1]
             for _ in range(60):
-                if subprocess.run(['docker', 'exec', identifier, 'pg_isready', '-U', 'postgres'], capture_output=True).returncode == 0:
+                if subprocess.run(['docker', 'exec', identifier, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres'], capture_output=True).returncode == 0:
                     break
                 time.sleep(0.5)
             else:
@@ -243,7 +274,8 @@ def main() -> None:
                    'CDNF_QUALIFICATION_STORAGE': str(root / 'storage')}
             def command(*args: str) -> list[str]:
                 return ['php', str(script), *args]
-            subprocess.run(command('init'), env=env, check=True, capture_output=True)
+            initialized = subprocess.run(command('init'), env=env, check=True, capture_output=True, text=True)
+            assert initialized.stdout.strip() == 'initialized', {'stdout': initialized.stdout, 'stderr': initialized.stderr}
             processes = [subprocess.Popen(command('create', str(actor), name), env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                          for actor, name in ((1, 'Race.Example.COM.'), (2, 'race.example.com'))]
             results = [process.communicate(timeout=30) for process in processes]
@@ -393,6 +425,26 @@ def main() -> None:
                             worker.kill()
                         worker.communicate(timeout=10)
             assert all(case['passed'] for case in managed_races.values()), managed_races
+            maintenance_env = {**env, 'CACHE_STORE': 'database'}
+            maintenance_ids = json.loads(subprocess.check_output(command('tls-maintenance-init'), env=maintenance_env, text=True))
+            holder = subprocess.Popen(command('tls-maintenance-lock'), env=maintenance_env, stdin=subprocess.PIPE,
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            try:
+                assert holder.stdout.readline().strip() == 'locked'
+                busy = json.loads(subprocess.check_output(command('tls-maintenance-run'), env=maintenance_env, text=True))
+                assert busy['queued'] == [], busy
+                assert busy['before'] == busy['after'], busy
+                _, error = holder.communicate(input='continue\n', timeout=10)
+                assert holder.returncode == 0, error
+            finally:
+                if holder.poll() is None:
+                    holder.kill()
+                holder.communicate(timeout=10)
+            maintenance_batches = []
+            for tick, expected in enumerate([maintenance_ids[index:index + 2] for index in range(0, len(maintenance_ids), 2)] + [maintenance_ids[:2]]):
+                batch = json.loads(subprocess.check_output(command('tls-maintenance-run', str(tick)), env=maintenance_env, text=True))
+                assert batch['queued'] == expected, {'expected': expected, 'actual': batch, 'previous': maintenance_batches}
+                maintenance_batches.append(batch)
             digest = subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{json .RepoDigests}}'], text=True).strip()
             print(json.dumps({'postgres_domain_claims': 'passed', 'instance': identifier, 'image_digests': json.loads(digest),
                               'concurrent_applicants': 2, 'active_configurations': 1, 'lock_wait_seconds': round(waited, 3),
@@ -404,6 +456,8 @@ def main() -> None:
                               'tls_upload_retained_certificate_count': final_tls['certificate_count'],
                               'managed_tls_activation_concurrency': {key: value for key, value in managed_races.items() if key != 'removal'},
                               'tls_mode_concurrent_custom_removal': managed_races['removal'],
+                              'tls_maintenance_batches_across_processes': maintenance_batches,
+                              'tls_maintenance_shared_lock': 'passed with isolated PostgreSQL cache store',
                               'database': 'disposable tmpfs, actual migrations; no PHPUnit or persistent volumes'}))
         finally:
             subprocess.run(['docker', 'rm', '-f', identifier], check=True, capture_output=True)

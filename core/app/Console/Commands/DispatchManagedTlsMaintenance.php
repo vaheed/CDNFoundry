@@ -13,7 +13,9 @@ use App\Models\TlsOrder;
 use App\Models\User;
 use Filament\Notifications\Notification;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 class DispatchManagedTlsMaintenance extends Command
 {
@@ -35,9 +37,7 @@ class DispatchManagedTlsMaintenance extends Command
                     }
                 });
             });
-        Domain::query()->where('lifecycle_state', DomainLifecycleState::Active)->whereNotNull('nameservers_verified_at')
-            ->whereHas('dnsRecords', fn ($query) => $query->where('mode', 'proxied'))->orderBy('id')->limit($limit)->pluck('id')
-            ->each(fn (int $id) => EnsureManagedCertificates::dispatch($id));
+        $this->queueDomains($limit);
 
         $admins = User::query()->where('type', UserType::Admin)->whereNull('disabled_at')->get();
         if ($admins->isNotEmpty()) {
@@ -59,5 +59,45 @@ class DispatchManagedTlsMaintenance extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    private function queueDomains(int $limit): void
+    {
+        $lock = Cache::lock('tls-maintenance-domain-scan', 300);
+        $acquired = $lock->get(function () use ($limit, $lock): bool {
+            $progress = Cache::get('tls-maintenance-domain-progress', []);
+            $cursor = max(0, (int) ($progress['cursor'] ?? 0));
+            $upperId = max(0, (int) ($progress['upper_id'] ?? 0));
+            if ($upperId === 0 || $cursor >= $upperId) {
+                $cursor = 0;
+                $upperId = (int) Domain::query()->max('id');
+            }
+            $ids = Domain::query()->where('lifecycle_state', DomainLifecycleState::Active)->whereNotNull('nameservers_verified_at')
+                ->whereHas('dnsRecords', fn ($query) => $query->where('mode', 'proxied'))
+                ->where('id', '>', $cursor)->where('id', '<=', $upperId)->orderBy('id')->limit($limit)->pluck('id');
+            foreach ($ids as $id) {
+                EnsureManagedCertificates::dispatch((int) $id);
+                if (! $lock->refresh()) {
+                    throw new RuntimeException('TLS maintenance scan lease was lost; retry the command.');
+                }
+            }
+            // Publish progress only after the batch has been dispatched. A lost
+            // cursor or failed dispatch safely repeats work through unique jobs.
+            $finished = $ids->count() < $limit || (int) $ids->last() === $upperId;
+            if (! $lock->refresh()) {
+                throw new RuntimeException('TLS maintenance scan lease was lost; retry the command.');
+            }
+            if (! Cache::forever('tls-maintenance-domain-progress', [
+                'cursor' => $finished ? 0 : (int) $ids->last(),
+                'upper_id' => $finished ? 0 : $upperId,
+            ])) {
+                throw new RuntimeException('Unable to save TLS maintenance progress; retry the command.');
+            }
+
+            return true;
+        });
+        if (! $acquired) {
+            $this->warn('TLS maintenance domain scan is already running; this invocation skipped domain dispatch.');
+        }
     }
 }

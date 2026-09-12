@@ -67,6 +67,7 @@ Historical docs are retained evidence, not qualification of this checkout.
 | Laravel test dependency/storage mounts | Replaced implicit runtime startup and writable development storage with `compose.test.yml` | Same `make dev-test` entry point; no data or volume deletion | Effective SQLite-memory preflight, 310-test checkpoint and Compose/docs validation passed; commit `094bbcaa` |
 | Synthetic custom-chain PKI generator | Consolidated API and real-TLS fixtures in `core/tests/Support/CertificateChain.php` | Test-only helper, mounted explicitly into the PHP runtime fixture | Shared eight-case negative corpus and valid private-CA control |
 | PHP purpose-only uploaded-chain check | Replaced by bounded native OpenSSL verification with explicit authentication strength | Same upload contract and private-CA support; pinned CLI required by the image | AUD-042: four new weak-chain regressions plus the original corpus, full application and real TLS restoration checks |
+| Fixed-prefix TLS maintenance scan | Replaced the scan that repeatedly selected only the earliest domains | Same command, limit and eligibility; rebuildable shared-cache progress, no migration | AUD-047: bounded coverage, arrivals, retry, cursor-loss and lease regressions |
 | Ignored `storage/qualification/security-audit/trivy-cache/` | Removed on 2026-09-12: duplicate reproducible scanner cache, not repository source | Retained `dependency-gate/cache/`, all scan reports and test evidence | Both 1,348,702,208-byte databases had SHA-256 `7a77cf4af9afbb891eb6e94d74968a36065fe71b0c56ce16e30d7081fc5cfab4`; neither cache was mounted by a running container. Removed 1,352,896,665 file bytes. |
 
 ## Qualification gates
@@ -1422,3 +1423,98 @@ Documentation lint/build/link checks passed in **49.001 seconds**
 (`tls-operation-docs`), covering 91 built pages and 3,413 internal links before
 the result annotations. Coverage remains 763 files: 658 pending, 101 partial and
 four reviewed. Production remains **not yet qualified**.
+
+## Bounded TLS maintenance coverage
+
+AUD-047 (**High production-availability impact, confirmed dispatch starvation**)
+affects `DispatchManagedTlsMaintenance`. Every hourly invocation selected the
+same lowest-ID eligible domains and stopped at its limit (500 by default).
+Later eligible domains could therefore remain outside automatic renewal
+planning indefinitely unless another action explicitly queued them. This is a
+scale-dependent renewal defect, not evidence of a cross-tenant exploit.
+
+On parent `0f95d101`, `tls-maintenance-coverage-before` failed in **8.759 seconds**:
+with three eligible domains, three ineligible controls and a batch limit of two,
+the second invocation repeated IDs 1 and 3 instead of reaching ID 6. The command
+now retains a cursor and fixed upper domain ID in shared cache, selects at most
+the existing limit, and starts a new sweep after finishing the range. New
+arrivals do not extend an in-progress sweep indefinitely. Eligibility remains
+active lifecycle, verified nameservers and at least one proxied record. Existing
+TLS-mode inclusion, challenge cleanup and alert behavior are unchanged.
+
+A shared 300-second lease serializes domain scans. It is refreshed during
+dispatch and before saving progress; detected lease loss stops progress
+publication. Queue exceptions leave the previous cursor available for retry.
+Cache loss restarts a sweep and can repeat unique/idempotent work. The cache
+holds rebuildable scheduling metadata, not desired domain state or certificate
+material. No schema migration, per-domain timer, service or runtime artifact is
+introduced. Normal image/worker rollout enables the change; rollback restores
+starvation. Operators must use shared persistent cache and budget batch cadence,
+queue latency and CA/DNS capacity against the renewal window. Cache resets or
+repeated failures can delay a sweep, so the scheduling formula in the TLS guide
+is not a production throughput qualification.
+
+Initial rotation/failure/lock regressions passed before adding lease-loss and
+separate-process cases. The final isolated application suite passed **327 tests
+/ 12,509 assertions**, 66.38 seconds inside PHPUnit and **72.592 seconds** total
+(`tls-maintenance-application`). It covers filtering, late arrivals, wraparound,
+queue failure/retry, lost progress, competing scans and replacement of an
+expired lease, including preservation of the replacement owner's lock. Pint
+and Python compilation passed. Compose, OpenAPI, seven supply-chain fixtures
+and eight qualification-tool regressions passed in **57.020 seconds**
+(`tls-maintenance-contracts`).
+
+The first separate-process PostgreSQL attempts failed their test expectation
+(`tls-maintenance-postgres`, **67.860 seconds**, and its diagnostic repeat,
+**64.514 seconds**). The fixture initially omitted the eligible domain left by
+the preceding policy gate. Diagnostic output showed the command correctly
+included it and saved cursor 5 with upper ID 8. The fixture now explicitly
+includes both earlier eligible domains plus its three new ones, retains the
+bounded batch assertions, and records progress before/after each command.
+These attempts are failed qualification runs, not passing production evidence.
+
+A further attempt (`tls-maintenance-postgres-qualified`, **9.812 seconds**)
+failed before maintenance: application tables were absent when the claim
+processes ran. The fixture used socket-based `pg_isready` and discarded its
+initialization output. It now probes TCP readiness, rejects a failed migration
+command, and requires the exact successful initialization marker before
+starting concurrent work. This strengthens the existing gate without touching
+a persistent database or accepting a failed check. The final runtime result is
+recorded separately below.
+
+Documentation lint/build/link checks passed in **42.783 seconds**
+(`tls-maintenance-docs`), covering 91 built pages and 3,414 internal links before
+the final result annotations. The owner-run browser checklist remains **Not
+run**. Coverage is **763 files: 657 pending, 102 partial and four reviewed**;
+challenge cleanup/alerts and the wider TLS/runtime/Fleet review remain open.
+
+After readiness correction, `tls-maintenance-postgres-verified` ran for
+**70.394 seconds** and demonstrated the complete first sweep: `[4, 5]`, `[6, 7]`,
+then `[8]`, with progress shared across processes and reset at the range end.
+Its immediate wraparound expectation failed because those queued jobs still
+held their real shared-cache uniqueness locks. The fixture now advances only
+its PHP test clock between scheduler ticks, preserving the locks and modeling
+the documented hourly cadence. It does not wait real hours or claim measured
+hourly throughput. The failed run remains recorded; no production dispatch or
+uniqueness rule was weakened. Inspection of the pinned PostgreSQL image also
+confirmed that its initialization server is socket-only, supporting the TCP
+readiness correction.
+
+`tls-maintenance-postgres-hourly` passed in **67.112 seconds**, instance
+`cdnf-claim-qualification-18d3822e5829`, on
+`postgres@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15`.
+Separate PHP processes using the disposable PostgreSQL cache store recorded
+batches `[4, 5]`, `[6, 7]`, `[8]`, then `[4, 5]` on simulated hourly ticks.
+The cursor and fixed upper ID persisted across processes, reset at sweep end,
+and remained unchanged while a different process held the scan lease. All
+previous claim, idempotency/process-death, policy, edge-sequence and TLS race
+cases also passed. The fixture used its existing 512-MiB tmpfs database, one CPU
+and random loopback port, then removed its own container. No named volume or
+persistent application database was modified.
+
+Final application PHP diffs matched the successful application evidence; the
+PostgreSQL command/fixture diffs matched this successful process-level run.
+This qualifies bounded scheduling with the tested cache driver and workload,
+not production Redis outage recovery, complete issuance throughput, signed edge
+delivery or the wider Fleet topology. No new migration or operator data rewrite
+is required. Production remains **not yet qualified** and the audit stays active.

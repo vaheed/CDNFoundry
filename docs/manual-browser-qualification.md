@@ -240,6 +240,14 @@ workstream does not replace an earlier product checkpoint.
    acknowledgement and verified HTTPS after issuance. This owner-run
    checkpoint remains **Not run**; deterministic worker ordering is checked by
    the application suite.
+   In an isolated operator environment with more eligible domains than the
+   chosen batch limit, run `php artisan cdnf:tls:dispatch-maintenance --limit=2`
+   on successive maintenance ticks. Use administrator **Horizon** to record the
+   queued certificate work and TLS status to confirm later domains are reached,
+   while each command considers at most two eligible domains. Leave the queue
+   running and verify that existing HTTPS continues serving during renewal.
+   This owner-run checkpoint is **Not run**; bounded selection, shared-cache
+   progress and failure cases are separately covered by automated tests.
 4. Use **Cache settings** to cover TTLs, object bound, origin-header policy,
    query policy/selected parameters, bypass cookies, status TTLs, admission,
    stale windows, and variant bounds. Prove MISS then HIT, development-mode

@@ -72,6 +72,22 @@ Hourly maintenance renews certificates inside `ACME_RENEW_BEFORE_DAYS`, retries
 eligible orders, removes expired challenge state, and creates deduplicated
 administrator alerts for failures or impending expiry.
 
+Each maintenance invocation considers at most `--limit` eligible domains
+(default 500, clamped to 1–2,000). A shared cache cursor advances through a
+fixed domain-ID range, then starts another sweep. Domains added during a sweep
+join the next one. Disabled, unverified and DNS-only domains are excluded.
+Overlapping domain scans are skipped under a shared lease; dispatch failure
+does not advance the cursor. Lost cache progress restarts the sweep and may
+repeat idempotent work; it does not remove certificates.
+
+Budget the maintenance interval and queue capacity against the renewal window.
+For a stable set of N eligible domains and batch size L, a sweep needs at most
+`ceil(N / L) + 1` successful invocations, including a possible empty final batch.
+At the default hourly cadence, 10,000 eligible domains therefore need up to
+21 hours just to enqueue their checks. This is a scheduling bound, not a load
+qualification or an issuance-time guarantee. Queue delay, retries and CA/DNS
+work require additional margin.
+
 ## Manual managed actions
 
 - **Renew** creates work only when renewal is due.

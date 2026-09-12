@@ -113,7 +113,7 @@ docker compose -f compose.dev.yml run --rm core php artisan cdnf:platform:settin
 
 | Command and syntax | Purpose and effects | Scheduled |
 | --- | --- | --- |
-| `cdnf:tls:dispatch-maintenance {--limit=500}` | Cleans expired ACME challenges, queues bounded managed-certificate maintenance, and publishes administrator expiry/failure alerts. Limit is clamped to 1–2,000. | Hourly |
+| `cdnf:tls:dispatch-maintenance {--limit=500}` | Cleans expired ACME challenges, advances a shared bounded domain sweep for managed-certificate maintenance, and publishes administrator expiry/failure alerts. Limit is clamped to 1–2,000; scan progress advances only after dispatch and resets after each fixed domain-ID range. | Hourly |
 
 ## Usage
 

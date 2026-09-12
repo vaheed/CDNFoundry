@@ -270,6 +270,15 @@ operation resources. Renewal must not complete the forced-reissue receipt.
 The subsequent forced job must record its new order ID, while a retry creates
 no duplicate order and preserves that result and the active certificate.
 
+Maintenance regressions use more eligible domains than fit in one batch and
+cover eligibility filtering, arrivals during a sweep, wraparound, dispatch
+failure, lost cursor state, competing invocations and lease loss. The PostgreSQL
+gate additionally invokes the actual command in separate PHP processes with
+the database cache driver in its disposable database. It requires an empty
+dispatch while another process holds the scan lease, then distinct bounded
+batches and wraparound. This establishes shared-cache progress/locking for that
+driver; it does not qualify production Redis outages or CA throughput.
+
 The PostgreSQL script also exercises idempotency locking with process-local
 caches, concurrent identical requests, and a killed process between mutation and
 receipt. For parent delegation, install host `bind9-dnsutils` (providing `dig`
