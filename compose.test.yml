@@ -1,0 +1,30 @@
+# Used only by make dev-test. Preserve development database and runtime volumes.
+services:
+  core:
+    depends_on: !reset {}
+    environment:
+      APP_ENV: testing
+      APP_CONFIG_CACHE: /tmp/cdnfoundry-test-config.php
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ":memory:"
+      DB_URL: ""
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+    volumes: !override
+      - ./core:/app
+      - ./docs:/docs
+      - ./tests:/tests:ro
+      - ./AGENTS.md:/AGENTS.md:ro
+      - ./.agents:/.agents:ro
+      - core-vendor:/app/vendor:ro
+      - mmdb:/mmdb:ro
+      - dev-pki:/run/dev-pki:ro
+      - ./docker/prometheus/dev-metrics-token:/run/dev-metrics/metrics-token:ro
+      - ./docker/backup/dev-restic-password:/run/dev-backup/restic-password:ro
+    tmpfs:
+      - /tmp:rw,nosuid,size=64m,mode=1777
+      - /app/storage:rw,nosuid,size=128m,mode=1777
+      - /app/bootstrap/cache:rw,nosuid,size=16m,mode=1777
+    mem_limit: 1g
+    pids_limit: 128

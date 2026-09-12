@@ -44,8 +44,14 @@ Use only:
 make dev-test
 ```
 
-The target injects `APP_ENV=testing`, `DB_CONNECTION=sqlite`,
-`DB_DATABASE=:memory:`, array cache, and synchronous queues. `Tests\TestCase`
+The target prepares the development vendor and test-CA volumes, then uses
+`compose.test.yml` to run PHP without starting or waiting for PostgreSQL, Redis
+or other runtime services. The override fixes `APP_ENV=testing`,
+`DB_CONNECTION=sqlite`, `DB_DATABASE=:memory:`, an empty `DB_URL`, array cache
+and sessions, and synchronous queues. Its temporary files, application storage
+and bootstrap cache use disposable, bounded tmpfs mounts; development storage
+and bootstrap-cache volumes are not mounted. The container has a 1-GiB memory
+and 128-process ceiling. `Tests\TestCase`
 fails closed when those effective values are absent. Never run
 `RefreshDatabase` or a migration/truncation suite against development
 PostgreSQL.

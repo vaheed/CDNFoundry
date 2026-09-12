@@ -1,4 +1,5 @@
 COMPOSE_DEV := docker compose -f compose.dev.yml
+COMPOSE_TEST := $(COMPOSE_DEV) -f compose.test.yml
 COMPOSE_PROD := docker compose --env-file .env.prod -f compose.prod.yml
 COMPOSE_PROD_EXAMPLE := docker compose --env-file .env.prod.example -f compose.prod.yml
 
@@ -48,7 +49,9 @@ dev-pdns-migrate:
 	$(COMPOSE_DEV) run --rm pdns-migrate
 
 dev-test: dev-assets
-	$(COMPOSE_DEV) run --rm -e APP_ENV=testing -e APP_CONFIG_CACHE=/tmp/cdnfoundry-test-config.php -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: -e CACHE_STORE=array -e QUEUE_CONNECTION=sync core php artisan test
+	$(COMPOSE_DEV) run --rm --no-deps vendor-init
+	$(COMPOSE_DEV) run --rm --no-deps dev-pki
+	$(COMPOSE_TEST) run --rm --no-deps core php artisan test
 
 dev-e2e: dev-waf-image
 	python3 tests/e2e/e2e.py
@@ -145,6 +148,7 @@ prod-logs:
 
 config-check:
 	$(COMPOSE_DEV) config --quiet
+	$(COMPOSE_TEST) config --quiet
 	$(COMPOSE_PROD_EXAMPLE) config --quiet
 	bash tests/config/generate-production-env.sh
 	./scripts/validate-production-overrides.sh
