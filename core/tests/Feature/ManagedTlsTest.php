@@ -17,6 +17,7 @@ use App\Models\TlsCertificate;
 use App\Models\TlsOrder;
 use App\Models\User;
 use App\Support\AcmeClient;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Bus;
@@ -516,6 +517,61 @@ PEM,
         $this->assertSame($error, $operation->refresh()->error);
         Queue::assertNotPushed(ReconcileDnsZone::class);
         $this->assertSame(1, Operation::query()->where('type', 'dns.zone_reconcile')->where('input->domain_id', $domain->id)->count());
+    }
+
+    public function test_obsolete_order_cleanup_and_receipt_roll_back_and_retry_together(): void
+    {
+        Queue::fake();
+        Http::preventStrayRequests();
+        $domain = $this->proxiedDomain();
+        $domain->dnsRecords()->delete();
+        $order = TlsOrder::query()->create([
+            'domain_id' => $domain->id, 'status' => 'publishing', 'names' => ['example.test', '*.example.test'],
+            'names_hash' => hash('sha256', "example.test\0*.example.test"), 'dns_revision' => $domain->revision,
+        ]);
+        $challenge = $order->challenges()->create([
+            'hostname' => 'example.test', 'record_name' => '_acme-challenge.example.test', 'record_value' => 'synthetic-value',
+            'status' => 'published', 'expires_at' => now()->addMinutes(10),
+        ]);
+        $operation = Operation::query()->create([
+            'type' => 'tls.managed_certificate', 'status' => 'running',
+            'input' => ['domain_id' => $domain->id, 'order_id' => $order->id],
+        ]);
+        // This test is guarded to SQLite :memory: before migrations or DDL.
+        DB::unprepared("CREATE TRIGGER reject_obsolete_receipt BEFORE UPDATE ON operations
+            WHEN OLD.type = 'tls.managed_certificate' AND NEW.status = 'failed'
+            BEGIN SELECT RAISE(ABORT, 'Injected obsolete receipt failure'); END");
+        try {
+            (new IssueManagedCertificate($order->id))->handle(app(AcmeClient::class));
+            $this->fail('The receipt write failure must propagate.');
+        } catch (QueryException $exception) {
+            $this->assertStringContainsString('Injected obsolete receipt failure', $exception->getMessage());
+        } finally {
+            DB::unprepared('DROP TRIGGER reject_obsolete_receipt');
+        }
+        $this->assertSame('publishing', $order->refresh()->status);
+        $this->assertNull($order->finished_at);
+        $this->assertNull($challenge->refresh()->cleaned_at);
+        $this->assertSame('running', $operation->refresh()->status);
+        $this->assertSame(1, $domain->refresh()->revision);
+        Queue::assertNotPushed(ReconcileDnsZone::class);
+
+        (new IssueManagedCertificate($order->id))->handle(app(AcmeClient::class));
+        $this->assertSame('obsolete', $order->refresh()->status);
+        $this->assertSame('cleaned', $challenge->refresh()->status);
+        $this->assertSame('failed', $operation->refresh()->status);
+        $this->assertSame($order->last_error, $operation->error);
+        $this->assertSame(2, $domain->refresh()->revision);
+        $this->assertSame(1, Operation::query()->where('type', 'dns.zone_reconcile')->count());
+        Queue::assertPushed(ReconcileDnsZone::class);
+        $finishedAt = $order->finished_at;
+        Queue::fake();
+        $this->travel(1)->minutes();
+        (new IssueManagedCertificate($order->id))->handle(app(AcmeClient::class));
+        $this->assertSame(2, $domain->refresh()->revision);
+        $this->assertEquals($finishedAt, $order->refresh()->finished_at);
+        Queue::assertNothingPushed();
+        Http::assertNothingSent();
     }
 
     private function proxiedDomain(string $hostname = 'www.example.test', string $zone = 'example.test'): Domain

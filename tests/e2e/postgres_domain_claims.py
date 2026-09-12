@@ -119,6 +119,18 @@ if ($mode === 'init') {
                     'injected_failure' => $exception->getMessage() === 'Injected late CA failure.',
                     'deadlock' => str_contains($exception->getMessage(), 'deadlock detected')])."\n";
             }
+        } elseif ($mode === 'tls-delayed-obsolete') {
+            $paused = false;
+            App\Models\TlsOrder::retrieved(function () use (&$paused): void {
+                if (! $paused) {
+                    $paused = true;
+                    echo "waiting\n"; flush();
+                    fgets(STDIN);
+                }
+            });
+            Illuminate\Support\Facades\Http::preventStrayRequests();
+            (new App\Jobs\IssueManagedCertificate($argv[2]))->handle(app(App\Support\AcmeClient::class));
+            echo json_encode(['status' => 'returned'])."\n";
         } elseif ($mode === 'tls-delayed-failure') {
             (new App\Jobs\IssueManagedCertificate($argv[2]))->failed(new RuntimeException('Injected stale failure.'));
             echo json_encode(['status' => 'returned'])."\n";
@@ -655,6 +667,27 @@ def main() -> None:
                                 process.kill()
                             process.communicate(timeout=10)
             assert all(case['passed'] for case in stale_successes.values()), stale_successes
+            # The preceding obsolescence case removed this disposable domain's
+            # proxy records. Pause a fresh worker after reading its order, then
+            # fail that order in a separate process before obsolescence resumes.
+            initial = json.loads(subprocess.check_output(command('tls-cleanup-init'), env=cleanup_env, text=True))
+            obsolete = subprocess.Popen(command('tls-delayed-obsolete', initial['order_id']), env=cleanup_env,
+                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            try:
+                ready = obsolete.stdout.readline().strip()
+                assert ready == 'waiting', ready
+                subprocess.run(command('tls-delayed-failure', initial['order_id']), env=cleanup_env, check=True, capture_output=True)
+                before = json.loads(subprocess.check_output(command('tls-cleanup-state', initial['order_id']), env=cleanup_env, text=True))
+                assert before['order_status'] == 'failed', before
+                output, error = obsolete.communicate(input='continue\n', timeout=15)
+                assert obsolete.returncode == 0 and json.loads(output)['status'] == 'returned', (output, error)
+                after = json.loads(subprocess.check_output(command('tls-cleanup-state', initial['order_id']), env=cleanup_env, text=True))
+                stale_obsolete = {'before': before, 'after': after, 'passed': before == after}
+                assert stale_obsolete['passed'], stale_obsolete
+            finally:
+                if obsolete.poll() is None:
+                    obsolete.kill()
+                obsolete.communicate(timeout=10)
             digest = subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{json .RepoDigests}}'], text=True).strip()
             print(json.dumps({'postgres_domain_claims': 'passed', 'instance': identifier, 'image_digests': json.loads(digest),
                               'concurrent_applicants': 2, 'active_configurations': 1, 'lock_wait_seconds': round(waited, 3),
@@ -671,6 +704,7 @@ def main() -> None:
                               'tls_cleanup_finalization_concurrency': cleanup_result,
                               'tls_stale_failure_concurrency': stale_failures,
                               'tls_stale_success_concurrency': stale_successes,
+                              'tls_stale_obsolescence': stale_obsolete,
                               'database': 'disposable tmpfs, actual migrations; no PHPUnit or persistent volumes'}))
         finally:
             subprocess.run(['docker', 'rm', '-f', identifier], check=True, capture_output=True)

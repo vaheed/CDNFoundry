@@ -1742,3 +1742,47 @@ this result annotation. Final source-link validation and lint follow annotation.
 AUD-050 is **fixed for the reproduced terminal-state paths**. Coverage remains
 **763 files: 656 pending, 103 partial and four reviewed**. Production remains
 **not yet qualified**; this checkpoint does not complete the wider audit.
+
+## Obsolescence preserves terminal state and commits its receipt atomically
+
+AUD-051 (**Medium / confirmed**) affects `IssueManagedCertificate::obsolete`.
+On parent `bdc06d88`, `tls-obsolete-rollback-before` failed in **8.929 seconds**:
+rejecting the issuance receipt update left the order obsolete instead of rolling
+it back. The receipt update occurred outside the cleanup transaction.
+`tls-obsolete-race-before` failed in **111.163 seconds** on actual PostgreSQL:
+a worker paused after reading an order later changed its newly committed failed
+outcome to obsolete and replaced its completion time. The active certificate
+and revision stayed unchanged in that race.
+
+Obsolescence now reloads/locks the order after locking its domain, preserves
+terminal outcomes, and updates a pending/running receipt inside the transaction.
+Changed challenge rows produce one revision and a coalesced DNS operation with
+dispatch after commit. No migration or data rewrite is required; normal worker
+rollout applies. Code rollback restores these defects. The regression adds an
+isolated SQLite receipt-write failure/retry and extends the existing PostgreSQL
+gate with actual separate job processes. No live CA or browser claim is made.
+
+Final verification: **16 TLS tests / 141 assertions passed**, **8.344 seconds**
+(`tls-obsolete-focused-final`). PostgreSQL passed in **115.161 seconds**
+(`tls-obsolete-race-final`, instance `cdnf-claim-qualification-1aaecbfa8487`),
+preserving the failed order's exact recorded state. It used the previously
+recorded pinned PostgreSQL image and disposable tmpfs isolation; persistent
+data and named volumes were preserved. Pint, Python syntax, development/test
+and production Compose validation passed. Documentation checks passed in
+**47.942 seconds** (`tls-obsolete-docs`) before this result annotation; final
+source links and lint are checked again. The full application suite was not
+rerun for this checkpoint; focused TLS and real PostgreSQL coverage were used.
+
+Intermediate evidence is retained: `tls-obsolete-focused` failed on the fake
+queue recording dispatch before the injected receipt failure. Dispatch
+registration was moved after the receipt write. `tls-obsolete-race-after`
+passed during that correction; the final PostgreSQL run above qualifies the
+unchanged final implementation. Container Pint could not write the test file;
+host Pint applied the import formatting successfully. No check was weakened.
+
+AUD-051 is **fixed for these reproduced paths**. Current-name/lifecycle
+admission and other nonterminal transitions remain under review. Manual browser
+qualification remains **Not run**, using the existing failed/obsolete-order
+checkpoint. Coverage is **4 reviewed, 103 partial, 656 pending** out of 763 files.
+These counts do not measure total audit effort or support an overall completion
+percentage. Production remains **not yet qualified**.

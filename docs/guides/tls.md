@@ -109,6 +109,11 @@ that outcome, certificate selection and revision intact. Retrying a completed
 finalization does not insert another certificate. Failed or obsolete work must
 go through eligible managed planning to create a new order.
 
+Obsolescence rechecks terminal order state under the domain/order locks. Its
+challenge cleanup, revision, DNS reconciliation operation and issuance receipt
+commit together. A receipt write failure rolls them back for retry; delayed
+obsolescence preserves an already completed outcome.
+
 ## Manual managed actions
 
 - **Renew** creates work only when renewal is due.

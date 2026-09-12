@@ -297,16 +297,25 @@ class IssueManagedCertificate implements ShouldQueue
     {
         DB::transaction(function () use ($order): void {
             $domain = Domain::query()->lockForUpdate()->find($order->domain_id);
-            $order->update(['status' => 'obsolete', 'finished_at' => now(), 'last_error' => 'The proxied hostname set changed before issuance completed.']);
-            if ($order->challenges()->whereNull('cleaned_at')->exists()) {
-                $order->challenges()->whereNull('cleaned_at')->update(['status' => 'cleaned', 'cleaned_at' => now()]);
-                if ($domain !== null) {
-                    $domain->forceFill(['revision' => $domain->revision + 1])->save();
-                    ReconcileDnsZone::dispatch($domain->id)->afterCommit();
-                }
+            $current = TlsOrder::query()->lockForUpdate()->find($order->id);
+            if ($current === null || in_array($current->status, ['succeeded', 'failed', 'obsolete'], true)) {
+                return;
+            }
+            $current->update(['status' => 'obsolete', 'finished_at' => now(), 'last_error' => 'The proxied hostname set changed before issuance completed.']);
+            $changed = $current->challenges()->whereNull('cleaned_at')->update(['status' => 'cleaned', 'cleaned_at' => now()]);
+            if ($domain !== null && $changed > 0) {
+                $domain->forceFill(['revision' => $domain->revision + 1])->save();
+                Operation::coalesceDomain('dns.zone_reconcile', $domain->id);
+            }
+            $operation = $this->operation();
+            if ($operation !== null) {
+                Operation::query()->whereKey($operation->id)->whereIn('status', ['pending', 'running'])
+                    ->update(['status' => 'failed', 'error' => $current->last_error, 'finished_at' => now()]);
+            }
+            if ($domain !== null && $changed > 0) {
+                ReconcileDnsZone::dispatch($domain->id)->afterCommit();
             }
         });
-        $this->operation()?->update(['status' => 'failed', 'error' => $order->last_error, 'finished_at' => now()]);
     }
 
     private function operation(): ?Operation

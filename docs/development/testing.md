@@ -305,6 +305,12 @@ the completed order/operation, completion time, certificate count, selected
 certificate and revision. Obsolescence uses the actual job after removing the
 disposable domain's proxy records; no persistent domain is altered.
 
+Obsolescence coverage also pauses a real PostgreSQL worker after its initial
+order read while another process fails that order. The resumed worker must
+preserve the completed state. An isolated SQLite trigger rejects the issuance
+receipt update to prove obsolescence/cleanup rollback, subsequent retry and
+repeat safety without sending any CA requests.
+
 The PostgreSQL script also exercises idempotency locking with process-local
 caches, concurrent identical requests, and a killed process between mutation and
 receipt. For parent delegation, install host `bind9-dnsutils` (providing `dig`
