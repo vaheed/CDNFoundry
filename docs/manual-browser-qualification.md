@@ -256,6 +256,13 @@ workstream does not replace an earlier product checkpoint.
    using the valid certificate. New expired-challenge cleanup should have a
    traceable DNS reconciliation operation. This owner-run checkpoint remains
    **Not run**; the finalization/cleanup interleaving is automated separately.
+   Record a completed order's status, certificate fingerprint, completion time
+   and domain revision. After worker retry/failure recovery in the isolated
+   operator environment, reload TLS status and the corresponding operation.
+   Expect the successful result and selected certificate to remain, with no
+   extra cleanup revision from a late failure. Verify HTTPS still serves the
+   recorded certificate. This owner-run checkpoint remains **Not run**; the
+   three delayed-worker interleavings are automated separately.
 4. Use **Cache settings** to cover TTLs, object bound, origin-header policy,
    query policy/selected parameters, bypass cookies, status TTLs, admission,
    stale windows, and variant bounds. Prove MISS then HIT, development-mode

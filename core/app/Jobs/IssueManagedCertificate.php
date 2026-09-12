@@ -58,7 +58,11 @@ class IssueManagedCertificate implements ShouldQueue
             return;
         }
         $operation = $this->operation();
-        $operation?->update(['status' => 'running', 'attempts' => ($operation->attempts ?? 0) + 1, 'started_at' => $operation->started_at ?? now()]);
+        if ($operation !== null) {
+            Operation::query()->whereKey($operation->id)->whereIn('status', ['pending', 'running'])->update([
+                'status' => 'running', 'attempts' => DB::raw('attempts + 1'), 'started_at' => $operation->started_at ?? now(),
+            ]);
+        }
         try {
             match ($order->status) {
                 'pending' => $this->create($order, $client),
@@ -69,8 +73,22 @@ class IssueManagedCertificate implements ShouldQueue
             };
         } catch (Throwable $exception) {
             $message = mb_substr($exception->getMessage(), 0, 4000);
-            $order->forceFill(['attempts' => $order->attempts + 1, 'last_error' => $message, 'available_at' => now()->addSeconds($this->retryDelay($order->attempts))])->save();
-            $operation?->update(['status' => 'pending', 'error' => $message]);
+            DB::transaction(function () use ($order, $operation, $message): void {
+                Domain::query()->lockForUpdate()->find($order->domain_id);
+                $current = TlsOrder::query()->lockForUpdate()->find($order->id);
+                if ($current === null || in_array($current->status, ['succeeded', 'failed', 'obsolete'], true)
+                    || $current->status !== $order->status) {
+                    return;
+                }
+                $current->forceFill([
+                    'attempts' => $current->attempts + 1, 'last_error' => $message,
+                    'available_at' => now()->addSeconds($this->retryDelay($current->attempts)),
+                ])->save();
+                if ($operation !== null) {
+                    Operation::query()->whereKey($operation->id)->whereIn('status', ['pending', 'running'])
+                        ->update(['status' => 'pending', 'error' => $message]);
+                }
+            });
             throw $exception;
         }
     }
@@ -78,19 +96,28 @@ class IssueManagedCertificate implements ShouldQueue
     public function failed(?Throwable $exception): void
     {
         $order = TlsOrder::query()->find($this->orderId);
-        if ($order === null || in_array($order->status, ['succeeded', 'obsolete'], true)) {
+        if ($order === null || in_array($order->status, ['succeeded', 'failed', 'obsolete'], true)) {
             return;
         }
-        $message = mb_substr($exception?->getMessage() ?? $order->last_error ?? 'Managed certificate issuance exhausted its retry budget.', 0, 4000);
-        DB::transaction(function () use ($order, $message): void {
+        DB::transaction(function () use ($order, $exception): void {
             $domain = Domain::query()->lockForUpdate()->find($order->domain_id);
-            $order->forceFill(['status' => 'failed', 'last_error' => $message, 'finished_at' => now()])->save();
-            $order->challenges()->whereNull('cleaned_at')->update(['status' => 'cleaned', 'cleaned_at' => now()]);
-            if ($domain !== null && $order->dns_revision !== null) {
+            $current = TlsOrder::query()->lockForUpdate()->find($order->id);
+            if ($current === null || in_array($current->status, ['succeeded', 'failed', 'obsolete'], true)) {
+                return;
+            }
+            $message = mb_substr($exception?->getMessage() ?? $current->last_error ?? 'Managed certificate issuance exhausted its retry budget.', 0, 4000);
+            $current->forceFill(['status' => 'failed', 'last_error' => $message, 'finished_at' => now()])->save();
+            $changed = $current->challenges()->whereNull('cleaned_at')->update(['status' => 'cleaned', 'cleaned_at' => now()]);
+            if ($domain !== null && $changed > 0) {
                 $domain->forceFill(['revision' => $domain->revision + 1])->save();
+                Operation::coalesceDomain('dns.zone_reconcile', $domain->id);
                 ReconcileDnsZone::dispatch($domain->id)->afterCommit();
             }
-            $this->operation()?->update(['status' => 'failed', 'error' => $message, 'finished_at' => now()]);
+            $operation = $this->operation();
+            if ($operation !== null) {
+                Operation::query()->whereKey($operation->id)->whereIn('status', ['pending', 'running'])
+                    ->update(['status' => 'failed', 'error' => $message, 'finished_at' => now()]);
+            }
         });
     }
 

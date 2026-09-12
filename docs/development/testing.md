@@ -290,6 +290,14 @@ cleanup operation record, live-challenge preservation, repeated cleanup and
 rollback/retry when operation persistence fails. This is transaction
 qualification, not a live-CA issuance or public-DNS serving test.
 
+Three further PostgreSQL interleavings delay a failure callback, a CA request
+error, or preflight execution until another worker completes issuance. Separate
+PHP processes run the actual job and callback with fixture CA responses. Each
+case must retain the succeeded order and operation, selected certificate and
+single finalization revision, without retry metadata or errors. The application
+suite also repeats an exhausted-issuance callback and requires unchanged
+completion time, error and revision, with no duplicate DNS dispatch.
+
 The PostgreSQL script also exercises idempotency locking with process-local
 caches, concurrent identical requests, and a killed process between mutation and
 receipt. For parent delegation, install host `bind9-dnsutils` (providing `dig`

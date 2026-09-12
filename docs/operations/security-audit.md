@@ -1595,3 +1595,79 @@ Documentation lint/build/link checks passed in **42.408 seconds**
 (`tls-cleanup-docs`), covering 91 built pages and 3,415 internal links before
 this result annotation. Final source-link validation and lint are checked after
 annotation; no application or fixture source changed after qualification.
+
+## Late issuance failures preserve completed outcomes
+
+AUD-049 (**Medium, confirmed with high confidence**) affects
+`core/app/Jobs/IssueManagedCertificate.php`. A failure callback loaded a
+nonterminal order before waiting for its domain lock, then wrote that stale
+order after another worker had completed issuance. The request exception path
+also wrote retry metadata and reopened the operation without checking current
+state. A repeated exhausted-issuance callback advanced the domain revision
+again even though its challenges were already cleaned. Preconditions are
+overlapping or delayed issuance work; the observed impact is corrupted order
+and operation outcomes and unnecessary DNS revisions, not loss of the selected
+certificate or demonstrated private-key exposure.
+
+On parent `959d96bb`, `tls-stale-failures-before` failed in **93.003 seconds**.
+The actual PostgreSQL job/callback interleavings recorded all three failures:
+
+| Delayed work | Observed baseline result |
+| --- | --- |
+| Exhausted-job callback waiting for finalization | Succeeded order and operation became failed; revision 12 became 13. |
+| CA request exception after finalization | Order stayed succeeded, but operation became pending; both gained errors, and the order gained an attempt and retry time. |
+| Preflight resumed after finalization, followed by a CA exception | Same pending operation and erroneous retry metadata on the succeeded order. |
+
+The selected certificate remained the finalized certificate in all three cases.
+`tls-repeated-failure-before` independently failed in **8.727 seconds**: a second
+callback advanced revision 2 to 3. The PostgreSQL baseline's source identity
+changed only because the application regression was extended during execution;
+its captured fixture and production implementation remained unchanged.
+
+Failure callbacks now acquire the domain lock, reload and lock the order, and
+ignore succeeded, failed or obsolete orders. Request errors write retry state
+only for the still-current nonterminal order state. Initial operation admission
+and error/failure updates affect only pending/running operations, preventing
+these writers from reopening completed receipts. The original request exception
+is still thrown for worker diagnostics. First-failure challenge cleanup changes
+the domain revision only when challenge rows changed, creates a coalesced DNS
+operation transactionally, and dispatches after commit. Active certificate
+selection, retry bounds and asynchronous external calls are preserved.
+
+No schema migration, key rewrite or operator data cleanup is required. Deploy
+the control-plane code and restart workers through the normal rollout. Code
+rollback restores the stale-write defects; it does not require a data rollback.
+Existing inconsistent historical receipts are not rewritten by this fix.
+
+`tls-stale-failures-after` passed in **97.031 seconds**, instance
+`cdnf-claim-qualification-4c8caa637735`, using
+`postgres@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15`.
+All three interleavings preserved succeeded orders and operations, zero error
+and retry metadata, matching active/order certificate IDs, and exactly one
+finalization revision. The earlier claim, idempotency/process-death, policy,
+edge-sequence, TLS selection, maintenance and cleanup cases also passed.
+Separate PHP processes exercised the actual job and callback against the
+disposable 512-MiB tmpfs PostgreSQL database; synthetic certificate material and
+fixture CA HTTP responses isolated external effects. Only that fixture's
+container was removed; persistent databases and named volumes were preserved.
+
+The isolated application suite passed **329 tests / 12,536 assertions**,
+**92.418 seconds** total and 85.25 seconds inside PHPUnit
+(`tls-stale-application`). The repeated callback retained its original error,
+completion time, revision and certificate, with no extra reconciliation dispatch.
+Successful evidence captured the same implementation and regression diffs.
+
+This finding is **fixed for the reproduced paths**. Other nonterminal issuance
+transitions, obsolete-job writes, lifecycle admission, CA behavior and complete
+Fleet/recovery qualification remain under review. Manual browser status is
+**Not run**. Inventory coverage remains **763 files: 656 pending, 103 partial and
+four reviewed**; production is **not yet qualified** and the overall audit stays
+active.
+
+Compose/configuration, OpenAPI, seven supply-chain fixtures and eight
+qualification-tool regressions passed in **65.425 seconds**
+(`tls-stale-contracts`). Pint passed both changed PHP files and Python compilation
+passed. Documentation lint/build/link checks passed in **49.368 seconds**
+(`tls-stale-docs`), covering 91 built pages and 3,416 internal links before this
+result annotation. Final source-link validation and lint follow the annotation;
+application and fixture sources remain the qualified versions.

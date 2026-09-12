@@ -95,6 +95,14 @@ cleanup, the revision increment and its DNS reconciliation operation commit
 together, with dispatch after commit. A persistence failure rolls them back
 for retry. Certificate material is not removed by this maintenance step.
 
+Issuance failure callbacks recheck the current order under the domain and order
+locks. A late or repeated failure preserves a completed outcome, completion time
+and active certificate. A late request error does not add retry metadata to a
+completed order or reopen its operation. The first failure cleans remaining
+challenges and records any resulting DNS reconciliation in the same transaction.
+Inspect the current TLS order and runtime acknowledgement when diagnosing an
+older worker error.
+
 ## Manual managed actions
 
 - **Renew** creates work only when renewal is due.

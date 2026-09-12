@@ -504,6 +504,18 @@ PEM,
         $this->assertSame($certificate->id, $domain->refresh()->active_tls_certificate_id);
         $this->assertSame('active', $certificate->refresh()->status);
         $this->assertSame($revision + 1, $domain->revision);
+
+        $finishedAt = $order->finished_at;
+        $error = $order->last_error;
+        $this->travel(1)->minutes();
+        Queue::fake();
+        (new IssueManagedCertificate($order->id))->failed(new RuntimeException('A repeated failure callback.'));
+        $this->assertSame($revision + 1, $domain->refresh()->revision);
+        $this->assertSame($error, $order->refresh()->last_error);
+        $this->assertEquals($finishedAt, $order->finished_at);
+        $this->assertSame($error, $operation->refresh()->error);
+        Queue::assertNotPushed(ReconcileDnsZone::class);
+        $this->assertSame(1, Operation::query()->where('type', 'dns.zone_reconcile')->where('input->domain_id', $domain->id)->count());
     }
 
     private function proxiedDomain(string $hostname = 'www.example.test', string $zone = 'example.test'): Domain
