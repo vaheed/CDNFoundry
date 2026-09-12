@@ -3,15 +3,20 @@
 namespace Tests\Feature;
 
 use App\Enums\DomainLifecycleState;
+use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
 use App\Jobs\EnsureManagedCertificates;
 use App\Models\Domain;
 use App\Models\EdgeRevision;
 use App\Models\TlsCertificate;
 use App\Models\TlsOrder;
 use App\Models\User;
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Livewire\Livewire;
+use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Support\CertificateChain;
 use Tests\TestCase;
 
 class TlsApiTest extends TestCase
@@ -64,6 +69,89 @@ class TlsApiTest extends TestCase
         $this->assertSame('managed', $domain->refresh()->tls_mode);
         $this->assertNull($domain->active_tls_certificate_id);
         $this->assertSame('revoked', TlsCertificate::query()->firstOrFail()->status);
+    }
+
+    public function test_custom_upload_accepts_a_valid_private_ca_chain(): void
+    {
+        [$user, $domain] = $this->proxiedDomain();
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/tls/upload", CertificateChain::make('valid'))
+            ->assertAccepted()->assertJsonPath('data.certificate.kind', 'custom');
+    }
+
+    public function test_custom_upload_normalizes_the_public_chain_without_storing_extra_private_key_material(): void
+    {
+        [$user, $domain] = $this->proxiedDomain();
+        $bundle = CertificateChain::make('valid');
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/tls/upload", [
+            ...$bundle, 'chain' => "Exported certificate bundle\n".$bundle['chain'].$bundle['private_key'],
+        ])->assertAccepted();
+
+        $stored = DB::table('tls_certificates')->where('domain_id', $domain->id)->value('chain_pem');
+        $this->assertFalse(str_contains($stored, 'PRIVATE KEY'), 'The public chain must not contain private-key PEM.');
+        $this->assertSame($bundle['chain'], $stored);
+    }
+
+    #[DataProvider('invalidChainConstraints')]
+    public function test_custom_upload_rejects_invalid_chain_constraints_without_replacing_active_state(string $constraint): void
+    {
+        [$user, $domain] = $this->proxiedDomain();
+        $domain->update(['lifecycle_state' => DomainLifecycleState::Active, 'nameservers_verified_at' => now()]);
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/tls/upload", CertificateChain::make('valid'))->assertAccepted();
+        $domain->refresh();
+        $revision = $domain->revision;
+        $certificateId = $domain->active_tls_certificate_id;
+        $artifactCount = EdgeRevision::query()->where('domain_id', $domain->id)->count();
+
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/tls/upload", CertificateChain::make($constraint))
+            ->assertUnprocessable()->assertJsonValidationErrors('chain');
+
+        $this->assertSame($revision, $domain->refresh()->revision);
+        $this->assertSame($certificateId, $domain->active_tls_certificate_id);
+        $this->assertSame('active', TlsCertificate::query()->findOrFail($certificateId)->status);
+        $this->assertSame(1, TlsCertificate::query()->where('domain_id', $domain->id)->count());
+        $this->assertSame($artifactCount, EdgeRevision::query()->where('domain_id', $domain->id)->count());
+    }
+
+    #[DataProvider('uploadEntrypoints')]
+    public function test_repeat_upload_replaces_a_legacy_unnormalized_chain(bool $panel): void
+    {
+        [$user, $domain] = $this->proxiedDomain();
+        $domain->update(['lifecycle_state' => DomainLifecycleState::Active, 'nameservers_verified_at' => now()]);
+        $bundle = CertificateChain::make('valid');
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/tls/upload", $bundle)->assertAccepted();
+        $domain->refresh();
+        $id = $domain->active_tls_certificate_id;
+        $revision = $domain->revision;
+        DB::table('tls_certificates')->where('id', $id)->update(['chain_pem' => $bundle['chain'].$bundle['private_key']]);
+
+        if ($panel) {
+            Filament::setCurrentPanel(Filament::getPanel('app'));
+            Livewire::test(ViewDomain::class, ['record' => $domain->id])
+                ->callAction('uploadCertificate', data: $bundle)->assertHasNoActionErrors();
+        } else {
+            $this->actingAs($user)->postJson("/api/domains/{$domain->id}/tls/upload", $bundle)->assertAccepted();
+        }
+
+        $stored = DB::table('tls_certificates')->where('id', $id)->value('chain_pem');
+        $this->assertFalse(str_contains($stored, 'PRIVATE KEY'), 'Repeat upload must replace legacy public-chain material.');
+        $this->assertSame($bundle['chain'], $stored);
+        $this->assertSame($id, $domain->refresh()->active_tls_certificate_id);
+        $this->assertSame($revision + 1, $domain->revision);
+        $this->assertSame(1, $domain->tlsCertificates()->count());
+        $snapshot = EdgeRevision::query()->where('domain_id', $domain->id)->latest('revision')->firstOrFail()->snapshot;
+        $this->assertSame($bundle['chain'], $snapshot['tls']['certificate']['chain_pem']);
+    }
+
+    public static function uploadEntrypoints(): array
+    {
+        return ['api' => [false], 'panel' => [true]];
+    }
+
+    public static function invalidChainConstraints(): array
+    {
+        $names = ['issuer_not_ca', 'issuer_key_usage', 'expired_issuer', 'expired_root', 'path_length', 'server_purpose', 'name_constraint', 'critical_extension'];
+
+        return array_combine($names, array_map(fn (string $name): array => [$name], $names));
     }
 
     public function test_managed_reissue_is_authorized_asynchronous_and_status_never_exposes_key_material(): void

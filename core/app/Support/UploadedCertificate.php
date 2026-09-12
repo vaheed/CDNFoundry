@@ -42,11 +42,11 @@ final class UploadedCertificate
                 throw ValidationException::withMessages(['certificate' => "The certificate does not cover {$hostname}."]);
             }
         }
-        self::validateChain($leaf, $chainPem);
+        $normalizedChain = self::validateChain($leaf, $chainPem);
         openssl_x509_export($leaf, $normalizedLeaf);
 
         return [
-            'certificate_pem' => $normalizedLeaf, 'chain_pem' => trim($chainPem)."\n", 'private_key' => $privateKeyPem,
+            'certificate_pem' => $normalizedLeaf, 'chain_pem' => $normalizedChain, 'private_key' => $privateKeyPem,
             'names' => $names, 'not_before' => $notBefore, 'expires_at' => $expiresAt,
             'fingerprint_sha256' => strtolower(openssl_x509_fingerprint($leaf, 'sha256', false)),
         ];
@@ -95,24 +95,68 @@ final class UploadedCertificate
         return str_ends_with($hostname, '.'.$suffix) && substr_count($hostname, '.') === substr_count($suffix, '.') + 1;
     }
 
-    private static function validateChain(\OpenSSLCertificate $leaf, string $chainPem): void
+    private static function validateChain(\OpenSSLCertificate $leaf, string $chainPem): string
     {
         preg_match_all('/-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----/s', $chainPem, $matches);
         if ($matches[0] === [] || count($matches[0]) > 10) {
             throw ValidationException::withMessages(['chain' => 'Provide a bounded PEM chain containing the issuing certificate and root.']);
         }
         $current = $leaf;
+        $certificates = [];
         foreach ($matches[0] as $pem) {
             $issuer = openssl_x509_read($pem);
             $public = $issuer === false ? false : openssl_pkey_get_public($issuer);
             if ($issuer === false || $public === false || openssl_x509_verify($current, $public) !== 1) {
                 throw ValidationException::withMessages(['chain' => 'The certificate chain signature order is invalid.']);
             }
+            if (! openssl_x509_export($issuer, $normalized)) {
+                throw ValidationException::withMessages(['chain' => 'The certificate chain could not be normalized.']);
+            }
+            $certificates[] = trim($normalized)."\n";
             $current = $issuer;
         }
         $rootPublic = openssl_pkey_get_public($current);
         if ($rootPublic === false || openssl_x509_verify($current, $rootPublic) !== 1) {
             throw ValidationException::withMessages(['chain' => 'The certificate chain must terminate in a self-signed root.']);
         }
+        $normalizedChain = implode('', $certificates);
+        $rootFile = null;
+        $chainFile = null;
+        try {
+            // Only canonical public certificates reach these private temporary files.
+            $rootFile = self::temporaryCertificates($certificates[array_key_last($certificates)]);
+            $chainFile = self::temporaryCertificates($normalizedChain);
+            $rootPath = stream_get_meta_data($rootFile)['uri'];
+            $chainPath = stream_get_meta_data($chainFile)['uri'];
+            // Explicit trust preserves private CAs; native verification enforces the
+            // full chain's constraints and validity, not just matching signatures.
+            if (openssl_x509_checkpurpose($leaf, X509_PURPOSE_SSL_SERVER, [$rootPath], $chainPath) !== true) {
+                throw ValidationException::withMessages(['chain' => 'The certificate chain is not currently valid for TLS server authentication.']);
+            }
+        } finally {
+            if (is_resource($chainFile)) {
+                fclose($chainFile);
+            }
+            if (is_resource($rootFile)) {
+                fclose($rootFile);
+            }
+        }
+
+        return $normalizedChain;
+    }
+
+    /** @return resource */
+    private static function temporaryCertificates(string $pem)
+    {
+        $file = tmpfile();
+        if ($file === false) {
+            throw new \RuntimeException('Certificate validation temporary storage is unavailable.');
+        }
+        if (fwrite($file, $pem) !== strlen($pem) || ! fflush($file)) {
+            fclose($file);
+            throw new \RuntimeException('Certificate validation temporary storage could not be written.');
+        }
+
+        return $file;
     }
 }

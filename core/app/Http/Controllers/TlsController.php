@@ -73,7 +73,10 @@ class TlsController extends Controller
             $existing = $locked->tlsCertificates()->where('kind', 'custom')->where('fingerprint_sha256', $validated['fingerprint_sha256'])->first();
             if ($existing !== null && $existing->expires_at->isFuture()) {
                 $certificate = $existing;
-                $certificate->update(['status' => 'active', 'activated_at' => $certificate->activated_at ?? now(), 'last_error' => null]);
+                $certificate->update([
+                    'chain_pem' => $validated['chain_pem'],
+                    'status' => 'active', 'activated_at' => $certificate->activated_at ?? now(), 'last_error' => null,
+                ]);
             } else {
                 $certificate = $locked->tlsCertificates()->create([
                     'kind' => 'custom', 'status' => 'active', 'certificate_pem' => $validated['certificate_pem'],

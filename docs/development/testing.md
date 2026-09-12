@@ -132,6 +132,25 @@ The cumulative `phase4_runtime.py` fixture resolves its syslog hostname to
 loopback explicitly. It verifies serving with telemetry unavailable and does
 not require a Vector container to exist on its test network.
 
+Run `python3 tests/e2e/uploaded_tls.py` for custom-certificate chain qualification.
+It builds the production PHP and OpenResty images, or accepts `--core-image` and
+`--edge-image` for compatible existing images and records their immutable local
+IDs. Current validator and runtime sources are mounted explicitly. A PHP process
+with no network or database generates synthetic private-CA chains and invokes
+the chain validator. A disposable OpenResty cell then serves those certificates
+to a real verifying Python TLS client. The valid control must return HTTP 200;
+eight invalid CA/usage/time/path/purpose/name/critical-extension cases must be
+rejected by admission and by the TLS client when deliberately forced into a
+runtime snapshot. Restoring the valid snapshot must restore its fingerprint
+and HTTP 200. Each publication waits for the runtime's per-worker refresh.
+No browser or existing database, container or named volume is used. Synthetic
+private material is never included in the result log. PHP has 256 MiB/one CPU/64
+processes and bounded tmpfs; the cell has 512 MiB/one CPU/128 processes and a
+random loopback TLS port. `TlsApiTest` separately proves API transaction rollback,
+chain normalization and API/Filament repeat-upload behavior. This fixture does
+not qualify signed agent delivery, ACME renewal or public-browser trust. CI and
+the production runner require it through the `uploaded-tls` gate.
+
 ## Non-browser real-runtime tests
 
 Start and migrate the persistent development stack, then:
@@ -188,6 +207,10 @@ git diff --check
 Application CI additionally runs Composer validation/advisories, npm production
 advisories, Pint, frontend build, Python compilation, production image builds,
 and a read-only core-image smoke test.
+
+`make openapi-check` prepares the vendor volume and runs the route-contract
+comparison in the same disposable test configuration. PostgreSQL and Redis
+startup or health are not prerequisites for this static check.
 
 ## Reporting
 

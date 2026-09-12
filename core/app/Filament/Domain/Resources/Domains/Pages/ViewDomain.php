@@ -132,7 +132,10 @@ class ViewDomain extends ViewRecord
                             'not_before' => $validated['not_before'], 'expires_at' => $validated['expires_at'], 'activated_at' => now(),
                         ]);
                     } else {
-                        $certificate->update(['status' => 'active', 'activated_at' => $certificate->activated_at ?? now(), 'last_error' => null]);
+                        $certificate->update([
+                            'chain_pem' => $validated['chain_pem'],
+                            'status' => 'active', 'activated_at' => $certificate->activated_at ?? now(), 'last_error' => null,
+                        ]);
                     }
                     $domain->tlsCertificates()->where('kind', 'custom')->where('id', '!=', $certificate->id)->where('status', 'active')->update(['status' => 'superseded']);
                     $domain->update(['tls_mode' => 'custom', 'active_tls_certificate_id' => $certificate->id, 'revision' => $domain->revision + 1]);

@@ -64,6 +64,8 @@ Historical docs are retained evidence, not qualification of this checkout.
 | Applied migrations and `docs/legacy/` | Retain: upgrade history and commit-specific evidence | Required historical compatibility | Further reference review pending |
 | Supply-chain image extraction | Replaced defective parser; preserved existing checks | Same CLI, stronger validation | Six adversarial fixture methods passed |
 | Qualification nonempty-file evidence rule | Replaced insufficient evidence contract | Structured attributable operator evidence required | Six tool regressions passed |
+| Laravel test dependency/storage mounts | Replaced implicit runtime startup and writable development storage with `compose.test.yml` | Same `make dev-test` entry point; no data or volume deletion | Effective SQLite-memory preflight, 310-test checkpoint and Compose/docs validation passed; commit `094bbcaa` |
+| Synthetic custom-chain PKI generator | Consolidated API and real-TLS fixtures in `core/tests/Support/CertificateChain.php` | Test-only helper, mounted explicitly into the PHP runtime fixture | Shared eight-case negative corpus and valid private-CA control |
 | Ignored `storage/qualification/security-audit/trivy-cache/` | Removed on 2026-09-12: duplicate reproducible scanner cache, not repository source | Retained `dependency-gate/cache/`, all scan reports and test evidence | Both 1,348,702,208-byte databases had SHA-256 `7a77cf4af9afbb891eb6e94d74968a36065fe71b0c56ce16e30d7081fc5cfab4`; neither cache was mounted by a running container. Removed 1,352,896,665 file bytes. |
 
 ## Qualification gates
@@ -960,3 +962,102 @@ correction; its preceding result is recorded under AUD-037. Manual browser
 qualification remains **Not run**, with no UI changes. Full topology/recovery,
 production load, unresolved image advisories and remaining first-party review
 still prevent production qualification.
+
+## Isolated checks and uploaded TLS chains — 2026-09-12
+
+| ID | Severity / confidence | Affected boundary and observed failure | Correction / status |
+| --- | --- | --- | --- |
+| AUD-039 | Low / confirmed qualification reliability defect | `Makefile` test and OpenAPI targets unnecessarily waited for development PostgreSQL/Redis; tests also mounted writable persistent application storage/cache | `compose.test.yml` provides bounded disposable storage and forced SQLite-memory configuration with no runtime dependency startup. Test isolation committed as `094bbcaa`; OpenAPI uses the same override. |
+| AUD-040 | Medium / confirmed API and real TLS failure | `UploadedCertificate::validateChain` checked only signatures/order, accepting non-CA/non-signing issuers, expired issuers/roots, path-length violations, client-only leaves, excluded DNS names and unknown critical extensions | Native TLS-server-purpose chain verification rejects all eight cases before durable mutation. Valid private CAs remain supported. Fixed for new/repeated uploads; existing installed bundles require operator review. |
+| AUD-041 | High / confirmed plaintext private-material persistence | Chain parsing ignored non-certificate blocks but stored the original input in unencrypted `tls_certificates.chain_pem`; both API and Filament reused that field unchanged on same-leaf uploads | Store only exported public certificates and replace the chain on repeat uploads. API and Filament regressions pass. Historical rows/backups are not silently scrubbed; affected keys require rotation/revocation and restricted recovery handling. |
+
+AUD-040 requires an authorized custom-certificate upload and affects that domain's
+serving availability; it does not confer public CA trust or access to another
+tenant. The roadmap requires uploaded chain validation and preservation of the
+previous valid certificate. Before correction, all eight adversarial chains
+returned **202 instead of 422** and could supersede the active certificate.
+AUD-041 requires private-key PEM to be included in the chain field. Reading that
+unencrypted database/backup field could then reveal key material without the
+application encryption key. No production key or customer data was used or
+exposure in an existing installation claimed; all fixtures are synthetic.
+
+Baseline `tls-chain-baseline` on `98c6ed37` plus its recorded test/override diff
+failed **nine tests**, with 301 passing in 104.815 seconds. The ninth failure
+proved raw private-key PEM reached the public-chain column. Initial remediation
+passed 310 tests in 100.115 seconds. A subsequent same-leaf regression
+`tls-repeat-before` failed one of 15 tests in 20.553 seconds: re-upload retained
+legacy chain text. Both upload entry points now replace that chain under the
+existing domain lock and publish the normal new revision, preserving the
+certificate ID. Rejected chains leave the active ID, status, revision,
+certificate count and edge artifact count unchanged.
+
+The validator retains the 16-KiB leaf/key, 64-KiB chain and ten-certificate bounds.
+Only canonical public certificates enter two temporary files, closed on success
+or failure. The supplied self-signed root is the explicit trust anchor. Native
+verification must return **true**; false and error returns reject the chain.
+This follows the [PHP OpenSSL purpose-check contract](https://www.php.net/manual/en/function.openssl-x509-checkpurpose.php)
+and [OpenSSL chain-verification semantics](https://docs.openssl.org/3.5/man1/openssl-verification-options/).
+No remote validation, synchronous runtime mutation, new schema or data migration
+is introduced. This is not a public-browser trust or revocation check.
+
+Final application checkpoint `tls-upload-application` passed **312 tests /
+12,367 assertions**, 57.28 seconds inside PHPUnit and 139.475 seconds for the
+supported `make dev-test` target. This includes PHP/Livewire action tests for
+repeat uploads; no browser was launched. The shared PKI helper now throws on
+generation failure instead of incrementing PHPUnit's assertion count for each
+generated fixture certificate. Non-application documentation/qualification
+files changed during this run; the tested PHP application/test sources did not.
+
+`tests/e2e/uploaded_tls.py` mounts the current chain validator into a networkless
+PHP container and uses a disposable OpenResty cell with real TLS sockets.
+The valid private-CA control returned HTTP 200. Each rejected chain was then
+deliberately forced into runtime state to prove that a verifying client refused
+it for the corresponding constraint failure. Restoring the valid snapshot
+restored its exact fingerprint and HTTP 200 after every case. This directly
+qualifies chain/client behavior and snapshot restoration; API last-valid
+transactions are covered separately. Signed agent delivery and ACME renewal
+are not exercised by this fixture.
+
+The first runtime experiment failed because a single matching handshake did
+not establish that every worker had reached its one-second refresh timer.
+The fixture now waits for that refresh before checking actual peer identity.
+`tls-upload-runtime-after` passed in 39.746 seconds; the final formatted fixture
+passed in **41.315 seconds** as `tls-upload-runtime-formatted`, instance
+`cdnf-uploaded-tls-826aa6e8b21f`. Image IDs:
+
+- PHP: `sha256:31a2938dc87baf01a37e1080a85a06e359eaeff82043b5cf20748daa0a0fe4eb`;
+- OpenResty: `sha256:f9835db95a10c4ca5e533cc6470faf1c3495867d549fb3fb395881bbd40fa89b`.
+
+The compatible existing PHP image reports OpenSSL 3.5.7; the client reports
+OpenSSL 3.0.13. Current validator/runtime files were mounted explicitly; this
+does not claim rebuilt release-image or advisory qualification. PHP was bounded
+to 256 MiB/one CPU/64 processes, and OpenResty to 512 MiB/one CPU/128 processes,
+with bounded tmpfs and only a random loopback TLS port. No existing database or
+named volume was used by that runtime fixture. Documentation changed during
+the final runtime run; its PHP and Python fixture and runtime sources did not.
+
+Roll out the updated control-plane image and restart its application workers
+through the existing deployment workflow. Rollback requires no schema changes
+but restores the admission and plaintext-chain defects. Review existing custom
+bundles without logging their contents; re-upload a currently valid chain to
+normalize the active row. If a key was stored in the old chain field, rotate it,
+replace/revoke its certificate and restrict existing backup copies as described
+in [TLS certificates](../guides/tls.md). This local audit has not modified any
+live installation or erased historical data.
+
+CI and the production runner now include the required `uploaded-tls` gate.
+Compose, OpenAPI and the seven supply-chain/eight qualification-tool regressions
+passed in **53.484 seconds** (`tls-upload-contracts-after`). The deliberate
+failure printed by the negative evidence fixture is its expected assertion,
+not a failed real TLS run. OpenAPI dependency isolation is committed as
+`0953775b`. Documentation lint, build and links passed in **47.458 seconds**
+(`tls-upload-docs`), covering 91 built pages and 3,408 internal links before
+this result annotation. Its source hash was unchanged across the command;
+only the local commit advanced. Pint and Python compilation passed.
+The updated inventory contains **763 files:
+661 pending, 98 partial and four reviewed**. Overall effort remains roughly
+20% complete, not measured security coverage. Implementation and documentation
+for this bounded correction are present; manual browser steps are updated and
+**Not run**. Whole-source review, image advisories, complete Fleet topology/
+recovery, public traffic and production load remain open. **Not yet qualified
+for production.**

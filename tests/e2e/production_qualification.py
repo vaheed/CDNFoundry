@@ -46,6 +46,8 @@ class Result:
 
 
 CHECKS = (
+    Check("uploaded-tls", "Custom certificate chain admission, real OpenResty TLS rejection and restoration",
+          ("python3", "tests/e2e/uploaded_tls.py"), "agent"),
     Check("origin-destinations", "Isolated OpenResty destination/DNS safety, bounded lookups and required IPv4/IPv6 HTTP/TLS",
           ("python3", "tests/e2e/origin_destinations.py"), "agent"),
     Check("origin-probes", "Isolated real DNS, HTTP/TLS, destination safety and required IPv6 origin probes",

@@ -73,13 +73,38 @@ Upload a leaf certificate, issuing chain, and private key in PEM. Bounds are
 
 - the key matches the leaf;
 - accepted key algorithm and size;
-- the chain verifies;
-- the current time is inside validity;
+- an ordered chain of at most ten issuing/root certificates ends at its
+  self-signed root and verifies for TLS server authentication;
+- CA constraints, signing key usage, path length, server purpose, name
+  constraints and critical extensions permit the leaf;
+- the leaf, issuers and root are currently valid;
 - names cover every required proxied hostname.
 
 Private keys are encrypted before persistence and never returned. The response
 contains only metadata and fingerprint. Removing the active custom certificate
 returns the domain to managed mode and queues managed issuance.
+
+Only normalized public certificate blocks are stored in the issuing-chain
+field. Extra export text or private-key blocks in that field are discarded;
+paste the private key only into **Private key PEM**. Re-uploading the same leaf
+updates its validated chain without changing the certificate ID and queues a
+new domain revision. A rejected upload changes neither the active certificate
+nor the domain revision or edge artifact.
+
+The supplied root is the explicit trust anchor for validation, so a valid
+private CA is supported. This does not install that CA into visitors' trust
+stores or prove public-browser trust. Supply the appropriate chain for your
+clients. Validation performs no remote CA or revocation lookup.
+
+When upgrading from an earlier validator, review existing custom bundles in a
+restricted environment without printing their contents. Re-upload a complete,
+currently valid bundle to replace legacy chain text, including when retaining
+the same leaf. If a private key was pasted into the old chain field, treat its
+unencrypted database and backup copies as exposed material: issue a replacement
+key/certificate and revoke the old certificate through its issuer. Preserve
+required backups under restricted access; this update does not erase historical
+rows, snapshots or backups. Existing invalid chains require a valid replacement;
+the update does not silently deactivate currently serving certificates.
 
 ## Failure behaviour
 

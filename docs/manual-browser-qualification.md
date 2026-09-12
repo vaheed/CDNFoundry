@@ -196,6 +196,17 @@ workstream does not replace an earlier product checkpoint.
    custom certificate**, and **Remove custom certificate** with valid/invalid
    keys, chains, names, and expiry. Confirm DNS-only hosts do not cause issuance
    and a failed order or upload preserves the previous valid certificate.
+   In **Upload custom certificate**, fill **Leaf certificate PEM**, **Issuing
+   chain PEM** (issuer first, root last) and **Private key PEM** with an owned
+   test-CA bundle covering the proxied hostname. Submit and record its fingerprint,
+   revision, acknowledgement and verified HTTPS result using a client that
+   trusts that test CA. Repeat with a non-CA issuer, expired issuer/root,
+   client-only leaf or name-constrained issuer excluding the hostname. Expect
+   a chain validation error, no successful-upload notification, unchanged
+   fingerprint/revision and continuing HTTPS on the prior certificate. Restore
+   the valid fields and submit the same leaf with its valid chain again: expect
+   acceptance, the same certificate ID and an incremented revision. Keep keys
+   out of screenshots and evidence. This owner-run checkpoint is **Not run**.
 4. Use **Cache settings** to cover TTLs, object bound, origin-header policy,
    query policy/selected parameters, bypass cookies, status TTLs, admission,
    stale windows, and variant bounds. Prove MISS then HIT, development-mode

@@ -156,6 +156,8 @@ jobs:
           docker build -t ghcr.io/vaheed/cdnfoundry-grafana:ci docker/grafana
       - name: Qualify origin destination safety and IPv6 HTTP/TLS
         run: python3 tests/e2e/origin_destinations.py --image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
+      - name: Qualify uploaded certificate chains with real TLS clients
+        run: python3 tests/e2e/uploaded_tls.py --core-image cdnfoundry/core:ci --edge-image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
       - name: Smoke-test the read-only core image
         shell: bash
         run: |

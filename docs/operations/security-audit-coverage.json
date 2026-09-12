@@ -148,6 +148,11 @@
       "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
     },
     {
+      "path": "compose.test.yml",
+      "status": "partial",
+      "scope": "AUD-039: reviewed disposable SQLite test mounts, bounds and dependency removal; Compose validation and application suite executed."
+    },
+    {
       "path": "core/.dockerignore",
       "status": "pending",
       "scope": "Inventory only; no whole-file completion claimed."
@@ -759,8 +764,8 @@
     },
     {
       "path": "core/app/Http/Controllers/TlsController.php",
-      "status": "pending",
-      "scope": "Inventory only; no whole-file completion claimed."
+      "status": "partial",
+      "scope": "AUD-040/041: upload rejection preserves active state; repeat upload replaces canonical chain. Other actions and concurrency review remain partial."
     },
     {
       "path": "core/app/Http/Controllers/TokenController.php",
@@ -1394,8 +1399,8 @@
     },
     {
       "path": "core/app/Support/UploadedCertificate.php",
-      "status": "pending",
-      "scope": "Inventory only; no whole-file completion claimed."
+      "status": "partial",
+      "scope": "AUD-040/041: verified chain constraints and normalized public PEM; remaining whole-file security review pending."
     },
     {
       "path": "core/artisan",
@@ -2239,8 +2244,13 @@
     },
     {
       "path": "core/tests/Feature/TlsApiTest.php",
-      "status": "pending",
-      "scope": "Inventory only; no whole-file completion claimed."
+      "status": "partial",
+      "scope": "AUD-040/041: synthetic chain constraints, plaintext-chain prevention, last-valid state and repeat uploads."
+    },
+    {
+      "path": "core/tests/Support/CertificateChain.php",
+      "status": "partial",
+      "scope": "Shared synthetic private-CA generator for API and actual TLS-client negative cases; no real certificate material."
     },
     {
       "path": "core/tests/TestCase.php",
@@ -3756,6 +3766,16 @@
       "path": "tests/e2e/production_qualification.py",
       "status": "partial",
       "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "tests/e2e/uploaded_tls.py",
+      "status": "partial",
+      "scope": "AUD-040: isolated PHP/OpenResty chain admission, client rejection and restored serving; signed agent/ACME/public infrastructure excluded."
+    },
+    {
+      "path": "tests/e2e/uploaded_tls_fixture.php",
+      "status": "partial",
+      "scope": "AUD-040: synthetic PHP chain producer, no network/database, current validator mounted; private output consumed only by owning Python process."
     },
     {
       "path": "tests/fixtures/edge-runtime.json",
