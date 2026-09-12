@@ -540,7 +540,7 @@
     {
       "path": "core/app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php",
       "status": "partial",
-      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established. AUD-043: TLS upload revision guards and real PostgreSQL interleaving; mounted-panel access revocation verified; remaining transitions still under review."
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established. AUD-043: TLS upload revision guards and real PostgreSQL interleaving; mounted-panel access revocation verified; remaining transitions still under review. AUD-045: custom-mode selection rejects certificates removed or expired before the locked selection; actual PostgreSQL removal and API/panel expiry regressions. Other transitions remain under review."
     },
     {
       "path": "core/app/Filament/Domain/Resources/Domains/RelationManagers/DnsRecordsRelationManager.php",
@@ -765,7 +765,7 @@
     {
       "path": "core/app/Http/Controllers/TlsController.php",
       "status": "partial",
-      "scope": "AUD-040/041: upload rejection preserves active state; repeat upload replaces canonical chain. Other actions and concurrency review remain partial. AUD-043: TLS upload revision guards and real PostgreSQL interleaving; mounted-panel access revocation verified; remaining transitions still under review."
+      "scope": "AUD-040/041: upload rejection preserves active state; repeat upload replaces canonical chain. Other actions and concurrency review remain partial. AUD-043: TLS upload revision guards and real PostgreSQL interleaving; mounted-panel access revocation verified; remaining transitions still under review. AUD-045: custom-mode selection rejects certificates removed or expired before the locked selection; actual PostgreSQL removal and API/panel expiry regressions. Other transitions remain under review."
     },
     {
       "path": "core/app/Http/Controllers/TokenController.php",
@@ -2245,7 +2245,7 @@
     {
       "path": "core/tests/Feature/TlsApiTest.php",
       "status": "partial",
-      "scope": "AUD-040/041: synthetic chain constraints, plaintext-chain prevention, last-valid state and repeat uploads. AUD-042: explicit chain authentication strength, weak RSA/SHA-1 corpus and pinned OpenSSL verifier; whole-file review remains partial. AUD-043: TLS upload revision guards and real PostgreSQL interleaving; mounted-panel access revocation verified; remaining transitions still under review."
+      "scope": "AUD-040/041: synthetic chain constraints, plaintext-chain prevention, last-valid state and repeat uploads. AUD-042: explicit chain authentication strength, weak RSA/SHA-1 corpus and pinned OpenSSL verifier; whole-file review remains partial. AUD-043: TLS upload revision guards and real PostgreSQL interleaving; mounted-panel access revocation verified; remaining transitions still under review. AUD-045: custom-mode selection rejects certificates removed or expired before the locked selection; actual PostgreSQL removal and API/panel expiry regressions. Other transitions remain under review."
     },
     {
       "path": "core/tests/Support/CertificateChain.php",
@@ -3750,7 +3750,7 @@
     {
       "path": "tests/e2e/postgres_domain_claims.py",
       "status": "partial",
-      "scope": "AUD-043: TLS upload revision guards and real PostgreSQL interleaving; mounted-panel access revocation verified; remaining transitions still under review. AUD-044: managed activation under the domain lock, current revision/custom-mode preservation, atomic operation failure and retry; real PostgreSQL interleavings passed. Remaining lifecycle and whole-file review incomplete."
+      "scope": "AUD-043: TLS upload revision guards and real PostgreSQL interleaving; mounted-panel access revocation verified; remaining transitions still under review. AUD-044: managed activation under the domain lock, current revision/custom-mode preservation, atomic operation failure and retry; real PostgreSQL interleavings passed. Remaining lifecycle and whole-file review incomplete. AUD-045: custom-mode selection rejects certificates removed or expired before the locked selection; actual PostgreSQL removal and API/panel expiry regressions. Other transitions remain under review."
     },
     {
       "path": "tests/e2e/postgres_edge_tasks.py",

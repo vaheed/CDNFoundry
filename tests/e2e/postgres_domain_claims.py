@@ -75,6 +75,8 @@ if ($mode === 'init') {
                 $locked = App\Models\Domain::query()->lockForUpdate()->findOrFail($domain->id);
                 if ($argv[2] === 'custom') {
                     app(App\Http\Controllers\TlsController::class)->update($request(['mode' => 'custom']), $locked);
+                } elseif ($argv[2] === 'removal') {
+                    app(App\Http\Controllers\TlsController::class)->destroyCustom($request([]), $locked);
                 } else {
                     $data = $locked->dnsRecords()->firstOrFail()->only(['type', 'content', 'ttl', 'mode', 'origin']);
                     $data['name'] = 'managed-race';
@@ -88,6 +90,13 @@ if ($mode === 'init') {
             config(['services.acme.renew_before_days' => 1]);
             (new App\Jobs\EnsureManagedCertificates($domain->id))->handle();
             echo json_encode($domain->refresh()->only(['revision', 'tls_mode', 'active_tls_certificate_id']))."\n";
+        } elseif ($mode === 'tls-custom-select') {
+            try {
+                $status = app(App\Http\Controllers\TlsController::class)->update($request(['mode' => 'custom']), $domain)->getStatusCode();
+            } catch (Symfony\Component\HttpKernel\Exception\HttpException $exception) {
+                $status = $exception->getStatusCode();
+            }
+            echo json_encode(['status' => $status, ...$domain->refresh()->only(['revision', 'tls_mode', 'active_tls_certificate_id'])])."\n";
         } elseif ($mode === 'tls-upload') {
             try {
                 $status = app(App\Http\Controllers\TlsController::class)->upload(
@@ -344,14 +353,15 @@ def main() -> None:
                     uploader.kill()
                 uploader.communicate(timeout=10)
             managed_races = {}
-            for change in ('custom', 'dns'):
+            for change in ('custom', 'dns', 'removal'):
                 initialized = json.loads(subprocess.check_output(command('tls-managed-init'), env=tls_env, text=True))
                 holder = subprocess.Popen(command('tls-managed-hold', change), env=tls_env, stdin=subprocess.PIPE,
                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 worker = None
                 try:
                     assert holder.stdout.readline().strip() == 'locked'
-                    worker = subprocess.Popen(command('tls-managed-run'), env=tls_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    worker = subprocess.Popen(command('tls-custom-select' if change == 'removal' else 'tls-managed-run'),
+                                              env=tls_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                     for _ in range(60):
                         blocked = subprocess.check_output(['docker', 'exec', identifier, 'psql', '-U', 'postgres',
                             '-d', 'cdnf_claim_qualification', '-Atc',
@@ -371,6 +381,8 @@ def main() -> None:
                     expected = written if change == 'custom' else {
                         **written, 'revision': written['revision'] + 1, 'active_tls_certificate_id': initialized['managed_id'],
                     }
+                    if change == 'removal':
+                        expected = {'status': 409, **written}
                     managed_races[change] = {'writer': written, 'worker': actual, 'expected': expected, 'passed': actual == expected}
                 finally:
                     if holder.poll() is None:
@@ -390,7 +402,8 @@ def main() -> None:
                               'tls_upload_concurrent_hostname_change': 'passed',
                               'tls_upload_revision_before_and_after_dns_change': [initial_tls['revision'], final_tls['revision']],
                               'tls_upload_retained_certificate_count': final_tls['certificate_count'],
-                              'managed_tls_activation_concurrency': managed_races,
+                              'managed_tls_activation_concurrency': {key: value for key, value in managed_races.items() if key != 'removal'},
+                              'tls_mode_concurrent_custom_removal': managed_races['removal'],
                               'database': 'disposable tmpfs, actual migrations; no PHPUnit or persistent volumes'}))
         finally:
             subprocess.run(['docker', 'rm', '-f', identifier], check=True, capture_output=True)

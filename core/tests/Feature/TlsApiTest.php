@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\DomainLifecycleState;
 use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
 use App\Jobs\EnsureManagedCertificates;
+use App\Jobs\ReconcileEdgeDomain;
 use App\Models\Domain;
 use App\Models\EdgeRevision;
 use App\Models\TlsCertificate;
@@ -77,6 +78,47 @@ class TlsApiTest extends TestCase
         [$user, $domain] = $this->proxiedDomain();
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/tls/upload", CertificateChain::make('valid'))
             ->assertAccepted()->assertJsonPath('data.certificate.kind', 'custom');
+    }
+
+    #[DataProvider('uploadEntrypoints')]
+    public function test_custom_mode_rechecks_certificate_expiry_after_acquiring_the_domain(bool $panel): void
+    {
+        Queue::fake();
+        [$user, $domain] = $this->proxiedDomain();
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/tls/upload", CertificateChain::make('valid'))->assertAccepted();
+        $expiresAt = $domain->tlsCertificates()->sole()->expires_at;
+        $domain->refresh()->update(['tls_mode' => 'managed', 'active_tls_certificate_id' => null]);
+        $revision = $domain->revision;
+        $operations = DB::table('operations')->count();
+        $audits = DB::table('audit_logs')->count();
+        Queue::fake();
+        $level = DB::transactionLevel();
+        $advanced = false;
+        // Advance time only when the action rereads the domain in its transaction.
+        // Actual concurrent removal is covered separately on PostgreSQL.
+        Domain::retrieved(function (Domain $retrieved) use ($domain, $expiresAt, $level, &$advanced): void {
+            if (! $advanced && $retrieved->id === $domain->id && DB::transactionLevel() > $level) {
+                $advanced = true;
+                $this->travelTo($expiresAt->addSecond());
+            }
+        });
+
+        if ($panel) {
+            Filament::setCurrentPanel(Filament::getPanel('app'));
+            Livewire::test(ViewDomain::class, ['record' => $domain->id])
+                ->callAction('tlsMode', data: ['mode' => 'custom'])->assertHasActionErrors(['mode']);
+        } else {
+            $this->patchJson("/api/domains/{$domain->id}/tls", ['mode' => 'custom'])
+                ->assertConflict()->assertJsonPath('code', 'conflict');
+        }
+
+        $this->assertTrue($advanced);
+        $this->assertSame('managed', $domain->refresh()->tls_mode);
+        $this->assertNull($domain->active_tls_certificate_id);
+        $this->assertSame($revision, $domain->revision);
+        $this->assertSame($operations, DB::table('operations')->count());
+        $this->assertSame($audits, DB::table('audit_logs')->count());
+        Queue::assertNotPushed(ReconcileEdgeDomain::class);
     }
 
     public function test_custom_upload_normalizes_the_public_chain_without_storing_extra_private_key_material(): void

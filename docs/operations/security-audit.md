@@ -1311,3 +1311,69 @@ Documentation lint, build and link checks passed in **45.121 seconds**
 (`managed-tls-docs`), covering 91 built pages and 3,411 internal links before
 this result annotation. No implementation or regression source changed after
 its successful qualification.
+
+## Custom TLS mode selection after removal or expiry
+
+AUD-045 (**Medium, confirmed same-domain availability defect**) affects
+`TlsController::update` and the Filament `ViewDomain` TLS-mode action. Each
+checked for a usable custom certificate before acquiring the domain lock, then
+selected the certificate again inside the transaction without rejecting a null
+result. Concurrent removal or expiry during that wait could therefore commit
+custom mode with no active certificate. This requires authorized changes or a
+certificate expiring during selection; no cross-tenant access was demonstrated.
+
+On parent `fdd0aa45`, `tls-mode-removal-before` reproduced the removal race in
+**64.396 seconds** using actual PHP controllers and disposable PostgreSQL.
+The removal request held the domain lock, revoked the custom certificate and
+selected a managed fallback at revision 10. PostgreSQL activity confirmed that
+the custom-mode request was waiting before removal committed. The waiting
+request then returned **202**, advanced to revision 11 and replaced the saved
+fallback with a null certificate in custom mode. Existing managed activation
+and DNS-concurrency cases still passed in this baseline.
+
+The API and Filament expiry regressions both failed before correction in
+**10.750 seconds** (`tls-mode-expiry-before`, two tests / eight assertions).
+They advance the test clock past expiry when the action rereads the domain in
+its transaction. The API returned 202 instead of 409; the panel accepted the
+change without a field error. This deterministic clock boundary complements,
+but does not substitute for, the real PostgreSQL removal interleaving.
+
+Both entry points now select the usable certificate under the existing domain
+lock and reject custom mode when that selection is null, before changing desired
+state or writing its audit record. The existing API `409` / `conflict` and panel
+**Mode** validation message remain the contract. The failed action creates no
+revision, operation, audit entry or edge dispatch. Valid selection and other
+mode behavior are preserved; no synchronous runtime action or schema change was
+introduced. Deploy the normal control-plane image/worker update. No migration
+or data rewrite is required, and code rollback restores the defect. Operators
+who already have custom mode without a valid certificate should upload valid
+coverage or explicitly select managed mode and verify runtime acknowledgement
+and HTTPS; this fix does not silently rewrite existing domain choices.
+
+`tls-mode-removal-after` passed in **65.217 seconds**, instance
+`cdnf-claim-qualification-afdbc0a9abaa`, using the same pinned PostgreSQL digest
+and isolated tmpfs/loopback bounds recorded for AUD-044. The custom selection
+returned **409**, retaining revision 10, managed mode and the managed certificate
+ID. All earlier PostgreSQL cases passed. This qualifies the desired-state
+transaction, not signed edge delivery or externally served production HTTPS.
+
+The isolated application suite passed **322 tests / 12,461 assertions**, 74.08
+seconds inside PHPUnit and **80.381 seconds** total (`tls-mode-application`).
+Both expiry entry points now reject the change and preserve mode, revision,
+operation/audit counts and dispatch state. Compose, OpenAPI, seven supply-chain
+fixtures and eight qualification-tool regressions passed in **56.932 seconds**
+(`tls-mode-contracts`). Pint passed on the three changed PHP files; Python
+compilation passed. Documentation edits account for source-hash changes during
+these runs; implementation and regression diffs are checked against the captured
+source evidence before commit.
+
+The owner-run mode-removal checklist is current and **Not run**. Coverage remains
+**763 files: 658 pending, 101 partial and four reviewed**. Managed-operation
+reporting and remaining TLS transitions are still under review. Production
+remains **not yet qualified**, including the previously documented image-build,
+Fleet/recovery, dependency and external-infrastructure gates.
+
+Documentation lint/build/link checks passed in **43.222 seconds**
+(`tls-mode-docs`), covering 91 built pages and 3,412 internal links before this
+result annotation. Final implementation/regression diffs matched both passed
+application and PostgreSQL evidence records.

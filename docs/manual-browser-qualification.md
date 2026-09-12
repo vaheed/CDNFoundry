@@ -223,6 +223,14 @@ workstream does not replace an earlier product checkpoint.
    HTTPS still serving that certificate. Record operation IDs and runtime
    acknowledgements. This owner-run checkpoint is **Not run**; deterministic
    job/DNS/mode contention is covered separately by the PostgreSQL gate.
+   With a valid custom certificate installed, open **TLS mode** in one session
+   and select **Custom** without submitting. In a second authorized session,
+   use **Remove custom certificate** and record the resulting mode, certificate
+   and revision. Submit the first session's dialog: expect a **Mode** error
+   instructing you to upload a valid certificate, with no successful mode
+   change. Reload and confirm the removal's saved state is retained. Upload a
+   valid replacement and confirm custom mode can be selected again. This
+   owner-run checkpoint remains **Not run**.
 4. Use **Cache settings** to cover TTLs, object bound, origin-header policy,
    query policy/selected parameters, bypass cookies, status TTLs, admission,
    stale windows, and variant bounds. Prove MISS then HIT, development-mode

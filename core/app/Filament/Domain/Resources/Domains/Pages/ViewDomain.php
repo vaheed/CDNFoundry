@@ -75,17 +75,16 @@ class ViewDomain extends ViewRecord
                 Select::make('mode')->options(['managed' => 'Managed', 'custom' => 'Custom', 'disabled' => 'Disabled'])->required(),
             ])->fillForm(fn (): array => ['mode' => $this->record->tls_mode])
                 ->action(function (array $data): void {
-                    if ($data['mode'] === 'custom'
-                        && ! $this->record->tlsCertificates()->where('kind', 'custom')->where('status', 'active')->where('expires_at', '>', now())->exists()) {
-                        throw ValidationException::withMessages([
-                            'mountedActions.0.data.mode' => 'Upload a valid custom certificate before selecting custom mode.',
-                        ]);
-                    }
                     DB::transaction(function () use ($data): void {
                         $domain = $this->record->newQuery()->lockForUpdate()->findOrFail($this->record->id);
                         $certificateId = $data['mode'] === 'custom'
                             ? $domain->tlsCertificates()->where('kind', 'custom')->where('status', 'active')->where('expires_at', '>', now())->latest('activated_at')->value('id')
                             : ($data['mode'] === 'managed' ? $domain->tlsCertificates()->where('kind', 'managed')->where('status', 'active')->where('expires_at', '>', now())->latest('activated_at')->value('id') : $domain->active_tls_certificate_id);
+                        if ($data['mode'] === 'custom' && $certificateId === null) {
+                            throw ValidationException::withMessages([
+                                'mountedActions.0.data.mode' => 'Upload a valid custom certificate before selecting custom mode.',
+                            ]);
+                        }
                         $domain->update(['tls_mode' => $data['mode'], 'active_tls_certificate_id' => $certificateId, 'revision' => $domain->revision + 1]);
                         AuditLog::record(auth()->user(), 'tls.mode_updated', $domain, ['mode' => $data['mode'], 'revision' => $domain->revision], request()->ip());
                     });

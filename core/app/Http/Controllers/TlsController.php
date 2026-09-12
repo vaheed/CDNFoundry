@@ -41,14 +41,12 @@ class TlsController extends Controller
     {
         Gate::authorize('update', $domain);
         $data = $request->validate(['mode' => ['required', 'in:managed,custom,disabled']]);
-        if ($data['mode'] === 'custom') {
-            abort_unless($domain->tlsCertificates()->where('kind', 'custom')->where('status', 'active')->where('expires_at', '>', now())->exists(), 409, 'Upload a valid custom certificate before selecting custom mode.');
-        }
         DB::transaction(function () use ($domain, $data, $request): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $certificateId = $data['mode'] === 'custom'
                 ? $locked->tlsCertificates()->where('kind', 'custom')->where('status', 'active')->where('expires_at', '>', now())->latest('activated_at')->value('id')
                 : ($data['mode'] === 'managed' ? $locked->tlsCertificates()->where('kind', 'managed')->where('status', 'active')->where('expires_at', '>', now())->latest('activated_at')->value('id') : $locked->active_tls_certificate_id);
+            abort_if($data['mode'] === 'custom' && $certificateId === null, 409, 'Upload a valid custom certificate before selecting custom mode.');
             $locked->update(['tls_mode' => $data['mode'], 'active_tls_certificate_id' => $certificateId, 'revision' => $locked->revision + 1]);
             AuditLog::record($request->user(), 'tls.mode_updated', $locked, ['mode' => $data['mode'], 'revision' => $locked->revision], $request->ip());
         });

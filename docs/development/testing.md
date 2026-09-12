@@ -257,6 +257,13 @@ managed certificate at the DNS writer's revision plus one, respectively.
 The application suite separately injects an operation-persistence failure,
 asserts unchanged activation/revision and no dispatch, then verifies a retry.
 
+Custom-mode selection is also raced against removal through the actual TLS
+controller: after removal commits a managed fallback, the waiting selection
+must return 409 and retain that fallback and revision. API and Filament tests
+separately advance the clock past certificate expiry when the action rereads
+the domain in its transaction, then require a conflict/field error without a
+new revision, operation, audit entry or edge dispatch.
+
 The PostgreSQL script also exercises idempotency locking with process-local
 caches, concurrent identical requests, and a killed process between mutation and
 receipt. For parent delegation, install host `bind9-dnsutils` (providing `dig`

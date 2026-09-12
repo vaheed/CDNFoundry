@@ -31,6 +31,13 @@ encryption key and externally retained TLS material.
 
 A domain TLS mode is `managed`, `custom`, or `disabled`.
 
+Selecting custom mode requires a current, active, unexpired custom certificate
+when the domain transaction acquires its lock. If the certificate was removed
+or expired while the request waited, the API returns `409` / `conflict` and the
+panel shows a **Mode** validation error. Reload and upload a valid certificate
+before retrying. The rejected selection preserves the saved mode, certificate
+and revision.
+
 ## Managed certificates
 
 Managed issuance requires all of the following:
