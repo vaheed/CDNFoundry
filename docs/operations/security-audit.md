@@ -64,6 +64,7 @@ Historical docs are retained evidence, not qualification of this checkout.
 | Applied migrations and `docs/legacy/` | Retain: upgrade history and commit-specific evidence | Required historical compatibility | Further reference review pending |
 | Supply-chain image extraction | Replaced defective parser; preserved existing checks | Same CLI, stronger validation | Six adversarial fixture methods passed |
 | Qualification nonempty-file evidence rule | Replaced insufficient evidence contract | Structured attributable operator evidence required | Six tool regressions passed |
+| Ignored `storage/qualification/security-audit/trivy-cache/` | Removed on 2026-09-12: duplicate reproducible scanner cache, not repository source | Retained `dependency-gate/cache/`, all scan reports and test evidence | Both 1,348,702,208-byte databases had SHA-256 `7a77cf4af9afbb891eb6e94d74968a36065fe71b0c56ce16e30d7081fc5cfab4`; neither cache was mounted by a running container. Removed 1,352,896,665 file bytes. |
 
 ## Qualification gates
 
@@ -71,6 +72,30 @@ Implementation, documentation and automated/runtime qualification are in
 progress. Manual browser qualification is **Not run**, owner-owned. Public
 IPv4/IPv6, Anycast, multi-host installer, load and clean-host restore evidence
 is not yet available. No measured production capacity is claimed.
+
+### Coverage and environment checkpoint — 2026-09-12
+
+The current inventory contains **759 files: 664 pending, 91 partial and four
+reviewed**. The user-facing estimate is approximately **20% of the overall
+effort completed, 80% remaining**. This is a rough planning judgment reflecting
+concentrated work on important trust boundaries, not a measured percentage of
+security coverage or production readiness. Whole-file status is deliberately
+separate from the verified fixes recorded below. Remaining work includes the
+untouched inventory, unresolved image findings, complete Fleet installation/
+upgrade/recovery qualification, release evidence and owner-run browser checks.
+
+The interrupted AUD-038 change was committed as `b57e3175` after verifying that
+the current source and staged tree still matched its completed runtime and
+documentation evidence. The documentation job had completed successfully on
+2026-09-08; it was not restarted or claimed as a new execution on September 12.
+
+On resumption, the host filesystem reported zero available bytes. Removing the
+duplicate cache above recovered about 1.35 GB, but ordinary-process available
+space remained zero; root-reserved free space was approximately 2.02 GB at the
+checkpoint. Larger builds/scans and production qualification need adequate free
+space before execution. No broad Docker pruning, named-volume deletion, database
+reset or Fleet/recovery-state removal was performed. Source review can continue;
+this environmental constraint does not mark the overall audit complete or blocked.
 
 ## Recorded progress
 
