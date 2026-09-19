@@ -442,7 +442,7 @@ services:
         limits: { memory: 256m, cpus: "0.25", pids: 96 }
 
   prometheus:
-    image: prom/prometheus:v3.12.0@sha256:69f5241418838263316593f7274a304b095c40bcf22e57272865da91bd60a8ac
+    image: ${CDNF_PROMETHEUS_IMAGE:?CDNF_PROMETHEUS_IMAGE must be an immutable image reference}
     profiles: [telemetry]
     group_add: ["82"]
     volumes:
@@ -543,7 +543,7 @@ services:
       retries: 20
 
   node-exporter:
-    image: prom/node-exporter:v1.10.2@sha256:3ac34ce007accad95afed72149e0d2b927b7e42fd1c866149b945b84737c62c3
+    image: ${CDNF_NODE_EXPORTER_IMAGE:?CDNF_NODE_EXPORTER_IMAGE must be an immutable image reference}
     profiles: [control, dns, edge, telemetry]
     command: [--path.procfs=/host/proc, --path.sysfs=/host/sys, --path.rootfs=/host/root, --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)]
     pid: host
@@ -556,7 +556,7 @@ services:
     restart: unless-stopped
 
   alertmanager:
-    image: prom/alertmanager:v0.32.1@sha256:51a825c2a40acc3e338fdd00d622e01ec090f72be2b3ea46be0839cd47a4d286
+    image: ${CDNF_ALERTMANAGER_IMAGE:?CDNF_ALERTMANAGER_IMAGE must be an immutable image reference}
     profiles: [telemetry]
     volumes: [./docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro]
     networks: [telemetry]

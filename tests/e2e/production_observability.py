@@ -65,6 +65,9 @@ def build_images(release: str) -> None:
         ("loki", "docker/loki/Dockerfile", "docker/loki"),
         ("grafana", "docker/grafana/Dockerfile", "docker/grafana"),
         ("caddy", "docker/caddy/Dockerfile", "docker/caddy"),
+        ("prometheus", "docker/prometheus/Dockerfile", "docker/prometheus"),
+        ("alertmanager", "docker/alertmanager/Dockerfile", "docker/alertmanager"),
+        ("node-exporter", "docker/node-exporter/Dockerfile", "docker/node-exporter"),
         ("vector", "docker/vector-runtime/Dockerfile", "docker/vector-runtime"),
         ("postgres", "docker/postgres/Dockerfile", "docker/postgres"),
     ):
@@ -85,7 +88,7 @@ def main() -> int:
     # Immutable local image IDs qualify the exact local build without requiring
     # a registry push or treating mutable qualification tags as deployment pins.
     local_images = {}
-    for component in ('core', 'web', 'edge-control', 'edge-runtime', 'edge-agent', 'edge-gateway', 'mmdb-updater', 'grafana', 'loki', 'postgres', 'vector', 'caddy'):
+    for component in ('core', 'web', 'edge-control', 'edge-runtime', 'edge-agent', 'edge-gateway', 'mmdb-updater', 'grafana', 'loki', 'postgres', 'vector', 'node-exporter', 'alertmanager', 'prometheus', 'caddy'):
         tag = f'ghcr.io/vaheed/cdnfoundry-{component}:{args.release}'
         local_images['CDNF_'+component.upper().replace('-', '_')+'_IMAGE'] = run('docker', 'image', 'inspect', tag, '--format', '{{.Id}}', cwd=ROOT, capture=True).stdout.strip()
 

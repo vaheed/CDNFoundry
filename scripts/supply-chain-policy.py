@@ -17,6 +17,9 @@ DOCKERFILES = [
     ROOT / "docker/nginx/Dockerfile.production", ROOT / "docker/openresty/Dockerfile",
     ROOT / "docker/mmdb-updater/Dockerfile", ROOT / "docker/grafana/Dockerfile", ROOT / "docker/loki/Dockerfile",
     ROOT / "docker/caddy/Dockerfile",
+    ROOT / "docker/prometheus/Dockerfile",
+    ROOT / "docker/alertmanager/Dockerfile",
+    ROOT / "docker/node-exporter/Dockerfile",
     ROOT / "docker/vector-runtime/Dockerfile",
     ROOT / "docker/postgres/Dockerfile",
 ]
@@ -124,7 +127,7 @@ def validate_git_dependencies(source: str) -> None:
 
 
 def validate_compose_images(document: dict) -> None:
-    components = {'CORE', 'WEB', 'EDGE_CONTROL', 'EDGE_RUNTIME', 'EDGE_AGENT', 'EDGE_GATEWAY', 'MMDB_UPDATER', 'GRAFANA', 'LOKI', 'POSTGRES', 'VECTOR', 'CADDY'}
+    components = {'CORE', 'WEB', 'EDGE_CONTROL', 'EDGE_RUNTIME', 'EDGE_AGENT', 'EDGE_GATEWAY', 'MMDB_UPDATER', 'GRAFANA', 'LOKI', 'POSTGRES', 'VECTOR', 'NODE_EXPORTER', 'ALERTMANAGER', 'PROMETHEUS', 'CADDY'}
     for name, service in document.get('services', {}).items():
         reference = service.get('image')
         if reference is None:
@@ -220,8 +223,10 @@ def main() -> None:
     for manifest, lockfile in [("core/composer.json", "core/composer.lock"), ("core/package.json", "core/package-lock.json"), ("docs/package.json", "docs/package-lock.json")]:
         if not (ROOT / manifest).is_file() or not (ROOT / lockfile).is_file():
             fail(f"{manifest} lacks required lockfile {lockfile}")
-    for module in [ROOT / "edge-agent/go.mod", ROOT / "edge-gateway/go.mod", ROOT / "docker/caddy/go.mod"]:
-        if "require " in module.read_text() and not module.with_name("go.sum").is_file():
+    for module in [ROOT / "edge-agent/go.mod", ROOT / "edge-gateway/go.mod", ROOT / "docker/caddy/go.mod",
+                   ROOT / "docker/alertmanager/upstream.go.mod", ROOT / "docker/prometheus/upstream.go.mod",
+                   ROOT / "docker/node-exporter/upstream.go.mod"]:
+        if "require " in module.read_text() and not module.with_suffix(".sum").is_file():
             fail(f"{module.relative_to(ROOT)} has dependencies but no go.sum")
 
     release = (ROOT / ".github/workflows/ci.yml").read_text()

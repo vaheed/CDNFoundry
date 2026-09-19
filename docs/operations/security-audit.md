@@ -2010,3 +2010,30 @@ still 0 under heavy local compiler load. Qualification now waits at most 60 seco
 for a real successful scheduled scrape after readiness; it still fails if none
 arrives. A full-stack rerun and remote publication remain required. Browser
 qualification was not run; there is no new UI.
+
+### Prometheus monitoring dependency remediation (September 19)
+
+Managed images now rebuild node exporter **1.12.1**, Alertmanager **0.34.1**, and
+Prometheus **3.13.3** from immutable upstream commits. The pinned Go 1.26.8
+builder uses committed `upstream.go.mod`/`upstream.go.sum` locks: node exporter
+updates `x/crypto` to 0.55.0; Alertmanager and Prometheus update gRPC to 1.83.2.
+Both server and companion utility binaries are replaced. Matching official
+Prometheus/Alertmanager UI assets are checksum-verified and embedded; no browser
+automation was run. Existing runtime images preserve their users, entrypoints,
+configuration paths and data volumes.
+
+All three complete images passed the unchanged High/Critical scan gate, including
+detected Go binaries. `monitoring_images.py` passed real exporter metrics,
+Prometheus scrape/query, Alertmanager ingestion/listing, and companion config
+tools. The actual production Prometheus configuration, all 30 alert rules, and
+operational Vector configuration/redaction tests passed with the rebuilt tools.
+Evidence: `node-exporter-final.json`, `alertmanager-final.json`,
+`prometheus-final.json`, `monitoring-runtime.log`, and `monitoring-config.log`
+under ignored `dependency-remediation` qualification storage.
+
+The existing three services are now included in release scanning, SBOMs,
+signatures, attestations, and the complete manifest/Fleet projection. No extra
+monitoring service or dashboard was added. Back up monitoring state before a
+populated-host upgrade; select a previously verified release and restore its
+matching backup for rollback. Full-stack qualification and remote publication
+remain outstanding; the owner browser job remains not run.
