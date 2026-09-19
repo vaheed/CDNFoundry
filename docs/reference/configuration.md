@@ -188,6 +188,7 @@ the supported host collector.
 | `CDNF_MMDB_UPDATER_IMAGE` | production hosts using GeoIP | Immutable MMDB updater image reference from the release manifest |
 | `CDNF_GRAFANA_IMAGE` | production telemetry | Immutable provisioned Grafana image reference from the release manifest |
 | `CDNF_CADDY_IMAGE` | production ingress | Immutable patched Caddy image reference from the release manifest |
+| `CDNF_POSTGRES_IMAGE` | production ingress | Immutable postgres image reference from the release manifest |
 | `CDNF_LOKI_IMAGE` | production telemetry | Immutable Loki image reference from the release manifest |
 | `HOST_BIND_IPV4` | generated multi-host bundle | Local listener address; default `0.0.0.0`, independent of public/NAT DNS addresses |
 | `HOST_BIND_IPV6` | generated dual-stack bundle | Local IPv6 listener; default `::`; publish only after end-to-end IPv6 qualification |

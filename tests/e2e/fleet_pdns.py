@@ -37,8 +37,14 @@ def main() -> None:
     project = "cdnf-pdns-qualification-" + uuid.uuid4().hex[:12]
     source = yaml.safe_load((ROOT / "compose.prod.yml").read_text())
     images = {name: source["services"][name]["image"] for name in ("pdns-db", "pdns-auth")}
-    require(all(re.search(r"@sha256:[0-9a-f]{64}$", value) for value in images.values()),
-            "PowerDNS qualification requires immutable production image digests.")
+    for service, reference in images.items():
+        if reference.startswith('${CDNF_'):
+            component = reference.split('_IMAGE', 1)[0].removeprefix('${CDNF_').lower().replace('_', '-')
+            images[service] = subprocess.check_output(
+                ['docker', 'image', 'inspect', f'ghcr.io/vaheed/cdnfoundry-{component}:ci',
+                 '--format', '{{.Id}}'], text=True).strip()
+    require(all(re.search(r'(?:@sha256:|^sha256:)[0-9a-f]{64}$', value) for value in images.values()),
+            "PowerDNS qualification requires immutable production image identities.")
     with tempfile.TemporaryDirectory(prefix=project) as temporary:
         root = Path(temporary)
         store = FleetState(root / "state")

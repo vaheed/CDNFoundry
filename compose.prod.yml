@@ -238,7 +238,7 @@ services:
     restart: "no"
 
   control-db:
-    image: postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
+    image: ${CDNF_POSTGRES_IMAGE:?CDNF_POSTGRES_IMAGE must be an immutable image reference}
     profiles: [control]
     environment:
       POSTGRES_DB: cdnf
@@ -267,7 +267,7 @@ services:
       retries: 20
 
   pdns-db:
-    image: postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
+    image: ${CDNF_POSTGRES_IMAGE:?CDNF_POSTGRES_IMAGE must be an immutable image reference}
     profiles: [dns]
     environment:
       POSTGRES_DB: pdns
@@ -304,7 +304,7 @@ services:
       retries: 20
 
   pdns-migrate:
-    image: postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
+    image: ${CDNF_POSTGRES_IMAGE:?CDNF_POSTGRES_IMAGE must be an immutable image reference}
     profiles: [tools]
     command: [psql, -v, ON_ERROR_STOP=1, -h, pdns-db, -U, pdns, -d, pdns, -f, /migrations/2026_07_17_000001_add_powerdns_metadata_tables.sql]
     environment: { PGPASSWORD: "${PDNS_DB_PASSWORD}" }

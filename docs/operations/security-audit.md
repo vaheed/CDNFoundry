@@ -1961,3 +1961,23 @@ Rollback requires restoring that backup into separate storage with the preceding
 release; do not point an older server at files written by 26.8. The disposable
 fixture proves the repository's current schema/data path, not arbitrary customer
 workloads or a live backup restore. Staging and owner browser checks remain not run.
+
+### PostgreSQL helper/toolchain remediation (September 19)
+
+The selected upstream PostgreSQL 18.6 Alpine image's remaining High/Critical
+findings were in `gosu` 1.19's Go 1.24.6 runtime. `docker/postgres` rebuilds that
+same helper from upstream commit `6456aaa0f3c854d199d0f037f068eb97515b7513`
+with pinned Go 1.26.8, retaining the official PostgreSQL image, entrypoint, user
+and data-directory contract. The final image passed the strict scan, including
+OS and detected Go binary (`dependency-remediation/postgres-final.json`).
+
+The real disposable 18.4 → 18.6 test passed: retained JSONB data, new writes,
+transaction rollback, rejected incorrect SCRAM password, process privilege drop,
+and restart continuity. Generated Fleet PowerDNS qualification also passed with
+this PostgreSQL image: restricted credentials, locking, rotation/retry and lost
+rotation recovery. Evidence: `postgres-runtime.log` and
+`postgres-fleet-runtime.log` under `dependency-remediation`. No development
+PostgreSQL or named volumes were modified. Release-managed `CDNF_POSTGRES_IMAGE`
+now covers control, DNS and migration tools; take a verified backup before a
+populated-host upgrade. Restore the preceding backup/image for rollback rather
+than assuming arbitrary in-place downgrades. Browser checks remain not run.

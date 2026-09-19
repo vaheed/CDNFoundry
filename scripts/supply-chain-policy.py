@@ -17,6 +17,7 @@ DOCKERFILES = [
     ROOT / "docker/nginx/Dockerfile.production", ROOT / "docker/openresty/Dockerfile",
     ROOT / "docker/mmdb-updater/Dockerfile", ROOT / "docker/grafana/Dockerfile", ROOT / "docker/loki/Dockerfile",
     ROOT / "docker/caddy/Dockerfile",
+    ROOT / "docker/postgres/Dockerfile",
 ]
 REQUIRED_LABELS = ["image.source", "image.revision", "image.version", "image.created", "image.description", "image.licenses"]
 
@@ -122,7 +123,7 @@ def validate_git_dependencies(source: str) -> None:
 
 
 def validate_compose_images(document: dict) -> None:
-    components = {'CORE', 'WEB', 'EDGE_CONTROL', 'EDGE_RUNTIME', 'EDGE_AGENT', 'EDGE_GATEWAY', 'MMDB_UPDATER', 'GRAFANA', 'LOKI', 'CADDY'}
+    components = {'CORE', 'WEB', 'EDGE_CONTROL', 'EDGE_RUNTIME', 'EDGE_AGENT', 'EDGE_GATEWAY', 'MMDB_UPDATER', 'GRAFANA', 'LOKI', 'POSTGRES', 'CADDY'}
     for name, service in document.get('services', {}).items():
         reference = service.get('image')
         if reference is None:

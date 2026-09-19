@@ -18,7 +18,7 @@ class ReleaseInstructionTests(unittest.TestCase):
         commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
         git_dir = subprocess.check_output(['git', 'rev-parse', '--absolute-git-dir'], cwd=ROOT, text=True).strip()
         components = ('core', 'web', 'edge-control', 'edge-runtime', 'edge-agent',
-                      'edge-gateway', 'mmdb-updater', 'grafana', 'loki', 'caddy')
+                      'edge-gateway', 'mmdb-updater', 'grafana', 'loki', 'postgres', 'caddy')
         manifest = {'source_commit': commit, 'images': [
             {'component': c, 'image': f'ghcr.io/vaheed/cdnfoundry-{c}@sha256:'+'a'*64}
             for c in components]}

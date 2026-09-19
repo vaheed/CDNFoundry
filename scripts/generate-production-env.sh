@@ -252,6 +252,7 @@ awk -v app_key="$app_key" \
       values["CDNF_GRAFANA_IMAGE"]="ghcr.io/vaheed/cdnfoundry-grafana:" release
       values["CDNF_LOKI_IMAGE"]="ghcr.io/vaheed/cdnfoundry-loki:" release
       values["CDNF_CADDY_IMAGE"]="ghcr.io/vaheed/cdnfoundry-caddy:" release
+      values["CDNF_POSTGRES_IMAGE"]="ghcr.io/vaheed/cdnfoundry-postgres:" release
       values["HOST_BIND_IPV6"]=host_bind_ipv6; values["EDGE_CONTROL_URL"]=edge_control_url
       values["EDGE_CONTROL_BIND"]=edge_control_bind; values["EDGE_STATUS_TOKEN"]=edge_status_token
       values["DNS_API_HOSTNAME"]=dns_api_hostname

@@ -17,11 +17,16 @@ scanned, signed keylessly, and given SPDX JSON and SLSA provenance attestations.
 Mutable channel tags are convenience aliases only. Deploy the `image` digest
 from `release-manifest.json`.
 
-The release includes the nine application components and managed Caddy ingress.
+The release includes the nine application components, managed Caddy ingress, and PostgreSQL.
 Caddy 2.11.4 is rebuilt with the committed Go module locks and patched Go
 toolchain; all three ingress services use `CDNF_CADDY_IMAGE` from the same
 verified manifest. Existing configuration and certificate volumes are retained.
 Rebuilding upstream binaries makes their dependency updates our responsibility.
+
+PostgreSQL 18.6 retains the official entrypoint and data directory. Its `gosu`
+1.19 helper is rebuilt from the pinned upstream commit with Go 1.26.8.
+All database and migration services use `CDNF_POSTGRES_IMAGE`; make a verified
+backup before upgrading an existing installation.
 
 ## Verify a release
 
@@ -52,7 +57,7 @@ cosign verify-blob \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   release-manifest.json
 jq -e --arg commit "$CDNF_SOURCE_COMMIT" '.source_commit == $commit and
-  (.images | length == 10 and all(.image | test("@sha256:[0-9a-f]{64}$")))' release-manifest.json
+  (.images | length == 11 and all(.image | test("@sha256:[0-9a-f]{64}$")))' release-manifest.json
 ```
 
 For every digest in the manifest:
@@ -101,7 +106,7 @@ fleet = json.loads(Path('fleet.json').read_text())
 commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
 require(manifest['source_commit'] == commit, 'Manifest source differs from checkout')
 components = {'core', 'web', 'edge-control', 'edge-runtime', 'edge-agent',
-              'edge-gateway', 'mmdb-updater', 'grafana', 'loki', 'caddy'}
+              'edge-gateway', 'mmdb-updater', 'grafana', 'loki', 'postgres', 'caddy'}
 rows = manifest['images']
 require(len(rows) == len(components) and {r['component'] for r in rows} == components,
         'Manifest components are missing or duplicated')

@@ -90,8 +90,6 @@ jobs:
         run: python3 -m pip install -r tests/fleet/requirements.txt
       - name: Qualify Fleet configuration and generated bundles
         run: make fleet-test
-      - name: Qualify generated PowerDNS credentials and rotation
-        run: sudo -E python3 tests/e2e/fleet_pdns.py
       - name: Enforce software supply-chain policy and negative fixtures
         run: make supply-chain-check
       - name: Validate development topology
@@ -155,8 +153,13 @@ jobs:
           docker build -t ghcr.io/vaheed/cdnfoundry-loki:ci docker/loki
           docker build -t ghcr.io/vaheed/cdnfoundry-grafana:ci docker/grafana
           docker build -t ghcr.io/vaheed/cdnfoundry-caddy:ci docker/caddy
+          docker build -t ghcr.io/vaheed/cdnfoundry-postgres:ci docker/postgres
       - name: Qualify origin destination safety and IPv6 HTTP/TLS
         run: python3 tests/e2e/origin_destinations.py --image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
+      - name: Qualify generated PowerDNS credentials and rotation
+        run: sudo -E python3 tests/e2e/fleet_pdns.py
+      - name: Qualify patched PostgreSQL minor upgrade and entrypoint
+        run: python3 tests/e2e/postgres_upgrade.py
       - name: Qualify ClickHouse LTS data upgrade and permissions
         run: python3 tests/e2e/clickhouse_upgrade.py
       - name: Qualify patched Caddy with production configs and real TLS
@@ -429,6 +432,7 @@ jobs:
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-grafana:${RELEASE}" docker/grafana
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-loki:${RELEASE}" docker/loki
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-caddy:${RELEASE}" docker/caddy
+          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-postgres:${RELEASE}" docker/postgres
       - name: Push, scan, attest, and sign immutable images
         env:
           RELEASE: ${{ github.sha }}
@@ -437,7 +441,7 @@ jobs:
           WORKFLOW_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
-          images=(core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater grafana loki caddy)
+          images=(core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater grafana loki postgres caddy)
           aliases=()
           push_with_retry() {
             local image="$1"
