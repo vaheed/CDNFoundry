@@ -44,7 +44,7 @@ LABEL org.opencontainers.image.source="https://github.com/vaheed/CDNFoundry" \
       org.opencontainers.image.created="${BUILD_DATE}" org.opencontainers.image.description="CDNFoundry OpenResty edge runtime" \
       org.opencontainers.image.licenses="Apache-2.0" org.opencontainers.image.documentation="https://vaheed.github.io/CDNFoundry/"
 
-RUN apk add --no-cache --upgrade libcrypto3=3.5.8-r0 libssl3=3.5.8-r0 libuuid=2.41.6-r1 libcurl=8.22.0-r0 libgcc libstdc++ lmdb lua5.1-maxminddb libxml2 pcre yajl \
+RUN apk add --no-cache --upgrade libcrypto3=3.5.8-r0 libssl3=3.5.8-r0 libuuid=2.41.6-r1 libcurl=8.22.0-r0 libexpat=2.8.4-r0 libgcc libstdc++ lmdb lua5.1-maxminddb libxml2 pcre yajl \
     && addgroup -S -g 10101 cdnf && adduser -S -D -H -u 10101 -G cdnf cdnf \
     && mkdir -p /var/cache/nginx/content/small /var/cache/nginx/content/standard /var/cache/nginx/content/large /var/cache/nginx/content/streaming /var/lib/cdnfoundry/runtime /var/lib/nginx/tmp/client_body /var/lib/nginx/tmp/proxy \
     && chown -R cdnf:cdnf /var/cache/nginx /var/lib/cdnfoundry/runtime /var/lib/nginx/tmp

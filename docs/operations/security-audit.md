@@ -2113,3 +2113,16 @@ including the Loki datasource health check (`plugin-candidate-runtime.log`).
 That run used an isolated Grafana plugin candidate; it does not qualify that
 candidate for publication or change the plugin signature policy. No Loki schema,
 retention policy or volume was changed. Remote publication remains blocked.
+
+### Edge Expat patch qualification (September 19)
+
+The current OpenResty base still contained Expat 2.8.2. The final edge runtime
+now installs Alpine's patched **2.8.4-r0**, resolving CVE-2026-66046,
+CVE-2026-76956 and CVE-2026-76957 without rebuilding or changing the WAF modules.
+The rebuilt image's unchanged strict scan gate passed with zero High/Critical
+findings (`edge-runtime-expat-scan.log`, `edge-runtime-final.json`). Real uploaded
+certificate qualification passed against this image, including twelve rejected
+invalid-chain cases and restoration of the previous valid certificate after
+each rejection (`edge-runtime-uploaded-tls.log`). Origin destination/IPv6/TLS
+qualification passed before this final Expat-only update (`edge-runtime-origin.log`).
+No browser test was run and this does not establish remote publication success.
