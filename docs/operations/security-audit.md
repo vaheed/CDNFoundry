@@ -5,6 +5,12 @@ description: Findings, review coverage, cleanup decisions, and qualification gat
 
 # Security audit and remediation evidence
 
+The owner closed the open-ended audit batch into a **development handoff on
+2026-09-19**. See the [handoff report](development-handoff.md) and
+[staged roadmap](../roadmap.md) for delivery status and separately scoped
+remaining jobs. Historical results below retain their original scope and dates;
+this handoff does not convert incomplete audit or production gates into passes.
+
 Audit in progress against `602c605b3f50551d18ddab442670d8fbc7e5f545`, initially clean
 `main`, on 2026-09-05. Changes in this checkout are part of the tested source.
 **Not yet qualified for production.** No public deployment, release publication,

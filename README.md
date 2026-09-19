@@ -16,6 +16,11 @@ It combines a Laravel and Filament control plane with PowerDNS, DNSdist,
 OpenResty, a Go edge agent, Vector, ClickHouse, Prometheus, and bounded
 role-based Docker Compose deployments.
 
+For the current development delivery, read the
+[handoff report](docs/operations/development-handoff.md) and
+[phased roadmap](docs/roadmap.md). The `dev` images target early staging tests;
+full production qualification remains a separate acceptance gate.
+
 Before deploying, read the [self-hosted private CDN design
 guide](https://vaheed.github.io/CDNFoundry/getting-started/private-cdn-design)
 to compare operational ownership, minimum topology, failure behavior, and the

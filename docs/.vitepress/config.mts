@@ -62,7 +62,6 @@ export default defineConfig({
   },
   srcExclude: [
     'legacy/**',
-    'roadmap.md',
     'manual-browser-qualification.md'
   ],
   head: [
@@ -268,6 +267,8 @@ export default defineConfig({
         {
           text: 'Operations',
           items: [
+            { text: 'Development handoff', link: '/operations/development-handoff' },
+            { text: 'Staged delivery roadmap', link: '/roadmap' },
             { text: 'Operations index', link: '/operations/' },
             { text: 'Production best practices', link: '/operations/production-best-practices' },
             { text: 'CLI commands', link: '/operations/cli-commands' },

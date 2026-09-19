@@ -3083,6 +3083,11 @@
       "scope": "Inventory only; no whole-file completion claimed."
     },
     {
+      "path": "docs/legacy/production-hardening-roadmap.md",
+      "status": "partial",
+      "scope": "Byte-identical archive of the prior roadmap; historical requirements transferred, not marked qualified."
+    },
+    {
       "path": "docs/legacy/production-layout.md",
       "status": "pending",
       "scope": "Inventory only; no whole-file completion claimed."
@@ -3191,6 +3196,11 @@
       "path": "docs/operations/cli-commands.md",
       "status": "partial",
       "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+    },
+    {
+      "path": "docs/operations/development-handoff.md",
+      "status": "partial",
+      "scope": "Handoff accounting and image retrieval instructions; exact dev CI publication tracked externally."
     },
     {
       "path": "docs/operations/fleet-rollouts.md",
@@ -3394,8 +3404,8 @@
     },
     {
       "path": "docs/roadmap.md",
-      "status": "pending",
-      "scope": "Inventory only; no whole-file completion claimed."
+      "status": "partial",
+      "scope": "September 19 owner-directed staged handoff roadmap; future phase execution remains open."
     },
     {
       "path": "docs/security/hardening.md",

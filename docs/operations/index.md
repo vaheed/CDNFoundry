@@ -5,6 +5,9 @@ description: Operate health, reconciliation, backups, incidents, and capacity fo
 
 # Operations
 
+Start with the [development handoff](development-handoff.md) for the dev release
+and the [staged delivery roadmap](../roadmap.md) for the next bounded jobs.
+
 - [Atomic edge runtime generations](runtime-generations.md)
 - [Software supply-chain verification](software-supply-chain.md)
 
