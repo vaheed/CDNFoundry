@@ -2144,7 +2144,8 @@ fixes, despite its `v1.5.1-0.20260427112133-525d1bab07e0` Go pseudo-version:
 [pinned upstream changelog](https://github.com/grafana/tempo/blob/525d1bab07e0/CHANGELOG.md),
 [bounded search configuration](https://github.com/grafana/tempo/blob/525d1bab07e0/modules/frontend/config.go),
 [secret encryption-key type](https://github.com/grafana/tempo/blob/525d1bab07e0/tempodb/backend/s3/config.go).
-No finding has been excluded; classification review remains open. Testing Trivy
+These findings were initially left blocking; the subsequent owner approval is
+recorded below. Testing Trivy
 0.74.0 independently reported the same three backend findings; the production
 scanner pin and release gate remain unchanged.
 
@@ -2156,3 +2157,22 @@ only this unsigned rebuilt plugin. It is not adopted: removing its invalidated
 vendor signature changes the existing trust contract and requires owner approval.
 The published-image signature gate would remain mandatory. The production
 Dockerfile still installs and checks the vendor-signed plugin archive unchanged.
+
+### Owner-approved Tempo classification and complete scan evidence
+
+On September 19 the owner explicitly approved CVE-2026-21728 and CVE-2026-28377
+as false positives for the exact locked Tempo dependency. The new classification
+file additionally restricts them to the Grafana backend path and expires October
+19. The resolved OSS dependency graph contains only Tempo protobuf packages and
+`go mod verify` passed. Evidence, source checksum, base digest, owner and expiry
+are recorded in the [supply-chain policy](software-supply-chain.md#approved-tempo-false-positive-classification).
+
+Raw scans now explicitly ignore nothing. Conversion retains both complete raw
+reports and separate classified JSON, including each original finding and its
+approval reason. Native Trivy fixtures passed matching, wrong version, wrong
+binary, wrong package, unapproved finding, expired approval and end-of-life cases.
+The actual Grafana report retains eleven raw High findings and nine unclassified
+High findings; it still fails release qualification. The obsolete blanket
+kin-openapi ignore from August was removed because the dependency is now fixed.
+Both required local/prepublication and registry publication gates use the same
+classification file. No plugin-signature change has been approved or adopted.

@@ -162,9 +162,12 @@ gate; a source build or example manifest cannot substitute for release evidence.
 ## Vulnerability policy and exceptions
 
 Trivy reports every severity in machine-readable JSON and fails publication on
-any High or Critical vulnerability, whether fixed or unfixed, or on an end-of-life
-OS. The scan runs once by digest, retains every severity in JSON and a readable
-table, then evaluates High/Critical findings from that same JSON with `convert`.
+any unclassified High or Critical finding, whether fixed or unfixed, or on an
+end-of-life OS. The scan uses an empty ignore file, retains every finding in JSON
+and a readable table, then evaluates that same JSON with `convert`. Approved
+classifications apply only during conversion. Additional `*.classified.json`
+reports retain the excluded findings, reasons and policy path through Trivy's
+`ExperimentalModifiedFindings` field; the original reports remain unchanged.
 The same gate scans all digest-pinned third-party production Compose images,
 including role overrides, before publication. It is also an agent-owned check
 in the production qualification runner:
@@ -179,6 +182,37 @@ image does not skip scanning the remaining images. No High finding is accepted a
 the CVE, affected component/digest, compensating control, owner, approval, and
 an expiry no later than 30 days. Exceptions are narrow reviewed policy changes;
 permanent wildcards and broad ignore files are forbidden. Keep scanner version and database freshness metadata with the reports.
+
+### Approved Tempo false-positive classification
+
+Owner **vaheed** explicitly approved the following two classifications on
+**2026-09-19**, expiring at **2026-10-19 UTC**. After expiry the scanner blocks
+these findings again. Scope is the Grafana backend at
+`usr/share/grafana/bin/grafana` and exactly
+`github.com/grafana/tempo@v1.5.1-0.20260427112133-525d1bab07e0`.
+The pinned Grafana 12.4.11 base digest is
+`sha256:3ea272e5cab64a4a62240c682e2c62433b25614d956d44c299a10cb6994f6f2e`;
+each derived release digest remains recorded in its scan metadata and signed
+release manifest. Other package versions, binary paths and findings do not match.
+
+| Finding | Evidence that the pinned source is fixed |
+| --- | --- |
+| CVE-2026-21728 | [Frontend configuration](https://github.com/grafana/tempo/blob/525d1bab07e0/modules/frontend/config.go) sets the search maximum to 256 × 1024; the pinned changelog includes the 2.10.2 fix. |
+| CVE-2026-28377 | [S3 configuration](https://github.com/grafana/tempo/blob/525d1bab07e0/tempodb/backend/s3/config.go) uses `flagext.Secret` for the customer encryption key; the pinned changelog includes the 2.10.3 fix. |
+
+Grafana's resolved OSS backend dependency graph additionally contains only four
+Tempo protobuf packages (`pkg/tempopb` and its common/resource/trace subpackages),
+not the affected server packages. Module checksums were verified; the source
+checksum is `h1:kE5kdMnyPJmlNUdWhahfzqPYB3vM8DtAxgWymbB8nOA=`. The scanner compares
+the Go pseudo-version against product 2.x versions and still reports both fixes
+as missing. This approval accepts that classification evidence; it does not accept
+running an affected Tempo server or waive the remaining Grafana/plugin findings.
+
+The old unbounded kin-openapi ignore was removed: current Grafana uses 0.147.0,
+after [the upstream 0.144.0 fix](https://github.com/advisories/GHSA-r277-6w6q-xmqw).
+`python3 tests/e2e/trivy_classifications.py` exercises the actual pinned scanner:
+matching findings are classified, while different versions/paths/packages,
+unapproved findings, expiry and end-of-life OS still fail. No browser is involved.
 
 ## Updating dependencies and bases
 

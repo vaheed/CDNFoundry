@@ -8,7 +8,8 @@ severity:
 ignore-unfixed: false
 exit-code: 1
 exit-on-eol: 1
-ignorefile: /work/supply-chain/.trivyignore
+# Keep the original scan complete. Approved classifications apply only to conversion.
+ignorefile: /dev/null
 scanners:
   - vuln
 vulnerability:

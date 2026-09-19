@@ -5,6 +5,12 @@ description: Run CDNFoundry unit, feature, contract, real-runtime, and scale qua
 
 # Testing and qualification
 
+Run `python3 tests/e2e/trivy_classifications.py` to qualify vulnerability-policy
+exceptions with the pinned Trivy container. It uses offline synthetic reports
+to verify exact package/version/path scope, unapproved findings, expiry and
+end-of-life failure. CI runs it before production image builds. Full image scans
+remain separate; these fixtures do not establish that an image is vulnerability-free.
+
 Run `python3 tests/e2e/gateway_ingress.py` for the non-browser gateway runtime
 qualification. It requires the development edge profile and the locally built
 `cdnfoundry/edge-gateway:qualification` image. Coding agents must not run the separate

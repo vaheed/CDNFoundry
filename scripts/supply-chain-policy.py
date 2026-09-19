@@ -191,8 +191,11 @@ def scan_production_dependencies(output: pathlib.Path, *, release: str | None = 
         commands = ([['docker', 'pull', reference]] if release is None else []) + [
             [*base, 'image', '--image-src', 'docker', '--config', '/work/supply-chain/trivy.yaml',
              '--format', 'json', '--output', f'/out/{name}.json', '--exit-code', '0', reference],
-            [*base, 'convert', '--format', 'table', '--output', f'/out/{name}.txt', f'/out/{name}.json'],
-            [*base, 'convert', '--exit-code', '1', '--exit-on-eol', '1', '--severity', 'HIGH,CRITICAL', f'/out/{name}.json'],
+            [*base, 'convert', '--ignorefile', '/dev/null', '--format', 'table', '--output', f'/out/{name}.txt', f'/out/{name}.json'],
+            [*base, 'convert', '--ignorefile', '/work/supply-chain/trivy-classifications.yaml', '--show-suppressed',
+             '--format', 'json', '--output', f'/out/{name}.classified.json', f'/out/{name}.json'],
+            [*base, 'convert', '--exit-code', '1', '--exit-on-eol', '1', '--severity', 'HIGH,CRITICAL',
+             '--ignorefile', '/work/supply-chain/trivy-classifications.yaml', '--show-suppressed', f'/out/{name}.json'],
         ]
         result = {'image': reference, 'report': f'{name}.json', 'commands': [], 'status': 'passed'}
         for command in commands:
@@ -256,7 +259,8 @@ def main() -> None:
             fail(f"release workflow lacks {evidence}")
     if 'scripts/supply-chain-policy.py --scan-release-images ci' not in release:
         fail('release workflow lacks the image gate before publication')
-    for evidence in ['convert --exit-code 1 --exit-on-eol 1 --severity HIGH,CRITICAL', 'convert --format table', '--exit-code 0 "${digest}"']:
+    for evidence in ['convert --exit-code 1 --exit-on-eol 1 --severity HIGH,CRITICAL', 'convert --ignorefile /dev/null --format table', '--exit-code 0 "${digest}"',
+                     '--ignorefile /work/supply-chain/trivy-classifications.yaml --show-suppressed']:
         if evidence not in release:
             fail(f"release scan lacks complete reporting and enforcement: {evidence}")
     if "push_with_retry()" not in release or release.count('docker push "${image}"') != 1:

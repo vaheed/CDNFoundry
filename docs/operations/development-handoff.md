@@ -44,15 +44,18 @@ claimed for that run.
 
 **Publication is blocked.** The owner explicitly chose on September 19 to retain
 the High/Critical vulnerability gate for `dev`; main/versioned releases remain
-equally strict. No waiver, scanner exclusion or warning-only path was added.
+equally strict. The only new classifications are the two owner-approved Tempo
+false positives described in the [supply-chain policy](software-supply-chain.md#approved-tempo-false-positive-classification).
+There is no warning-only publication path.
 
 The latest complete **local** release-image gate scanned all seventeen current
 images: sixteen passed and Grafana failed. The generated production observability
 runtime check passed with Grafana 12.4.11 and the vendor-signed ClickHouse plugin
 4.21.3, including all four datasource health checks. Grafana still reports eleven
 High findings: eight in the plugin's Go runtime, one in Thrift, and two in Tempo.
-The pinned Tempo source contains the reported fixes, but no scanner classification
-exception has been applied. A rebuilt plugin removes its eight runtime findings
+The pinned Tempo source contains the reported fixes; the owner approved exact
+package/path classifications through October 19. Raw findings remain in the
+evidence, with classifications recorded separately. A rebuilt plugin removes its eight runtime findings
 and passes the same runtime check, but requires a separate trust-policy decision
 because rebuilding invalidates the vendor signature. It is an isolated candidate,
 not the release image. Complete evidence is under ignored
