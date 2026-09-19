@@ -1847,3 +1847,12 @@ no fixed package version reported. Refreshing the current Caddy tag reduced its
 High/Critical findings from 40 to 17 but did not clear the gate. That candidate
 was tested only, not adopted. AUD-013 dependency qualification remains open;
 no scan exception or publication success is implied by these two corrections.
+
+The same run's backend E2E failed at its first control-plane heartbeat: the test
+provisioned a serial and expiry but omitted the enrolled certificate. Exact-leaf
+authentication correctly rejected it. The fixture now stores its generated
+public certificate with that identity; the authentication check is unchanged.
+Local `dev-control-plane-identity` passed authentication but stopped with HTTP
+500 on pre-existing invalid persisted `edge_runtime` settings. That run is
+**failed**, not a complete control-plane pass; persistent settings were not reset.
+The clean GitHub topology must qualify the complete corrected fixture.

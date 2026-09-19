@@ -352,6 +352,7 @@ def provision_edge(token: str, name: str, country: str, continent: str, ipv4: st
     artisan(
         "App\\Models\\Edge::query()->whereKey(" + quote(edge["id"]) + ")->update(["
         f"'registered_at'=>now(),'identity_certificate_serial'=>{quote(serial.upper())},"
+        f"'identity_certificate'=>{quote(certificate.read_text())},"
         "'identity_certificate_expires_at'=>now()->addDay(),'identity_revoked_at'=>null,'bootstrap_token_hash'=>null,'agent_version'=>'1.2.0']);"
     )
     return {**edge, "context": {
