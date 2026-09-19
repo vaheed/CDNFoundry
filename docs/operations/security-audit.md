@@ -2102,3 +2102,14 @@ a missing local image fails rather than pulling another build. Negative fixtures
 prove missing-image failure, continued inventory, override coverage and rejection
 of mutable release names. Registry-digest scanning/signing remains unchanged.
 The local complete image gate and remote run are still pending final remediation.
+
+### Loki patch qualification (September 19)
+
+The managed Loki image now pins vendor release **3.7.8** by digest. Its complete
+image report has zero High/Critical findings under the existing scanner and
+unchanged gate. Native `-verify-config=true` passed with production retention
+settings. The generated production observability qualification also passed,
+including the Loki datasource health check (`plugin-candidate-runtime.log`).
+That run used an isolated Grafana plugin candidate; it does not qualify that
+candidate for publication or change the plugin signature policy. No Loki schema,
+retention policy or volume was changed. Remote publication remains blocked.
