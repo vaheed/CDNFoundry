@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -68,6 +69,12 @@ def main() -> None:
                               'entrypoint_privilege_drop': 'passed'}))
         finally:
             run('docker', 'rm', '-f', name, check=False)
+            # Entrypoints chown these disposable bind mounts to their database UID.
+            # Return ownership before TemporaryDirectory removes them on non-root CI.
+            run('docker', 'run', '--rm', '--network', 'none', '--user', '0:0',
+                '--memory', '64m', '--pids-limit', '32', '--entrypoint', 'chown',
+                '-v', f'{data}:/qualification-data', PREVIOUS,
+                '-R', f'{os.getuid()}:{os.getgid()}', '/qualification-data')
 
 
 if __name__ == '__main__':

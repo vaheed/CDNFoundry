@@ -333,3 +333,45 @@ A test-only process seam supplies the fixture trust anchor and redirects packets
 production validation and bounds run unchanged. This does not qualify public
 DNS, registrar propagation or routed IPv6. No application database or existing
 container/volume changes. IPv6 loopback is required for the check.
+
+## CI image reuse and build caches
+
+CI builds the 17 production images in eight independent `images` matrix jobs.
+`docker-bake.hcl` owns the build targets; the application group shares its core
+build with web and edge-control through Bake target contexts. Each target has a
+separate GitHub Actions layer-cache scope, including intermediate compiler
+layers. A cache miss still builds from the pinned inputs; an unavailable cache
+export cannot bypass a build or qualification failure. Go checks cache their
+compiler and module data using the module declarations.
+
+Builds carry the workflow commit, ref name and commit timestamp in their release
+labels. Each group uploads a compressed Docker archive with its checksum and
+image IDs. `scripts/ci/images.py load` rejects missing, duplicate, corrupt or
+wrong-commit artifacts and verifies the loaded image IDs. Both production
+qualification and publication load those same artifacts. Publication tags the
+qualified images with the commit instead of compiling them again; complete
+scans, SBOMs, signatures, attestations and the signed manifest remain required.
+The publication scanner shares one local vulnerability database cache between
+images and still evaluates each image. Archives expire after one day; rerun the
+whole workflow if artifacts have expired, rather than only the publication job.
+
+Each image group and publication job has a 30-minute deadline; production-image
+qualification has 20 minutes. These are failure bounds, not a promised total
+workflow duration: runner queues, environment approval, cold caches, uploads,
+runtime qualification and registry availability affect elapsed time. Measure
+both cold and warm successful runs before claiming a new completion time.
+
+Validate the transfer rejection cases with:
+
+```sh
+python3 -m unittest discover -s tests/qualification
+```
+
+The PostgreSQL and ClickHouse upgrade fixtures use temporary bind-mounted data,
+restore its ownership through a bounded container, and then remove the temporary
+files. This allows the same real upgrade/restart checks to finish on a non-root
+GitHub runner without changing any persistent database or named volume. Run
+`python3 tests/e2e/postgres_upgrade.py` and
+`python3 tests/e2e/clickhouse_upgrade.py` as a normal Docker-enabled user to cover
+that cleanup boundary. Browser qualification is not applicable to these CI-only
+changes; the owner-run checklist remains unchanged.

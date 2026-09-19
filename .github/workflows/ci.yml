@@ -80,10 +80,63 @@ jobs:
       - name: Check OpenAPI contract
         run: php artisan cdnf:api:openapi --check
 
+  images:
+    name: Build production images (${{ matrix.group }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        group: [application, edge, dashboards, dns, monitoring, agents, logging, storage]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Prepare disposable runner space for source image builds
+        run: bash scripts/prepare-image-runner.sh
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        with:
+          buildkitd-config-inline: |
+            [worker.oci]
+              max-parallelism = 2
+      - name: Set reproducible release labels and per-image caches
+        env:
+          IMAGE_GROUP: ${{ matrix.group }}
+        run: |
+          echo "BUILD_DATE=$(git show -s --format=%cI HEAD)" >> "$GITHUB_ENV"
+          python3 scripts/ci/images.py cache "$IMAGE_GROUP"
+      - name: Build and cache this image group
+        uses: docker/bake-action@5be5f02ff8819ecd3092ea6b2e6261c31774f2b4 # v6
+        env:
+          SOURCE_REVISION: ${{ github.sha }}
+          RELEASE_VERSION: ${{ github.ref_name }}
+        with:
+          source: .
+          files: |
+            docker-bake.hcl
+            storage/ci-images/cache.json
+          targets: ${{ matrix.group }}
+          load: true
+          provenance: false
+      - name: Export exact images for qualification and publication
+        env:
+          IMAGE_GROUP: ${{ matrix.group }}
+          SOURCE_REVISION: ${{ github.sha }}
+        run: python3 scripts/ci/images.py export "$IMAGE_GROUP"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: production-images-${{ matrix.group }}
+          path: |
+            storage/ci-images/*.tar.gz
+            storage/ci-images/*.manifest.json
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
   compose:
     name: Compose contracts and production images
+    needs: images
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Prepare disposable runner space for source image builds
@@ -108,31 +161,17 @@ jobs:
       - name: Validate observability contracts
         run: python3 -m unittest tests/observability/test_grafana_contract.py tests/observability/test_operational_logging_contract.py
       - name: Validate Python syntax
-        run: python3 -m compileall -q tests/e2e tests/docs tests/fleet tests/qualification tests/supply_chain scripts/cdnfoundry_fleet
-      - name: Build every production image from its pinned base
-        run: |
-          docker build --target production -t cdnfoundry/core:ci -t ghcr.io/vaheed/cdnfoundry-core:ci core
-          docker build --build-arg CORE_IMAGE=cdnfoundry/core:ci --target web -t ghcr.io/vaheed/cdnfoundry-web:ci -f docker/nginx/Dockerfile.production .
-          docker build --build-arg CORE_IMAGE=cdnfoundry/core:ci --target edge-control -t ghcr.io/vaheed/cdnfoundry-edge-control:ci -f docker/nginx/Dockerfile.production .
-          docker build -t ghcr.io/vaheed/cdnfoundry-edge-runtime:ci -f docker/openresty/Dockerfile .
-          docker builder prune --all --force
-          docker build -t ghcr.io/vaheed/cdnfoundry-edge-agent:ci edge-agent
-          docker build -t ghcr.io/vaheed/cdnfoundry-edge-gateway:ci edge-gateway
-          docker build -t ghcr.io/vaheed/cdnfoundry-mmdb-updater:ci docker/mmdb-updater
-          docker build -t ghcr.io/vaheed/cdnfoundry-loki:ci docker/loki
-          docker build -t ghcr.io/vaheed/cdnfoundry-grafana:ci docker/grafana
-          docker builder prune --all --force
-          docker build -t ghcr.io/vaheed/cdnfoundry-caddy:ci docker/caddy
-          docker build -t ghcr.io/vaheed/cdnfoundry-dnsdist:ci docker/dnsdist
-          docker build -t ghcr.io/vaheed/cdnfoundry-pdns:ci docker/pdns
-          docker builder prune --all --force
-          docker build -t ghcr.io/vaheed/cdnfoundry-prometheus:ci docker/prometheus
-          docker build -t ghcr.io/vaheed/cdnfoundry-alertmanager:ci docker/alertmanager
-          docker build -t ghcr.io/vaheed/cdnfoundry-node-exporter:ci docker/node-exporter
-          docker builder prune --all --force
-          docker build -t ghcr.io/vaheed/cdnfoundry-vector:ci docker/vector-runtime
-          docker build -t ghcr.io/vaheed/cdnfoundry-postgres:ci docker/postgres
-          docker builder prune --all --force
+        run: python3 -m compileall -q tests/e2e tests/docs tests/fleet tests/qualification tests/supply_chain scripts/cdnfoundry_fleet scripts/ci
+      - name: Download exact production images
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: production-images-*
+          path: storage/ci-images
+          merge-multiple: true
+      - name: Load and verify production image identities
+        env:
+          SOURCE_REVISION: ${{ github.sha }}
+        run: python3 scripts/ci/images.py load
       - name: Scan every built release image before allowing publication
         run: python3 scripts/supply-chain-policy.py --scan-release-images ci --output storage/qualification/release-image-scans
       - name: Retain complete release image scan evidence
@@ -222,7 +261,7 @@ jobs:
   backend-e2e:
     name: Backend and runtime E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Prepare disposable runner space for source image builds
@@ -322,7 +361,10 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.26.8'
-          cache: false
+          cache: true
+          cache-dependency-path: |
+            edge-agent/go.mod
+            edge-gateway/go.mod
       - name: Check Go CI failure propagation
         run: python3 -m unittest discover -s tests/qualification -p test_go_ci.py
       - name: Test and build every Go module
@@ -429,7 +471,7 @@ jobs:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/v'))
     needs: [core, compose, backend-e2e, scale-e2e, go, docs, production-dependencies]
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 30
     environment: production
     permissions:
       contents: read
@@ -455,36 +497,20 @@ jobs:
           printf 'release=%s\nref=%s\nworkflow_run_id=%s\nstatus=started\n' \
             "${RELEASE}" "${RELEASE_REF_NAME}" "${WORKFLOW_RUN_ID}" \
             > release-evidence/build-context.txt
-      - name: Build commit-addressed images
+      - name: Download exact production images
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: production-images-*
+          path: storage/ci-images
+          merge-multiple: true
+      - name: Load and verify production image identities
         env:
-          RELEASE: ${{ github.sha }}
-          RELEASE_REF_NAME: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          labels=(--build-arg "SOURCE_REVISION=${RELEASE}" --build-arg "RELEASE_VERSION=${RELEASE_REF_NAME}" --build-arg "BUILD_DATE=${build_date}")
-          docker build "${labels[@]}" --target production -t "ghcr.io/vaheed/cdnfoundry-core:${RELEASE}" core
-          docker build "${labels[@]}" --build-arg "CORE_IMAGE=ghcr.io/vaheed/cdnfoundry-core:${RELEASE}" --target web -t "ghcr.io/vaheed/cdnfoundry-web:${RELEASE}" -f docker/nginx/Dockerfile.production .
-          docker build "${labels[@]}" --build-arg "CORE_IMAGE=ghcr.io/vaheed/cdnfoundry-core:${RELEASE}" --target edge-control -t "ghcr.io/vaheed/cdnfoundry-edge-control:${RELEASE}" -f docker/nginx/Dockerfile.production .
-          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-edge-runtime:${RELEASE}" -f docker/openresty/Dockerfile .
-          docker builder prune --all --force
-          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-edge-agent:${RELEASE}" edge-agent
-          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-edge-gateway:${RELEASE}" edge-gateway
-          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-mmdb-updater:${RELEASE}" docker/mmdb-updater
-          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-grafana:${RELEASE}" docker/grafana
-          docker builder prune --all --force
-          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-loki:${RELEASE}" docker/loki
-          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-caddy:${RELEASE}" docker/caddy
-          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-dnsdist:${RELEASE}" docker/dnsdist
-          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-pdns:${RELEASE}" docker/pdns
-          docker builder prune --all --force
-          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-prometheus:${RELEASE}" docker/prometheus
-          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-alertmanager:${RELEASE}" docker/alertmanager
-          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-node-exporter:${RELEASE}" docker/node-exporter
-          docker builder prune --all --force
-          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-vector:${RELEASE}" docker/vector-runtime
-          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-postgres:${RELEASE}" docker/postgres
-          docker builder prune --all --force
+          SOURCE_REVISION: ${{ github.sha }}
+        run: python3 scripts/ci/images.py load
+      - name: Tag qualified images with the source commit
+        env:
+          SOURCE_REVISION: ${{ github.sha }}
+        run: python3 scripts/ci/images.py tag
       - name: Push, scan, attest, and sign immutable images
         env:
           RELEASE: ${{ github.sha }}
@@ -532,6 +558,7 @@ jobs:
               aliases+=("${minor}" "${major}" latest)
             fi
           fi
+          mkdir -p /tmp/cdnfoundry-trivy-cache
           first=true
           for component in "${images[@]}"; do
             image="ghcr.io/vaheed/cdnfoundry-${component}"
@@ -541,13 +568,13 @@ jobs:
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}/release-evidence:/out" \
               anchore/syft:v1.33.0@sha256:f94e5d9fce1f2278491a8e3a63bd5f6ddb81fdfdbb8bf7a1637565c1d5344357 \
               "${digest}" -o "spdx-json=/out/${component}.spdx.json"
-            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/work:ro" -v "${PWD}/release-evidence:/out" \
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/work:ro" -v "${PWD}/release-evidence:/out" -v /tmp/cdnfoundry-trivy-cache:/root/.cache/ \
               aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e \
               image --config /work/supply-chain/trivy.yaml --format json --output "/out/${component}.trivy.json" --exit-code 0 "${digest}"
             docker run --rm -v "${PWD}/release-evidence:/out" \
               aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e \
               convert --ignorefile /dev/null --format table --output "/out/${component}.trivy.txt" "/out/${component}.trivy.json"
-            docker run --rm -v "${PWD}:/work:ro" -v "${PWD}/release-evidence:/out" \
+            docker run --rm -v "${PWD}:/work:ro" -v "${PWD}/release-evidence:/out" -v /tmp/cdnfoundry-trivy-cache:/root/.cache/ \
               aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e \
               convert --ignorefile /work/supply-chain/trivy-classifications.yaml --show-suppressed \
               --format json --output "/out/${component}.classified.json" "/out/${component}.trivy.json"
