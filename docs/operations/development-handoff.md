@@ -94,7 +94,7 @@ Live staging and manual browser qualification remain separate and unexecuted.
 | Delivery and tests | Pinned build inputs, complete scan evidence, verifiable qualification input, Fleet CI inclusion, Go failure propagation and isolated Laravel/OpenAPI checks | Current remote gates and exact-release evidence; clean-host verifier execution |
 | Cleanup/docs | Dead build arguments removed and defective/superseded implementations replaced; current runbooks and cleanup ledger retained | Complete remaining inventory and prove non-use before further deletion |
 
-Findings AUD-001 through AUD-054 have individual evidence and status in the audit
+Findings AUD-001 through AUD-055 have individual evidence and status in the audit
 register. Some are broader ongoing qualifications, including dependency/image
 risk; this table must not be read as “all findings resolved.” Historical fixes
 and historical scan failures remain visible rather than being erased by this handoff.
@@ -117,6 +117,14 @@ and historical scan failures remain visible rather than being erased by this han
 Local command logs, exit codes, timings and source identities are under ignored
 `storage/qualification/security-audit/dev-handoff-*`. CI retains release and
 image scan artifacts. A dependency scanner pass is not an installer/load pass.
+
+Local environment limitations: the full control-plane rerun encountered invalid
+persisted `edge_runtime` settings, which were preserved for migration/compatibility
+review. The clean remote control-plane fixture subsequently passed. The host
+also exhausted disk space with unbounded Docker logs (AUD-055); existing logs
+and database volumes were preserved. The container-based mTLS signer passed
+locally after correction. The next run must still qualify the entire backend
+sequence and the unprivileged BIND fixture together.
 
 ## Retrieve the complete app for staging
 

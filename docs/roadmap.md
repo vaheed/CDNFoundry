@@ -161,6 +161,9 @@ operational checklist is recorded. Current status: **partial**.
 **Job `telemetry-and-cleanup`.** Review tenant log/analytics/export access,
 redaction, bounded ingestion/query cost, retention, alerts and failure isolation.
 Assign every remaining admin/config/build/asset/doc/test-tool inventory path.
+Resolve AUD-055: bound Docker service log size/retention and document applying
+rotation to existing containers without deleting database volumes. The current
+local installation exhausted disk space on unbounded ClickHouse/Horizon logs.
 Extend the cleanup ledger and remove only proven unused/superseded items after
 framework, generator and documented-caller tracing. Preserve applied migrations,
 rollback material, regression coverage and supported external contracts.

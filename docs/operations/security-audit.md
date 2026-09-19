@@ -1867,3 +1867,23 @@ bogus DNSSEC, existing DS, child-apex rejection and IPv4/IPv6 UDP/TCP checks.
 This used disposable files in `/dev/shm` because the host filesystem lacked
 space for unprivileged writes. The local scan cache was removed; scan reports,
 persistent databases and named volumes were retained. No CI gate was relaxed.
+
+The second run passed the corrected control-plane fixture, including Anycast,
+cache operations and acknowledged placement migration, then failed `phase4_mtls`
+because it invoked host PHP with container-only Composer dependencies. The
+signer now runs through the already-built Compose core with its entrypoint
+overridden to PHP, the caller's UID/GID and disposable PKI. It does not boot the
+application, run migrations or use the configured production CA. Local real
+mTLS qualification passed (`cdnf-mtls-a5de0593c76e`): client identity, header
+overwrite/clear, leaf rejection and ordinary ingress denial. Earlier local
+attempts failed while the filesystem was full; they are not reported as passes.
+
+AUD-055 (**High / confirmed operational availability risk**) records unbounded
+Docker JSON logs: current Compose files have no rotation configuration, and the
+running local ClickHouse/Horizon containers reported empty log options with
+approximately **38 GiB / 7 GiB** of logs. The host exhausted writable space.
+No log contents or database data were deleted. Unreferenced scan image references,
+the regenerable scan cache and unused build cache older than 24 hours were
+removed; scan reports remain. This finding is **open**, assigned to the roadmap's
+telemetry/cleanup job, and must be addressed before claiming bounded long-running
+staging operation.

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Qualify real edge-control TLS, certificate provenance and leaf constraints.
 
-Uses disposable Nginx/PHP containers and ephemeral test PKI. The PHP upstream
+Uses the built Compose core for signing, disposable Nginx/PHP containers and
+ephemeral test PKI. The PHP upstream
 reports only certificate metadata, never rendered UI or private material.
 """
 import json
@@ -12,6 +13,7 @@ import tempfile
 import uuid
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+COMPOSE = os.environ.get('CDNF_COMPOSE_FILE', 'compose.dev.yml')
 NGINX = 'nginx:1.31.3-alpine@sha256:4a73073bd557c65b759505da037898b61f1be6cbcc3c2c3aeac22d2a470c1752'
 PHP_IMAGE = 'php:8.5-fpm-alpine@sha256:9dc81f4086ea5402227a6bcc489b04b4baba12394624d9621faa92ed812fb8ee'
 
@@ -46,8 +48,8 @@ echo json_encode(['verify' => $_SERVER['HTTP_X_EDGE_CERTIFICATE_VERIFY'] ?? '',
         # Call the actual first-party signer against ephemeral CA material.
         signer = target / 'sign.php'
         signer.write_text('''<?php
-require getenv('CDNF_QUALIFICATION_ROOT').'/core/vendor/autoload.php';
-$app = new Illuminate\\Foundation\\Application(getenv('CDNF_QUALIFICATION_ROOT').'/core');
+require '/app/vendor/autoload.php';
+$app = new Illuminate\\Foundation\\Application('/app');
 $app->detectEnvironment(fn () => 'qualification');
 $app->instance('config', new Illuminate\\Config\\Repository(['edge' => [
     'identity_ca_certificate' => __DIR__.'/ca.crt', 'identity_ca_private_key' => __DIR__.'/ca.key',
@@ -57,7 +59,11 @@ $result = App\\Support\\EdgeCertificateAuthority::sign(file_get_contents(__DIR__
 file_put_contents(__DIR__.'/client.crt', $result['certificate']);
 echo json_encode(['serial' => $result['serial'], 'fingerprint' => openssl_x509_fingerprint($result['certificate'], 'sha256')]);
 ''')
-        identity = json.loads(run('php', str(signer), env={**os.environ, 'CDNF_QUALIFICATION_ROOT': str(ROOT)}).stdout)
+        identity = json.loads(run(
+            'docker', 'compose', '-f', COMPOSE, 'run', '--rm', '--no-deps',
+            '--user', f'{os.getuid()}:{os.getgid()}', '--entrypoint', 'php',
+            '--volume', f'{target}:/fixture', 'core', '/fixture/sign.php',
+        ).stdout)
         run('openssl', 'verify', '-purpose', 'sslclient', '-CAfile', str(target / 'ca.crt'), str(target / 'client.crt'))
         run('openssl', 'req', '-newkey', 'rsa:2048', '-nodes', '-subj', '/CN=forged-edge',
             '-keyout', str(target / 'forged.key'), '-out', str(target / 'forged.csr'))
