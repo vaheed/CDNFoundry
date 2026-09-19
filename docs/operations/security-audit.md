@@ -1899,3 +1899,23 @@ not be committed or printed. No database migration, refresh or volume deletion
 occurred. AUD-055 is **partially remediated**: these two development services are
 bounded; the remaining service/production logging policy remains assigned to
 telemetry/cleanup. Do not remove the limits during subsequent development starts.
+
+## Dependency remediation: verified base and queue replacements
+
+Production helper containers now use Alpine **3.22.6**, digest
+`sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8`.
+Valkey now uses **9.1.2-alpine3.24**, digest
+`sha256:a0dbf4c1d5708782907c10e2c72deff317518518b5288a58416981d9db95d30b`.
+Both exact images passed the existing High/Critical and EOL gate with no
+High/Critical package findings. An isolated, unpublished-port Valkey container
+passed startup, PING, SET/GET and Lua execution, then was removed without volumes.
+Compose and supply-chain checks passed. No live database/queue upgrade occurred;
+normal canary/backup procedures apply when deploying the new pins.
+
+Candidate reports are retained under ignored
+`storage/qualification/dependency-remediation/candidate-scans`, with selected
+digests in `candidates.json`. The other nine newly scanned upstream candidates
+still failed; Caddy's refreshed candidate had already failed separately. Those
+failures were not adopted or waived. This closes **2 of the original 12** image
+entries; it does not qualify the remaining dependencies or the application-image
+publication gate. AUD-013 remains open and remediation continues.

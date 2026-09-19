@@ -254,7 +254,7 @@ services:
       retries: 20
 
   redis:
-    image: valkey/valkey:9.1.0-alpine@sha256:c9b77919daeba2c02ad954d0c844cc4e7142069d177b89c5fd771f405daf9e02
+    image: valkey/valkey:9.1.2-alpine3.24@sha256:a0dbf4c1d5708782907c10e2c72deff317518518b5288a58416981d9db95d30b
     profiles: [control]
     command: [valkey-server, --appendonly, "yes", --requirepass, "${REDIS_PASSWORD}", --maxmemory, 1gb, --maxmemory-policy, noeviction]
     volumes: [redis:/data]
@@ -376,7 +376,7 @@ services:
       retries: 3
 
   loki-data-init:
-    image: alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
+    image: alpine:3.22.6@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
     profiles: [telemetry]
     command: [chown, "10001:10001", /loki]
     volumes: [loki-data:/loki]
@@ -702,7 +702,7 @@ services:
           pids: 128
 
   edge-gateway-state-init:
-    image: alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
+    image: alpine:3.22.6@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
     profiles: [edge]
     command: [chown, "10101:10101", /state]
     volumes: [edge-gateway-state:/state]
