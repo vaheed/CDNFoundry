@@ -10,8 +10,8 @@ as a development delivery handoff, at the owner's request. Remaining security,
 installation and production acceptance work is assigned to separate jobs in the
 [new roadmap](../roadmap.md). It does not claim that the full audit is complete.
 
-The requested deliverable is remote `dev` with a successful CI run and all nine
-GHCR application images published. Live deployment is a separate Phase 1 job;
+The requested deliverable is remote `dev` with a successful CI run and all application and managed infrastructure
+GHCR images published. Live deployment is a separate Phase 1 job;
 no staging host access or live deployment was requested for this handoff.
 
 ## Source and release evidence
@@ -87,8 +87,14 @@ successful builds do not establish a vulnerability pass.
 
 Next bounded job: **`dependency-remediation`**, now a Phase 0 prerequisite in the
 roadmap. Select and qualify supported replacements, rescan exact infrastructure
-and application images, then resume delivery and verify nine-image publication.
+and application images, then resume delivery and verify complete release publication.
 Live staging and manual browser qualification remain separate and unexecuted.
+
+Local remediation progress: Alpine 3.22.6 and Valkey 9.1.2 passed the strict
+image gate. The managed Caddy 2.11.4 build also passed, including its detected
+Go binary, real HTTPS proxy/allowlist checks, and Fleet/Compose contracts. These
+resolve 3 of the original 12 dependency entries locally; remote publication
+remains pending. No vulnerability exception was added.
 
 ## Implemented and committed work
 
@@ -149,16 +155,17 @@ A successful `publish-images` job publishes these GHCR repositories:
 | MMDB updater | `ghcr.io/vaheed/cdnfoundry-mmdb-updater` |
 | Grafana | `ghcr.io/vaheed/cdnfoundry-grafana` |
 | Loki | `ghcr.io/vaheed/cdnfoundry-loki` |
+| Caddy ingress | `ghcr.io/vaheed/cdnfoundry-caddy` |
 
 Each has the full source-SHA tag. `dev` and `dev-latest` are convenience aliases;
 use the immutable digest references in the signed manifest for deployment.
 Download `release-evidence-<full-source-sha>` from that successful run. It includes
 `release-manifest.json`, its Sigstore bundle and component scan/provenance/SBOM
 evidence. Follow [release verification](software-supply-chain.md#verify-a-release)
-to verify identity and project the nine digests into Fleet configuration, then
+to verify identity and project every release digest into Fleet configuration, then
 follow the [starter quick start](../deployment/production-quick-start.md).
 PostgreSQL, DNS, queue and other infrastructure images come from the pinned
-Compose topology; the nine images alone are not a running installation.
+Compose topology; the images alone are not a running installation.
 
 ## Compatibility, operations and rollback
 

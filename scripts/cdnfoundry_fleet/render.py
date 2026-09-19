@@ -214,6 +214,7 @@ class Renderer:
             "CDNF_MMDB_UPDATER_IMAGE": f"ghcr.io/vaheed/cdnfoundry-mmdb-updater:{node['release']}",
             "CDNF_GRAFANA_IMAGE": f"ghcr.io/vaheed/cdnfoundry-grafana:{node['release']}",
             "CDNF_LOKI_IMAGE": f"ghcr.io/vaheed/cdnfoundry-loki:{node['release']}",
+            "CDNF_CADDY_IMAGE": f"ghcr.io/vaheed/cdnfoundry-caddy:{node['release']}",
             "HOST_BIND_IPV4": node["bind_ipv4"],
             "HOST_BIND_IPV6": node.get("bind_ipv6") or "::",
             "DNS_BIND_V4": node["bind_ipv4"],

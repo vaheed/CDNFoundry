@@ -16,6 +16,7 @@ DOCKERFILES = [
     ROOT / "core/Dockerfile", ROOT / "edge-agent/Dockerfile", ROOT / "edge-gateway/Dockerfile",
     ROOT / "docker/nginx/Dockerfile.production", ROOT / "docker/openresty/Dockerfile",
     ROOT / "docker/mmdb-updater/Dockerfile", ROOT / "docker/grafana/Dockerfile", ROOT / "docker/loki/Dockerfile",
+    ROOT / "docker/caddy/Dockerfile",
 ]
 REQUIRED_LABELS = ["image.source", "image.revision", "image.version", "image.created", "image.description", "image.licenses"]
 
@@ -121,7 +122,7 @@ def validate_git_dependencies(source: str) -> None:
 
 
 def validate_compose_images(document: dict) -> None:
-    components = {'CORE', 'WEB', 'EDGE_CONTROL', 'EDGE_RUNTIME', 'EDGE_AGENT', 'EDGE_GATEWAY', 'MMDB_UPDATER', 'GRAFANA', 'LOKI'}
+    components = {'CORE', 'WEB', 'EDGE_CONTROL', 'EDGE_RUNTIME', 'EDGE_AGENT', 'EDGE_GATEWAY', 'MMDB_UPDATER', 'GRAFANA', 'LOKI', 'CADDY'}
     for name, service in document.get('services', {}).items():
         reference = service.get('image')
         if reference is None:
@@ -217,7 +218,7 @@ def main() -> None:
     for manifest, lockfile in [("core/composer.json", "core/composer.lock"), ("core/package.json", "core/package-lock.json"), ("docs/package.json", "docs/package-lock.json")]:
         if not (ROOT / manifest).is_file() or not (ROOT / lockfile).is_file():
             fail(f"{manifest} lacks required lockfile {lockfile}")
-    for module in [ROOT / "edge-agent/go.mod", ROOT / "edge-gateway/go.mod"]:
+    for module in [ROOT / "edge-agent/go.mod", ROOT / "edge-gateway/go.mod", ROOT / "docker/caddy/go.mod"]:
         if "require " in module.read_text() and not module.with_name("go.sum").is_file():
             fail(f"{module.relative_to(ROOT)} has dependencies but no go.sum")
 

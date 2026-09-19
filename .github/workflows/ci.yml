@@ -154,8 +154,11 @@ jobs:
           docker build -t ghcr.io/vaheed/cdnfoundry-mmdb-updater:ci docker/mmdb-updater
           docker build -t ghcr.io/vaheed/cdnfoundry-loki:ci docker/loki
           docker build -t ghcr.io/vaheed/cdnfoundry-grafana:ci docker/grafana
+          docker build -t ghcr.io/vaheed/cdnfoundry-caddy:ci docker/caddy
       - name: Qualify origin destination safety and IPv6 HTTP/TLS
         run: python3 tests/e2e/origin_destinations.py --image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
+      - name: Qualify patched Caddy with production configs and real TLS
+        run: python3 tests/e2e/caddy_ingress.py --image ghcr.io/vaheed/cdnfoundry-caddy:ci
       - name: Qualify uploaded certificate chains with real TLS clients
         run: python3 tests/e2e/uploaded_tls.py --core-image cdnfoundry/core:ci --edge-image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
       - name: Smoke-test the read-only core image
@@ -423,6 +426,7 @@ jobs:
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-mmdb-updater:${RELEASE}" docker/mmdb-updater
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-grafana:${RELEASE}" docker/grafana
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-loki:${RELEASE}" docker/loki
+          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-caddy:${RELEASE}" docker/caddy
       - name: Push, scan, attest, and sign immutable images
         env:
           RELEASE: ${{ github.sha }}
@@ -431,7 +435,7 @@ jobs:
           WORKFLOW_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
-          images=(core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater grafana loki)
+          images=(core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater grafana loki caddy)
           aliases=()
           push_with_retry() {
             local image="$1"

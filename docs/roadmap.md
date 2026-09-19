@@ -46,7 +46,7 @@ results, release evidence, implemented fixes and limitations.
 existing audit work; archive the roadmap; publish this plan and the report.
 Validate locally, push `dev` without changing remote `main`, inspect the exact
 commit's public Actions run through `curl`, and fix delivery-blocking failures.
-Require the existing nine-image scan/sign/attest/manifest publication pipeline.
+Require the scan/sign/attest/manifest publication pipeline for every release image.
 Finish with a clean tree, pushed commit, successful run URL and retrieval steps.
 No live staging deployment belongs to this job.
 
@@ -64,8 +64,8 @@ The report records image findings and the corrected CI fixtures.
 image findings before resuming publication. Select supported patched versions or
 rebuilds, pin exact digests, update every Compose/Fleet reference consistently,
 and qualify affected DNS, database, telemetry and ingress behavior. Preserve
-database compatibility and rollback. Rescan all 12 dependency images and the
-nine application images with complete evidence. A missing vendor fix remains a
+database compatibility and rollback. Rescan every selected dependency and every application or managed
+infrastructure image with complete evidence. A missing vendor fix remains a
 blocker; do not hide it, ignore all unfixed findings or waive the dev gate.
 This delivery prerequisite precedes Phase 1; Phase 8 retains clean-host release
 verification and the wider publishing/credential review.
@@ -75,7 +75,7 @@ applicable configuration/runtime tests and exact-image vulnerability gates pass;
 no existing data is reset. Browser **not applicable to image scanning**; document
 any changed operator workflow. Current status: **scan inventory complete,
 remediation incomplete**. After it passes, resume `delivery-handoff` and verify
-the exact commit's successful run and nine published images.
+the exact commit's successful run and all published release images.
 
 ## Phase 1 — Install and smoke-test the empty staging environment
 
@@ -176,7 +176,7 @@ checkpoints recorded. Current status: **partial**.
 
 **Job `release-verification`.** Carries forward the old third workstream. Review
 current advisories; fix supported dependency defects and rescan exact digests.
-Verify source → nine images → complete SBOM/scan/provenance/signatures → signed
+Verify source → all release images → complete SBOM/scan/provenance/signatures → signed
 manifest → Fleet projection and clean-host pull. Test verifier failures, publishing
 refs, CI permissions, credential boundaries and rollback without blanket exceptions.
 

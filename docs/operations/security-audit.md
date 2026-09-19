@@ -1919,3 +1919,24 @@ still failed; Caddy's refreshed candidate had already failed separately. Those
 failures were not adopted or waived. This closes **2 of the original 12** image
 entries; it does not qualify the remaining dependencies or the application-image
 publication gate. AUD-013 remains open and remediation continues.
+
+### Managed Caddy dependency remediation (September 19)
+
+The vendor Caddy 2.11.4 image still contained High/Critical Go dependencies after
+its OS refresh. `docker/caddy` now builds the standard upstream launcher with
+Go 1.26.8 and committed module/checksum locks, including patched `x/crypto`,
+`x/net`, `x/text` and gRPC. The final source-built image passed the unchanged
+Trivy High/Critical and EOL gate; both its Alpine packages and `/usr/bin/caddy`
+Go binary were detected. Evidence: `dependency-remediation/caddy-final.json`
+and `caddy-final-scan.log` under ignored qualification storage.
+
+The real non-browser `tests/e2e/caddy_ingress.py` qualification passed against
+that image: all three production configurations adapt, HTTPS reaches a real
+upstream, an excluded source receives 403, and the health endpoint responds.
+Production Caddy, DNS API and telemetry ingress now share `CDNF_CADDY_IMAGE`,
+with the existing configuration, certificate volumes and service topology.
+The release pipeline builds, scans, signs and attests this tenth component;
+Fleet's verified manifest projection requires it. There is no database migration.
+Rollback selects the preceding verified release and retains the existing volumes.
+The remote pipeline and full release publication remain unqualified until run.
+Manual browser qualification was not run; no UI workflow changed.

@@ -18,7 +18,7 @@ class ReleaseInstructionTests(unittest.TestCase):
         commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
         git_dir = subprocess.check_output(['git', 'rev-parse', '--absolute-git-dir'], cwd=ROOT, text=True).strip()
         components = ('core', 'web', 'edge-control', 'edge-runtime', 'edge-agent',
-                      'edge-gateway', 'mmdb-updater', 'grafana', 'loki')
+                      'edge-gateway', 'mmdb-updater', 'grafana', 'loki', 'caddy')
         manifest = {'source_commit': commit, 'images': [
             {'component': c, 'image': f'ghcr.io/vaheed/cdnfoundry-{c}@sha256:'+'a'*64}
             for c in components]}
@@ -56,7 +56,7 @@ class ReleaseInstructionTests(unittest.TestCase):
                 self.assertEqual(0o600, output.stat().st_mode & 0o777)
                 projected = json.loads(output.read_text())
                 self.assertEqual(commit, projected['global']['release'])
-                self.assertTrue(all(len(node['extra_env']) == 9 for node in projected['nodes']))
+                self.assertTrue(all(len(node['extra_env']) == len(components) for node in projected['nodes']))
                 dry_run = subprocess.run([str(ROOT / 'scripts/cdnfoundry-fleet'), '--config', str(output),
                                           '--state-dir', str(root / 'state'), '--output-dir', str(root / 'bundles'),
                                           '--non-interactive', '--dry-run', 'setup'],

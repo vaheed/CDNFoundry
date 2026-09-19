@@ -64,6 +64,7 @@ def build_images(release: str) -> None:
         ("mmdb-updater", "docker/mmdb-updater/Dockerfile", "docker/mmdb-updater"),
         ("loki", "docker/loki/Dockerfile", "docker/loki"),
         ("grafana", "docker/grafana/Dockerfile", "docker/grafana"),
+        ("caddy", "docker/caddy/Dockerfile", "docker/caddy"),
     ):
         run("docker", "build", "-t", f"ghcr.io/vaheed/cdnfoundry-{image}:{release}",
             "-f", dockerfile, context, cwd=ROOT)
@@ -82,7 +83,7 @@ def main() -> int:
     # Immutable local image IDs qualify the exact local build without requiring
     # a registry push or treating mutable qualification tags as deployment pins.
     local_images = {}
-    for component in ('core', 'web', 'edge-control', 'edge-runtime', 'edge-agent', 'edge-gateway', 'mmdb-updater', 'grafana', 'loki'):
+    for component in ('core', 'web', 'edge-control', 'edge-runtime', 'edge-agent', 'edge-gateway', 'mmdb-updater', 'grafana', 'loki', 'caddy'):
         tag = f'ghcr.io/vaheed/cdnfoundry-{component}:{args.release}'
         local_images['CDNF_'+component.upper().replace('-', '_')+'_IMAGE'] = run('docker', 'image', 'inspect', tag, '--format', '{{.Id}}', cwd=ROOT, capture=True).stdout.strip()
 

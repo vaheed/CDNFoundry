@@ -107,7 +107,7 @@ x-core: &core
 
 services:
   caddy:
-    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    image: ${CDNF_CADDY_IMAGE:?CDNF_CADDY_IMAGE must be an immutable image reference}
     profiles: [control]
     environment:
       CONTROL_HOSTNAME: ${CONTROL_HOSTNAME:?CONTROL_HOSTNAME is required}
@@ -131,7 +131,7 @@ services:
     healthcheck: { test: [CMD, wget, -qO-, http://127.0.0.1:2019/healthz], interval: 10s, timeout: 3s, retries: 10 }
 
   dns-api:
-    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    image: ${CDNF_CADDY_IMAGE:?CDNF_CADDY_IMAGE must be an immutable image reference}
     profiles: [dns]
     environment:
       DNS_API_HOSTNAME: ${DNS_API_HOSTNAME:?DNS_API_HOSTNAME is required}
@@ -149,7 +149,7 @@ services:
     healthcheck: { test: [CMD, wget, -qO-, http://127.0.0.1:2019/healthz], interval: 10s, timeout: 3s, retries: 10 }
 
   telemetry-gateway:
-    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    image: ${CDNF_CADDY_IMAGE:?CDNF_CADDY_IMAGE must be an immutable image reference}
     profiles: [telemetry]
     environment:
       TELEMETRY_HOSTNAME: ${TELEMETRY_HOSTNAME:?TELEMETRY_HOSTNAME is required}
