@@ -14,6 +14,112 @@ The requested deliverable is remote `dev` with a successful CI run and all appli
 GHCR images published. Live deployment is a separate Phase 1 job;
 no staging host access or live deployment was requested for this handoff.
 
+## Staging install and smoke job
+
+**2026-09-20 — Phase 1, `staging-install-and-smoke`.** The owner confirms the
+previous delivery job is finished and images are published. Delivery statements
+below are historical checkpoints, not instructions to repeat publication or
+remediation. This job starts from clean `dev` at `a8c694fd`; neither archived
+roadmap is changed. No staging installation or production readiness is inferred
+from publication.
+
+### Inputs and scope
+
+All deployment inputs below are **pending owner input**. Reference protected
+files or access methods, never paste credentials into this report.
+
+| Input | Required detail |
+| --- | --- |
+| Release | Successful run URL, full source SHA, signed manifest and bundle location; deploy verified component digests |
+| Hosts | SSH aliases/access method, OS, role/address inventory, bundle path, existing installation/data status; one control/telemetry host and two DNS/edge hosts, or explicit smaller-topology limits |
+| Management DNS | Independent operator zone/provider and control, edge-control, telemetry, Grafana and PoP names; record changes/access method |
+| Public DNS | Owned platform zone, two nameservers/glue and disposable customer zone; registrar access method and current DS/delegation state |
+| Origin | Owned HTTP and verified HTTPS endpoint, Host/SNI, disposable hostname and cacheable test resource |
+| Address families | Approved public IPv4/IPv6, routed or NAT service listeners, firewall/reachability scope and external probe location |
+| Protected configuration | Fleet config/state location, secure release pull access if needed, GeoIP provider configuration, recovery material location and administrator credential delivery method |
+
+Use the [starter quick start](../deployment/production-quick-start.md) in its
+existing order. Verify the selected release with the existing
+[release verifier](software-supply-chain.md#verify-a-release); do not republish,
+rebuild or repeat scans solely because a new roadmap job started. Generate and
+validate bundles from the verified image projection before transfer. Preserve
+existing PostgreSQL data, named volumes, Fleet state, keys and TLS material.
+
+The durable changes are installation state, explicit application/PowerDNS
+migrations and disposable desired-state records in PostgreSQL. External effects
+are host activation, delegated DNS, queued runtime deployment and certificate
+issuance. Use authenticated host access and administrator/API policies; send
+idempotency keys for API mutations and follow operation acknowledgements.
+Bound smoke traffic to the disposable zone and a single probe sequence per
+host/family; poll operations with a fixed deadline and record timeout as failure.
+Retain previous verified bundles/images and last-valid runtime state. Recover
+through the documented rollback procedure, never database refresh, key
+regeneration or volume deletion. A fresh installation has no earlier serving
+release to claim as a tested rollback target.
+
+### Execution and evidence matrix
+
+Every row is **not run on staging**. Once access is available, run non-browser
+probes using Python under `tests/e2e` against the selected inventory; adapt only
+where a reproduced installation gap requires it. Existing development fixtures
+are not automatically safe or suitable for remote staging. Do not point an
+unreviewed destructive fixture at these hosts or launch the full production
+acceptance matrix as a substitute for this bounded smoke job.
+
+| Order | Check and expected result | Evidence to retain |
+| --- | --- | --- |
+| 1 | Verify signed manifest/images, Fleet dry-run, generated bundle validation; all components match selected immutable release | Source SHA, run URL, manifest hash, image digests, sanitized validation results |
+| 2 | Start control using generated explicit migration workflow; health/readiness over verified public HTTPS succeed; Horizon processes a queued operation and Scheduler executes due work | Migration status, service health, operation ID/result, worker/scheduler timestamps |
+| 3 | Start DNS roles; restricted API TLS/auth succeeds from control, private services are not publicly reachable; register/test/enable both clusters | Cluster IDs, connection results, listener observations without credentials |
+| 4 | Publish platform identity and initial customer SOA/NS to both targets before delegation; then delegate/verify and add DNS-only record | Desired/acknowledged revisions, public parent answers, UDP/TCP SOA/NS/A and configured AAAA from each host |
+| 5 | Enroll each edge, assign shared pool/cells/endpoints; listener-only generation and fresh heartbeat converge before proxying | Edge/pool IDs, gateway/cell generation and revision, endpoint addresses |
+| 6 | Validate origin, proxy test hostname, obtain DNS-01 TLS; HTTP and verified HTTPS reach expected origin via each edge/family | Origin result, certificate public fingerprint/expiry/name, status and request IDs; no private material |
+| 7 | Repeat cacheable request for MISS/HIT; URL purge and full epoch purge each acknowledge and cause fresh fetch; controlled security deny then restore succeeds | Operation IDs, cache results, epoch/revision, deny/restore status and continued comparison traffic |
+| 8 | Vector delivers the generated traffic to ClickHouse; metrics, four Grafana datasources and two dashboard UIDs respond through APIs; Loki receives sanitized operational event | Bounded API/query results, event/request IDs and freshness; no rendered UI inspection |
+| 9 | Restart one role/host at a time; identities, desired state, DNS and HTTPS recover using retained volumes; control unavailability preserves last-valid serving | Before/after generation and revision, DNS/HTTP observations, restart/recovery times and health |
+
+Use verified TLS throughout; do not suppress certificate errors. Execute DNS
+UDP/TCP and HTTP/TLS checks from the recorded external probe location for every
+approved address family. Explicitly record unavailable IPv6 or a smaller topology
+as an unqualified limitation. Stop and retain sanitized evidence when a check
+fails; fix only reproducible Phase 1 installation blockers and rerun affected
+checks. Load testing, broad adversarial audit, clean-host recovery and dependency
+review remain assigned to their later roadmap jobs.
+
+For each executed row retain timestamp, operator, environment/topology, selected
+source/image identities, command and exit code, expected/actual result,
+operation/revision IDs and a sanitized evidence reference. Use the structured
+step fields in [production qualification](production-qualification.md#owner-evidence)
+when exchanging JSON evidence, but do not label this partial smoke record a
+full production qualification pass. Keep raw evidence in a protected store.
+
+### Completion gate
+
+| Gate | Current result |
+| --- | --- |
+| Implementation/installation | Existing installer present; selected-host installation **not run**, access/configuration pending |
+| Documentation | Preparation and exact owner browser steps written; deployment observations pending |
+| Automated/runtime qualification | Local documentation/configuration checks **passed**; live staging matrix **not run** |
+| Owner-run browser qualification | **Not run**; owner executes [Phase 1 smoke](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md#phase-1--empty-staging-smoke) and supplies results |
+
+Preparation checks executed on 2026-09-20:
+
+- `make config-check`: **passed** development/test/production Compose parsing,
+  production environment generation and role override validation; no services
+  started or images rebuilt.
+- `make docs-check`: **passed** source links (99 documents), Markdown lint,
+  VitePress build and built-site validation (93 pages, 3,582 internal links).
+  The first build failed on two links to the unpublished manual checklist;
+  repository links corrected the failure and the full rerun passed.
+- `git diff --check`: **passed**. Archived legacy roadmaps remain unchanged.
+- Application tests, live staging artifact verification and non-browser runtime
+  probes: **not run** in this preparation unit; no application code changed and
+  the selected staging release/access inputs are absent.
+
+No live hosts, migrations, DNS records or persistent volumes were changed by
+preparation. Phase 1 remains open until all required evidence is recorded.
+Phase 2 is the next separate roadmap job only after Phase 1 completes.
+
 ## Source and release evidence
 
 The remote base was `602c605b3f50551d18ddab442670d8fbc7e5f545` on `main`.

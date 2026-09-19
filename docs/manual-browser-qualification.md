@@ -38,6 +38,89 @@ Evidence must be sanitized. Never record passwords, API or bootstrap tokens, coo
 4. Record successful automated evidence for PHP, Go, Lua/OpenResty, schemas, OpenAPI, Compose, non-browser E2E, failure injection, image builds, supply-chain policy, and vulnerability scanning. Record exact unavailable commands and prerequisites as blocked.
 5. Keep browser developer tools open for console and network inspection. Any unexpected JavaScript exception, failed asset, authorization leak, or unstable operation state fails the relevant checkpoint.
 
+## Phase 1 — Empty staging smoke
+
+Status: **Not run — owner execution required.** This is the bounded browser
+checkpoint for `staging-install-and-smoke`, not the entire later production
+acceptance job. Use the selected staging release and disposable zone recorded in
+the [staging job report](operations/development-handoff.md#staging-install-and-smoke-job).
+Record each step separately with expected/actual result and sanitized evidence.
+The agent owns non-browser installation/runtime checks; coordinate shared setup
+so existing clusters, edges and domains are reused rather than duplicated.
+
+1. After control HTTPS and the supported administrator bootstrap command succeed,
+   open `https://control.<operator_domain>/admin/login`. Enter the securely
+   delivered administrator email/password. Expect the operations overview,
+   valid HTTPS and no failed assets or unexpected console errors. Do not include
+   credentials in evidence. Repeat the layout check at a narrow viewport.
+2. Open **Infrastructure → DNS clusters**. For each prepared PoP, create its
+   record disabled with **API URL**, **API key**, **Server ID**, and **Zone
+   capacity** from the protected installation configuration, or inspect the
+   existing API-created record. Use **Test connection**, expect healthy verified
+   TLS, then enable. Open **Infrastructure → System DNS identity**, fill the
+   approved platform domain, proxy hostname, nameservers with IPv4/approved IPv6,
+   SOA and TTL fields, and both **DNS cluster targets**. Select **Validate and
+   preview**, review **Validated — nothing has been saved yet**, then
+   **Save DNS identity and queue update**. Expect an asynchronous operation and
+   both cluster acknowledgements; record IDs, never API keys.
+3. Open **Domains → Create** and enter the owned disposable zone in **Name**,
+   unless already created during API smoke. Expect **Pending verification**,
+   **Assigned nameservers**, and **Pending claim expires**. After the agent
+   confirms both hosts answer SOA/NS, set the exact assigned delegation at the
+   registrar. Use **Verify nameservers** after propagation. Expect a queued
+   operation followed by **Active**; a failure must remain visible until fixed.
+4. Open **Infrastructure → Edges**. Create or inspect each prepared edge with
+   **Cell slots = 8**. For creation, securely transfer its one-time enrollment
+   block to the matching host before acknowledging the modal. Expect the same
+   edge UUID, fresh heartbeat and ready gateway after host activation. Never
+   capture the token in screenshots. In **Infrastructure → Service pools**,
+   inspect the enabled Geo-Unicast shared pool; in each edge's **Cells**, use
+   **Assign service pool** for the intended slots. Inspect the approved endpoint
+   addresses and wait for the listener-only generation acknowledgement.
+5. Open the active domain's **DNS records**, enter the approved **Origin server
+   hostname or IP**, **Scheme**, **TLS SNI** and **Verify origin TLS** for the
+   HTTPS origin. Run **Test origin** and expect a successful operation with
+   `verified` TLS. Enable proxying for the test hostname and use managed
+   **TLS mode**. Expect acknowledged placement and valid DNS-01 certificate
+   status. The agent separately records actual HTTP/HTTPS requests through
+   each edge; UI success alone does not pass runtime qualification.
+6. Open **Cache settings** and inspect the smoke resource's policy. Perform URL
+   purge with **Purge cache → Type → Exact URLs**, enter the agreed resource in
+   **URLs (one per line)** and submit. Expect **Cache purge queued**, per-edge
+   acknowledgement and a fresh fetch. Repeat with **Type → Everything** and
+   expect the full-purge epoch to advance. In **Security allow/block rules**,
+   create a rule with **Type → IP address**, **Value** set to the external probe
+   IP, **Action → Block**, **Priority → 100**, and **Enabled** on. Expect the
+   controlled request to be denied after acknowledgement while a different
+   comparison client continues serving. Delete that rule, wait for
+   acknowledgement and confirm recovery.
+   Record operation IDs and before/after revisions. An absent action is a failed
+   current checkpoint, not a deferred feature.
+7. Open **Observe → Operations overview**, then **Observe → Traffic and
+   telemetry** with the disposable **Domain** selected. Expect fresh smoke
+   traffic, truthful queue/edge state and no false success for failed work.
+   In Grafana, open **Connections → Data sources** and confirm the four
+   provisioned datasource health checks; under **Dashboards**, open both
+   **CDNFoundry — System Command Center** and **CDNFoundry — Domain Command
+   Center**. Select the disposable **Domain** in the latter and expect only
+   its traffic. Use the existing Grafana checklist for any failed observation.
+8. Under **Customers → Users**, create a domain user assigned only to this
+   test domain. Sign in at `/app/login`; expect that domain and no administrator
+   navigation. Direct administrator URLs must deny access. After the agent's
+   coordinated restart check, revisit the domain and edge status: assignments,
+   certificate, acknowledged state and fresh heartbeat must remain correct.
+
+### Phase 1 completion gate
+
+- Implementation: existing screens and selected-host installation require
+  observed evidence; installation is **not run**.
+- Documentation: this bounded checklist and the staging evidence matrix are
+  written; observed discrepancies must be corrected before closure.
+- Automated/runtime qualification: **not run on staging**; agent report remains
+  separate from browser results.
+- Owner-run browser qualification: **not run** until the owner supplies each
+  checkpoint's actual result. No browser automation is permitted.
+
 ## Implemented product regression
 
 Complete this regression before the current hardening workstreams. It preserves

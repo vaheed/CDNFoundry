@@ -6,8 +6,9 @@ description: Bounded jobs for dev publication, staging tests, remaining review, 
 # CDNFoundry staged delivery roadmap
 
 This plan replaces the open-ended audit goal on **2026-09-19**, at the owner's
-request. The current job delivers a tested `dev` branch and successful GitHub
-Actions publication of the complete application images. The production staging
+request. The owner confirmed on **2026-09-20** that the previous delivery job
+is finished and the application images are published. The current bounded job
+is Phase 1, `staging-install-and-smoke`. The production staging
 environment has no customer traffic and is for early testing. Image publication
 and empty-stage smoke tests do not establish general production readiness.
 
@@ -45,7 +46,7 @@ results, release evidence, implemented fixes and limitations.
 
 ## Phase 0 — Dev delivery handoff
 
-**Job `delivery-handoff`: current job.** Commit the pending Fleet corrections and
+**Job `delivery-handoff`: complete per owner handoff on 2026-09-20.** Commit the pending Fleet corrections and
 existing audit work; archive the roadmap; publish this plan and the report.
 Validate locally, push `dev` without changing remote `main`, inspect the exact
 commit's public Actions run through `curl`, and fix delivery-blocking failures.
@@ -60,8 +61,10 @@ publication**. Exact status is established by the report and linked Actions run.
 Local gate status: **passed** for all 17 release images, all 3 external
 production images and the documented runtime checks. Implementation and operator
 documentation are present. The [latest dev Actions run](https://github.com/vaheed/CDNFoundry/actions/workflows/ci.yml?query=branch%3Adev)
-provides the remaining remote gate: every required job and image publication
-must succeed for the pushed commit. The [handoff report](operations/development-handoff.md)
+records the remote gate: every required job and image publication must succeed
+for the delivered commit. Publication completion is accepted from the owner
+handoff; this job does not rerun delivery. The selected manifest and exact run
+identity must still be recorded before staging deployment. The [handoff report](operations/development-handoff.md)
 records the evidence and approved, narrowly scoped Grafana exceptions. No
 warning-only publication is allowed. A successful remote gate completes this
 job and admits Phase 1; it does not qualify a live staging installation.
@@ -82,12 +85,12 @@ no existing data is reset. Browser **not applicable to image scanning**; documen
 any changed operator workflow. Local status: **remediation and qualification
 passed**. The rebuilt Grafana backend and plugin pass their combined datasource
 checks; approved Tempo classifications retain the raw findings and expire October
-19. Complete `delivery-handoff` by verifying the exact commit's successful remote
-run and all published release images.
+19. Delivery is complete per the owner handoff; retain its exact release evidence
+when selecting the staging release.
 
 ## Phase 1 — Install and smoke-test the empty staging environment
 
-**Next job `staging-install-and-smoke`.** Inputs: published release manifest,
+**Current job `staging-install-and-smoke`.** Inputs: published release manifest,
 staging host access/inventory, independent management DNS, test-zone registrar
 access, origin endpoint and approved address families. Follow the starter Fleet
 quick start on one control/telemetry host and two DNS/edge hosts, or explicitly
@@ -100,7 +103,22 @@ The owner executes implemented screens in `docs/manual-browser-qualification.md`
 
 Completion gate: installation works on the stated hosts, operator docs are current,
 non-UI runtime checks pass and owner browser status is recorded separately.
-Current status: **not run for the delivered dev release**.
+Current status: **blocked on staging inputs; live installation and smoke checks
+not run for the delivered dev release**. See the
+[staging job record](operations/development-handoff.md#staging-install-and-smoke-job)
+for required inputs, execution order and evidence.
+
+- Implementation: existing Fleet installer and runtime are present; installation
+  on the selected hosts is **not run**, so this gate remains open.
+- Documentation: staging preparation and the bounded owner browser checklist are
+  written; host-specific observations and corrections remain pending deployment.
+- Automated/runtime qualification: local documentation/configuration checks are
+  recorded separately in the job record; staging checks are **not run**.
+- Owner-run browser qualification: **not run**. Use the
+  [Phase 1 checklist](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md#phase-1--empty-staging-smoke).
+
+Stop at this phase boundary. Missing staging access is not permission to start
+Phase 2 or repeat publication/security-audit work.
 
 ## Phase 2 — Identity, authorization and domain lifecycle
 
@@ -210,7 +228,8 @@ complete release qualification**.
 
 ## Start the next bounded job
 
-Request: **“Run dependency-remediation, retain all release gates, then resume
-delivery-handoff for dev. Stop at its documented gate and report blockers.”**
-After publication succeeds, start Phase 1 with staging host access and topology.
-Neither is required for image remediation/publication.
+Current request: **“Run staging-install-and-smoke using the published release.
+Stop at its phase gate and report blockers.”** Supply the selected manifest,
+host access/topology, independent management DNS, test delegation, origin and
+approved address families. After all Phase 1 gates pass, Phase 2
+`identity-and-domain-boundaries` is a separate request; it is not started here.
