@@ -34,6 +34,7 @@ ROLES = {"control", "edge", "dns", "dns-edge", "monitoring"}
 MONITORING_MODES = {"disabled", "colocated", "dedicated"}
 LOG_MODES = {"disabled", "centralized"}
 BACKUP_MODES = {"disabled", "control", "all-stateful"}
+NULLABLE_NODE_ADDRESSES = {"public_ipv6", "bind_ipv6", "monitor_ipv4", "monitor_ipv6", "log_ipv4", "log_ipv6"}
 
 GLOBAL_SECRET_NAMES = {
     "app-key",
@@ -271,7 +272,7 @@ class FleetState:
         if name not in state["nodes"]:
             raise ValidationError(f"Unknown node: {name}")
         merged = copy.deepcopy(state["nodes"][name])
-        merged.update({k: v for k, v in changes.items() if v is not None})
+        merged.update({k: v for k, v in changes.items() if v is not None or k in NULLABLE_NODE_ADDRESSES})
         merged["name"] = name
         clean = self._normalize_node(state, merged)
         candidate = copy.deepcopy(state)
@@ -314,7 +315,7 @@ class FleetState:
             "public_ipv4": validate_ip(node.get("public_ipv4"), required=True),
             "public_ipv6": validate_ip(node.get("public_ipv6")),
             "bind_ipv4": validate_ip(node.get("bind_ipv4") or "0.0.0.0", required=True),
-            "bind_ipv6": validate_ip(node.get("bind_ipv6") or ("::" if state["global"].get("ipv6") else None)),
+            "bind_ipv6": validate_ip(node.get("bind_ipv6", "::" if state["global"].get("ipv6") else None)),
             "monitor_ipv4": validate_ip(node.get("monitor_ipv4")),
             "monitor_ipv6": validate_ip(node.get("monitor_ipv6")),
             "log_ipv4": validate_ip(node.get("log_ipv4")),

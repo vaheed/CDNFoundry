@@ -16,6 +16,7 @@ from .state import (
     LOG_MODES,
     MONITORING_MODES,
     NODE_SECRET_NAMES,
+    NULLABLE_NODE_ADDRESSES,
     FleetState,
     ROLES,
 )
@@ -106,7 +107,7 @@ def parser() -> argparse.ArgumentParser:
     setup.add_argument("--operator-domain")
     setup.add_argument("--platform-domain")
     setup.add_argument("--release")
-    setup.add_argument("--acme-email", default="")
+    setup.add_argument("--acme-email")
     setup.add_argument("--dual-stack", action="store_true")
     setup.add_argument(
         "--preset",
@@ -317,7 +318,7 @@ def _node_payload(args: argparse.Namespace, config: dict[str, Any], *, update: b
         value = getattr(args, arg_name, None)
         if value is None:
             value = source.get(target)
-        if value is not None:
+        if value is not None or (target in NULLABLE_NODE_ADDRESSES and target in source):
             payload[target] = value
     extra = dict(source.get("extra_env", {}))
     for item in getattr(args, "extra_env", []) or []:

@@ -5,6 +5,12 @@ description: Complete lifecycle guide for CDNFoundry production fleets including
 
 # Production fleet operator guide
 
+To remove an optional node address, set its field to JSON `null` in the setup
+node object or the `update-node` configuration's `node` object. Omitting a field
+leaves its current value unchanged. Render and validate the replacement bundles,
+then use the normal rollout procedure; editing Fleet state alone does not change
+running listeners or external DNS. Retain the previous configuration for rollback.
+
 ```mermaid
 flowchart LR
   subgraph Authority["Protected authority"]

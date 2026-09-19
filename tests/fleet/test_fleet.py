@@ -1506,3 +1506,43 @@ def test_fleet_rejects_wrong_address_families_and_string_booleans(store: FleetSt
         with pytest.raises(ValidationError):
             store.add_node(store.load(), payload)
         assert store.state_file.read_bytes() == before
+
+
+@pytest.mark.parametrize('command', ['setup', 'update-node'])
+def test_explicit_null_clears_optional_addresses_without_resetting_omitted_fields(
+    store: FleetState, source_repo: Path, tmp_path: Path, command: str,
+) -> None:
+    from cdnfoundry_fleet.cli import main
+    addresses = {
+        'public_ipv6': '2001:db8::211', 'bind_ipv6': '::',
+        'monitor_ipv4': '192.0.2.212', 'monitor_ipv6': '2001:db8::212',
+        'log_ipv4': '192.0.2.213', 'log_ipv6': '2001:db8::213',
+    }
+    with store.locked():
+        with store.transaction() as candidate:
+            candidate['global']['ipv6'] = True
+    add(store, {**node('edge-clear', 'edge', '192.0.2.211'), **addresses})
+    add(store, node('control-clear', 'control', '192.0.2.210'))
+    with store.locked():
+        store.configure_feature(store.load(), 'monitoring', {'mode': 'colocated', 'host': None})
+    common = ['--state-dir', str(store.state_dir), '--repo-root', str(source_repo), '--non-interactive']
+    assert main([*common, 'update-node', '--node', 'edge-clear', '--location', 'changed']) == 0
+    current = store.load()['nodes']['edge-clear']
+    assert {key: current[key] for key in addresses} == addresses
+    config = tmp_path / 'clear.json'
+    cleared = dict.fromkeys(addresses)
+    config.write_text(json.dumps({'nodes': [{'name': 'edge-clear', **cleared}]} if command == 'setup' else {'node': cleared}))
+    arguments = ['setup', '--no-render'] if command == 'setup' else ['update-node', '--node', 'edge-clear']
+    assert main([*common, '--config', str(config), *arguments]) == 0
+    state = store.load()
+    current = state['nodes']['edge-clear']
+    assert state['global']['acme_email'] == 'ops@example.com'
+    assert {key: current[key] for key in addresses} == cleared
+    assert current['public_ipv4'] == '192.0.2.211'
+    assert current['location'] == 'changed'
+    output = tmp_path / 'bundles'
+    Renderer(source_repo, store, output).render(state)
+    compose = yaml.safe_load((output / 'edge-clear/compose.yml').read_text())
+    assert not any(str(port).startswith('[') for service in compose['services'].values() for port in service.get('ports', []))
+    policy = json.loads((output / 'control-clear/generated/geo-routing-policy.json').read_text())
+    assert policy['edges'][0]['ipv6'] is None

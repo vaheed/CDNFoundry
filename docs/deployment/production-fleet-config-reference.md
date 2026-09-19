@@ -91,6 +91,13 @@ CDNFOUNDRY_FLEET_OUTPUT_DIR
 | `enabled` | no | Exclude disabled nodes from rendering and targets |
 | `draining` | no | Keep node configured but remove it from preferred routing |
 
+On `setup` or `update-node`, omitted node fields retain their saved values.
+Explicit JSON `null` clears `public_ipv6`, `bind_ipv6`, `monitor_ipv4`,
+`monitor_ipv6`, `log_ipv4`, or `log_ipv6`. An explicit null IPv6 bind remains
+disabled even in a dual-stack fleet; `::` is the default only when that field
+is absent on a new node. Omitted `--acme-email` on repeated setup preserves the
+saved contact; an explicitly conflicting contact is still rejected.
+
 Example:
 
 ```json

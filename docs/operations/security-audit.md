@@ -1786,3 +1786,29 @@ qualification remains **Not run**, using the existing failed/obsolete-order
 checkpoint. Coverage is **4 reviewed, 103 partial, 656 pending** out of 763 files.
 These counts do not measure total audit effort or support an overall completion
 percentage. Production remains **not yet qualified**.
+
+## Fleet configuration updates and repeated setup
+
+AUD-052 (**Medium / confirmed**) affects `scripts/cdnfoundry_fleet/state.py`
+and `cli.py`. `update-node` discarded explicit null optional addresses; node
+normalization also replaced a null IPv6 bind with `::` in dual-stack fleets.
+AUD-053 (**Medium / confirmed**) affects repeated setup: the default empty
+`--acme-email` was treated as an explicit conflict with the saved contact.
+The initial two-case regression failed (`fleet-null-before`, **3.238 seconds**):
+update-node retained the old addresses and setup stopped at the email conflict.
+After address correction, `fleet-null-focused` still failed setup in **6.199
+seconds**, confirming the separate email-default defect.
+
+Explicit JSON null now clears the six optional address fields; omission preserves
+saved fields. A null IPv6 bind stays disabled, while an absent new-node bind
+retains its default. Omitted setup email no longer overrides saved identity.
+Existing conflict and address-family validation remain intact. Generated Compose
+and geographic policy regressions verify the cleared state. The complete Fleet
+suite passed **78 tests** in **77.191 seconds** (`fleet-config-updates`, September
+12); its captured source diffs match this checkpoint. No schema migration or
+automatic live-host mutation occurs. Render, validate and roll out updated
+bundles normally; restore the prior configuration and bundle for rollback.
+
+Both findings are fixed. Whole-file Fleet review, clean-host installation and
+recovery remain incomplete. Manual browser qualification is **Not run**. This
+test result establishes configuration/render behavior, not a production install.

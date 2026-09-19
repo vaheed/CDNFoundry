@@ -3520,7 +3520,7 @@
     {
       "path": "scripts/cdnfoundry_fleet/cli.py",
       "status": "partial",
-      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established. AUD-052/053: optional-address null updates and omitted setup email; generated bundle regression and 78 Fleet tests passed. Whole-file review incomplete."
     },
     {
       "path": "scripts/cdnfoundry_fleet/common.py",
@@ -3545,7 +3545,7 @@
     {
       "path": "scripts/cdnfoundry_fleet/state.py",
       "status": "partial",
-      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established. AUD-052/053: optional-address null updates and omitted setup email; generated bundle regression and 78 Fleet tests passed. Whole-file review incomplete."
     },
     {
       "path": "scripts/ensure-development-certificates.sh",
@@ -3790,7 +3790,7 @@
     {
       "path": "tests/fleet/test_fleet.py",
       "status": "partial",
-      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established."
+      "scope": "Changed and reviewed within recorded findings; whole-file audit completion not established. AUD-052/053: optional-address null updates and omitted setup email; generated bundle regression and 78 Fleet tests passed. Whole-file review incomplete."
     },
     {
       "path": "tests/observability/test_grafana_contract.py",
