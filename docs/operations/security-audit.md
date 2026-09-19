@@ -1856,3 +1856,14 @@ Local `dev-control-plane-identity` passed authentication but stopped with HTTP
 500 on pre-existing invalid persisted `edge_runtime` settings. That run is
 **failed**, not a complete control-plane pass; persistent settings were not reset.
 The clean GitHub topology must qualify the complete corrected fixture.
+
+Run [35439077121](https://github.com/vaheed/CDNFoundry/actions/runs/35439077121)
+confirmed the documentation correction, but BIND still failed. Running the full
+fixture as UID/GID 65534 reproduced a second defect: BIND exited because its
+dropped DAC capabilities could not traverse the host user's mode-0700 temporary
+directory. The fixture directory now uses 0755; signing-key file modes are
+unchanged. The complete unprivileged run then passed fresh/stale delegation,
+bogus DNSSEC, existing DS, child-apex rejection and IPv4/IPv6 UDP/TCP checks.
+This used disposable files in `/dev/shm` because the host filesystem lacked
+space for unprivileged writes. The local scan cache was removed; scan reports,
+persistent databases and named volumes were retained. No CI gate was relaxed.

@@ -60,6 +60,9 @@ def main() -> None:
     results = []
     with tempfile.TemporaryDirectory(prefix='cdnf-parent-qualification-') as temporary:
         root = Path(temporary)
+        # named drops DAC capabilities, so it must be able to traverse a
+        # fixture directory owned by an unprivileged host runner.
+        root.chmod(0o755)
         (root / 'resolver.php').write_text(PHP)
         (root / 'com.zone').write_text('''$ORIGIN com.
 $TTL 60
