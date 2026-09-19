@@ -21,6 +21,8 @@ import tempfile
 import time
 import uuid
 
+from docker_images import ensure_image
+
 ROOT = Path(__file__).resolve().parents[2]
 DNS_IMAGE = 'python:3.13-alpine@sha256:399babc8b49529dabfd9c922f2b5eea81d611e4512e3ed250d75bd2e7683f4b0'
 
@@ -40,6 +42,7 @@ def main() -> None:
     if args.image is None:
         run('docker', 'build', '-f', 'docker/openresty/Dockerfile', '-t', image, '.')
     image = run('docker', 'image', 'inspect', image, '--format', '{{.Id}}').stdout.strip()
+    ensure_image(DNS_IMAGE)
     instance = 'cdnf-origin-destinations-' + uuid.uuid4().hex[:12]
     prefix = uuid.uuid4().hex[:10]
     subnet = f'fd{prefix[:2]}:{prefix[2:6]}:{prefix[6:]}::/64'

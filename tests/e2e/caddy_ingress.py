@@ -10,6 +10,8 @@ import tempfile
 import time
 import uuid
 
+from docker_images import ensure_image
+
 ROOT = Path(__file__).resolve().parents[2]
 BUSYBOX = 'busybox:1.38.0-musl@sha256:32b5cdad7cce41dfd53d0ae06baebcf8357a147ee7694dc706911c373bc30c37'
 
@@ -22,6 +24,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('--image', default='ghcr.io/vaheed/cdnfoundry-caddy:ci')
     image = parser.parse_args().image
+    ensure_image(BUSYBOX)
     name = 'cdnf-caddy-' + uuid.uuid4().hex[:12]
     containers: list[str] = []
     with tempfile.TemporaryDirectory(prefix=name) as directory:

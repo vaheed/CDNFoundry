@@ -10,6 +10,8 @@ import tempfile
 import time
 import uuid
 
+from docker_images import ensure_image
+
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -22,6 +24,8 @@ def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 def main() -> None:
     current = yaml.safe_load((ROOT / 'compose.prod.yml').read_text())['services']['clickhouse']['image']
+    ensure_image(PREVIOUS)
+    ensure_image(current)
     name = 'cdnf-clickhouse-' + uuid.uuid4().hex[:12]
     with tempfile.TemporaryDirectory(prefix=name) as directory:
         data = Path(directory) / 'data'

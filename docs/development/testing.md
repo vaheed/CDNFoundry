@@ -336,7 +336,7 @@ container/volume changes. IPv6 loopback is required for the check.
 
 ## CI image reuse and build caches
 
-CI builds the 17 production images in eight independent `images` matrix jobs.
+CI builds the 17 production images in nine independent `images` matrix jobs.
 `docker-bake.hcl` owns the build targets; the application group shares its core
 build with web and edge-control through Bake target contexts. Each target has a
 separate GitHub Actions layer-cache scope, including intermediate compiler
@@ -375,3 +375,8 @@ GitHub runner without changing any persistent database or named volume. Run
 `python3 tests/e2e/clickhouse_upgrade.py` as a normal Docker-enabled user to cover
 that cleanup boundary. Browser qualification is not applicable to these CI-only
 changes; the owner-run checklist remains unchanged.
+
+Missing pinned DNS, database and Caddy fixture images are pulled before runtime
+setup, with four attempts, a 120-second per-attempt deadline and bounded backoff.
+Existing local images avoid the registry call. These retries cover image downloads
+only; runtime assertions are never retried or suppressed.

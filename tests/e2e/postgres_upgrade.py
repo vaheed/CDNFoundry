@@ -11,6 +11,8 @@ import tempfile
 import time
 import uuid
 
+from docker_images import ensure_image
+
 PREVIOUS = 'postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15'
 
 
@@ -22,6 +24,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('--image', default='ghcr.io/vaheed/cdnfoundry-postgres:ci')
     image = parser.parse_args().image
+    ensure_image(PREVIOUS)
     name = 'cdnf-postgres-' + uuid.uuid4().hex[:12]
     with tempfile.TemporaryDirectory(prefix=name) as directory:
         data = Path(directory) / 'data'

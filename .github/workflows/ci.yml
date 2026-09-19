@@ -86,9 +86,9 @@ jobs:
     timeout-minutes: 30
     strategy:
       fail-fast: false
-      max-parallel: 8
+      max-parallel: 9
       matrix:
-        group: [application, edge, dashboards, dns, monitoring, agents, logging, storage]
+        group: [application, edge, dashboards, authoritative-dns, dns-routing, monitoring, agents, logging, storage]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Prepare disposable runner space for source image builds
@@ -163,7 +163,7 @@ jobs:
       - name: Validate Python syntax
         run: python3 -m compileall -q tests/e2e tests/docs tests/fleet tests/qualification tests/supply_chain scripts/cdnfoundry_fleet scripts/ci
       - name: Download exact production images
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           pattern: production-images-*
           path: storage/ci-images
@@ -498,7 +498,7 @@ jobs:
             "${RELEASE}" "${RELEASE_REF_NAME}" "${WORKFLOW_RUN_ID}" \
             > release-evidence/build-context.txt
       - name: Download exact production images
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           pattern: production-images-*
           path: storage/ci-images
