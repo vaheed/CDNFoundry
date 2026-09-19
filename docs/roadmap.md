@@ -57,11 +57,14 @@ Completion gate: implementation and documentation present; local checks and
 remote publication pass for the delivered commit; browser **not applicable to
 publication**. Exact status is established by the report and linked Actions run.
 
-Current status: **delivery blocked**. The first dev run built all nine application
-images and passed the Compose qualification job, but infrastructure vulnerability
-scans failed. On September 19 the owner explicitly retained the strict gate for
-`dev` as well as main/versioned releases. No warning-only publication is allowed.
-The report records image findings and the corrected CI fixtures.
+Local gate status: **passed** for all 17 release images, all 3 external
+production images and the documented runtime checks. Implementation and operator
+documentation are present. The [latest dev Actions run](https://github.com/vaheed/CDNFoundry/actions/workflows/ci.yml?query=branch%3Adev)
+provides the remaining remote gate: every required job and image publication
+must succeed for the pushed commit. The [handoff report](operations/development-handoff.md)
+records the evidence and approved, narrowly scoped Grafana exceptions. No
+warning-only publication is allowed. A successful remote gate completes this
+job and admits Phase 1; it does not qualify a live staging installation.
 
 **Prerequisite job `dependency-remediation`.** Resolve the selected infrastructure
 image findings before resuming publication. Select supported patched versions or
@@ -76,9 +79,11 @@ verification and the wider publishing/credential review.
 Completion gate for the prerequisite: supported replacements are documented;
 applicable configuration/runtime tests and exact-image vulnerability gates pass;
 no existing data is reset. Browser **not applicable to image scanning**; document
-any changed operator workflow. Current status: **scan inventory complete,
-remediation incomplete**. After it passes, resume `delivery-handoff` and verify
-the exact commit's successful run and all published release images.
+any changed operator workflow. Local status: **remediation and qualification
+passed**. The rebuilt Grafana backend and plugin pass their combined datasource
+checks; approved Tempo classifications retain the raw findings and expire October
+19. Complete `delivery-handoff` by verifying the exact commit's successful remote
+run and all published release images.
 
 ## Phase 1 — Install and smoke-test the empty staging environment
 

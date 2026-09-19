@@ -32,37 +32,37 @@ report is committed before that run starts; do not treat its existence as proof
 that CI or publication passed. The handoff response records the final run URL
 and result. A failed, skipped or approval-waiting publication job is not success.
 
-## Delivery blocker and next job
+## Delivery gate and next job
+
+**Local release qualification passed:** all **17/17** application and managed
+infrastructure images passed the complete release gate, and **3/3** remaining
+external production images passed their separate gate. The combined patched
+Grafana backend/plugin passed generated production qualification with all four
+datasources healthy. Evidence is retained under ignored
+`storage/qualification/dependency-remediation`: `release-gate/summary.json`,
+`dependency-gate/summary.json`, and `grafana-combined-runtime.log`.
+
+The owner retains the High/Critical gate for dev and main/versioned releases.
+Only the two exact, expiring Tempo false-positive classifications and the
+single rebuilt ClickHouse plugin trust boundary were explicitly approved; see
+[the supply-chain policy](software-supply-chain.md). Complete raw findings remain
+available alongside classified reports. Other findings still block publication.
+
+**Remote delivery authority:** the [latest dev Actions run](https://github.com/vaheed/CDNFoundry/actions/workflows/ci.yml?query=branch%3Adev)
+for the pushed commit must show every required job and **Publish GHCR images**
+successful. The final handoff response records that exact run URL and SHA.
+This report does not substitute local qualification for that remote result.
+After that gate succeeds, the next job is **Phase 1: staging-install-and-smoke**.
+The current job performs no live staging deployment; owner browser checks are
+not run. Remote main is unchanged.
+
+### Earlier failed runs
 
 Run [35439995763](https://github.com/vaheed/CDNFoundry/actions/runs/35439995763)
-finished for `1de3c3e817123dc7252bed2e3811216fb1ff6f00`: **all six functional/build
-jobs passed**, including the full backend sequence and all nine image builds.
-The infrastructure vulnerability scan failed and image publication was skipped.
-The owner requires a fully green pipeline and successful publication; dependency
-remediation is now active, not deferred completion. No successful release is
-claimed for that run.
-
-**Publication is blocked.** The owner explicitly chose on September 19 to retain
-the High/Critical vulnerability gate for `dev`; main/versioned releases remain
-equally strict. The only new classifications are the two owner-approved Tempo
-false positives described in the [supply-chain policy](software-supply-chain.md#approved-tempo-false-positive-classification).
-There is no warning-only publication path.
-
-The latest complete **local** release-image gate scanned all seventeen current
-images: sixteen passed and Grafana failed. The generated production observability
-runtime check passed with Grafana 12.4.11 and the vendor-signed ClickHouse plugin
-4.21.3, including all four datasource health checks. Grafana still reports eleven
-High findings: eight in the plugin's Go runtime, one in Thrift, and two in Tempo.
-The pinned Tempo source contains the reported fixes; the owner approved exact
-package/path classifications through October 19. Raw findings remain in the
-evidence, with classifications recorded separately. A rebuilt plugin removes its eight runtime findings
-and passes the same runtime check. The owner subsequently approved that one
-plugin to load under the signed image's trust boundary; its source rebuild is
-now included in the release Dockerfile. The combined image qualification and
-exact-SHA remote publication remain the required delivery gates. Complete evidence is under ignored
-`storage/qualification/dependency-remediation/release-gate` and the audit report.
-The remote run above is still the last delivered result; local progress is not
-proof of a green remote pipeline or published images.
+for `1de3c3e817123dc7252bed2e3811216fb1ff6f00` passed all six functional/build
+jobs, but failed the infrastructure scan and skipped publication. The dependency
+remediation and complete local passes above supersede that dependency checkpoint;
+the older run itself remains failed and is not release evidence.
 
 The first run, [35438336177](https://github.com/vaheed/CDNFoundry/actions/runs/35438336177),
 qualified source `800ec21cd457a3e2e0d97c6ba2b8cf866fc74115`. Go and bounded DNS scale

@@ -2228,3 +2228,21 @@ an immediate dev push; run
 [35463193802](https://github.com/vaheed/CDNFoundry/actions/runs/35463193802)
 started for the preceding backend checkpoint. The following plugin commit's run
 will supersede it and must pass publication before this job is complete.
+
+### Complete local release qualification after the approved fixes
+
+The combined Grafana image passed generated production observability qualification
+with all four datasource health checks. The complete release-image command then
+finished with **17 passed, zero failed**; the separate remaining external-image
+gate finished with **3 passed, zero failed**. Raw reports exclude nothing; the
+classified Grafana report retains only the two explicitly approved Tempo records
+as suppressed findings and has no unclassified High/Critical findings. Evidence:
+`grafana-combined-runtime.log`, `approved-release-gate.log`,
+`release-gate/summary.json`, and `dependency-gate/summary.json`.
+
+All nineteen observability contract tests passed after updating the expected
+Grafana/plugin version and checksum assertions. The backend E2E job also builds
+Grafana through development Compose, so it uses the guarded disposable-runner
+preparation and a 90-minute maximum budget. These local results do not claim the
+full production Dockerfile build on GitHub or GHCR publication has passed; the
+exact pushed commit's Actions result remains the delivery completion gate.
