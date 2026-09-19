@@ -32,6 +32,56 @@ report is committed before that run starts; do not treat its existence as proof
 that CI or publication passed. The handoff response records the final run URL
 and result. A failed, skipped or approval-waiting publication job is not success.
 
+## Delivery blocker and next job
+
+**Publication is blocked.** The owner explicitly chose on September 19 to retain
+the High/Critical vulnerability gate for `dev`; main/versioned releases remain
+equally strict. No waiver, scanner exclusion or warning-only path was added.
+
+The first run, [35438336177](https://github.com/vaheed/CDNFoundry/actions/runs/35438336177),
+qualified source `800ec21cd457a3e2e0d97c6ba2b8cf866fc74115`. Go and bounded DNS scale
+passed. The Compose job passed, including builds of all nine production images,
+origin/TLS checks and generated production observability qualification. Docs
+failed its dependency audit, PHP failed its BIND fixture, and backend E2E failed
+its provisioned edge identity. The subsequent commits fix those reproduced
+tool/fixture defects; the next exact-SHA run determines whether all remote
+functional checks now pass. These corrections do not resolve image findings.
+
+The local September 19 scan of the same 12 infrastructure pins failed as follows.
+Counts are package findings, including repeated advisories across packages, not
+distinct exploitable defects. “No fix reported” means Trivy supplied no fixed
+package version for that selected image; it is not proof that every alternative
+image is affected. Exact pins remain in the source and complete JSON/table reports
+are retained in the CI `production-dependency-scans` artifact and local ignored
+`storage/qualification/dev-dependencies` directory.
+
+| Selected image | High/Critical findings | No fix reported |
+| --- | ---: | ---: |
+| Alpine 3.22 | 2 | 0 |
+| Caddy 2.11.4-alpine | 40 | 0 |
+| ClickHouse 26.3.12.3-alpine | 2 | 0 |
+| PostgreSQL 18.4-alpine | 32 | 0 |
+| DNSdist 2.1.0 | 142 | 67 |
+| PowerDNS Authoritative 5.1.3 | 226 | 150 |
+| Alertmanager 0.32.1 | 74 | 0 |
+| Node exporter 1.10.2 | 40 | 0 |
+| Prometheus 3.12.0 | 52 | 0 |
+| Vector 0.55.0-alpine | 17 | 0 |
+| Vector 0.55.0-debian | 92 | 45 |
+| Valkey 9.1.0-alpine | 9 | 0 |
+
+The refreshed Caddy 2.11.4-alpine candidate at
+`sha256:de23def33b17fb5d1290b0f6c2add1d70780e52341896c00a4c8a2a2fe9d355e`
+still had 17 High/Critical findings in embedded Go dependencies/toolchain after
+its OS fixes. It was scanned but not adopted. A same-tag refresh alone is
+insufficient. The full application-image scan/sign/publication job has not run;
+successful builds do not establish a vulnerability pass.
+
+Next bounded job: **`dependency-remediation`**, now a Phase 0 prerequisite in the
+roadmap. Select and qualify supported replacements, rescan exact infrastructure
+and application images, then resume delivery and verify nine-image publication.
+Live staging and manual browser qualification remain separate and unexecuted.
+
 ## Implemented and committed work
 
 | Area | Completed behavior and evidence | Still required |
@@ -44,7 +94,7 @@ and result. A failed, skipped or approval-waiting publication job is not success
 | Delivery and tests | Pinned build inputs, complete scan evidence, verifiable qualification input, Fleet CI inclusion, Go failure propagation and isolated Laravel/OpenAPI checks | Current remote gates and exact-release evidence; clean-host verifier execution |
 | Cleanup/docs | Dead build arguments removed and defective/superseded implementations replaced; current runbooks and cleanup ledger retained | Complete remaining inventory and prove non-use before further deletion |
 
-Findings AUD-001 through AUD-053 have individual evidence and status in the audit
+Findings AUD-001 through AUD-054 have individual evidence and status in the audit
 register. Some are broader ongoing qualifications, including dependency/image
 risk; this table must not be read as “all findings resolved.” Historical fixes
 and historical scan failures remain visible rather than being erased by this handoff.
@@ -121,5 +171,6 @@ phase complete merely because its implementation or tests exist.
 
 Decision: **development release candidate for an empty staging environment only
 after the exact commit's CI and publication gates pass; not yet qualified for
-customer production traffic.** The next job is Phase 1, `staging-install-and-smoke`,
-with host access and topology supplied separately.
+customer production traffic.** The immediate next job is `dependency-remediation`;
+Phase 1, `staging-install-and-smoke`, follows successful publication with host
+access and topology supplied separately.

@@ -54,6 +54,29 @@ Completion gate: implementation and documentation present; local checks and
 remote publication pass for the delivered commit; browser **not applicable to
 publication**. Exact status is established by the report and linked Actions run.
 
+Current status: **delivery blocked**. The first dev run built all nine application
+images and passed the Compose qualification job, but infrastructure vulnerability
+scans failed. On September 19 the owner explicitly retained the strict gate for
+`dev` as well as main/versioned releases. No warning-only publication is allowed.
+The report records image findings and the corrected CI fixtures.
+
+**Prerequisite job `dependency-remediation`.** Resolve the selected infrastructure
+image findings before resuming publication. Select supported patched versions or
+rebuilds, pin exact digests, update every Compose/Fleet reference consistently,
+and qualify affected DNS, database, telemetry and ingress behavior. Preserve
+database compatibility and rollback. Rescan all 12 dependency images and the
+nine application images with complete evidence. A missing vendor fix remains a
+blocker; do not hide it, ignore all unfixed findings or waive the dev gate.
+This delivery prerequisite precedes Phase 1; Phase 8 retains clean-host release
+verification and the wider publishing/credential review.
+
+Completion gate for the prerequisite: supported replacements are documented;
+applicable configuration/runtime tests and exact-image vulnerability gates pass;
+no existing data is reset. Browser **not applicable to image scanning**; document
+any changed operator workflow. Current status: **scan inventory complete,
+remediation incomplete**. After it passes, resume `delivery-handoff` and verify
+the exact commit's successful run and nine published images.
+
 ## Phase 1 — Install and smoke-test the empty staging environment
 
 **Next job `staging-install-and-smoke`.** Inputs: published release manifest,
@@ -176,6 +199,7 @@ complete release qualification**.
 
 ## Start the next bounded job
 
-Request: **“Run Phase 1, staging-install-and-smoke, for the published dev release.
-Stop at its documented gate and report blockers.”** Supply staging host access
-and topology then; neither is required for this image-publication handoff.
+Request: **“Run dependency-remediation, retain all release gates, then resume
+delivery-handoff for dev. Stop at its documented gate and report blockers.”**
+After publication succeeds, start Phase 1 with staging host access and topology.
+Neither is required for image remediation/publication.
