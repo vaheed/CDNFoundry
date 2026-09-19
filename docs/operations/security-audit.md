@@ -2037,3 +2037,20 @@ monitoring service or dashboard was added. Back up monitoring state before a
 populated-host upgrade; select a previously verified release and restore its
 matching backup for rollback. Full-stack qualification and remote publication
 remain outstanding; the owner browser job remains not run.
+
+### Final application-image rebuild checks (September 19)
+
+Rebuilding current source resolved stale local control-plane image findings: the
+current `core` image passed the strict image gate. Fresh web/edge-control images
+exposed an additional inherited Expat update; both now explicitly install
+`libexpat=2.8.4-r0` and pass the same gate. The real web image's Nginx configuration
+test passed. Evidence: `core-current-scan.log`, `ingress-current-scan.log`,
+`web-config.log`, and their complete `*-final.json` reports under
+`dependency-remediation`. Historical image reports are not evidence for a fresh
+build; every final image must still pass before publication.
+
+Edge-agent and edge-gateway build stages now limit Go parallelism to two workers.
+Both embedded Go test suites passed during their image rebuilds. The extra managed
+source builds require bounded CI job budgets of 120 minutes for qualification and
+180 minutes for publication, including scans/signing. No test or vulnerability
+gate was removed. These are maximum job budgets, not measured release durations.
