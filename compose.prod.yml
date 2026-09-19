@@ -286,7 +286,7 @@ services:
       retries: 20
 
   pdns-auth:
-    image: powerdns/pdns-auth-51:5.1.3@sha256:f976e753a1de8ec62636203ecb12ae5fa3d1055601be167de53f1f673e0abe59
+    image: ${CDNF_PDNS_IMAGE:?CDNF_PDNS_IMAGE must be an immutable image reference}
     profiles: [dns]
     volumes:
       - ./docker/pdns/pdns.conf:/etc/powerdns/pdns.conf:ro
@@ -315,7 +315,7 @@ services:
     restart: "no"
 
   dnsdist:
-    image: powerdns/dnsdist-21:2.1.0@sha256:2fc7ef0e0009a419e59082e31e2e42614fd0979c0b1929f72f4755f210c1e521
+    image: ${CDNF_DNSDIST_IMAGE:?CDNF_DNSDIST_IMAGE must be an immutable image reference}
     profiles: [dns]
     ports:
       - "${DNS_BIND_V4}:53:53/udp"

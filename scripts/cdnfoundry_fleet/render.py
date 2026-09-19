@@ -215,6 +215,8 @@ class Renderer:
             "CDNF_GRAFANA_IMAGE": f"ghcr.io/vaheed/cdnfoundry-grafana:{node['release']}",
             "CDNF_LOKI_IMAGE": f"ghcr.io/vaheed/cdnfoundry-loki:{node['release']}",
             "CDNF_CADDY_IMAGE": f"ghcr.io/vaheed/cdnfoundry-caddy:{node['release']}",
+            "CDNF_DNSDIST_IMAGE": f"ghcr.io/vaheed/cdnfoundry-dnsdist:{node['release']}",
+            "CDNF_PDNS_IMAGE": f"ghcr.io/vaheed/cdnfoundry-pdns:{node['release']}",
             "CDNF_PROMETHEUS_IMAGE": f"ghcr.io/vaheed/cdnfoundry-prometheus:{node['release']}",
             "CDNF_ALERTMANAGER_IMAGE": f"ghcr.io/vaheed/cdnfoundry-alertmanager:{node['release']}",
             "CDNF_NODE_EXPORTER_IMAGE": f"ghcr.io/vaheed/cdnfoundry-node-exporter:{node['release']}",

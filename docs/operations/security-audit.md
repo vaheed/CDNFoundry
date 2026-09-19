@@ -2054,3 +2054,40 @@ Both embedded Go test suites passed during their image rebuilds. The extra manag
 source builds require bounded CI job budgets of 120 minutes for qualification and
 180 minutes for publication, including scans/signing. No test or vulnerability
 gate was removed. These are maximum job budgets, not measured release durations.
+
+### PowerDNS and DNSdist dependency remediation (September 19)
+
+The Debian vendor images retained High/Critical findings without package fixes.
+Managed PowerDNS Authoritative **5.1.4** and DNSdist **2.1.2** now compile their
+upstream release sources on pinned Alpine 3.24. The source archives were verified
+against the vendor's published signing keys before their SHA-256 hashes were
+committed into the Dockerfiles:
+
+- PowerDNS source SHA-256: `f8a10edbf60e49d8c160e93121989d5ebcdad838d0e0b747f26ef7e89fd220c0`;
+  valid signature fingerprint `FBAE0323821C7706A5CA151BDCF513FA7EED19F3`.
+- DNSdist source SHA-256: `9fcb469d7a1b5116606f2563761343d1c595523c1fd67808835fa4edc03c24ce`;
+  valid signature fingerprint `D6300CABCBF469BBE392E503A208ED4F8AF58446`.
+
+Primary source: [PowerDNS source verification](https://doc.powerdns.com/authoritative/appendices/compiling.html).
+Both final image scans passed the unchanged High/Critical gate. Runtime APK
+metadata is retained; no findings were suppressed. The builds preserve UID/GID
+953, PowerDNS supplementary secret group 82, configuration locations, PostgreSQL
+schema/API and the configured Lua/GeoIP, UDP/TCP and dnstap features. Required
+runtime shared libraries were checked by executing the actual binaries.
+
+`dns_images.py` passed real UDP/TCP A/AAAA/Lua answers, authenticated zone API,
+metrics, PowerDNS restart, and DNS serving with the dnstap listener unavailable.
+It loaded the GeoIP backend without a geolocation database; country-specific
+MMDB routing is not claimed by that fixture. Generated Fleet qualification passed
+restricted secret permissions, concurrent/invalid rotation refusal, successful
+rotation/retry, and interrupted-rotation recovery with both managed database/DNS
+images. Evidence: `dns-runtime.log`, `dns-fleet-runtime.log`, `pdns-final.json`,
+`dnsdist-final.json`, and source signature records under `dependency-remediation`.
+
+`CDNF_PDNS_IMAGE` and `CDNF_DNSDIST_IMAGE` now participate in the complete signed
+release manifest. No existing database/volume was reset. Back up desired/runtime
+DNS state before a populated-host upgrade and retain the previous verified
+images/configuration; restore matching state if rollback is required. The owner
+browser job remains not run. All twelve original dependency entries now have
+locally scan-qualified replacements and applicable runtime evidence; final
+application-image qualification and successful remote publication remain open.

@@ -188,6 +188,8 @@ the supported host collector.
 | `CDNF_MMDB_UPDATER_IMAGE` | production hosts using GeoIP | Immutable MMDB updater image reference from the release manifest |
 | `CDNF_GRAFANA_IMAGE` | production telemetry | Immutable provisioned Grafana image reference from the release manifest |
 | `CDNF_CADDY_IMAGE` | production ingress | Immutable patched Caddy image reference from the release manifest |
+| `CDNF_DNSDIST_IMAGE` | production authoritative DNS | Immutable DNSdist image reference from the release manifest |
+| `CDNF_PDNS_IMAGE` | production authoritative DNS | Immutable PowerDNS image reference from the release manifest |
 | `CDNF_PROMETHEUS_IMAGE` | production telemetry | Immutable Prometheus image reference from the release manifest |
 | `CDNF_ALERTMANAGER_IMAGE` | production telemetry | Immutable Alertmanager image reference from the release manifest |
 | `CDNF_NODE_EXPORTER_IMAGE` | production host monitoring | Immutable node exporter image reference from the release manifest |

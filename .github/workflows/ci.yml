@@ -86,8 +86,11 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install Fleet qualification dependencies
-        run: python3 -m pip install -r tests/fleet/requirements.txt
+      - name: Install Fleet and DNS qualification dependencies
+        run: |
+          python3 -m pip install -r tests/fleet/requirements.txt
+          sudo apt-get update
+          sudo apt-get install -y bind9-dnsutils
       - name: Qualify Fleet configuration and generated bundles
         run: make fleet-test
       - name: Enforce software supply-chain policy and negative fixtures
@@ -114,6 +117,8 @@ jobs:
           docker build -t ghcr.io/vaheed/cdnfoundry-loki:ci docker/loki
           docker build -t ghcr.io/vaheed/cdnfoundry-grafana:ci docker/grafana
           docker build -t ghcr.io/vaheed/cdnfoundry-caddy:ci docker/caddy
+          docker build -t ghcr.io/vaheed/cdnfoundry-dnsdist:ci docker/dnsdist
+          docker build -t ghcr.io/vaheed/cdnfoundry-pdns:ci docker/pdns
           docker build -t ghcr.io/vaheed/cdnfoundry-prometheus:ci docker/prometheus
           docker build -t ghcr.io/vaheed/cdnfoundry-alertmanager:ci docker/alertmanager
           docker build -t ghcr.io/vaheed/cdnfoundry-node-exporter:ci docker/node-exporter
@@ -161,6 +166,8 @@ jobs:
             test rules /etc/prometheus/alerts.test.yml
       - name: Qualify origin destination safety and IPv6 HTTP/TLS
         run: python3 tests/e2e/origin_destinations.py --image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
+      - name: Qualify compiled DNS services and telemetry outage serving
+        run: python3 tests/e2e/dns_images.py
       - name: Qualify generated PowerDNS credentials and rotation
         run: sudo -E python3 tests/e2e/fleet_pdns.py
       - name: Qualify patched monitoring scrape and alert APIs
@@ -443,6 +450,8 @@ jobs:
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-grafana:${RELEASE}" docker/grafana
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-loki:${RELEASE}" docker/loki
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-caddy:${RELEASE}" docker/caddy
+          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-dnsdist:${RELEASE}" docker/dnsdist
+          docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-pdns:${RELEASE}" docker/pdns
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-prometheus:${RELEASE}" docker/prometheus
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-alertmanager:${RELEASE}" docker/alertmanager
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-node-exporter:${RELEASE}" docker/node-exporter
@@ -456,7 +465,7 @@ jobs:
           WORKFLOW_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
-          images=(core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater grafana loki postgres vector node-exporter alertmanager prometheus caddy)
+          images=(core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater grafana loki postgres vector node-exporter alertmanager prometheus pdns dnsdist caddy)
           aliases=()
           push_with_retry() {
             local image="$1"

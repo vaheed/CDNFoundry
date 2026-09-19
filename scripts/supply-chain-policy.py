@@ -17,6 +17,8 @@ DOCKERFILES = [
     ROOT / "docker/nginx/Dockerfile.production", ROOT / "docker/openresty/Dockerfile",
     ROOT / "docker/mmdb-updater/Dockerfile", ROOT / "docker/grafana/Dockerfile", ROOT / "docker/loki/Dockerfile",
     ROOT / "docker/caddy/Dockerfile",
+    ROOT / "docker/dnsdist/Dockerfile",
+    ROOT / "docker/pdns/Dockerfile",
     ROOT / "docker/prometheus/Dockerfile",
     ROOT / "docker/alertmanager/Dockerfile",
     ROOT / "docker/node-exporter/Dockerfile",
@@ -127,7 +129,7 @@ def validate_git_dependencies(source: str) -> None:
 
 
 def validate_compose_images(document: dict) -> None:
-    components = {'CORE', 'WEB', 'EDGE_CONTROL', 'EDGE_RUNTIME', 'EDGE_AGENT', 'EDGE_GATEWAY', 'MMDB_UPDATER', 'GRAFANA', 'LOKI', 'POSTGRES', 'VECTOR', 'NODE_EXPORTER', 'ALERTMANAGER', 'PROMETHEUS', 'CADDY'}
+    components = {'CORE', 'WEB', 'EDGE_CONTROL', 'EDGE_RUNTIME', 'EDGE_AGENT', 'EDGE_GATEWAY', 'MMDB_UPDATER', 'GRAFANA', 'LOKI', 'POSTGRES', 'VECTOR', 'NODE_EXPORTER', 'ALERTMANAGER', 'PROMETHEUS', 'PDNS', 'DNSDIST', 'CADDY'}
     for name, service in document.get('services', {}).items():
         reference = service.get('image')
         if reference is None:
