@@ -1818,3 +1818,32 @@ bundles normally; restore the prior configuration and bundle for rollback.
 Both findings are fixed. Whole-file Fleet review, clean-host installation and
 recovery remain incomplete. Manual browser qualification is **Not run**. This
 test result establishes configuration/render behavior, not a production install.
+
+## Dev CI dependency and fixture corrections
+
+AUD-054 (**High / confirmed**) is the documentation toolchain's transitive
+`smol-toml` 1.7.0 dependency. The
+[upstream advisory](https://github.com/advisories/GHSA-7w5x-hrqm-74c2)
+describes an infinite loop on malformed TOML. A bounded local subprocess
+reproduced the hang. The npm override and lockfile now select patched 1.7.1;
+both malformed array/table inputs reject promptly and valid input still parses.
+`npm audit --prefix docs --audit-level=high` reports zero vulnerabilities.
+The complete documentation check passed in **54.085 seconds**
+(`dev-docs-dependency`). No application migration is involved.
+
+The real BIND fixture also wrote signed zones as container root. An unprivileged
+runner could not rewrite them for subsequent negative cases. A disposable
+UID-65534 reproduction failed with root-owned output and passed when the signing
+container used the caller's UID/GID. `parent_delegation.py` now supplies that
+identity; its full real-BIND check passed in **31.696 seconds**
+(`dev-parent-ownership`). The remote run's failed BIND step motivated this check;
+its private job log was unavailable, so the next CI run must confirm the fix
+on the GitHub runner. Production DNS behavior and persistent volumes are unchanged.
+
+The first dev run, [35438336177](https://github.com/vaheed/CDNFoundry/actions/runs/35438336177),
+also failed its infrastructure vulnerability gate. The local exact-pin scan
+failed all 12 images; DNSdist, PowerDNS and Debian Vector include findings with
+no fixed package version reported. Refreshing the current Caddy tag reduced its
+High/Critical findings from 40 to 17 but did not clear the gate. That candidate
+was tested only, not adopted. AUD-013 dependency qualification remains open;
+no scan exception or publication success is implied by these two corrections.

@@ -69,7 +69,7 @@ ns IN A 8.8.8.8
 customer IN NS fresh.ns1.provider.net.
 customer IN NS fresh.ns2.provider.net.
 ''')
-        tools = ['docker', 'run', '--rm', '--network', 'none', '--mount', f'type=bind,source={root},target=/fixture',
+        tools = ['docker', 'run', '--rm', '--network', 'none', '--user', f'{os.getuid()}:{os.getgid()}', '--mount', f'type=bind,source={root},target=/fixture',
                  '--workdir', '/fixture', '--entrypoint', 'sh', image, '-ec']
         run(*tools, 'dnssec-keygen -q -a ECDSAP256SHA256 -f KSK com; dnssec-keygen -q -a ECDSAP256SHA256 com; dnssec-signzone -n 1 -S -o com -f com.signed com.zone')
         key = next(p for p in root.glob('Kcom*.key') if 'DNSKEY 257' in p.read_text())
