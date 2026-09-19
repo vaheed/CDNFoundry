@@ -215,6 +215,7 @@ class Renderer:
             "CDNF_GRAFANA_IMAGE": f"ghcr.io/vaheed/cdnfoundry-grafana:{node['release']}",
             "CDNF_LOKI_IMAGE": f"ghcr.io/vaheed/cdnfoundry-loki:{node['release']}",
             "CDNF_CADDY_IMAGE": f"ghcr.io/vaheed/cdnfoundry-caddy:{node['release']}",
+            "CDNF_VECTOR_IMAGE": f"ghcr.io/vaheed/cdnfoundry-vector:{node['release']}",
             "CDNF_POSTGRES_IMAGE": f"ghcr.io/vaheed/cdnfoundry-postgres:{node['release']}",
             "HOST_BIND_IPV4": node["bind_ipv4"],
             "HOST_BIND_IPV6": node.get("bind_ipv6") or "::",

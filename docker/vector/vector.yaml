@@ -9,11 +9,11 @@ sources:
   edge_events:
     type: http_server
     address: 0.0.0.0:8686
-    encoding: json
+    decoding: { codec: json }
   dns_events:
     type: http_server
     address: 0.0.0.0:8687
-    encoding: json
+    decoding: { codec: json }
   dns_dnstap:
     type: dnstap
     address: 0.0.0.0:6000

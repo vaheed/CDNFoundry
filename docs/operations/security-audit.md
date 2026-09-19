@@ -1981,3 +1981,32 @@ PostgreSQL or named volumes were modified. Release-managed `CDNF_POSTGRES_IMAGE`
 now covers control, DNS and migration tools; take a verified backup before a
 populated-host upgrade. Restore the preceding backup/image for rollback rather
 than assuming arbitrary in-place downgrades. Browser checks remain not run.
+
+### Vector dependency and configuration remediation (September 19)
+
+One managed Vector **0.58.0** image now serves both traffic and operational
+collectors, replacing the Alpine/Debian 0.55 pins. The unchanged upstream binary
+is copied from its immutable vendor image into pinned Ubuntu 26.04 with the
+required C runtime and `journalctl`. The complete final image passed the strict
+High/Critical gate (`dependency-remediation/vector-final.json`). The synthetic
+binary-journal test passed through actual `journalctl` and Vector; no host journal
+or customer data was used. HTTP edge/DNS event ingestion, current transformations,
+and query-secret redaction passed in `vector_traffic.py`. The traffic config also
+validates against the development 0.55 image. Evidence: `vector-journal.log`,
+`vector-traffic.log`, `vector-config.log`, and `vector-dev-config.log`.
+
+The upgrade required two compatibility changes: HTTP JSON sources use
+`decoding.codec` instead of removed `encoding`, and operator-owned configurations
+explicitly opt into environment interpolation in their two Compose services.
+The latter retains existing endpoint/authentication/metadata substitution;
+configuration must remain operator-controlled and read-only to workloads.
+The journal writer exists only in the disposable test helper. Persistent buffer
+paths are retained, and no existing development data or services were reset.
+The PostgreSQL reference in the Grafana provisioning tool was also brought onto
+the already qualified managed image.
+
+The broader generated-stack run did not pass: its control Prometheus scrape was
+still 0 under heavy local compiler load. Qualification now waits at most 60 seconds
+for a real successful scheduled scrape after readiness; it still fails if none
+arrives. A full-stack rerun and remote publication remain required. Browser
+qualification was not run; there is no new UI.

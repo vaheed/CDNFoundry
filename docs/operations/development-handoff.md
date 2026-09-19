@@ -93,8 +93,8 @@ Live staging and manual browser qualification remain separate and unexecuted.
 Local remediation progress: Alpine 3.22.6 and Valkey 9.1.2 passed the strict
 image gate. The managed Caddy 2.11.4 build also passed, including its detected
 Go binary, real HTTPS proxy/allowlist checks, and Fleet/Compose contracts. These
-together with ClickHouse 26.8.7.19 and PostgreSQL 18.6 resolve 5 of the original
-12 dependency entries locally; remote publication
+together with ClickHouse 26.8.7.19, PostgreSQL 18.6, and the two Vector collectors
+resolve 7 of the original 12 dependency entries locally; remote publication
 remains pending. No vulnerability exception was added.
 
 ## Implemented and committed work
@@ -157,6 +157,7 @@ A successful `publish-images` job publishes these GHCR repositories:
 | Grafana | `ghcr.io/vaheed/cdnfoundry-grafana` |
 | Loki | `ghcr.io/vaheed/cdnfoundry-loki` |
 | postgres | `ghcr.io/vaheed/cdnfoundry-postgres` |
+| vector | `ghcr.io/vaheed/cdnfoundry-vector` |
 | Caddy ingress | `ghcr.io/vaheed/cdnfoundry-caddy` |
 
 Each has the full source-SHA tag. `dev` and `dev-latest` are convenience aliases;

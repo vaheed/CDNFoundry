@@ -358,9 +358,10 @@ services:
       start_period: 20s
 
   vector:
-    image: timberio/vector:0.55.0-alpine@sha256:faf14cdafb5526a94b478b2a51055b774b92761c2a22ce3af1fa416a67b75939
+    image: ${CDNF_VECTOR_IMAGE:?CDNF_VECTOR_IMAGE must be an immutable image reference}
     profiles: [telemetry, dns, edge]
     environment:
+      VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION: "true"
       CLICKHOUSE_ENDPOINT: ${CLICKHOUSE_URL:?CLICKHOUSE_URL is required}
       CLICKHOUSE_USER: cdnf
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
@@ -410,10 +411,11 @@ services:
         limits: { memory: 1g, cpus: "1", pids: 128 }
 
   log-collector:
-    image: timberio/vector:0.55.0-debian@sha256:a4be1111b40303524aae2ffb02cd59cef2a4e9753bd13d265bf0233e921828d9
+    image: ${CDNF_VECTOR_IMAGE:?CDNF_VECTOR_IMAGE must be an immutable image reference}
     profiles: [logs]
     command: [--config, /etc/vector/operational.yaml]
     environment:
+      VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION: "true"
       LOG_ENVIRONMENT: production
       LOG_ROLE: ${LOG_ROLE:?LOG_ROLE is required for the logs profile}
       LOG_HOST: ${LOG_HOST:?LOG_HOST is required for the logs profile}
@@ -463,7 +465,7 @@ services:
       start_period: 10s
 
   grafana-control-db-provision:
-    image: postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
+    image: ${CDNF_POSTGRES_IMAGE:?CDNF_POSTGRES_IMAGE must be an immutable image reference}
     profiles: [telemetry]
     environment:
       PGHOST: ${GRAFANA_POSTGRES_PROVISION_HOST}

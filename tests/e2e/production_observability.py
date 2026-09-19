@@ -65,6 +65,7 @@ def build_images(release: str) -> None:
         ("loki", "docker/loki/Dockerfile", "docker/loki"),
         ("grafana", "docker/grafana/Dockerfile", "docker/grafana"),
         ("caddy", "docker/caddy/Dockerfile", "docker/caddy"),
+        ("vector", "docker/vector-runtime/Dockerfile", "docker/vector-runtime"),
         ("postgres", "docker/postgres/Dockerfile", "docker/postgres"),
     ):
         run("docker", "build", "-t", f"ghcr.io/vaheed/cdnfoundry-{image}:{release}",
@@ -84,7 +85,7 @@ def main() -> int:
     # Immutable local image IDs qualify the exact local build without requiring
     # a registry push or treating mutable qualification tags as deployment pins.
     local_images = {}
-    for component in ('core', 'web', 'edge-control', 'edge-runtime', 'edge-agent', 'edge-gateway', 'mmdb-updater', 'grafana', 'loki', 'postgres', 'caddy'):
+    for component in ('core', 'web', 'edge-control', 'edge-runtime', 'edge-agent', 'edge-gateway', 'mmdb-updater', 'grafana', 'loki', 'postgres', 'vector', 'caddy'):
         tag = f'ghcr.io/vaheed/cdnfoundry-{component}:{args.release}'
         local_images['CDNF_'+component.upper().replace('-', '_')+'_IMAGE'] = run('docker', 'image', 'inspect', tag, '--format', '{{.Id}}', cwd=ROOT, capture=True).stdout.strip()
 
@@ -151,13 +152,19 @@ def main() -> int:
             if "cdnfoundry_component_health" not in metrics:
                 raise RuntimeError("authenticated control metrics are missing")
 
-            query = compose(
-                bundle, "exec", "-T", "prometheus", "wget", "-qO-",
-                "http://127.0.0.1:9090/api/v1/query?query=up%7Bjob%3D%22cdnfoundry-control%22%7D",
-                capture=True,
-            )
-            result = json.loads(query.stdout)["data"]["result"]
-            if not result or result[0]["value"][1] != "1":
+            # A ready server can still have its last pre-readiness scrape at 0.
+            # Wait for an actual successful scheduled scrape, with a hard bound.
+            for _ in range(30):
+                query = compose(
+                    bundle, "exec", "-T", "prometheus", "wget", "-qO-",
+                    "http://127.0.0.1:9090/api/v1/query?query=up%7Bjob%3D%22cdnfoundry-control%22%7D",
+                    capture=True,
+                )
+                result = json.loads(query.stdout)["data"]["result"]
+                if result and result[0]["value"][1] == "1":
+                    break
+                time.sleep(2)
+            else:
                 raise RuntimeError(f"Prometheus control scrape is not up: {result}")
 
             env = dict(
