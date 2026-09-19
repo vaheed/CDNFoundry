@@ -2091,3 +2091,14 @@ images/configuration; restore matching state if rollback is required. The owner
 browser job remains not run. All twelve original dependency entries now have
 locally scan-qualified replacements and applicable runtime evidence; final
 application-image qualification and successful remote publication remain open.
+
+### Preserve the dependency gate for managed images
+
+Moving a dependency from a pinned vendor image to a managed release image must
+not move its first security gate past publication. CI now scans all built release
+images in the required Compose qualification job, retaining complete evidence in
+`release-image-scans`. Inventory comes from production Compose and role overrides;
+a missing local image fails rather than pulling another build. Negative fixtures
+prove missing-image failure, continued inventory, override coverage and rejection
+of mutable release names. Registry-digest scanning/signing remains unchanged.
+The local complete image gate and remote run are still pending final remediation.

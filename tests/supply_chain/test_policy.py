@@ -3,6 +3,9 @@ import importlib.util
 from pathlib import Path
 import unittest
 import tempfile
+import json
+from types import SimpleNamespace
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('supply_policy', Path(__file__).resolve().parents[2] / 'scripts/supply-chain-policy.py')
 policy = importlib.util.module_from_spec(spec)
@@ -11,6 +14,35 @@ PIN = 'alpine:3@sha256:' + 'a' * 64
 
 
 class ImageReferenceTests(unittest.TestCase):
+    def test_release_inventory_includes_managed_role_images(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'deploy/production').mkdir(parents=True)
+            (root / 'compose.prod.yml').write_text('services:\n  core:\n    image: "${CDNF_CORE_IMAGE:?required}"\n  db:\n    image: '+PIN+'\n')
+            (root / 'deploy/production/logs.yml').write_text('services:\n  collector:\n    image: "${CDNF_VECTOR_IMAGE:?required}"\n')
+            self.assertEqual(['ghcr.io/vaheed/cdnfoundry-core:ci', 'ghcr.io/vaheed/cdnfoundry-vector:ci'],
+                             policy.production_release_images(root, 'ci'))
+            with self.assertRaises(ValueError):
+                policy.production_release_images(root, 'dev-latest')
+
+    def test_missing_local_release_image_fails_without_pulling_and_continues_inventory(self):
+        references = ['ghcr.io/vaheed/cdnfoundry-core:ci', 'ghcr.io/vaheed/cdnfoundry-vector:ci']
+        commands = []
+
+        def execute(command, **kwargs):
+            commands.append(command)
+            return SimpleNamespace(returncode=1 if command[-1] == references[0] else 0)
+
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(policy, 'production_release_images', return_value=references), \
+                patch.object(policy.subprocess, 'run', side_effect=execute):
+            with self.assertRaises(SystemExit):
+                policy.scan_production_dependencies(Path(directory), release='ci')
+            summary = json.loads((Path(directory) / 'summary.json').read_text())
+            self.assertEqual(['failed', 'passed'], [row['status'] for row in summary['results']])
+        self.assertFalse(any(command[:2] == ['docker', 'pull'] for command in commands))
+        self.assertTrue(any(command[-1] == references[1] for command in commands))
+
     def test_dependency_scan_includes_role_overrides_and_deduplicates(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

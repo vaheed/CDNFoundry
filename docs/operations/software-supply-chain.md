@@ -241,3 +241,14 @@ release when verifying image evidence. The verification commands use an exact
 `--certificate-identity` for the selected workflow ref. Provenance uses
 `slsaprovenance1`, matching the workflow's SLSA v1 predicate, not the older
 `slsaprovenance` predicate type.
+
+## Gate managed images before publication
+
+The Compose qualification job scans every locally built release image discovered
+from production Compose and role overrides before publication can start. This
+includes managed infrastructure images as well as the application images. The
+scan never pulls a replacement for a missing local build. A failed scan retains
+its full evidence, continues the inventory, and fails the job; no publishing job
+runs until all required jobs succeed. Retrieve `release-image-scans` for these
+reports. The publication job still scans the registry digests and retains the
+signed release evidence separately.

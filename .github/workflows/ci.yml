@@ -124,6 +124,16 @@ jobs:
           docker build -t ghcr.io/vaheed/cdnfoundry-node-exporter:ci docker/node-exporter
           docker build -t ghcr.io/vaheed/cdnfoundry-vector:ci docker/vector-runtime
           docker build -t ghcr.io/vaheed/cdnfoundry-postgres:ci docker/postgres
+      - name: Scan every built release image before allowing publication
+        run: python3 scripts/supply-chain-policy.py --scan-release-images ci --output storage/qualification/release-image-scans
+      - name: Retain complete release image scan evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: release-image-scans
+          path: |
+            storage/qualification/release-image-scans/*.json
+            storage/qualification/release-image-scans/*.txt
       - name: Validate operational logging configurations and alert rules
         run: |
           docker run --rm \

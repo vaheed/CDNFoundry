@@ -155,7 +155,24 @@ def production_dependency_images(root: pathlib.Path) -> list[str]:
     return sorted(references)
 
 
-def scan_production_dependencies(output: pathlib.Path) -> None:
+def production_release_images(root: pathlib.Path, release: str) -> list[str]:
+    import yaml
+    if not re.fullmatch(r'ci|[0-9a-f]{40}', release):
+        raise ValueError('Release scan requires ci or a full source commit')
+    components: set[str] = set()
+    for path in [root / 'compose.prod.yml', *sorted((root / 'deploy/production').glob('*.yml'))]:
+        document = yaml.safe_load(path.read_text())
+        validate_compose_images(document)
+        for service in document.get('services', {}).values():
+            match = re.fullmatch(r'\$\{CDNF_([A-Z_]+)_IMAGE:\?[^}]+\}', service.get('image', ''))
+            if match:
+                components.add(match[1].lower().replace('_', '-'))
+    if not components:
+        raise ValueError('No production release images discovered')
+    return [f'ghcr.io/vaheed/cdnfoundry-{component}:{release}' for component in sorted(components)]
+
+
+def scan_production_dependencies(output: pathlib.Path, *, release: str | None = None) -> None:
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
     scanner = 'aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e'
@@ -166,10 +183,12 @@ def scan_production_dependencies(output: pathlib.Path) -> None:
             '-v', f'{ROOT}:/work:ro', '-v', f'{output}:/out',
             '-v', f'{cache}:/root/.cache', scanner]
     results = []
-    for index, reference in enumerate(production_dependency_images(ROOT), 1):
-        name = f'dependency-{index:02}'
-        commands = [
-            ['docker', 'pull', reference],
+    references = production_dependency_images(ROOT) if release is None else production_release_images(ROOT, release)
+    for index, reference in enumerate(references, 1):
+        name = f'{"dependency" if release is None else "release"}-{index:02}'
+        # Locally built release images must exist; pulling a similarly named
+        # registry tag would qualify different bytes from this checkout.
+        commands = ([['docker', 'pull', reference]] if release is None else []) + [
             [*base, 'image', '--image-src', 'docker', '--config', '/work/supply-chain/trivy.yaml',
              '--format', 'json', '--output', f'/out/{name}.json', '--exit-code', '0', reference],
             [*base, 'convert', '--format', 'table', '--output', f'/out/{name}.txt', f'/out/{name}.json'],
@@ -235,6 +254,8 @@ def main() -> None:
     for evidence in ["syft", "trivy", "sign --yes", "attest --yes", "release-manifest.json", "@sha256:"]:
         if evidence not in release:
             fail(f"release workflow lacks {evidence}")
+    if 'scripts/supply-chain-policy.py --scan-release-images ci' not in release:
+        fail('release workflow lacks the image gate before publication')
     for evidence in ['convert --exit-code 1 --exit-on-eol 1 --severity HIGH,CRITICAL', 'convert --format table', '--exit-code 0 "${digest}"']:
         if evidence not in release:
             fail(f"release scan lacks complete reporting and enforcement: {evidence}")
@@ -257,9 +278,13 @@ def main() -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--scan-production-dependencies', action='store_true')
+    scans = parser.add_mutually_exclusive_group()
+    scans.add_argument('--scan-production-dependencies', action='store_true')
+    scans.add_argument('--scan-release-images', metavar='RELEASE')
     parser.add_argument('--output', type=pathlib.Path, default=ROOT / 'storage/qualification/production-dependencies')
     args = parser.parse_args()
     main()
     if args.scan_production_dependencies:
         scan_production_dependencies(args.output)
+    elif args.scan_release_images:
+        scan_production_dependencies(args.output, release=args.scan_release_images)
