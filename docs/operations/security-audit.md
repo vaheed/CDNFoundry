@@ -2126,3 +2126,33 @@ invalid-chain cases and restoration of the previous valid certificate after
 each rejection (`edge-runtime-uploaded-tls.log`). Origin destination/IPv6/TLS
 qualification passed before this final Expat-only update (`edge-runtime-origin.log`).
 No browser test was run and this does not establish remote publication success.
+
+### Grafana vendor patch and remaining publication blocker (September 19)
+
+Grafana now pins **12.4.11** and vendor-signed ClickHouse plugin **4.21.3** with
+the publisher's archive checksum. The generated production observability runtime
+check passed with these exact local images, including Prometheus, ClickHouse,
+control PostgreSQL and Loki datasource health (`vendor-patch-production-runtime.log`).
+The complete required release-image scan command was executed locally against all
+seventeen images: **sixteen passed; Grafana failed** (`release-gate/summary.json`).
+This is a failed release gate, not a publication qualification.
+
+Eleven High findings remain in Grafana's report: eight Go runtime findings in the
+signed plugin, Thrift CVE-2026-43871, and Tempo CVE-2026-21728/CVE-2026-28377.
+The exact locked Tempo commit already contains the search limit and secret-key
+fixes, despite its `v1.5.1-0.20260427112133-525d1bab07e0` Go pseudo-version:
+[pinned upstream changelog](https://github.com/grafana/tempo/blob/525d1bab07e0/CHANGELOG.md),
+[bounded search configuration](https://github.com/grafana/tempo/blob/525d1bab07e0/modules/frontend/config.go),
+[secret encryption-key type](https://github.com/grafana/tempo/blob/525d1bab07e0/tempodb/backend/s3/config.go).
+No finding has been excluded; classification review remains open. Testing Trivy
+0.74.0 independently reported the same three backend findings; the production
+scanner pin and release gate remain unchanged.
+
+An isolated plugin rebuilt from upstream commit
+`551f9c4e32359f3844f659ce7ffd51fe7df77a07` using Go 1.26.8 has zero High/Critical
+plugin findings and passes the real datasource check (`plugin-candidate.json`,
+`plugin-candidate-runtime.log`). That test candidate explicitly enabled loading
+only this unsigned rebuilt plugin. It is not adopted: removing its invalidated
+vendor signature changes the existing trust contract and requires owner approval.
+The published-image signature gate would remain mandatory. The production
+Dockerfile still installs and checks the vendor-signed plugin archive unchanged.

@@ -46,6 +46,20 @@ claimed for that run.
 the High/Critical vulnerability gate for `dev`; main/versioned releases remain
 equally strict. No waiver, scanner exclusion or warning-only path was added.
 
+The latest complete **local** release-image gate scanned all seventeen current
+images: sixteen passed and Grafana failed. The generated production observability
+runtime check passed with Grafana 12.4.11 and the vendor-signed ClickHouse plugin
+4.21.3, including all four datasource health checks. Grafana still reports eleven
+High findings: eight in the plugin's Go runtime, one in Thrift, and two in Tempo.
+The pinned Tempo source contains the reported fixes, but no scanner classification
+exception has been applied. A rebuilt plugin removes its eight runtime findings
+and passes the same runtime check, but requires a separate trust-policy decision
+because rebuilding invalidates the vendor signature. It is an isolated candidate,
+not the release image. Complete evidence is under ignored
+`storage/qualification/dependency-remediation/release-gate` and the audit report.
+The remote run above is still the last delivered result; local progress is not
+proof of a green remote pipeline or published images.
+
 The first run, [35438336177](https://github.com/vaheed/CDNFoundry/actions/runs/35438336177),
 qualified source `800ec21cd457a3e2e0d97c6ba2b8cf866fc74115`. Go and bounded DNS scale
 passed. The Compose job passed, including builds of all nine production images,
@@ -82,7 +96,7 @@ The refreshed Caddy 2.11.4-alpine candidate at
 `sha256:de23def33b17fb5d1290b0f6c2add1d70780e52341896c00a4c8a2a2fe9d355e`
 still had 17 High/Critical findings in embedded Go dependencies/toolchain after
 its OS fixes. It was scanned but not adopted. A same-tag refresh alone is
-insufficient. The full application-image scan/sign/publication job has not run;
+insufficient. The remote application-image scan/sign/publication job has not run;
 successful builds do not establish a vulnerability pass.
 
 Next bounded job: **`dependency-remediation`**, now a Phase 0 prerequisite in the
