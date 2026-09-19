@@ -186,7 +186,7 @@ jobs:
       - name: Qualify origin destination safety and IPv6 HTTP/TLS
         run: python3 tests/e2e/origin_destinations.py --image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
       - name: Qualify compiled DNS services and telemetry outage serving
-        run: python3 tests/e2e/dns_images.py
+        run: sudo -E python3 tests/e2e/dns_images.py
       - name: Qualify generated PowerDNS credentials and rotation
         run: sudo -E python3 tests/e2e/fleet_pdns.py
       - name: Qualify patched monitoring scrape and alert APIs

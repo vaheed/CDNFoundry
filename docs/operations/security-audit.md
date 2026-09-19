@@ -2246,3 +2246,21 @@ Grafana through development Compose, so it uses the guarded disposable-runner
 preparation and a 90-minute maximum budget. These local results do not claim the
 full production Dockerfile build on GitHub or GHCR publication has passed; the
 exact pushed commit's Actions result remains the delivery completion gate.
+
+### GitHub image qualification and DNS fixture permissions
+
+Run [35463728284](https://github.com/vaheed/CDNFoundry/actions/runs/35463728284)
+built all seventeen production Dockerfiles and passed their release vulnerability
+gate, operational configuration checks, and real origin IPv6 HTTP/TLS tests.
+The other six prerequisite jobs passed, including full backend/runtime E2E.
+The DNS image test then failed immediately because its temporary configuration
+requires ownership `root:82`, while that workflow step ran without privileges.
+An isolated unprivileged reproduction failed at `os.chown` with `PermissionError`;
+the same real DNS qualification passed with the required privileges. Its evidence
+is `storage/qualification/dependency-remediation/dns-runtime-recheck.log`.
+
+The workflow now invokes that test with `sudo -E`, consistently with the existing
+Fleet PowerDNS and production observability checks that prepare owned fixtures.
+Application container identities and production configuration permissions are
+unchanged. Publication was skipped for the failed run; the corrected commit must
+pass every remaining runtime gate and publication before delivery is complete.
