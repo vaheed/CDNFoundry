@@ -2193,3 +2193,19 @@ GitHub-hosted and Linux markers all match. Bash syntax and refusal checks for
 local, self-hosted and non-Linux cases passed. No runner cleanup or broad cache
 pruning was executed on the development/Fleet host. Actual hosted-runner capacity
 and the full workflow remain pending the next remote run.
+
+### Grafana backend Thrift remediation
+
+The Grafana backend now builds from pinned upstream commit
+`05757e789657299d00314f8f96d49d1aca569f33` with a checksum-verified source archive.
+A two-file dependency patch selects Thrift **0.24.0** and commits its workspace
+checksums, resolving CVE-2026-43871. The vendor 12.4.11 frontend, entrypoint and
+signed ClickHouse plugin remain in the final image. Compiler concurrency is two;
+the builder's Go memory target is 2 GiB, separate from runtime service limits.
+
+The patched source compiled in the pinned Go 1.26.8 container; `go mod verify`
+passed and binary build metadata confirms Thrift 0.24.0. Evidence is under
+`dependency-remediation/grafana-rebuild`. This checkpoint is being pushed at the
+owner's request while the rebuilt backend's image scan and generated production
+runtime check finish. The complete production Dockerfile build and hosted CI
+result are not yet claimed as passed. Plugin trust approval remains separate.

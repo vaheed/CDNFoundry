@@ -1,4 +1,19 @@
 ARG GRAFANA_IMAGE=grafana/grafana:12.4.11@sha256:3ea272e5cab64a4a62240c682e2c62433b25614d956d44c299a10cb6994f6f2e
+FROM golang:1.26.8-alpine@sha256:ce864e7223ac17b1775e6fd0b4c0db580c2eb50e7953a427916379e4b92a1628 AS backend
+RUN apk add --no-cache git patch
+WORKDIR /src
+ADD --checksum=sha256:07622e9c2b67eded2a9c2ad52d8d8e26cb6f17e594152046f447302aed975ef1 \
+    https://github.com/grafana/grafana/archive/05757e789657299d00314f8f96d49d1aca569f33.tar.gz /tmp/grafana.tar.gz
+RUN tar -xzf /tmp/grafana.tar.gz --strip-components=1 -C /src && rm /tmp/grafana.tar.gz
+COPY dependencies.patch /tmp/dependencies.patch
+RUN patch --batch --forward -p1 < /tmp/dependencies.patch
+ENV CGO_ENABLED=0 GOMAXPROCS=2 GOMEMLIMIT=2GiB GOFLAGS=-p=2
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    go build -mod=readonly -buildvcs=false -trimpath -tags=oss \
+       -ldflags='-s -w -X main.version=12.4.11+cdnfoundry -X main.commit=05757e789657299d00314f8f96d49d1aca569f33 -X main.buildBranch=cdnfoundry -X main.buildstamp=1789487640' \
+       -o /out/grafana ./pkg/cmd/grafana \
+    && go mod verify
+
 FROM ${GRAFANA_IMAGE}
 
 ARG CLICKHOUSE_PLUGIN_VERSION=4.21.3
@@ -9,6 +24,7 @@ LABEL org.opencontainers.image.source="https://github.com/vaheed/CDNFoundry" \
       org.opencontainers.image.created="${BUILD_DATE}" org.opencontainers.image.description="CDNFoundry Grafana observability" \
       org.opencontainers.image.licenses="AGPL-3.0-only" org.opencontainers.image.documentation="https://vaheed.github.io/CDNFoundry/"
 USER root
+COPY --from=backend --chmod=0755 /out/grafana /usr/share/grafana/bin/grafana
 ADD --checksum=sha256:${CLICKHOUSE_PLUGIN_SHA256} \
     https://grafana.com/api/plugins/grafana-clickhouse-datasource/versions/${CLICKHOUSE_PLUGIN_VERSION}/download?os=linux&arch=amd64 \
     /tmp/grafana-clickhouse-datasource.zip
