@@ -1940,3 +1940,24 @@ Fleet's verified manifest projection requires it. There is no database migration
 Rollback selects the preceding verified release and retains the existing volumes.
 The remote pipeline and full release publication remain unqualified until run.
 Manual browser qualification was not run; no UI workflow changed.
+
+### ClickHouse LTS dependency remediation (September 19)
+
+Production now pins ClickHouse **26.8.7.19-alpine**, digest
+`sha256:2bece7c646f08865eadc2000a60427e2964adf2b46908a6d476dfa7cc5408720`.
+This is the vendor's [current stable/LTS release](https://packages.clickhouse.com/)
+([26.8 release notes](https://presentations.clickhouse.com/2026-release-26.8/)).
+Its complete image scan passed the unchanged High/Critical and EOL gate.
+`tests/e2e/clickhouse_upgrade.py` passed a real isolated upgrade from the previous
+26.3.12.3 production pin: current schema and migrations, retained rows, materialized
+aggregates, Grafana read-only authorization, new writes and restart continuity.
+Evidence is in `dependency-remediation/additional-scans/dependency-01.json` and
+`clickhouse-upgrade.log`. Existing development containers and volumes were not
+upgraded or modified by this qualification.
+
+This changes the production database release line. Before upgrading a populated
+installation, retain a verified backup and the previous image/configuration.
+Rollback requires restoring that backup into separate storage with the preceding
+release; do not point an older server at files written by 26.8. The disposable
+fixture proves the repository's current schema/data path, not arbitrary customer
+workloads or a live backup restore. Staging and owner browser checks remain not run.

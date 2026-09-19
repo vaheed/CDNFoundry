@@ -157,6 +157,8 @@ jobs:
           docker build -t ghcr.io/vaheed/cdnfoundry-caddy:ci docker/caddy
       - name: Qualify origin destination safety and IPv6 HTTP/TLS
         run: python3 tests/e2e/origin_destinations.py --image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
+      - name: Qualify ClickHouse LTS data upgrade and permissions
+        run: python3 tests/e2e/clickhouse_upgrade.py
       - name: Qualify patched Caddy with production configs and real TLS
         run: python3 tests/e2e/caddy_ingress.py --image ghcr.io/vaheed/cdnfoundry-caddy:ci
       - name: Qualify uploaded certificate chains with real TLS clients

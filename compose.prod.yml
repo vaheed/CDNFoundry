@@ -335,7 +335,7 @@ services:
       retries: 10
 
   clickhouse:
-    image: clickhouse/clickhouse-server:26.3.12.3-alpine@sha256:c246f5c07d647c5b4f50e99609d1fe3a79e58880ef28c2043edc4bb55762a65d
+    image: clickhouse/clickhouse-server:26.8.7.19-alpine@sha256:2bece7c646f08865eadc2000a60427e2964adf2b46908a6d476dfa7cc5408720
     profiles: [telemetry]
     environment:
       CLICKHOUSE_DB: cdnf

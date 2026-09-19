@@ -93,7 +93,7 @@ Live staging and manual browser qualification remain separate and unexecuted.
 Local remediation progress: Alpine 3.22.6 and Valkey 9.1.2 passed the strict
 image gate. The managed Caddy 2.11.4 build also passed, including its detected
 Go binary, real HTTPS proxy/allowlist checks, and Fleet/Compose contracts. These
-resolve 3 of the original 12 dependency entries locally; remote publication
+together with ClickHouse 26.8.7.19 resolve 4 of the original 12 dependency entries locally; remote publication
 remains pending. No vulnerability exception was added.
 
 ## Implemented and committed work
