@@ -167,6 +167,9 @@ services:
 
   horizon:
     <<: *core
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
     command: [php, artisan, horizon]
     networks: [control, dns]
 
@@ -275,6 +278,9 @@ services:
 
   clickhouse:
     image: clickhouse/clickhouse-server:26.3.12.3-alpine
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
     environment:
       CLICKHOUSE_DB: cdnf
       CLICKHOUSE_USER: cdnf

@@ -34,6 +34,14 @@ and result. A failed, skipped or approval-waiting publication job is not success
 
 ## Delivery blocker and next job
 
+Run [35439995763](https://github.com/vaheed/CDNFoundry/actions/runs/35439995763)
+finished for `1de3c3e817123dc7252bed2e3811216fb1ff6f00`: **all six functional/build
+jobs passed**, including the full backend sequence and all nine image builds.
+The infrastructure vulnerability scan failed and image publication was skipped.
+The owner requires a fully green pipeline and successful publication; dependency
+remediation is now active, not deferred completion. No successful release is
+claimed for that run.
+
 **Publication is blocked.** The owner explicitly chose on September 19 to retain
 the High/Critical vulnerability gate for `dev`; main/versioned releases remain
 equally strict. No waiver, scanner exclusion or warning-only path was added.

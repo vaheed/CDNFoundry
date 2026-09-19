@@ -1887,3 +1887,15 @@ the regenerable scan cache and unused build cache older than 24 hours were
 removed; scan reports remain. This finding is **open**, assigned to the roadmap's
 telemetry/cleanup job, and must be addressed before claiming bounded long-running
 staging operation.
+
+The owner approved deleting the oversized development ClickHouse/Horizon log
+history after retaining recent tails. Both containers were recreated with
+`json-file` rotation at **10 MB × 3 files**; the limits are now in `compose.dev.yml`.
+Their named-volume identities were checked before and after and are unchanged.
+ClickHouse reported healthy, Horizon reported running, and Compose validation
+passed. About **43 GB** became available. Private recent tails are retained under
+ignored `storage/qualification/security-audit/log-recovery-20260919`; they must
+not be committed or printed. No database migration, refresh or volume deletion
+occurred. AUD-055 is **partially remediated**: these two development services are
+bounded; the remaining service/production logging policy remains assigned to
+telemetry/cleanup. Do not remove the limits during subsequent development starts.
