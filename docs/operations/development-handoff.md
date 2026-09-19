@@ -56,9 +56,10 @@ High findings: eight in the plugin's Go runtime, one in Thrift, and two in Tempo
 The pinned Tempo source contains the reported fixes; the owner approved exact
 package/path classifications through October 19. Raw findings remain in the
 evidence, with classifications recorded separately. A rebuilt plugin removes its eight runtime findings
-and passes the same runtime check, but requires a separate trust-policy decision
-because rebuilding invalidates the vendor signature. It is an isolated candidate,
-not the release image. Complete evidence is under ignored
+and passes the same runtime check. The owner subsequently approved that one
+plugin to load under the signed image's trust boundary; its source rebuild is
+now included in the release Dockerfile. The combined image qualification and
+exact-SHA remote publication remain the required delivery gates. Complete evidence is under ignored
 `storage/qualification/dependency-remediation/release-gate` and the audit report.
 The remote run above is still the last delivered result; local progress is not
 proof of a green remote pipeline or published images.

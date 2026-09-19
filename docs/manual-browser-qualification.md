@@ -514,6 +514,11 @@ Run the documented operator commands from a clean verification environment and a
    Domain Command Center**. Confirm the system dashboard is the home dashboard.
 4. Restart Grafana with network egress blocked. Confirm it becomes healthy and
    both dashboards and the ClickHouse plugin load without a startup download.
+   An unsigned-plugin notice is expected only for the bundled
+   `grafana-clickhouse-datasource`: the owner approved its patched source build
+   under the signed image's trust boundary. Do not enable any other unsigned
+   plugin; verify the release image before this checklist. Browser status remains
+   **not run** until the owner records these checks.
 
 ### System Command Center
 

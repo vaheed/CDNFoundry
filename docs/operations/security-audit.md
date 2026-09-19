@@ -2209,3 +2209,22 @@ passed and binary build metadata confirms Thrift 0.24.0. Evidence is under
 owner's request while the rebuilt backend's image scan and generated production
 runtime check finish. The complete production Dockerfile build and hosted CI
 result are not yet claimed as passed. Plugin trust approval remains separate.
+
+### Approved patched ClickHouse plugin adoption
+
+The owner subsequently explicitly approved the rebuilt plugin and requested
+publication. The release Dockerfile now builds the same plugin commit with Go
+1.26.8, preserves vendor frontend assets, and enables only
+`grafana-clickhouse-datasource` to load without its invalidated vendor manifest.
+The signed immutable image, read-only plugin directory and unchanged vulnerability
+gates protect this approved boundary. The roadmap, supply-chain policy and manual
+browser checklist record the exception. No arbitrary unsigned plugin is enabled.
+
+The rebuilt Grafana backend scan has zero unclassified High/Critical findings;
+its generated production datasource qualification passed. The previously tested
+rebuilt plugin likewise has zero High/Critical findings and passed datasource
+qualification. Combined-image qualification is now running. The owner requested
+an immediate dev push; run
+[35463193802](https://github.com/vaheed/CDNFoundry/actions/runs/35463193802)
+started for the preceding backend checkpoint. The following plugin commit's run
+will supersede it and must pass publication before this job is complete.

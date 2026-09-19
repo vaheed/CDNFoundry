@@ -39,6 +39,9 @@ results, release evidence, implemented fixes and limitations.
 - Preserve tenant policies, safe origins, encrypted TLS keys, signature checks
   and production migration compatibility. The observability exception remains
   exactly the system/domain Grafana dashboards, Vector/ClickHouse and bounded Loki.
+  The owner-approved rebuilt ClickHouse plugin uses the signed image as its
+  trust boundary; its sole plugin-signature exception is documented in the
+  [supply-chain policy](operations/software-supply-chain.md#approved-rebuilt-clickhouse-plugin).
 
 ## Phase 0 — Dev delivery handoff
 

@@ -214,6 +214,25 @@ after [the upstream 0.144.0 fix](https://github.com/advisories/GHSA-r277-6w6q-xm
 matching findings are classified, while different versions/paths/packages,
 unapproved findings, expiry and end-of-life OS still fail. No browser is involved.
 
+### Approved rebuilt ClickHouse plugin
+
+On **2026-09-19**, owner **vaheed** explicitly approved loading the rebuilt
+`grafana-clickhouse-datasource` plugin under the signed application image's trust
+boundary. Vendor plugin 4.21.3 still embeds Go 1.26.5 with eight High findings.
+The image instead compiles the same upstream source commit
+`551f9c4e32359f3844f659ce7ffd51fe7df77a07` with pinned Go 1.26.8, verifies module
+checksums, and retains the checksum-pinned vendor frontend assets and license.
+
+Rebuilding invalidates the vendor plugin manifest, so only that manifest is
+removed and `GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS` names only
+`grafana-clickhouse-datasource`. This deliberately replaces that plugin's vendor
+signature check with verification of the immutable CDNFoundry image. It does
+not permit arbitrary unsigned plugins or bypass image scan/signature gates.
+The production root filesystem and bundled plugin directory remain read-only;
+startup plugin downloads remain disabled. Verify the signed release manifest
+and image digest before deployment. Return to the vendor-signed distribution
+when a compatible, scan-qualified vendor build becomes available.
+
 ## Updating dependencies and bases
 
 1. Resolve the exact multi-platform manifest digest from the upstream registry

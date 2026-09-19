@@ -222,9 +222,11 @@ jobs:
   backend-e2e:
     name: Backend and runtime E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Prepare disposable runner space for source image builds
+        run: bash scripts/prepare-image-runner.sh
       - name: Start migratable development control plane
         run: make dev-control-up
       - name: Apply migrations explicitly
