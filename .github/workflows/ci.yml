@@ -86,6 +86,8 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Prepare disposable runner space for source image builds
+        run: bash scripts/prepare-image-runner.sh
       - name: Install Fleet and DNS qualification dependencies
         run: |
           python3 -m pip install -r tests/fleet/requirements.txt
@@ -113,19 +115,24 @@ jobs:
           docker build --build-arg CORE_IMAGE=cdnfoundry/core:ci --target web -t ghcr.io/vaheed/cdnfoundry-web:ci -f docker/nginx/Dockerfile.production .
           docker build --build-arg CORE_IMAGE=cdnfoundry/core:ci --target edge-control -t ghcr.io/vaheed/cdnfoundry-edge-control:ci -f docker/nginx/Dockerfile.production .
           docker build -t ghcr.io/vaheed/cdnfoundry-edge-runtime:ci -f docker/openresty/Dockerfile .
+          docker builder prune --all --force
           docker build -t ghcr.io/vaheed/cdnfoundry-edge-agent:ci edge-agent
           docker build -t ghcr.io/vaheed/cdnfoundry-edge-gateway:ci edge-gateway
           docker build -t ghcr.io/vaheed/cdnfoundry-mmdb-updater:ci docker/mmdb-updater
           docker build -t ghcr.io/vaheed/cdnfoundry-loki:ci docker/loki
           docker build -t ghcr.io/vaheed/cdnfoundry-grafana:ci docker/grafana
+          docker builder prune --all --force
           docker build -t ghcr.io/vaheed/cdnfoundry-caddy:ci docker/caddy
           docker build -t ghcr.io/vaheed/cdnfoundry-dnsdist:ci docker/dnsdist
           docker build -t ghcr.io/vaheed/cdnfoundry-pdns:ci docker/pdns
+          docker builder prune --all --force
           docker build -t ghcr.io/vaheed/cdnfoundry-prometheus:ci docker/prometheus
           docker build -t ghcr.io/vaheed/cdnfoundry-alertmanager:ci docker/alertmanager
           docker build -t ghcr.io/vaheed/cdnfoundry-node-exporter:ci docker/node-exporter
+          docker builder prune --all --force
           docker build -t ghcr.io/vaheed/cdnfoundry-vector:ci docker/vector-runtime
           docker build -t ghcr.io/vaheed/cdnfoundry-postgres:ci docker/postgres
+          docker builder prune --all --force
       - name: Scan every built release image before allowing publication
         run: python3 scripts/supply-chain-policy.py --scan-release-images ci --output storage/qualification/release-image-scans
       - name: Retain complete release image scan evidence
@@ -428,6 +435,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Prepare disposable runner space for source image builds
+        run: bash scripts/prepare-image-runner.sh
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
@@ -456,19 +465,24 @@ jobs:
           docker build "${labels[@]}" --build-arg "CORE_IMAGE=ghcr.io/vaheed/cdnfoundry-core:${RELEASE}" --target web -t "ghcr.io/vaheed/cdnfoundry-web:${RELEASE}" -f docker/nginx/Dockerfile.production .
           docker build "${labels[@]}" --build-arg "CORE_IMAGE=ghcr.io/vaheed/cdnfoundry-core:${RELEASE}" --target edge-control -t "ghcr.io/vaheed/cdnfoundry-edge-control:${RELEASE}" -f docker/nginx/Dockerfile.production .
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-edge-runtime:${RELEASE}" -f docker/openresty/Dockerfile .
+          docker builder prune --all --force
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-edge-agent:${RELEASE}" edge-agent
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-edge-gateway:${RELEASE}" edge-gateway
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-mmdb-updater:${RELEASE}" docker/mmdb-updater
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-grafana:${RELEASE}" docker/grafana
+          docker builder prune --all --force
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-loki:${RELEASE}" docker/loki
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-caddy:${RELEASE}" docker/caddy
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-dnsdist:${RELEASE}" docker/dnsdist
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-pdns:${RELEASE}" docker/pdns
+          docker builder prune --all --force
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-prometheus:${RELEASE}" docker/prometheus
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-alertmanager:${RELEASE}" docker/alertmanager
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-node-exporter:${RELEASE}" docker/node-exporter
+          docker builder prune --all --force
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-vector:${RELEASE}" docker/vector-runtime
           docker build "${labels[@]}" -t "ghcr.io/vaheed/cdnfoundry-postgres:${RELEASE}" docker/postgres
+          docker builder prune --all --force
       - name: Push, scan, attest, and sign immutable images
         env:
           RELEASE: ${{ github.sha }}

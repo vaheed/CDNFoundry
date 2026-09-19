@@ -2176,3 +2176,20 @@ High findings; it still fails release qualification. The obsolete blanket
 kin-openapi ignore from August was removed because the dependency is now fixed.
 Both required local/prepublication and registry publication gates use the same
 classification file. No plugin-signature change has been approved or adopted.
+
+### Disposable CI runner build capacity
+
+The cold Grafana source build requires its Go module cache plus several gigabytes
+each of compiler cache and temporary objects. Together with the seventeen output
+images this exceeds the standard runner's documented
+[14 GB workspace capacity](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+Compose qualification and publication now remove unused Android/.NET/Haskell/
+Swift/CodeQL SDK directories from their disposable GitHub-hosted Linux VMs, and
+discard BuildKit caches between large builds. Tagged output images remain for
+qualification/publication; these commands do not remove volumes.
+
+`scripts/prepare-image-runner.sh` refuses execution unless GitHub Actions,
+GitHub-hosted and Linux markers all match. Bash syntax and refusal checks for
+local, self-hosted and non-Linux cases passed. No runner cleanup or broad cache
+pruning was executed on the development/Fleet host. Actual hosted-runner capacity
+and the full workflow remain pending the next remote run.
