@@ -34,11 +34,11 @@ credentials into this report. Remaining inputs are tracked below.
 | --- | --- |
 | Release | Selected run [35472074232](https://github.com/vaheed/CDNFoundry/actions/runs/35472074232), source `a8c694fd34a2ac5210daa243d9a77ab4b1437451`; manifest plus all 17 image signatures, SBOMs and provenance verified |
 | Hosts | Three supplied SSH targets reachable with passwordless sudo; one control/telemetry and two DNS/edge roles; Ubuntu 22.04, 4 CPUs, about 4 GB RAM and 66 GB free disk each; no existing CDNFoundry installation found |
-| Management DNS | Owner supplied suffix; all six required A records resolve to their intended hosts; no AAAA records; public HTTPS pending startup |
-| Public DNS | Owner supplied platform zone; nameserver glue, disposable customer zone and registrar workflow remain pending |
+| Management DNS | Owner supplied suffix; all six required A records resolve to their intended hosts; no AAAA records; public control HTTPS passed |
+| Public DNS | Platform and initial customer zones published; exact customer claim delegation remains owner-pending |
 | Origin | Owned HTTP and verified HTTPS endpoint, Host/SNI, disposable hostname and cacheable test resource |
 | Address families | IPv4 only per owner; Fleet IPv6 disabled; public service/firewall reachability still requires qualification |
-| Protected configuration | Protected draft and release evidence under `.prod`; ACME contact supplied; administrator credential delivery remains pending; use the existing zero-credential GeoIP provider |
+| Protected configuration | Protected draft and release evidence under `.prod`; ACME contact supplied; administrator and assigned domain-user credentials delivered through protected local files; use the existing zero-credential GeoIP provider |
 
 Use the [starter quick start](../deployment/production-quick-start.md) in its
 existing order. Verify the selected release with the existing
@@ -61,8 +61,9 @@ release to claim as a tested rollback target.
 
 ### Execution and evidence matrix
 
-Row 1 release verification and local bundle generation are complete; control
-startup is in progress. Other live smoke results remain **not run**. Run non-browser
+Release verification, control installation, both DNS roles and direct platform
+DNS checks have passed. Edge enrollment is in progress; customer proxy/TLS/cache
+and security smoke checks remain **not run**. Run non-browser
 probes using Python under `tests/e2e` against the selected inventory; adapt only
 where a reproduced installation gap requires it. Existing development fixtures
 are not automatically safe or suitable for remote staging. Do not point an
@@ -100,9 +101,9 @@ full production qualification pass. Keep raw evidence in a protected store.
 
 | Gate | Current result |
 | --- | --- |
-| Implementation/installation | Verified bundles generated; control startup in progress; full selected-host installation gate remains open |
-| Documentation | Preparation and exact owner browser steps written; deployment observations pending |
-| Automated/runtime qualification | Local documentation/configuration checks **passed**; live staging matrix **not run** |
+| Implementation/installation | Control and DNS roles healthy; edge enrollment in progress; full selected-host installation gate remains open |
+| Documentation | Preparation, owner checklist and reproduced install corrections documented; final runtime observations pending |
+| Automated/runtime qualification | Local preparation and control/DNS checks **passed**; remaining traffic/restart checks pending |
 | Owner-run browser qualification | **Not run**; owner executes [Phase 1 smoke](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md#phase-1--empty-staging-smoke) and supplies results |
 
 Preparation checks executed on 2026-09-20:
@@ -117,7 +118,7 @@ Preparation checks executed on 2026-09-20:
 - `git diff --check`: **passed**. Archived legacy roadmaps remain unchanged.
 - Application tests, live staging artifact verification and non-browser runtime
   probes: **not run** in this preparation unit; no application code changed and
-  deployment configuration and DNS inputs remain incomplete.
+  these were not run during the initial documentation-only preparation.
 
 ### Host preparation and release verification checkpoint
 
@@ -158,7 +159,78 @@ Preparation checks executed on 2026-09-20:
 The initial documentation preparation changed no hosts. Subsequent preparation
 installs prerequisites and starts the selected control bundle with its explicit
 migration workflow. Existing development PostgreSQL and named volumes are
-untouched; no volume deletion or destructive database refresh is permitted. Phase 1 remains open until all required evidence is recorded.
+untouched; no volume deletion or destructive database refresh is permitted.
+
+### Control and DNS runtime checkpoint
+
+- Control startup and explicit application migrations completed. PostgreSQL,
+  Valkey, ClickHouse, MMDB, core/web, Grafana, Prometheus, Loki and Vector are
+  healthy. Administrator bootstrap through `cdnf:admin:create` and the real
+  `POST /api/auth/login` succeeded. Credentials remain in the protected local
+  `.prod/staging-admin.json`; the API token is stored separately and must be
+  revoked after qualification. No secrets appear in this report.
+- The domain-user account is assigned only to the disposable customer zone.
+  API login and its single-domain listing passed; administrator health access
+  returned 403. The probe token was revoked. Administrator login is `/admin/login`;
+  domain-user login is `/app/login`. Credentials are stored separately in local
+  `.prod/staging-admin.json` and `.prod/staging-domain-user.json` (mode 0600).
+  Browser login remains **not run** until the owner supplies results.
+- The owner supplied an HTTPS Docker Hub mirror. It was merged into all three
+  daemon configurations, validated and applied by SIGHUP; effective mirror
+  configuration was verified. A pinned Alpine pull passed. A prior exact-digest
+  Valkey archive transfer also passed destination digest verification; a redundant
+  ClickHouse archive transfer was stopped once the mirror pull succeeded.
+  Registry identity/digest pins and TLS verification were retained.
+- Both PoPs initially failed DNSdist startup because wildcard port 53 conflicted
+  with Ubuntu's loopback resolver. Fleet `bind_ipv4` was changed to each assigned
+  local public address, bundles rerendered and validated, and previous bundles
+  retained before activation. Both DNS roles now start healthy with the original
+  PostgreSQL volumes. The host resolvers were preserved.
+- Private listeners (8083, 8443, 8444, 9100, 9599 as applicable) are restricted
+  through host INPUT and Docker DOCKER-USER rules to their control/edge sources.
+  The rules are installed through a Docker pre-start hook for persistence.
+  Untrusted external connections were blocked or closed; both queued cluster
+  connection tests from the permitted control source passed. Restart persistence
+  remains to be exercised with the later continuity check.
+- Both DNS clusters were created disabled, asynchronously tested, then enabled.
+  Platform identity validation/confirmation and deployment succeeded. The
+  disposable customer zone was created pending verification and its initial
+  SOA/claim-specific NS records deployed on both PoPs. Parent-delegation verification
+  remains pending the owner's exact assigned-nameserver update.
+- **Passed:** `tests/e2e/staging_health.py` from the control host: verified public
+  control health/readiness and Grafana health, unauthenticated administrator API
+  denial, authoritative platform SOA over UDP and TCP on both PoPs, and matching
+  serials. This focused probe is read-only and does not establish the remaining
+  phase gates. Its report is retained in `.prod/control-vantage-health-report.json`.
+- The first workspace DNS probe **failed**: this workspace intercepts port 53
+  and returned recursive responses even for the reserved address `192.0.2.1`.
+  The strict AA check was retained. The independently executed control-host probe
+  returned actual authoritative responses and passed. The failed report is kept
+  separately; the workspace is not a qualified direct-DNS vantage point.
+- Edge records and a bounded shared pool are created; eight cell slots per edge,
+  no per-domain processes. Country/continent metadata uses the deployed MMDB
+  result for the PoP addresses. Enrollment/image activation is in progress.
+- The owner supplied an HTTP origin on port 8096. It responds with 302 and is
+  supported by the API's custom-port validator. The earlier default-port probe
+  failed (HTTP unavailable and HTTPS hostname mismatch); origin HTTPS is not
+  qualified by the HTTP endpoint. Public edge HTTPS still requires DNS-01 issuance
+  and real traffic checks after domain verification.
+
+Focused probe invocation from a non-intercepting host:
+
+```bash
+python3 tests/e2e/staging_health.py \
+  --control https://control.example.net \
+  --grafana https://grafana.example.net \
+  --zone example.org --dns-server 192.0.2.20 --dns-server 192.0.2.30 \
+  --report /protected/path/staging-health.json
+```
+
+Replace the documentation names/addresses with the protected staging inventory.
+The runner does not execute browsers, create records, migrate databases or
+qualify cache/security/restarts. It records only the checks actually requested.
+
+Phase 1 remains open until all required evidence is recorded.
 Phase 2 is the next separate roadmap job only after Phase 1 completes.
 
 ## Source and release evidence

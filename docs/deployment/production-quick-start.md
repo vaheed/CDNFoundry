@@ -94,7 +94,11 @@ Edit `fleet.json` and replace every example value:
 
 Keep `public_ipv6`, `bind_ipv6`, `monitor_ipv6`, and `log_ipv6` in every node object and set unavailable paths to JSON `null`. Set global `ipv6` to `true` only after the independent DNS provider's AAAA records, host routes, firewalls, and external reachability are ready.
 
-The checked-in addresses are RFC documentation ranges and cannot serve production traffic. Keep `bind_ipv4` as `0.0.0.0` for normal routed/NAT hosts unless a specific local interface address is required.
+The checked-in addresses are RFC documentation ranges and cannot serve production traffic. For DNS roles on hosts with a loopback resolver such as Ubuntu's
+`127.0.0.53:53`, set `bind_ipv4` to the node's assigned local service address.
+Binding `0.0.0.0:53` would conflict with that resolver. Keep the resolver intact;
+validate that both UDP and TCP 53 bind successfully. On NAT hosts use the
+assigned local interface address, not an unassigned advertised address.
 
 Validate the JSON before it can create state:
 
@@ -337,7 +341,7 @@ Use this exact order:
    is now complete. Edge creation and host changes begin in step 8; do not
    enable proxying yet.
 
-API automation follows the same sequence. Authenticate with `POST /api/v1/admin/login`, protect the returned bearer token, and use the DNS-cluster, domain, record, and edge endpoints in the live OpenAPI document. Send `Idempotency-Key` on mutations and poll the operation returned by `202 Accepted`. Never store an API token in Fleet JSON.
+API automation follows the same sequence. Authenticate with `POST /api/auth/login`, protect the returned bearer token, and use the DNS-cluster, domain, record, and edge endpoints in the live OpenAPI document. Send `Idempotency-Key` on mutations and poll the operation returned by `202 Accepted`. Never store an API token in Fleet JSON.
 
 Both PoP DNS runtimes must already be healthy from step 6. If either cluster
 test fails, do not enable it and do not delegate the customer zone.

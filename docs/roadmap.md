@@ -105,7 +105,9 @@ Completion gate: installation works on the stated hosts, operator docs are curre
 non-UI runtime checks pass and owner browser status is recorded separately.
 Current status: **staging installation in progress; full smoke and owner browser
 gates remain open**. The selected manifest and 17 image signatures/attestations
-are verified; host access and management DNS are available. See the
+are verified; control and DNS roles are healthy, and public control HTTPS plus
+authoritative UDP/TCP DNS smoke checks pass from the control-host vantage.
+Edge enrollment and customer traffic qualification remain in progress. See the
 [staging job record](operations/development-handoff.md#staging-install-and-smoke-job)
 for required inputs, execution order and evidence.
 
@@ -114,7 +116,8 @@ for required inputs, execution order and evidence.
 - Documentation: staging preparation and the bounded owner browser checklist are
   written; host-specific observations and corrections remain pending deployment.
 - Automated/runtime qualification: local documentation/configuration checks are
-  recorded separately in the job record; staging checks are **not run**.
+  recorded separately in the job record; control/DNS checks pass, while customer
+  traffic, telemetry-under-traffic and restart checks remain open.
 - Owner-run browser qualification: **not run**. Use the
   [Phase 1 checklist](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md#phase-1--empty-staging-smoke).
 

@@ -83,7 +83,12 @@ so existing clusters, edges and domains are reused rather than duplicated.
    `verified` TLS. Enable proxying for the test hostname and use managed
    **TLS mode**. Expect acknowledged placement and valid DNS-01 certificate
    status. The agent separately records actual HTTP/HTTPS requests through
-   each edge; UI success alone does not pass runtime qualification.
+   each edge; UI success alone does not pass runtime qualification. For this
+   staging installation the operator configured an advanced HTTP origin on port
+   `8096` through the API. Inspect the saved **Origin port** before testing;
+   changing **Scheme** in the UI selects its standard port. The HTTP origin does
+   not qualify verified origin HTTPS. Use a separately supplied valid HTTPS
+   origin for that checkpoint, and keep its result open until it is tested.
 6. Open **Cache settings** and inspect the smoke resource's policy. Perform URL
    purge with **Purge cache → Type → Exact URLs**, enter the agreed resource in
    **URLs (one per line)** and submit. Expect **Cache purge queued**, per-edge
@@ -104,8 +109,11 @@ so existing clusters, edges and domains are reused rather than duplicated.
    **CDNFoundry — System Command Center** and **CDNFoundry — Domain Command
    Center**. Select the disposable **Domain** in the latter and expect only
    its traffic. Use the existing Grafana checklist for any failed observation.
-8. Under **Customers → Users**, create a domain user assigned only to this
-   test domain. Sign in at `/app/login`; expect that domain and no administrator
+8. Under **Customers → Users**, inspect the prepared domain user assigned only
+   to this test domain, or create it if absent. For the current staging instance,
+   use the email/password in local `.prod/staging-domain-user.json`; the separate
+   administrator credentials are in `.prod/staging-admin.json`. Sign in at
+   `/app/login`; expect that domain and no administrator
    navigation. Direct administrator URLs must deny access. After the agent's
    coordinated restart check, revisit the domain and edge status: assignments,
    certificate, acknowledged state and fresh heartbeat must remain correct.
@@ -116,8 +124,9 @@ so existing clusters, edges and domains are reused rather than duplicated.
   observed evidence; installation is **not run**.
 - Documentation: this bounded checklist and the staging evidence matrix are
   written; observed discrepancies must be corrected before closure.
-- Automated/runtime qualification: **not run on staging**; agent report remains
-  separate from browser results.
+- Automated/runtime qualification: control/public HTTPS and authoritative DNS
+  checks passed as recorded in the handoff; remaining traffic/restart checks
+  remain open. Agent evidence stays separate from browser results.
 - Owner-run browser qualification: **not run** until the owner supplies each
   checkpoint's actual result. No browser automation is permitted.
 
