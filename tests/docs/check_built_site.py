@@ -105,7 +105,7 @@ def resolve_output(path: str) -> pathlib.Path | None:
     if not relative or relative.endswith("/"):
         candidates.append(direct / "index.html")
     else:
-        candidates.extend([direct.with_suffix(".html"), direct / "index.html"])
+        candidates.extend([pathlib.Path(str(direct) + ".html"), direct / "index.html"])
     return next((candidate for candidate in candidates if candidate.is_file()), None)
 
 

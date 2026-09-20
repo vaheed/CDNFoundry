@@ -97,14 +97,70 @@ step fields in [production qualification](production-qualification.md#owner-evid
 when exchanging JSON evidence, but do not label this partial smoke record a
 full production qualification pass. Keep raw evidence in a protected store.
 
+### Owner-requested release checkpoint — 2026-09-20
+
+The owner requested that this job stop, all remaining source changes be committed,
+`dev` be merged into `main`, and tag `v0.9.8` be published with release notes.
+The job ends at this checkpoint; **Phase 1 is not complete**. Do not resume
+installation or start Phase 2 automatically. The next requested roadmap job must
+close the remaining Phase 1 gates. See the [release notes](releases/v0.9.8.md). Their inventory covers the full
+pre-merge `main` (`602c605b`) to `dev` comparison and changes since v0.9.7,
+including the earlier security, TLS, origin, Fleet and dependency work. The
+rendered documentation checker now resolves dotted version-page names correctly.
+
+Deployed state at stop:
+
+- Control remains on signed source `a8c694fd`; it has not received the shared
+  timezone migration, independent healthy-edge KPI or recovered-operation query.
+- Both PoPs use the verified `80eea902` agent and runtime images. Its manifest
+  signature and all 17 image signatures, SPDX and SLSA attestations passed.
+  Manifest SHA-256: `19a5ee738b68d782557734b04c23475accd1976a33beda36d1c2e3b3aa539ab2`.
+  Its migration marker is stale; subsequent source derives that marker correctly.
+- The previously failed full purge recovered through normal asynchronous purge
+  reconciliation and both edge receipts succeeded. A fresh full purge then
+  advanced epoch 2 to 3; refresh and subsequent HIT passed on both edges.
+- The origin-error Vector correction is deployed on all hosts. Following runtime
+  deployment, actual origin timings were 51–69 ms; cache hits retained null
+  latency, and successful sampled traffic carried zero origin errors. The final
+  enrolled-edge identity correction is committed but not deployed.
+- `tests/e2e/staging_continuity.py` passed both control-outage and single-PoP
+  Docker-restart modes against staging. HTTPS certificates and content hashes
+  remained correct; control readiness recovered and named volumes were retained.
+  The initial runner's 90-second stop timeout was shorter than Horizon's existing
+  120-second grace period. Services were restored; a corrected 180-second timeout
+  passed without changing production shutdown policy.
+- A live health check after purge recovery showed only the seven historical
+  verification failures and the missing verified backup. The committed query
+  excludes those failures after a later successful same-domain check. The owner
+  explicitly retained the backup warning and deferred backup setup.
+
+Latest local checks actually run: **25 Laravel tests / 172 assertions** for
+operations dashboard and domain lifecycle in guarded SQLite memory; **9
+supply-chain tests**; **19 observability tests**; real Vector identity-override and
+relay modes (11 origin-metric cases each); PHP formatting; Compose/config checks;
+and documentation validation. Earlier relevant timezone, Go and real-runtime
+results below remain valid and were not rerun unnecessarily. No browser automation
+was run. PostgreSQL and named volumes were preserved; no new control migration was
+applied. Protected deployment credentials and raw evidence remain outside Git. The
+temporary staging API token was revoked at closeout; both user login credentials
+remain in their protected local files.
+
+Remaining operations: verify the final release workflow and signed evidence;
+deploy the selected control image with a fresh protected database snapshot and
+explicit `2026_09_20_170000_add_display_timezone_setting` migration; deploy the
+Vector identity configuration; check PostgreSQL recovery-health results and
+per-edge aggregates; collect the exact owner browser results. Existing rollback
+image references and protected host environment backups are retained. Release
+publication alone does not close these gates.
+
 ### Completion gate
 
 | Gate | Current result |
 | --- | --- |
-| Implementation/installation | Control, DNS and edge roles installed; both gateways acknowledge shared-pool endpoints; customer-serving installation gate remains open |
-| Documentation | Preparation, owner checklist and reproduced install corrections documented; final runtime observations pending |
-| Automated/runtime qualification | Control/DNS, account isolation, Grafana APIs and first-PoP Docker restart checks **passed**; customer traffic and outage-serving checks pending |
-| Owner-run browser qualification | **Partial**: owner confirmed both login/access checks; remaining checks **not run**; owner executes [Phase 1 smoke](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md#phase-1--empty-staging-smoke) and supplies results |
+| Implementation/installation | All three roles installed; corrected agent/runtime deployed on both PoPs; final control/UI and Vector identity changes await deployment |
+| Documentation | Current browser/API setup, manual steps, runtime results and release checkpoint recorded |
+| Automated/runtime qualification | Control/DNS, account isolation, Grafana APIs, customer HTTP/HTTPS, cache/URL/full purge, security, control outage and PoP restart **passed**; final changes await deployment/retest |
+| Owner-run browser qualification | **Partial**: both login/access checks passed; healthy-edge KPI retest outstanding; remaining checks **not run** |
 
 Preparation checks executed on 2026-09-20:
 

@@ -103,34 +103,38 @@ The owner executes implemented screens in `docs/manual-browser-qualification.md`
 
 Completion gate: installation works on the stated hosts, operator docs are current,
 non-UI runtime checks pass and owner browser status is recorded separately.
-Current status: **staging installation in progress; full smoke and owner browser
-gates remain open**. The selected manifest and 17 image signatures/attestations
-are verified; control and DNS roles are healthy, and public control HTTPS plus
-authoritative UDP/TCP DNS smoke checks pass from the control-host vantage.
-Both edges are enrolled and their shared-pool gateways are ready. Customer
-claim delegation, HTTP origin, visitor HTTPS, cache hits, URL purge and bounded
-security deny/restore checks pass. Full purge exposed an agent protocol defect;
-the tested correction still requires signed-image deployment and staging retest. See the
-[staging job record](operations/development-handoff.md#staging-install-and-smoke-job)
-for required inputs, execution order and evidence.
+Current status: **job stopped at the owner's release checkpoint on 2026-09-20;
+Phase 1 remains incomplete**. This release checkpoint commits current work for
+`v0.9.8`; it does not assert full staging qualification or production readiness.
+See the [release notes](operations/releases/v0.9.8.md) and
+[staging job record](operations/development-handoff.md#staging-install-and-smoke-job).
 
-- Implementation: existing Fleet installer and runtime are present; installation
-  on all three selected hosts is present; the customer-serving gate remains open.
-- Documentation: staging preparation and the bounded owner browser checklist are
-  written; host-specific corrections and browser/API setup steps are recorded.
-  Customer-traffic results and the requested shared platform display timezone are
-  documented. Recovery-aware verification health is implemented and tested;
-  its signed deployment, telemetry corrections and final runtime results remain pending.
-- Automated/runtime qualification: local documentation/configuration checks are
-  recorded separately in the job record; control/DNS, account isolation, Grafana
-  API and first-PoP Docker restart checks pass. Customer HTTP/HTTPS, cache and security checks pass; full purge deployment,
-  signed-image deployment of telemetry corrections and serving-through-outage
-  checks remain open. Real Vector transforms and OpenResty protocol checks pass.
-- Owner-run browser qualification: **partial**. Owner confirmed administrator
-  overview login and the domain user’s assigned-domain-only access on 2026-09-20.
-  The reported unavailable healthy-edge KPI is **failed, correction awaiting
-  deployed-browser retest**. All other remaining browser checkpoints are **not run**. Use the
+- Implementation: all three hosts are installed. The verified `80eea902` agent
+  and runtime fixes are deployed on both PoPs; full purge now succeeds. Shared
+  timezone, healthy-edge KPI and recovery-aware operation health are committed
+  but await signed control-image deployment and explicit display-setting migration.
+  The final Vector enrolled-edge identity mapping is committed but not deployed.
+- Documentation: Fleet browser/API setup, manual checkpoints, release notes and
+  the sanitized handoff record are current. Legacy roadmaps remain unchanged.
+- Automated/runtime qualification: control/DNS, account isolation, Grafana APIs,
+  HTTP origin, verified visitor HTTPS, cache/URL/full purge and security checks
+  passed. Both edges served during a control outage; one PoP Docker restart
+  preserved serving on its peer and recovered verified HTTPS with named volumes
+  intact. Real origin latency and error telemetry passed. Final control-image and
+  Vector identity deployment/retest remain open. Verified HTTPS origin transport
+  was not exercised because the owner selected an HTTP origin with visitor TLS.
+  The owner chose to retain the missing-backup warning and configure backups
+  separately; no backup/recovery readiness is claimed.
+- Owner-run browser qualification: **partial**. Both login/access checks passed
+  per the owner. The previously unavailable healthy-edge KPI remains **failed,
+  correction awaiting deployed-browser retest**. Timezone, recovery presentation,
+  edge-filter telemetry and the other remaining checks are **not run**. Use the
   [Phase 1 checklist](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md#phase-1--empty-staging-smoke).
+
+The next separate roadmap job is **resume `staging-install-and-smoke`**: verify
+and deploy the selected signed control image, apply its additive migration,
+deploy the Vector identity configuration, qualify those changes, and collect
+owner browser results. Phase 2 is not admitted until those Phase 1 gates close.
 
 Stop at this phase boundary. Outstanding staging gates are not permission to start
 Phase 2 or repeat publication/security-audit work.
