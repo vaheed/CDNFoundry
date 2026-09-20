@@ -1,4 +1,4 @@
-FROM golang:1.26.8-alpine@sha256:ce864e7223ac17b1775e6fd0b4c0db580c2eb50e7953a427916379e4b92a1628 AS build
+FROM golang:1.27.0-alpine@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS build
 ENV GOMAXPROCS=2 GOFLAGS=-p=2
 WORKDIR /src
 COPY go.mod main.go main_test.go scale_test.go ./
