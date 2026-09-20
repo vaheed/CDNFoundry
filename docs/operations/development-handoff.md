@@ -16,6 +16,21 @@ no staging host access or live deployment was requested for this handoff.
 
 ## Staging install and smoke job
 
+**2026-09-20 — Release CI correction.** The Fleet qualification step in
+[run 35532096806](https://github.com/vaheed/CDNFoundry/actions/runs/35532096806/job/106136942429)
+failed because Vector's new edge identity mapping introduced an inline Compose
+default. Production Compose now reads `EDGE_ID` directly from the environment
+file, matching the edge agent. Fleet already emits this field, including an empty
+value before enrollment. No migration, persistent-state change or deployment is
+required by this correction; reverting the single Compose line reverses it.
+All 80 Fleet tests, documentation links, Compose configuration, production
+overrides and empty/enrolled identity projection passed locally. Real Vector
+HTTP ingestion, identity mapping, redaction and all
+11 origin metric cases passed for both identity values using locally available
+image `sha256:c4af7611f5df8dfd162a27858332e24c2082a080246fedf451c7e769ff86407f`.
+The exact release image remains subject to CI qualification. Manual browser
+qualification was not run; this correction changes no browser workflow.
+
 **2026-09-20 — Phase 1, `staging-install-and-smoke`.** The owner confirms the
 previous delivery job is finished and images are published. Delivery statements
 below are historical checkpoints, not instructions to repeat publication or
