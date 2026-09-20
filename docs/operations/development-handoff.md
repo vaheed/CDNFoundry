@@ -389,6 +389,23 @@ stored in `origin_error`, inflating error counts, and the runtime always emitted
 null origin latency. This is a current telemetry qualification defect, not a
 successful telemetry gate; correction and runtime qualification remain open.
 
+### Edge identity in traffic telemetry
+
+The updated runtime produced real origin latency samples from both assigned
+cells, with successful requests carrying no origin error. Inspection also found
+that access events used local cell names as `edge_id`, which cannot match the
+administrator's enrolled-edge UUID filter. The production Vector collector now
+receives its host's enrolled `EDGE_ID` as `CDNF_TELEMETRY_EDGE_ID` and attributes
+local events to that edge. A collector without that setting preserves incoming
+identity, including the control-side relay. Existing historical rows are retained.
+
+The pinned published Vector binary passed the actual HTTP decoder/transform job
+both with an enrolled UUID and without an override: each run passed all 11 origin
+metric cases, identity assertions and query redaction. All 19 observability
+contract tests and production Compose/config checks passed. Implementation and
+documentation are present; this final mounted-config correction is **not deployed**
+at the owner's release checkpoint. Owner edge-filter browser check: **not run**.
+
 ### Active health after recovery
 
 The 19:04 UTC live check confirmed four conditions: one failed full purge, its

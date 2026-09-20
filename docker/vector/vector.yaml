@@ -76,6 +76,9 @@ transforms:
       .tls_error = slice!(replace(to_string(.tls_error) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 256)
       .security_action = slice!(to_string(.security_action) ?? "allow", 0, 24)
       .security_reason = slice!(to_string(.security_reason) ?? "", 0, 64)
+      # A PoP collector knows its enrolled edge; local cell names are not global IDs.
+      collector_edge_id = get_env_var("CDNF_TELEMETRY_EDGE_ID") ?? ""
+      if collector_edge_id != "" { .edge_id = collector_edge_id }
       .edge_id = slice!(to_string(.edge_id) ?? "unknown", 0, 64)
       .client_ip = slice!(to_string(.client_ip) ?? "", 0, 45)
       .country = slice!(upcase(to_string(.country) ?? "ZZ"), 0, 2)

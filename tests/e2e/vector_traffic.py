@@ -24,7 +24,9 @@ def main() -> None:
     name = 'cdnf-vector-traffic-' + uuid.uuid4().hex[:12]
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--image', default='ghcr.io/vaheed/cdnfoundry-vector:ci')
-    image = parser.parse_args().image
+    parser.add_argument('--edge-id', default='')
+    args = parser.parse_args()
+    image = args.image
     with tempfile.TemporaryDirectory(prefix=name) as directory:
         root = Path(directory)
         root.chmod(0o755)
@@ -40,10 +42,11 @@ def main() -> None:
         try:
             run('docker', 'run', '-d', '--name', name, '--network', 'bridge', '--read-only',
                 '--memory', '256m', '--tmpfs', '/tmp:rw,size=32m', '-p', '127.0.0.1::8686', '-p', '127.0.0.1::8687',
+                '-e', 'CDNF_TELEMETRY_EDGE_ID='+args.edge_id,
                 '-v', f'{root}/vector.yaml:/etc/vector/vector.yaml:ro', '-v', f'{root}/result:/result', image)
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
             for kind, port, event in [('edge', '8686', {'domain_id': 42, 'hostname': 'qualification.test', 'status': 200,
-                                                     'path': '/qualified?token=synthetic-secret'}),
+                                                     'path': '/qualified?token=synthetic-secret', 'edge_id': 'cell-01'}),
                                       ('dns', '8687', {'domain_id': 42, 'zone': 'qualification.test', 'qname': 'www.qualification.test',
                                                      'qtype': 'A', 'rcode': 'NOERROR'})]:
                 hostport = run('docker', 'port', name, port+'/tcp').stdout.strip().rsplit(':', 1)[1]
@@ -67,6 +70,7 @@ def main() -> None:
                 assert rows[0]['domain_id'] == 42
                 if kind == 'edge':
                     assert rows[0]['path'] == '/qualified'
+                    assert rows[0]['edge_id'] == (args.edge_id or 'cell-01')
                     assert 'synthetic-secret' not in target.read_text()
                 else:
                     assert rows[0]['qname'] == 'www.qualification.test'
