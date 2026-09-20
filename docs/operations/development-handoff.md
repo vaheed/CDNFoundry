@@ -25,18 +25,20 @@ from publication.
 
 ### Inputs and scope
 
-All deployment inputs below are **pending owner input**. Reference protected
-files or access methods, never paste credentials into this report.
+Host access and the management/platform domain choices have now been supplied
+through the protected local `.prod` inventory. IPv6 is explicitly disabled for
+this staging job. Reference protected files or access methods, never paste
+credentials into this report. Remaining inputs are tracked below.
 
 | Input | Required detail |
 | --- | --- |
-| Release | Successful run URL, full source SHA, signed manifest and bundle location; deploy verified component digests |
-| Hosts | SSH aliases/access method, OS, role/address inventory, bundle path, existing installation/data status; one control/telemetry host and two DNS/edge hosts, or explicit smaller-topology limits |
-| Management DNS | Independent operator zone/provider and control, edge-control, telemetry, Grafana and PoP names; record changes/access method |
-| Public DNS | Owned platform zone, two nameservers/glue and disposable customer zone; registrar access method and current DS/delegation state |
+| Release | Selected run [35472074232](https://github.com/vaheed/CDNFoundry/actions/runs/35472074232), source `a8c694fd34a2ac5210daa243d9a77ab4b1437451`; manifest plus all 17 image signatures, SBOMs and provenance verified |
+| Hosts | Three supplied SSH targets reachable with passwordless sudo; one control/telemetry and two DNS/edge roles; Ubuntu 22.04, 4 CPUs, about 4 GB RAM and 66 GB free disk each; no existing CDNFoundry installation found |
+| Management DNS | Owner supplied suffix; all six required A records resolve to their intended hosts; no AAAA records; public HTTPS pending startup |
+| Public DNS | Owner supplied platform zone; nameserver glue, disposable customer zone and registrar workflow remain pending |
 | Origin | Owned HTTP and verified HTTPS endpoint, Host/SNI, disposable hostname and cacheable test resource |
-| Address families | Approved public IPv4/IPv6, routed or NAT service listeners, firewall/reachability scope and external probe location |
-| Protected configuration | Fleet config/state location, secure release pull access if needed, GeoIP provider configuration, recovery material location and administrator credential delivery method |
+| Address families | IPv4 only per owner; Fleet IPv6 disabled; public service/firewall reachability still requires qualification |
+| Protected configuration | Protected draft and release evidence under `.prod`; ACME contact supplied; administrator credential delivery remains pending; use the existing zero-credential GeoIP provider |
 
 Use the [starter quick start](../deployment/production-quick-start.md) in its
 existing order. Verify the selected release with the existing
@@ -59,7 +61,8 @@ release to claim as a tested rollback target.
 
 ### Execution and evidence matrix
 
-Every row is **not run on staging**. Once access is available, run non-browser
+Row 1 release verification and local bundle generation are complete; control
+startup is in progress. Other live smoke results remain **not run**. Run non-browser
 probes using Python under `tests/e2e` against the selected inventory; adapt only
 where a reproduced installation gap requires it. Existing development fixtures
 are not automatically safe or suitable for remote staging. Do not point an
@@ -97,7 +100,7 @@ full production qualification pass. Keep raw evidence in a protected store.
 
 | Gate | Current result |
 | --- | --- |
-| Implementation/installation | Existing installer present; selected-host installation **not run**, access/configuration pending |
+| Implementation/installation | Verified bundles generated; control startup in progress; full selected-host installation gate remains open |
 | Documentation | Preparation and exact owner browser steps written; deployment observations pending |
 | Automated/runtime qualification | Local documentation/configuration checks **passed**; live staging matrix **not run** |
 | Owner-run browser qualification | **Not run**; owner executes [Phase 1 smoke](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md#phase-1--empty-staging-smoke) and supplies results |
@@ -114,10 +117,48 @@ Preparation checks executed on 2026-09-20:
 - `git diff --check`: **passed**. Archived legacy roadmaps remain unchanged.
 - Application tests, live staging artifact verification and non-browser runtime
   probes: **not run** in this preparation unit; no application code changed and
-  the selected staging release/access inputs are absent.
+  deployment configuration and DNS inputs remain incomplete.
 
-No live hosts, migrations, DNS records or persistent volumes were changed by
-preparation. Phase 1 remains open until all required evidence is recorded.
+### Host preparation and release verification checkpoint
+
+- Public release run: **35472074232**, source
+  `a8c694fd34a2ac5210daa243d9a77ab4b1437451`. The public artifact download used
+  a relay because unauthenticated GitHub artifact API access returned 401.
+  The relay is not a trust authority: the manifest and every image were verified
+  using pinned Cosign against the exact official `refs/heads/dev` workflow and
+  GitHub OIDC issuer before projecting any digest.
+- **Passed:** signed manifest verification and all **17/17** image signatures,
+  SPDX attestations and SLSA provenance, including subject digest, source commit,
+  workflow, build type and builder checks. No image rebuild or scan rerun.
+  Manifest SHA-256:
+  `95087bd7705c8ff04ba4960fb45f217a75864dce77dc32a65c31d499c8446f28`.
+- **Passed:** three-host SSH/sudo access, external GHCR HTTPS connectivity,
+  synchronized NTP, and independent management DNS A records. IPv6 is disabled
+  in the protected Fleet configuration; operating-system IPv6 is not part of
+  the qualified service scope.
+- Docker 29.1.3 and Compose 2.40.3 prerequisite installation and checks passed
+  on control and both PoPs. The first PoP's pre-existing unattended kernel
+  update held the package lock; bounded retries preserved that update, and its
+  prerequisite installation subsequently passed. The required reboot completed; Docker/Compose
+  returned healthy on kernel `5.15.0-191-generic`.
+- **Passed:** exact-release Fleet dry-run, protected bundle generation and
+  all three bundle validations (Compose, immutable references, Caddy config and
+  certificate chain). Control transfer completed; startup stopped before migrations because Docker
+  Hub returned 403 for the pinned Valkey digest. Transfer of the exact image
+  from the verification workstation is in progress. This is not an HTTPS pass.
+- Reproduced and corrected a quick-start ordering omission: fresh metrics-token
+  ownership must be set to `root:82`, mode `0640`, before pre-start validation.
+  The [quick start](../deployment/production-quick-start.md)
+  now records the same restricted ownership that `start.sh` applies. The
+  original validation failed; validation after the ownership correction passed.
+- Inventory, SSH key/known-hosts, Fleet state, bundles, release evidence and
+  command logs remain protected under ignored `.prod`. No private material is
+  committed. Existing workspace `.gitignore` changes are preserved.
+
+The initial documentation preparation changed no hosts. Subsequent preparation
+installs prerequisites and starts the selected control bundle with its explicit
+migration workflow. Existing development PostgreSQL and named volumes are
+untouched; no volume deletion or destructive database refresh is permitted. Phase 1 remains open until all required evidence is recorded.
 Phase 2 is the next separate roadmap job only after Phase 1 completes.
 
 ## Source and release evidence

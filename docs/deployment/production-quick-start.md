@@ -168,7 +168,25 @@ sudo ./scripts/cdnfoundry-fleet \
   show-start-order
 ```
 
-For every bundle, review `README.md` and run `./validate.sh`. Validation uses the pinned Caddy images to parse every Caddyfile included in that node before activation, in addition to checking Compose interpolation, permissions, and certificate chains. It may pull a missing pinned image and create a short-lived validation container, but it does not start the application services. Production Compose has no deployment-value defaults: all interpolation comes from that bundle's generated `.env.prod`.
+For every bundle, review `README.md`. Before running `./validate.sh`, prepare
+its metrics token ownership when the file is present (control or monitoring
+roles). Run these commands from the protected bundle directory on both the
+validation workstation and the destination host after transfer:
+
+```bash
+if [ -f secrets/metrics-token ]; then
+  sudo chown 0:82 secrets/metrics-token
+  sudo chmod 0640 secrets/metrics-token
+fi
+sudo ./validate.sh
+```
+
+Fresh rendering creates the metrics token with mode `0640` but the rendering
+user's ownership. The validator requires `root:82`; `start.sh` also sets this
+ownership, but the pre-transfer/pre-start validation occurs first. Keep the
+bundle directory mode `0700` and do not broaden other secret permissions.
+
+Validation uses the pinned Caddy images to parse every Caddyfile included in that node before activation, in addition to checking Compose interpolation, permissions, and certificate chains. It may pull a missing pinned image and create a short-lived validation container, but it does not start the application services. Production Compose has no deployment-value defaults: all interpolation comes from that bundle's generated `.env.prod`.
 
 ## 5. Start the control plane
 
@@ -176,7 +194,8 @@ Transfer `bundles/control-1` over an authenticated channel to `/opt/cdnfoundry` 
 
 ```bash
 cd /opt/cdnfoundry
-./validate.sh
+# Apply the metrics-token ownership step above if that file is present.
+sudo ./validate.sh
 sudo ./start.sh
 docker compose --env-file .env.prod ps
 ```
@@ -265,7 +284,8 @@ Transfer `bundles/pop-1` and `bundles/pop-2` over authenticated channels to
 
 ```bash
 cd /opt/cdnfoundry
-./validate.sh
+# Apply the metrics-token ownership step above if that file is present.
+sudo ./validate.sh
 sudo ./start.sh
 docker compose --env-file .env.prod ps
 ```

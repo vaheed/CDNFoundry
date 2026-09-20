@@ -103,13 +103,14 @@ The owner executes implemented screens in `docs/manual-browser-qualification.md`
 
 Completion gate: installation works on the stated hosts, operator docs are current,
 non-UI runtime checks pass and owner browser status is recorded separately.
-Current status: **blocked on staging inputs; live installation and smoke checks
-not run for the delivered dev release**. See the
+Current status: **staging installation in progress; full smoke and owner browser
+gates remain open**. The selected manifest and 17 image signatures/attestations
+are verified; host access and management DNS are available. See the
 [staging job record](operations/development-handoff.md#staging-install-and-smoke-job)
 for required inputs, execution order and evidence.
 
 - Implementation: existing Fleet installer and runtime are present; installation
-  on the selected hosts is **not run**, so this gate remains open.
+  on the selected hosts is **in progress**, so this gate remains open.
 - Documentation: staging preparation and the bounded owner browser checklist are
   written; host-specific observations and corrections remain pending deployment.
 - Automated/runtime qualification: local documentation/configuration checks are
@@ -117,7 +118,7 @@ for required inputs, execution order and evidence.
 - Owner-run browser qualification: **not run**. Use the
   [Phase 1 checklist](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md#phase-1--empty-staging-smoke).
 
-Stop at this phase boundary. Missing staging access is not permission to start
+Stop at this phase boundary. Outstanding staging gates are not permission to start
 Phase 2 or repeat publication/security-audit work.
 
 ## Phase 2 — Identity, authorization and domain lifecycle
