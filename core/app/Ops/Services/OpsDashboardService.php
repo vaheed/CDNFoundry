@@ -104,7 +104,7 @@ final class OpsDashboardService
             return $this->invalid($context);
         }
 
-        return $this->remember('system', $context, 10, function () use ($context): array {
+        return $this->remember('system', $context, 10, function (): array {
             try {
                 $components = $this->health->components();
                 $conditions = $this->conditions($components);
@@ -122,9 +122,8 @@ final class OpsDashboardService
                 $heartbeatSeconds = app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds');
                 $staleEdgesQuery = Edge::query()->where('enabled', true)
                     ->where(fn ($query) => $query->whereNull('last_heartbeat_at')->orWhere('last_heartbeat_at', '<', now()->subSeconds($heartbeatSeconds)));
-                $failedOperations = Operation::query()->where('status', 'failed')
-                    ->where('created_at', '>=', $context->from)
-                    ->where('created_at', '<', $context->to);
+                // Current health is independent of the historical traffic range.
+                $failedOperations = Operation::query()->unresolvedFailures();
 
                 return [
                     'available' => true,

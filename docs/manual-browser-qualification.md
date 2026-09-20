@@ -130,6 +130,13 @@ so existing clusters, edges and domains are reused rather than duplicated.
 7. Open **Observe → Operations overview**, then **Observe → Traffic and
    telemetry** with the disposable **Domain** selected. Expect fresh smoke
    traffic, truthful queue/edge state and no false success for failed work.
+   After a successful nameserver verification, earlier failed checks of the same
+   domain must remain in **Operations** history but must no longer count as an
+   active verification condition or affected domain. A new failure must count
+   again. After purge reconciliation succeeds on both edges, its failed purge
+   and task conditions must clear on the next health poll. A missing verified
+   backup must remain visible; only when all current conditions are healthy
+   should the degraded service banner clear. Status: **Not run**.
    In Grafana, open **Connections → Data sources** and confirm the four
    provisioned datasource health checks; under **Dashboards**, open both
    **CDNFoundry — System Command Center** and **CDNFoundry — Domain Command

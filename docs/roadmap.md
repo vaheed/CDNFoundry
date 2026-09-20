@@ -119,7 +119,8 @@ for required inputs, execution order and evidence.
 - Documentation: staging preparation and the bounded owner browser checklist are
   written; host-specific corrections and browser/API setup steps are recorded.
   Customer-traffic results and the requested shared platform display timezone are
-  documented. Telemetry corrections and final runtime results remain pending.
+  documented. Recovery-aware verification health is implemented and tested;
+  its signed deployment, telemetry corrections and final runtime results remain pending.
 - Automated/runtime qualification: local documentation/configuration checks are
   recorded separately in the job record; control/DNS, account isolation, Grafana
   API and first-PoP Docker restart checks pass. Customer HTTP/HTTPS, cache and security checks pass; full purge deployment,

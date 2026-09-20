@@ -279,6 +279,66 @@ class OpsDashboardTest extends TestCase
             ->assertSeeHtml('cdn-widget-state--compact');
     }
 
+    public function test_recovered_verification_is_history_instead_of_an_active_health_failure(): void
+    {
+        $this->travelTo(now()->startOfHour()->addMinutes(30));
+        Http::fake(['*' => Http::response('')]);
+        $admin = User::factory()->admin()->create();
+        $domain = Domain::query()->create(['name' => 'recovered.example.test', 'display_name' => 'Recovered']);
+        $failure = Operation::query()->create([
+            'type' => 'domain.nameservers_verify', 'status' => 'failed',
+            'input' => ['domain_id' => $domain->id],
+            'created_at' => now()->subHours(3), 'finished_at' => now()->subHours(3)->addMinute(),
+        ]);
+        $context = OpsDashboardContext::fromFilters(['range' => '1h'], $admin);
+        $before = app(OpsDashboardService::class)->system($context);
+        $this->assertTrue($before['available']);
+        $this->assertSame(1, $before['affected_domains']);
+        $this->assertSame('degraded', $before['components']['operations']['status']);
+
+        Operation::query()->create([
+            'type' => $failure->type, 'status' => 'succeeded', 'input' => $failure->input,
+            'created_at' => now()->subMinutes(2), 'finished_at' => now()->subMinute(),
+        ]);
+        Cache::flush();
+        $after = app(OpsDashboardService::class)->system($context);
+        $this->assertSame('healthy', $after['components']['operations']['status']);
+        $this->assertSame(0, $after['affected_domains']);
+        $this->assertNull($after['started_at']);
+        $this->assertSame('failed', $failure->fresh()->status);
+        // Recovery must not hide an independently missing verified backup.
+        $this->assertSame('degraded', $after['components']['backups']['status']);
+        $this->assertSame('degraded', $after['state']);
+    }
+
+    public function test_verification_recovery_requires_later_success_for_the_same_domain(): void
+    {
+        $failure = Operation::query()->create([
+            'type' => 'domain.nameservers_verify', 'status' => 'failed', 'input' => ['domain_id' => 1],
+            'created_at' => now()->subHours(2), 'finished_at' => now()->subHour(),
+        ]);
+        $recovery = Operation::query()->create([
+            'type' => $failure->type, 'status' => 'succeeded', 'input' => ['domain_id' => 2],
+            'created_at' => now()->subMinutes(2), 'finished_at' => now()->subMinute(),
+        ]);
+        $this->assertSame(1, Operation::query()->unresolvedFailures()->count());
+        $recovery->update(['input' => $failure->input, 'status' => 'running']);
+        $this->assertSame(1, Operation::query()->unresolvedFailures()->count());
+        $recovery->update(['status' => 'succeeded', 'finished_at' => now()->subHours(3)]);
+        $this->assertSame(1, Operation::query()->unresolvedFailures()->count());
+        $recovery->update(['finished_at' => now()->subMinute()]);
+        $this->assertSame(0, Operation::query()->unresolvedFailures()->count());
+        $newFailure = Operation::query()->create([
+            'type' => $failure->type, 'status' => 'failed', 'input' => $failure->input,
+            'created_at' => now(), 'finished_at' => now(),
+        ]);
+        $this->assertSame([$newFailure->id], Operation::query()->unresolvedFailures()->pluck('id')->all());
+        $failure->update(['type' => 'dns.zone_import']);
+        $this->assertSame(2, Operation::query()->unresolvedFailures()->count());
+        $failure->update(['type' => 'domain.nameservers_verify', 'input' => []]);
+        $this->assertSame(2, Operation::query()->unresolvedFailures()->count());
+    }
+
     protected function tearDown(): void
     {
         CarbonImmutable::setTestNow();

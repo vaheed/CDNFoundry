@@ -389,6 +389,28 @@ stored in `origin_error`, inflating error counts, and the runtime always emitted
 null origin latency. This is a current telemetry qualification defect, not a
 successful telemetry gate; correction and runtime qualification remain open.
 
+### Active health after recovery
+
+The 19:04 UTC live check confirmed four conditions: one failed full purge, its
+two failed edge tasks, seven earlier nameserver-verification failures, and no
+verified backup. DNS, TLS, edges and telemetry components were healthy. The
+operation health query now excludes a failed nameserver verification only when
+a later verification of the same domain finished successfully. History retains
+the failed attempts; unrelated failures, pending retries and newer failures stay
+active. Dashboard impact and condition age use the same current failure query,
+independently of the selected historical traffic range. The backup warning stays
+visible until a real backup succeeds and is verified. The owner explicitly
+chose to keep this warning visible and configure backups separately.
+
+Implementation and documentation: present. Isolated SQLite dashboard tests passed
+**14 tests, 105 assertions**, including recovery, domain isolation, newer failure,
+retained history and the independent backup warning. The initial new test fixture
+omitted a required display name; correcting the fixture produced the passing run.
+Signed core deployment and live PostgreSQL qualification remain pending. Owner
+browser status: **not run** for recovery presentation. Release manifest generation
+also now derives its migration marker from the actual source migration files;
+the previous fixed marker predated the new display timezone migration.
+
 ### Origin telemetry correction
 
 The runtime now includes its final upstream response timing in access events.

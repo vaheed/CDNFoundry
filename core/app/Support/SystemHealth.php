@@ -102,7 +102,7 @@ final class SystemHealth
 
         $usageLag = UsageRollup::query()->where('status', 'finalized')->max('interval_end');
         $components['usage'] = $this->state($usageLag === null || now()->diffInHours($usageLag) > 3 ? 'degraded' : 'healthy', ['last_finalized_interval' => $usageLag]);
-        $components['operations'] = $this->state(Operation::query()->where('status', 'failed')->exists() ? 'degraded' : 'healthy', ['failed' => Operation::query()->where('status', 'failed')->count()]);
+        $components['operations'] = $this->state(Operation::query()->unresolvedFailures()->exists() ? 'degraded' : 'healthy', ['failed' => Operation::query()->unresolvedFailures()->count()]);
         $lastBackup = Backup::query()->where('status', 'succeeded')->whereNotNull('verified_at')->max('verified_at');
         $backupStale = $lastBackup === null || now()->diffInHours($lastBackup) > app(PlatformSettings::class)->integer('operations', 'backup_stale_hours');
         $components['backups'] = $this->state($backupStale ? 'degraded' : 'healthy', ['last_verified_at' => $lastBackup]);

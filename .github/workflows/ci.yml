@@ -538,8 +538,11 @@ jobs:
             done
           }
           mkdir -p release-evidence
-          printf '{"schema_version":1,"release_version":"%s","source_commit":"%s","created_at":"%s","workflow_run_id":"%s","runtime_schema_version":1,"database_migration":"2026_09_05_160000_add_domain_delegation_claims","images":[' \
-            "${RELEASE_REF_NAME}" "${RELEASE}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${WORKFLOW_RUN_ID}" > release-evidence/release-manifest.json
+          database_migration="$(find core/database/migrations -maxdepth 1 -name '*.php' -printf '%f\n' | LC_ALL=C sort | tail -n 1)"
+          database_migration="${database_migration%.php}"
+          test -n "${database_migration}"
+          printf '{"schema_version":1,"release_version":"%s","source_commit":"%s","created_at":"%s","workflow_run_id":"%s","runtime_schema_version":1,"database_migration":"%s","images":[' \
+            "${RELEASE_REF_NAME}" "${RELEASE}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${WORKFLOW_RUN_ID}" "${database_migration}" > release-evidence/release-manifest.json
           if [[ "${RELEASE_REF}" == "refs/heads/main" ]]; then
             aliases+=(latest)
           elif [[ "${RELEASE_REF}" == "refs/heads/dev" ]]; then
