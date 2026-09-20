@@ -111,6 +111,9 @@ so existing clusters, edges and domains are reused rather than duplicated.
    its traffic. Use the existing Grafana checklist for any failed observation.
 8. Under **Customers → Users**, inspect the prepared domain user assigned only
    to this test domain, or create it if absent. For the current staging instance,
+   confirm **Type = Domain user** under **Customers → Users**, then open
+   **Customers → Domains → test domain → Users** and confirm the assignment.
+   Use **Attach** only if the assignment is absent. For login,
    use the email/password in local `.prod/staging-domain-user.json`; the separate
    administrator credentials are in `.prod/staging-admin.json`. Sign in at
    `/app/login`; expect that domain and no administrator

@@ -46,7 +46,18 @@ This runbook creates the smallest practical production CDNFoundry fleet:
 - two combined DNS and edge nodes in separate failure domains;
 - one generated, role-filtered bundle per host.
 
-The topology is data, not code. You edit a local JSON file containing your domains, addresses, and locations. You do not edit deployment shell scripts or Compose files.
+The topology is data: edit a local JSON file containing your domains, addresses, and locations. Fleet generates the deployment files. Host-specific DNS or Docker networking overrides, when needed, are documented below and must be retained alongside the generated bundle.
+
+Use steps 1–6 for host installation, then choose the browser or API instructions
+for desired state. Both paths use the same accounts, permissions and asynchronous
+operations. Fleet does not create panel users, register DNS clusters, enroll edge
+identities, change registrar delegation, or prove public traffic readiness.
+
+Before starting, have three hosts, an independently hosted management suffix,
+a platform zone, a separate disposable customer zone with registrar access, an
+ACME email, and a working owned origin. Record its scheme, host/IP, port, Host
+header, and HTTPS SNI. These are distinct inputs: the customer zone must not
+be the reserved platform zone. Keep IPv6 disabled until it is routable.
 
 ## 1. Prepare the hosts
 
@@ -65,8 +76,8 @@ sudo ./scripts/install-production-prerequisites.sh
 ```
 
 Select the source commit from an available signed release manifest. Do not
-deploy from a moving branch or mutable image tag. The audit checkout currently
-has no established signed release evidence and is not production qualified.
+deploy from a moving branch or mutable image tag. Select the exact successful publication run and verify its evidence. Publication
+alone does not qualify a staging installation or establish production readiness.
 
 Before installation, complete [release verification and Fleet image projection](../operations/software-supply-chain.md#verify-a-release).
 Populate the topology below, then use that procedure to produce
@@ -112,9 +123,9 @@ The dry run performs topology, role, address, feature, and Compose validation wi
 ### Publish the control-host management records
 
 Before starting the control bundle, create these records at the independent
-DNS provider that hosts `operator_domain`. In the starter topology all four
-names point to the control node's public address because control, edge-control,
-telemetry, and Grafana are colocated:
+DNS provider that hosts `operator_domain`. In the starter topology the first four
+names point to the control node because control, edge-control, telemetry and
+Grafana are colocated. Each PoP management name points to its own host:
 
 | Name | Record | Value |
 | --- | --- | --- |
@@ -122,6 +133,8 @@ telemetry, and Grafana are colocated:
 | `edge-control.ops.example.com` | `A` | control node `public_ipv4` |
 | `telemetry.ops.example.com` | `A` | control node `public_ipv4` |
 | `grafana.ops.example.com` | `A` | control node `public_ipv4` |
+| `pop-1.ops.example.com` | `A` | first PoP `public_ipv4` |
+| `pop-2.ops.example.com` | `A` | second PoP `public_ipv4` |
 
 When the control node has a configured `public_ipv6`, publish matching `AAAA`
 records to that address. Otherwise do not publish `AAAA` records. Replace the
@@ -196,6 +209,11 @@ Validation uses the pinned Caddy images to parse every Caddyfile included in tha
 
 Transfer `bundles/control-1` over an authenticated channel to `/opt/cdnfoundry` on the control host. Preserve modes and do not place the bundle in a public or shared directory.
 
+The bundle directory is root-owned mode `0700`. Run commands inside it from a
+root shell (`sudo -i`) on that host; leave that shell with `exit` when finished.
+Use the same protected root-shell workflow on each PoP. Do not loosen directory
+or env-file permissions merely to run Compose as your SSH user.
+
 ```bash
 cd /opt/cdnfoundry
 # Apply the metrics-token ownership step above if that file is present.
@@ -225,7 +243,7 @@ curl --fail --show-error https://grafana.ops.example.com/api/health
 docker compose --env-file .env.prod logs --since 10m --no-color caddy
 ```
 
-If a browser reports `ERR_SSL_PROTOCOL_ERROR`, first recheck the three `A` and
+If a browser reports `ERR_SSL_PROTOCOL_ERROR`, first recheck the four control-host `A` and
 optional `AAAA` records above, inbound TCP 80/443, and the Caddy log for ACME
 errors. A healthy `caddy` container only confirms its local process health; it
 does not confirm public DNS, certificate issuance, or the external TLS path.
@@ -309,8 +327,11 @@ restricted DNS API with the generated certificate and API key. Allow public UDP
 and TCP 53; keep TCP 8444 restricted to the control-plane source addresses.
 
 ```bash
-dig @127.0.0.1 version.bind TXT CH +short
-dig +tcp @127.0.0.1 version.bind TXT CH +short
+# Replace this with the PoP's actual bind_ipv4; a response before zone
+# publication proves reachability only, not a working authoritative zone.
+read -r -p 'PoP bind IPv4: ' CDNF_DNS_BIND
+dig @"$CDNF_DNS_BIND" example.net SOA +norecurse +time=3 +tries=1
+dig +tcp @"$CDNF_DNS_BIND" example.net SOA +norecurse +time=3 +tries=1
 openssl s_client -connect pop-1.ops.example.com:8444 \
   -servername pop-1.ops.example.com \
   -CAfile pki/edge-server-ca.crt </dev/null
@@ -333,15 +354,22 @@ Use this exact order:
    verification. Wait for both cluster acknowledgements, then verify the SOA
    and NS answers over UDP and TCP directly against both authoritative hosts.
 4. Only after those answers are correct, create any required registrar glue and
-   change customer delegation. The first automatic verification may show a
+   change customer delegation to the **exact Assigned nameservers shown on that
+   customer domain**, including their claim prefix. The base platform
+   `ns1.example.net` and `ns2.example.net` alone do not prove the customer claim.
+   Keep the platform registrar glue pointing to the PoPs. A recursive
+   `dig NS customer.test` may show child-zone answers even while the registrar
+   still has the wrong names: verify the actual parent delegation. The first automatic verification may show a
    visible failure because delegation was intentionally not changed earlier;
-   use **Verify nameservers** now and wait for it to succeed. Activate the
-   domain, add its first DNS-only A/AAAA record, wait for both cluster
+   use **Verify nameservers** now and wait for it to succeed. Successful verification activates the
+   domain; if it remains disabled after a previously verified claim, use its
+   activation action. Add its first DNS-only A/AAAA record, wait for both cluster
    acknowledgements, and verify those answers directly. DNS desired-state setup
    is now complete. Edge creation and host changes begin in step 8; do not
    enable proxying yet.
 
-API automation follows the same sequence. Authenticate with `POST /api/auth/login`, protect the returned bearer token, and use the DNS-cluster, domain, record, and edge endpoints in the live OpenAPI document. Send `Idempotency-Key` on mutations and poll the operation returned by `202 Accepted`. Never store an API token in Fleet JSON.
+Follow the [API setup sequence](#api-setup-sequence) below for exact routes and
+request fields. API automation follows the same sequence. Authenticate with `POST /api/auth/login`, protect the returned bearer token, and use the DNS-cluster, domain, record, and edge endpoints in the live OpenAPI document. Send `Idempotency-Key` on mutations and poll the operation returned by `202 Accepted`. Never store an API token in Fleet JSON.
 
 Both PoP DNS runtimes must already be healthy from step 6. If either cluster
 test fails, do not enable it and do not delegate the customer zone.
@@ -417,11 +445,12 @@ domain.
 
 Finish edge desired state in this order:
 
-1. Create and enable the service pool.
+1. Create the service pool disabled.
 2. Assign the intended non-drained cells on each edge.
 3. Add each PoP's advertised endpoint and, only for NAT, its matching public
    key configured in `EDGE_GATEWAY_ADDRESS_MAP`.
-4. Wait for the gateway to acknowledge the listener-only endpoint generation.
+4. Enable the pool after every participating edge has its endpoint and enough
+   assigned cells. Wait for the gateway to acknowledge the listener-only endpoint generation.
    No placeholder or proxied customer hostname is required, and this state must
    not emit repeated candidate errors or generation-mismatch warnings.
 5. Add the validated origin and enable proxying for the test hostname, then
@@ -446,6 +475,148 @@ gateway image or release defect. Do not run the container privileged, change it 
 broader capabilities. Keep the endpoint withdrawn until a corrected immutable
 gateway image is deployed.
 
+### Create and assign the customer user
+
+After the customer domain exists, open **Customers → Users**, select **Create**,
+enter **Name**, **Email**, a unique **Password**, and **Type = Domain user**. Save the
+account, open **Customers → Domains**, select the test domain, open its **Users**
+relation, select **Attach**, choose the new account, and confirm **Attach**. Reuse existing accounts/domains during qualification.
+Give the owner their email, password through a protected channel, and
+`https://control.ops.example.com/app/login`. Never send the administrator
+password as the customer's credentials. Sign in separately as that user and
+confirm the assigned domain is visible and administrator navigation is absent.
+The API equivalents are in the table below. Browser checks are owner-run.
+
+### API setup sequence
+
+Use the checked-out release's `docs/public/openapi.json` together with the
+[endpoint catalog](../reference/api/endpoints.md). All paths below start with
+`/api`. Send JSON and `Accept: application/json`; authenticated calls need the
+bearer token. Generate a distinct UUID `Idempotency-Key` for each mutation;
+retry a timed-out request with the same key and identical body. Never put actual
+passwords/tokens in command arguments, terminal output or Fleet JSON. Use a
+protected request file or an API client that reads secrets without echoing them.
+
+1. `POST /auth/login` with `email`, `password`, `device_name`. Save `data.token`
+   privately. Login works for either user type; `/admin/*` requires an admin.
+2. Use the following sequence, keeping every returned cluster/domain/user/edge/
+   pool/cell/record ID. Read existing lists first so reruns reuse desired state.
+3. Poll `GET /admin/operations/{id}` as admin, or `GET /operations/{id}` as the
+   authorized domain user. A `202` is queued work, not success. Operation IDs
+   occur at top-level `operation_id`, `data.operation_id`, or `data.id` when the
+   response is an operation object. Stop on `failed`; inspect its error, correct
+   the cause, and submit an intentional new attempt with a new key. Bound polls
+   to three minutes and report a timeout instead of continuing silently.
+4. Revoke the temporary API token with `POST /auth/logout` when finished.
+
+| Order | Request | Fields and completion check |
+| --- | --- | --- |
+| DNS clusters, once per PoP | `POST /admin/dns/clusters` | `name`, `location`, `api_url` (`https://pop-N.ops.example.com:8444`), protected `api_key`, `server_id: "localhost"`, `nameservers: [{"hostname":"ns1.example.net"},{"hostname":"ns2.example.net"}]`, `capacity_zones: 10000`; created disabled, test queued; poll top-level `operation_id` |
+| Test/retry and enable | `POST /admin/dns/clusters/{id}/test`, then `POST /admin/dns/clusters/{id}/enable` | Empty objects; wait for test success before enable; wait for its reconcile operation |
+| Preview platform identity | `POST /admin/system/settings/dns/validate` | Payload below; receive `data.confirmation_token`; validation alone saves nothing |
+| Save platform identity | `PATCH /admin/system/settings/dns` | Same payload plus `confirmation_token`; poll operation `data.id`; require both DNS deployments |
+| Customer zone | `POST /domains` | `{"name":"customer.test"}` using your actual owned zone; retain `data.id`; inspect `GET /domains/{id}` for assigned nameservers and `GET /domains/{id}/dns/deployment` for acknowledgements |
+| Verify real delegation | `POST /domains/{id}/verify-nameservers` | Empty object after saving the exact assigned names at the registrar; poll `data.id`; expect `lifecycle_state: active`; never use force-verification for qualification |
+| Customer user | `POST /admin/users` | `name`, `email`, `password` (12+ characters with upper/lower case and digits), `type: "user"`; retain `data.id` |
+| Assign customer user | `POST /admin/domains/{domain}/users` | `{"user_id": USER_ID}`; log in separately as this user and check `GET /domains`; administrator API calls must return 403 |
+| Edge, once per PoP | `POST /admin/edges` | `name`, actual `country_code` and `continent_code`, `cell_slot_count: 8`; leave management IPs null when the same addresses serve traffic; securely retain `data.id` and one-time `data.bootstrap_token`; perform step 8 host enrollment |
+| Shared service pool | `POST /admin/edge-pools` | `name`, `kind: "shared"`, `routing_mode: "geo_unicast"`, `minimum_ready_cells: 1`, `replicas_per_edge: 1`, `maximum_domains_per_cell: 1000`, `cache_profile: "standard"`, `compression_profile: "standard"`, `waf_capable: false`; created disabled |
+| Assign a cell on each edge | `PUT /admin/edge-pools/{pool}/cells/{cell}` | Empty object; select an unassigned, non-drained cell from `GET /admin/edges/{edge}`; poll `data.operation_id` |
+| Endpoint, once per edge | `POST /admin/edge-pools/{pool}/edges/{edge}/endpoint` | `ipv4`, `ipv6: null` for IPv4-only, `withdrawn: false`; use the actual service address |
+| Enable pool | `POST /admin/edge-pools/{pool}/enable` | Empty object after cells/endpoints exist; inspect `GET /admin/edge-pools/{pool}` until every endpoint has `gateway_state: ready` and a fresh acknowledgement |
+
+Example identity payload (replace every example domain and address):
+
+```json
+{
+  "platform_domain": "example.net",
+  "proxy_hostname": "proxy.example.net",
+  "nameservers": [
+    {"hostname": "ns1.example.net", "ipv4": "198.51.100.30", "ipv6": null},
+    {"hostname": "ns2.example.net", "ipv4": "198.51.100.31", "ipv6": null}
+  ],
+  "soa_primary": "ns1.example.net",
+  "soa_mailbox": "hostmaster.example.net",
+  "soa_refresh": 3600,
+  "soa_retry": 600,
+  "soa_expire": 1209600,
+  "soa_minimum_ttl": 300,
+  "default_ttl": 300,
+  "cluster_targets": ["pop-1.ops.example.com:8444", "pop-2.ops.example.com:8444"]
+}
+```
+
+For the active customer zone, create a DNS-only record with
+`POST /domains/{domain}/dns/records` using the release's record schema. Check
+`GET /domains/{domain}/dns/deployment` and query both authoritative servers.
+Then configure a proxied record with its validated origin using the same record
+API, and check `GET /domains/{domain}/deployment`. Use
+`POST /domains/{domain}/dns/records/{record}/origin/test` for the queued origin
+probe. Origin `host`, `port`, `scheme`, `host_header`, `sni`, `verify_tls`,
+`connect_timeout_ms`, `response_timeout_ms`, and `retry_count` are explicit fields.
+Advanced HTTP ports such as 8096 are supported through this API; the browser's
+scheme selector chooses the standard port. Inspect the saved port before changing
+it. An HTTP origin does not prove verified HTTPS origin connectivity.
+
+Wait for managed DNS-01 issuance and the acknowledged edge deployment before
+claiming client HTTPS works. Follow the implemented [Phase 1 manual checks](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md#phase-1--empty-staging-smoke)
+for origin, TLS, cache purge, security and telemetry, and execute the runtime
+checks in step 9. API/UI success alone is not traffic evidence.
+
+### Host DNS and gateway readiness troubleshooting
+
+These checks reproduce two observed host-network failures without weakening
+certificate, DNSSEC, domain-claim or image verification:
+
+- If nameserver verification reports DNSSEC/resolution failure, run
+  `docker compose --env-file .env.prod exec -T core delv -q CUSTOMER_ZONE -t DS`.
+  Compare with the same command using `delv @1.1.1.1` and `delv @8.8.8.8` only
+  where those resolvers are reachable and appropriate for the host. A fully
+  validated negative DS response is expected for an unsigned customer zone.
+  If Docker's inherited resolver fails but approved explicit resolvers validate,
+  put their addresses in a host-local `/opt/cdnfoundry/compose.override.yml` under
+  `services.core.dns`, `services.horizon.dns`, and `services.scheduler.dns`,
+  validate it, then recreate those three services. The queue worker performs
+  domain verification, so fixing only the web application is insufficient.
+- If an enrolled edge has fresh heartbeats but the gateway stays unacknowledged,
+  inspect `docker compose --env-file .env.prod exec -T edge-agent cat /etc/hosts`.
+  An `invalid IP` entry for `host-gateway` cannot resolve. Obtain the actual
+  gateway with `docker network inspect cdnfoundry_edge`; do not assume its subnet.
+  In a host-local override set `services.edge-agent.extra_hosts.host-gateway`
+  to that bridge's IPv4 gateway, validate, then recreate only `edge-agent`.
+  Confirm the agent can read `http://host-gateway:9105/metrics` and the endpoint
+  becomes ready. Restrict external TCP 9105 to monitoring/control sources;
+  allow the local bridge path. Do not expose metrics publicly.
+
+Example override shapes; substitute approved resolvers and the inspected bridge
+address, and apply only the relevant service on each host:
+
+```yaml
+services:
+  core:
+    dns: [1.1.1.1, 8.8.8.8]
+  horizon:
+    dns: [1.1.1.1, 8.8.8.8]
+  scheduler:
+    dns: [1.1.1.1, 8.8.8.8]
+```
+
+```yaml
+services:
+  edge-agent:
+    extra_hosts:
+      host-gateway: 172.18.0.1
+```
+
+Preserve any existing override; merge and review rather than overwrite it. Keep
+it mode `0600` in the mode-`0700` bundle directory. Before activation use
+`sudo docker compose --env-file .env.prod config --quiet`, then
+`sudo docker compose --env-file .env.prod up -d --no-deps --wait SERVICE` with
+`SERVICE` replaced by `core horizon scheduler` on control or `edge-agent` on a PoP. Retain the previous override for
+rollback. These deployment overrides are not Fleet state: keep them in protected
+host inventory and reapply/revalidate them after a future bundle replacement.
+They require no image rebuild, database migration or volume removal.
+
 ## 9. Acceptance and recovery gate
 
 Check public endpoints before delegation or traffic:
@@ -458,7 +629,8 @@ dig +short A control.ops.example.com @1.1.1.1
 dig +short AAAA control.ops.example.com @1.1.1.1 # empty is valid when IPv6 is null
 dig +tcp SOA example.net @ns1.example.net
 dig SOA example.net @ns2.example.net
-curl --fail --resolve www.example.net:443:EDGE_IP https://www.example.net/
+# Use the enrolled customer hostname, never the reserved platform namespace.
+curl --fail --resolve www.customer.test:443:EDGE_IP https://www.customer.test/
 ```
 
 Run `docker compose --env-file .env.prod ps` on every node. Long-running services must be healthy; completed migration helpers may be exited. Ports 8443/8444, metrics, PostgreSQL, Valkey, PowerDNS API, ClickHouse, and Loki are restricted interfaces, not general public endpoints.

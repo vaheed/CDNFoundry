@@ -392,6 +392,14 @@ Use both steps in CI or before a production rollout:
 
 Validation renders into a temporary directory and leaves active bundles unchanged. Rendering builds each node in a temporary directory, then atomically replaces the active bundle while retaining `.previous`.
 
+Fleet validates generated configuration; it does not verify public DNS/TLS,
+registrar delegation, account access or customer traffic. Follow the
+[starter quick start](production-quick-start.md) for the ordered browser and API
+onboarding paths. Keep any tested host-local resolver/bridge Compose overrides
+in protected inventory; Fleet does not import them into its state. Merge them
+into the candidate bundle and validate before replacement. The quick start
+documents diagnosis, targeted activation and preservation of those overrides.
+
 ## Bundle transfer and activation
 
 Archive one node from the generator host:
@@ -408,7 +416,12 @@ On the target host:
 install -d -m 0700 /opt/cdnfoundry.new
 tar -xzf /tmp/edge-frankfurt.tar.gz --strip-components=1 -C /opt/cdnfoundry.new
 cd /opt/cdnfoundry.new
-./validate.sh
+# Apply retained host-local overrides before validation.
+if [ -f secrets/metrics-token ]; then
+  sudo chown 0:82 secrets/metrics-token
+  sudo chmod 0640 secrets/metrics-token
+fi
+sudo ./validate.sh
 cd /opt
 mv cdnfoundry cdnfoundry.previous 2>/dev/null || true
 mv cdnfoundry.new cdnfoundry

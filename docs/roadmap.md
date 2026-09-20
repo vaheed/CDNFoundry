@@ -107,17 +107,20 @@ Current status: **staging installation in progress; full smoke and owner browser
 gates remain open**. The selected manifest and 17 image signatures/attestations
 are verified; control and DNS roles are healthy, and public control HTTPS plus
 authoritative UDP/TCP DNS smoke checks pass from the control-host vantage.
-Edge enrollment and customer traffic qualification remain in progress. See the
+Both edges are enrolled and their shared-pool gateways are ready. Customer
+claim delegation and traffic qualification remain outstanding. See the
 [staging job record](operations/development-handoff.md#staging-install-and-smoke-job)
 for required inputs, execution order and evidence.
 
 - Implementation: existing Fleet installer and runtime are present; installation
-  on the selected hosts is **in progress**, so this gate remains open.
+  on all three selected hosts is present; the customer-serving gate remains open.
 - Documentation: staging preparation and the bounded owner browser checklist are
-  written; host-specific observations and corrections remain pending deployment.
+  written; host-specific corrections and browser/API setup steps are recorded.
+  Final customer-traffic results remain pending.
 - Automated/runtime qualification: local documentation/configuration checks are
-  recorded separately in the job record; control/DNS checks pass, while customer
-  traffic, telemetry-under-traffic and restart checks remain open.
+  recorded separately in the job record; control/DNS, account isolation, Grafana
+  API and first-PoP Docker restart checks pass. Customer traffic, telemetry under
+  traffic and serving-through-outage checks remain open.
 - Owner-run browser qualification: **not run**. Use the
   [Phase 1 checklist](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md#phase-1--empty-staging-smoke).
 

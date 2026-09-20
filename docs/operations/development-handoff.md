@@ -62,7 +62,7 @@ release to claim as a tested rollback target.
 ### Execution and evidence matrix
 
 Release verification, control installation, both DNS roles and direct platform
-DNS checks have passed. Edge enrollment is in progress; customer proxy/TLS/cache
+DNS checks have passed. Both edge roles are enrolled with ready shared-pool endpoints; customer proxy/TLS/cache
 and security smoke checks remain **not run**. Run non-browser
 probes using Python under `tests/e2e` against the selected inventory; adapt only
 where a reproduced installation gap requires it. Existing development fixtures
@@ -101,9 +101,9 @@ full production qualification pass. Keep raw evidence in a protected store.
 
 | Gate | Current result |
 | --- | --- |
-| Implementation/installation | Control and DNS roles healthy; edge enrollment in progress; full selected-host installation gate remains open |
+| Implementation/installation | Control, DNS and edge roles installed; both gateways acknowledge shared-pool endpoints; customer-serving installation gate remains open |
 | Documentation | Preparation, owner checklist and reproduced install corrections documented; final runtime observations pending |
-| Automated/runtime qualification | Local preparation and control/DNS checks **passed**; remaining traffic/restart checks pending |
+| Automated/runtime qualification | Control/DNS, account isolation, Grafana APIs and first-PoP Docker restart checks **passed**; customer traffic and outage-serving checks pending |
 | Owner-run browser qualification | **Not run**; owner executes [Phase 1 smoke](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md#phase-1--empty-staging-smoke) and supplies results |
 
 Preparation checks executed on 2026-09-20:
@@ -232,6 +232,55 @@ qualify cache/security/restarts. It records only the checks actually requested.
 
 Phase 1 remains open until all required evidence is recorded.
 Phase 2 is the next separate roadmap job only after Phase 1 completes.
+
+### Edge enrollment and operator-path checkpoint
+
+- Both agents enrolled against the published images and send fresh heartbeats.
+  Each has eight bounded slots and one cell assigned to `staging-shared` (pool 3).
+  Both IPv4 service endpoints report `gateway_state: ready`. Pool creation is
+  disabled; assign cells and endpoints before enabling. The quick start's former
+  enable-before-assignment ordering was corrected against actual API behavior.
+- Docker generated a literal `invalid IP` hosts entry for `host-gateway` on both
+  PoPs. A validated host-local Compose override maps that name to the inspected
+  edge bridge gateway. Recreating only the agents restored gateway status and
+  endpoint acknowledgement without rebuilding images or altering desired state.
+  Gateway TCP 9105 is included in persistent private-listener rules; external
+  probes were blocked/closed while local agent and control access remained valid.
+- The inherited Docker resolver returned SERVFAIL for DNSSEC queries. Explicit
+  upstream resolver probes validated DS absence, parent NS and parent addresses.
+  A control-host override applies the tested DNS servers to Core, Horizon and
+  Scheduler. All three must receive the setting; Core-only changes do not fix
+  queued verification. These host overrides must accompany future bundle updates.
+- The actual `.ir` parent returned the base platform names for the customer
+  domain, while recursive answers exposed the child zone's claim-prefixed names.
+  The owner confirmed saving only the base names. Exact claim delegation at the
+  registrar is still required; force-verification was not used. Failed operations
+  are retained as evidence, not counted as passed activation. After the worker
+  resolver correction, verification reached the parent check and returned
+  `Observed nameservers do not exactly match the nameservers assigned to this claim.`
+- **Passed:** `tests/e2e/staging_observability.py`: authenticated health for
+  Prometheus, ClickHouse, control PostgreSQL and Loki datasources; exactly the two
+  provisioned dashboard UIDs; both dashboard API documents. Credentials are read
+  from a mode-0600 file, never printed. Report:
+  `.prod/staging-observability-report.json`. This is API availability evidence,
+  not rendered dashboard or telemetry-under-customer-traffic qualification.
+- **Passed:** first-PoP Docker restart, retained volume-name inventory, persistent
+  private-listener INPUT rule, fresh edge heartbeat and ready endpoint, and the
+  control-vantage health/authoritative UDP/TCP DNS probe after recovery. Core and
+  agents also recovered after targeted recreation. This does not establish
+  customer HTTPS continuity or serving during control outage; those require an
+  active domain and traffic first. No PostgreSQL or named volume was removed.
+- Spent bootstrap tokens were cleared from both protected host env files after
+  enrollment; persisted edge identities remain in their original volumes.
+- Browser/API setup documentation now separates Fleet host installation from
+  desired-state onboarding, explains administrator/domain-user accounts and exact
+  registrar claims, lists API request fields and operation polling, and records
+  host-network diagnosis and overrides. Browser checkpoint remains **not run**.
+
+Remaining Phase 1 inputs/gates: exact customer registrar delegation, verified
+HTTPS origin for that explicit checkpoint, customer proxy/client TLS/cache/purge/
+security checks, traffic telemetry, serving continuity, and owner browser results.
+The next separate roadmap job remains Phase 2; it has not started.
 
 ## Source and release evidence
 
