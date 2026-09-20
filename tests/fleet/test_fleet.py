@@ -344,6 +344,35 @@ def test_monitoring_targets_cover_every_host_and_update_after_removal(store: Fle
     assert {group["labels"]["node"] for group in targets} == {"control-1", "monitor-1", "dns-1"}
 
 
+@pytest.mark.parametrize("mode", ["colocated", "dedicated"])
+def test_monitoring_can_scrape_remote_hosts_without_exposing_private_services(
+    store: FleetState, source_repo: Path, tmp_path: Path, mode: str
+) -> None:
+    document = yaml.safe_load((source_repo / "compose.prod.yml").read_text())
+    document["services"]["prometheus"]["networks"] = ["telemetry"]
+    document["networks"] = {"telemetry": {"internal": True}}
+    (source_repo / "compose.prod.yml").write_text(yaml.safe_dump(document))
+    add(store, node("control-1", "control", "192.0.2.60"))
+    add(store, node("dns-1", "dns", "192.0.2.62"))
+    monitor = "control-1"
+    if mode == "dedicated":
+        monitor = "monitor-1"
+        add(store, node(monitor, "monitoring", "192.0.2.61"))
+    with store.locked():
+        store.configure_feature(store.load(), "monitoring", {
+            "mode": mode, "host": monitor if mode == "dedicated" else None,
+        })
+    output = tmp_path / "bundles"
+    Renderer(source_repo, store, output).render(store.load())
+    compose = yaml.safe_load((output / monitor / "compose.yml").read_text())
+    service = compose["services"]["prometheus"]
+    assert set(service["networks"]) == {"telemetry", "egress"}
+    assert compose["networks"]["telemetry"]["internal"] is True
+    assert not compose["networks"]["egress"].get("internal", False)
+    assert not service.get("ports")
+    assert "prometheus" not in yaml.safe_load((output / "dns-1/compose.yml").read_text())["services"]
+
+
 def test_multi_region_four_dns_ten_edge_topology_validates(store: FleetState) -> None:
     for index, location in enumerate(["ashburn", "frankfurt", "singapore", "sao-paulo"], 1):
         add(store, node(f"dns-{location}", "dns", f"192.0.2.{70 + index}", region=f"r{index}", location=location))
@@ -849,7 +878,8 @@ def test_production_docs_match_generated_bundle_workflow() -> None:
     assert "git clone https://github.com/vaheed/CDNFoundry.git" in quick
     assert "starter-fleet.json" in quick
     assert "--config fleet.json" in quick
-    assert "all four" in quick
+    assert "the first four" in quick
+    assert "Each PoP management name points to its own host" in quick
     assert "edge-control.ops.example.com" in quick
     assert "curl --fail --show-error https://control.ops.example.com/api/health" in quick
     assert "curl --fail --show-error https://control.ops.example.com/api/ready" in quick

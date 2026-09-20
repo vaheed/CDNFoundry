@@ -695,7 +695,10 @@ Confirm:
 - edge mTLS enrollment and heartbeat;
 - customer HTTP/TLS service through both PoPs;
 - MMDB health on control, DNS, and edge roles;
-- Prometheus targets, Grafana dashboards, ClickHouse telemetry, and bounded Loki logs;
+- Prometheus targets all up (including remote PoPs), Grafana dashboards,
+  ClickHouse telemetry, and bounded Loki logs; use the
+  [remote metrics check](production-fleet-operator-guide.md#remote-metrics-reachability)
+  if datasource health passes but remote scrapes fail;
 - encrypted backup and restore rehearsal when backups are enabled;
 - restart and previous-bundle rollback without deleting volumes.
 

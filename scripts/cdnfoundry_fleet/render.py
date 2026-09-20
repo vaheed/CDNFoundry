@@ -129,6 +129,13 @@ class Renderer:
 
     def _apply_generated_overrides(self, state: dict[str, Any], node: dict[str, Any], compose: dict[str, Any]) -> None:
         services = compose.get("services", {})
+        if "prometheus" in services:
+            # Fleet targets include other hosts; internal networks cannot route
+            # those scrapes. Keep private service networks and add outbound access.
+            networks = services["prometheus"].setdefault("networks", [])
+            if "egress" not in networks:
+                networks.append("egress")
+            compose.setdefault("networks", {}).setdefault("egress", {})
         if "node-exporter" in services:
             bind = node.get("monitor_ipv4") or node["bind_ipv4"]
             ports = [f"{bind}:9100:9100/tcp"]

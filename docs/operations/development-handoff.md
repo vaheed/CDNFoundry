@@ -297,6 +297,26 @@ on 2026-09-20. These specific browser subchecks passed; other browser checks
 remain **not run**.
 The next separate roadmap job remains Phase 2; it has not started.
 
+### Remote metrics correction
+
+The deeper target query found **8/17 remote scrapes down** despite healthy
+Grafana datasource checks: Prometheus had only internal network attachments.
+Fleet now retains its private service networks and adds the existing outbound
+`egress` network, without publishing a Prometheus port. A protected override
+applied the same correction to the selected already-published staging bundle;
+only Prometheus was recreated and its existing volume/image retained.
+
+The actual follow-up query passed **17/17 targets up**. Loki reported recent
+production operational events. Customer-request telemetry remains pending until
+activation. Regression tests cover both colocated and dedicated monitoring,
+retained internal networking and absence of public port publication. Compose
+validation passed. The first Fleet suite run had 79 passing cases and one stale
+documentation assertion (`all four` after the management table gained two PoPs);
+the assertion was updated to check the four control names plus separate PoP
+names. The focused corrected tests passed, followed by **80/80 Fleet tests**,
+`make config-check`, and `make docs-check` (99 documents, 93 built pages, 3,595
+internal links). No images were rebuilt or republished.
+
 ## Source and release evidence
 
 The remote base was `602c605b3f50551d18ddab442670d8fbc7e5f545` on `main`.

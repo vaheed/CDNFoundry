@@ -435,6 +435,25 @@ Never transfer the entire fleet state or another node’s bundle. Do not replace
 
 If `log-collector` exits with code `78` and reports that `LOG_AUTH_TOKEN` is missing, do not put the token directly in the rendered Compose manifest. Verify that `.env.prod` contains a non-empty `LOG_AUTH_TOKEN` and that the rendered `log-collector.environment` maps `LOG_AUTH_TOKEN` from Compose interpolation, then rerender and transfer the corrected node bundle. Recreate only `log-collector`; its bounded `operational-vector-data` volume preserves buffered logs.
 
+### Remote metrics reachability
+
+Monitoring bundles attach Prometheus to the existing private service networks
+and the outbound `egress` network. The private networks stay internal and no
+Prometheus port is published. Without outbound access the local datasource can
+be healthy while every remote PoP scrape fails. After activation inspect the
+Prometheus `up` query: all expected remote node, DNSdist, gateway and collector
+targets must be present and up. Datasource health alone is insufficient.
+
+For an already deployed bundle generated before this correction, merge a
+`prometheus` service entry into the protected host-local Compose override,
+retaining its existing networks and adding `egress`. Validate Compose and
+recreate only Prometheus. Keep its volume and image digest. For the starter
+control bundle the complete network list is `telemetry`, `control`,
+`dns-private`, `egress`. Other role layouts must retain their own existing
+networks. Continue restricting metrics listeners to the monitoring source;
+do not open remote metrics publicly to work around an outbound routing failure.
+New Fleet renders include this attachment automatically.
+
 ## Updating the fleet
 
 Add a host:
