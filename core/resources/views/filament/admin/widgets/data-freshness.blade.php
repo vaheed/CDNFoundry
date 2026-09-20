@@ -9,7 +9,7 @@
                 @foreach ($state['sources'] ?? [] as $source)
                     <div>
                         <dt><span class="cdn-freshness-dot" data-state="{{ $source['state'] }}" aria-hidden="true"></span>{{ $source['label'] }}</dt>
-                        <dd>{{ filled($source['timestamp']) ? \Carbon\CarbonImmutable::parse($source['timestamp'])->toIso8601String() : 'Unavailable' }} <span class="sr-only">State:</span><span class="cdn-freshness-state">{{ str($source['state'])->replace('_', ' ')->headline() }}</span></dd>
+                        <dd>{{ $this->dashboardTimestamp($source['timestamp']) }} <span class="sr-only">State:</span><span class="cdn-freshness-state">{{ str($source['state'])->replace('_', ' ')->headline() }}</span></dd>
                     </div>
                 @endforeach
             </dl>

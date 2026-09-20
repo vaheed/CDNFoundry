@@ -47,7 +47,7 @@ class EdgeHealthTable extends TableWidget
                 TextColumn::make('capacity_percent')->label('Peak resource')->state(fn (Edge $record): string => $this->capacitySummary($record)['label'])->badge()
                     ->tooltip(fn (Edge $record): string => $this->capacitySummary($record)['detail'])
                     ->color(fn (string $state): string => $this->capacityTone($state)),
-                TextColumn::make('last_heartbeat_at')->label('Heartbeat')->since()->dateTimeTooltip()->placeholder('Never')->sortable(),
+                TextColumn::make('last_heartbeat_at')->label('Heartbeat')->since()->dateTimeTooltip('Y-m-d H:i:s P e')->placeholder('Never')->sortable(),
                 TextColumn::make('active_sequence')->label('Revision')->numeric()->sortable(),
                 TextColumn::make('capacity.last_rejection.reason')->label('Current issue')->placeholder('None')->limit(38)->tooltip(fn (Edge $record): ?string => data_get($record->capacity, 'last_rejection.reason')),
             ])

@@ -39,7 +39,7 @@
                 </div>
                 <details class="cdn-chart-summary">
                     <summary>Accessible data summary</summary>
-                    <p>{{ count($displayState['current'] ?? []) }} hourly points. Source through {{ $displayState['source_timestamp'] ?? 'an unavailable timestamp' }}. Use Traffic and telemetry for tabular detail.</p>
+                    <p>{{ count($displayState['current'] ?? []) }} hourly points. Source through {{ $this->dashboardTimestamp($displayState['source_timestamp'] ?? null) }}. Use Traffic and telemetry for tabular detail.</p>
                 </details>
                 <a class="cdn-widget-link" href="{{ $this->getDrilldownUrl() }}">Open detailed analytics <span aria-hidden="true">→</span></a>
             @endif

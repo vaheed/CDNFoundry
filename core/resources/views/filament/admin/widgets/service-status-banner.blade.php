@@ -33,8 +33,9 @@
         </div>
 
         <dl class="cdn-service-facts">
-            <div><dt>Condition since</dt><dd>{{ filled($state['started_at'] ?? null) ? \Carbon\CarbonImmutable::parse($state['started_at'])->diffForHumans() : 'Not established' }}</dd></div>
-            <div><dt>Last update</dt><dd>{{ filled(data_get($freshness, 'sources.0.timestamp')) ? \Carbon\CarbonImmutable::parse(data_get($freshness, 'sources.0.timestamp'))->diffForHumans() : 'Unavailable' }}</dd></div>
+            <div><dt>Condition since</dt><dd title="{{ $this->dashboardTimestamp($state['started_at'] ?? null) }}">{{ filled($state['started_at'] ?? null) ? \Carbon\CarbonImmutable::parse($state['started_at'])->diffForHumans() : 'Not established' }}</dd></div>
+            <div><dt>Health checked</dt><dd title="{{ $this->dashboardTimestamp($state['checked_at'] ?? null) }}">{{ filled($state['checked_at'] ?? null) ? \Carbon\CarbonImmutable::parse($state['checked_at'])->diffForHumans() : 'Unavailable' }}</dd></div>
+            <div><dt>Traffic aggregate</dt><dd title="{{ $this->dashboardTimestamp(data_get($freshness, 'sources.0.timestamp')) }}">{{ filled(data_get($freshness, 'sources.0.timestamp')) ? \Carbon\CarbonImmutable::parse(data_get($freshness, 'sources.0.timestamp'))->diffForHumans() : 'Unavailable' }}</dd></div>
             <div><dt>Updates</dt><dd>Polling active</dd></div>
         </dl>
 

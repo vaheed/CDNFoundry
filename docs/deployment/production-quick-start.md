@@ -705,3 +705,30 @@ Confirm:
 Never run `docker compose down -v`, regenerate application/CA keys during an ordinary upgrade, or copy one edge identity volume to another host.
 
 Continue with the [Production fleet operator guide](production-fleet-operator-guide.md). For separated roles across several regions, use the [Multi-region fleet quick start](production-quick-start-multi-region.md).
+
+## Reading the administrator overview
+
+Open **Governance → Platform settings → Display → Display timezone**, search
+for an IANA timezone such as `Asia/Tehran`, select it and press **Save**. This one
+saved setting applies to administrator and domain-user panels: charts, tables,
+domain details, analytics, timestamp tooltips and date/time inputs. Reload an
+already-open page after changing it. Domain users cannot change the setting.
+Relative ages stay relative. Stored events, API values and complete hourly query
+boundaries remain UTC. A new installation may have no completed traffic bucket
+until the next UTC hour. External Grafana retains its own dashboard timezone.
+
+API alternative: `PATCH /api/admin/system/settings/display` with administrator
+authentication, a fresh `Idempotency-Key` and
+`{"values":{"timezone":"Asia/Tehran"}}`. Expect the saved setting revision and no
+runtime operation. Invalid zones are rejected; changing the setting back restores
+the prior presentation without modifying event timestamps.
+
+Apply the additive `2026_09_20_170000_add_display_timezone_setting` migration
+before opening the new Platform settings page. Existing preferences survive
+migration reruns and image rollback. The initial default is UTC.
+
+**Healthy edges** comes from current heartbeats, independently of traffic buckets.
+**Health checked** is the system check time; **Traffic aggregate** is the newest
+completed traffic bucket. A degraded banner also covers retained failed operations,
+failed purges and missing verified backups; it does not by itself mean that Vector
+or ClickHouse is offline. Inspect the listed conditions before diagnosing ingestion.

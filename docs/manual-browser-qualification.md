@@ -57,6 +57,22 @@ so existing clusters, edges and domains are reused rather than duplicated.
    delivered administrator email/password. Expect the operations overview,
    valid HTTPS and no failed assets or unexpected console errors. Do not include
    credentials in evidence. Repeat the layout check at a narrow viewport.
+   Open **Governance → Platform settings → Display → Display timezone**,
+   search for **Asia/Tehran**, select it and press **Save**. Expect a success
+   notification. Reload settings and expect the saved selection. Open the
+   overview: chart labels and **Data freshness** must use UTC+03:30; heartbeat
+   and timeline tooltips must show that offset. Open **Traffic and telemetry**,
+   **Audit logs**, and a domain's TLS/deployment details and expect the same zone.
+   Log in as the domain user and inspect domain analytics and certificate expiry:
+   expect the same timezone, with no access to Platform settings. Change the
+   setting back to **UTC** as administrator and reload both panels; counts and
+   instants must remain unchanged while displayed times shift by 3 hours 30 minutes.
+   In **Traffic and telemetry → Rebuild usage**, inspect (without submitting)
+   **From** and **To**: their labels must name the shared timezone.
+   **Healthy edges** must remain available without a completed traffic bucket;
+   **Health checked** and **Traffic aggregate** must have separate labels.
+   Status: **Not run** for these new checkpoints. Earlier login passes do not
+   cover timezone changes or dashboard corrections.
 2. Open **Infrastructure → DNS clusters**. For each prepared PoP, create its
    record disabled with **API URL**, **API key**, **Server ID**, and **Zone
    capacity** from the protected installation configuration, or inspect the

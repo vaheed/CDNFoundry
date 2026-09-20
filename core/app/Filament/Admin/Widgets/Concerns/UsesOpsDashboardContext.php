@@ -5,6 +5,7 @@ namespace App\Filament\Admin\Widgets\Concerns;
 use App\Filament\Admin\Pages\Telemetry;
 use App\Models\User;
 use App\Ops\Data\OpsDashboardContext;
+use App\Support\PlatformSettings;
 use Filament\Widgets\Concerns\InteractsWithPageFilters;
 
 trait UsesOpsDashboardContext
@@ -22,6 +23,11 @@ trait UsesOpsDashboardContext
         $user = auth()->user();
 
         return OpsDashboardContext::fromFilters($this->pageFilters, $user);
+    }
+
+    public function dashboardTimestamp(?string $timestamp, string $format = 'Y-m-d H:i:s P e'): string
+    {
+        return app(PlatformSettings::class)->formatTimestamp($timestamp, $format);
     }
 
     protected function telemetryUrl(array $extra = []): string

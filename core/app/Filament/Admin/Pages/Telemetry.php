@@ -73,8 +73,8 @@ class Telemetry extends Page
                     Select::make('domain_id')->label('Domain (optional)')
                         ->options(fn (): array => Domain::query()->orderBy('name')->limit(500)->pluck('name', 'id')->all())
                         ->searchable(),
-                    DateTimePicker::make('from')->label('From (UTC)')->timezone('UTC')->seconds(false)->required(),
-                    DateTimePicker::make('to')->label('To (UTC)')->timezone('UTC')->seconds(false)->required()->after('from'),
+                    DateTimePicker::make('from')->label(fn (): string => 'From ('.app(PlatformSettings::class)->displayTimezone().')')->seconds(false)->required(),
+                    DateTimePicker::make('to')->label(fn (): string => 'To ('.app(PlatformSettings::class)->displayTimezone().')')->seconds(false)->required()->after('from'),
                 ])
                 ->fillForm(fn (): array => [
                     'from' => CarbonImmutable::now('UTC')->subHour()->startOfHour(),

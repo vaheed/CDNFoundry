@@ -345,6 +345,50 @@ requires a newly signed agent image and successful full purge on both staging
 PoPs. Browser gate: only the two owner-confirmed logins passed; remaining checks
 are not run. Customer-serving continuity remains outstanding.
 
+### Dashboard telemetry and display timezone
+
+At 16:53 UTC, direct application health checks showed healthy Vector, ClickHouse,
+queues, scheduler, DNS, TLS, two fresh edges and all sixteen cells. Four remaining
+conditions were failed runtime tasks, failed purge, retained failed operations and
+no verified backup. All observed request events were in the still-open 16:00 UTC
+hour, explaining the overview's empty completed-hour query. The dashboard had
+incorrectly hidden the independently healthy-edge count with traffic KPIs; that
+coupling is removed. Health-check time and traffic-bucket time now have distinct
+labels. Historical failure evidence is retained.
+
+The owner requested one shared timezone in Platform settings. The **Display →
+Display timezone** setting now controls both panels through Filament's shared
+formatter and custom analytics views, including chart labels, freshness, domain
+history, heartbeat and timeline tooltips. The dashboard has no independent
+selector. Stored timestamps, API values and complete-hour query bounds remain UTC.
+The additive `2026_09_20_170000_add_display_timezone_setting` migration seeds UTC
+and preserves existing preferences on rerun or image rollback. Admin-only writes
+use existing validation, audit and idempotency handling without a runtime job.
+External Grafana retains its independent timezone configuration.
+
+Implementation and documentation are present. Focused isolated tests cover Tehran
+conversion, repeated DST hours, UTC query-bound preservation, invalid settings,
+authorization, idempotency, migration preservation and empty-traffic edge health.
+The isolated Compose suite passed **32 tests, 242 assertions** across
+`OpsDashboardTest`, `SystemSettingsTest` and `AnalyticsApiTest`; Pint passed on the
+changed PHP sources. A full settings-form test exposed numeric checkbox values
+for HTTP version 2; form dehydration now preserves canonical strings without
+relaxing API validation. The initial fixture failures and corrected passing run
+are retained in protected local evidence. Documentation validation passed (99
+documents, 93 pages, 3,600 internal links). Browser qualification is
+**not run** for these changes; exact steps are in the Phase 1 checklist. Signed
+core image rollout and explicit migration are still pending.
+
+At 17:06 UTC, the completed 16:00 bucket was fresh and contained 496 requests,
+confirming that the initial no-data state was the complete-hour boundary.
+OpenAPI generation and freshness checks passed after using the root file writer
+for repository-owned documentation.
+
+A separate live aggregate check also found successful upstream HTTP statuses
+stored in `origin_error`, inflating error counts, and the runtime always emitted
+null origin latency. This is a current telemetry qualification defect, not a
+successful telemetry gate; correction and runtime qualification remain open.
+
 ## Source and release evidence
 
 The remote base was `602c605b3f50551d18ddab442670d8fbc7e5f545` on `main`.

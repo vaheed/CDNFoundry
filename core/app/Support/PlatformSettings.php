@@ -8,6 +8,7 @@ use App\Models\AuditLog;
 use App\Models\Operation;
 use App\Models\SystemSetting;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
@@ -15,8 +16,25 @@ use RuntimeException;
 
 final class PlatformSettings
 {
-    /** @var array<string, SystemSetting> */
+    /** @var array<string, SystemSetting|null> */
     private array $loaded = [];
+
+    public function displayTimezone(): string
+    {
+        if (! array_key_exists('display', $this->loaded)) {
+            $this->loaded['display'] = SystemSetting::query()->find('display');
+        }
+
+        // Older installations retain UTC until the additive migration is applied.
+        return $this->loaded['display'] === null ? 'UTC' : (string) $this->get('display', 'timezone');
+    }
+
+    public function formatTimestamp(string|\DateTimeInterface|null $timestamp, string $format = 'Y-m-d H:i:s P e'): string
+    {
+        return filled($timestamp)
+            ? CarbonImmutable::parse($timestamp, 'UTC')->setTimezone($this->displayTimezone())->format($format)
+            : 'Unavailable';
+    }
 
     public function definitions(): array
     {

@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Support\PlatformSettings;
+use Filament\Support\Facades\FilamentTimezone;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Queue\Events\JobExceptionOccurred;
@@ -41,6 +42,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        FilamentTimezone::set(fn (): string => app(PlatformSettings::class)->displayTimezone());
+
         Queue::before(function (JobProcessing $event): void {
             Context::add('job_id', $event->job->uuid() ?? $event->job->getJobId());
         });

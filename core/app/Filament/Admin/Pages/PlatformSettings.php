@@ -5,6 +5,7 @@ namespace App\Filament\Admin\Pages;
 use App\Support\FilamentHelp;
 use App\Support\PlatformSettings as SettingsRegistry;
 use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -60,15 +61,19 @@ class PlatformSettings extends Page
         $this->mount($settings);
     }
 
-    private function field(string $name, array $field): TextInput|Toggle|TagsInput|CheckboxList
+    private function field(string $name, array $field): TextInput|Toggle|TagsInput|CheckboxList|Select
     {
         $default = is_array($field['default']) ? json_encode($field['default'], JSON_UNESCAPED_SLASHES) : var_export($field['default'], true);
         $help = $field['description'].' Default: '.$default.'.';
 
         return match ($field['type']) {
+            'timezone' => Select::make($name)->label(FilamentHelp::label($field['label'], $help))
+                ->options(array_combine(\DateTimeZone::listIdentifiers(), \DateTimeZone::listIdentifiers()))
+                ->searchable()->native(false)->required()->rules($field['rules']),
             'boolean' => Toggle::make($name)->label(FilamentHelp::label($field['label'], $help)),
             'cidr_list', 'ip_list' => TagsInput::make($name)->label(FilamentHelp::label($field['label'], $help)),
-            'choice_list' => CheckboxList::make($name)->label(FilamentHelp::label($field['label'], $help))->options($field['options'])->columns(2),
+            'choice_list' => CheckboxList::make($name)->label(FilamentHelp::label($field['label'], $help))->options($field['options'])->columns(2)
+                ->dehydrateStateUsing(fn (array $state): array => array_map(fn (mixed $value): mixed => is_int($value) ? (string) $value : $value, $state)),
             'url' => TextInput::make($name)->label(FilamentHelp::label($field['label'], $help))->url()->maxLength(2048)->placeholder('https://grafana.example.com/explore'),
             default => TextInput::make($name)->label(FilamentHelp::label($field['label'], $help))->integer()->required(),
         };

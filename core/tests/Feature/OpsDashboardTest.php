@@ -6,6 +6,7 @@ use App\Filament\Admin\Pages\AdminDashboard;
 use App\Filament\Admin\Resources\Operations\OperationResource;
 use App\Filament\Admin\Widgets\DnsHealthWidget;
 use App\Filament\Admin\Widgets\EdgeHealthTable;
+use App\Filament\Admin\Widgets\OpsKpiOverview;
 use App\Filament\Admin\Widgets\ServiceStatusBanner;
 use App\Filament\Admin\Widgets\TrafficOverviewChart;
 use App\Models\Domain;
@@ -16,6 +17,7 @@ use App\Ops\Data\OpsDashboardContext;
 use App\Ops\Services\MetricComparisonService;
 use App\Ops\Services\OpsDashboardService;
 use App\Ops\Support\MetricFormatter;
+use App\Support\PlatformSettings;
 use Carbon\CarbonImmutable;
 use Filament\Support\Enums\Width;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -52,6 +54,25 @@ class OpsDashboardTest extends TestCase
         $this->assertNull($invalid->domainId);
         $this->assertNull($invalid->edgeId);
         $this->assertCount(3, $invalid->errors);
+    }
+
+    public function test_platform_timezone_preserves_utc_buckets_and_formats_dst_offsets(): void
+    {
+        CarbonImmutable::setTestNow('2026-08-01T12:34:56Z');
+        $admin = User::factory()->admin()->create();
+        $utc = OpsDashboardContext::fromFilters([], $admin);
+        $settings = app(PlatformSettings::class);
+        $settings->update('display', ['timezone' => 'Asia/Tehran'], $admin);
+        $context = OpsDashboardContext::fromFilters([], $admin);
+        $this->assertTrue($utc->from->equalTo($context->from));
+        $this->assertTrue($utc->to->equalTo($context->to));
+        Http::fake([config('services.clickhouse.url').'*' => Http::response('')]);
+        $widget = Livewire::actingAs($admin)->test(TrafficOverviewChart::class)->instance();
+        $this->assertSame('2026-08-01 15:30:00 +03:30 Asia/Tehran', $widget->dashboardTimestamp('2026-08-01 12:00:00'));
+        $this->assertSame('Unavailable', $widget->dashboardTimestamp(null));
+        $settings->update('display', ['timezone' => 'America/New_York'], $admin);
+        $this->assertSame('Nov 1 01:30 -04:00', $widget->dashboardTimestamp('2026-11-01 05:30:00', 'M j H:i P'));
+        $this->assertSame('Nov 1 01:30 -05:00', $widget->dashboardTimestamp('2026-11-01 06:30:00', 'M j H:i P'));
     }
 
     public function test_metric_comparisons_and_formatting_do_not_invent_a_zero_baseline(): void
@@ -228,6 +249,22 @@ class OpsDashboardTest extends TestCase
             ->assertOk()
             ->assertSee('Recent logs')
             ->assertSee('latest 24 hours');
+    }
+
+    public function test_edge_health_remains_visible_without_completed_traffic_buckets(): void
+    {
+        $admin = User::factory()->admin()->create();
+        Edge::query()->create(['name' => 'fresh-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'enabled' => true, 'last_heartbeat_at' => now()]);
+        Http::fake([config('services.clickhouse.url').'*' => Http::response('')]);
+
+        Livewire::actingAs($admin)->test(OpsKpiOverview::class)
+            ->assertSee('No matching aggregate data')
+            ->assertSee('Healthy edges')
+            ->assertSee('Fresh enabled edge heartbeats');
+
+        Livewire::actingAs($admin)->test(ServiceStatusBanner::class)
+            ->assertSee('Health checked')
+            ->assertSee('Traffic aggregate');
     }
 
     public function test_dns_health_keeps_cluster_diagnostics_visible_without_aggregate_rows(): void

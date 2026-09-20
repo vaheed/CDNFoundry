@@ -4359,6 +4359,7 @@
                         "schema": {
                             "type": "string",
                             "enum": [
+                                "display",
                                 "operations",
                                 "telemetry",
                                 "observability",
@@ -4402,6 +4403,7 @@
                         "schema": {
                             "type": "string",
                             "enum": [
+                                "display",
                                 "operations",
                                 "telemetry",
                                 "observability",

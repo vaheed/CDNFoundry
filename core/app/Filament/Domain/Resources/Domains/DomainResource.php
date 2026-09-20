@@ -16,6 +16,7 @@ use App\Models\Operation;
 use App\Models\PlatformDnsSetting;
 use App\Support\EdgeRoutingCompiler;
 use App\Support\FilamentHelp;
+use App\Support\PlatformSettings;
 use App\Support\SecurityConfig;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\TextInput;
@@ -112,7 +113,7 @@ class DomainResource extends Resource
                         })->copyable()->placeholder('Waiting for placement'),
                     TextEntry::make('validated_edge_revisions')->label('Validated revisions')
                         ->state(fn (Domain $record): array => EdgeRevision::query()->where('domain_id', $record->id)->where('status', 'validated')->latest('revision')->limit(10)->get()
-                            ->map(fn (EdgeRevision $revision): string => "#{$revision->revision} · {$revision->created_at->format('Y-m-d H:i:s T')}")->all())
+                            ->map(fn (EdgeRevision $revision): string => "#{$revision->revision} · {$revision->created_at->copy()->setTimezone(app(PlatformSettings::class)->displayTimezone())->format('Y-m-d H:i:s P e')}")->all())
                         ->listWithLineBreaks()->placeholder('None'),
                     TextEntry::make('proxy_settings_summary')->label('Proxy defaults')
                         ->state(fn (Domain $record): string => self::proxySettingsSummary($record->proxy_settings))
@@ -130,7 +131,7 @@ class DomainResource extends Resource
                                 $deployment->cluster->name,
                                 $deployment->desired_revision,
                                 $deployment->deployed_revision,
-                                $deployment->deployed_at === null ? '' : ' · '.$deployment->deployed_at->format('Y-m-d H:i:s T'),
+                                $deployment->deployed_at === null ? '' : ' · '.$deployment->deployed_at->copy()->setTimezone(app(PlatformSettings::class)->displayTimezone())->format('Y-m-d H:i:s P e'),
                             ))->all())
                         ->listWithLineBreaks()->placeholder('Not deployed'),
                     TextEntry::make('dnsDeployments.last_error')->label('Deployment errors')->placeholder('None'),
@@ -176,7 +177,7 @@ class DomainResource extends Resource
 
                         return "{$limits['requests_per_second']} req/s · {$limits['connections_per_client']} client connections · {$limits['connections_per_domain']} domain connections · {$limits['origin_max_connections']} origin connections · {$limits['maximum_request_body_size']} body bytes";
                     })->columnSpanFull(),
-                    TextEntry::make('recent_security_events')->label('Recent reason codes')->state(fn (Domain $record): array => $record->securityEvents()->latest('occurred_at')->limit(10)->get()->map(fn ($event): string => "{$event->reason_code} · {$event->occurred_at->format('Y-m-d H:i:s T')}")->all())->listWithLineBreaks()->placeholder('None')->columnSpanFull(),
+                    TextEntry::make('recent_security_events')->label('Recent reason codes')->state(fn (Domain $record): array => $record->securityEvents()->latest('occurred_at')->limit(10)->get()->map(fn ($event): string => "{$event->reason_code} · {$event->occurred_at->copy()->setTimezone(app(PlatformSettings::class)->displayTimezone())->format('Y-m-d H:i:s P e')}")->all())->listWithLineBreaks()->placeholder('None')->columnSpanFull(),
                 ])->columns(['default' => 1, 'md' => 2, 'xl' => 4]),
         ]);
     }

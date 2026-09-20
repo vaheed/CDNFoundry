@@ -20,6 +20,17 @@ Updating `edge_runtime`, `origin_safety`, or `proxy_defaults` creates an
 asynchronous global edge reconcile operation. Other groups apply to later
 requests or scheduled work without rewriting every domain.
 
+## Display
+
+| Field | Default | Allowed |
+| --- | --- | --- |
+| `timezone` | `UTC` | IANA timezone, such as `Asia/Tehran` |
+
+The administrator selects one shared display timezone for both panels. It applies
+to date/time fields, tables, charts and custom analytics views. API timestamps,
+exports and database values remain UTC. Changing this group is audited and has no
+edge reconciliation operation. It does not configure an external Grafana instance.
+
 ## Operations
 
 | Field | Default | Allowed |

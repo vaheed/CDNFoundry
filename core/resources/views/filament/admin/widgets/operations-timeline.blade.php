@@ -14,7 +14,7 @@
                             <div class="min-w-0 flex-1">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <span class="cdn-row-title">{{ str($item['type'])->replace(['.', '_'], ' ')->headline() }}</span>
-                                    <time class="cdn-row-meta" datetime="{{ $item['occurred_at'] }}">{{ filled($item['occurred_at']) ? \Carbon\CarbonImmutable::parse($item['occurred_at'])->diffForHumans() : 'Unknown time' }}</time>
+                                    <time class="cdn-row-meta" title="{{ $this->dashboardTimestamp($item['occurred_at']) }}" datetime="{{ $item['occurred_at'] }}">{{ filled($item['occurred_at']) ? \Carbon\CarbonImmutable::parse($item['occurred_at'])->diffForHumans() : 'Unknown time' }}</time>
                                 </div>
                                 <div class="cdn-row-meta">{{ $item['target'] }} · {{ $item['actor'] }} · {{ str($item['status'])->headline() }}@if($item['duration_seconds'] !== null) · {{ \Carbon\CarbonInterval::seconds($item['duration_seconds'])->cascade()->forHumans(['short' => true]) }}@endif</div>
                             </div>

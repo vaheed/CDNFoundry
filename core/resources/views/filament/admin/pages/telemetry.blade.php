@@ -1,6 +1,7 @@
 <x-filament-panels::page>
     @php
         $state = $this->state;
+        $display = app(\App\Support\PlatformSettings::class);
         $filterOptions = $this->filterOptions;
         $summary = $state['summary'];
         $formatBytes = function (int|float|string|null $value): string {
@@ -31,14 +32,14 @@
             </div>
         </x-filament::section>
 
-        <x-filament::section heading="Telemetry status" :description="strtoupper($state['filters']['range']) . ' complete-hour analytics · UTC · bytes · milliseconds · no sampling. Data through ' . ($state['meta']['finalized_until'] ?? 'the finalization boundary') . ' is finalized.'" icon="heroicon-o-signal">
+        <x-filament::section heading="Telemetry status" :description="strtoupper($state['filters']['range']) . ' complete-hour analytics · ' . $display->displayTimezone() . ' · bytes · milliseconds · no sampling. Data through ' . $display->formatTimestamp($state['meta']['finalized_until'] ?? null) . ' is finalized.'" icon="heroicon-o-signal">
             <div class="flex flex-wrap gap-3">
                 <x-ui.status-pill :tone="$state['available'] ? 'success' : 'danger'">ClickHouse {{ $state['available'] ? 'available' : 'unavailable' }}</x-ui.status-pill>
                 <x-ui.status-pill :tone="$state['buffer']['available'] ? 'success' : 'warning'">Vector metrics {{ $state['buffer']['available'] ? 'available' : 'unavailable' }}</x-ui.status-pill>
                 <x-ui.status-pill :tone="($state['meta']['partial'] ?? true) ? 'info' : 'success'">{{ ($state['meta']['partial'] ?? true) ? 'Live window included' : 'Fully finalized range' }}</x-ui.status-pill>
             </div>
             @if (in_array($state['meta']['aggregate_state'] ?? null, ['delayed', 'stale'], true))
-                <x-ui.widget-state class="cdn-widget-state--compact mt-3" :state="$state['meta']['aggregate_state']" :description="'Latest complete traffic bucket: ' . ($state['meta']['aggregate_source_timestamp'] ?? 'unavailable')" />
+                <x-ui.widget-state class="cdn-widget-state--compact mt-3" :state="$state['meta']['aggregate_state']" :description="'Latest complete traffic bucket: ' . $display->formatTimestamp($state['meta']['aggregate_source_timestamp'] ?? null)" />
             @endif
             @if ($state['meta']['partial'] ?? true)
                 <p class="cdn-row-meta mt-3">Normal: the latest {{ $state['meta']['finalization_delay_minutes'] ?? 15 }} minutes remain provisional so this page can include current traffic. This is not a delivery warning; finalized usage is listed separately below.</p>
@@ -70,9 +71,9 @@
             <div class="cdn-dashboard-columns">
                 <x-filament::section heading="Global traffic" description="Hourly request and transfer totals for the last 24 hours." icon="heroicon-o-chart-bar">
                     <x-ui.data-table caption="Global hourly traffic">
-                        <x-slot:header><tr><th>UTC hour</th><th class="text-right">Requests</th><th class="text-right">Transfer</th></tr></x-slot:header>
+                        <x-slot:header><tr><th>Hour ({{ $display->displayTimezone() }})</th><th class="text-right">Requests</th><th class="text-right">Transfer</th></tr></x-slot:header>
                                 @forelse ($state['traffic']['items'] as $row)
-                                    <tr><td class="px-3 py-2 whitespace-nowrap">{{ $row['bucket'] ?? 'Unknown' }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format((int) ($row['requests'] ?? 0)) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes(((int) ($row['bytes_in'] ?? 0)) + ((int) ($row['bytes_out'] ?? 0))) }}</td></tr>
+                                    <tr><td class="px-3 py-2 whitespace-nowrap">{{ $display->formatTimestamp($row['bucket'] ?? null) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format((int) ($row['requests'] ?? 0)) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes(((int) ($row['bytes_in'] ?? 0)) + ((int) ($row['bytes_out'] ?? 0))) }}</td></tr>
                                 @empty
                                     <tr><td colspan="3" class="px-3 py-6 text-center text-gray-500">No traffic was recorded in this range.</td></tr>
                                 @endforelse
@@ -157,7 +158,7 @@
                                     <div class="cdn-activity-row">
                                         <div class="min-w-0">
                                             <div class="cdn-row-title">{{ $row['hostname'] ?? $row['edge_id'] ?? ('Domain #' . ($row['domain_id'] ?? 'unknown')) }}</div>
-                                            <div class="cdn-row-meta">{{ $row['occurred_at'] ?? 'Unknown time' }} · {{ $row['method'] ?? $row['event_type'] ?? 'event' }} {{ $row['path'] ?? '' }} · {{ $row['security_reason'] ?? $row['origin_error'] ?? $row['tls_error'] ?? ('HTTP ' . ($row['status'] ?? '—')) }}</div>
+                                            <div class="cdn-row-meta">{{ $display->formatTimestamp($row['occurred_at'] ?? null) }} · {{ $row['method'] ?? $row['event_type'] ?? 'event' }} {{ $row['path'] ?? '' }} · {{ $row['security_reason'] ?? $row['origin_error'] ?? $row['tls_error'] ?? ('HTTP ' . ($row['status'] ?? '—')) }}</div>
                                         </div>
                                         @if (isset($row['status']))<span class="cdn-status-pill" data-tone="{{ (int) $row['status'] >= 500 ? 'danger' : 'warning' }}">{{ $row['status'] }}</span>@endif
                                     </div>
@@ -221,7 +222,7 @@
                 <x-ui.data-table caption="Finalized global usage intervals">
                     <x-slot:header><tr><th>Domain / interval</th><th class="text-right">Requests</th><th class="text-right">Transfer</th><th class="text-right">DNS</th><th>State</th></tr></x-slot:header>
                             @forelse ($state['usage'] as $row)
-                                <tr><td class="px-3 py-2"><div class="font-medium">{{ $row['domain'] }}</div><div class="text-xs text-gray-500">{{ $row['interval'] }}</div></td><td class="px-3 py-2 text-right tabular-nums">{{ number_format($row['requests']) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes($row['bytes']) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format($row['dns_queries']) }}</td><td class="px-3 py-2"><span class="cdn-status-pill" data-tone="{{ $row['status'] === 'finalized' ? 'success' : 'warning' }}">{{ str($row['status'])->headline() }}</span></td></tr>
+                                <tr><td class="px-3 py-2"><div class="font-medium">{{ $row['domain'] }}</div><div class="text-xs text-gray-500">{{ $display->formatTimestamp($row['interval']) }}</div></td><td class="px-3 py-2 text-right tabular-nums">{{ number_format($row['requests']) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes($row['bytes']) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format($row['dns_queries']) }}</td><td class="px-3 py-2"><span class="cdn-status-pill" data-tone="{{ $row['status'] === 'finalized' ? 'success' : 'warning' }}">{{ str($row['status'])->headline() }}</span></td></tr>
                             @empty
                                 <tr><td colspan="5" class="px-3 py-6 text-center text-gray-500">No finalized usage intervals are available yet.</td></tr>
                             @endforelse

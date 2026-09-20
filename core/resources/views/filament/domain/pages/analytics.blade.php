@@ -1,6 +1,7 @@
 <x-filament-panels::page>
     @php
         $state = $this->state;
+        $display = app(\App\Support\PlatformSettings::class);
         $formatBytes = function (int|float|string|null $value): string {
             $bytes = max(0, (float) ($value ?? 0));
             $units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
@@ -9,7 +10,8 @@
             return number_format($bytes / (1024 ** $index), $index === 0 ? 0 : 1) . ' ' . $units[$index];
         };
         $dimensions = ['bucket', 'status', 'cache_status', 'country', 'hostname', 'path', 'edge_id', 'encoding', 'qtype'];
-        $formatMetric = function (string $key, mixed $value) use ($formatBytes): string {
+        $formatMetric = function (string $key, mixed $value) use ($formatBytes, $display): string {
+            if ($key === 'bucket') return $display->formatTimestamp($value);
             if (str_starts_with($key, 'bytes')) return $formatBytes($value);
             if (str_contains($key, 'latency')) return number_format((float) $value, 1) . ' ms';
             if (is_numeric($value)) return number_format((float) $value, str_contains($key, 'ratio') ? 2 : 0);
@@ -31,7 +33,7 @@
         </x-filament::section>
 
         @if ($state['domain'])
-            <x-filament::section :heading="'Analytics for ' . $state['domain']->name" :description="($state['meta']['from'] ?? '') . ' through ' . ($state['meta']['to'] ?? '') . ' · UTC · bytes · milliseconds · no sampling'" icon="heroicon-o-chart-bar-square">
+            <x-filament::section :heading="'Analytics for ' . $state['domain']->name" :description="$display->formatTimestamp($state['meta']['from'] ?? null) . ' through ' . $display->formatTimestamp($state['meta']['to'] ?? null) . ' · ' . $display->displayTimezone() . ' · bytes · milliseconds · no sampling'" icon="heroicon-o-chart-bar-square">
                 <div class="flex flex-wrap gap-3">
                     <x-ui.status-pill :tone="$state['available'] ? 'success' : 'danger'">ClickHouse {{ $state['available'] ? 'available' : 'unavailable' }}</x-ui.status-pill>
                     <x-ui.status-pill :tone="($state['meta']['partial'] ?? true) ? 'info' : 'success'">{{ ($state['meta']['partial'] ?? true) ? 'Live window included' : 'Fully finalized range' }}</x-ui.status-pill>
@@ -69,6 +71,7 @@
                                     @php
                                         $dimension = collect($dimensions)->first(fn (string $key): bool => array_key_exists($key, $row));
                                         $title = $dimension ? ($row[$dimension] ?? 'Unknown') : 'Summary';
+                                        if ($dimension === 'bucket') $title = $display->formatTimestamp($row['bucket'] ?? null);
                                         if ($dimension === 'country') $title = ($row['country'] ?? 'ZZ') . ' · ' . ($row['continent'] ?? 'Unknown');
                                         if ($dimension === 'qtype') $title = ($row['qtype'] ?? 'Unknown') . ' · ' . ($row['rcode'] ?? 'Unknown');
                                         if ($dimension === 'encoding') $title = strtoupper($row['encoding'] ?? 'identity') . ' · ' . str($row['profile'] ?? 'off')->replace('_', ' ')->headline();
@@ -95,7 +98,7 @@
                                         <div class="cdn-activity-row">
                                             <div class="min-w-0">
                                                 <div class="cdn-row-title">{{ $row['qname'] ?? (($row['method'] ?? $row['event_type'] ?? 'event') . ' ' . ($row['path'] ?? $row['hostname'] ?? '')) }}</div>
-                                                <div class="cdn-row-meta">{{ $row['occurred_at'] ?? 'Unknown time' }} · {{ $row['client_ip'] ?? 'unknown client' }} · {{ $row['rcode'] ?? $row['security_reason'] ?? $row['origin_error'] ?? ('HTTP ' . ($row['status'] ?? '—')) }}</div>
+                                                <div class="cdn-row-meta">{{ $display->formatTimestamp($row['occurred_at'] ?? null) }} · {{ $row['client_ip'] ?? 'unknown client' }} · {{ $row['rcode'] ?? $row['security_reason'] ?? $row['origin_error'] ?? ('HTTP ' . ($row['status'] ?? '—')) }}</div>
                                             </div>
                                             @if (isset($row['status']))<span class="cdn-status-pill" data-tone="{{ (int) $row['status'] >= 500 ? 'danger' : 'success' }}">{{ $row['status'] }}</span>@endif
                                         </div>
@@ -114,9 +117,9 @@
                     <x-filament::button tag="a" icon="heroicon-o-arrow-down-tray" :href="route('app.analytics.usage.csv', $state['domain'])">Usage CSV export</x-filament::button>
                 </div>
                 <x-ui.data-table caption="Finalized domain usage intervals">
-                    <x-slot:header><tr><th>UTC interval</th><th class="text-right">Requests</th><th class="text-right">Transfer</th><th class="text-right">DNS</th><th>State</th></tr></x-slot:header>
+                    <x-slot:header><tr><th>Interval ({{ $display->displayTimezone() }})</th><th class="text-right">Requests</th><th class="text-right">Transfer</th><th class="text-right">DNS</th><th>State</th></tr></x-slot:header>
                             @forelse ($state['usage'] as $row)
-                                <tr><td class="px-3 py-2 whitespace-nowrap">{{ $row['interval'] }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format($row['requests']) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes($row['bytes']) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format($row['dns_queries']) }}</td><td class="px-3 py-2"><span class="cdn-status-pill" data-tone="{{ $row['status'] === 'finalized' ? 'success' : 'warning' }}">{{ str($row['status'])->headline() }}</span></td></tr>
+                                <tr><td class="px-3 py-2 whitespace-nowrap">{{ $display->formatTimestamp($row['interval']) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format($row['requests']) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes($row['bytes']) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format($row['dns_queries']) }}</td><td class="px-3 py-2"><span class="cdn-status-pill" data-tone="{{ $row['status'] === 'finalized' ? 'success' : 'warning' }}">{{ str($row['status'])->headline() }}</span></td></tr>
                             @empty
                                 <tr><td colspan="5" class="px-3 py-6 text-center text-gray-500">No finalized usage intervals are available yet.</td></tr>
                             @endforelse

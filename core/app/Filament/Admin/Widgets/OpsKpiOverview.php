@@ -30,18 +30,18 @@ class OpsKpiOverview extends StatsOverviewWidget
         $traffic = app(OpsDashboardService::class)->traffic($context);
         $system = app(OpsDashboardService::class)->system($context);
         $formatter = app(MetricFormatter::class);
+        $edgeStat = $this->edgeStat($system);
         if (! ($traffic['available'] ?? false) || ($traffic['state'] ?? null) === 'no_data') {
             $description = $traffic['error'] ?? (($traffic['state'] ?? null) === 'no_data' ? 'No matching aggregate data' : 'Telemetry unavailable');
 
-            return collect(['Requests', 'Egress', 'Cache hit ratio', '4xx rate', '5xx rate', 'Origin latency', 'Healthy edges'])
+            return collect(['Requests', 'Egress', 'Cache hit ratio', '4xx rate', '5xx rate', 'Origin latency'])
                 ->map(fn (string $label): Stat => Stat::make($label, 'Unavailable')->description($description)->color('gray'))
+                ->push($edgeStat)
                 ->all();
         }
 
         $current = $traffic['summary'];
         $previous = $traffic['previous_summary'];
-        $healthyEdges = (int) data_get($system, 'components.edges.details.enabled', 0) - (int) data_get($system, 'components.edges.details.stale', 0);
-        $edgeChart = [(float) max(0, $healthyEdges)];
 
         return [
             $this->stat('Requests', $formatter->number($current['requests']), $current['requests'], $previous['requests'] ?? null, array_column($traffic['current'], 'requests'), 'primary', $this->telemetryUrl()),
@@ -50,10 +50,25 @@ class OpsKpiOverview extends StatsOverviewWidget
             $this->stat('4xx rate', $formatter->percent($current['rate_4xx']), $current['rate_4xx'], $previous['rate_4xx'] ?? null, array_column($traffic['current'], 'requests_4xx'), ($current['rate_4xx'] ?? 0) >= 0.1 ? 'warning' : 'success', $this->telemetryUrl(['status_family' => '4xx'])),
             $this->stat('5xx rate', $formatter->percent($current['rate_5xx']), $current['rate_5xx'], $previous['rate_5xx'] ?? null, array_column($traffic['current'], 'requests_5xx'), ($current['rate_5xx'] ?? 0) >= 0.01 ? 'danger' : 'success', $this->telemetryUrl(['status_family' => '5xx'])),
             $this->stat('Origin latency', $formatter->milliseconds($current['origin_average_latency_ms']), $current['origin_average_latency_ms'], $previous['origin_average_latency_ms'] ?? null, $this->originLatencyChart($traffic['current']), ($current['origin_average_latency_ms'] ?? 0) >= 1000 ? 'danger' : (($current['origin_average_latency_ms'] ?? 0) >= 500 ? 'warning' : 'success'), $this->telemetryUrl(['view' => 'origin'])),
-            Stat::make('Healthy edges', $formatter->number(max(0, $healthyEdges)))
-                ->description('Fresh enabled edge heartbeats')
-                ->chart($edgeChart)->color($healthyEdges > 0 ? 'success' : 'danger')->url(EdgeResource::getUrl(panel: 'admin')),
+            $edgeStat,
         ];
+    }
+
+    private function edgeStat(array $system): Stat
+    {
+        $enabled = data_get($system, 'components.edges.details.enabled');
+        $stale = data_get($system, 'components.edges.details.stale');
+        if (! ($system['available'] ?? false) || ! is_numeric($enabled) || ! is_numeric($stale)) {
+            return Stat::make('Healthy edges', 'Unavailable')
+                ->description('Edge health unavailable')->color('gray');
+        }
+
+        $healthy = max(0, (int) $enabled - (int) $stale);
+
+        return Stat::make('Healthy edges', app(MetricFormatter::class)->number($healthy))
+            ->description('Fresh enabled edge heartbeats')
+            ->chart([(float) $healthy])->color($healthy > 0 ? 'success' : 'danger')
+            ->url(EdgeResource::getUrl(panel: 'admin'));
     }
 
     private function stat(string $label, string $value, float|int|null $current, float|int|null $previous, array $chart, string $color, string $url): Stat

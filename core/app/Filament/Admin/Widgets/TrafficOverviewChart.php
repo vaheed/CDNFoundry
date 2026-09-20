@@ -4,7 +4,6 @@ namespace App\Filament\Admin\Widgets;
 
 use App\Filament\Admin\Widgets\Concerns\UsesOpsDashboardContext;
 use App\Ops\Services\OpsDashboardService;
-use Carbon\CarbonImmutable;
 use Filament\Widgets\ChartWidget;
 
 class TrafficOverviewChart extends ChartWidget
@@ -96,6 +95,6 @@ class TrafficOverviewChart extends ChartWidget
     /** @param array<int, array<string, mixed>> $rows */
     private function labels(array $rows): array
     {
-        return array_map(fn (array $row): string => isset($row['bucket']) ? CarbonImmutable::parse($row['bucket'], 'UTC')->format('M j H:i') : 'Unknown', $rows);
+        return array_map(fn (array $row): string => isset($row['bucket']) ? $this->dashboardTimestamp($row['bucket'], 'M j H:i P') : 'Unknown', $rows);
     }
 }

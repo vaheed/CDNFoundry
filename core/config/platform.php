@@ -2,6 +2,13 @@
 
 return [
     'groups' => [
+        'display' => [
+            'label' => 'Display',
+            'description' => 'Shared date and time presentation for administrator and domain-user panels. Stored timestamps and API values remain UTC.',
+            'fields' => [
+                'timezone' => ['type' => 'timezone', 'label' => 'Display timezone', 'default' => 'UTC', 'description' => 'One IANA timezone for all panel dates, charts and date/time inputs.', 'rules' => ['required', 'string', 'timezone:all']],
+            ],
+        ],
         'operations' => [
             'label' => 'Operations and recovery',
             'description' => 'Bounded retention and freshness thresholds used by health checks, alerts, and recovery policy.',

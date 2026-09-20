@@ -4,7 +4,6 @@ namespace App\Filament\Admin\Widgets;
 
 use App\Filament\Admin\Widgets\Concerns\UsesOpsDashboardContext;
 use App\Ops\Services\OpsDashboardService;
-use Carbon\CarbonImmutable;
 use Filament\Widgets\ChartWidget;
 
 class ErrorLatencyChart extends ChartWidget
@@ -46,7 +45,7 @@ class ErrorLatencyChart extends ChartWidget
                 ['label' => '5xx rate (%)', 'data' => $this->rates($rows, 'requests_5xx'), 'borderColor' => 'rgb(220, 38, 38)', 'backgroundColor' => 'rgba(220, 38, 38, 0.08)', 'fill' => true, 'tension' => 0.25, 'yAxisID' => 'y'],
                 ['label' => 'Origin average (ms)', 'data' => $this->latency($rows), 'borderColor' => 'rgb(124, 58, 237)', 'borderDash' => [5, 4], 'tension' => 0.25, 'yAxisID' => 'y1'],
             ],
-            'labels' => array_map(fn (array $row): string => isset($row['bucket']) ? CarbonImmutable::parse($row['bucket'], 'UTC')->format('M j H:i') : 'Unknown', $rows),
+            'labels' => array_map(fn (array $row): string => isset($row['bucket']) ? $this->dashboardTimestamp($row['bucket'], 'M j H:i P') : 'Unknown', $rows),
         ];
     }
 
