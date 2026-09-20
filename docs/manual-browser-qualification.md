@@ -40,8 +40,12 @@ Evidence must be sanitized. Never record passwords, API or bootstrap tokens, coo
 
 ## Phase 1 — Empty staging smoke
 
-Status: **Not run — owner execution required.** This is the bounded browser
-checkpoint for `staging-install-and-smoke`, not the entire later production
+Status: **Partial — owner confirmed both login checks passed on 2026-09-20.**
+The administrator reaches the overview; the domain user sees only the assigned
+customer domain with no administrator navigation. This covers the login/access
+subchecks of steps 1 and 8, not their layout/restart checks. All other Phase 1
+checkpoints remain **Not run — owner execution required**. This is the bounded
+browser checkpoint for `staging-install-and-smoke`, not the entire later production
 acceptance job. Use the selected staging release and disposable zone recorded in
 the [staging job report](operations/development-handoff.md#staging-install-and-smoke-job).
 Record each step separately with expected/actual result and sanitized evidence.
@@ -79,16 +83,18 @@ so existing clusters, edges and domains are reused rather than duplicated.
    addresses and wait for the listener-only generation acknowledgement.
 5. Open the active domain's **DNS records**, enter the approved **Origin server
    hostname or IP**, **Scheme**, **TLS SNI** and **Verify origin TLS** for the
-   HTTPS origin. Run **Test origin** and expect a successful operation with
-   `verified` TLS. Enable proxying for the test hostname and use managed
+   selected origin. Run **Test origin** and expect a successful operation;
+   an HTTPS origin must additionally report `verified` TLS. Enable proxying
+   for the test hostname and use managed
    **TLS mode**. Expect acknowledged placement and valid DNS-01 certificate
    status. The agent separately records actual HTTP/HTTPS requests through
    each edge; UI success alone does not pass runtime qualification. For this
    staging installation the operator configured an advanced HTTP origin on port
    `8096` through the API. Inspect the saved **Origin port** before testing;
    changing **Scheme** in the UI selects its standard port. The HTTP origin does
-   not qualify verified origin HTTPS. Use a separately supplied valid HTTPS
-   origin for that checkpoint, and keep its result open until it is tested.
+   not qualify verified origin HTTPS. The owner selected this HTTP origin with
+   managed Let’s Encrypt visitor HTTPS for the current smoke job; record origin
+   HTTPS as **not exercised — HTTP origin selected**, not as a TLS pass.
 6. Open **Cache settings** and inspect the smoke resource's policy. Perform URL
    purge with **Purge cache → Type → Exact URLs**, enter the agreed resource in
    **URLs (one per line)** and submit. Expect **Cache purge queued**, per-edge

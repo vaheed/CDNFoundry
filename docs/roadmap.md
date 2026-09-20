@@ -121,7 +121,9 @@ for required inputs, execution order and evidence.
   recorded separately in the job record; control/DNS, account isolation, Grafana
   API and first-PoP Docker restart checks pass. Customer traffic, telemetry under
   traffic and serving-through-outage checks remain open.
-- Owner-run browser qualification: **not run**. Use the
+- Owner-run browser qualification: **partial**. Owner confirmed administrator
+  overview login and the domain user’s assigned-domain-only access on 2026-09-20.
+  All remaining browser checkpoints are **not run**. Use the
   [Phase 1 checklist](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md#phase-1--empty-staging-smoke).
 
 Stop at this phase boundary. Outstanding staging gates are not permission to start

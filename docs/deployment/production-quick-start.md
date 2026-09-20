@@ -558,6 +558,59 @@ Advanced HTTP ports such as 8096 are supported through this API; the browser's
 scheme selector chooses the standard port. Inspect the saved port before changing
 it. An HTTP origin does not prove verified HTTPS origin connectivity.
 
+For example, first create the DNS-only record with the real origin address:
+
+```json
+{"type":"A","name":"@","content":"198.51.100.90","ttl":300,"mode":"dns_only"}
+```
+
+After domain activation, update that record with
+`PATCH /domains/{domain}/dns/records/{record}`. This example uses an HTTP origin
+and managed **visitor-side** HTTPS; these are separate connections:
+
+```json
+{
+  "mode": "proxied",
+  "origin": {
+    "host": "198.51.100.90",
+    "port": 8096,
+    "scheme": "http",
+    "host_header": "origin.example.org",
+    "sni": null,
+    "verify_tls": true,
+    "connect_timeout_ms": 3000,
+    "response_timeout_ms": 15000,
+    "retry_count": 1,
+    "websocket": false
+  }
+}
+```
+
+Use the Host header expected by your origin. `verify_tls` applies only when
+`scheme` is `https`; an HTTP origin has no certificate to validate. For an HTTPS
+origin use its real port, matching `sni`, and a valid trusted certificate with
+`verify_tls: true`. Visitor certificates cannot validate the separate origin
+connection. Do not create placeholder DNS records just to request certificates.
+
+Finish the API smoke sequence with these requests and real traffic observations:
+
+| Action | Request and body | Completion evidence |
+| --- | --- | --- |
+| Managed visitor TLS | `PATCH /domains/{domain}/tls` with `{"mode":"managed"}` if not already selected | `GET /domains/{domain}/tls/status` shows active certificate covering the proxied hostname; verified HTTPS through each PoP succeeds |
+| Origin probe | `POST /domains/{domain}/dns/records/{record}/origin/test` with `{}` | Operation succeeds for the selected origin scheme; HTTP success is not an HTTPS-origin pass |
+| Cache state | `GET /domains/{domain}/cache` | Caching enabled, development mode off; repeated bounded GETs for a cacheable resource produce MISS then HIT after admission |
+| Exact URL purge | `POST /domains/{domain}/cache/purge` with `{"type":"urls","urls":["https://www.customer.test/resource.ico"]}` | Poll `GET /domains/{domain}/cache/purges/{id}` until all edge tasks succeed, then observe fresh fetch followed by HIT |
+| Full purge | Same purge endpoint with `{"type":"all"}` | Epoch advances, every edge acknowledges, and the next request fetches fresh content |
+| Controlled deny | `POST /domains/{domain}/security/rules` with `{"match_type":"ip","value":"PROBE_PUBLIC_IP","action":"block","priority":100,"enabled":true}` | Wait for deployment acknowledgement; probe client denied while an independent client still serves |
+| Restore | `DELETE /domains/{domain}/security/rules/{rule}` | Wait for deployment acknowledgement and verify the previously blocked client recovers |
+
+Replace sample hostnames/paths with the exact proxied hostname and resource used
+in the test. A newly created record or rule can return `201` before deployment;
+check desired/deployed revisions, not just HTTP acceptance. Purges expose their
+own task status rather than a generic operation ID. Retain the created deny rule
+ID and remove it even if its traffic check fails. Use only your probe IP, never a
+broad deny range or a shared client address needed by others.
+
 Wait for managed DNS-01 issuance and the acknowledged edge deployment before
 claiming client HTTPS works. Follow the implemented [Phase 1 manual checks](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md#phase-1--empty-staging-smoke)
 for origin, TLS, cache purge, security and telemetry, and execute the runtime

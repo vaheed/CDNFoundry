@@ -104,7 +104,7 @@ full production qualification pass. Keep raw evidence in a protected store.
 | Implementation/installation | Control, DNS and edge roles installed; both gateways acknowledge shared-pool endpoints; customer-serving installation gate remains open |
 | Documentation | Preparation, owner checklist and reproduced install corrections documented; final runtime observations pending |
 | Automated/runtime qualification | Control/DNS, account isolation, Grafana APIs and first-PoP Docker restart checks **passed**; customer traffic and outage-serving checks pending |
-| Owner-run browser qualification | **Not run**; owner executes [Phase 1 smoke](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md#phase-1--empty-staging-smoke) and supplies results |
+| Owner-run browser qualification | **Partial**: owner confirmed both login/access checks; remaining checks **not run**; owner executes [Phase 1 smoke](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md#phase-1--empty-staging-smoke) and supplies results |
 
 Preparation checks executed on 2026-09-20:
 
@@ -277,9 +277,24 @@ Phase 2 is the next separate roadmap job only after Phase 1 completes.
   registrar claims, lists API request fields and operation polling, and records
   host-network diagnosis and overrides. Browser checkpoint remains **not run**.
 
-Remaining Phase 1 inputs/gates: exact customer registrar delegation, verified
-HTTPS origin for that explicit checkpoint, customer proxy/client TLS/cache/purge/
-security checks, traffic telemetry, serving continuity, and owner browser results.
+The owner subsequently confirmed saving both full assigned names. A parent
+TCP query now returns the new assignment; the verification job reports parent
+authority disagreement while propagation continues. A bounded four-parent probe
+tracks convergence. The owner selected the supplied HTTP origin with managed
+Let’s Encrypt visitor TLS; origin HTTPS is **not exercised**, not a passed check.
+The HTTP favicon returned 200, a bounded 49,334-byte image, and public cache
+headers; its digest is retained for edge comparison. The bounded
+`tests/e2e/staging_traffic.py` probe is prepared: compilation/help, a verified
+HTTPS control-health request and rejection of a mismatched TLS hostname passed.
+Customer edge traffic with this probe remains **not run** until activation. The initial DNS-only record
+is saved but customer records remain withheld while the claim is pending.
+
+Remaining Phase 1 gates: parent propagation/claim verification, customer proxy/
+client TLS/cache/purge/security checks, traffic telemetry, serving continuity,
+and remaining owner browser results. The owner confirmed administrator overview
+login and the domain user’s assigned-domain-only access without admin navigation
+on 2026-09-20. These specific browser subchecks passed; other browser checks
+remain **not run**.
 The next separate roadmap job remains Phase 2; it has not started.
 
 ## Source and release evidence
