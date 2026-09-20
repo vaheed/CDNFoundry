@@ -375,9 +375,15 @@ func (c *client) runCachePurge(task edgeTask) (map[string]any, string) {
 	if task.Payload.PurgeType == "all" && len(task.Payload.CacheKeys) != 0 || task.Payload.PurgeType == "urls" && len(task.Payload.CacheKeys) == 0 {
 		return map[string]any{"status": "failed", "failure_reason": "invalid_cache_purge_task"}, "failed"
 	}
+	keys := task.Payload.CacheKeys
+	if keys == nil {
+		// The cell control protocol requires an array even when the API sends
+		// null for a full purge. Preserve its strict typed validation.
+		keys = []string{}
+	}
 	command := map[string]any{
 		"task_id": task.ID, "action": "cache_purge", "domain": task.Payload.Domain,
-		"type": task.Payload.PurgeType, "cache_epoch": task.Payload.CacheEpoch, "cache_keys": task.Payload.CacheKeys,
+		"type": task.Payload.PurgeType, "cache_epoch": task.Payload.CacheEpoch, "cache_keys": keys,
 	}
 	applied := 0
 	for _, endpoint := range c.statusURLs {

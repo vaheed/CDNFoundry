@@ -317,6 +317,34 @@ names. The focused corrected tests passed, followed by **80/80 Fleet tests**,
 `make config-check`, and `make docs-check` (99 documents, 93 built pages, 3,595
 internal links). No images were rebuilt or republished.
 
+### Customer traffic and full-purge protocol correction
+
+The registrar parent now publishes the assigned claim nameservers; normal
+verification activated the staging domain. Both PoPs serve the selected HTTP
+origin and verified Let's Encrypt visitor HTTPS. Static-resource SHA-256 matches
+on both edges. Cache admission produced BYPASS, MISS, then HIT. URL purge succeeded
+on both edges. A temporary single-client security deny returned 403 from both
+edges while an independent client retained 200; removing the rule restored 200.
+The first traffic probe incorrectly required the first post-purge request to be
+MISS; it now accepts the documented admission sequence and still requires MISS
+and subsequent HIT. HTTPS origin transport was not exercised: the owner selected
+an HTTP origin with managed visitor TLS.
+
+Full purge failed on the published agent: an API null `cache_keys` became JSON
+null in the cell command, whose strict protocol requires an empty array. The
+agent now emits an empty array without weakening cell validation. Go formatting,
+vet, all agent tests and build passed with the pinned Go toolchain. The new
+`tests/e2e/edge_purge_protocol.py` passed both null and empty-array inputs through
+the modified Go agent into the published real OpenResty runtime. The isolated
+fixture needed a local Vector hostname for its existing syslog configuration;
+the initial fixture failure was retained. No staging image was replaced yet.
+
+Implementation gate: correction present. Documentation gate: results recorded.
+Automated gate: focused Go and real-cell protocol checks passed. Deployment gate:
+requires a newly signed agent image and successful full purge on both staging
+PoPs. Browser gate: only the two owner-confirmed logins passed; remaining checks
+are not run. Customer-serving continuity remains outstanding.
+
 ## Source and release evidence
 
 The remote base was `602c605b3f50551d18ddab442670d8fbc7e5f545` on `main`.

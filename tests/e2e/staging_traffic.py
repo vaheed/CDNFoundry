@@ -33,12 +33,14 @@ class EdgeHTTPS(http.client.HTTPSConnection):
             raise
 
 
-def probe(hostname, address, path):
-    connection = EdgeHTTPS(hostname, address)
+def probe(hostname, address, path, scheme):
+    connection = (EdgeHTTPS(hostname, address) if scheme == 'https'
+                  else http.client.HTTPConnection(address, timeout=15))
     try:
         connection.connect()
-        fingerprint = hashlib.sha256(connection.sock.getpeercert(binary_form=True)).hexdigest()
-        connection.request('GET', path, headers={'Accept-Encoding': 'identity'})
+        fingerprint = (hashlib.sha256(connection.sock.getpeercert(binary_form=True)).hexdigest()
+                       if scheme == 'https' else None)
+        connection.request('GET', path, headers={'Host': hostname, 'Accept-Encoding': 'identity'})
         response = connection.getresponse()
         body = response.read(1024 * 1024 + 1)
         if len(body) > 1024 * 1024:
@@ -46,7 +48,7 @@ def probe(hostname, address, path):
         return {'status': response.status,
                 'cache': response.getheader('X-CDNFoundry-Cache'),
                 'body_sha256': hashlib.sha256(body).hexdigest(), 'bytes': len(body),
-                'certificate_sha256': fingerprint, 'tls_verified': True}
+                'certificate_sha256': fingerprint, 'tls_verified': scheme == 'https'}
     finally:
         connection.close()
 
@@ -54,13 +56,15 @@ def probe(hostname, address, path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--hostname', required=True)
+    parser.add_argument('--scheme', choices=['http', 'https'], default='https')
     parser.add_argument('--edge', action='append', type=ipaddress.ip_address, required=True)
     parser.add_argument('--path', required=True)
-    parser.add_argument('--expected-status', type=int, choices=[200, 403], default=200)
+    parser.add_argument('--expected-status', type=int, choices=[200, 301, 302, 308, 403], default=200)
     parser.add_argument('--expected-sha256')
     parser.add_argument('--samples', type=int, choices=range(1, 6), default=3)
     parser.add_argument('--expect-hit', action='store_true')
-    parser.add_argument('--expect-first-miss', action='store_true')
+    parser.add_argument('--expect-refresh', action='store_true',
+                        help='Require a fresh first fetch and subsequent cache MISS; admission may BYPASS first')
     parser.add_argument('--report', type=Path, required=True)
     args = parser.parse_args()
     if len(args.edge) > 8 or not args.path.startswith('/') or any(c in args.path for c in '\r\n?#'):
@@ -74,7 +78,7 @@ def main():
             for index in range(args.samples):
                 if index:
                     time.sleep(1)
-                sample = probe(args.hostname, str(address), args.path)
+                sample = probe(args.hostname, str(address), args.path, args.scheme)
                 row['samples'].append(sample)
                 if sample['status'] != args.expected_status:
                     raise ValueError('Unexpected HTTP status')
@@ -82,15 +86,19 @@ def main():
                     raise ValueError('Resource differs from expected origin content')
             if args.expect_hit and not any(r['cache'] == 'HIT' for r in row['samples']):
                 raise ValueError('No cache HIT within sample bound')
-            if args.expect_first_miss and row['samples'][0]['cache'] != 'MISS':
-                raise ValueError('First request was not a cache MISS')
+            if args.expect_refresh and (
+                row['samples'][0]['cache'] not in ['BYPASS', 'MISS']
+                or not any(r['cache'] == 'MISS' for r in row['samples'])
+            ):
+                raise ValueError('Expected a fresh fetch followed by cache admission')
             row['outcome'] = 'passed'
         except Exception as error:
             row['error_type'] = type(error).__name__
         checks.append(row)
         print(str(address), row['outcome'], flush=True)
     passed = all(row['outcome'] == 'passed' for row in checks)
-    report = {'scope': 'bounded verified HTTPS static-resource requests only',
+    report = {'scope': 'bounded static-resource requests; HTTPS verifies certificate and hostname',
+              'scheme': args.scheme,
               'recorded_at': datetime.now(timezone.utc).isoformat(),
               'outcome': 'passed' if passed else 'failed', 'checks': checks}
     args.report.parent.mkdir(parents=True, exist_ok=True)

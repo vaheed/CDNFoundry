@@ -323,3 +323,10 @@ child process; they are not deployment settings.
 | --- | --- | --- |
 | `CDNF_QUALIFY_IPV6` | `tests/e2e/origin_probes.py` | Requires an isolated private IPv6 interface; a missing interface fails qualification |
 | `CDNF_PROBE_FIXTURE` | Go test child process | Synthetic origin-task JSON for trusted TLS verification in a fresh process |
+
+## Isolated purge protocol qualification
+
+`CDNF_TEST_CELL_URL` and `CDNF_TEST_CELL_TOKEN_FILE` are test-only inputs for
+`TestFullCachePurgeAgainstRunningCell`. The Python protocol runner supplies an
+isolated loopback cell endpoint and a temporary synthetic token file. Never point
+this fixture at a staging or production cell. These are not deployment settings.

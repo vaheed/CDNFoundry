@@ -1008,6 +1008,56 @@ func TestCachePurgeFansOutToEveryAuthenticatedCell(t *testing.T) {
 	}
 }
 
+func TestFullCachePurgeSendsAnEmptyArrayToCells(t *testing.T) {
+	for _, input := range []string{`null`, `[]`} {
+		t.Run(input, func(t *testing.T) {
+			calls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var command map[string]json.RawMessage
+				if r.Header.Get("X-Edge-Status-Token") != "status-secret" || r.URL.Path != "/control" ||
+					json.NewDecoder(io.LimitReader(r.Body, 128<<10)).Decode(&command) != nil || string(command["cache_keys"]) != "[]" {
+					http.Error(w, "cell requires a JSON array", http.StatusBadRequest)
+					return
+				}
+				calls++
+				_, _ = w.Write([]byte(`{"data":{"accepted":true}}`))
+			}))
+			defer server.Close()
+			var task edgeTask
+			if err := json.Unmarshal([]byte(`{"id":"full-purge","type":"cache_purge","payload":{"domain":"example.test","type":"all","cache_epoch":4,"cache_keys":`+input+`}}`), &task); err != nil {
+				t.Fatal(err)
+			}
+			c := &client{http: server.Client(), statusToken: "status-secret", statusURLs: []string{server.URL + "/passive-failures", server.URL + "/passive-failures"}}
+			result, status := c.runCachePurge(task)
+			if status != "succeeded" || result["applied_cells"] != 2 || calls != 2 {
+				t.Fatalf("full purge failed: status=%s result=%#v calls=%d", status, result, calls)
+			}
+		})
+	}
+}
+
+func TestFullCachePurgeAgainstRunningCell(t *testing.T) {
+	endpoint := os.Getenv("CDNF_TEST_CELL_URL")
+	if endpoint == "" {
+		t.Skip("run tests/e2e/edge_purge_protocol.py for the real OpenResty cell check")
+	}
+	token, err := os.ReadFile(os.Getenv("CDNF_TEST_CELL_TOKEN_FILE"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &client{http: &http.Client{Timeout: 5 * time.Second}, statusToken: strings.TrimSpace(string(token)), statusURLs: []string{endpoint + "/passive-failures"}}
+	for _, input := range []string{`null`, `[]`} {
+		var task edgeTask
+		if err := json.Unmarshal([]byte(`{"id":"full-`+input+`","type":"cache_purge","payload":{"domain":"purge-qualification.invalid","type":"all","cache_epoch":4,"cache_keys":`+input+`}}`), &task); err != nil {
+			t.Fatal(err)
+		}
+		result, status := c.runCachePurge(task)
+		if status != "succeeded" || result["applied_cells"] != 1 {
+			t.Fatalf("real cell rejected full purge: status=%s result=%#v", status, result)
+		}
+	}
+}
+
 func TestWriteCellRuntimesKeepsStableSlotsAndEmptyUnassignedState(t *testing.T) {
 	dir := t.TempDir()
 	c := &client{runtimeDir: dir, cellAssignments: map[string]string{"cell-01": "shared-default", "cell-02": ""}}

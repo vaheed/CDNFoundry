@@ -108,7 +108,9 @@ gates remain open**. The selected manifest and 17 image signatures/attestations
 are verified; control and DNS roles are healthy, and public control HTTPS plus
 authoritative UDP/TCP DNS smoke checks pass from the control-host vantage.
 Both edges are enrolled and their shared-pool gateways are ready. Customer
-claim delegation and traffic qualification remain outstanding. See the
+claim delegation, HTTP origin, visitor HTTPS, cache hits, URL purge and bounded
+security deny/restore checks pass. Full purge exposed an agent protocol defect;
+the tested correction still requires signed-image deployment and staging retest. See the
 [staging job record](operations/development-handoff.md#staging-install-and-smoke-job)
 for required inputs, execution order and evidence.
 
@@ -119,8 +121,8 @@ for required inputs, execution order and evidence.
   Final customer-traffic results remain pending.
 - Automated/runtime qualification: local documentation/configuration checks are
   recorded separately in the job record; control/DNS, account isolation, Grafana
-  API and first-PoP Docker restart checks pass. Customer traffic, telemetry under
-  traffic and serving-through-outage checks remain open.
+  API and first-PoP Docker restart checks pass. Customer HTTP/HTTPS, cache and security checks pass; full purge deployment,
+  dashboard telemetry qualification and serving-through-outage checks remain open.
 - Owner-run browser qualification: **partial**. Owner confirmed administrator
   overview login and the domain user’s assigned-domain-only access on 2026-09-20.
   All remaining browser checkpoints are **not run**. Use the
