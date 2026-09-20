@@ -453,8 +453,6 @@ Finish edge desired state in this order:
    assigned cells. Wait for the gateway to acknowledge the listener-only endpoint generation.
    No placeholder or proxied customer hostname is required, and this state must
    not emit repeated candidate errors or generation-mismatch warnings.
-5. Add the validated origin and enable proxying for the test hostname, then
-   wait for its placement and route generation to become active.
 5. Inspect other seeded pools before proxying the first domain. Configure their
    cells and endpoints if you intend to use them; otherwise disable unused,
    unconfigured pools so placement cannot select them. Never disable a pool with
@@ -462,7 +460,8 @@ Finish edge desired state in this order:
    `POST /api/admin/domains/{domain}/move`, body `{"pool_id": READY_POOL_ID}`,
    using administrator authentication and an `Idempotency-Key`; wait for the
    operation and active placement before disabling the now-unused pool.
-
+6. Add the validated origin and enable proxying for the test hostname, then
+   wait for its placement and route generation to become active.
 
 Creating the endpoint before assigning cells is also safe: it remains pending
 and omitted from the candidate until a cell participates, then converges to the
