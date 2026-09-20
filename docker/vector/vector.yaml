@@ -48,8 +48,28 @@ transforms:
       .bytes_in = to_int(.bytes_in) ?? 0
       .bytes_out = to_int(.bytes_out) ?? 0
       .cache_status = slice!(to_string(.cache_status) ?? "unknown", 0, 24)
-      .origin_latency_ms = to_int(.origin_latency_ms) ?? null
+      # Missing measurements must remain null, not become a zero-ms sample.
+      latency = -1
+      if .origin_latency_ms != null {
+        latency = to_int(.origin_latency_ms) ?? -1
+      }
+      if latency < 0 && exists(.origin_response_time) {
+        # Report the final upstream attempt; cached/security responses have no sample.
+        timing = parse_regex(to_string(.origin_response_time) ?? "", r'(?P<seconds>[0-9]+\.[0-9]+)$') ?? {}
+        seconds = parse_float(to_string(timing.seconds)) ?? -1.0
+        if seconds >= 0.0 && seconds <= 3600.0 {
+          latency = to_int(seconds * 1000.0)
+        }
+      }
+      .origin_latency_ms = null
+      if latency >= 0 && latency <= 3600000 { .origin_latency_ms = latency }
+      del(.origin_response_time)
       .origin_error = slice!(replace(to_string(.origin_error) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 256)
+      # Older cells send upstream status lists in origin_error. Retain failures,
+      # but never count successful responses, redirects, 4xx or absent upstreams.
+      if .origin_error == "-" || match(.origin_error, r'^[0-9, :]+$') {
+        if !match(.origin_error, r'(^|[, :])5[0-9][0-9]($|[, :])') { .origin_error = "" }
+      }
       .origin_role = slice!(to_string(.origin_role) ?? "primary", 0, 8)
       if .origin_role != "backup" { .origin_role = "primary" }
       .origin_transition = slice!(to_string(.origin_transition) ?? "none", 0, 32)

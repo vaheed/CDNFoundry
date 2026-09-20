@@ -123,7 +123,8 @@ for required inputs, execution order and evidence.
 - Automated/runtime qualification: local documentation/configuration checks are
   recorded separately in the job record; control/DNS, account isolation, Grafana
   API and first-PoP Docker restart checks pass. Customer HTTP/HTTPS, cache and security checks pass; full purge deployment,
-  dashboard telemetry qualification and serving-through-outage checks remain open.
+  signed-image deployment of telemetry corrections and serving-through-outage
+  checks remain open. Real Vector transforms and OpenResty protocol checks pass.
 - Owner-run browser qualification: **partial**. Owner confirmed administrator
   overview login and the domain user’s assigned-domain-only access on 2026-09-20.
   All remaining browser checkpoints are **not run**. Use the

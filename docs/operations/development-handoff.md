@@ -389,6 +389,28 @@ stored in `origin_error`, inflating error counts, and the runtime always emitted
 null origin latency. This is a current telemetry qualification defect, not a
 successful telemetry gate; correction and runtime qualification remain open.
 
+### Origin telemetry correction
+
+The runtime now includes its final upstream response timing in access events.
+Vector converts valid bounded measurements to milliseconds, preserves absent
+measurements as null, and removes the transport-only timing field before storage.
+Legacy upstream status lists no longer count successful responses, redirects or
+4xx responses as origin failures; 5xx attempts and explicit failure codes remain.
+A recovered retry with an earlier 5xx still records an origin failure. The Vector configuration is a Fleet bind mount and can use the existing verified
+binary. This does not change proxy retry or serving behavior and requires no ClickHouse migration.
+Previously stored aggregates retain their original values; they are not silently
+rewritten, and the cutover must be recorded when images are deployed.
+
+The pinned published Vector binary passed the real HTTP decoder and production
+transform test with **11 origin-metric cases**, plus DNS decoding and query-string
+redaction. An initial image download timeout and two VRL compile errors were fixed
+before the passing run; no invalid transform was deployed. The changed production
+OpenResty configuration also passed startup and the real Go-to-cell purge test.
+Additional Filament panel/access/workflow tests passed **41 tests, 372 assertions**
+for the shared timezone change. Implementation is present; staging deployment and
+end-to-end ingestion retest remain pending. Browser qualification remains not run
+except the two earlier owner-confirmed login checks.
+
 ## Source and release evidence
 
 The remote base was `602c605b3f50551d18ddab442670d8fbc7e5f545` on `main`.
