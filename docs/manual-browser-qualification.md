@@ -44,7 +44,11 @@ Status: **Partial — owner confirmed both login checks passed on 2026-09-20.**
 The administrator reaches the overview; the domain user sees only the assigned
 customer domain with no administrator navigation. This covers the login/access
 subchecks of steps 1 and 8, not their layout/restart checks. All other Phase 1
-checkpoints remain **Not run — owner execution required**. This is the bounded
+checkpoints remain **Not run — owner execution required**, except the overview
+KPI checkpoint: the owner reported unavailable healthy-edge data, which is
+**Failed — correction implemented, deployed-browser retest pending**. Empty
+traffic buckets were separately explained by the first incomplete UTC hour;
+later direct application checks found a fresh completed bucket. This is the bounded
 browser checkpoint for `staging-install-and-smoke`, not the entire later production
 acceptance job. Use the selected staging release and disposable zone recorded in
 the [staging job report](operations/development-handoff.md#staging-install-and-smoke-job).

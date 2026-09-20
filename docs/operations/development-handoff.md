@@ -411,6 +411,33 @@ for the shared timezone change. Implementation is present; staging deployment an
 end-to-end ingestion retest remain pending. Browser qualification remains not run
 except the two earlier owner-confirmed login checks.
 
+### Live telemetry configuration and release preparation
+
+The corrected Vector configuration from `d25461cf` was validated inside each
+existing verified Vector container, installed with its previous file retained,
+and activated by recreating only Vector on all three hosts. All three became
+healthy and retained their images and named buffer volumes. Protected local Fleet
+bundles now match the deployed configuration. Four fresh customer requests after
+the final cutover reached ClickHouse with HTTP 200, empty `origin_error` and null
+latency. Both edges still served verified HTTPS with the expected static-resource
+hash. Actual latency measurements await the updated runtime image; old aggregate
+values were retained.
+
+A protected control PostgreSQL custom-format snapshot was made before the
+additive display-setting migration. Its archive catalog was verified without
+restoring or changing the live database. The initial catalog check used the
+wrong buffered file offset and was corrected by reopening the snapshot. This
+snapshot is not the later encrypted off-host backup/restore qualification and
+does not clear the missing verified-backup condition.
+
+The first new publication run found a Markdown list numbering/blank-line error
+in the pool setup instructions. Commit `80eea902` corrected the sequence and
+passed documentation lint and link validation. Its
+[new release run](https://github.com/vaheed/CDNFoundry/actions/runs/35525286908)
+is the candidate for the required core, agent and runtime fixes. Publication,
+signature verification, image deployment and the remaining continuity/browser
+gates are pending; an image build alone is not deployment evidence.
+
 ## Source and release evidence
 
 The remote base was `602c605b3f50551d18ddab442670d8fbc7e5f545` on `main`.

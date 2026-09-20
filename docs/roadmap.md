@@ -127,7 +127,8 @@ for required inputs, execution order and evidence.
   checks remain open. Real Vector transforms and OpenResty protocol checks pass.
 - Owner-run browser qualification: **partial**. Owner confirmed administrator
   overview login and the domain user’s assigned-domain-only access on 2026-09-20.
-  All remaining browser checkpoints are **not run**. Use the
+  The reported unavailable healthy-edge KPI is **failed, correction awaiting
+  deployed-browser retest**. All other remaining browser checkpoints are **not run**. Use the
   [Phase 1 checklist](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md#phase-1--empty-staging-smoke).
 
 Stop at this phase boundary. Outstanding staging gates are not permission to start
