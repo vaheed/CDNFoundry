@@ -221,7 +221,40 @@ The protected snapshot is not a backup/restore pass. Verified HTTPS origin
 transport remains untested because the owner selected an HTTP origin with
 visitor TLS. The previously retained missing-backup warning remains visible.
 No browser automation was run. Phase 1 remains incomplete until the owner records
-the exact browser checklist results; Phase 2 is not admitted.
+the exact browser checklist results. At this checkpoint, Phase 2 was not admitted.
+
+On 2026-09-23 the owner explicitly deferred the remaining Phase 1 browser checks
+and directed work to begin on Phase 2. This changes the work order for the
+implementation review; it does not turn any unrun Phase 1 checkpoint into a
+pass. The browser results and any resulting fixes remain required before Phase 1
+can be closed.
+
+### Phase 2 identity review — first pass, 2026-09-23
+
+The API did not install Sanctum's stateful request middleware, so a same-origin
+panel session could not use the API policy boundary. The middleware is now
+enabled. API logout deletes the bearer token for token requests and invalidates
+the browser session plus CSRF token for session requests. A regression covers
+same-origin session access to one assigned domain, denial for another domain,
+session logout and the subsequent unauthenticated request. The API guide and
+current-phase browser checklist describe the behavior.
+
+The supported `make dev-test` command passed **339 tests / 12,615 assertions**
+after this change. Its effective Compose environment was verified as
+`testing / sqlite / :memory:` before migration-capable tests. The disposable
+`tests/e2e/postgres_domain_claims.py` job passed its actual-migration,
+concurrent-applicant, claim-locking and idempotency checks on a temporary
+PostgreSQL container with a tmpfs data directory. The disposable real-BIND
+parent-delegation job passed fresh/stale delegation, bogus DNSSEC, retained DS,
+child-apex rejection, IPv4/TCP and IPv6/UDP/TCP cases; it does not qualify a
+public registrar. The PostgreSQL job also replayed the additive delegation-claim
+migration over verified and pending legacy rows, preserving ownership,
+revisions and nullable claim state. Pint, PHP syntax, `make contract-check`
+(Compose, generated production environment, OpenAPI and 19 observability
+contract tests), and `make docs-check` (links, Markdown lint and built site)
+passed. No browser automation or owner
+Phase 2 browser qualification was run. The rest of the Phase 2 source review
+and runtime qualification remain open.
 
 Preparation checks executed on 2026-09-20:
 

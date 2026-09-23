@@ -134,18 +134,20 @@ See the [release notes](operations/releases/v0.9.8.md) and
   other remaining checks are **not run**. Use the
   [Phase 1 checklist](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md#phase-1--empty-staging-smoke).
 
-The current bounded job remains **`staging-install-and-smoke`**. Agent-owned
-deployment and runtime gates passed on 2026-09-23; collect and record the owner's
-remaining browser results before closing Phase 1. Phase 2 is not admitted until
-those Phase 1 gates close. See the resumed execution record in the
+The owner deferred the remaining manual browser checks on 2026-09-23 and
+explicitly requested work on Phase 2. Phase 1 remains open; its browser gate
+is not waived or recorded as passed. Agent-owned deployment and runtime gates
+passed on 2026-09-23. Collect and record the owner's browser results before
+closing Phase 1. See the resumed execution record in the
 [staging handoff](operations/development-handoff.md#resume-execution-2026-09-23).
 
-Stop at this phase boundary. Outstanding staging gates are not permission to start
-Phase 2 or repeat publication/security-audit work.
+Phase 2 implementation review may proceed under the owner's explicit direction.
+Do not claim Phase 1 completion or production readiness from that work.
 
 ## Phase 2 — Identity, authorization and domain lifecycle
 
-**Job `identity-and-domain-boundaries`.** Review sessions/tokens/CSRF, disabled
+**Current job `identity-and-domain-boundaries` (owner-directed while Phase 1 browser
+qualification remains open).** Review sessions/tokens/CSRF, disabled
 users, policies/binding, Filament/Livewire parity, operations, imports, parent
 verification, claim expiration/reclaim, assignments and queued authorization.
 Extend cross-tenant tests, actual PostgreSQL races and signed parent-delegation
@@ -154,6 +156,14 @@ checks, including supported IPv4/IPv6 and existing-installation migration paths.
 Completion gate: assigned source inventory reviewed and confirmed defects fixed;
 API/operator docs current; relevant application/PostgreSQL/DNS checks pass;
 owner browser checkpoint recorded separately. Current status: **partial**.
+The first review found that same-origin panel sessions were not admitted to API
+routes. Stateful Sanctum API middleware and session logout invalidation are now
+implemented; API documentation and a policy-scoped session regression were
+added. The isolated Laravel suite, disposable PostgreSQL claim/race and
+legacy-migration job, and real-BIND parent-delegation fixture with IPv4/IPv6
+transports pass. The rest
+of the assigned inventory, public-delegation qualification and owner
+browser checklist remain open; Phase 1 browser qualification is also still open.
 
 ## Phase 3 — Managed TLS and queue recovery
 
@@ -251,8 +261,6 @@ complete release qualification**.
 
 ## Start the next bounded job
 
-Current request: **“Run staging-install-and-smoke using the published release.
-Stop at its phase gate and report blockers.”** Supply the selected manifest,
-host access/topology, independent management DNS, test delegation, origin and
-approved address families. After all Phase 1 gates pass, Phase 2
-`identity-and-domain-boundaries` is a separate request; it is not started here.
+Current request: **continue Phase 2 while the owner performs Phase 1 browser
+qualification later.** Keep the Phase 1 manual gate open and record its actual
+results when supplied. Do not infer a Phase 1 pass from Phase 2 implementation.

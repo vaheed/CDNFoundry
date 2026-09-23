@@ -32,6 +32,12 @@ Send later requests with `Authorization: Bearer TOKEN`. `POST /api/auth/logout`
 revokes the current token. Personal access tokens are managed through
 `/api/me/tokens`.
 
+Same-origin browser requests can instead use the signed-in panel session.
+Sanctum accepts the session only from configured stateful origins, applies the
+same account and domain policies, and requires a CSRF token for mutations.
+For a session request, `POST /api/auth/logout` invalidates that browser session
+and rotates its CSRF token. A bearer-token logout revokes only that token.
+
 Public endpoints are `/health`, `/ready`, `/nameservers`, and `/auth/login`.
 Administrator endpoints additionally require `users.type=admin`.
 

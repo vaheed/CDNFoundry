@@ -25,8 +25,9 @@ then onboard customer state.
 | HTTP API | Automation and integrations | Sanctum bearer token and the same policies |
 | CLI | Host and platform operators | `php artisan cdnf:*` inside the supported container context |
 
-The panels and API use the same authorization policies. A domain user cannot
-escape assignment scope by switching to the API.
+The panels and API use the same authorization policies. Same-origin browser
+requests may use the panel session with CSRF protection; automation uses bearer
+tokens. A domain user cannot escape assignment scope by switching to the API.
 
 ## Administrator bootstrap
 

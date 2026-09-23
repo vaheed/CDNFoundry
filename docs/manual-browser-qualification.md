@@ -180,6 +180,46 @@ so existing clusters, edges and domains are reused rather than duplicated.
   checkpoints are **not run** until the owner supplies results. No browser
   automation was used. Phase 1 is not complete.
 
+## Phase 2 — Identity and domain boundaries
+
+Status: **Not run — owner execution required.** The owner directed Phase 2
+implementation work to proceed while Phase 1 browser checks are deferred. This
+does not close the Phase 1 gate. Use only disposable accounts and domains.
+
+1. Sign in to `/admin/login` as an active administrator and `/app/login` as a
+   domain user assigned to one disposable domain. In each panel, open a domain
+   page, sign out, then use Back and reload. Expect the login page and no domain
+   data. Sign in again; the assigned domain user must see only that domain.
+2. In **Customers → Users**, disable the disposable domain user. Refresh the
+   user's open `/app` page and expect access denied. Re-enable the account and
+   sign in again. Under **Customers → Domains → disposable domain → Users**,
+   detach the user; refreshing its domain page must deny access. Attach the
+   user again only after checking the intended assignment.
+3. Under **Account → API tokens**, create a token named `phase2-check`, copy it
+   only from the one-time display, and confirm the list shows only its suffix.
+   Use it for one permitted domain API read and one read of another disposable
+   user's domain; expect success and denial respectively. Revoke the token and
+   expect later use to be unauthenticated. Do not put the token in evidence.
+4. Create a disposable child zone under an already managed parent. Inspect the
+   assigned nameservers and pending claim expiry, then try **Verify nameservers**
+   before setting the exact parent delegation. Expect a visible failed operation
+   and no active status. Apply the assigned delegation, retry, and expect an
+   active domain only after the parent-side check succeeds. Record operation IDs
+   and sanitized DNS results.
+
+### Phase 2 completion gate
+
+- Implementation: session/API parity correction is present; the remaining
+  identity, authorization and domain-lifecycle inventory review is open.
+- Documentation: current API session behavior and these manual steps are written;
+  final operator findings remain to be recorded.
+- Automated/runtime qualification: isolated Laravel and disposable PostgreSQL
+  claim/race and legacy-migration checks, plus the real-BIND parent fixture on
+  IPv4/IPv6, passed; the full Phase 2 source inventory and public registrar
+  qualification remain open.
+- Owner-run browser qualification: **Not run**. The owner plans to execute it
+  later; no browser automation was used.
+
 ## Implemented product regression
 
 Complete this regression before the current hardening workstreams. It preserves
@@ -201,6 +241,12 @@ workstream does not replace an earlier product checkpoint.
    one-time boundary, use it for one permitted API request, then revoke it and
    confirm subsequent use fails. Confirm password/profile changes invalidate
    the documented sessions and never reveal password history.
+4. Sign in to `/app` as the assigned domain user and sign out. Use the browser's
+   Back button and reload a previously opened domain page; expect a login
+   redirect and no domain data. Sign in again and confirm the assigned domain
+   is available. Repeat the sign-out and reload check in `/admin` with the
+   administrator account. Record both results separately; do not save cookies
+   or session values in evidence.
 
 ### System DNS, clusters, and domains
 

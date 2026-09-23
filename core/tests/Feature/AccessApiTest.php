@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\UserType;
 use App\Http\Middleware\IdempotentRequest;
 use App\Models\AuditLog;
+use App\Models\Domain;
 use App\Models\IdempotencyKey;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -31,6 +32,39 @@ class AccessApiTest extends TestCase
         $this->withToken($token)->postJson('/api/auth/logout')->assertOk();
         $this->assertDatabaseCount('personal_access_tokens', 0);
         $this->assertDatabaseHas('audit_logs', ['action' => 'auth.login', 'actor_id' => $user->id]);
+    }
+
+    public function test_same_origin_browser_session_uses_domain_policies_and_logout_invalidates_session(): void
+    {
+        $user = User::factory()->create();
+        $assigned = Domain::query()->create(['name' => 'assigned.example.com', 'display_name' => 'Assigned']);
+        $other = Domain::query()->create(['name' => 'other.example.com', 'display_name' => 'Other']);
+        $assigned->users()->attach($user);
+        $this->withSession([auth('web')->getName() => $user->id, 'browser_marker' => 'present'])
+            ->withHeader('Origin', 'http://localhost');
+
+        $this->getJson('/api/domains')->assertOk()->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $assigned->id);
+        $this->getJson("/api/domains/{$other->id}")->assertForbidden();
+        $this->postJson('/api/auth/logout')->assertOk()->assertJsonPath('data.logged_out', true);
+
+        $this->assertGuest('web');
+        $this->assertNull(session('browser_marker'));
+        $this->app['auth']->forgetGuards();
+        $this->getJson('/api/me')->assertUnauthorized();
+        $this->assertDatabaseHas('audit_logs', ['action' => 'auth.logout', 'actor_id' => $user->id]);
+    }
+
+    public function test_disabled_user_session_is_denied_by_the_api(): void
+    {
+        $user = User::factory()->create();
+        $this->withSession([auth('web')->getName() => $user->id])
+            ->withHeader('Origin', 'http://localhost');
+        $this->getJson('/api/me')->assertOk();
+
+        $user->update(['disabled_at' => now()]);
+        $this->app['auth']->forgetGuards();
+        $this->getJson('/api/me')->assertForbidden()->assertJsonPath('error.code', 'account_disabled');
     }
 
     public function test_disabled_user_cannot_login(): void

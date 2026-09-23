@@ -327,6 +327,27 @@ if ($mode === 'init') {
         throw new RuntimeException('Finalization failed to preserve reclaim evidence.');
     }
     echo "constraints_and_finalization=passed\n";
+} elseif ($mode === 'legacy-claim-upgrade') {
+    // Recreate the pre-claim schema only inside this disposable database, then
+    // apply the real additive migration to rows an existing installation owns.
+    Illuminate\Support\Facades\DB::statement('ALTER TABLE domains DROP COLUMN delegation_token, DROP COLUMN delegation_nameservers, DROP COLUMN claim_expires_at');
+    Illuminate\Support\Facades\DB::table('migrations')->where('migration', '2026_09_05_160000_add_domain_delegation_claims')->delete();
+    $verified = App\Models\Domain::query()->create(['name' => 'verified-upgrade.example.net', 'display_name' => 'Verified legacy',
+        'lifecycle_state' => 'active', 'nameservers_verified_at' => now(), 'revision' => 4]);
+    $pending = App\Models\Domain::query()->create(['name' => 'pending-upgrade.example.net', 'display_name' => 'Pending legacy',
+        'lifecycle_state' => 'pending_verification', 'revision' => 2]);
+    if (Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]) !== 0) {
+        throw new RuntimeException('Existing-installation claim migration failed: '.Illuminate\Support\Facades\Artisan::output());
+    }
+    $verified->refresh();
+    $pending->refresh();
+    if ($verified->revision !== 4 || $verified->nameservers_verified_at === null
+        || $verified->delegation_nameservers !== null || $verified->claim_expires_at !== null
+        || $pending->revision !== 2 || $pending->nameservers_verified_at !== null
+        || $pending->delegation_nameservers !== null || $pending->claim_expires_at !== null) {
+        throw new RuntimeException('Claim migration changed legacy ownership or claim state.');
+    }
+    echo "legacy_claim_upgrade=passed\n";
 } elseif ($mode === 'hold') {
     Illuminate\Support\Facades\DB::transaction(function (): void {
         App\Models\Domain::lockCanonicalName('locked.example.com');
@@ -688,6 +709,8 @@ def main() -> None:
                 if obsolete.poll() is None:
                     obsolete.kill()
                 obsolete.communicate(timeout=10)
+            legacy_upgrade = subprocess.check_output(command('legacy-claim-upgrade'), env=env, text=True).strip()
+            assert legacy_upgrade == 'legacy_claim_upgrade=passed', legacy_upgrade
             digest = subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{json .RepoDigests}}'], text=True).strip()
             print(json.dumps({'postgres_domain_claims': 'passed', 'instance': identifier, 'image_digests': json.loads(digest),
                               'concurrent_applicants': 2, 'active_configurations': 1, 'lock_wait_seconds': round(waited, 3),
@@ -705,6 +728,7 @@ def main() -> None:
                               'tls_stale_failure_concurrency': stale_failures,
                               'tls_stale_success_concurrency': stale_successes,
                               'tls_stale_obsolescence': stale_obsolete,
+                              'legacy_claim_upgrade': 'passed',
                               'database': 'disposable tmpfs, actual migrations; no PHPUnit or persistent volumes'}))
         finally:
             subprocess.run(['docker', 'rm', '-f', identifier], check=True, capture_output=True)
