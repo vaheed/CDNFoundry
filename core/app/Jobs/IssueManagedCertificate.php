@@ -152,6 +152,9 @@ class IssueManagedCertificate implements ShouldQueue
         DB::transaction(function () use ($order, $account, $remote, $challenges): void {
             $domain = Domain::query()->lockForUpdate()->findOrFail($order->domain_id);
             $locked = TlsOrder::query()->lockForUpdate()->findOrFail($order->id);
+            if ($locked->status !== 'pending') {
+                return;
+            }
             if ($challenges !== []) {
                 $domain->forceFill(['revision' => $domain->revision + 1])->save();
             }
