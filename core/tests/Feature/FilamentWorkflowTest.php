@@ -27,6 +27,7 @@ use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Jobs\VerifyDomainNameservers;
+use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Models\DomainEdgeCell;
 use App\Models\DomainEdgePlacement;
@@ -104,6 +105,27 @@ class FilamentWorkflowTest extends TestCase
         Livewire::test(ApiTokens::class)->set('name', 'over-limit')->call('createToken')->assertHasErrors(['name']);
 
         $this->assertSame(User::MAX_ACTIVE_TOKENS, $user->tokens()->count());
+    }
+
+    public function test_panel_token_issuance_rolls_back_when_audit_write_fails(): void
+    {
+        $user = User::factory()->create();
+        Filament::setCurrentPanel(Filament::getPanel('app'));
+        $this->actingAs($user);
+        AuditLog::creating(function (): void {
+            throw new \RuntimeException('injected audit failure');
+        });
+
+        try {
+            Livewire::test(ApiTokens::class)->set('name', 'audit-failure')->call('createToken');
+            $this->fail('Injected audit failure did not occur');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('injected audit failure', $exception->getMessage());
+        } finally {
+            AuditLog::flushEventListeners();
+        }
+
+        $this->assertDatabaseCount('personal_access_tokens', 0);
     }
 
     public function test_domain_creation_automatically_queues_zone_provisioning_and_nameserver_verification(): void

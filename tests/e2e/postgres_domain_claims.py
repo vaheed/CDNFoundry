@@ -431,6 +431,20 @@ if ($mode === 'init') {
 } elseif ($mode === 'token-empty-init') {
     $user = App\Models\User::factory()->create();
     echo json_encode(['user_id' => $user->id, 'tokens' => 0])."\n";
+} elseif ($mode === 'token-audit-failure') {
+    $user = App\Models\User::findOrFail((int) $argv[2]);
+    $request = Illuminate\Http\Request::create('/api/me/tokens', 'POST', ['name' => 'audit-failure']);
+    $request->setUserResolver(fn () => $user);
+    App\Models\AuditLog::creating(function (): void {
+        throw new RuntimeException('injected audit failure');
+    });
+    try {
+        app(App\Http\Controllers\TokenController::class)->store($request);
+        $failed = false;
+    } catch (RuntimeException $exception) {
+        $failed = $exception->getMessage() === 'injected audit failure';
+    }
+    echo json_encode(['audit_failed' => $failed, 'tokens' => $user->tokens()->count()])."\n";
 } elseif ($mode === 'token-issue') {
     $paused = false;
     App\Models\User::retrieved(function ($loaded) use ($argv, &$paused): void {
@@ -1001,6 +1015,10 @@ def main() -> None:
                         if process.poll() is None:
                             process.kill()
                         process.communicate(timeout=10)
+            audit_case = json.loads(subprocess.check_output(command('token-empty-init'), env=env, text=True))
+            audit_failure = json.loads(subprocess.check_output(
+                command('token-audit-failure', str(audit_case['user_id'])), env=env, text=True))
+            assert audit_failure == {'audit_failed': True, 'tokens': 0}, audit_failure
             digest = subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{json .RepoDigests}}'], text=True).strip()
             print(json.dumps({'postgres_domain_claims': 'passed', 'instance': identifier, 'image_digests': json.loads(digest),
                               'concurrent_applicants': 2, 'active_configurations': 1, 'lock_wait_seconds': round(waited, 3),
@@ -1025,6 +1043,7 @@ def main() -> None:
                               'concurrent_token_limit': [first_token_result, second_token_result],
                               'concurrent_token_issue_disable': [issued_before_disable, disabled_after_issue],
                               'concurrent_token_issue_delete': [issued_before_delete, deleted_after_issue],
+                              'postgres_token_audit_rollback': audit_failure,
                               'database': 'disposable tmpfs, actual migrations; no PHPUnit or persistent volumes'}))
         finally:
             subprocess.run(['docker', 'rm', '-f', identifier], check=True, capture_output=True)

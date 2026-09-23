@@ -173,14 +173,18 @@ Domain-user operation reads now require current assignment. Token issuance is
 bounded at 50 active tokens per user across API login, manual API creation and
 the panel; a PostgreSQL race proved the final slot is not overfilled. Token
 metadata now commits with issuance, so a failed suffix write rolls back the
-unseen secret. The deprovisioning delay is now rechecked under the domain lock
+unseen secret. API login, manual API token creation and panel token creation
+now commit their audit rows with issuance; injected audit failures roll back
+the unseen tokens in isolated regressions and a disposable PostgreSQL replay.
+The deprovisioning delay is now
+rechecked under the domain lock
 at finalization. Domain deletion now rechecks assignment under the domain lock
 before starting deprovisioning; an isolated revocation regression passed. The
 administrator disable and deletion paths now lock the user row shared with
 token issuance, so revocation and the deletion precondition are atomic with
 the account change. The Filament user actions now take the same lock and
 recheck token deletion eligibility at execution. The full isolated Laravel
-suite passes (357 tests, 12,730 assertions), and disposable PostgreSQL proved
+suite passes (359 tests, 12,736 assertions), and disposable PostgreSQL proved
 that concurrent disable and
 delete both wait for token issuance: disable revokes the resulting token,
 while deletion rejects the now-tokened account with 409. Staging deployment

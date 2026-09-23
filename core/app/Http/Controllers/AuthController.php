@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
@@ -26,9 +27,12 @@ class AuthController extends Controller
             return response()->json(['error' => ['code' => 'account_disabled', 'message' => 'This account is disabled.']], 403);
         }
 
-        $createdToken = $user->createTokenWithinLimit($request->string('device_name')->value() ?: 'api', 'device_name');
-        $token = $createdToken->plainTextToken;
-        AuditLog::record($user, 'auth.login', $user, [], $request->ip());
+        $token = DB::transaction(function () use ($request, $user): string {
+            $created = $user->createTokenWithinLimit($request->string('device_name')->value() ?: 'api', 'device_name');
+            AuditLog::record($user, 'auth.login', $user, [], $request->ip());
+
+            return $created->plainTextToken;
+        });
 
         return response()->json(['data' => ['user' => UserResource::make($user), 'token' => $token]]);
     }

@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\AuditLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Laravel\Sanctum\NewAccessToken;
 use Laravel\Sanctum\PersonalAccessToken;
 
 class TokenController extends Controller
@@ -21,8 +23,12 @@ class TokenController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate(['name' => ['required', 'string', 'max:100']]);
-        $created = $request->user()->createTokenWithinLimit($validated['name']);
-        AuditLog::record($request->user(), 'token.created', $request->user(), ['token_id' => $created->accessToken->id], $request->ip());
+        $created = DB::transaction(function () use ($request, $validated): NewAccessToken {
+            $created = $request->user()->createTokenWithinLimit($validated['name']);
+            AuditLog::record($request->user(), 'token.created', $request->user(), ['token_id' => $created->accessToken->id], $request->ip());
+
+            return $created;
+        });
 
         return response()->json(['data' => ['id' => $created->accessToken->id, 'name' => $validated['name'], 'token' => $created->plainTextToken]], 201);
     }

@@ -199,6 +199,34 @@ class AccessApiTest extends TestCase
         $this->assertDatabaseCount('personal_access_tokens', 0);
     }
 
+    public function test_failed_token_audit_rolls_back_api_login_and_manual_issuance(): void
+    {
+        $user = User::factory()->create(['password' => 'CorrectHorseBattery9']);
+        AuditLog::creating(function (): void {
+            throw new \RuntimeException('injected audit failure');
+        });
+        $this->withoutExceptionHandling();
+
+        try {
+            foreach ([
+                fn () => $this->postJson('/api/auth/login', [
+                    'email' => $user->email, 'password' => 'CorrectHorseBattery9', 'device_name' => 'audit-failure',
+                ]),
+                fn () => $this->actingAs($user)->postJson('/api/me/tokens', ['name' => 'audit-failure']),
+            ] as $issue) {
+                try {
+                    $issue();
+                    $this->fail('Injected audit failure did not occur');
+                } catch (\RuntimeException $exception) {
+                    $this->assertSame('injected audit failure', $exception->getMessage());
+                }
+                $this->assertDatabaseCount('personal_access_tokens', 0);
+            }
+        } finally {
+            AuditLog::flushEventListeners();
+        }
+    }
+
     public function test_idempotency_storage_never_persists_or_replays_one_time_tokens(): void
     {
         $user = User::factory()->create();

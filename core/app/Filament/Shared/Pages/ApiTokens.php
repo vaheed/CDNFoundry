@@ -7,6 +7,8 @@ use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Laravel\Sanctum\NewAccessToken;
 use Laravel\Sanctum\PersonalAccessToken;
 
 class ApiTokens extends Page
@@ -36,8 +38,12 @@ class ApiTokens extends Page
     public function createToken(): void
     {
         $this->validate(['name' => ['required', 'string', 'max:100']]);
-        $created = auth()->user()->createTokenWithinLimit($this->name);
-        AuditLog::record(auth()->user(), 'token.created', auth()->user(), ['token_id' => $created->accessToken->id], request()->ip());
+        $created = DB::transaction(function (): NewAccessToken {
+            $created = auth()->user()->createTokenWithinLimit($this->name);
+            AuditLog::record(auth()->user(), 'token.created', auth()->user(), ['token_id' => $created->accessToken->id], request()->ip());
+
+            return $created;
+        });
         $this->plainTextToken = $created->plainTextToken;
         $this->name = '';
         Notification::make()->success()->title('Token created')->body('Copy it now; it will not be shown again.')->send();
