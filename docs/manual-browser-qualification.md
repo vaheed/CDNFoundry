@@ -225,6 +225,49 @@ domains.
 - Owner-run browser qualification: **Not run**. The owner plans to execute it
   later; no browser automation was used.
 
+## Phase 3 — Managed TLS and queue recovery
+
+Status: **Not run — owner execution required after agent-owned roadmap phases.**
+Use a disposable verified domain with one proxied hostname and an existing valid
+managed certificate. Record operation IDs, certificate fingerprints, order
+status, revision and edge acknowledgement; never capture private keys or CSR
+material.
+
+1. In the domain panel, open the disposable domain's **TLS** page. Inspect
+   **TLS mode**, **Proxied hostnames**, selected certificate fingerprint and
+   expiry. Expect managed mode, hostname coverage and valid HTTPS through each
+   assigned edge before starting work.
+2. Select **Reissue managed certificate** and submit. Expect a queued planning
+   operation. Refresh the TLS page and inspect its order status and operation
+   result separately. While issuance is pending, request the hostname through
+   both edges; expect the previous valid certificate and successful HTTPS.
+   After issuance and edge acknowledgement, expect a new valid fingerprint,
+   the requested hostname in coverage and successful HTTPS on both edges.
+3. In an isolated operator environment, interrupt the certificate worker after
+   the CA accepts finalization, then resume it using the existing queue and
+   order. Refresh the TLS page and administrator **Operations** view. Expect
+   the same order to finish without a second selected key, duplicate active
+   certificate or false success; the previous valid certificate must serve
+   until the replacement is acknowledged. Record the sanitized order/operation
+   IDs and before/after fingerprints, not key material.
+4. While a disposable reissue is pending, use the domain's **Disable** action
+   in a separate authorized session, then resume certificate work. Expect the
+   order to become obsolete without selecting a new certificate. Use **Activate**
+   only after reviewing its delegation and proxy state, and expect the
+   previous valid certificate to remain available for eligible HTTPS serving.
+
+### Phase 3 completion gate
+
+- Implementation: persisted key/CSR retry and locked lifecycle checks are present; the remaining
+  managed lifecycle and queue-recovery inventory is open.
+- Documentation: current TLS retry behavior and these owner steps are written;
+  final operator findings remain to be recorded.
+- Automated/runtime qualification: injected lost-response regression and real
+  Pebble/DNSdist issuance passed; edge HTTPS qualification remains open because
+  the development edges lack fresh authenticated heartbeats.
+- Owner-run browser qualification: **Not run**. The owner will execute it after
+  agent-owned roadmap phases; no browser automation was used.
+
 ## Implemented product regression
 
 Complete this regression before the current hardening workstreams. It preserves

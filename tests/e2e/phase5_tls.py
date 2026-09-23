@@ -6,7 +6,11 @@ from __future__ import annotations
 import json
 import pathlib
 import secrets
+import hashlib
+import socket
+import ssl
 import subprocess
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -65,11 +69,42 @@ def quote(value: str) -> str:
     return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
 
+def verify_edge_https(hostname: str, fingerprint: str) -> None:
+    pebble = subprocess.run(["docker", "compose", "-f", "compose.dev.yml", "ps", "-q", "pebble"],
+                            cwd=ROOT, check=True, capture_output=True, text=True, timeout=15).stdout.strip()
+    if not pebble:
+        raise AssertionError("Pebble container is unavailable for CA verification")
+    with tempfile.TemporaryDirectory(prefix="cdnf-pebble-ca-") as directory:
+        authority = pathlib.Path(directory) / "minica.pem"
+        subprocess.run(["docker", "cp", f"{pebble}:/test/certs/pebble.minica.pem", str(authority)],
+                       cwd=ROOT, check=True, capture_output=True, timeout=15)
+        context = ssl.create_default_context(cafile=str(authority))
+        for port in (8444, 8445):
+            deadline = time.monotonic() + 90
+            last_error: Exception | None = None
+            while time.monotonic() < deadline:
+                try:
+                    with socket.create_connection(("127.0.0.1", port), timeout=5) as connection:
+                        with context.wrap_socket(connection, server_hostname=hostname) as secured:
+                            observed = hashlib.sha256(secured.getpeercert(binary_form=True)).hexdigest()
+                            if observed != fingerprint:
+                                raise AssertionError("Edge selected a different certificate fingerprint")
+                            break
+                except (OSError, ssl.SSLError, AssertionError) as error:
+                    last_error = error
+                    time.sleep(1)
+            else:
+                raise AssertionError(f"verified edge HTTPS did not converge on port {port}: {type(last_error).__name__}")
+
+
 def main() -> None:
     if sql("select count(*) from dns_clusters where enabled and last_health_status='healthy'") == "0":
         raise AssertionError("Phase 5 TLS qualification requires the qualified local PowerDNS cluster")
     if sql("select count(*) from edge_pools where name='shared-default' and enabled") != "1":
         raise AssertionError("Phase 5 TLS qualification requires the shared-default edge pool")
+    if int(sql("select count(*) from edges where enabled and registered_at is not null "
+               "and last_heartbeat_at > now() - interval '2 minutes'")) < 2:
+        raise AssertionError("Verified edge HTTPS requires two freshly enrolled development edges")
     # Pebble does not persist its account registry when its container is
     # recreated, while the development PostgreSQL volume intentionally does.
     # Preserve the account key but force local account rediscovery so a
@@ -126,6 +161,7 @@ def main() -> None:
     assert certificate["kind"] == "managed", certificate
     assert set(certificate["names"]) == {ZONE, f"*.{ZONE}"}, certificate
     assert "private_key" not in json.dumps(last), last
+    verify_edge_https(f"www.{ZONE}", certificate["fingerprint_sha256"])
     _, records = call("GET", f"/api/domains/{domain_id}/dns/records", token=token)
     assert all(not row["name"].startswith("_acme-challenge") for row in records["data"]), records
     deadline = time.monotonic() + 60
