@@ -246,6 +246,11 @@ The local real OpenResty and managed CRS fixtures pass. WAF profile and
 exclusion mutations now recheck assignment under the domain lock, and the
 exclusion limit is checked in the same transaction. Staging enforcement and
 failure-injection checks remain open.
+The staging WAF probe found that the agent dropped the compiled WAF policy
+before cell activation, so Balanced allowed the attack despite a successful
+control operation. The agent now preserves WAF and compression policy in each
+assigned cell. Its Go regression passes; stage enforcement must be retested
+after a verified agent rollout.
 
 ## Phase 6 — Fleet operations, upgrades and clean-host recovery
 

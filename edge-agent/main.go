@@ -1275,16 +1275,18 @@ func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) 
 	cellCertificates := map[string]map[string]any{}
 	for _, raw := range s.Domains {
 		var domain struct {
-			Domain    string         `json:"domain"`
-			DomainID  uint64         `json:"domain_id"`
-			Revision  uint64         `json:"revision"`
-			Settings  map[string]any `json:"settings"`
-			Cache     map[string]any `json:"cache"`
-			Security  map[string]any `json:"security"`
-			TLS       map[string]any `json:"tls"`
-			Pools     []string       `json:"pools"`
-			Cells     []string       `json:"cells"`
-			Hostnames []struct {
+			Domain      string         `json:"domain"`
+			DomainID    uint64         `json:"domain_id"`
+			Revision    uint64         `json:"revision"`
+			Settings    map[string]any `json:"settings"`
+			Cache       map[string]any `json:"cache"`
+			Compression map[string]any `json:"compression"`
+			Security    map[string]any `json:"security"`
+			WAF         map[string]any `json:"waf"`
+			TLS         map[string]any `json:"tls"`
+			Pools       []string       `json:"pools"`
+			Cells       []string       `json:"cells"`
+			Hostnames   []struct {
 				Hostname         string         `json:"hostname"`
 				Origin           map[string]any `json:"origin"`
 				TLSCertificateID string         `json:"tls_certificate_id"`
@@ -1304,6 +1306,12 @@ func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) 
 		}
 		if domain.Security == nil {
 			domain.Security = map[string]any{}
+		}
+		if domain.Compression == nil {
+			domain.Compression = map[string]any{}
+		}
+		if domain.WAF == nil {
+			domain.WAF = map[string]any{}
 		}
 		if domain.TLS == nil {
 			domain.TLS = map[string]any{}
@@ -1350,7 +1358,7 @@ func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) 
 				}
 				hostTLS["certificate_id"] = hostCertificateID
 			}
-			compiled := map[string]any{"domain": domain.Domain, "domain_id": domain.DomainID, "revision": domain.Revision, "settings": domain.Settings, "cache": domain.Cache, "security": domain.Security, "tls": hostTLS, "origin": host.Origin}
+			compiled := map[string]any{"domain": domain.Domain, "domain_id": domain.DomainID, "revision": domain.Revision, "settings": domain.Settings, "cache": domain.Cache, "compression": domain.Compression, "security": domain.Security, "waf": domain.WAF, "tls": hostTLS, "origin": host.Origin}
 			hosts[name] = compiled
 			for _, cell := range domain.Cells {
 				if !validCellName(cell) {

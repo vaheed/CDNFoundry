@@ -357,6 +357,20 @@ func TestRuntimeAssignsSupplementalCertificatesPerHostname(t *testing.T) {
 	}
 }
 
+func TestRuntimePreservesWAFAndCompressionForAssignedCell(t *testing.T) {
+	domain := json.RawMessage(`{"domain":"example.test","domain_id":1,"revision":7,"cells":["cell-01"],"settings":{"enabled":true},"cache":{},"compression":{"profile_name":"standard","gzip":true},"security":{},"waf":{"name":"balanced","blocking":true,"inbound_threshold":5},"tls":{"mode":"managed"},"hostnames":[{"hostname":"example.test","origin":{"host":"origin.example"}}]}`)
+	active, cells, err := compileRuntime(state{Sequence: 7, Domains: map[string]json.RawMessage{"1": domain}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, hosts := range []map[string]any{active["hosts"].(map[string]any), cells["cell-01"]["hosts"].(map[string]any)} {
+		host := hosts["example.test"].(map[string]any)
+		if host["waf"].(map[string]any)["name"] != "balanced" || host["compression"].(map[string]any)["profile_name"] != "standard" {
+			t.Fatal("runtime dropped the domain WAF or compression policy")
+		}
+	}
+}
+
 func TestRuntimeTargetsOnlySelectedCellsWithinOnePool(t *testing.T) {
 	domain := json.RawMessage(`{"domain":"example.test","domain_id":7,"revision":2,"pools":["shared-default"],"cells":["cell-02"],"settings":{"enabled":true},"cache":{},"tls":{"mode":"disabled"},"hostnames":[{"hostname":"www.example.test","origin":{"host":"origin.example"}}]}`)
 	_, runtimes, err := compileRuntime(state{Sequence: 9, Domains: map[string]json.RawMessage{"7": domain}})

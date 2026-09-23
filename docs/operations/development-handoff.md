@@ -362,6 +362,20 @@ and the active exclusion limit is checked inside that transaction. A revoked
 assignment regression passed. These source changes await publication and
 staging qualification.
 
+The first staging WAF mode probe failed because the shared pool was not marked
+WAF capable. Both PoPs ran the same runtime image with CRS files present, so
+the disposable domain's active shared pool was marked capable with that exact
+image identity; its global reconcile succeeded. The repeated probe showed Off
+and Monitor responses as expected, but Balanced still allowed the attack.
+The profile was restored to Off after each attempt. Core artifacts contained
+Balanced, while the active cell files omitted `waf` entirely. The edge agent
+compiler had also omitted `compression`; it now carries both typed policy
+objects into global and assigned-cell runtime state. A Go regression checks
+both generated states, and the edge-agent test suite passes. This is a
+confirmed staging enforcement failure until the corrected agent image is
+verified, deployed on both PoPs, and the same WAF probe passes. Protected
+evidence is under `.prod`; no browser automation ran.
+
 The real Pebble fixture exposed an existing development installation with only
 `delegation_nameservers` present as JSON and no migration receipt. The additive
 claim migration now detects missing columns individually and converts that
