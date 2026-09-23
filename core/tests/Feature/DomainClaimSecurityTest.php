@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\DomainLifecycleState;
 use App\Filament\Domain\Resources\Domains\Pages\CreateDomain;
+use App\Http\Controllers\DomainController;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\VerifyDomainNameservers;
 use App\Models\DnsCluster;
@@ -19,6 +20,8 @@ use App\Support\PowerDnsClient;
 use Filament\Facades\Filament;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
@@ -28,6 +31,28 @@ use Tests\TestCase;
 class DomainClaimSecurityTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_deprovision_rechecks_assignment_after_initial_authorization(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::query()->create(['name' => 'withdrawn.example.com', 'display_name' => 'Withdrawn']);
+        $domain->users()->attach($user);
+        $request = Request::create("/api/domains/{$domain->id}", 'DELETE');
+        $request->setUserResolver(fn () => $user);
+        Gate::after(function ($actor, $ability) use ($domain, $user): void {
+            if ($actor->is($user) && $ability === 'delete' && $domain->users()->whereKey($user->id)->exists()) {
+                $domain->users()->detach($user);
+            }
+        });
+
+        $this->expectException(AuthorizationException::class);
+        try {
+            app(DomainController::class)->destroy($request, $domain);
+        } finally {
+            $this->assertSame(DomainLifecycleState::PendingVerification, $domain->fresh()->lifecycle_state);
+            $this->assertSame(0, Operation::query()->where('type', 'domain.deprovision')->count());
+        }
+    }
 
     public function test_revoked_assignment_cannot_replay_cached_domain_response(): void
     {

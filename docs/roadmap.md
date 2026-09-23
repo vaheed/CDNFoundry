@@ -174,7 +174,9 @@ bounded at 50 active tokens per user across API login, manual API creation and
 the panel; a PostgreSQL race proved the final slot is not overfilled. Token
 metadata now commits with issuance, so a failed suffix write rolls back the
 unseen secret. The deprovisioning delay is now rechecked under the domain lock
-at finalization. The additive claim migration now admits a partial existing
+at finalization. Domain deletion now rechecks assignment under the domain lock
+before starting deprovisioning; an isolated revocation regression passed. The
+additive claim migration now admits a partial existing
 installation with a JSON assignment and retains its values as JSONB; a
 disposable PostgreSQL replay passed. The remaining source inventory and public
 delegation qualification remain open; the local public DNSSEC probe failed before the

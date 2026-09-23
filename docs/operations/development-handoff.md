@@ -299,6 +299,16 @@ passed. No browser automation or owner Phase 2 browser qualification was run.
 The rest of the Phase 2 source review
 and runtime qualification remain open.
 
+### Phase 2 lifecycle authorization follow-up, 2026-09-23
+
+Domain deletion now rechecks the current assignment after locking the domain in
+its transaction. A request whose assignment is revoked after its initial
+authorization cannot start deprovisioning or create an operation. The isolated
+regression revokes access between the two authorization checks and confirms
+the domain and operation state remain unchanged. The Phase 2 inventory and
+public delegation qualification remain open; owner browser checks remain not
+run.
+
 ### Phase 3 managed TLS review — first pass, 2026-09-23
 
 The issuer previously generated the private key and CSR, sent ACME

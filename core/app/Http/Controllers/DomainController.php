@@ -82,6 +82,7 @@ class DomainController extends Controller
         Gate::authorize('delete', $domain);
         $operation = DB::transaction(function () use ($request, $domain): Operation {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
+            Gate::authorize('delete', $locked);
             if ($locked->lifecycle_state !== DomainLifecycleState::Deprovisioning) {
                 $locked->forceFill([
                     'lifecycle_state' => DomainLifecycleState::Deprovisioning,
