@@ -12,8 +12,8 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
 PHP = r"""
-require getenv('CDNF_QUALIFICATION_ROOT').'/core/vendor/autoload.php';
-$app = require getenv('CDNF_QUALIFICATION_ROOT').'/core/bootstrap/app.php';
+require getenv('CDNF_QUALIFICATION_CORE').'/vendor/autoload.php';
+$app = require getenv('CDNF_QUALIFICATION_CORE').'/bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 try {
     $observed = (new App\Support\NameserverResolver)->resolve(getenv('CDNF_QUALIFICATION_DOMAIN'));
@@ -41,12 +41,16 @@ def main() -> int:
 
     environment = os.environ.copy()
     environment.update(
-        CDNF_QUALIFICATION_ROOT=str(ROOT),
+        CDNF_QUALIFICATION_CORE=str(ROOT / "core"),
         CDNF_QUALIFICATION_DOMAIN=domain,
         CDNF_QUALIFICATION_NAMESERVERS=json.dumps(sorted(set(nameservers))),
     )
     result = subprocess.run(["php", "-r", PHP], cwd=ROOT, env=environment,
-                            capture_output=True, text=True, timeout=60, check=True)
+                            capture_output=True, text=True, timeout=60)
+    if result.returncode != 0:
+        print(json.dumps({"qualification": "public_parent_delegation", "status": "harness_failed",
+                          "exit_code": result.returncode}, sort_keys=True))
+        return 1
     outcome = json.loads(result.stdout)
     print(json.dumps({"qualification": "public_parent_delegation", **outcome}, sort_keys=True))
     return 0 if outcome["status"] == "passed" else 1

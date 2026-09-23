@@ -286,8 +286,9 @@ using the protected staging assignment failed before comparison because the
 local `delv` resolver reported `FORMERR` and a non-improving referral from public
 DNS resolvers. No live delegation pass is claimed from this workspace; rerun
 `python3 tests/e2e/staging_parent_delegation.py .prod/test-domain.json` from an
-environment with working DNSSEC resolution. A read-only SSH reachability probe
-to the staging control host was also unavailable from this workspace. The
+environment with working DNSSEC resolution. Read-only SSH reachability probes
+to the control host and both DNS/edge hosts were also unavailable from this
+workspace. The
 script prints only counts and
 status. The PostgreSQL job also replayed the additive delegation-claim
 migration over verified and pending legacy rows, preserving ownership,
