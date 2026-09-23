@@ -19,6 +19,7 @@ Platform settings may make a limit stricter within the documented bound.
 | Resource | Limit |
 | --- | --- |
 | Normal list page | 50 or 100 items depending on endpoint |
+| Active API tokens | 50 per user across password login, API creation, and panel creation |
 | Edge routing snapshot | 250 edges per page |
 | Edge manifest | 500 artifacts |
 | Full edge snapshot | 100,000 domain artifacts, 96 MiB response |

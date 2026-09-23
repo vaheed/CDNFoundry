@@ -164,7 +164,10 @@ legacy-migration job, and real-BIND parent-delegation fixture with IPv4/IPv6
 transports pass. Assignment also rechecks eligibility under a row lock, with
 a disposable PostgreSQL disable/attach race proving rejection. API and Filament
 use the same assignment boundary. Queued DNS imports now recheck current actor
-scope, and duplicate workers commit one import and one operation receipt. The rest
+scope, and duplicate workers commit one import and one operation receipt.
+Domain-user operation reads now require current assignment. Token issuance is
+bounded at 50 active tokens per user across API login, manual API creation and
+the panel; a PostgreSQL race proved the final slot is not overfilled. The rest
 of the assigned inventory, public-delegation qualification and owner
 browser checklist remain open; Phase 1 browser qualification is also still open.
 

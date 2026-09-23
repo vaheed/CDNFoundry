@@ -18,18 +18,26 @@ use App\Jobs\ReconcileEdgeDomain;
 use App\Jobs\TestDnsCluster;
 use App\Jobs\VerifyDomainNameservers;
 use App\Models\AuditLog;
+use App\Models\Domain;
 use App\Models\Operation;
 use App\Support\PlatformSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Gate;
 
 class OperationController extends Controller
 {
     public function show(Request $request, Operation $operation): JsonResource
     {
-        abort_unless($request->user()->isAdmin() || $operation->actor_id === $request->user()->getKey(), 403);
+        if (! $request->user()->isAdmin()) {
+            abort_unless($operation->actor_id === $request->user()->getKey(), 403);
+            $domainId = $operation->input['domain_id'] ?? null;
+            abort_unless(is_int($domainId) || (is_string($domainId) && ctype_digit($domainId)), 403);
+            $domain = Domain::query()->find((int) $domainId);
+            abort_unless($domain !== null && Gate::forUser($request->user())->allows('view', $domain), 403);
+        }
 
         return JsonResource::make($operation);
     }

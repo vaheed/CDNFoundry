@@ -401,6 +401,30 @@ if ($mode === 'init') {
     $domain = App\Models\Domain::query()->findOrFail((int) $operation->input['domain_id']);
     echo json_encode(['status' => $operation->status, 'attempts' => $operation->attempts,
         'revision' => $domain->revision, 'records' => $domain->dnsRecords()->count()])."\n";
+} elseif ($mode === 'token-init') {
+    $user = App\Models\User::factory()->create();
+    for ($index = 1; $index < App\Models\User::MAX_ACTIVE_TOKENS; $index++) {
+        $user->createToken('existing-'.$index);
+    }
+    echo json_encode(['user_id' => $user->id, 'tokens' => $user->tokens()->count()])."\n";
+} elseif ($mode === 'token-issue') {
+    $paused = false;
+    App\Models\User::retrieved(function ($loaded) use ($argv, &$paused): void {
+        if (getenv('CDNF_TOKEN_PAUSE') === '1' && ! $paused && $loaded->id === (int) $argv[2]
+            && Illuminate\Support\Facades\DB::transactionLevel() > 0) {
+            $paused = true;
+            echo "locked\n"; flush();
+            fgets(STDIN);
+        }
+    });
+    $user = App\Models\User::query()->findOrFail((int) $argv[2]);
+    try {
+        $user->createTokenWithinLimit('race-token');
+        $status = 201;
+    } catch (Illuminate\Validation\ValidationException $exception) {
+        $status = 422;
+    }
+    echo json_encode(['status' => $status, 'tokens' => $user->tokens()->count()])."\n";
 } elseif ($mode === 'hold') {
     Illuminate\Support\Facades\DB::transaction(function (): void {
         App\Models\Domain::lockCanonicalName('locked.example.com');
@@ -830,6 +854,40 @@ def main() -> None:
                         if process.poll() is None:
                             process.kill()
                         process.communicate(timeout=10)
+            token_case = json.loads(subprocess.check_output(command('token-init'), env=env, text=True))
+            assert token_case['tokens'] == 49, token_case
+            first_token = subprocess.Popen(command('token-issue', str(token_case['user_id'])),
+                                           env={**env, 'CDNF_TOKEN_PAUSE': '1'}, stdin=subprocess.PIPE,
+                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            second_token = None
+            try:
+                assert first_token.stdout.readline().strip() == 'locked'
+                second_token = subprocess.Popen(command('token-issue', str(token_case['user_id'])), env=env,
+                                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                for _ in range(90):
+                    blocked = subprocess.check_output(['docker', 'exec', identifier, 'psql', '-U', 'postgres',
+                        '-d', 'cdnf_claim_qualification', '-Atc',
+                        "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%users%'"], text=True)
+                    if int(blocked.strip()) > 0:
+                        break
+                    assert second_token.poll() is None, 'Token contender exited before user-row contention'
+                    time.sleep(.02)
+                else:
+                    raise AssertionError('Token contender did not wait on the user row')
+                output, error = first_token.communicate(input='continue\n', timeout=10)
+                assert first_token.returncode == 0, error
+                first_token_result = json.loads(output.strip().splitlines()[-1])
+                output, error = second_token.communicate(timeout=10)
+                assert second_token.returncode == 0, error
+                second_token_result = json.loads(output.strip().splitlines()[-1])
+                assert first_token_result == {'status': 201, 'tokens': 50}, first_token_result
+                assert second_token_result == {'status': 422, 'tokens': 50}, second_token_result
+            finally:
+                for process in (second_token, first_token):
+                    if process is not None:
+                        if process.poll() is None:
+                            process.kill()
+                        process.communicate(timeout=10)
             digest = subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{json .RepoDigests}}'], text=True).strip()
             print(json.dumps({'postgres_domain_claims': 'passed', 'instance': identifier, 'image_digests': json.loads(digest),
                               'concurrent_applicants': 2, 'active_configurations': 1, 'lock_wait_seconds': round(waited, 3),
@@ -850,6 +908,7 @@ def main() -> None:
                               'legacy_claim_upgrade': 'passed',
                               'assignment_disable_race': assignment_result,
                               'duplicate_dns_import_race': first_result,
+                              'concurrent_token_limit': [first_token_result, second_token_result],
                               'database': 'disposable tmpfs, actual migrations; no PHPUnit or persistent volumes'}))
         finally:
             subprocess.run(['docker', 'rm', '-f', identifier], check=True, capture_output=True)

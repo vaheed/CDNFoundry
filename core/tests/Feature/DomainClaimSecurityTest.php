@@ -42,6 +42,24 @@ class DomainClaimSecurityTest extends TestCase
             ->patchJson("/api/domains/{$domain->id}", ['display_name' => 'Confidential label'])->assertForbidden();
     }
 
+    public function test_revoked_assignment_cannot_read_earlier_domain_operation_input(): void
+    {
+        $user = User::factory()->create();
+        $admin = User::factory()->admin()->create();
+        $domain = Domain::query()->create(['name' => 'operation.example.com', 'display_name' => 'Operation']);
+        $domain->users()->attach($user);
+        $operation = Operation::query()->create([
+            'actor_id' => $user->id, 'type' => 'dns.zone_import', 'status' => 'pending',
+            'input' => ['domain_id' => $domain->id, 'zone' => 'private DNS content'],
+        ]);
+
+        $this->actingAs($user)->getJson("/api/operations/{$operation->id}")->assertOk();
+        $domain->users()->detach($user);
+        $this->actingAs($user)->getJson("/api/operations/{$operation->id}")
+            ->assertForbidden()->assertDontSee('private DNS content');
+        $this->actingAs($admin)->getJson("/api/operations/{$operation->id}")->assertOk();
+    }
+
     public function test_public_suffix_rules_and_idna_preserve_delegated_zone_support(): void
     {
         foreach (['com.br', 'co.za', 'github.io', 'foo.ck', 'example.com..', 'bücher.de..'] as $name) {

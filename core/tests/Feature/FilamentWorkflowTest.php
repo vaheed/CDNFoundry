@@ -18,6 +18,7 @@ use App\Filament\Domain\Resources\Domains\Pages\CreateDomain;
 use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
 use App\Filament\Domain\Resources\Domains\RelationManagers\DnsRecordsRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\UsersRelationManager;
+use App\Filament\Shared\Pages\ApiTokens;
 use App\Jobs\BuildUsageRollups;
 use App\Jobs\ReconcileAllDnsZones;
 use App\Jobs\ReconcileAllEdgeDomains;
@@ -66,6 +67,20 @@ class FilamentWorkflowTest extends TestCase
         $this->assertTrue($domain->users()->whereKey($user->id)->exists());
         $this->assertFalse($domain->users()->whereKey($disabled->id)->exists());
         $this->assertDatabaseHas('audit_logs', ['action' => 'domain.user_assigned', 'subject_id' => (string) $domain->id]);
+    }
+
+    public function test_panel_token_creation_respects_the_active_token_limit(): void
+    {
+        $user = User::factory()->create();
+        for ($index = 1; $index <= User::MAX_ACTIVE_TOKENS; $index++) {
+            $user->createToken("existing-{$index}");
+        }
+        Filament::setCurrentPanel(Filament::getPanel('app'));
+        $this->actingAs($user);
+
+        Livewire::test(ApiTokens::class)->set('name', 'over-limit')->call('createToken')->assertHasErrors(['name']);
+
+        $this->assertSame(User::MAX_ACTIVE_TOKENS, $user->tokens()->count());
     }
 
     public function test_domain_creation_automatically_queues_zone_provisioning_and_nameserver_verification(): void

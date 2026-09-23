@@ -30,7 +30,8 @@ curl --fail --request POST \
 
 Send later requests with `Authorization: Bearer TOKEN`. `POST /api/auth/logout`
 revokes the current token. Personal access tokens are managed through
-`/api/me/tokens`.
+`/api/me/tokens`. Each user may hold at most 50 active tokens across login,
+API creation and the panel. Revoke an old token before issuing another.
 
 Same-origin browser requests can instead use the signed-in panel session.
 Sanctum accepts the session only from configured stateful origins, applies the
@@ -76,6 +77,10 @@ Domain authorization runs before replay, so revoked assignments cannot retrieve
 earlier cached domain responses. One-time tokens are omitted from receipts and
 replayed responses. Existing receipts without query parameters remain compatible
 during upgrades. Queue dispatch waits for commit.
+
+Domain users can read only operations they requested for a domain they can
+still access. Removing an assignment also removes access to older operation
+input and results. Administrators can inspect global operation history.
 
 ```sh
 curl --fail --request POST \

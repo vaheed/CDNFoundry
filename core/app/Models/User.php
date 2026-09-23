@@ -12,7 +12,10 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\HasApiTokens;
+use Laravel\Sanctum\NewAccessToken;
 
 #[Fillable(['name', 'email', 'password', 'type', 'disabled_at'])]
 #[Hidden(['password', 'remember_token'])]
@@ -20,6 +23,23 @@ class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
+
+    public const MAX_ACTIVE_TOKENS = 50;
+
+    public function createTokenWithinLimit(string $name, string $field = 'name'): NewAccessToken
+    {
+        return DB::transaction(function () use ($name, $field): NewAccessToken {
+            $user = self::query()->lockForUpdate()->findOrFail($this->getKey());
+            abort_if($user->isDisabled(), 403, 'This account is disabled.');
+            if ($user->tokens()->count() >= self::MAX_ACTIVE_TOKENS) {
+                throw ValidationException::withMessages([
+                    $field => 'At most '.self::MAX_ACTIVE_TOKENS.' active API tokens are allowed. Revoke an old token before creating another.',
+                ]);
+            }
+
+            return $user->createToken($name);
+        });
+    }
 
     public function isAdmin(): bool
     {

@@ -250,26 +250,38 @@ operations are skipped on duplicate delivery, and an administrator retry must
 explicitly return a failed operation to pending. The failure path retains the
 previous zone and reports a failed operation.
 
-The supported `make dev-test` command passed **343 tests / 12,651 assertions**
+Domain-user operation reads now require current access to the operation's
+domain as well as original actor identity; revocation cannot replay old
+operation input. Administrators retain global operation access.
+
+Password login, API token creation and the Filament token page now share a
+50-active-token limit per user. Issuance locks the user row; the disposable
+PostgreSQL race admitted one of two requests competing for the final slot,
+leaving exactly 50 tokens. Existing tokens are not deleted by the change;
+operators can revoke older tokens through the token page before issuing more.
+
+The supported `make dev-test` command passed **346 tests / 12,671 assertions**
 after this change. Its effective Compose environment was verified as
 `testing / sqlite / :memory:` before migration-capable tests. The disposable
 `tests/e2e/postgres_domain_claims.py` job passed its actual-migration,
 concurrent-applicant, claim-locking and idempotency checks on a temporary
 PostgreSQL container with a tmpfs data directory. A real row-lock race proved
 that a concurrently disabled user is not assigned (HTTP 422, zero pivot rows).
+The final-token-slot race returned one HTTP 201 and one HTTP 422, leaving 50
+active tokens.
 Two independent PostgreSQL workers contended on one DNS import operation row;
 only one attempt and one revision were committed with 101 records. An injected
 receipt failure in the isolated suite rolled back the entire import.
-The disposable real-BIND
-parent-delegation job passed fresh/stale delegation, bogus DNSSEC, retained DS,
+The disposable real-BIND parent-delegation job passed fresh/stale delegation,
+bogus DNSSEC, retained DS,
 child-apex rejection, IPv4/TCP and IPv6/UDP/TCP cases; it does not qualify a
 public registrar. The PostgreSQL job also replayed the additive delegation-claim
 migration over verified and pending legacy rows, preserving ownership,
 revisions and nullable claim state. Pint, PHP syntax, `make contract-check`
 (Compose, generated production environment, OpenAPI and 19 observability
 contract tests), and `make docs-check` (links, Markdown lint and built site)
-passed. No browser automation or owner
-Phase 2 browser qualification was run. The rest of the Phase 2 source review
+passed. No browser automation or owner Phase 2 browser qualification was run.
+The rest of the Phase 2 source review
 and runtime qualification remain open.
 
 Preparation checks executed on 2026-09-20:

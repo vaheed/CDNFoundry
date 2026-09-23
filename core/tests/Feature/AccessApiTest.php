@@ -158,6 +158,27 @@ class AccessApiTest extends TestCase
         $this->assertDatabaseMissing('personal_access_tokens', ['id' => $tokenId]);
     }
 
+    public function test_login_and_manual_creation_share_the_active_token_limit(): void
+    {
+        $user = User::factory()->create(['password' => 'CorrectHorseBattery9']);
+        for ($index = 1; $index <= User::MAX_ACTIVE_TOKENS; $index++) {
+            $user->createToken("existing-{$index}");
+        }
+
+        $this->postJson('/api/auth/login', [
+            'email' => $user->email, 'password' => 'CorrectHorseBattery9', 'device_name' => 'over-limit',
+        ])->assertUnprocessable()->assertJsonPath('code', 'validation_failed')->assertJsonStructure(['errors' => ['device_name']]);
+        $this->actingAs($user)->postJson('/api/me/tokens', ['name' => 'over-limit'])
+            ->assertUnprocessable()->assertJsonStructure(['errors' => ['name']]);
+        $this->assertSame(User::MAX_ACTIVE_TOKENS, $user->tokens()->count());
+
+        $user->tokens()->oldest('id')->firstOrFail()->delete();
+        $this->postJson('/api/auth/login', [
+            'email' => $user->email, 'password' => 'CorrectHorseBattery9', 'device_name' => 'replacement',
+        ])->assertOk()->assertJsonStructure(['data' => ['token']]);
+        $this->assertSame(User::MAX_ACTIVE_TOKENS, $user->tokens()->count());
+    }
+
     public function test_idempotency_storage_never_persists_or_replays_one_time_tokens(): void
     {
         $user = User::factory()->create();

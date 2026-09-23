@@ -200,6 +200,8 @@ does not close the Phase 1 gate. Use only disposable accounts and domains.
    Use it for one permitted domain API read and one read of another disposable
    user's domain; expect success and denial respectively. Revoke the token and
    expect later use to be unauthenticated. Do not put the token in evidence.
+   The page must refuse creation at 50 active tokens and allow issuance again
+   after revocation; use disposable tokens if checking this limit.
 4. Create a disposable child zone under an already managed parent. Inspect the
    assigned nameservers and pending claim expiry, then try **Verify nameservers**
    before setting the exact parent delegation. Expect a visible failed operation
@@ -210,8 +212,9 @@ does not close the Phase 1 gate. Use only disposable accounts and domains.
 ### Phase 2 completion gate
 
 - Implementation: session/API parity, locked assignment and queued DNS-import
-  authorization/atomicity corrections are present; the remaining identity,
-  authorization and domain-lifecycle inventory review is open.
+  authorization/atomicity corrections are present. Operation reads enforce
+  current assignment, and token issuance is capped at 50 per user. The remaining
+  identity, authorization and domain-lifecycle inventory review is open.
 - Documentation: current API session behavior and these manual steps are written;
   final operator findings remain to be recorded.
 - Automated/runtime qualification: isolated Laravel and disposable PostgreSQL
