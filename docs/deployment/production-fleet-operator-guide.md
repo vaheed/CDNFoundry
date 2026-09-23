@@ -61,7 +61,8 @@ bundle. Docker applies changed logging options when it creates a container; an
 existing container keeps its old options until it is recreated. After rendering
 and validating a new bundle, use the normal canary and wave rollout so Compose
 recreates changed containers one host at a time. Check the effective options on
-each host with `docker inspect --format '{{json .HostConfig.LogConfig}}' CONTAINER`.
+each host with `docker inspect CONTAINER` and inspect its `HostConfig.LogConfig`
+field.
 Check free disk space before the rollout. Retain any required log evidence
 outside Docker first; recreation removes that container's old JSON log history.
 Do not run `docker compose down --volumes` or prune named volumes. If a wave

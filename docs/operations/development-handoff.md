@@ -5,7 +5,7 @@ description: Completed audit batch, actual test evidence, remaining jobs, and de
 
 # Development branch handoff
 
-## Staging pop-2 gateway status repair — 2026-09-23
+## Staging pop-2 gateway status repair (2026-09-23)
 
 The owner reported **Degraded** for `staging-pop-2` while its heartbeat was
 fresh. A read-only administrator API check found eight ready cells, active
