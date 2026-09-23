@@ -308,7 +308,14 @@ rollback material, regression coverage and supported external contracts.
 
 Completion gate: assigned inventory reviewed; cleanup decisions and compatibility
 documented; contracts/links/outage checks pass; owner Grafana/admin/export
-checkpoints recorded. Current status: **partial**.
+checkpoints recorded. Current status: **partial**. AUD-055's source policy now
+bounds Docker JSON logs at 10 MB × 3 for every development and production
+Compose service, including inherited cells. The rendered Compose contract and
+Fleet suite pass. On 2026-09-23 a controlled staging rollout recreated the
+services on both PoPs and control; inspection confirms 53/53 running containers
+have the bounded options, with no named-volume changes. Verified HTTPS and
+host-local authoritative DNS checks passed. Tenant telemetry inventory, cleanup
+ledger, outage qualification and owner browser checkpoints remain open.
 
 ## Phase 8 — Dependency and release verification closure
 

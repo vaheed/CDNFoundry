@@ -1,5 +1,9 @@
 name: cdnfoundry
 
+x-bounded-logging: &bounded-logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
 x-core-env: &core-env
   APP_ENV: production
   APP_DEBUG: "false"
@@ -50,6 +54,7 @@ x-core-env: &core-env
   GRAFANA_EXPLORE_URL: ${GRAFANA_EXPLORE_URL}
 
 x-edge-cell: &edge-cell
+  logging: *bounded-logging
   image: ${CDNF_EDGE_RUNTIME_IMAGE:?CDNF_EDGE_RUNTIME_IMAGE must be an immutable image reference}
   profiles: [edge]
   volumes:
@@ -107,6 +112,7 @@ x-core: &core
 
 services:
   caddy:
+    logging: *bounded-logging
     image: ${CDNF_CADDY_IMAGE:?CDNF_CADDY_IMAGE must be an immutable image reference}
     profiles: [control]
     environment:
@@ -131,6 +137,7 @@ services:
     healthcheck: { test: [CMD, wget, -qO-, http://127.0.0.1:2019/healthz], interval: 10s, timeout: 3s, retries: 10 }
 
   dns-api:
+    logging: *bounded-logging
     image: ${CDNF_CADDY_IMAGE:?CDNF_CADDY_IMAGE must be an immutable image reference}
     profiles: [dns]
     environment:
@@ -149,6 +156,7 @@ services:
     healthcheck: { test: [CMD, wget, -qO-, http://127.0.0.1:2019/healthz], interval: 10s, timeout: 3s, retries: 10 }
 
   telemetry-gateway:
+    logging: *bounded-logging
     image: ${CDNF_CADDY_IMAGE:?CDNF_CADDY_IMAGE must be an immutable image reference}
     profiles: [telemetry]
     environment:
@@ -174,6 +182,7 @@ services:
     healthcheck: { test: [CMD, wget, -qO-, http://127.0.0.1:2019/healthz], interval: 10s, timeout: 3s, retries: 10 }
 
   core:
+    logging: *bounded-logging
     <<: *core
     profiles: [control]
     healthcheck:
@@ -183,6 +192,7 @@ services:
       retries: 10
 
   web:
+    logging: *bounded-logging
     image: ${CDNF_WEB_IMAGE:?CDNF_WEB_IMAGE must be an immutable image reference}
     profiles: [control]
     ports: ["${CONTROL_BIND}:8080"]
@@ -199,6 +209,7 @@ services:
       retries: 10
 
   edge-control:
+    logging: *bounded-logging
     image: ${CDNF_EDGE_CONTROL_IMAGE:?CDNF_EDGE_CONTROL_IMAGE must be an immutable image reference}
     profiles: [control]
     ports: ["${EDGE_CONTROL_BIND}:8443"]
@@ -216,18 +227,21 @@ services:
     tmpfs: [/var/cache/nginx, /var/run]
 
   horizon:
+    logging: *bounded-logging
     <<: *core
     profiles: [control]
     command: [php, artisan, horizon]
     stop_grace_period: 120s
 
   scheduler:
+    logging: *bounded-logging
     <<: *core
     profiles: [control]
     command: [php, artisan, schedule:work]
     stop_grace_period: 30s
 
   migrate:
+    logging: *bounded-logging
     <<: *core
     profiles: [tools]
     command: [php, artisan, migrate, --force]
@@ -238,6 +252,7 @@ services:
     restart: "no"
 
   control-db:
+    logging: *bounded-logging
     image: ${CDNF_POSTGRES_IMAGE:?CDNF_POSTGRES_IMAGE must be an immutable image reference}
     profiles: [control]
     environment:
@@ -254,6 +269,7 @@ services:
       retries: 20
 
   redis:
+    logging: *bounded-logging
     image: valkey/valkey:9.1.2-alpine3.24@sha256:a0dbf4c1d5708782907c10e2c72deff317518518b5288a58416981d9db95d30b
     profiles: [control]
     command: [valkey-server, --appendonly, "yes", --requirepass, "${REDIS_PASSWORD}", --maxmemory, 1gb, --maxmemory-policy, noeviction]
@@ -267,6 +283,7 @@ services:
       retries: 20
 
   pdns-db:
+    logging: *bounded-logging
     image: ${CDNF_POSTGRES_IMAGE:?CDNF_POSTGRES_IMAGE must be an immutable image reference}
     profiles: [dns]
     environment:
@@ -286,6 +303,7 @@ services:
       retries: 20
 
   pdns-auth:
+    logging: *bounded-logging
     image: ${CDNF_PDNS_IMAGE:?CDNF_PDNS_IMAGE must be an immutable image reference}
     profiles: [dns]
     volumes:
@@ -304,6 +322,7 @@ services:
       retries: 20
 
   pdns-migrate:
+    logging: *bounded-logging
     image: ${CDNF_POSTGRES_IMAGE:?CDNF_POSTGRES_IMAGE must be an immutable image reference}
     profiles: [tools]
     command: [psql, -v, ON_ERROR_STOP=1, -h, pdns-db, -U, pdns, -d, pdns, -f, /migrations/2026_07_17_000001_add_powerdns_metadata_tables.sql]
@@ -315,6 +334,7 @@ services:
     restart: "no"
 
   dnsdist:
+    logging: *bounded-logging
     image: ${CDNF_DNSDIST_IMAGE:?CDNF_DNSDIST_IMAGE must be an immutable image reference}
     profiles: [dns]
     ports:
@@ -335,6 +355,7 @@ services:
       retries: 10
 
   clickhouse:
+    logging: *bounded-logging
     image: clickhouse/clickhouse-server:26.8.7.19-alpine@sha256:2bece7c646f08865eadc2000a60427e2964adf2b46908a6d476dfa7cc5408720
     profiles: [telemetry]
     environment:
@@ -358,6 +379,7 @@ services:
       start_period: 20s
 
   vector:
+    logging: *bounded-logging
     image: ${CDNF_VECTOR_IMAGE:?CDNF_VECTOR_IMAGE must be an immutable image reference}
     profiles: [telemetry, dns, edge]
     environment:
@@ -378,6 +400,7 @@ services:
       retries: 3
 
   loki-data-init:
+    logging: *bounded-logging
     image: alpine:3.22.6@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
     profiles: [telemetry]
     command: [chown, "10001:10001", /loki]
@@ -385,6 +408,7 @@ services:
     restart: "no"
 
   loki:
+    logging: *bounded-logging
     image: ${CDNF_LOKI_IMAGE:?CDNF_LOKI_IMAGE must be an immutable image reference}
     profiles: [telemetry]
     environment:
@@ -412,6 +436,7 @@ services:
         limits: { memory: 1g, cpus: "1", pids: 128 }
 
   log-collector:
+    logging: *bounded-logging
     image: ${CDNF_VECTOR_IMAGE:?CDNF_VECTOR_IMAGE must be an immutable image reference}
     profiles: [logs]
     command: [--config, /etc/vector/operational.yaml]
@@ -443,6 +468,7 @@ services:
         limits: { memory: 256m, cpus: "0.25", pids: 96 }
 
   prometheus:
+    logging: *bounded-logging
     image: ${CDNF_PROMETHEUS_IMAGE:?CDNF_PROMETHEUS_IMAGE must be an immutable image reference}
     profiles: [telemetry]
     group_add: ["82"]
@@ -466,6 +492,7 @@ services:
       start_period: 10s
 
   grafana-control-db-provision:
+    logging: *bounded-logging
     image: ${CDNF_POSTGRES_IMAGE:?CDNF_POSTGRES_IMAGE must be an immutable image reference}
     profiles: [telemetry]
     environment:
@@ -488,6 +515,7 @@ services:
     pids_limit: 32
 
   grafana:
+    logging: *bounded-logging
     image: ${CDNF_GRAFANA_IMAGE:?CDNF_GRAFANA_IMAGE must be an immutable image reference}
     profiles: [telemetry]
     ports: ["${GRAFANA_BIND}:3000"]
@@ -544,6 +572,7 @@ services:
       retries: 20
 
   node-exporter:
+    logging: *bounded-logging
     image: ${CDNF_NODE_EXPORTER_IMAGE:?CDNF_NODE_EXPORTER_IMAGE must be an immutable image reference}
     profiles: [control, dns, edge, telemetry]
     command: [--path.procfs=/host/proc, --path.sysfs=/host/sys, --path.rootfs=/host/root, --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)]
@@ -557,6 +586,7 @@ services:
     restart: unless-stopped
 
   alertmanager:
+    logging: *bounded-logging
     image: ${CDNF_ALERTMANAGER_IMAGE:?CDNF_ALERTMANAGER_IMAGE must be an immutable image reference}
     profiles: [telemetry]
     volumes: [./docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro]
@@ -583,6 +613,7 @@ services:
       telemetry: {}
 
   cell-02:
+    logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18082:8081", "127.0.0.1:18445:8444", "127.0.0.1:19082:9080"]
     environment: { EDGE_CELL_NAME: cell-02, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-02.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
@@ -597,42 +628,49 @@ services:
       telemetry: {}
 
   cell-03:
+    logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18083:8081", "127.0.0.1:18446:8444", "127.0.0.1:19083:9080"]
     environment: { EDGE_CELL_NAME: cell-03, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-03.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
     volumes: [edge-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-03-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-04:
+    logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18084:8081", "127.0.0.1:18447:8444", "127.0.0.1:19084:9080"]
     environment: { EDGE_CELL_NAME: cell-04, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-04.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
     volumes: [edge-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-04-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-05:
+    logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18085:8081", "127.0.0.1:18448:8444", "127.0.0.1:19085:9080"]
     environment: { EDGE_CELL_NAME: cell-05, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-05.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
     volumes: [edge-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-05-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-06:
+    logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18086:8081", "127.0.0.1:18449:8444", "127.0.0.1:19086:9080"]
     environment: { EDGE_CELL_NAME: cell-06, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-06.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
     volumes: [edge-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-06-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-07:
+    logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18087:8081", "127.0.0.1:18450:8444", "127.0.0.1:19087:9080"]
     environment: { EDGE_CELL_NAME: cell-07, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-07.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
     volumes: [edge-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-07-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-08:
+    logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18088:8081", "127.0.0.1:18451:8444", "127.0.0.1:19088:9080"]
     environment: { EDGE_CELL_NAME: cell-08, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-08.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
     volumes: [edge-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-08-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   edge-agent:
+    logging: *bounded-logging
     image: ${CDNF_EDGE_AGENT_IMAGE:?CDNF_EDGE_AGENT_IMAGE must be an immutable image reference}
     profiles: [edge]
     environment:
@@ -673,6 +711,7 @@ services:
           pids: 64
 
   edge-gateway:
+    logging: *bounded-logging
     image: ${CDNF_EDGE_GATEWAY_IMAGE:?CDNF_EDGE_GATEWAY_IMAGE must be an immutable image reference}
     profiles: [edge]
     environment:
@@ -705,6 +744,7 @@ services:
           pids: 128
 
   edge-gateway-state-init:
+    logging: *bounded-logging
     image: alpine:3.22.6@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
     profiles: [edge]
     command: [chown, "10101:10101", /state]
@@ -712,6 +752,7 @@ services:
     restart: "no"
 
   mmdb-updater:
+    logging: *bounded-logging
     image: ${CDNF_MMDB_UPDATER_IMAGE:?CDNF_MMDB_UPDATER_IMAGE must be an immutable image reference}
     profiles: [control, dns, edge]
     environment:

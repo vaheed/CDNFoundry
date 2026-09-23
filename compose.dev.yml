@@ -1,5 +1,9 @@
 name: cdnfoundry-dev
 
+x-bounded-logging: &bounded-logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
 x-core-env: &core-env
   APP_ENV: local
   APP_DEBUG: "true"
@@ -38,6 +42,7 @@ x-core-env: &core-env
   GRAFANA_EXPLORE_URL: ${GRAFANA_EXPLORE_URL:-http://localhost:3000/explore?left=%7B%22datasource%22:%22loki%22%7D}
 
 x-core: &core
+  logging: *bounded-logging
   build:
     context: ./core
     target: development
@@ -75,6 +80,7 @@ x-dev-cell-env: &dev-cell-env
   GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb
 
 x-dev-cell: &dev-cell
+  logging: *bounded-logging
   build:
     context: .
     dockerfile: docker/openresty/Dockerfile
@@ -99,6 +105,7 @@ x-dev-cell: &dev-cell
 
 services:
   dev-pki:
+    logging: *bounded-logging
     build:
       context: .
       dockerfile: docker/dev-pki/Dockerfile
@@ -106,6 +113,7 @@ services:
     restart: "no"
 
   vendor-init:
+    logging: *bounded-logging
     build:
       context: ./core
       target: development
@@ -124,6 +132,7 @@ services:
     restart: "no"
 
   core:
+    logging: *bounded-logging
     <<: *core
     healthcheck:
       test: [CMD, php, -r, "exit(@fsockopen('127.0.0.1', 9000) ? 0 : 1);"]
@@ -132,6 +141,7 @@ services:
       retries: 10
 
   web:
+    logging: *bounded-logging
     image: nginx:1.30.3-alpine
     ports: ["8080:8080"]
     volumes:
@@ -148,6 +158,7 @@ services:
       retries: 10
 
   edge-control:
+    logging: *bounded-logging
     image: nginx:1.30.3-alpine
     ports: ["${CDNF_DEV_EDGE_CONTROL_BIND:-127.0.0.1:9443}:8443"]
     volumes:
@@ -166,23 +177,24 @@ services:
       retries: 10
 
   horizon:
+    logging: *bounded-logging
     <<: *core
-    logging:
-      driver: json-file
-      options: { max-size: "10m", max-file: "3" }
     command: [php, artisan, horizon]
     networks: [control, dns]
 
   scheduler:
+    logging: *bounded-logging
     <<: *core
     command: [php, artisan, schedule:work]
 
   migrate:
+    logging: *bounded-logging
     <<: *core
     command: [php, artisan, migrate, --force]
     restart: "no"
 
   control-db:
+    logging: *bounded-logging
     image: postgres:18.4-alpine
     environment:
       POSTGRES_DB: cdnf
@@ -197,6 +209,7 @@ services:
       retries: 20
 
   redis:
+    logging: *bounded-logging
     image: valkey/valkey:9.1.0-alpine
     command: [valkey-server, --appendonly, "yes", --maxmemory, 256mb, --maxmemory-policy, noeviction]
     volumes: [redis:/data]
@@ -208,6 +221,7 @@ services:
       retries: 20
 
   pdns-db:
+    logging: *bounded-logging
     image: postgres:18.4-alpine
     environment:
       POSTGRES_DB: pdns
@@ -224,6 +238,7 @@ services:
       retries: 20
 
   pdns-auth:
+    logging: *bounded-logging
     image: powerdns/pdns-auth-51:5.1.3
     volumes:
       - ./docker/pdns/pdns.conf:/etc/powerdns/pdns.conf:ro
@@ -241,6 +256,7 @@ services:
       retries: 20
 
   pdns-migrate:
+    logging: *bounded-logging
     image: postgres:18.4-alpine
     command: [psql, -v, ON_ERROR_STOP=1, -h, pdns-db, -U, pdns, -d, pdns, -f, /migrations/2026_07_17_000001_add_powerdns_metadata_tables.sql]
     environment: { PGPASSWORD: pdns-dev-only }
@@ -251,6 +267,7 @@ services:
     restart: "no"
 
   dnsdist:
+    logging: *bounded-logging
     image: powerdns/dnsdist-21:2.1.0
     ports: ["1053:53/udp", "1053:53/tcp"]
     volumes: [./docker/dnsdist/dnsdist.conf:/etc/dnsdist/dnsdist.conf:ro]
@@ -265,6 +282,7 @@ services:
       retries: 10
 
   pebble:
+    logging: *bounded-logging
     image: ghcr.io/letsencrypt/pebble@sha256:ddf230642b1a584f519f32e347de1b05a6e4c1f6c35c1863b33effeab5f78199
     command: [-dnsserver, dnsdist:53]
     environment:
@@ -277,10 +295,8 @@ services:
     restart: unless-stopped
 
   clickhouse:
+    logging: *bounded-logging
     image: clickhouse/clickhouse-server:26.3.12.3-alpine
-    logging:
-      driver: json-file
-      options: { max-size: "10m", max-file: "3" }
     environment:
       CLICKHOUSE_DB: cdnf
       CLICKHOUSE_USER: cdnf
@@ -300,6 +316,7 @@ services:
       retries: 20
 
   vector:
+    logging: *bounded-logging
     image: timberio/vector:0.55.0-alpine
     environment:
       CLICKHOUSE_ENDPOINT: http://clickhouse:8123
@@ -312,12 +329,14 @@ services:
     restart: unless-stopped
 
   loki-data-init:
+    logging: *bounded-logging
     image: alpine:3.22
     command: [chown, "10001:10001", /loki]
     volumes: [loki-data:/loki]
     restart: "no"
 
   loki:
+    logging: *bounded-logging
     build:
       context: ./docker/loki
     ports: ["127.0.0.1:3100:3100"]
@@ -337,6 +356,7 @@ services:
       start_period: 10s
 
   log-collector:
+    logging: *bounded-logging
     image: timberio/vector:0.55.0-debian@sha256:a4be1111b40303524aae2ffb02cd59cef2a4e9753bd13d265bf0233e921828d9
     container_name: cdnfoundry-log-collector
     command: [--config, /etc/vector/operational.yaml]
@@ -365,6 +385,7 @@ services:
     pids_limit: 96
 
   prometheus:
+    logging: *bounded-logging
     image: prom/prometheus:v3.12.0
     ports: ["9090:9090"]
     volumes:
@@ -381,6 +402,7 @@ services:
     networks: [telemetry, control, dns]
 
   grafana-control-db-provision:
+    logging: *bounded-logging
     image: postgres:18.4-alpine
     environment:
       PGHOST: control-db
@@ -398,6 +420,7 @@ services:
     restart: "no"
 
   grafana:
+    logging: *bounded-logging
     build:
       context: ./docker/grafana
     ports: ["127.0.0.1:3000:3000"]
@@ -443,6 +466,7 @@ services:
       retries: 20
 
   node-exporter:
+    logging: *bounded-logging
     image: prom/node-exporter:v1.10.2
     command: [--path.procfs=/host/proc, --path.sysfs=/host/sys, --path.rootfs=/host/root, --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)]
     pid: host
@@ -455,12 +479,14 @@ services:
     restart: unless-stopped
 
   alertmanager:
+    logging: *bounded-logging
     image: prom/alertmanager:v0.32.1
     ports: ["9093:9093"]
     volumes: [./docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro]
     networks: [telemetry]
 
   origin-http:
+    logging: *bounded-logging
     image: nginx:1.30.3-alpine
     command: [sh, -c, "dd if=/dev/zero of=/tmp/large-object bs=1048576 count=2 >/dev/null 2>&1 && dd if=/dev/zero of=/tmp/graceful-object bs=8192 count=1 >/dev/null 2>&1 && exec nginx -g 'daemon off;'"]
     tmpfs: [/tmp:size=4m]
@@ -468,6 +494,7 @@ services:
     networks: [edge]
 
   origin-https:
+    logging: *bounded-logging
     build:
       context: ./docker/nginx
       dockerfile: Dockerfile.origin-https
@@ -486,6 +513,7 @@ services:
     networks: [edge]
 
   edge-a:
+    logging: *bounded-logging
     build:
       context: .
       dockerfile: docker/openresty/Dockerfile
@@ -519,6 +547,7 @@ services:
       retries: 10
 
   edge-a-quarantine:
+    logging: *bounded-logging
     build:
       context: .
       dockerfile: docker/openresty/Dockerfile
@@ -552,31 +581,37 @@ services:
     volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-a-cell-03-cache:/var/cache/nginx]
 
   edge-a-cell-04:
+    logging: *bounded-logging
     <<: *edge-a-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-04, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-04.json }
     volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-a-cell-04-cache:/var/cache/nginx]
 
   edge-a-cell-05:
+    logging: *bounded-logging
     <<: *edge-a-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-05, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-05.json }
     volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-a-cell-05-cache:/var/cache/nginx]
 
   edge-a-cell-06:
+    logging: *bounded-logging
     <<: *edge-a-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-06, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-06.json }
     volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-a-cell-06-cache:/var/cache/nginx]
 
   edge-a-cell-07:
+    logging: *bounded-logging
     <<: *edge-a-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-07, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-07.json }
     volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-a-cell-07-cache:/var/cache/nginx]
 
   edge-a-cell-08:
+    logging: *bounded-logging
     <<: *edge-a-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-08, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-08.json }
     volumes: [dev-pki:/run/edge:ro, edge-a-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-a-cell-08-cache:/var/cache/nginx]
 
   edge-agent-a:
+    logging: *bounded-logging
     build: ./edge-agent
     environment:
       EDGE_CONTROL_URL: https://edge-control:8443
@@ -614,6 +649,7 @@ services:
     pids_limit: 64
 
   edge-gateway-a:
+    logging: *bounded-logging
     build: ./edge-gateway
     environment:
       GATEWAY_CONFIG_FILE: /var/lib/cdnfoundry/runtime/current/gateway.json
@@ -647,12 +683,14 @@ services:
     cap_add: [NET_BIND_SERVICE]
 
   edge-gateway-a-state-init:
+    logging: *bounded-logging
     image: alpine:3.22
     command: [chown, "10101:10101", /state]
     volumes: [edge-a-gateway-state:/state]
     restart: "no"
 
   edge-b:
+    logging: *bounded-logging
     build:
       context: .
       dockerfile: docker/openresty/Dockerfile
@@ -686,6 +724,7 @@ services:
       retries: 10
 
   edge-b-quarantine:
+    logging: *bounded-logging
     build:
       context: .
       dockerfile: docker/openresty/Dockerfile
@@ -719,31 +758,37 @@ services:
     volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-b-cell-03-cache:/var/cache/nginx]
 
   edge-b-cell-04:
+    logging: *bounded-logging
     <<: *edge-b-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-04, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-04.json }
     volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-b-cell-04-cache:/var/cache/nginx]
 
   edge-b-cell-05:
+    logging: *bounded-logging
     <<: *edge-b-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-05, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-05.json }
     volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-b-cell-05-cache:/var/cache/nginx]
 
   edge-b-cell-06:
+    logging: *bounded-logging
     <<: *edge-b-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-06, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-06.json }
     volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-b-cell-06-cache:/var/cache/nginx]
 
   edge-b-cell-07:
+    logging: *bounded-logging
     <<: *edge-b-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-07, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-07.json }
     volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-b-cell-07-cache:/var/cache/nginx]
 
   edge-b-cell-08:
+    logging: *bounded-logging
     <<: *edge-b-extra-cell
     environment: { <<: *dev-cell-env, EDGE_CELL_NAME: cell-08, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-08.json }
     volumes: [dev-pki:/run/edge:ro, edge-b-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, edge-b-cell-08-cache:/var/cache/nginx]
 
   edge-agent-b:
+    logging: *bounded-logging
     build: ./edge-agent
     environment:
       EDGE_CONTROL_URL: https://edge-control:8443
@@ -781,6 +826,7 @@ services:
     pids_limit: 64
 
   edge-gateway-b:
+    logging: *bounded-logging
     build: ./edge-gateway
     environment:
       GATEWAY_CONFIG_FILE: /var/lib/cdnfoundry/runtime/current/gateway.json
@@ -813,12 +859,14 @@ services:
     cap_add: [NET_BIND_SERVICE]
 
   edge-gateway-b-state-init:
+    logging: *bounded-logging
     image: alpine:3.22
     command: [chown, "10101:10101", /state]
     volumes: [edge-b-gateway-state:/state]
     restart: "no"
 
   poweradmin:
+    logging: *bounded-logging
     image: poweradmin/poweradmin:4.3.3
     ports: ["9191:80"]
     environment:
@@ -842,6 +890,7 @@ services:
     restart: unless-stopped
 
   mmdb-updater:
+    logging: *bounded-logging
     build:
       context: ./docker/mmdb-updater
     environment:

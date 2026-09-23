@@ -1896,9 +1896,15 @@ ClickHouse reported healthy, Horizon reported running, and Compose validation
 passed. About **43 GB** became available. Private recent tails are retained under
 ignored `storage/qualification/security-audit/log-recovery-20260919`; they must
 not be committed or printed. No database migration, refresh or volume deletion
-occurred. AUD-055 is **partially remediated**: these two development services are
-bounded; the remaining service/production logging policy remains assigned to
-telemetry/cleanup. Do not remove the limits during subsequent development starts.
+occurred. All services in the development and production Compose sources now
+declare the same 10 MB × 3 JSON log policy, including inherited cell templates.
+The rendered policy is covered by a Compose contract test. On 2026-09-23 the
+three staging hosts were rolled one at a time with a protected Compose overlay;
+Docker inspection showed 53/53 running containers using the bounded options.
+No named volume changed. AUD-055's staged log-retention condition is
+**remediated**; broader telemetry and cleanup qualification remains in Phase 7.
+Existing containers on any other installation retain their original logging
+options until recreation; keep the limits during subsequent starts.
 
 ## Dependency remediation: verified base and queue replacements
 

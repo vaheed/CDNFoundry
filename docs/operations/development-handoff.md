@@ -973,6 +973,32 @@ sequence and the unprivileged BIND fixture together.
 
 ## Retrieve the complete app for staging
 
+### September 23 Phase 6–8 continuation
+
+The Phase 7 AUD-055 source correction now covers every service in the
+development and production Compose files, including shared and extra cell
+templates. The production Fleet renderer inherits the explicit logging policy.
+Local qualification passed: both Compose configurations, nine operational
+logging contract tests, 80 Fleet tests, and nine supply-chain policy and release
+instruction tests. `git diff --check` also passed. The supply-chain test suite
+intentionally exercises a rejected image and reports that fixture failure before
+the suite's final success.
+
+The initial read-only inspection found 53 running containers with empty
+`json-file` options. A protected logging overlay was applied to the rendered
+Fleet bundle on pop-1, pop-2, then control-1. Every service was recreated in
+sequence. Final Docker inspection found **53/53** containers using
+`max-size=10m` and `max-file=3`; no named volume changed on any host. Verified
+HTTPS cache probes passed on both PoPs. Control health, readiness, Grafana
+health and unauthenticated-admin checks passed over verified HTTPS. Host-local
+authoritative UDP/TCP SOA checks passed on both PoPs. The workspace's public
+DNS path returned recursive flags, so the public authoritative DNS check from
+this workspace did not pass; this is retained as a qualification limitation.
+Sanitized rollout and inspection reports are under ignored `.prod/`.
+Phase 6 clean-host restore, Phase 7 telemetry and
+cleanup inventory, and Phase 8 exact selected-release scan and pull verification
+remain unqualified. Owner browser qualification remains **not run**.
+
 A successful `publish-images` job publishes these GHCR repositories:
 
 | Component | Repository |

@@ -24,6 +24,18 @@ class OperationalLoggingContractTest(unittest.TestCase):
         )
         cls.production = json.loads(completed.stdout)
 
+    def test_every_compose_service_has_bounded_docker_logs(self) -> None:
+        for filename, extra in (("compose.prod.yml", ["--env-file", ".env.prod.example"]), ("compose.dev.yml", [])):
+            completed = subprocess.run(
+                ["docker", "compose", *extra, "-f", filename, "--profile", "control", "--profile", "dns", "--profile", "edge", "--profile", "telemetry", "--profile", "logs", "--profile", "tools", "config", "--format", "json"],
+                cwd=ROOT, check=True, capture_output=True, text=True,
+            )
+            services = json.loads(completed.stdout)["services"]
+            self.assertTrue(services)
+            for name, service in services.items():
+                with self.subTest(compose=filename, service=name):
+                    self.assertEqual({"driver": "json-file", "options": {"max-size": "10m", "max-file": "3"}}, service.get("logging"))
+
     def test_loki_is_private_persistent_pinned_and_bounded(self) -> None:
         service = self.production["services"]["loki"]
         self.assertNotIn("ports", service)

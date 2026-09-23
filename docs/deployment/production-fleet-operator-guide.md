@@ -53,6 +53,20 @@ The generator runs from a trusted checkout of the CDNFoundry repository and writ
 
 Remote nodes do not need a repository clone. They receive only their own bundle.
 
+## Docker log retention on existing hosts
+
+Every service in the production Compose source uses Docker `json-file` logging
+with 10 MB per file and three files. Fleet renders this policy into each node
+bundle. Docker applies changed logging options when it creates a container; an
+existing container keeps its old options until it is recreated. After rendering
+and validating a new bundle, use the normal canary and wave rollout so Compose
+recreates changed containers one host at a time. Check the effective options on
+each host with `docker inspect --format '{{json .HostConfig.LogConfig}}' CONTAINER`.
+Check free disk space before the rollout. Retain any required log evidence
+outside Docker first; recreation removes that container's old JSON log history.
+Do not run `docker compose down --volumes` or prune named volumes. If a wave
+fails, restore the previous bundle and repeat the normal rollback procedure.
+
 ## Fastest supported setup
 
 From the repository root, run:
