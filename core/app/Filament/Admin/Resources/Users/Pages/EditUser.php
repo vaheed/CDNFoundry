@@ -10,6 +10,7 @@ use Filament\Actions\DeleteAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class EditUser extends EditRecord
 {
@@ -34,18 +35,33 @@ class EditUser extends EditRecord
                 ->action(function (): void {
                     /** @var User $user */
                     $user = $this->record;
-                    $disabling = ! $user->isDisabled();
-                    $user->forceFill(['disabled_at' => $disabling ? now() : null])->save();
-                    if ($disabling) {
-                        $user->tokens()->delete();
-                    }
-                    AuditLog::record(auth()->user(), $disabling ? 'user.disabled' : 'user.enabled', $user, [], request()->ip());
+                    $disabling = DB::transaction(function () use ($user): bool {
+                        $locked = User::query()->lockForUpdate()->findOrFail($user->getKey());
+                        abort_if($locked->is(auth()->user()), 422, 'You cannot disable your own account.');
+                        $disabling = ! $locked->isDisabled();
+                        $locked->forceFill(['disabled_at' => $disabling ? now() : null])->save();
+                        if ($disabling) {
+                            $locked->tokens()->delete();
+                        }
+                        AuditLog::record(auth()->user(), $disabling ? 'user.disabled' : 'user.enabled', $locked, [], request()->ip());
+
+                        return $disabling;
+                    });
                     Notification::make()->success()->title($disabling ? 'User disabled' : 'User enabled')->send();
                     $this->refreshFormData(['disabled_at']);
                 }),
             DeleteAction::make()
                 ->disabled(fn (): bool => $this->record->is(auth()->user()) || $this->record->tokens()->exists())
-                ->before(fn () => AuditLog::record(auth()->user(), 'user.deleted', $this->record, ['email' => $this->record->email], request()->ip())),
+                ->using(function (User $record): bool {
+                    return DB::transaction(function () use ($record): bool {
+                        $locked = User::query()->lockForUpdate()->findOrFail($record->getKey());
+                        abort_if($locked->is(auth()->user()), 422, 'You cannot delete your own account.');
+                        abort_if($locked->tokens()->exists(), 409, 'Revoke all tokens before deleting this user.');
+                        AuditLog::record(auth()->user(), 'user.deleted', $locked, ['email' => $locked->email], request()->ip());
+
+                        return (bool) $locked->delete();
+                    });
+                }),
         ];
     }
 }

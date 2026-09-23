@@ -14,6 +14,7 @@ use App\Filament\Admin\Resources\Edges\Pages\ListEdges;
 use App\Filament\Admin\Resources\Edges\Pages\ViewEdge;
 use App\Filament\Admin\Resources\Edges\RelationManagers\CellsRelationManager;
 use App\Filament\Admin\Resources\Operations\Pages\ListOperations;
+use App\Filament\Admin\Resources\Users\Pages\EditUser;
 use App\Filament\Domain\Resources\Domains\Pages\CreateDomain;
 use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
 use App\Filament\Domain\Resources\Domains\RelationManagers\DnsRecordsRelationManager;
@@ -45,6 +46,28 @@ use Tests\TestCase;
 class FilamentWorkflowTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_user_panel_disable_revokes_tokens_and_delete_requires_revocation(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $user = User::factory()->create();
+        $user->createToken('panel-test');
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(EditUser::class, ['record' => $user->getRouteKey()])
+            ->assertActionDisabled('delete');
+        Livewire::test(EditUser::class, ['record' => $user->getRouteKey()])
+            ->callAction('toggleAccess')->assertHasNoActionErrors();
+        $this->assertTrue($user->fresh()->isDisabled());
+        $this->assertSame(0, $user->tokens()->count());
+
+        Livewire::test(EditUser::class, ['record' => $user->getRouteKey()])
+            ->callAction('delete')->assertHasNoActionErrors();
+        $this->assertDatabaseMissing('users', ['id' => $user->id]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'user.disabled', 'subject_id' => $user->id]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'user.deleted', 'subject_id' => $user->id]);
+    }
 
     public function test_administrator_relation_manager_assigns_an_active_domain_user(): void
     {

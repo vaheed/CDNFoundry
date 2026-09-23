@@ -428,6 +428,9 @@ if ($mode === 'init') {
         $user->createToken('existing-'.$index);
     }
     echo json_encode(['user_id' => $user->id, 'tokens' => $user->tokens()->count()])."\n";
+} elseif ($mode === 'token-empty-init') {
+    $user = App\Models\User::factory()->create();
+    echo json_encode(['user_id' => $user->id, 'tokens' => 0])."\n";
 } elseif ($mode === 'token-issue') {
     $paused = false;
     App\Models\User::retrieved(function ($loaded) use ($argv, &$paused): void {
@@ -446,6 +449,27 @@ if ($mode === 'init') {
         $status = 422;
     }
     echo json_encode(['status' => $status, 'tokens' => $user->tokens()->count()])."\n";
+} elseif ($mode === 'token-disable') {
+    $admin = App\Models\User::findOrFail(1);
+    $user = App\Models\User::findOrFail((int) $argv[2]);
+    $request = Illuminate\Http\Request::create('/api/admin/users/'.$user->id.'/disable', 'POST');
+    $request->setUserResolver(fn () => $admin);
+    app(App\Http\Controllers\Admin\UserController::class)->disable($request, $user);
+    $user->refresh();
+    echo json_encode(['disabled' => $user->isDisabled(), 'tokens' => $user->tokens()->count()])."\n";
+} elseif ($mode === 'token-delete') {
+    $admin = App\Models\User::findOrFail(1);
+    $user = App\Models\User::findOrFail((int) $argv[2]);
+    $request = Illuminate\Http\Request::create('/api/admin/users/'.$user->id, 'DELETE');
+    $request->setUserResolver(fn () => $admin);
+    try {
+        app(App\Http\Controllers\Admin\UserController::class)->destroy($request, $user);
+        $status = 204;
+    } catch (Symfony\Component\HttpKernel\Exception\HttpException $exception) {
+        $status = $exception->getStatusCode();
+    }
+    echo json_encode(['status' => $status, 'user_exists' => App\Models\User::whereKey($user->id)->exists(),
+        'tokens' => $user->tokens()->count()])."\n";
 } elseif ($mode === 'hold') {
     Illuminate\Support\Facades\DB::transaction(function (): void {
         App\Models\Domain::lockCanonicalName('locked.example.com');
@@ -911,6 +935,72 @@ def main() -> None:
                         if process.poll() is None:
                             process.kill()
                         process.communicate(timeout=10)
+            disable_case = json.loads(subprocess.check_output(command('token-init'), env=env, text=True))
+            issuing = subprocess.Popen(command('token-issue', str(disable_case['user_id'])),
+                                       env={**env, 'CDNF_TOKEN_PAUSE': '1'}, stdin=subprocess.PIPE,
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            disabling = None
+            try:
+                assert issuing.stdout.readline().strip() == 'locked'
+                disabling = subprocess.Popen(command('token-disable', str(disable_case['user_id'])), env=env,
+                                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                for _ in range(90):
+                    blocked = subprocess.check_output(['docker', 'exec', identifier, 'psql', '-U', 'postgres',
+                        '-d', 'cdnf_claim_qualification', '-Atc',
+                        "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%users%'"], text=True)
+                    if int(blocked.strip()) > 0:
+                        break
+                    assert disabling.poll() is None, 'Disable contender exited before user-row contention'
+                    time.sleep(.02)
+                else:
+                    raise AssertionError('Disable contender did not wait on the user row')
+                output, error = issuing.communicate(input='continue\n', timeout=10)
+                assert issuing.returncode == 0, error
+                issued_before_disable = json.loads(output.strip().splitlines()[-1])
+                output, error = disabling.communicate(timeout=10)
+                assert disabling.returncode == 0, error
+                disabled_after_issue = json.loads(output.strip().splitlines()[-1])
+                assert issued_before_disable == {'status': 201, 'tokens': 50}, issued_before_disable
+                assert disabled_after_issue == {'disabled': True, 'tokens': 0}, disabled_after_issue
+            finally:
+                for process in (disabling, issuing):
+                    if process is not None:
+                        if process.poll() is None:
+                            process.kill()
+                        process.communicate(timeout=10)
+            delete_case = json.loads(subprocess.check_output(command('token-empty-init'), env=env, text=True))
+            issuing = subprocess.Popen(command('token-issue', str(delete_case['user_id'])),
+                                       env={**env, 'CDNF_TOKEN_PAUSE': '1'}, stdin=subprocess.PIPE,
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            deleting = None
+            try:
+                assert issuing.stdout.readline().strip() == 'locked'
+                deleting = subprocess.Popen(command('token-delete', str(delete_case['user_id'])), env=env,
+                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                for _ in range(90):
+                    blocked = subprocess.check_output(['docker', 'exec', identifier, 'psql', '-U', 'postgres',
+                        '-d', 'cdnf_claim_qualification', '-Atc',
+                        "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%users%'"], text=True)
+                    if int(blocked.strip()) > 0:
+                        break
+                    assert deleting.poll() is None, 'Delete contender exited before user-row contention'
+                    time.sleep(.02)
+                else:
+                    raise AssertionError('Delete contender did not wait on the user row')
+                output, error = issuing.communicate(input='continue\n', timeout=10)
+                assert issuing.returncode == 0, error
+                issued_before_delete = json.loads(output.strip().splitlines()[-1])
+                output, error = deleting.communicate(timeout=10)
+                assert deleting.returncode == 0, error
+                deleted_after_issue = json.loads(output.strip().splitlines()[-1])
+                assert issued_before_delete == {'status': 201, 'tokens': 1}, issued_before_delete
+                assert deleted_after_issue == {'status': 409, 'user_exists': True, 'tokens': 1}, deleted_after_issue
+            finally:
+                for process in (deleting, issuing):
+                    if process is not None:
+                        if process.poll() is None:
+                            process.kill()
+                        process.communicate(timeout=10)
             digest = subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{json .RepoDigests}}'], text=True).strip()
             print(json.dumps({'postgres_domain_claims': 'passed', 'instance': identifier, 'image_digests': json.loads(digest),
                               'concurrent_applicants': 2, 'active_configurations': 1, 'lock_wait_seconds': round(waited, 3),
@@ -933,6 +1023,8 @@ def main() -> None:
                               'assignment_disable_race': assignment_result,
                               'duplicate_dns_import_race': first_result,
                               'concurrent_token_limit': [first_token_result, second_token_result],
+                              'concurrent_token_issue_disable': [issued_before_disable, disabled_after_issue],
+                              'concurrent_token_issue_delete': [issued_before_delete, deleted_after_issue],
                               'database': 'disposable tmpfs, actual migrations; no PHPUnit or persistent volumes'}))
         finally:
             subprocess.run(['docker', 'rm', '-f', identifier], check=True, capture_output=True)

@@ -12,6 +12,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 
 class UserController extends Controller
 {
@@ -50,11 +51,14 @@ class UserController extends Controller
     public function disable(Request $request, User $user): UserResource
     {
         abort_if($user->is($request->user()), 422, 'You cannot disable your own account.');
-        if (! $user->isDisabled()) {
-            $user->forceFill(['disabled_at' => now()])->save();
-            $user->tokens()->delete();
-            AuditLog::record($request->user(), 'user.disabled', $user, [], $request->ip());
-        }
+        DB::transaction(function () use ($request, $user): void {
+            $locked = User::query()->lockForUpdate()->findOrFail($user->getKey());
+            if (! $locked->isDisabled()) {
+                $locked->forceFill(['disabled_at' => now()])->save();
+                $locked->tokens()->delete();
+                AuditLog::record($request->user(), 'user.disabled', $locked, [], $request->ip());
+            }
+        });
 
         return UserResource::make($user->refresh());
     }
@@ -72,9 +76,12 @@ class UserController extends Controller
     public function destroy(Request $request, User $user): JsonResponse
     {
         abort_if($user->is($request->user()), 422, 'You cannot delete your own account.');
-        abort_if($user->tokens()->exists(), 409, 'Revoke all tokens before deleting this user.');
-        AuditLog::record($request->user(), 'user.deleted', $user, ['email' => $user->email], $request->ip());
-        $user->delete();
+        DB::transaction(function () use ($request, $user): void {
+            $locked = User::query()->lockForUpdate()->findOrFail($user->getKey());
+            abort_if($locked->tokens()->exists(), 409, 'Revoke all tokens before deleting this user.');
+            AuditLog::record($request->user(), 'user.deleted', $locked, ['email' => $locked->email], $request->ip());
+            $locked->delete();
+        });
 
         return response()->json(null, 204);
     }
