@@ -128,6 +128,33 @@ class SystemSettingsTest extends TestCase
         Queue::assertPushed(ReconcileAllEdgeDomains::class, fn (ReconcileAllEdgeDomains $job): bool => $job->operationId === $operationId);
     }
 
+    public function test_legacy_edge_telemetry_values_remain_compatible_without_accepting_new_unknown_input(): void
+    {
+        Queue::fake();
+        $setting = SystemSetting::query()->findOrFail('edge_runtime');
+        $legacy = [
+            'telemetry_quorum_edges' => 2,
+            'telemetry_max_age_seconds' => 120,
+            'telemetry_future_skew_seconds' => 15,
+        ];
+        $setting->update(['values' => [...$setting->values, ...$legacy]]);
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)->getJson('/api/admin/system/settings/edge_runtime')->assertOk()
+            ->assertJsonMissing(['key' => 'telemetry_quorum_edges']);
+        $this->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->patchJson('/api/admin/system/settings/edge_runtime', ['values' => ['heartbeat_fresh_seconds' => 60]])
+            ->assertAccepted();
+        $saved = $setting->refresh()->values;
+        $this->assertSame(60, $saved['heartbeat_fresh_seconds']);
+        foreach ($legacy as $key => $value) {
+            $this->assertSame($value, $saved[$key]);
+        }
+        $this->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->patchJson('/api/admin/system/settings/edge_runtime', ['values' => ['telemetry_quorum_edges' => 3]])
+            ->assertUnprocessable();
+    }
+
     public function test_domain_deprovisioning_uses_the_database_window_not_environment_configuration(): void
     {
         $user = User::factory()->create();

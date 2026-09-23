@@ -53,7 +53,7 @@ final class PlatformSettings
             $row = SystemSetting::query()->find($group)
                 ?? throw new RuntimeException("Platform setting group '{$group}' is missing. Run the database migrations.");
             try {
-                $values = $this->validate($group, $row->values);
+                $values = $this->validate($group, $this->currentPersistedValues($group, $row->values));
             } catch (ValidationException $exception) {
                 throw new RuntimeException("Platform setting group '{$group}' contains invalid persisted values.", previous: $exception);
             }
@@ -166,11 +166,12 @@ final class PlatformSettings
         $result = DB::transaction(function () use ($group, $input, $actor, $ipAddress, $runtimeGroups): array {
             $setting = SystemSetting::query()->lockForUpdate()->find($group)
                 ?? throw new RuntimeException("Platform setting group '{$group}' is missing. Run the database migrations.");
-            $values = $this->validate($group, [...$setting->values, ...$input]);
-            if ($setting->values === $values) {
+            $current = $this->currentPersistedValues($group, $setting->values);
+            $values = $this->validate($group, [...$current, ...$input]);
+            if ($current === $values) {
                 return ['setting' => $setting, 'operation' => null];
             }
-            $setting->update(['values' => $values, 'revision' => $setting->revision + 1]);
+            $setting->update(['values' => [...$setting->values, ...$values], 'revision' => $setting->revision + 1]);
             $operation = in_array($group, $runtimeGroups, true) ? Operation::query()->create([
                 'actor_id' => $actor?->getKey(), 'type' => 'system_settings.update', 'status' => 'pending',
                 'input' => ['group' => $group, 'revision' => $setting->revision],
@@ -195,6 +196,17 @@ final class PlatformSettings
             ReconcilePlatformDnsIdentity::dispatch()->afterCommit();
         }
         ReconcileAllEdgeDomains::dispatch($operation->getKey())->afterCommit();
+    }
+
+    private function currentPersistedValues(string $group, array $values): array
+    {
+        if ($group !== 'edge_runtime') {
+            return $values;
+        }
+
+        return array_diff_key($values, array_flip([
+            'telemetry_quorum_edges', 'telemetry_max_age_seconds', 'telemetry_future_skew_seconds',
+        ]));
     }
 
     private static function validCidr(string $cidr): bool

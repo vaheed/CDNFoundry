@@ -89,6 +89,11 @@ does not migrate ClickHouse tables automatically.
 | `placement_drain_seconds` | 300 | 30–86,400 |
 | `max_domain_artifact_bytes` | 2,097,152 | 65,536–16,777,216 |
 
+Existing rows may still contain the older telemetry quorum, maximum-age and
+future-skew values. Current workers ignore those three stored fields, retain
+them during updates for mixed-version compatibility, and do not offer them as
+new input. Other unknown persisted fields still fail validation.
+
 ## Origin safety
 
 | Field | Default | Allowed |
