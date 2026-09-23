@@ -103,6 +103,18 @@ challenges and records any resulting DNS reconciliation in the same transaction.
 Inspect the current TLS order and runtime acknowledgement when diagnosing an
 older worker error.
 
+Before sending ACME finalization, the issuer stores the new private key encrypted
+and stores its CSR on the order. If the CA accepts finalization but its response
+is lost, retry checks the remote order and reuses that same key and CSR. A
+remote `processing` or `valid` order moves to certificate polling; a `ready`
+order resubmits the saved CSR. The current valid certificate stays selected
+until a replacement is admitted and activated. Keep application encryption keys
+in recovery material so an in-flight order remains readable after restore.
+The issuer also rechecks active domain lifecycle, verified delegation and the
+current proxied hostname set before work and under the domain lock before
+admitting the downloaded certificate. A disabled, retired or changed domain
+marks the order obsolete and retains any previously valid certificate.
+
 Certificate finalization also rechecks the locked order's state before writing.
 A response arriving after the order succeeded, failed or became obsolete leaves
 that outcome, certificate selection and revision intact. Retrying a completed

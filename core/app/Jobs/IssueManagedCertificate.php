@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Enums\DomainLifecycleState;
 use App\Models\AcmeAccount;
 use App\Models\DnsCluster;
 use App\Models\Domain;
@@ -52,7 +53,7 @@ class IssueManagedCertificate implements ShouldQueue
             return;
         }
         $domain = Domain::query()->find($order->domain_id);
-        if ($domain === null || ! collect(ManagedCertificateNames::requiredSets($domain))->contains(fn (array $set): bool => $set === $order->names)) {
+        if ($domain === null || ! $this->eligible($domain, $order)) {
             $this->obsolete($order);
 
             return;
@@ -219,11 +220,55 @@ class IssueManagedCertificate implements ShouldQueue
 
             return;
         }
-        $request = $client->finalizeOrder($account, $order->finalize_url, $order->names);
-        $order->update([
-            'status' => 'finalizing', 'private_key_ciphertext' => $request['private_key'], 'csr_der' => $request['csr_der'],
-            'next_poll_at' => now()->addSeconds(5), 'last_error' => null,
-        ]);
+        $preparedEarlier = $order->private_key_ciphertext !== null;
+        if (! $preparedEarlier) {
+            $request = $client->certificateRequestFor($order->names);
+            $preparedEarlier = DB::transaction(function () use ($order, $request): bool {
+                Domain::query()->lockForUpdate()->findOrFail($order->domain_id);
+                $locked = TlsOrder::query()->lockForUpdate()->findOrFail($order->id);
+                if ($locked->status !== 'validating') {
+                    return true;
+                }
+                if ($locked->private_key_ciphertext !== null || $locked->csr_der !== null) {
+                    return true;
+                }
+                $locked->forceFill(['private_key_ciphertext' => $request['private_key'], 'csr_der' => $request['csr_der']])->save();
+
+                return false;
+            });
+            $order->refresh();
+        }
+        if ($order->status !== 'validating') {
+            return;
+        }
+        if ($order->private_key_ciphertext === null || $order->csr_der === null) {
+            throw new RuntimeException('The persisted managed certificate request is incomplete.');
+        }
+        if ($preparedEarlier) {
+            $remote = $client->orderStatus($account, $order->acme_order_url);
+            if ($remote['status'] === 'invalid') {
+                throw new RuntimeException('The ACME order became invalid before finalization.');
+            }
+            if ($remote['status'] === 'pending') {
+                $order->update(['next_poll_at' => now()->addSeconds(10)]);
+                $this->release(10);
+
+                return;
+            }
+            if (! in_array($remote['status'], ['ready', 'processing', 'valid'], true)) {
+                throw new RuntimeException('The ACME order is not ready for finalization.');
+            }
+        }
+        if (! $preparedEarlier || $remote['status'] === 'ready') {
+            $client->submitFinalization($account, $order->finalize_url, $order->csr_der);
+        }
+        DB::transaction(function () use ($order): void {
+            Domain::query()->lockForUpdate()->findOrFail($order->domain_id);
+            $locked = TlsOrder::query()->lockForUpdate()->findOrFail($order->id);
+            if ($locked->status === 'validating' && $locked->csr_der === $order->csr_der) {
+                $locked->forceFill(['status' => 'finalizing', 'next_poll_at' => now()->addSeconds(5), 'last_error' => null])->save();
+            }
+        });
         $this->release(5);
     }
 
@@ -261,6 +306,11 @@ class IssueManagedCertificate implements ShouldQueue
             $domain = Domain::query()->lockForUpdate()->findOrFail($order->domain_id);
             $locked = TlsOrder::query()->lockForUpdate()->findOrFail($order->id);
             if ($locked->status !== 'finalizing') {
+                return;
+            }
+            if (! $this->eligible($domain, $locked)) {
+                $this->obsolete($locked);
+
                 return;
             }
             $certificate = $domain->tlsCertificates()->create([
@@ -301,7 +351,7 @@ class IssueManagedCertificate implements ShouldQueue
             if ($current === null || in_array($current->status, ['succeeded', 'failed', 'obsolete'], true)) {
                 return;
             }
-            $current->update(['status' => 'obsolete', 'finished_at' => now(), 'last_error' => 'The proxied hostname set changed before issuance completed.']);
+            $current->update(['status' => 'obsolete', 'finished_at' => now(), 'last_error' => 'The domain or proxied hostname set changed before issuance completed.']);
             $changed = $current->challenges()->whereNull('cleaned_at')->update(['status' => 'cleaned', 'cleaned_at' => now()]);
             if ($domain !== null && $changed > 0) {
                 $domain->forceFill(['revision' => $domain->revision + 1])->save();
@@ -316,6 +366,14 @@ class IssueManagedCertificate implements ShouldQueue
                 ReconcileDnsZone::dispatch($domain->id)->afterCommit();
             }
         });
+    }
+
+    private function eligible(Domain $domain, TlsOrder $order): bool
+    {
+        return $domain->lifecycle_state === DomainLifecycleState::Active
+            && $domain->disabled_at === null
+            && $domain->nameservers_verified_at !== null
+            && collect(ManagedCertificateNames::requiredSets($domain))->contains(fn (array $set): bool => $set === $order->names);
     }
 
     private function operation(): ?Operation

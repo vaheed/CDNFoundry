@@ -167,6 +167,98 @@ PEM,
         $this->assertDatabaseHas('operations', ['type' => 'tls.managed_certificate', 'status' => 'succeeded']);
     }
 
+    public function test_lost_finalize_response_reuses_persisted_key_and_request(): void
+    {
+        Queue::fake();
+        config()->set('services.acme.enabled', true);
+        config()->set('services.acme.contact_email', 'admin@example.test');
+        config()->set('services.acme.directory_url', 'https://acme.test/directory');
+        $domain = $this->proxiedDomain();
+        (new EnsureManagedCertificates($domain->id))->handle();
+        $order = TlsOrder::query()->firstOrFail();
+        $finalizeCalls = 0;
+        $this->fakeAcme(function () use (&$finalizeCalls, $order): void {
+            $finalizeCalls++;
+            $this->assertNotNull(TlsOrder::query()->findOrFail($order->id)->csr_der);
+            $this->assertNotNull(DB::table('tls_orders')->where('id', $order->id)->value('private_key_ciphertext'));
+            throw new RuntimeException('Injected lost finalization response.');
+        });
+        $job = new IssueManagedCertificate($order->id);
+        $client = app(AcmeClient::class);
+        $order->update(['available_at' => now()->subSecond()]);
+        $job->handle($client);
+        $order->update(['status' => 'validating', 'next_poll_at' => now()->subSecond()]);
+
+        try {
+            $job->handle($client);
+            $this->fail('Injected finalization response loss did not occur');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('Injected lost finalization response.', $exception->getMessage());
+        }
+        $order->refresh();
+        $this->assertSame('validating', $order->status);
+        $this->assertNotNull($order->private_key_ciphertext);
+        $this->assertNotNull($order->csr_der);
+        $this->assertNotSame($order->private_key_ciphertext, DB::table('tls_orders')->where('id', $order->id)->value('private_key_ciphertext'));
+        $key = $order->private_key_ciphertext;
+        $csr = $order->csr_der;
+
+        $order->update(['available_at' => now()->subSecond(), 'next_poll_at' => now()->subSecond()]);
+        $job->handle($client);
+        $this->assertSame('finalizing', $order->refresh()->status);
+        $this->assertSame($key, $order->private_key_ciphertext);
+        $this->assertSame($csr, $order->csr_der);
+        $this->assertSame(1, $finalizeCalls);
+    }
+
+    public function test_order_becomes_obsolete_when_domain_is_disabled_before_issuance(): void
+    {
+        Queue::fake();
+        $domain = $this->proxiedDomain();
+        (new EnsureManagedCertificates($domain->id))->handle();
+        $order = TlsOrder::query()->firstOrFail();
+        $order->update(['available_at' => now()->subSecond()]);
+        $domain->update(['lifecycle_state' => DomainLifecycleState::Disabled, 'disabled_at' => now()]);
+        Http::preventStrayRequests();
+
+        (new IssueManagedCertificate($order->id))->handle(app(AcmeClient::class));
+
+        $this->assertSame('obsolete', $order->refresh()->status);
+        $this->assertDatabaseCount('tls_certificates', 0);
+        $this->assertNull($domain->refresh()->active_tls_certificate_id);
+    }
+
+    public function test_domain_disabled_during_ca_download_cannot_activate_certificate(): void
+    {
+        Queue::fake();
+        config()->set('services.acme.enabled', true);
+        config()->set('services.acme.contact_email', 'admin@example.test');
+        config()->set('services.acme.directory_url', 'https://acme.test/directory');
+        $domain = $this->proxiedDomain();
+        (new EnsureManagedCertificates($domain->id))->handle();
+        $order = TlsOrder::query()->firstOrFail();
+        $job = new IssueManagedCertificate($order->id);
+        $client = app(AcmeClient::class);
+        $this->fakeAcme();
+        $order->update(['available_at' => now()->subSecond()]);
+        $job->handle($client);
+        $order->update(['status' => 'validating', 'next_poll_at' => now()->subSecond()]);
+        $job->handle($client);
+        $this->assertSame('finalizing', $order->refresh()->status);
+
+        $this->fakeAcme(null, function () use ($domain) {
+            $domain->update(['lifecycle_state' => DomainLifecycleState::Disabled, 'disabled_at' => now()]);
+
+            return Http::response(['status' => 'valid', 'certificate' => 'https://acme.test/certificate/1']);
+        });
+        $order->update(['next_poll_at' => now()->subSecond()]);
+        $job->handle($client);
+
+        $this->assertSame('obsolete', $order->refresh()->status);
+        $this->assertDatabaseCount('tls_certificates', 0);
+        $this->assertNull($domain->refresh()->active_tls_certificate_id);
+    }
+
     public function test_deep_hostname_gets_a_bounded_supplemental_order_and_valid_certificate_is_reused(): void
     {
         Queue::fake();
@@ -588,9 +680,9 @@ PEM,
         return $domain;
     }
 
-    private function fakeAcme(): void
+    private function fakeAcme(?\Closure $finalizeResponse = null, ?\Closure $orderResponse = null): void
     {
-        Http::fake(function (Request $request) {
+        Http::fake(function (Request $request) use ($finalizeResponse, $orderResponse) {
             $url = $request->url();
             if ($url === 'https://acme.test/directory') {
                 return Http::response(['newNonce' => 'https://acme.test/nonce', 'newAccount' => 'https://acme.test/account', 'newOrder' => 'https://acme.test/new-order']);
@@ -614,11 +706,14 @@ PEM,
                     ['type' => 'dns-01', 'url' => 'https://acme.test/challenge/1', 'token' => 'token'],
                 ]]);
             }
+            if ($url === 'https://acme.test/finalize/1' && $finalizeResponse !== null) {
+                return $finalizeResponse($request);
+            }
             if ($url === 'https://acme.test/challenge/1' || $url === 'https://acme.test/finalize/1') {
                 return Http::response(['status' => 'processing']);
             }
             if ($url === 'https://acme.test/order/1') {
-                return Http::response(['status' => 'valid', 'certificate' => 'https://acme.test/certificate/1']);
+                return $orderResponse !== null ? $orderResponse($request) : Http::response(['status' => 'valid', 'certificate' => 'https://acme.test/certificate/1']);
             }
             if ($url === 'https://acme.test/certificate/1') {
                 return Http::response($this->issuedCertificate());

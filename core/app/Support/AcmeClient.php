@@ -102,12 +102,20 @@ final class AcmeClient
     }
 
     /** @param list<string> $names */
-    public function finalizeOrder(AcmeAccount $account, string $url, array $names): array
+    public function certificateRequestFor(array $names): array
     {
         [$privateKey, $csr] = $this->certificateRequest($names);
-        $this->signedRequest($url, ['csr' => $this->base64Url($csr)], $account);
 
         return ['private_key' => $privateKey, 'csr_der' => base64_encode($csr)];
+    }
+
+    public function submitFinalization(AcmeAccount $account, string $url, string $encodedCsr): void
+    {
+        $csr = base64_decode($encodedCsr, true);
+        if ($csr === false || $csr === '') {
+            throw new RuntimeException('The persisted certificate request is invalid.');
+        }
+        $this->signedRequest($url, ['csr' => $this->base64Url($csr)], $account);
     }
 
     public function orderStatus(AcmeAccount $account, string $url): array
