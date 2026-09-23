@@ -326,6 +326,25 @@ fixture passed CA-verified SNI and exact issued-certificate fingerprint checks
 through both gateways. The remaining Phase 3 lifecycle inventory is open.
 Owner browser qualification is deferred; no browser automation ran.
 
+The hourly TLS maintenance pass now also redispatches at most its configured
+batch size of nonterminal orders that have not changed for ten minutes and are
+due for work. Issuance jobs have a per-order uniqueness lease, so maintenance
+cannot fill the queue with the same order while an earlier delivery is queued.
+This recovers the gap where an order commits but its initial dispatch is lost.
+The isolated managed TLS suite passed 20 tests, including a stale/due/terminal
+selection regression. This source change is not yet present in the selected
+staging image; release and staging qualification are still pending.
+
+A read-only staging baseline from the control host passed public control
+health/readiness, Grafana health, administrator API denial, and authoritative
+UDP/TCP SOA checks on both PoPs. A workspace probe passed CA-verified visitor
+HTTPS, expected origin bytes, and cache HITs on both PoPs with four samples.
+The first two-sample cache probe returned BYPASS then MISS and did not meet its
+HIT expectation; it was retained as a failed narrow probe. This baseline is
+for the previously deployed images and does not qualify the new TLS recovery
+change. The local real OpenResty runtime and managed WAF fixtures passed; a
+staging WAF and failure-injection pass remains open.
+
 The real Pebble fixture exposed an existing development installation with only
 `delegation_nameservers` present as JSON and no migration receipt. The additive
 claim migration now detects missing columns individually and converts that

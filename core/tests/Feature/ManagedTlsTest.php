@@ -418,6 +418,28 @@ PEM,
         }
     }
 
+    public function test_maintenance_recovers_only_stale_due_nonterminal_orders_with_a_bounded_batch(): void
+    {
+        Queue::fake();
+        $domain = Domain::query()->create(['name' => 'recovery.example.test', 'display_name' => 'Recovery']);
+        $orders = [];
+        foreach (['pending', 'publishing', 'validating', 'finalizing', 'failed'] as $status) {
+            $order = TlsOrder::query()->create([
+                'domain_id' => $domain->id, 'status' => $status, 'names' => [$domain->name],
+                'names_hash' => hash('sha256', $status),
+            ]);
+            $order->forceFill(['updated_at' => now()->subMinutes(20)])->saveQuietly();
+            $orders[$status] = $order;
+        }
+        $orders['validating']->forceFill(['next_poll_at' => now()->addHour()])->saveQuietly();
+        $orders['finalizing']->forceFill(['updated_at' => now()])->saveQuietly();
+
+        $this->artisan('cdnf:tls:dispatch-maintenance', ['--limit' => 1])->assertSuccessful();
+        $this->assertSame([$orders['pending']->id], Queue::pushed(IssueManagedCertificate::class)
+            ->map(fn (IssueManagedCertificate $job): string => $job->orderId)->all());
+        $this->assertSame($orders['pending']->id, (new IssueManagedCertificate($orders['pending']->id))->uniqueId());
+    }
+
     public function test_expired_challenge_cleanup_records_one_revision_and_operation(): void
     {
         Queue::fake();

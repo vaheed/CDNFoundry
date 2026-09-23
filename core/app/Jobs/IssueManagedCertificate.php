@@ -10,6 +10,7 @@ use App\Models\Operation;
 use App\Models\TlsOrder;
 use App\Support\AcmeClient;
 use App\Support\ManagedCertificateNames;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +18,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use RuntimeException;
 use Throwable;
 
-class IssueManagedCertificate implements ShouldQueue
+class IssueManagedCertificate implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
@@ -27,12 +28,19 @@ class IssueManagedCertificate implements ShouldQueue
 
     public int $timeout = 60;
 
+    public int $uniqueFor = 900;
+
     /** @var list<int> */
     public array $backoff = [60, 300, 900, 3600];
 
     public function __construct(public string $orderId)
     {
         $this->onQueue('certificate_purge');
+    }
+
+    public function uniqueId(): string
+    {
+        return $this->orderId;
     }
 
     public function handle(AcmeClient $client): void

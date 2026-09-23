@@ -203,6 +203,10 @@ After refreshing the development cell images, the extended fixture passed
 CA-verified SNI and exact issued-certificate fingerprint checks through both
 gateways. The remaining lifecycle inventory is open. Owner browser
 qualification is deferred until the owner-run pass.
+The hourly maintenance pass now redispatches stale, due nonterminal orders in
+a bounded batch, guarded by per-order queue uniqueness. The isolated recovery
+regression and managed TLS suite pass. The change awaits a published image and
+staging rollout.
 
 - Implementation: **partial**; remaining lifecycle and queue-recovery inventory
   is open.

@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Enums\DomainLifecycleState;
 use App\Enums\UserType;
 use App\Jobs\EnsureManagedCertificates;
+use App\Jobs\IssueManagedCertificate;
 use App\Jobs\ReconcileDnsZone;
 use App\Models\AcmeChallenge;
 use App\Models\Domain;
@@ -46,6 +47,7 @@ class DispatchManagedTlsMaintenance extends Command
                 });
             });
         $this->queueDomains($limit);
+        $this->recoverOrders($limit);
 
         $admins = User::query()->where('type', UserType::Admin)->whereNull('disabled_at')->get();
         if ($admins->isNotEmpty()) {
@@ -67,6 +69,16 @@ class DispatchManagedTlsMaintenance extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    private function recoverOrders(int $limit): void
+    {
+        TlsOrder::query()->whereIn('status', ['pending', 'publishing', 'validating', 'finalizing'])
+            ->where('updated_at', '<=', now()->subMinutes(10))
+            ->where(fn ($query) => $query->whereNull('available_at')->orWhere('available_at', '<=', now()))
+            ->where(fn ($query) => $query->whereNull('next_poll_at')->orWhere('next_poll_at', '<=', now()))
+            ->orderBy('updated_at')->orderBy('id')->limit($limit)->pluck('id')
+            ->each(fn (string $id) => IssueManagedCertificate::dispatch($id));
     }
 
     private function queueDomains(int $limit): void
