@@ -264,9 +264,12 @@ an injected suffix-write failure leaves no unseen active token.
 Final deprovisioning now rechecks its delay after locking the domain, so a
 concurrent delay extension cannot be bypassed by a worker's earlier read.
 
-The supported `make dev-test` command passed **347 tests / 12,673 assertions**
+The supported `make dev-test` command passed **348 tests / 12,676 assertions**
 after this change. Its effective Compose environment was verified as
 `testing / sqlite / :memory:` before migration-capable tests. The disposable
+suite also exercised password change through a real Sanctum bearer token and
+confirmed the other token was revoked while the current token remained stored.
+The disposable
 `tests/e2e/postgres_domain_claims.py` job passed its actual-migration,
 concurrent-applicant, claim-locking and idempotency checks on a temporary
 PostgreSQL container with a tmpfs data directory. A real row-lock race proved

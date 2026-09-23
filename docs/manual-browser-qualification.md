@@ -182,9 +182,10 @@ so existing clusters, edges and domains are reused rather than duplicated.
 
 ## Phase 2 — Identity and domain boundaries
 
-Status: **Not run — owner execution required.** The owner directed Phase 2
-implementation work to proceed while Phase 1 browser checks are deferred. This
-does not close the Phase 1 gate. Use only disposable accounts and domains.
+Status: **Not run — owner execution required after agent-owned roadmap phases.**
+The owner directed implementation through all phases without waiting for browser
+checks. This does not close any browser gate. Use only disposable accounts and
+domains.
 
 1. Sign in to `/admin/login` as an active administrator and `/app/login` as a
    domain user assigned to one disposable domain. In each panel, open a domain

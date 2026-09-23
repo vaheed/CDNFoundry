@@ -240,6 +240,22 @@ class AccessApiTest extends TestCase
         $this->assertDatabaseHas('audit_logs', ['actor_id' => $user->id, 'action' => 'profile.password_changed']);
     }
 
+    public function test_bearer_token_can_change_password_and_other_tokens_are_revoked(): void
+    {
+        $user = User::factory()->create(['password' => 'CorrectHorseBattery9']);
+        $current = $user->createToken('current');
+        $other = $user->createToken('other');
+
+        $this->withToken($current->plainTextToken)->putJson('/api/me/password', [
+            'current_password' => 'CorrectHorseBattery9',
+            'password' => 'AnotherStrongPassword9',
+            'password_confirmation' => 'AnotherStrongPassword9',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('personal_access_tokens', ['id' => $current->accessToken->id]);
+        $this->assertDatabaseMissing('personal_access_tokens', ['id' => $other->accessToken->id]);
+    }
+
     public function test_disabling_a_user_revokes_existing_tokens_and_blocks_the_next_request(): void
     {
         $admin = User::factory()->admin()->create();
