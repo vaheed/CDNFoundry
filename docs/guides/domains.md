@@ -143,6 +143,12 @@ host before onboarding new customers. Existing verified zones retain their
 nameservers and assignments. Existing pending claims receive a fresh assignment
 when **Verify nameservers** is requested again; old unverified claims older than
 seven days retire under the expiry rule.
+If an older installation already has `delegation_nameservers` as JSON but lacks
+the migration receipt, the migration preserves its values, converts the column
+to JSONB, and adds only missing claim fields. The conversion bounds lock wait
+to five seconds and execution to 30 seconds; a timeout leaves the transaction
+unapplied for a later explicit retry. Check migration status before resuming
+workers.
 
 The new nullable columns are recovery evidence. Preserve them in backups and
 retain platform wildcard records during rollback. Do not roll back to code that
