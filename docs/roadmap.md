@@ -172,10 +172,11 @@ Domain-user operation reads now require current assignment. Token issuance is
 bounded at 50 active tokens per user across API login, manual API creation and
 the panel; a PostgreSQL race proved the final slot is not overfilled. Token
 metadata now commits with issuance, so a failed suffix write rolls back the
-unseen secret. The
-deprovisioning delay is now rechecked under the domain lock at finalization.
-The remaining source inventory, public-delegation qualification and owner
-browser checklist remain open; Phase 1 browser qualification is also still open.
+unseen secret. The deprovisioning delay is now rechecked under the domain lock
+at finalization. The remaining source inventory and public-delegation
+qualification remain open; the local public DNSSEC probe failed before the
+delegation comparison. The Phase 1 and Phase 2 owner browser checklists are
+pending for the owner's later qualification pass.
 
 ## Phase 3 — Managed TLS and queue recovery
 

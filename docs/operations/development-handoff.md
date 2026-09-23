@@ -280,9 +280,14 @@ Two independent PostgreSQL workers contended on one DNS import operation row;
 only one attempt and one revision were committed with 101 records. An injected
 receipt failure in the isolated suite rolled back the entire import.
 The disposable real-BIND parent-delegation job passed fresh/stale delegation,
-bogus DNSSEC, retained DS,
-child-apex rejection, IPv4/TCP and IPv6/UDP/TCP cases; it does not qualify a
-public registrar. The PostgreSQL job also replayed the additive delegation-claim
+bogus DNSSEC, retained DS, child-apex rejection, IPv4/TCP and IPv6/UDP/TCP
+cases; it does not qualify a public registrar. A later read-only public check
+using the protected staging assignment failed before comparison because the
+local `delv` resolver reported `FORMERR` and a non-improving referral from public
+DNS resolvers. No live delegation pass is claimed from this workspace; rerun
+`python3 tests/e2e/staging_parent_delegation.py .prod/test-domain.json` from an
+environment with working DNSSEC resolution. The script prints only counts and
+status. The PostgreSQL job also replayed the additive delegation-claim
 migration over verified and pending legacy rows, preserving ownership,
 revisions and nullable claim state. Pint, PHP syntax, `make contract-check`
 (Compose, generated production environment, OpenAPI and 19 observability
