@@ -27,7 +27,6 @@ class AuthController extends Controller
         }
 
         $createdToken = $user->createTokenWithinLimit($request->string('device_name')->value() ?: 'api', 'device_name');
-        $createdToken->accessToken->forceFill(['token_last_six' => substr($createdToken->plainTextToken, -6)])->save();
         $token = $createdToken->plainTextToken;
         AuditLog::record($user, 'auth.login', $user, [], $request->ip());
 

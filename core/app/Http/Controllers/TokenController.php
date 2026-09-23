@@ -22,7 +22,6 @@ class TokenController extends Controller
     {
         $validated = $request->validate(['name' => ['required', 'string', 'max:100']]);
         $created = $request->user()->createTokenWithinLimit($validated['name']);
-        $created->accessToken->forceFill(['token_last_six' => substr($created->plainTextToken, -6)])->save();
         AuditLog::record($request->user(), 'token.created', $request->user(), ['token_id' => $created->accessToken->id], $request->ip());
 
         return response()->json(['data' => ['id' => $created->accessToken->id, 'name' => $validated['name'], 'token' => $created->plainTextToken]], 201);

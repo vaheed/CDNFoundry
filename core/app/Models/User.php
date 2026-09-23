@@ -37,7 +37,10 @@ class User extends Authenticatable implements FilamentUser
                 ]);
             }
 
-            return $user->createToken($name);
+            $created = $user->createToken($name);
+            $created->accessToken->forceFill(['token_last_six' => substr($created->plainTextToken, -6)])->save();
+
+            return $created;
         });
     }
 

@@ -259,10 +259,12 @@ Password login, API token creation and the Filament token page now share a
 PostgreSQL race admitted one of two requests competing for the final slot,
 leaving exactly 50 tokens. Existing tokens are not deleted by the change;
 operators can revoke older tokens through the token page before issuing more.
+The token's display suffix now commits in the same transaction as issuance;
+an injected suffix-write failure leaves no unseen active token.
 Final deprovisioning now rechecks its delay after locking the domain, so a
 concurrent delay extension cannot be bypassed by a worker's earlier read.
 
-The supported `make dev-test` command passed **346 tests / 12,671 assertions**
+The supported `make dev-test` command passed **347 tests / 12,673 assertions**
 after this change. Its effective Compose environment was verified as
 `testing / sqlite / :memory:` before migration-capable tests. The disposable
 `tests/e2e/postgres_domain_claims.py` job passed its actual-migration,

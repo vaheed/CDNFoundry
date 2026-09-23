@@ -141,8 +141,11 @@ passed on 2026-09-23. Collect and record the owner's browser results before
 closing Phase 1. See the resumed execution record in the
 [staging handoff](operations/development-handoff.md#resume-execution-2026-09-23).
 
-Phase 2 implementation review may proceed under the owner's explicit direction.
-Do not claim Phase 1 completion or production readiness from that work.
+On 2026-09-23 the owner directed implementation through all roadmap phases
+without waiting for browser qualification, which the owner will execute after
+the agent-owned phases. Record each browser gate as pending; this instruction
+does not turn an unrun browser check into a pass or establish production
+readiness. Agent-owned phases still proceed in roadmap order.
 
 ## Phase 2 — Identity, authorization and domain lifecycle
 
@@ -167,7 +170,9 @@ use the same assignment boundary. Queued DNS imports now recheck current actor
 scope, and duplicate workers commit one import and one operation receipt.
 Domain-user operation reads now require current assignment. Token issuance is
 bounded at 50 active tokens per user across API login, manual API creation and
-the panel; a PostgreSQL race proved the final slot is not overfilled. The
+the panel; a PostgreSQL race proved the final slot is not overfilled. Token
+metadata now commits with issuance, so a failed suffix write rolls back the
+unseen secret. The
 deprovisioning delay is now rechecked under the domain lock at finalization.
 The remaining source inventory, public-delegation qualification and owner
 browser checklist remain open; Phase 1 browser qualification is also still open.

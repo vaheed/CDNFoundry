@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Laravel\Sanctum\PersonalAccessToken;
 use Tests\TestCase;
 
 class AccessApiTest extends TestCase
@@ -177,6 +178,25 @@ class AccessApiTest extends TestCase
             'email' => $user->email, 'password' => 'CorrectHorseBattery9', 'device_name' => 'replacement',
         ])->assertOk()->assertJsonStructure(['data' => ['token']]);
         $this->assertSame(User::MAX_ACTIVE_TOKENS, $user->tokens()->count());
+    }
+
+    public function test_token_metadata_failure_rolls_back_issued_secret(): void
+    {
+        $user = User::factory()->create();
+        PersonalAccessToken::updating(function (): void {
+            throw new \RuntimeException('injected token metadata failure');
+        });
+
+        try {
+            $user->createTokenWithinLimit('must-rollback');
+            $this->fail('Injected token metadata failure did not occur');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('injected token metadata failure', $exception->getMessage());
+        } finally {
+            PersonalAccessToken::flushEventListeners();
+        }
+
+        $this->assertDatabaseCount('personal_access_tokens', 0);
     }
 
     public function test_idempotency_storage_never_persists_or_replays_one_time_tokens(): void

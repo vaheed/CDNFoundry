@@ -37,7 +37,6 @@ class ApiTokens extends Page
     {
         $this->validate(['name' => ['required', 'string', 'max:100']]);
         $created = auth()->user()->createTokenWithinLimit($this->name);
-        $created->accessToken->forceFill(['token_last_six' => substr($created->plainTextToken, -6)])->save();
         AuditLog::record(auth()->user(), 'token.created', auth()->user(), ['token_id' => $created->accessToken->id], request()->ip());
         $this->plainTextToken = $created->plainTextToken;
         $this->name = '';
