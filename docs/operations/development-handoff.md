@@ -326,11 +326,12 @@ fixture passed CA-verified SNI and exact issued-certificate fingerprint checks
 through both gateways. The remaining Phase 3 lifecycle inventory is open.
 Owner browser qualification is deferred; no browser automation ran.
 
-The hourly TLS maintenance pass now also redispatches at most its configured
-batch size of nonterminal orders that have not changed for ten minutes and are
-due for work. Issuance jobs have a per-order uniqueness lease, so maintenance
-cannot fill the queue with the same order while an earlier delivery is queued.
-This recovers the gap where an order commits but its initial dispatch is lost.
+The five-minute TLS recovery pass redispatches at most its configured batch
+size of nonterminal orders that have not changed for ten minutes and are due
+for work. It skips the hourly renewal scan and alerts. Issuance jobs have a
+per-order uniqueness lease, so recovery cannot fill the queue with the same
+order while an earlier delivery is queued. This recovers the gap where an
+order commits but its initial dispatch is lost before the order lifetime ends.
 The isolated managed TLS suite passed 20 tests, including a stale/due/terminal
 selection regression. This source change is not yet present in the selected
 staging image; release and staging qualification are still pending.

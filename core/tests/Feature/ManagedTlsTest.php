@@ -434,9 +434,10 @@ PEM,
         $orders['validating']->forceFill(['next_poll_at' => now()->addHour()])->saveQuietly();
         $orders['finalizing']->forceFill(['updated_at' => now()])->saveQuietly();
 
-        $this->artisan('cdnf:tls:dispatch-maintenance', ['--limit' => 1])->assertSuccessful();
+        $this->artisan('cdnf:tls:dispatch-maintenance', ['--limit' => 1, '--orders-only' => true])->assertSuccessful();
         $this->assertSame([$orders['pending']->id], Queue::pushed(IssueManagedCertificate::class)
             ->map(fn (IssueManagedCertificate $job): string => $job->orderId)->all());
+        Queue::assertNotPushed(EnsureManagedCertificates::class);
         $this->assertSame($orders['pending']->id, (new IssueManagedCertificate($orders['pending']->id))->uniqueId());
     }
 

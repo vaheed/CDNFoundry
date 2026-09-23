@@ -21,13 +21,18 @@ use RuntimeException;
 
 class DispatchManagedTlsMaintenance extends Command
 {
-    protected $signature = 'cdnf:tls:dispatch-maintenance {--limit=500}';
+    protected $signature = 'cdnf:tls:dispatch-maintenance {--limit=500} {--orders-only}';
 
     protected $description = 'Queue bounded managed-certificate renewal and publish administrator TLS alerts';
 
     public function handle(): int
     {
         $limit = min(2000, max(1, (int) $this->option('limit')));
+        if ($this->option('orders-only')) {
+            $this->recoverOrders($limit);
+
+            return self::SUCCESS;
+        }
         AcmeChallenge::query()->whereNull('cleaned_at')->where('expires_at', '<=', now())->with('order:id,domain_id')->limit($limit)->get()
             ->filter(fn (AcmeChallenge $challenge): bool => $challenge->order !== null)
             ->groupBy(fn (AcmeChallenge $challenge): int => $challenge->order->domain_id)->each(function ($challenges, int $domainId): void {
