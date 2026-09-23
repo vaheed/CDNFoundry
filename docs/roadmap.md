@@ -202,6 +202,16 @@ CA-verified SNI and exact issued-certificate fingerprint checks through both
 gateways. The remaining lifecycle inventory is open. Owner browser
 qualification is deferred until the owner-run pass.
 
+- Implementation: **partial**; remaining lifecycle and queue-recovery inventory
+  is open.
+- Documentation: **current for implemented behavior**; TLS guide, development
+  handoff and owner checklist reflect this pass.
+- Automated/runtime qualification: **partial**; 352 isolated Laravel tests and
+  the real Pebble/DNSdist/dual-gateway TLS fixture passed, while the remaining
+  Phase 3 failure and recovery matrix is open.
+- Manual browser: **not run**; owner will execute the written checklist after
+  the agent-owned roadmap work.
+
 ## Phase 4 — DNS, proxy, cache and edge trust boundaries
 
 **Job `data-plane-boundaries`.** Review DNS types/imports/zone isolation and
