@@ -344,6 +344,14 @@ now asks for a private comparison against the address used to reach control
 HTTPS. The new ingress and core images, regenerated Fleet bundle and a stage
 spoofing probe are required before this is recorded as fixed on stage.
 
+During local Caddy adaptation, an old staging Grafana administrator credential
+appeared in command output. It was rotated immediately through Grafana's
+administrator API. The old credential is rejected, the new credential is kept
+only in protected staging/Fleet files, and the control-host environment was
+updated. Grafana was recreated healthy without changing the named-volume
+inventory. The new credential must be used for the owner browser pass; no
+credential value belongs in this report.
+
 A read-only staging baseline from the control host passed public control
 health/readiness, Grafana health, administrator API denial, and authoritative
 UDP/TCP SOA checks on both PoPs. A workspace probe passed CA-verified visitor

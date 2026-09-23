@@ -27,6 +27,7 @@ def main() -> int:
     token = None
     original = None
     checks = []
+    restoration = "not_attempted"
 
     def api(method, path, payload=None):
         headers = {"Accept": "application/json"}
@@ -94,14 +95,18 @@ def main() -> int:
                     clean_status[edge] = status
         outcome = "passed"
     finally:
-        if token is not None:
-            try:
-                if original is not None and api("GET", "/domains/" + str(domain["id"]) + "/waf")["name"] != original:
+        try:
+            if token is not None and original is not None:
+                if api("GET", "/domains/" + str(domain["id"]) + "/waf")["name"] != original:
                     set_profile(original)
+                restoration = "passed"
+        finally:
+            try:
+                if token is not None:
+                    api("POST", "/auth/logout")
             finally:
-                api("POST", "/auth/logout")
-        args.report.parent.mkdir(parents=True, exist_ok=True)
-        args.report.write_text(json.dumps({"outcome": outcome, "checks": checks}, indent=2) + "\n")
+                args.report.parent.mkdir(parents=True, exist_ok=True)
+                args.report.write_text(json.dumps({"outcome": outcome, "restoration": restoration, "checks": checks}, indent=2) + "\n")
     print("staging WAF qualification", outcome)
     return 0 if outcome == "passed" else 1
 
