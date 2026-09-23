@@ -59,7 +59,7 @@ class FinalizeDomainDeprovisioning implements ShouldBeUnique, ShouldQueue
         DB::transaction(function () use ($domain): void {
             Domain::lockCanonicalName($domain->name);
             $locked = Domain::query()->lockForUpdate()->find($domain->id);
-            if ($locked === null || $locked->lifecycle_state !== DomainLifecycleState::Deprovisioning) {
+            if ($locked === null || $locked->lifecycle_state !== DomainLifecycleState::Deprovisioning || $locked->deprovision_after?->isFuture()) {
                 return;
             }
             DomainNameTombstone::query()->updateOrCreate(['name' => $locked->name], [

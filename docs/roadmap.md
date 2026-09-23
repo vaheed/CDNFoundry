@@ -167,8 +167,9 @@ use the same assignment boundary. Queued DNS imports now recheck current actor
 scope, and duplicate workers commit one import and one operation receipt.
 Domain-user operation reads now require current assignment. Token issuance is
 bounded at 50 active tokens per user across API login, manual API creation and
-the panel; a PostgreSQL race proved the final slot is not overfilled. The rest
-of the assigned inventory, public-delegation qualification and owner
+the panel; a PostgreSQL race proved the final slot is not overfilled. The
+deprovisioning delay is now rechecked under the domain lock at finalization.
+The remaining source inventory, public-delegation qualification and owner
 browser checklist remain open; Phase 1 browser qualification is also still open.
 
 ## Phase 3 — Managed TLS and queue recovery

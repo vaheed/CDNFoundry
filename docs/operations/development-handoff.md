@@ -259,6 +259,8 @@ Password login, API token creation and the Filament token page now share a
 PostgreSQL race admitted one of two requests competing for the final slot,
 leaving exactly 50 tokens. Existing tokens are not deleted by the change;
 operators can revoke older tokens through the token page before issuing more.
+Final deprovisioning now rechecks its delay after locking the domain, so a
+concurrent delay extension cannot be bypassed by a worker's earlier read.
 
 The supported `make dev-test` command passed **346 tests / 12,671 assertions**
 after this change. Its effective Compose environment was verified as
