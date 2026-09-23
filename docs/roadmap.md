@@ -206,16 +206,18 @@ gateways. The remaining lifecycle inventory is open. Owner browser
 qualification is deferred until the owner-run pass.
 The five-minute recovery pass redispatches stale, due nonterminal orders in a
 bounded batch, guarded by per-order queue uniqueness. The isolated recovery
-regression and managed TLS suite pass. The change awaits a published image and
-staging rollout.
+regression and managed TLS suite pass. The signed `4cd61eee` core image is on
+staging; the orders-only maintenance command passed there. The active managed
+certificate remained valid through the control outage and both PoP checks.
 
 - Implementation: **partial**; remaining lifecycle and queue-recovery inventory
   is open.
 - Documentation: **current for implemented behavior**; TLS guide, development
   handoff and owner checklist reflect this pass.
-- Automated/runtime qualification: **partial**; 352 isolated Laravel tests and
-  the real Pebble/DNSdist/dual-gateway TLS fixture passed, while the remaining
-  Phase 3 failure and recovery matrix is open.
+- Automated/runtime qualification: **partial**; 356 isolated Laravel tests,
+  the real Pebble/DNSdist/dual-gateway TLS fixture, staging maintenance and
+  verified HTTPS continuity passed. The remaining Phase 3 failure and recovery
+  matrix is open.
 - Manual browser: **not run**; owner will execute the written checklist after
   the agent-owned roadmap work.
 
@@ -230,6 +232,21 @@ DNS/HTTP/TLS, Go and IPv6 adversarial tests, not only mocks.
 Completion gate: assigned inventory and defects resolved; runtime/operator
 contracts current; negative and failure checks pass; owner DNS/cache/edge
 checkpoints recorded. Current status: **partial**.
+The signed core ingress correction is deployed on staging. A public mutation
+with a forged forwarding header wrote the workspace's actual public egress IP
+to the audit log, and the disposable label was restored. Both PoPs passed
+authoritative UDP/TCP DNS, verified HTTPS content and cache HIT. A PoP Docker
+restart and bounded control outage preserved serving and named volumes. The
+remaining source inventory and owner browser checkpoints keep this phase open.
+
+- Implementation: **partial**; the forwarding fix is deployed, while the
+  remaining DNS/proxy/edge trust inventory is open.
+- Documentation: **current for implemented behavior**; staging evidence and
+  the owner DNS/cache/edge checklist are recorded.
+- Automated/runtime qualification: **partial**; local DNS, mTLS, cache and
+  control-plane fixtures and staging DNS, HTTPS/cache, audit-IP and continuity
+  checks passed. Remaining adversarial matrix items are open.
+- Manual browser: **not run**; owner checklist is ready.
 
 ## Phase 5 — Durable activation and real WAF qualification
 
@@ -244,13 +261,25 @@ and WAF enforcement checks pass, owner diagnostics/security checklist recorded.
 Current status: **implementation and prior evidence exist; full gate remains open**.
 The local real OpenResty and managed CRS fixtures pass. WAF profile and
 exclusion mutations now recheck assignment under the domain lock, and the
-exclusion limit is checked in the same transaction. Staging enforcement and
-failure-injection checks remain open.
+exclusion limit is checked in the same transaction. The remaining staging
+failure-injection matrix is open.
 The staging WAF probe found that the agent dropped the compiled WAF policy
 before cell activation, so Balanced allowed the attack despite a successful
 control operation. The agent now preserves WAF and compression policy in each
-assigned cell. Its Go regression passes; stage enforcement must be retested
-after a verified agent rollout.
+assigned cell. Its Go regression passed. Both PoPs now run the signed agent;
+staging Off, Monitor and Balanced enforcement passed and the original profile
+was restored. Single-PoP restart and control outage continuity passed with
+named volumes unchanged. The remaining corrupt-download/fsync failure matrix
+and owner browser checkpoints keep the full phase gate open.
+
+- Implementation: **partial**; the WAF compiler fix is deployed, with remaining
+  durability failure-injection work open.
+- Documentation: **current for implemented behavior**; WAF and continuity
+  results and the owner security checklist are recorded.
+- Automated/runtime qualification: **partial**; local managed CRS and staging
+  Off/Monitor/Balanced plus restart/outage checks passed. Corrupt-download and
+  fsync failure cases remain open.
+- Manual browser: **not run**; owner checklist is ready.
 
 ## Phase 6 — Fleet operations, upgrades and clean-host recovery
 

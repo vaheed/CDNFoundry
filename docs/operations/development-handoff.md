@@ -5,6 +5,41 @@ description: Completed audit batch, actual test evidence, remaining jobs, and de
 
 # Development branch handoff
 
+## Staging Phase 3–5 and audit-IP checkpoint — 2026-09-23
+
+The stage control host and both PoPs now run the required images from successful
+[CI run 35876283440](https://github.com/vaheed/CDNFoundry/actions/runs/35876283440),
+source `4cd61eeee8e2252575db377e5ca722f53a492d50`. The release archive
+matched GitHub's artifact SHA-256, its manifest Sigstore bundle verified for the
+`dev` workflow identity, and all 17 image signatures, SPDX attestations and
+SLSA provenance statements verified against that source. The core and edge-agent
+digests came from this signed manifest; the updated production Caddyfile was
+installed on control. No mutable tag was selected for rollout.
+
+A protected PostgreSQL custom-format snapshot was made before migration and
+its catalog was readable. The explicit migration command passed. Control core,
+Horizon, Scheduler and Caddy became healthy; both PoP agents became healthy.
+Named volume inventories were unchanged on all three hosts. Previous environment
+files and the control Caddyfile were retained as rollback copies. This snapshot
+does not qualify off-host backup or restore.
+
+| Agent-owned staging check | Actual result |
+| --- | --- |
+| Audit client IP | **Passed:** a public admin mutation sent a forged `X-Forwarded-For`; its audit row held the workspace's public egress IP rather than the forged or container address. The disposable domain label was restored. |
+| Managed TLS queue recovery | **Passed:** `cdnf:tls:dispatch-maintenance --orders-only` completed on control. The real local Pebble/DNSdist/dual-gateway issuance fixture and isolated recovery regressions passed; no stale live staging order was injected. |
+| Public control and DNS | **Passed:** health, readiness, protected admin route, Grafana health, and customer-zone authoritative SOA over UDP and TCP at both PoPs. |
+| Customer HTTPS/cache | **Passed:** verified TLS hostname, expected resource hash and cache HIT on both PoPs after rollout. |
+| Managed WAF | **Passed:** Off, Monitor and Balanced behavior on both PoPs. Balanced blocked the probe; the original Off profile was restored. |
+| Restart/outage continuity | **Passed:** one PoP Docker restart and bounded control outage; peer serving and certificate/content hashes remained correct, recovery succeeded, and volume inventories were unchanged. |
+| Owner browser | **Not run by agent.** The current [manual checklist](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md) is ready for the owner, including the administrator audit IP, TLS, DNS/cache and WAF checkpoints. |
+
+The stage is ready for the owner's **manual browser qualification of implemented
+Phases 3–5**. This is not a claim that those full roadmap phases have closed:
+the remaining source inventories and Phase 3/5 failure-injection matrices are
+still open in the [roadmap](../roadmap.md). The previous production-readiness
+and off-host backup limitations also remain. Protected reports and rollout logs
+are retained only under ignored `.prod`.
+
 **Checkpoint date: 2026-09-19.** This closes the previous open-ended work batch
 as a development delivery handoff, at the owner's request. Remaining security,
 installation and production acceptance work is assigned to separate jobs in the
