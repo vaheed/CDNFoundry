@@ -208,6 +208,10 @@ domains.
    expect later use to be unauthenticated. Do not put the token in evidence.
    The page must refuse creation at 50 active tokens and allow issuance again
    after revocation; use disposable tokens if checking this limit.
+   For a separate disposable user, issue one token and attempt deletion under
+   **Customers → Users**. Expect deletion to be refused while the token exists.
+   Revoke that token, retry deletion, and expect the user to disappear from the
+   list. Record the result without saving the token or account credentials.
 4. Create a disposable child zone under an already managed parent. Inspect the
    assigned nameservers and pending claim expiry, then try **Verify nameservers**
    before setting the exact parent delegation. Expect a visible failed operation
@@ -219,7 +223,8 @@ domains.
 
 - Implementation: session/API parity, locked assignment and queued DNS-import
   authorization/atomicity corrections are present. Operation reads enforce
-  current assignment, and token issuance is capped at 50 per user. The remaining
+  current assignment, and token issuance is capped at 50 per user. Account
+  disable and deletion serialize with issuance on the user row. The remaining
   identity, authorization and domain-lifecycle inventory review is open.
 - Documentation: current API session behavior and these manual steps are written;
   final operator findings remain to be recorded.
@@ -604,6 +609,12 @@ workstream does not replace an earlier product checkpoint.
    normal-cell, and WAF-cell digests. Inject a canary failure, confirm automatic
    pause, roll back, and verify no dynamic cell creation. Upgrade one edge at a
    time, then control/DNS components, while comparison DNS/HTTPS stays healthy.
+10. After recreating staging pop-2's agent with the Fleet-rendered bridge
+    mapping, open **Infrastructure → Edges → staging-pop-2**. Expect a fresh
+    heartbeat, **Traffic listener = Ready**, **Gateway process = Ready**, and
+    matching active edge and gateway revisions. On the administrator overview,
+    expect **Edge health and capacity → staging-pop-2 = Healthy**. A fresh
+    heartbeat with **Degraded** fails this checkpoint even if HTTPS still serves.
 
 ### Implemented product completion gate
 

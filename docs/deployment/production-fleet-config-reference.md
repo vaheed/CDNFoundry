@@ -146,6 +146,12 @@ are not a control-plane requirement. Optional host overrides such as
 MMDB settings, and gateway capacity belong in `extra_env`. The address map is
 needed only for NAT/load-balancer translation; directly assigned service
 addresses bind without it.
+For an edge host where Docker writes `invalid IP` for the symbolic
+`host-gateway`, set `EDGE_HOST_GATEWAY_IPV4` in that node's `extra_env` to the
+IPv4 gateway inspected from its `cdnfoundry_edge` network. Fleet validates a
+private IPv4 address and writes the explicit `edge-agent.extra_hosts` mapping
+into that node's generated Compose bundle. Reinspect the gateway if the Docker
+network is recreated; do not copy one host's address to another without checking.
 
 ## Control database selection
 

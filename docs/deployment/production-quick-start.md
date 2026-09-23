@@ -644,6 +644,10 @@ certificate, DNSSEC, domain-claim or image verification:
   gateway with `docker network inspect cdnfoundry_edge`; do not assume its subnet.
   In a host-local override set `services.edge-agent.extra_hosts.host-gateway`
   to that bridge's IPv4 gateway, validate, then recreate only `edge-agent`.
+  For the next Fleet render, also set `EDGE_HOST_GATEWAY_IPV4` to that inspected
+  address in the edge node's `extra_env`. The generated bundle will retain the
+  mapping through later agent recreations; keep the host-local override until
+  the new bundle has been validated and activated.
   Confirm the agent can read `http://host-gateway:9105/metrics` and the endpoint
   becomes ready. Restrict external TCP 9105 to monitoring/control sources;
   allow the local bridge path. Do not expose metrics publicly.

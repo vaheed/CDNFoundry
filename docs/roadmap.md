@@ -176,7 +176,15 @@ metadata now commits with issuance, so a failed suffix write rolls back the
 unseen secret. The deprovisioning delay is now rechecked under the domain lock
 at finalization. Domain deletion now rechecks assignment under the domain lock
 before starting deprovisioning; an isolated revocation regression passed. The
-additive claim migration now admits a partial existing
+administrator disable and deletion paths now lock the user row shared with
+token issuance, so revocation and the deletion precondition are atomic with
+the account change. The Filament user actions now take the same lock and
+recheck token deletion eligibility at execution. The full isolated Laravel
+suite passes (357 tests, 12,730 assertions), and disposable PostgreSQL proved
+that concurrent disable and
+delete both wait for token issuance: disable revokes the resulting token,
+while deletion rejects the now-tokened account with 409. Staging deployment
+remains open. The additive claim migration now admits a partial existing
 installation with a JSON assignment and retains its values as JSONB; a
 disposable PostgreSQL replay passed. A read-only resolver check inside the
 staging control container matched both assigned public parent nameservers;
@@ -293,6 +301,16 @@ preserve ownership/assignments and rebuild derived DNS/edge state.
 Completion gate: supported installation/upgrade/restore paths work on recorded
 hosts; recovery docs/material are complete; runtime checks pass and owner
 operational checklist is recorded. Current status: **partial**.
+The staging pop-2 incident on 2026-09-23 showed that an agent-only recreate
+omitting its existing host-local Compose override can leave Docker's invalid
+`host-gateway` entry active, making the gateway metrics unreachable to the
+agent. Reapplying the validated override restored healthy listener reporting
+without changing gateway or cell serving. Fleet upgrade/recreate paths must
+carry this host mapping durably before this phase can close. Fleet source now
+accepts a validated per-edge bridge gateway address and renders it into the
+agent's Compose mapping; staging still uses the existing host-local override
+until that source is released and its bundle activated. See the
+[staging handoff](operations/development-handoff.md#staging-pop-2-gateway-status-repair-2026-09-23).
 
 ## Phase 7 — Telemetry and remaining repository cleanup
 

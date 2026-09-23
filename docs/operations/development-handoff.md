@@ -5,6 +5,50 @@ description: Completed audit batch, actual test evidence, remaining jobs, and de
 
 # Development branch handoff
 
+## Staging pop-2 gateway status repair — 2026-09-23
+
+The owner reported **Degraded** for `staging-pop-2` while its heartbeat was
+fresh. A read-only administrator API check found eight ready cells, active
+sequence 36, `gateway.ready = false`, and `listener_ready = false`. The
+dashboard derives Degraded from that listener flag. Direct, TLS-verified
+visitor HTTPS still returned the expected 302 from both PoPs.
+
+On pop-2, the gateway container was running and host-local metrics returned
+HTTP 200. The agent's configured metrics URL used `host-gateway`, but its
+container had Docker's literal `invalid IP` hosts entry, so the name did not
+resolve. The validated host-local Compose override already mapped
+`host-gateway` to the inspected `cdnfoundry_edge` bridge gateway
+(`172.18.0.1`); the last agent recreation used only the generated Compose
+file and logging overlay and omitted that override.
+
+After validating the three-file Compose stack with `.env.prod`, only
+`edge-agent` was recreated with the existing override. It became healthy;
+inside the agent, gateway metrics became reachable. Its next control-plane
+heartbeat reported `gateway.ready = true`, `listener_ready = true`, two
+listeners, two routes, and gateway revision 36 matching active sequence 36.
+Both PoPs again returned TLS-verified HTTPS 302. No DNS, gateway, cell,
+database, or named volume was recreated. Future pop-2 agent recreations must
+include the host-local override until Fleet carries the mapping durably.
+Fleet source now supports a validated `EDGE_HOST_GATEWAY_IPV4` per edge node
+and embeds the address in its generated Compose bundle. The Fleet suite passed
+81 tests. This source change has not been released or activated on staging;
+the current host-local override remains required. The full Phase 6 upgrade
+and rollback gate remains open.
+
+## Read-only staging revisit — 2026-09-23
+
+The workspace ran `tests/e2e/staging_health.py` against the protected Fleet
+inventory without changing staging. Public control health and readiness,
+Grafana health, and the protected administrator route passed. Its four DNS
+checks did not establish authority: both configured PoP addresses returned
+recursive (`ra`) rather than authoritative (`aa`) flags from this workspace.
+The saved result is `.prod/stage-health-current.json`; repeat the authoritative
+UDP/TCP check from a host with direct DNS access before interpreting this as a
+PoP failure. A batch-mode SSH reachability check for the staging control host
+from this workspace was unavailable, so the direct-host probe was not repeated
+in this revisit. The Phase 2 user-lock change is local only and was not deployed
+to staging or production. No browser check ran in this revisit.
+
 ## Staging Phase 3–5 and audit-IP checkpoint — 2026-09-23
 
 The stage control host and both PoPs now run the required images from successful

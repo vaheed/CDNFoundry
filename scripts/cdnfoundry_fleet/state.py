@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import fcntl
+import ipaddress
 import os
 import shutil
 from contextlib import contextmanager
@@ -306,6 +307,14 @@ class FleetState:
         extra_env = validate_env_mapping(node.get("extra_env", {}))
         if "EDGE_GATEWAY_ADDRESS_MAP" in extra_env:
             validate_gateway_address_map(extra_env["EDGE_GATEWAY_ADDRESS_MAP"])
+        if "EDGE_HOST_GATEWAY_IPV4" in extra_env:
+            try:
+                gateway = ipaddress.IPv4Address(extra_env["EDGE_HOST_GATEWAY_IPV4"])
+            except ipaddress.AddressValueError as exc:
+                raise ValidationError("EDGE_HOST_GATEWAY_IPV4 must be a private IPv4 address") from exc
+            if (role not in {"edge", "dns-edge"} or not gateway.is_private or gateway.is_loopback
+                    or gateway.is_link_local or gateway.is_unspecified or gateway.is_multicast or gateway.is_reserved):
+                raise ValidationError("EDGE_HOST_GATEWAY_IPV4 requires a private edge-host IPv4 address")
         return {
             "name": name,
             "role": role,

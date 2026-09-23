@@ -129,6 +129,12 @@ class Renderer:
 
     def _apply_generated_overrides(self, state: dict[str, Any], node: dict[str, Any], compose: dict[str, Any]) -> None:
         services = compose.get("services", {})
+        gateway_ip = node.get("extra_env", {}).get("EDGE_HOST_GATEWAY_IPV4")
+        if gateway_ip and "edge-agent" in services:
+            # Some Docker hosts materialize the symbolic host-gateway as the
+            # literal text "invalid IP". Embed the inspected bridge address in
+            # the generated bundle so later agent recreations retain it.
+            services["edge-agent"]["extra_hosts"] = [f"host-gateway:{gateway_ip}"]
         if "prometheus" in services:
             # Fleet targets include other hosts; internal networks cannot route
             # those scrapes. Keep private service networks and add outbound access.

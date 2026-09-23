@@ -1189,6 +1189,27 @@ def test_optional_extra_env_is_preserved_for_manual_edge_registration(store: Fle
     assert json.loads(env["EDGE_GATEWAY_ADDRESS_MAP"]) == {"198.51.100.10": "198.51.100.10"}
 
 
+def test_inspected_edge_host_gateway_is_embedded_in_rendered_bundle(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
+    add(store, node("control-1", "control", "192.0.2.174"))
+    edge = node("edge-1", "edge", "192.0.2.175")
+    edge["extra_env"] = {"EDGE_HOST_GATEWAY_IPV4": "172.18.0.1"}
+    add(store, edge)
+    output = tmp_path / "bundles"
+    Renderer(source_repo, store, output).render(store.load(), node_name="edge-1")
+    compose = yaml.safe_load((output / "edge-1/compose.yml").read_text(encoding="utf-8"))
+    assert compose["services"]["edge-agent"]["extra_hosts"] == ["host-gateway:172.18.0.1"]
+    real_output = tmp_path / "real-bundles"
+    Renderer(REPO_PATCH, store, real_output).render(store.load(), node_name="edge-1")
+    real_compose = yaml.safe_load((real_output / "edge-1/compose.yml").read_text(encoding="utf-8"))
+    assert real_compose["services"]["edge-agent"]["extra_hosts"] == ["host-gateway:172.18.0.1"]
+
+    for invalid in ("0.0.0.0", "127.0.0.1", "169.254.1.1", "2001:db8::1", "8.8.8.8"):
+        candidate = node("edge-2", "edge", "192.0.2.176")
+        candidate["extra_env"] = {"EDGE_HOST_GATEWAY_IPV4": invalid}
+        with pytest.raises(ValidationError, match="EDGE_HOST_GATEWAY_IPV4"):
+            add(store, candidate)
+
+
 def test_edge_registration_command_uses_protected_token_file(source_repo: Path, tmp_path: Path) -> None:
     import subprocess
 
