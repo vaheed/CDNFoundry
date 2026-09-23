@@ -243,13 +243,23 @@ pivot transaction, preventing a concurrent disable or type change from
 slipping past the selector or request validation. The API guide and
 current-phase browser checklist describe the behavior.
 
-The supported `make dev-test` command passed **341 tests / 12,633 assertions**
+Queued DNS imports now recheck the current actor and assignment under the
+domain transaction. Revoked or disabled actors cannot replace records. The
+import's zone mutation and operation success receipt commit together; terminal
+operations are skipped on duplicate delivery, and an administrator retry must
+explicitly return a failed operation to pending. The failure path retains the
+previous zone and reports a failed operation.
+
+The supported `make dev-test` command passed **343 tests / 12,651 assertions**
 after this change. Its effective Compose environment was verified as
 `testing / sqlite / :memory:` before migration-capable tests. The disposable
 `tests/e2e/postgres_domain_claims.py` job passed its actual-migration,
 concurrent-applicant, claim-locking and idempotency checks on a temporary
 PostgreSQL container with a tmpfs data directory. A real row-lock race proved
 that a concurrently disabled user is not assigned (HTTP 422, zero pivot rows).
+Two independent PostgreSQL workers contended on one DNS import operation row;
+only one attempt and one revision were committed with 101 records. An injected
+receipt failure in the isolated suite rolled back the entire import.
 The disposable real-BIND
 parent-delegation job passed fresh/stale delegation, bogus DNSSEC, retained DS,
 child-apex rejection, IPv4/TCP and IPv6/UDP/TCP cases; it does not qualify a

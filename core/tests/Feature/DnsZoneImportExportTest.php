@@ -6,8 +6,10 @@ use App\Jobs\ImportDnsZone;
 use App\Models\Domain;
 use App\Models\Operation;
 use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
 class DnsZoneImportExportTest extends TestCase
@@ -109,6 +111,75 @@ ZONE;
         $this->assertDatabaseCount('dns_records', 101);
         $this->assertSame(2, $domain->refresh()->revision);
         $this->assertSame('succeeded', Operation::findOrFail($operationId)->status);
+        (new ImportDnsZone($operationId))->handle();
+        $this->assertDatabaseCount('dns_records', 101);
+        $this->assertSame(2, $domain->refresh()->revision);
+    }
+
+    public function test_queued_import_and_operation_success_roll_back_together(): void
+    {
+        Queue::fake();
+        [$user, $domain] = $this->ownedDomain();
+        $lines = ['$ORIGIN example.com.'];
+        for ($index = 1; $index <= 101; $index++) {
+            $lines[] = "host{$index} 60 IN A 192.0.2.".(($index % 250) + 1);
+        }
+        $response = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/import", [
+            'zone' => implode("\n", $lines), 'replace_existing' => true,
+        ])->assertAccepted();
+        $operation = Operation::findOrFail($response->json('data.id'));
+        Operation::updating(function (Operation $candidate): void {
+            if ($candidate->status === 'succeeded') {
+                throw new \RuntimeException('injected receipt failure');
+            }
+        });
+        try {
+            (new ImportDnsZone($operation->id))->handle();
+            $this->fail('Injected operation receipt failure did not occur.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('injected receipt failure', $exception->getMessage());
+        } finally {
+            Operation::flushEventListeners();
+        }
+
+        $this->assertDatabaseCount('dns_records', 0);
+        $this->assertSame(1, $domain->refresh()->revision);
+        $this->assertSame('failed', $operation->refresh()->status);
+        $this->assertSame(1, $operation->attempts);
+        (new ImportDnsZone($operation->id))->handle();
+        $this->assertDatabaseCount('dns_records', 0);
+        $this->assertSame(1, $domain->refresh()->revision);
+    }
+
+    public function test_queued_import_rechecks_revoked_or_disabled_actor_before_changing_the_zone(): void
+    {
+        Queue::fake();
+        foreach (['revoked', 'disabled'] as $scenario) {
+            [$user, $domain] = $this->ownedDomain("{$scenario}.example.com");
+            $lines = ['$ORIGIN '.$domain->name.'.'];
+            for ($index = 1; $index <= 101; $index++) {
+                $lines[] = "host{$index} 60 IN A 192.0.2.".(($index % 250) + 1);
+            }
+            $response = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/import", [
+                'zone' => implode("\n", $lines), 'replace_existing' => true,
+            ])->assertAccepted();
+            $operation = Operation::findOrFail($response->json('data.id'));
+            if ($scenario === 'revoked') {
+                $domain->users()->detach($user);
+            } else {
+                $user->update(['disabled_at' => now()]);
+            }
+
+            try {
+                (new ImportDnsZone($operation->id))->handle();
+                $this->fail("A {$scenario} actor was allowed to import DNS records.");
+            } catch (AuthorizationException|HttpException) {
+            }
+
+            $this->assertSame('failed', $operation->refresh()->status);
+            $this->assertSame(1, $domain->refresh()->revision);
+            $this->assertSame(0, $domain->dnsRecords()->count());
+        }
     }
 
     public function test_large_invalid_import_fails_without_partial_state_and_can_be_retried(): void

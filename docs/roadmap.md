@@ -163,7 +163,8 @@ added. The isolated Laravel suite, disposable PostgreSQL claim/race and
 legacy-migration job, and real-BIND parent-delegation fixture with IPv4/IPv6
 transports pass. Assignment also rechecks eligibility under a row lock, with
 a disposable PostgreSQL disable/attach race proving rejection. API and Filament
-use the same assignment boundary. The rest
+use the same assignment boundary. Queued DNS imports now recheck current actor
+scope, and duplicate workers commit one import and one operation receipt. The rest
 of the assigned inventory, public-delegation qualification and owner
 browser checklist remain open; Phase 1 browser qualification is also still open.
 

@@ -375,6 +375,32 @@ if ($mode === 'init') {
         $status = $exception->getStatusCode();
     }
     echo json_encode(['status' => $status, 'assignments' => $domain->users()->count()])."\n";
+} elseif ($mode === 'import-init') {
+    $user = App\Models\User::factory()->create();
+    $domain = App\Models\Domain::query()->create(['name' => 'import-race.example.net', 'display_name' => 'Import race', 'revision' => 1]);
+    $domain->users()->attach($user);
+    $lines = ['$ORIGIN import-race.example.net.'];
+    for ($index = 1; $index <= 101; $index++) {
+        $lines[] = 'host'.$index.' 60 IN A 192.0.2.'.(($index % 250) + 1);
+    }
+    $operation = App\Models\Operation::query()->create(['actor_id' => $user->id, 'type' => 'dns.zone_import',
+        'status' => 'pending', 'input' => ['domain_id' => $domain->id, 'zone' => implode("\n", $lines), 'replace_existing' => true]]);
+    echo json_encode(['operation_id' => $operation->id, 'domain_id' => $domain->id])."\n";
+} elseif ($mode === 'import-worker') {
+    $paused = false;
+    App\Models\Operation::retrieved(function ($operation) use ($argv, &$paused): void {
+        if (getenv('CDNF_IMPORT_PAUSE') === '1' && ! $paused && $operation->id === $argv[2]
+            && Illuminate\Support\Facades\DB::transactionLevel() > 0) {
+            $paused = true;
+            echo "locked\n"; flush();
+            fgets(STDIN);
+        }
+    });
+    (new App\Jobs\ImportDnsZone($argv[2]))->handle();
+    $operation = App\Models\Operation::query()->findOrFail($argv[2]);
+    $domain = App\Models\Domain::query()->findOrFail((int) $operation->input['domain_id']);
+    echo json_encode(['status' => $operation->status, 'attempts' => $operation->attempts,
+        'revision' => $domain->revision, 'records' => $domain->dnsRecords()->count()])."\n";
 } elseif ($mode === 'hold') {
     Illuminate\Support\Facades\DB::transaction(function (): void {
         App\Models\Domain::lockCanonicalName('locked.example.com');
@@ -772,6 +798,38 @@ def main() -> None:
                         if process.poll() is None:
                             process.kill()
                         process.communicate(timeout=10)
+            import_case = json.loads(subprocess.check_output(command('import-init'), env=env, text=True))
+            first_import = subprocess.Popen(command('import-worker', import_case['operation_id']),
+                                            env={**env, 'CDNF_IMPORT_PAUSE': '1'}, stdin=subprocess.PIPE,
+                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            second_import = None
+            try:
+                assert first_import.stdout.readline().strip() == 'locked'
+                second_import = subprocess.Popen(command('import-worker', import_case['operation_id']), env=env,
+                                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                for _ in range(90):
+                    blocked = subprocess.check_output(['docker', 'exec', identifier, 'psql', '-U', 'postgres',
+                        '-d', 'cdnf_claim_qualification', '-Atc',
+                        "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%operations%'"], text=True)
+                    if int(blocked.strip()) > 0:
+                        break
+                    assert second_import.poll() is None, 'Duplicate import exited before operation-row contention'
+                    time.sleep(.02)
+                else:
+                    raise AssertionError('Duplicate import did not wait on the operation row')
+                output, error = first_import.communicate(input='continue\n', timeout=15)
+                assert first_import.returncode == 0, error
+                first_result = json.loads(output.strip().splitlines()[-1])
+                output, error = second_import.communicate(timeout=15)
+                assert second_import.returncode == 0, error
+                second_result = json.loads(output.strip().splitlines()[-1])
+                assert first_result == second_result == {'status': 'succeeded', 'attempts': 1, 'revision': 2, 'records': 101}
+            finally:
+                for process in (second_import, first_import):
+                    if process is not None:
+                        if process.poll() is None:
+                            process.kill()
+                        process.communicate(timeout=10)
             digest = subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{json .RepoDigests}}'], text=True).strip()
             print(json.dumps({'postgres_domain_claims': 'passed', 'instance': identifier, 'image_digests': json.loads(digest),
                               'concurrent_applicants': 2, 'active_configurations': 1, 'lock_wait_seconds': round(waited, 3),
@@ -791,6 +849,7 @@ def main() -> None:
                               'tls_stale_obsolescence': stale_obsolete,
                               'legacy_claim_upgrade': 'passed',
                               'assignment_disable_race': assignment_result,
+                              'duplicate_dns_import_race': first_result,
                               'database': 'disposable tmpfs, actual migrations; no PHPUnit or persistent volumes'}))
         finally:
             subprocess.run(['docker', 'rm', '-f', identifier], check=True, capture_output=True)

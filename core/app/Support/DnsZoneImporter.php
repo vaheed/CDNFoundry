@@ -7,6 +7,7 @@ use App\Models\DnsRecord;
 use App\Models\Domain;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
 final class DnsZoneImporter
@@ -17,14 +18,21 @@ final class DnsZoneImporter
         if ($records === []) {
             throw ValidationException::withMessages(['zone' => 'The zone contains no supported records.']);
         }
-        if ($actor?->isAdmin() !== true && collect($records)->contains(fn (array $record): bool => $record['type'] === 'NS')) {
-            abort(403, 'Only administrators can manage delegated NS records.');
-        }
 
         return DB::transaction(function () use ($domainId, $records, $replaceExisting, $actor, $ipAddress): array {
             $domain = Domain::query()->lockForUpdate()->findOrFail($domainId);
+            $actor = $actor === null ? null : User::query()->lockForUpdate()->find($actor->id);
+            abort_unless($actor !== null && ! $actor->isDisabled(), 403, 'The import actor is no longer authorized.');
+            Gate::forUser($actor)->authorize('update', $domain);
+            if (! $actor->isAdmin()) {
+                abort_unless(DB::table('domain_user')->where('domain_id', $domainId)->where('user_id', $actor->id)
+                    ->lockForUpdate()->first() !== null, 403, 'The import assignment has been revoked.');
+                if (collect($records)->contains(fn (array $record): bool => $record['type'] === 'NS')) {
+                    abort(403, 'Only administrators can manage delegated NS records.');
+                }
+            }
             $existing = $domain->dnsRecords()->lockForUpdate()->get();
-            if ($replaceExisting && $actor?->isAdmin() !== true && $existing->contains(fn (DnsRecord $record): bool => $record->type === 'NS')) {
+            if ($replaceExisting && ! $actor->isAdmin() && $existing->contains(fn (DnsRecord $record): bool => $record->type === 'NS')) {
                 abort(403, 'Only administrators can manage delegated NS records.');
             }
             $final = collect($records);
