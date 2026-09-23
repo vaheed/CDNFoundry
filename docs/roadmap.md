@@ -7,8 +7,9 @@ description: Bounded jobs for dev publication, staging tests, remaining review, 
 
 This plan replaces the open-ended audit goal on **2026-09-19**, at the owner's
 request. The owner confirmed on **2026-09-20** that the previous delivery job
-is finished and the application images are published. The current bounded job
-is Phase 1, `staging-install-and-smoke`. The production staging
+is finished and the application images are published. The owner has since
+authorized sequential agent-owned work across the remaining phases while
+manual browser qualification stays pending. The production staging
 environment has no customer traffic and is for early testing. Image publication
 and empty-stage smoke tests do not establish general production readiness.
 
@@ -90,7 +91,7 @@ when selecting the staging release.
 
 ## Phase 1 — Install and smoke-test the empty staging environment
 
-**Current job `staging-install-and-smoke`.** Inputs: published release manifest,
+**Job `staging-install-and-smoke`.** Inputs: published release manifest,
 staging host access/inventory, independent management DNS, test-zone registrar
 access, origin endpoint and approved address families. Follow the starter Fleet
 quick start on one control/telemetry host and two DNS/edge hosts, or explicitly
@@ -149,7 +150,7 @@ readiness. Agent-owned phases still proceed in roadmap order.
 
 ## Phase 2 — Identity, authorization and domain lifecycle
 
-**Current job `identity-and-domain-boundaries` (owner-directed while Phase 1 browser
+**Job `identity-and-domain-boundaries` (owner-directed while Phase 1 browser
 qualification remains open).** Review sessions/tokens/CSRF, disabled
 users, policies/binding, Filament/Livewire parity, operations, imports, parent
 verification, claim expiration/reclaim, assignments and queued authorization.
@@ -173,8 +174,10 @@ bounded at 50 active tokens per user across API login, manual API creation and
 the panel; a PostgreSQL race proved the final slot is not overfilled. Token
 metadata now commits with issuance, so a failed suffix write rolls back the
 unseen secret. The deprovisioning delay is now rechecked under the domain lock
-at finalization. The remaining source inventory and public-delegation
-qualification remain open; the local public DNSSEC probe failed before the
+at finalization. The additive claim migration now admits a partial existing
+installation with a JSON assignment and retains its values as JSONB; a
+disposable PostgreSQL replay passed. The remaining source inventory and public
+delegation qualification remain open; the local public DNSSEC probe failed before the
 delegation comparison. The Phase 1 and Phase 2 owner browser checklists are
 pending for the owner's later qualification pass.
 
@@ -190,6 +193,14 @@ checks and qualify a real isolated test CA with edge HTTPS clients.
 Completion gate: lifecycle defects fixed, TLS/worker runbooks current,
 failure/retry/rollback runtime checks pass and owner TLS checklist recorded.
 Current status: **partial**; prior terminal-state/upload fixes are retained.
+The issuer now persists the encrypted key and CSR before CA finalization and
+reuses them after a lost response. An injected lost-response regression passes;
+the real Pebble/DNSdist managed-issuance fixture also passes. Late certificate
+downloads now recheck domain lifecycle and hostname eligibility under the lock.
+After refreshing the development cell images, the extended fixture passed
+CA-verified SNI and exact issued-certificate fingerprint checks through both
+gateways. The remaining lifecycle inventory is open. Owner browser
+qualification is deferred until the owner-run pass.
 
 ## Phase 4 — DNS, proxy, cache and edge trust boundaries
 
@@ -274,6 +285,7 @@ complete release qualification**.
 
 ## Start the next bounded job
 
-Current request: **continue Phase 2 while the owner performs Phase 1 browser
-qualification later.** Keep the Phase 1 manual gate open and record its actual
-results when supplied. Do not infer a Phase 1 pass from Phase 2 implementation.
+Current request: **continue implementation and agent-owned qualification through
+the roadmap while the owner defers browser checks until the final pass.** Keep
+each manual gate open and record its actual results when supplied. Do not infer
+a browser pass from implementation or non-browser qualification.

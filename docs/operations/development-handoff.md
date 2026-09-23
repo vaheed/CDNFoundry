@@ -299,6 +299,57 @@ passed. No browser automation or owner Phase 2 browser qualification was run.
 The rest of the Phase 2 source review
 and runtime qualification remain open.
 
+### Phase 3 managed TLS review — first pass, 2026-09-23
+
+The issuer previously generated the private key and CSR, sent ACME
+finalization, then persisted them. A lost CA response could leave a finalized
+remote order with no matching local key. It now commits the encrypted key and
+CSR before the external request. On retry it checks the remote order and reuses
+the saved request: `ready` resubmits the same CSR, while `processing` or `valid`
+continues certificate polling. An injected lost-response regression observed
+the persisted material inside the CA callback and proved retry kept the same
+key/CSR without another finalization call. The isolated Laravel suite passed
+**352 tests / 12,702 assertions**. The real Pebble/DNSdist fixture passed
+managed issuance, challenge cleanup and encrypted key storage after the
+development dependencies and explicit migrations were restored. The extended
+fixture passed CA-verified SNI and exact issued-certificate fingerprint checks
+through both gateways. The remaining Phase 3 lifecycle inventory is open.
+Owner browser qualification is deferred; no browser automation ran.
+
+The real Pebble fixture exposed an existing development installation with only
+`delegation_nameservers` present as JSON and no migration receipt. The additive
+claim migration now detects missing columns individually and converts that
+existing assignment to JSONB with a five-second lock wait and 30-second
+statement bound. On the persistent development PostgreSQL it preserved both
+populated assignments and added the missing claim fields; the display-timezone
+migration also applied. Named volumes and other records were retained. A
+disposable PostgreSQL replay of this partial shape is part of the Phase 2
+qualification job and passed, preserving the verified row's assignment and
+revision while converting JSON to JSONB. The first Pebble attempts stopped at
+absent database/Redis services and the outdated schema; they were not TLS passes.
+
+Attempted verified visitor HTTPS on both development gateways then exposed the existing
+`edge_runtime` row's retired telemetry fields. Edge reconciliation had failed
+closed with no artifact, leaving the TLS handshake unavailable. Current workers
+now validate the live settings while retaining those three stored legacy fields
+through updates for mixed-version compatibility; new unknown input remains
+rejected. The extended real-Pebble fixture checks CA-verified SNI and the issued
+fingerprint on both gateways after reconciliation. The existing two development
+edge identities initially had stale heartbeats. Recreating edge control and
+the current agents restored fresh heartbeats and generation activation without
+deleting their state volumes. Recreating both gateways restored listener
+activation. Older OpenResty cells also reported no loaded generation, so the
+current images were rebuilt and all cells recreated using their existing state
+volumes. The first visitor probe used Docker's host-published port, while this
+gateway binds its assigned service address; a direct listener probe completed
+TLS. The next probe trusted Pebble's API test CA instead of the separate,
+ephemeral issuance root and correctly failed chain validation. The fixture now
+reads each active gateway listener and fetches Pebble's current issuance root
+over its authenticated management TLS endpoint. Its complete run passed real
+DNS-01 issuance, challenge cleanup, encrypted key storage, CA/hostname
+verification and the issued SHA-256 fingerprint on both gateways. The fixture
+removed its disposable domain; named volumes and pre-existing data remain.
+
 Preparation checks executed on 2026-09-20:
 
 - `make config-check`: **passed** development/test/production Compose parsing,
