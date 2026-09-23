@@ -178,9 +178,10 @@ at finalization. Domain deletion now rechecks assignment under the domain lock
 before starting deprovisioning; an isolated revocation regression passed. The
 additive claim migration now admits a partial existing
 installation with a JSON assignment and retains its values as JSONB; a
-disposable PostgreSQL replay passed. The remaining source inventory and public
-delegation qualification remain open; the local public DNSSEC probe failed before the
-delegation comparison. The Phase 1 and Phase 2 owner browser checklists are
+disposable PostgreSQL replay passed. A read-only resolver check inside the
+staging control container matched both assigned public parent nameservers;
+the earlier workspace DNSSEC probe had failed before comparison. The remaining
+source inventory is open. The Phase 1 and Phase 2 owner browser checklists are
 pending for the owner's later qualification pass.
 
 ## Phase 3 — Managed TLS and queue recovery
@@ -241,6 +242,10 @@ bypass attempts, bounded resources and mixed-version last-valid behavior.
 Completion gate: implementation reviewed, truthful docs, actual failure-injection
 and WAF enforcement checks pass, owner diagnostics/security checklist recorded.
 Current status: **implementation and prior evidence exist; full gate remains open**.
+The local real OpenResty and managed CRS fixtures pass. WAF profile and
+exclusion mutations now recheck assignment under the domain lock, and the
+exclusion limit is checked in the same transaction. Staging enforcement and
+failure-injection checks remain open.
 
 ## Phase 6 — Fleet operations, upgrades and clean-host recovery
 

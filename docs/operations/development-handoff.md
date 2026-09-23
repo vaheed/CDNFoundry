@@ -335,6 +335,14 @@ The isolated managed TLS suite passed 20 tests, including a stale/due/terminal
 selection regression. This source change is not yet present in the selected
 staging image; release and staging qualification are still pending.
 
+The owner reported that staging audit logs show a container address for
+administrator actions. The public Caddy ingress now replaces incoming
+`X-Forwarded-For` with its direct peer address, and Laravel trusts that
+forwarded client address for request IP attribution. The Phase 1 owner checklist
+now asks for a private comparison against the address used to reach control
+HTTPS. The new ingress and core images, regenerated Fleet bundle and a stage
+spoofing probe are required before this is recorded as fixed on stage.
+
 A read-only staging baseline from the control host passed public control
 health/readiness, Grafana health, administrator API denial, and authoritative
 UDP/TCP SOA checks on both PoPs. A workspace probe passed CA-verified visitor
@@ -344,6 +352,15 @@ HIT expectation; it was retained as a failed narrow probe. This baseline is
 for the previously deployed images and does not qualify the new TLS recovery
 change. The local real OpenResty runtime and managed WAF fixtures passed; a
 staging WAF and failure-injection pass remains open.
+
+The control-container resolver later matched both assigned public parent
+nameservers for the disposable zone. This is a direct staging public-delegation
+pass; it does not close the remaining Phase 2 source inventory.
+
+WAF profile and exclusion mutations now reauthorize under the locked domain,
+and the active exclusion limit is checked inside that transaction. A revoked
+assignment regression passed. These source changes await publication and
+staging qualification.
 
 The real Pebble fixture exposed an existing development installation with only
 `delegation_nameservers` present as JSON and no migration receipt. The additive

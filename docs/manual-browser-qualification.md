@@ -75,6 +75,11 @@ so existing clusters, edges and domains are reused rather than duplicated.
    **From** and **To**: their labels must name the shared timezone.
    **Healthy edges** must remain available without a completed traffic bucket;
    **Health checked** and **Traffic aggregate** must have separate labels.
+   After saving the display timezone, open **Governance → Audit logs** and find
+   the matching administrator change. Its **IP address** must be the public
+   address from which the administrator reached control HTTPS, not a Docker
+   container address. Record the expected address privately; do not publish it
+   in screenshots or the shared report.
    Status: **Not run** for these new checkpoints. Earlier login passes do not
    cover timezone changes or dashboard corrections.
 2. Open **Infrastructure → DNS clusters**. For each prepared PoP, create its

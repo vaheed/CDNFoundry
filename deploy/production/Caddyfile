@@ -6,6 +6,8 @@
 {$CONTROL_HOSTNAME} {
 	encode zstd gzip
 	reverse_proxy web:8080 {
+		# Replace caller-supplied forwarding chains at the public trust boundary.
+		header_up X-Forwarded-For {remote_host}
 		header_up X-Forwarded-Proto https
 		header_up X-Forwarded-Port 443
 		header_up X-Forwarded-Host {$CONTROL_HOSTNAME}

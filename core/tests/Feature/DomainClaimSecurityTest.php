@@ -32,6 +32,22 @@ class DomainClaimSecurityTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_audit_uses_client_ip_forwarded_by_public_ingress(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::query()->create(['name' => 'audit-ip.example.com', 'display_name' => 'Audit IP']);
+        $domain->users()->attach($user);
+
+        $this->withServerVariables(['REMOTE_ADDR' => '172.20.0.8'])
+            ->actingAs($user)->withHeader('X-Forwarded-For', '198.51.100.42')
+            ->patchJson("/api/domains/{$domain->id}", ['display_name' => 'Updated'])->assertOk();
+
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'domain.updated', 'subject_id' => (string) $domain->id,
+            'ip_address' => '198.51.100.42',
+        ]);
+    }
+
     public function test_deprovision_rechecks_assignment_after_initial_authorization(): void
     {
         $user = User::factory()->create();

@@ -2,12 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\WafController;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\Domain;
 use App\Models\EdgePool;
 use App\Models\User;
 use App\Support\ManagedWaf;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -15,6 +19,26 @@ use Tests\TestCase;
 class ManagedWafTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_profile_update_rechecks_assignment_inside_domain_transaction(): void
+    {
+        [$owner, $domain] = $this->ownedDomain();
+        $request = Request::create("/api/domains/{$domain->id}/waf", 'PATCH', ['profile' => 'balanced']);
+        $request->setUserResolver(fn () => $owner);
+        Gate::after(function ($actor, $ability) use ($domain, $owner): void {
+            if ($actor->is($owner) && $ability === 'update' && $domain->users()->whereKey($owner->id)->exists()) {
+                $domain->users()->detach($owner);
+            }
+        });
+
+        $this->expectException(AuthorizationException::class);
+        try {
+            app(WafController::class)->update($request, $domain);
+        } finally {
+            $this->assertSame('off', $domain->fresh()->waf_profile);
+            $this->assertSame(1, $domain->fresh()->revision);
+        }
+    }
 
     public function test_fixed_profiles_are_revisioned_authorized_and_idempotent(): void
     {

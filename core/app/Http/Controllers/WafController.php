@@ -31,6 +31,7 @@ class WafController extends Controller
         ]);
         DB::transaction(function () use ($data, $domain, $request): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
+            Gate::authorize('update', $locked);
             $locked->update(['waf_profile' => $data['profile'], 'revision' => $locked->revision + 1]);
             AuditLog::record($request->user(), 'waf.profile_updated', $locked, ['profile' => $data['profile'], 'revision' => $locked->revision], $request->ip());
         });
@@ -49,9 +50,10 @@ class WafController extends Controller
     {
         Gate::authorize('update', $domain);
         $data = ManagedWaf::validateExclusion($request->all());
-        abort_if($domain->wafExclusions()->where('expires_at', '>', now())->count() >= ManagedWaf::MAXIMUM_EXCLUSIONS, 409, 'The per-domain active WAF-exclusion limit has been reached.');
         $exclusion = DB::transaction(function () use ($data, $domain, $request): WafExclusion {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
+            Gate::authorize('update', $locked);
+            abort_if($locked->wafExclusions()->where('expires_at', '>', now())->count() >= ManagedWaf::MAXIMUM_EXCLUSIONS, 409, 'The per-domain active WAF-exclusion limit has been reached.');
             $exclusion = $locked->wafExclusions()->create([...$data, 'owner_id' => $request->user()->id]);
             $locked->update(['revision' => $locked->revision + 1]);
             AuditLog::record($request->user(), 'waf.exclusion_created', $exclusion, [
@@ -72,6 +74,8 @@ class WafController extends Controller
         abort_unless($exclusion->domain_id === $domain->id, 404);
         DB::transaction(function () use ($domain, $exclusion, $request): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
+            Gate::authorize('update', $locked);
+            abort_unless($exclusion->domain_id === $locked->id && $exclusion->exists, 404);
             AuditLog::record($request->user(), 'waf.exclusion_deleted', $exclusion, ['revision' => $locked->revision + 1], $request->ip());
             $exclusion->delete();
             $locked->update(['revision' => $locked->revision + 1]);
