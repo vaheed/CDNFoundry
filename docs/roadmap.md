@@ -103,38 +103,42 @@ The owner executes implemented screens in `docs/manual-browser-qualification.md`
 
 Completion gate: installation works on the stated hosts, operator docs are current,
 non-UI runtime checks pass and owner browser status is recorded separately.
-Current status: **job stopped at the owner's release checkpoint on 2026-09-20;
-Phase 1 remains incomplete**. This release checkpoint commits current work for
-`v0.9.8`; it does not assert full staging qualification or production readiness.
+Historical status: **job stopped at the owner's release checkpoint on
+2026-09-20; Phase 1 remained incomplete**. That checkpoint committed current
+work for `v0.9.8`; it did not assert full staging qualification or production
+readiness. The owner resumed the same bounded job on 2026-09-23.
 See the [release notes](operations/releases/v0.9.8.md) and
 [staging job record](operations/development-handoff.md#staging-install-and-smoke-job).
 
 - Implementation: all three hosts are installed. The verified `80eea902` agent
-  and runtime fixes are deployed on both PoPs; full purge now succeeds. Shared
-  timezone, healthy-edge KPI and recovery-aware operation health are committed
-  but await signed control-image deployment and explicit display-setting migration.
-  The final Vector enrolled-edge identity mapping is committed but not deployed.
+  and runtime fixes are deployed on both PoPs; full purge now succeeds. The
+  signed `1818132d` control image is deployed, its display-timezone migration was
+  applied explicitly, and the final Vector enrolled-edge identity mapping is
+  deployed on control and both PoPs. Named volumes were preserved.
 - Documentation: Fleet browser/API setup, manual checkpoints, release notes and
   the sanitized handoff record are current. Legacy roadmaps remain unchanged.
 - Automated/runtime qualification: control/DNS, account isolation, Grafana APIs,
   HTTP origin, verified visitor HTTPS, cache/URL/full purge and security checks
   passed. Both edges served during a control outage; one PoP Docker restart
   preserved serving on its peer and recovered verified HTTPS with named volumes
-  intact. Real origin latency and error telemetry passed. Final control-image and
-  Vector identity deployment/retest remain open. Verified HTTPS origin transport
-  was not exercised because the owner selected an HTTP origin with visitor TLS.
+  intact. Real origin latency and error telemetry passed. After the resumed
+  rollout, public control health/readiness/auth checks, a verified-HTTPS cache
+  sequence on both PoPs, and live ClickHouse edge-identity attribution passed.
+  Verified HTTPS origin transport was not exercised because the owner selected
+  an HTTP origin with visitor TLS.
   The owner chose to retain the missing-backup warning and configure backups
   separately; no backup/recovery readiness is claimed.
 - Owner-run browser qualification: **partial**. Both login/access checks passed
-  per the owner. The previously unavailable healthy-edge KPI remains **failed,
-  correction awaiting deployed-browser retest**. Timezone, recovery presentation,
-  edge-filter telemetry and the other remaining checks are **not run**. Use the
+  per the owner. The healthy-edge KPI correction is deployed and awaits its
+  browser retest. Timezone, recovery presentation, edge-filter telemetry and the
+  other remaining checks are **not run**. Use the
   [Phase 1 checklist](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md#phase-1--empty-staging-smoke).
 
-The next separate roadmap job is **resume `staging-install-and-smoke`**: verify
-and deploy the selected signed control image, apply its additive migration,
-deploy the Vector identity configuration, qualify those changes, and collect
-owner browser results. Phase 2 is not admitted until those Phase 1 gates close.
+The current bounded job remains **`staging-install-and-smoke`**. Agent-owned
+deployment and runtime gates passed on 2026-09-23; collect and record the owner's
+remaining browser results before closing Phase 1. Phase 2 is not admitted until
+those Phase 1 gates close. See the resumed execution record in the
+[staging handoff](operations/development-handoff.md#resume-execution-2026-09-23).
 
 Stop at this phase boundary. Outstanding staging gates are not permission to start
 Phase 2 or repeat publication/security-audit work.

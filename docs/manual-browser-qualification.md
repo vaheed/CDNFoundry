@@ -130,9 +130,10 @@ so existing clusters, edges and domains are reused rather than duplicated.
 7. Open **Observe → Operations overview**, then **Observe → Traffic and
    telemetry** with the disposable **Domain** selected. Expect fresh smoke
    traffic, truthful queue/edge state and no false success for failed work.
-   After the Vector identity configuration is deployed and a complete traffic
-   hour is available, choose each enrolled **Edge** in turn; expect that edge's
-   new smoke traffic rather than an empty result caused by local cell-name IDs.
+   The Vector identity configuration is deployed to control and both PoPs. After
+   a complete traffic hour is available, choose each enrolled **Edge** in turn;
+   expect that edge's new smoke traffic rather than an empty result caused by
+   local cell-name IDs.
    Older cell-name telemetry is retained and is outside this correction.
    After a successful nameserver verification, earlier failed checks of the same
    domain must remain in **Operations** history but must no longer count as an
@@ -140,7 +141,8 @@ so existing clusters, edges and domains are reused rather than duplicated.
    again. After purge reconciliation succeeds on both edges, its failed purge
    and task conditions must clear on the next health poll. A missing verified
    backup must remain visible; only when all current conditions are healthy
-   should the degraded service banner clear. Status: **Not run**.
+   should the degraded service banner clear. Status: **Owner retest required**;
+   the control image, migration and live Vector identity mapping are now deployed.
    In Grafana, open **Connections → Data sources** and confirm the four
    provisioned datasource health checks; under **Dashboards**, open both
    **CDNFoundry — System Command Center** and **CDNFoundry — Domain Command
@@ -161,18 +163,22 @@ so existing clusters, edges and domains are reused rather than duplicated.
 ### Phase 1 completion gate
 
 - Implementation: installation on all three staging hosts is present. PoP purge
-  and origin-metric image fixes are deployed. Final control/UI fixes and Vector
-  edge-identity configuration await deployment at the owner's release checkpoint.
+  and origin-metric image fixes are deployed. The signed control image and
+  additive timezone migration are deployed; the Vector edge-identity mapping is
+  deployed and verified on control and both PoPs.
 - Documentation: exact current browser steps and the staging evidence matrix
   are written; observed discrepancies must be corrected before closure.
 - Automated/runtime qualification: control/public HTTPS, authoritative DNS,
   customer traffic, URL/full purge, security, control-outage serving and PoP
-  restart continuity passed as recorded in the handoff. Final change deployment
-  and retests remain open. Agent evidence stays separate from browser results.
+  restart continuity passed as recorded in the handoff. Post-deployment control
+  readiness, Vector health, verified-HTTPS cache requests and live ClickHouse
+  edge-identity attribution also passed. Agent evidence stays separate from
+  browser results.
 - Owner-run browser qualification: **partial**. Both login/access checks passed;
-  the healthy-edge KPI retest remains outstanding after its earlier failure.
-  All remaining checkpoints are **not run** until the owner supplies results.
-  No browser automation was used. Phase 1 is not complete.
+  the healthy-edge KPI retest is ready now. Run the timezone and recovery checks,
+  then edge-filtered traffic after a complete traffic hour. Other remaining
+  checkpoints are **not run** until the owner supplies results. No browser
+  automation was used. Phase 1 is not complete.
 
 ## Implemented product regression
 

@@ -177,6 +177,52 @@ publication alone does not close these gates.
 | Automated/runtime qualification | Control/DNS, account isolation, Grafana APIs, customer HTTP/HTTPS, cache/URL/full purge, security, control outage and PoP restart **passed**; final changes await deployment/retest |
 | Owner-run browser qualification | **Partial**: both login/access checks passed; healthy-edge KPI retest outstanding; remaining checks **not run** |
 
+### Resume execution 2026-09-23
+
+The owner resumed `staging-install-and-smoke` on `dev`. The latest successful
+dev workflow is [run 35533604362](https://github.com/vaheed/CDNFoundry/actions/runs/35533604362),
+source `1818132d75f00a8381d2f86dc7bf5bf9436bad9f`. All required build, runtime,
+documentation, Compose, dependency-scan and **Publish GHCR images** jobs passed.
+The core image deployed to control is
+`ghcr.io/vaheed/cdnfoundry-core@sha256:e68b1cd5f2a076996aaa9bc2f23757916bdff2a667cd41d790b009ab105e99c6`.
+Cosign verified its signature, SPDX attestation and SLSA provenance against the
+`dev` workflow identity; the verified provenance names the exact source SHA.
+The public workflow-artifact endpoint returned HTTP 401 in this workspace, so
+the full release-manifest archive was not downloaded or independently parsed.
+
+Before migration, a protected PostgreSQL custom-format snapshot was created at
+`.prod/backup-before-phase1-resume.dump` (209,568 bytes); `pg_restore --list`
+validated its archive catalog. This is a local snapshot, not an encrypted
+off-host backup or restore qualification. Migration
+`2026_09_20_170000_add_display_timezone_setting` ran explicitly and completed.
+The `core`, `horizon` and `scheduler` services became healthy, and the named
+volume inventory was unchanged. Verified public HTTPS returned 200 for
+`/api/health` and `/api/ready`; the protected admin health route returned 401
+without authentication.
+
+The current Vector transform was validated with the deployed Vector binary,
+and the generated production Compose configuration passed on all three hosts.
+The collector identity environment mapping was installed and checked against each
+host's resolved `EDGE_ID`; the control collector correctly has an empty override.
+All three collectors are healthy. A bounded verified-HTTPS request sequence for
+the known cacheable resource returned `MISS, HIT, HIT` through each PoP and
+matched the expected content hash. ClickHouse recorded four events under each
+PoP's enrolled identity. Sanitized reports and command logs are retained under
+`.prod/phase1-*` and `.prod/*phase1*`.
+
+| Gate | Current result |
+| --- | --- |
+| Implementation/installation | **Passed** for the resumed control image/migration and Vector identity rollout on all three hosts; earlier DNS, edge, purge and origin fixes remain deployed |
+| Documentation | This report, the roadmap and the manual checklist reflect the deployed state; the owner checklist remains open |
+| Automated/runtime qualification | **Passed** for core readiness/auth boundary, migration, Compose/Vector validation, collector health, cache/TLS/content and live ClickHouse identity attribution; volume inventory unchanged |
+| Owner-run browser qualification | **Partial**: prior login/access checks passed. The healthy-edge KPI can now be retested; timezone and recovery presentation, edge-filtered telemetry and remaining checklist items still require owner results |
+
+The protected snapshot is not a backup/restore pass. Verified HTTPS origin
+transport remains untested because the owner selected an HTTP origin with
+visitor TLS. The previously retained missing-backup warning remains visible.
+No browser automation was run. Phase 1 remains incomplete until the owner records
+the exact browser checklist results; Phase 2 is not admitted.
+
 Preparation checks executed on 2026-09-20:
 
 - `make config-check`: **passed** development/test/production Compose parsing,
