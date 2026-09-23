@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 import secrets
 import hashlib
 import socket
@@ -130,12 +131,26 @@ def main() -> None:
         raise AssertionError("Phase 5 TLS qualification requires the qualified local PowerDNS cluster")
     if sql("select count(*) from edge_pools where name='shared-default' and enabled") != "1":
         raise AssertionError("Phase 5 TLS qualification requires the shared-default edge pool")
-    heartbeat_deadline = time.monotonic() + 120
-    while int(sql("select count(*) from edges where enabled and registered_at is not null "
-                  "and last_heartbeat_at > now() - interval '2 minutes'")) < 2:
-        if time.monotonic() >= heartbeat_deadline:
-            raise AssertionError("Verified edge HTTPS requires two freshly enrolled development edges")
-        time.sleep(3)
+    # CI starts disposable agents without enrollment credentials. The issuance
+    # fixture runs there; enrolled developer stacks also qualify both gateways.
+    agent_ids = [subprocess.run(
+        ["docker", "compose", "-f", "compose.dev.yml", "exec", "-T", f"edge-agent-{edge}",
+         "printenv", "EDGE_ID"], cwd=ROOT, capture_output=True, text=True, timeout=15,
+    ).stdout.strip() for edge in ("a", "b")]
+    persisted_identities = all(subprocess.run(
+        ["docker", "compose", "-f", "compose.dev.yml", "exec", "-T", f"edge-agent-{edge}",
+         "test", "-s", "/var/lib/cdnfoundry/agent/identity.json"],
+        cwd=ROOT, capture_output=True, timeout=15,
+    ).returncode == 0 for edge in ("a", "b"))
+    enrolled_edges = persisted_identities or (all(agent_ids) and len(set(agent_ids)) == 2)
+    if enrolled_edges and all(agent_ids):
+        assert all(re.fullmatch(r"[0-9a-fA-F-]{36}", edge_id) for edge_id in agent_ids)
+        heartbeat_deadline = time.monotonic() + 120
+        while int(sql("select count(*) from edges where enabled and registered_at is not null "
+                      "and last_heartbeat_at > now() - interval '2 minutes'")) < 2:
+            if time.monotonic() >= heartbeat_deadline:
+                raise AssertionError("Configured development agents did not report fresh heartbeats")
+            time.sleep(3)
     # Pebble does not persist its account registry when its container is
     # recreated, while the development PostgreSQL volume intentionally does.
     # Preserve the account key but force local account rediscovery so a
@@ -192,7 +207,8 @@ def main() -> None:
     assert certificate["kind"] == "managed", certificate
     assert set(certificate["names"]) == {ZONE, f"*.{ZONE}"}, certificate
     assert "private_key" not in json.dumps(last), last
-    verify_edge_https(f"www.{ZONE}", certificate["fingerprint_sha256"])
+    if enrolled_edges:
+        verify_edge_https(f"www.{ZONE}", certificate["fingerprint_sha256"])
     _, records = call("GET", f"/api/domains/{domain_id}/dns/records", token=token)
     assert all(not row["name"].startswith("_acme-challenge") for row in records["data"]), records
     deadline = time.monotonic() + 60
@@ -201,7 +217,9 @@ def main() -> None:
     assert not dig(f"_acme-challenge.{ZONE}", "TXT"), "temporary ACME TXT record was not removed"
     raw_key = sql(f"select private_key_ciphertext from tls_certificates where id='{certificate['id']}'")
     assert "PRIVATE KEY" not in raw_key, "managed private key was stored as plaintext"
-    print(json.dumps({"result": "passed", "domain_id": domain_id, "zone": ZONE, "certificate_id": certificate["id"]}))
+    print(json.dumps({"result": "passed", "domain_id": domain_id, "zone": ZONE,
+                      "certificate_id": certificate["id"],
+                      "verified_edge_https": "passed" if enrolled_edges else "not_run_no_enrolled_agents"}))
 
 
 def cleanup() -> None:
