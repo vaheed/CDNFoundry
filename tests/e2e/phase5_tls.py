@@ -130,9 +130,12 @@ def main() -> None:
         raise AssertionError("Phase 5 TLS qualification requires the qualified local PowerDNS cluster")
     if sql("select count(*) from edge_pools where name='shared-default' and enabled") != "1":
         raise AssertionError("Phase 5 TLS qualification requires the shared-default edge pool")
-    if int(sql("select count(*) from edges where enabled and registered_at is not null "
-               "and last_heartbeat_at > now() - interval '2 minutes'")) < 2:
-        raise AssertionError("Verified edge HTTPS requires two freshly enrolled development edges")
+    heartbeat_deadline = time.monotonic() + 120
+    while int(sql("select count(*) from edges where enabled and registered_at is not null "
+                  "and last_heartbeat_at > now() - interval '2 minutes'")) < 2:
+        if time.monotonic() >= heartbeat_deadline:
+            raise AssertionError("Verified edge HTTPS requires two freshly enrolled development edges")
+        time.sleep(3)
     # Pebble does not persist its account registry when its container is
     # recreated, while the development PostgreSQL volume intentionally does.
     # Preserve the account key but force local account rediscovery so a
