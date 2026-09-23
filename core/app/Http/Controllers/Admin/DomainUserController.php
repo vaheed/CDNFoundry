@@ -25,12 +25,9 @@ class DomainUserController extends Controller
         $validated = $request->validate([
             'user_id' => ['required', 'integer', Rule::exists('users', 'id')->where('type', UserType::User->value)->whereNull('disabled_at')],
         ]);
-        $attached = $domain->users()->syncWithoutDetaching([$validated['user_id']]);
-        if ($attached['attached'] !== []) {
-            AuditLog::record($request->user(), 'domain.user_assigned', $domain, ['user_id' => $validated['user_id']], $request->ip());
-        }
+        [$user, $created] = $domain->assignActiveUser($request->user(), $validated['user_id'], $request->ip());
 
-        return response()->json(['data' => UserResource::make(User::findOrFail($validated['user_id']))], $attached['attached'] === [] ? 200 : 201);
+        return response()->json(['data' => UserResource::make($user)], $created ? 201 : 200);
     }
 
     public function destroy(Request $request, Domain $domain, User $user): JsonResponse

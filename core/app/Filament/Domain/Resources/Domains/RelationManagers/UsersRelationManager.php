@@ -11,6 +11,7 @@ use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Validation\ValidationException;
 
 class UsersRelationManager extends RelationManager
 {
@@ -30,8 +31,11 @@ class UsersRelationManager extends RelationManager
         ])->headerActions([
             AttachAction::make()->attachAnother(false)->preloadRecordSelect()
                 ->recordSelectOptionsQuery(fn (Builder $query): Builder => $query->where('type', UserType::User->value)->whereNull('disabled_at'))
-                ->after(function (): void {
-                    AuditLog::record(auth()->user(), 'domain.user_assigned', $this->getOwnerRecord(), [], request()->ip());
+                ->using(function (?User $record): void {
+                    if ($record === null) {
+                        throw ValidationException::withMessages(['recordId' => 'Only active domain users may be assigned.']);
+                    }
+                    $this->getOwnerRecord()->assignActiveUser(auth()->user(), $record->id, request()->ip());
                 }),
         ])->recordActions([
             DetachAction::make()->after(function (User $record): void {

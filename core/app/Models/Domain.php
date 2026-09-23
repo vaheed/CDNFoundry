@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\DomainLifecycleState;
+use App\Enums\UserType;
 use App\Support\DomainName;
 use App\Support\DomainNameserverVerification;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -148,6 +149,26 @@ class Domain extends Model
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class)->withPivot('created_at');
+    }
+
+    /** @return array{0: User, 1: bool} */
+    public function assignActiveUser(User $actor, int $userId, ?string $ipAddress = null): array
+    {
+        return DB::transaction(function () use ($actor, $userId, $ipAddress): array {
+            $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
+            abort_unless($actor->isAdmin() && ! $actor->isDisabled(), 403);
+            $user = User::query()->lockForUpdate()->findOrFail($userId);
+            if ($user->type !== UserType::User || $user->isDisabled()) {
+                throw ValidationException::withMessages(['user_id' => 'Only active domain users may be assigned.']);
+            }
+            $attached = $this->users()->syncWithoutDetaching([$user->id]);
+            $created = $attached['attached'] !== [];
+            if ($created) {
+                AuditLog::record($actor, 'domain.user_assigned', $this, ['user_id' => $user->id], $ipAddress);
+            }
+
+            return [$user, $created];
+        });
     }
 
     public function dnsRecords(): HasMany

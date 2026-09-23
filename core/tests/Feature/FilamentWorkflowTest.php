@@ -17,6 +17,7 @@ use App\Filament\Admin\Resources\Operations\Pages\ListOperations;
 use App\Filament\Domain\Resources\Domains\Pages\CreateDomain;
 use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
 use App\Filament\Domain\Resources\Domains\RelationManagers\DnsRecordsRelationManager;
+use App\Filament\Domain\Resources\Domains\RelationManagers\UsersRelationManager;
 use App\Jobs\BuildUsageRollups;
 use App\Jobs\ReconcileAllDnsZones;
 use App\Jobs\ReconcileAllEdgeDomains;
@@ -43,6 +44,29 @@ use Tests\TestCase;
 class FilamentWorkflowTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_administrator_relation_manager_assigns_an_active_domain_user(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $user = User::factory()->create();
+        $disabled = User::factory()->disabled()->create();
+        $domain = Domain::query()->create(['name' => 'assignment-ui.example.test', 'display_name' => 'Assignment UI']);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(UsersRelationManager::class, [
+            'ownerRecord' => $domain,
+            'pageClass' => ViewDomain::class,
+        ])->callTableAction('attach', null, ['recordId' => $user->id])->assertHasNoActionErrors();
+        Livewire::test(UsersRelationManager::class, [
+            'ownerRecord' => $domain,
+            'pageClass' => ViewDomain::class,
+        ])->callTableAction('attach', null, ['recordId' => $disabled->id])->assertHasFormErrors(['recordId']);
+
+        $this->assertTrue($domain->users()->whereKey($user->id)->exists());
+        $this->assertFalse($domain->users()->whereKey($disabled->id)->exists());
+        $this->assertDatabaseHas('audit_logs', ['action' => 'domain.user_assigned', 'subject_id' => (string) $domain->id]);
+    }
 
     public function test_domain_creation_automatically_queues_zone_provisioning_and_nameserver_verification(): void
     {

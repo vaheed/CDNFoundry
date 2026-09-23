@@ -161,7 +161,9 @@ routes. Stateful Sanctum API middleware and session logout invalidation are now
 implemented; API documentation and a policy-scoped session regression were
 added. The isolated Laravel suite, disposable PostgreSQL claim/race and
 legacy-migration job, and real-BIND parent-delegation fixture with IPv4/IPv6
-transports pass. The rest
+transports pass. Assignment also rechecks eligibility under a row lock, with
+a disposable PostgreSQL disable/attach race proving rejection. API and Filament
+use the same assignment boundary. The rest
 of the assigned inventory, public-delegation qualification and owner
 browser checklist remain open; Phase 1 browser qualification is also still open.
 

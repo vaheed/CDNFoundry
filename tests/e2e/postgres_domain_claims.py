@@ -348,6 +348,33 @@ if ($mode === 'init') {
         throw new RuntimeException('Claim migration changed legacy ownership or claim state.');
     }
     echo "legacy_claim_upgrade=passed\n";
+} elseif ($mode === 'assignment-init') {
+    $admin = App\Models\User::factory()->admin()->create();
+    $target = App\Models\User::factory()->create();
+    $domain = App\Models\Domain::query()->create(['name' => 'assignment-race.example.net', 'display_name' => 'Assignment race']);
+    echo json_encode(['admin_id' => $admin->id, 'target_id' => $target->id, 'domain_id' => $domain->id])."\n";
+} elseif ($mode === 'assignment-disable') {
+    Illuminate\Support\Facades\DB::transaction(function () use ($argv): void {
+        $user = App\Models\User::query()->lockForUpdate()->findOrFail((int) $argv[2]);
+        $user->forceFill(['disabled_at' => now()])->save();
+        echo "locked\n"; flush();
+        fgets(STDIN);
+    });
+    echo "disabled\n";
+} elseif ($mode === 'assignment-attach') {
+    $admin = App\Models\User::query()->findOrFail((int) $argv[4]);
+    $domain = App\Models\Domain::query()->findOrFail((int) $argv[2]);
+    $request = Illuminate\Http\Request::create('/api/admin/domains/'.$domain->id.'/users', 'POST', ['user_id' => (int) $argv[3]]);
+    $request->setUserResolver(fn () => $admin);
+    try {
+        $response = app(App\Http\Controllers\Admin\DomainUserController::class)->store($request, $domain);
+        $status = $response->getStatusCode();
+    } catch (Illuminate\Validation\ValidationException $exception) {
+        $status = 422;
+    } catch (Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $exception) {
+        $status = $exception->getStatusCode();
+    }
+    echo json_encode(['status' => $status, 'assignments' => $domain->users()->count()])."\n";
 } elseif ($mode === 'hold') {
     Illuminate\Support\Facades\DB::transaction(function (): void {
         App\Models\Domain::lockCanonicalName('locked.example.com');
@@ -711,6 +738,40 @@ def main() -> None:
                 obsolete.communicate(timeout=10)
             legacy_upgrade = subprocess.check_output(command('legacy-claim-upgrade'), env=env, text=True).strip()
             assert legacy_upgrade == 'legacy_claim_upgrade=passed', legacy_upgrade
+            assignment = json.loads(subprocess.check_output(command('assignment-init'), env=env, text=True))
+            disabler = subprocess.Popen(command('assignment-disable', str(assignment['target_id'])), env=env,
+                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            contender = None
+            try:
+                assert disabler.stdout.readline().strip() == 'locked'
+                contender = subprocess.Popen(command('assignment-attach', str(assignment['domain_id']),
+                                             str(assignment['target_id']), str(assignment['admin_id'])), env=env,
+                                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                for _ in range(90):
+                    blocked = subprocess.check_output(['docker', 'exec', identifier, 'psql', '-U', 'postgres',
+                        '-d', 'cdnf_claim_qualification', '-Atc',
+                        "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%users%'"], text=True)
+                    if int(blocked.strip()) > 0:
+                        break
+                    assert contender.poll() is None, 'Assignment contender exited before row-lock contention'
+                    time.sleep(.02)
+                else:
+                    raise AssertionError('Assignment contender did not wait on the user row')
+                output, error = disabler.communicate(input='continue\n', timeout=10)
+                assert disabler.returncode == 0 and output.strip() == 'disabled', (output, error)
+                output, error = contender.communicate(timeout=10)
+                assert contender.returncode == 0, error
+                try:
+                    assignment_result = json.loads(output.strip().splitlines()[-1])
+                except json.JSONDecodeError as exception:
+                    raise AssertionError((output, error)) from exception
+                assert assignment_result == {'status': 422, 'assignments': 0}, assignment_result
+            finally:
+                for process in (contender, disabler):
+                    if process is not None:
+                        if process.poll() is None:
+                            process.kill()
+                        process.communicate(timeout=10)
             digest = subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{json .RepoDigests}}'], text=True).strip()
             print(json.dumps({'postgres_domain_claims': 'passed', 'instance': identifier, 'image_digests': json.loads(digest),
                               'concurrent_applicants': 2, 'active_configurations': 1, 'lock_wait_seconds': round(waited, 3),
@@ -729,6 +790,7 @@ def main() -> None:
                               'tls_stale_success_concurrency': stale_successes,
                               'tls_stale_obsolescence': stale_obsolete,
                               'legacy_claim_upgrade': 'passed',
+                              'assignment_disable_race': assignment_result,
                               'database': 'disposable tmpfs, actual migrations; no PHPUnit or persistent volumes'}))
         finally:
             subprocess.run(['docker', 'rm', '-f', identifier], check=True, capture_output=True)

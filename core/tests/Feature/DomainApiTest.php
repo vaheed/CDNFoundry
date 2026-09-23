@@ -73,6 +73,21 @@ class DomainApiTest extends TestCase
         $this->assertDatabaseCount('domain_user', 0);
     }
 
+    public function test_admin_cannot_assign_a_disabled_user_or_administrator(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $disabled = User::factory()->disabled()->create();
+        $otherAdmin = User::factory()->admin()->create();
+        $domain = Domain::query()->create(['name' => 'assignment.example.net', 'display_name' => 'Assignment']);
+
+        foreach ([$disabled, $otherAdmin] as $user) {
+            $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/users", ['user_id' => $user->id])
+                ->assertUnprocessable();
+        }
+
+        $this->assertDatabaseCount('domain_user', 0);
+    }
+
     public function test_assigned_user_can_update_only_the_domain_display_label(): void
     {
         $user = User::factory()->create();

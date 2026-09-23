@@ -209,8 +209,9 @@ does not close the Phase 1 gate. Use only disposable accounts and domains.
 
 ### Phase 2 completion gate
 
-- Implementation: session/API parity correction is present; the remaining
-  identity, authorization and domain-lifecycle inventory review is open.
+- Implementation: session/API parity and locked assignment corrections are
+  present; the remaining identity, authorization and domain-lifecycle inventory
+  review is open.
 - Documentation: current API session behavior and these manual steps are written;
   final operator findings remain to be recorded.
 - Automated/runtime qualification: isolated Laravel and disposable PostgreSQL
