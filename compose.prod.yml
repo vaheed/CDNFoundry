@@ -81,6 +81,12 @@ x-edge-cell: &edge-cell
   deploy:
     resources:
       limits: { memory: 512m, cpus: "0.5", pids: 128 }
+  healthcheck:
+    test: [CMD, wget, -qO-, http://127.0.0.1:8080/healthz]
+    interval: 10s
+    timeout: 3s
+    retries: 10
+    start_period: 120s
 
 x-core: &core
   image: ${CDNF_CORE_IMAGE:?CDNF_CORE_IMAGE must be an immutable image reference}

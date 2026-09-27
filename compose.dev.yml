@@ -103,6 +103,7 @@ x-dev-cell: &dev-cell
     interval: 10s
     timeout: 3s
     retries: 10
+    start_period: 120s
 
 services:
   dev-pki:
@@ -546,6 +547,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
+      start_period: 120s
 
   edge-a-quarantine:
     logging: *bounded-logging
@@ -723,6 +725,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
+      start_period: 120s
 
   edge-b-quarantine:
     logging: *bounded-logging

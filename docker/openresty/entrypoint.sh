@@ -23,4 +23,15 @@ mkdir -p \
     /var/cache/nginx/content/streaming
 chown -R cdnf:cdnf /var/cache/nginx
 
+if [ "${1:-}" = /usr/local/openresty/bin/openresty ] && ! getent hosts vector >/dev/null 2>&1; then
+    # OpenResty resolves syslog destinations while loading its configuration.
+    # Keep serving from the bounded Docker stdout log if Vector is unavailable
+    # during startup; a telemetry outage must not make every cell unavailable.
+    fallback_config=/var/lib/nginx/tmp/nginx-without-syslog.conf
+    sed '/^[[:space:]]*access_log syslog:server=vector:9000,/d' \
+        /usr/local/openresty/nginx/conf/nginx.conf > "$fallback_config"
+    echo 'Vector DNS unavailable; serving with bounded stdout telemetry only' >&2
+    exec "$@" -c "$fallback_config"
+fi
+
 exec "$@"
