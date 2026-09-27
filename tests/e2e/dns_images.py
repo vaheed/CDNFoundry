@@ -37,8 +37,13 @@ def main() -> None:
                 '-e', 'POSTGRES_USER=pdns', '-e', 'POSTGRES_PASSWORD=pdns-dev-only', '-e', 'POSTGRES_DB=pdns',
                 '-v', f'{ROOT}/docker/postgres/pdns-schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro',
                 'ghcr.io/vaheed/cdnfoundry-postgres:ci')
+            # The entrypoint's temporary initialization server accepts Unix socket
+            # queries, then stops before the final server starts. TCP is ready only
+            # after that handoff, so both the probe and fixture insert use TCP.
+            database_psql = ('docker', 'exec', '-e', 'PGPASSWORD=pdns-dev-only', database,
+                             'psql', '-h', '127.0.0.1', '-U', 'pdns')
             for _ in range(60):
-                result = run('docker', 'exec', database, 'psql', '-U', 'pdns', '-Atc',
+                result = run(*database_psql, '-Atc',
                              "SELECT count(*) FROM records", check=False)
                 if result.returncode == 0:
                     break
@@ -54,7 +59,7 @@ INSERT INTO records (domain_id,name,type,content,ttl,auth) VALUES
 (1,'www.qualification.test','AAAA','2001:db8::42',60,true),
 (1,'lua.qualification.test','LUA',$$A "pickrandom({'192.0.2.43'})"$$,60,true);
 """
-            run('docker', 'exec', database, 'psql', '-U', 'pdns', '-v', 'ON_ERROR_STOP=1', '-c', sql)
+            run(*database_psql, '-v', 'ON_ERROR_STOP=1', '-c', sql)
             auth = name+'-pdns'
             containers.append(auth)
             run('docker', 'run', '-d', '--name', auth, '--network', name, '--network-alias', 'pdns-auth',
