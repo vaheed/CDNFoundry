@@ -30,12 +30,15 @@ secrets are shown only when issued.
 ## Bring a domain into service
 
 1. Create the domain under its intended owner. Record the operation ID for
-   asynchronous changes and wait for successful reconciliation.
-2. Complete ownership verification using the exact challenge and record shown
-   by the panel. Confirm the active ownership state before changing delegation.
-3. Add DNS records with their intended TTLs. Check both authoritative POPs over
-   UDP and TCP before changing registrar NS records. Keep management DNS at an
-   independent provider.
+   asynchronous changes and wait until its zone is deployed to both POPs.
+2. Copy the domain's exact assigned nameservers to the registrar. Query the
+   parent authorities directly from the control host and each POP; recursive
+   answers or the child zone's NS records do not prove parent delegation.
+   If the parent authorities still return the previous assignment, wait for
+   them to converge before requesting verification again. Confirm the domain
+   becomes active. Keep management DNS at an independent provider.
+3. Add DNS records with their intended TTLs. Wait for both deployment
+   acknowledgements, then check both authoritative POPs over UDP and TCP.
 4. Configure one validated origin for each proxied hostname. Confirm its Host
    header, scheme, port, and TLS name. Test the origin directly, then test each
    POP with the customer hostname.

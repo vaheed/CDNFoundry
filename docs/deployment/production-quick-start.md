@@ -187,8 +187,15 @@ sudo ./scripts/cdnfoundry-fleet \
 
 For every bundle, review `README.md`. Before running `./validate.sh`, prepare
 its metrics token ownership when the file is present (control or monitoring
-roles). Run these commands from the protected bundle directory on both the
-validation workstation and the destination host after transfer:
+roles). A combined DNS/edge bundle also needs its externally held node key,
+dedicated edge listener certificate and key, and stable recovery key provisioned
+at the `/dev/shm/cdnfoundry/` paths specified in its README. Provision them on
+both the validation workstation and destination host before validating there;
+the generated bundle deliberately excludes these private files. Keep the keys
+on tmpfs with the documented UID and mode, and disable host swap. See
+[edge key provisioning](production-fleet-operator-guide.md#pki-layout)
+for the exact paths and ownership. Run these commands from the protected bundle
+directory on both hosts:
 
 ```bash
 if [ -f secrets/metrics-token ]; then
@@ -306,7 +313,8 @@ Transfer `bundles/pop-1` and `bundles/pop-2` over authenticated channels to
 
 ```bash
 cd /opt/cdnfoundry
-# Apply the metrics-token ownership step above if that file is present.
+# Provision the externally held tmpfs keys and apply the metrics-token
+# ownership step above before validating this combined DNS/edge bundle.
 sudo ./validate.sh
 sudo ./start.sh
 docker compose --env-file .env.prod ps

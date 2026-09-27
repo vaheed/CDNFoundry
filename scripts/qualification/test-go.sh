@@ -2,9 +2,15 @@
 set -euo pipefail
 
 repository="$(pwd)"
-mapfile -t modules < <(find . -name go.mod -not -path './.git/*' -printf '%h\n' | sort -u)
+modules=()
+while IFS= read -r -d '' module_file; do
+    modules+=("$(dirname "$module_file")")
+done < <(git ls-files -z -- 'go.mod' '**/go.mod')
+if (( ${#modules[@]} == 0 )); then
+    echo 'No tracked Go modules found for qualification.' >&2
+    exit 1
+fi
 for module in "${modules[@]}"; do
-    module="${module#./}"
     docker run --rm \
         --mount "type=bind,source=${repository},target=/src,readonly" \
         --workdir "/src/${module}" \
