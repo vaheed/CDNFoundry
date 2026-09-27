@@ -26,6 +26,15 @@ never repair deployment state by editing a dashboard or derived metric.
 Do not use `/api/health` as proof that DNS, edge, telemetry, or reconciliation is
 healthy.
 
+For a read-only path check, run `python3 tests/e2e/staging_health.py` with
+`--control`, `--grafana`, `--zone`, one or more `--dns-server` values, and
+`--report`. Add `--edge-hostname`, one or more `--edge` addresses,
+`--cache-path` for a stable cacheable 200 resource, and
+`--origin-probe-prefix` for an origin route that returns 200 for a fresh child
+path. The report separately records authoritative UDP/TCP DNS and serial
+parity, verified TLS, a cache HIT, and a unique origin fetch. The probe makes
+bounded GET requests and does not follow redirects or inspect rendered UI.
+
 ## Component checks
 
 The system reports:
