@@ -250,7 +250,15 @@ jobs:
           docker run --rm --entrypoint /bin/promtool -v "$PWD/docker/prometheus:/etc/prometheus:ro" ghcr.io/vaheed/cdnfoundry-prometheus:ci \
             test rules /etc/prometheus/alerts.test.yml
       - name: Qualify bounded Vector buffers at runtime
-        run: python3 tests/e2e/vector_buffer_startup.py --image ghcr.io/vaheed/cdnfoundry-vector:ci
+        run: |
+          if ! python3 tests/e2e/vector_buffer_startup.py --image ghcr.io/vaheed/cdnfoundry-vector:ci > /tmp/cdnfoundry-vector-startup.log 2>&1; then
+            df -h /tmp /var/lib/docker
+            tail -n 20 /tmp/cdnfoundry-vector-startup.log
+            annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-vector-startup.log)"
+            echo "::error title=Vector runtime startup qualification failed::${annotation}"
+            exit 1
+          fi
+          cat /tmp/cdnfoundry-vector-startup.log
       - name: Qualify origin destination safety and IPv6 HTTP/TLS
         run: python3 tests/e2e/origin_destinations.py --image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
       - name: Qualify edge serving without Vector DNS

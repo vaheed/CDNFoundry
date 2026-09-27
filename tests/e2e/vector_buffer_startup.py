@@ -34,11 +34,16 @@ def main() -> None:
                 "-v", f"{ROOT / 'docker/vector/vector.yaml'}:/etc/vector/vector.yaml:ro",
                 "-v", f"{directory}:/vector-data-dir", image,
             )
-            time.sleep(3)
-            running = run("docker", "inspect", name, "--format", "{{.State.Running}}").stdout.strip()
-            log = run("docker", "logs", name).stderr
-            if running != "true" or "Vector has started" not in log:
-                raise RuntimeError(f"bounded Vector buffers prevented startup: {log[-2000:]}")
+            for _ in range(30):
+                running = run("docker", "inspect", name, "--format", "{{.State.Running}}").stdout.strip()
+                log = run("docker", "logs", name).stderr
+                if running == "true" and "Vector has started" in log:
+                    break
+                if running != "true":
+                    raise RuntimeError(f"bounded Vector buffers prevented startup: {log[-2000:]}")
+                time.sleep(1)
+            else:
+                raise RuntimeError(f"Vector startup exceeded 30 seconds: {log[-2000:]}")
             run("docker", "exec", name, "vector", "validate", "--no-environment", "/etc/vector/vector.yaml")
             print("vector_buffer_startup=passed")
         finally:
