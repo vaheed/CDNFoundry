@@ -351,7 +351,16 @@ jobs:
           make dev-e2e 2>&1 | tee /tmp/cdnfoundry-e2e.log
           status=${PIPESTATUS[0]}
           if (( status != 0 )); then
-            tail -n 25 /tmp/cdnfoundry-e2e.log > /tmp/cdnfoundry-e2e-tail.log
+            python3 - <<'PY' > /tmp/cdnfoundry-e2e-tail.log
+          from pathlib import Path
+
+          lines = Path('/tmp/cdnfoundry-e2e.log').read_text(errors='replace').splitlines()
+          traceback_starts = [i for i, line in enumerate(lines) if line.startswith('Traceback (most recent call last):')]
+          if traceback_starts:
+              print('\n'.join(lines[traceback_starts[-1]:][:35]))
+          else:
+              print('\n'.join(lines[-25:]))
+          PY
             {
               echo '### Non-UI E2E failure tail'
               echo '```text'
