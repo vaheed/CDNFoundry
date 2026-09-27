@@ -212,7 +212,7 @@ services:
   redis:
     logging: *bounded-logging
     image: valkey/valkey:9.1.0-alpine
-    command: [valkey-server, --appendonly, "yes", --maxmemory, 256mb, --maxmemory-policy, noeviction]
+    command: [valkey-server, --appendonly, "yes", --maxmemory, 512mb, --maxmemory-policy, noeviction]
     volumes: [redis:/data]
     networks: [control]
     healthcheck:

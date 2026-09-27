@@ -155,6 +155,20 @@ class SystemSettingsTest extends TestCase
             ->assertUnprocessable();
     }
 
+    public function test_retired_dns_setting_remains_readable_during_a_rolling_upgrade(): void
+    {
+        $setting = SystemSetting::query()->findOrFail('dns_lifecycle');
+        $setting->update(['values' => [...$setting->values, 'domain_claim_lifetime_hours' => 72]]);
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)->getJson('/api/admin/system/settings/dns_lifecycle')->assertOk()
+            ->assertJsonMissing(['key' => 'domain_claim_lifetime_hours']);
+        $this->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->patchJson('/api/admin/system/settings/dns_lifecycle', ['values' => ['deprovision_delay_days' => 8]])
+            ->assertOk();
+        $this->assertSame(72, $setting->refresh()->values['domain_claim_lifetime_hours']);
+    }
+
     public function test_domain_deprovisioning_uses_the_database_window_not_environment_configuration(): void
     {
         $user = User::factory()->create();
