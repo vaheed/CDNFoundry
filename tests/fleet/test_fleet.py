@@ -291,6 +291,9 @@ def test_disabled_monitoring_does_not_require_clickhouse_credentials_on_edge(sto
     env = env_values(output / "edge-dubai/.env.prod")
     assert "vector" not in compose["services"]
     assert "CLICKHOUSE_PASSWORD" not in env
+    production = yaml.safe_load((REPO_PATCH / "compose.prod.yml").read_text(encoding="utf-8"))
+    assert production["services"]["cell-01"]["healthcheck"]["start_period"] == "120s"
+    assert "bounded Docker" in (output / "edge-dubai/README.md").read_text(encoding="utf-8")
 
 
 def test_dns_profile_includes_vector_when_monitoring_is_enabled(

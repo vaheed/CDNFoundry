@@ -56,6 +56,9 @@ The system reports:
 - Horizon master state and each queue;
 - scheduler heartbeat;
 - ClickHouse and Vector probes;
+- edge cells continue serving with bounded Docker stdout logs when Vector is
+  absent at startup; their container log reports this fallback, and they need
+  a restart after Vector recovers to restore direct syslog delivery;
 - maximum host clock offset from Prometheus;
 - MMDB presence, readability, size, and age;
 - enabled/fresh edges and listener readiness;
