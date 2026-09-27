@@ -545,7 +545,9 @@ function M.access()
     -- Attacker-controlled client cardinality must never evict control and
     -- per-domain counters. Nginx's limit_req remains a fixed-memory fallback.
     local client_requests = ngx.shared.traffic_limits:incr(client_key, 1, 0, 2)
-    local domain_requests = dictionary:incr(domain_key, 1, 0, 2)
+    local domain_dictionary = ngx.shared.domain_limits
+    local domain_requests = domain_dictionary:incr(domain_key, 1, 0, 2)
+    if not domain_requests then return security_reject(503, "domain_rate_exceeded") end
     local rps = tonumber(limits.requests_per_second) or 100
     local burst = tonumber(limits.request_burst) or 200
     if client_requests and client_requests > rps + burst then return security_reject(429, "client_rate_exceeded") end
@@ -553,21 +555,25 @@ function M.access()
     local client_connection_key = "security:conn:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client)
     local domain_connection_key = "security:conn:domain:" .. tostring(config.domain)
     local client_connections = ngx.shared.traffic_limits:incr(client_connection_key, 1, 0)
-    local domain_connections = dictionary:incr(domain_connection_key, 1, 0)
+    local domain_connections = domain_dictionary:incr(domain_connection_key, 1, 0)
+    if not domain_connections then
+        if client_connections then ngx.shared.traffic_limits:incr(client_connection_key, -1, 0) end
+        return security_reject(503, "domain_connections_exceeded")
+    end
     if client_connections and client_connections > (tonumber(limits.connections_per_client) or 64) then
         ngx.shared.traffic_limits:incr(client_connection_key, -1, 0)
-        dictionary:incr(domain_connection_key, -1, 0)
+        domain_dictionary:incr(domain_connection_key, -1, 0)
         return security_reject(429, "client_connections_exceeded")
     end
     if domain_connections and domain_connections > (tonumber(limits.connections_per_domain) or 512) then
         ngx.shared.traffic_limits:incr(client_connection_key, -1, 0)
-        dictionary:incr(domain_connection_key, -1, 0)
+        domain_dictionary:incr(domain_connection_key, -1, 0)
         return security_reject(429, "domain_connections_exceeded")
     end
     -- ngx.exec enters a named cache location and may replace ngx.ctx. Nginx
     -- request variables survive that redirect and let the log phase release
     -- the active-request counters reliably.
-    ngx.var.cdn_security_client_connection_key = client_connection_key
+    ngx.var.cdn_security_client_connection_key = client_connections and client_connection_key or ""
     ngx.var.cdn_security_domain_connection_key = domain_connection_key
     if config.settings and config.settings.redirect_https == true and ngx.var.scheme == "http" then
         return ngx.redirect("https://" .. host .. ngx.var.request_uri, 308)
@@ -666,9 +672,10 @@ function M.origin_access()
         if open_until > now then return security_reject(503, "origin_circuit_open") end
     end
     local origin_key = "security:origin:connections:" .. tostring(config.domain) .. ":" .. role
-    local active = dictionary:incr(origin_key, 1, 0)
+    local active = ngx.shared.domain_limits:incr(origin_key, 1, 0)
+    if not active then return security_reject(503, "origin_capacity_exceeded") end
     if active and active > (tonumber(limits.origin_max_connections) or 128) then
-        dictionary:incr(origin_key, -1, 0)
+        ngx.shared.domain_limits:incr(origin_key, -1, 0)
         return security_reject(503, "origin_capacity_exceeded")
     end
     -- Keep the acquired reservation across named proxy/error redirects, which
@@ -862,7 +869,12 @@ function M.finish()
         local current = ngx.shared.traffic_limits:incr(client_key, -1, 0)
         if current and current <= 0 then ngx.shared.traffic_limits:delete(client_key) end
     end
-    for _, key in ipairs({ngx.var.cdn_security_domain_connection_key, ngx.var.cdn_compression_connection_key}) do
+    local domain_key = ngx.var.cdn_security_domain_connection_key
+    if domain_key and domain_key ~= "" then
+        local current = ngx.shared.domain_limits:incr(domain_key, -1, 0)
+        if current and current <= 0 then ngx.shared.domain_limits:delete(domain_key) end
+    end
+    for _, key in ipairs({ngx.var.cdn_compression_connection_key}) do
         if key and key ~= "" then
             local current = ngx.shared.runtime_limits:incr(key, -1, 0)
             if current and current <= 0 then ngx.shared.runtime_limits:delete(key) end
@@ -879,7 +891,7 @@ function M.origin_done()
     local config = state.hosts[host]
     local role = (ngx.var.cdn_origin_role ~= "" and ngx.var.cdn_origin_role) or ngx.ctx.origin_role or "primary"
     local domain = config and tostring(config.domain) or ngx.ctx.origin_domain
-    dictionary:incr(connection_key, -1, 0)
+    ngx.shared.domain_limits:incr(connection_key, -1, 0)
     dictionary:incr("capacity:origin_connections", -1, 0)
     if not domain then return end
     local status = tonumber((ngx.var.upstream_status or ""):match("(%d+)%s*$")) or tonumber(ngx.status) or 0
