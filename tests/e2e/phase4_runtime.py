@@ -7,6 +7,7 @@ import pathlib
 import subprocess
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 NAME = "cdnf-phase4-runtime-e2e"
@@ -198,7 +199,7 @@ def main() -> None:
         initial["hosts"]["development.example"]["cache"]["development_mode_until"] = int(time.time()) + 3600
         for cache_host in (
             "admission.example", "admission-limit.example", "origin-policy.example",
-            "small-object.example", "stale.example", "no-stale.example",
+            "small-object.example", "stale.example", "no-stale.example", "single-flight.example",
         ):
             initial["hosts"][cache_host] = state({cache_host: "cache-origin.example"}, 1)["hosts"][cache_host]
         initial["hosts"]["admission-limit.example"]["security"] = {
@@ -217,6 +218,9 @@ def main() -> None:
         })
         initial["hosts"]["no-stale.example"]["cache"].update({
             "edge_ttl_seconds": 1, "browser_ttl_seconds": 5, "stale_if_error_seconds": 0,
+        })
+        initial["hosts"]["single-flight.example"]["cache"].update({
+            "edge_ttl_seconds": 1, "stale_while_revalidate_seconds": 5,
         })
         initial["hosts"]["admission.example"]["cache"].update({
             "status_ttl_seconds": {"200": 3600, "302": 20, "404": 15},
@@ -383,6 +387,27 @@ def main() -> None:
             for _ in range(70):
                 resident = request_with("admission-limit.example", "/resident")
                 assert resident.returncode == 0 and "X-CDNFoundry-Cache: HIT" in resident.stderr, resident.stderr
+            origin_container = run("docker", "compose", "-f", "compose.dev.yml", "ps", "-q", "origin-http").stdout.strip()
+            def origin_fetches() -> int:
+                logs = run("docker", "logs", origin_container, check=False)
+                return (logs.stdout + logs.stderr).count('GET /single-flight HTTP/')
+
+            before = origin_fetches()
+            with ThreadPoolExecutor(max_workers=6) as workers:
+                first_wave = list(workers.map(lambda _: request_with("single-flight.example", "/single-flight"), range(6)))
+            assert all(response.returncode == 0 for response in first_wave), first_wave
+            assert origin_fetches() == before + 1, "cold cache sent concurrent origin fetches"
+            time.sleep(2.2)
+            before = origin_fetches()
+            started = time.monotonic()
+            stale_refresh = request_with("single-flight.example", "/single-flight")
+            assert stale_refresh.returncode == 0 and "X-CDNFoundry-Cache: STALE" in stale_refresh.stderr, stale_refresh.stderr
+            assert time.monotonic() - started < 2, "stale response waited for origin refresh"
+            with ThreadPoolExecutor(max_workers=6) as workers:
+                refresh_wave = list(workers.map(lambda _: request_with("single-flight.example", "/single-flight"), range(6)))
+            assert all(response.returncode == 0 for response in refresh_wave), refresh_wave
+            time.sleep(2.5)
+            assert origin_fetches() == before + 1, "expired object triggered more than one origin refresh"
             for path in ("/set-cookie", "/private", "/no-store", "/vary-star", "/vary-language"):
                 first = request_with("admission.example", path)
                 second = request_with("admission.example", path)
