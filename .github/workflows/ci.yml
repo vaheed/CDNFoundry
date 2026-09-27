@@ -179,7 +179,28 @@ jobs:
           SOURCE_REVISION: ${{ github.sha }}
         run: python3 scripts/ci/images.py load
       - name: Scan every built release image before allowing publication
-        run: python3 scripts/supply-chain-policy.py --scan-release-images ci --output storage/qualification/release-image-scans
+        run: |
+          if ! python3 scripts/supply-chain-policy.py --scan-release-images ci --output storage/qualification/release-image-scans; then
+            python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('storage/qualification/release-image-scans')
+          summary = json.loads((root / 'summary.json').read_text())
+          for result in summary['results']:
+              if result['status'] != 'failed':
+                  continue
+              findings = []
+              classified = root / result['report'].replace('.json', '.classified.json')
+              if classified.exists():
+                  for target in json.loads(classified.read_text()).get('Results', []):
+                      for item in target.get('Vulnerabilities') or []:
+                          if item.get('Severity') in ('HIGH', 'CRITICAL'):
+                              findings.append(f"{item.get('VulnerabilityID')} {item.get('PkgName')} {item.get('InstalledVersion')}")
+              detail = '; '.join(findings[:12]) or 'scanner command failed before classified findings were available'
+              print(f"::error title=Release image scan failed::{result['image']}: {detail}")
+          PY
+            exit 1
+          fi
       - name: Retain complete release image scan evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
