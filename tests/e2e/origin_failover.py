@@ -15,6 +15,7 @@ PRIMARY = "cdnf-origin-failover-primary"
 BACKUP = "cdnf-origin-failover-backup"
 ISOLATED = "cdnf-origin-failover-isolated"
 NETWORK = os.environ.get("CDNF_EDGE_NETWORK", "cdnfoundry-dev_edge")
+ORIGIN_NETWORK = f"cdnf-origin-failover-{os.getpid()}"
 CACHE_TTL_SECONDS = 1
 STALE_IF_ERROR_SECONDS = 10
 
@@ -49,7 +50,8 @@ def wait_for_origin(address: str, marker: str, timeout_seconds: float = 10) -> N
         if result.returncode == 0 and result.stdout == f"{marker}\n":
             return
         time.sleep(0.2)
-    raise RuntimeError(f"{marker} origin did not become ready at {address}")
+    current = run("docker", "inspect", PRIMARY, check=False)
+    raise RuntimeError(f"{marker} origin did not become ready at {address}; last probe: {result.stderr}; container: {current.stdout[-1000:]}")
 
 
 def endpoint(host: str, marker: str) -> dict:
@@ -57,7 +59,7 @@ def endpoint(host: str, marker: str) -> dict:
         "host": host, "port": 80, "scheme": "http", "host_header": f"{marker}.origin",
         "sni": None, "verify_tls": False, "connect_timeout_ms": 300,
         "response_timeout_ms": 1000, "retry_count": 0, "websocket": False,
-        "health_check": None, "private_allowlist": ["172.16.0.0/12"],
+        "health_check": None, "private_allowlist": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"],
         "blocked_networks": [], "blocked_addresses": [],
     }
 
@@ -80,6 +82,7 @@ def main() -> None:
     run("docker", "compose", "-f", "compose.dev.yml", "up", "-d", "origin-http")
     run("docker", "build", "-f", "docker/openresty/Dockerfile", "-t", "cdnfoundry/edge-runtime:test", ".")
     run("docker", "rm", "-f", CELL, PRIMARY, BACKUP, ISOLATED, check=False)
+    run("docker", "network", "create", "--internal", ORIGIN_NETWORK)
     with tempfile.TemporaryDirectory(prefix="cdnf-origin-failover-") as directory:
         temporary = pathlib.Path(directory)
         temporary.chmod(0o755)
@@ -90,14 +93,14 @@ def main() -> None:
                 f"add_header X-Origin-Marker \"{marker}\"; return 200 \"{marker}\\n\"; }}}}\n"
             )
             config.chmod(0o644)
-            run("docker", "run", "-d", "--name", name, "--network", NETWORK,
+            run("docker", "run", "-d", "--name", name, "--network", ORIGIN_NETWORK,
                 "--network-alias", name.removeprefix("cdnf-origin-failover-"),
                 "-v", f"{config}:/etc/nginx/conf.d/default.conf:ro", "nginx:1.30.3-alpine")
             running = json.loads(run("docker", "inspect", name).stdout)[0]["State"]["Running"]
             if not running:
                 raise RuntimeError(run("docker", "logs", name, check=False).stderr)
 
-        address = lambda name: json.loads(run("docker", "inspect", name).stdout)[0]["NetworkSettings"]["Networks"][NETWORK]["IPAddress"]
+        address = lambda name: json.loads(run("docker", "inspect", name).stdout)[0]["NetworkSettings"]["Networks"][ORIGIN_NETWORK]["IPAddress"]
         primary = endpoint(address(PRIMARY), "primary")
         primary["backup"] = endpoint(address(BACKUP), "backup")
         primary["failover"] = {
@@ -136,6 +139,7 @@ def main() -> None:
             # evict otherwise valid entries as soon as it accounts overhead.
             "--tmpfs", "/var/cache/nginx:rw,noexec,nosuid,size=256m,mode=0777",
             "cdnfoundry/edge-runtime:test")
+        run("docker", "network", "connect", ORIGIN_NETWORK, CELL)
         try:
             wait_for_cell()
             run("docker", "exec", CELL, "sh", "-c", "if test -f /var/lib/nginx/tmp/nginx-without-syslog.conf; then openresty -t -c /var/lib/nginx/tmp/nginx-without-syslog.conf; else openresty -t; fi")
@@ -218,6 +222,7 @@ def main() -> None:
             print("origin_failover=passed transition_seconds<=5 concurrent_requests=24 isolation=passed")
         finally:
             run("docker", "rm", "-f", CELL, PRIMARY, BACKUP, ISOLATED, check=False)
+            run("docker", "network", "rm", ORIGIN_NETWORK, check=False)
 
 
 if __name__ == "__main__":
