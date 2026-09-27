@@ -311,6 +311,7 @@ def test_dns_profile_includes_vector_when_monitoring_is_enabled(
 
     assert "vector" in compose["services"]
     assert set(compose["services"]["vector"]["profiles"]) == {"dns", "edge", "telemetry"}
+    assert "268435488 bytes" in (output / "dns-1/README.md").read_text(encoding="utf-8")
 
 
 def test_duplicate_ip_and_malicious_node_input_are_rejected(store: FleetState) -> None:

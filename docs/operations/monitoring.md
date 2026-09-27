@@ -56,6 +56,10 @@ The system reports:
 - Horizon master state and each queue;
 - scheduler heartbeat;
 - ClickHouse and Vector probes;
+- Vector's security and DNS buffers are capped at 268435488 bytes each, the
+  minimum accepted by the production Vector version; startup qualification
+  checks the live process because configuration validation does not build the
+  disk buffers;
 - edge cells continue serving with bounded Docker stdout logs when Vector is
   absent at startup; their container log reports this fallback, and they need
   a restart after Vector recovers to restore direct syslog delivery. Query

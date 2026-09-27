@@ -706,6 +706,14 @@ exec python3 ./reconcile-pdns-password.py
         operator_domain = state["global"]["operator_domain"]
         control_bootstrap = ""
         edge_bootstrap = ""
+        vector_buffers = ""
+        if "vector" in compose.get("services", {}):
+            vector_buffers = """
+Vector reserves bounded disk buffers for billing, security, and DNS telemetry.
+The security and DNS buffers each use the Vector-supported minimum of
+268435488 bytes. A config validation alone does not instantiate these buffers;
+confirm that the `vector` container is healthy and logs `Vector has started`.
+"""
         if node["role"] in {"edge", "dns-edge"}:
             edge_bootstrap = """
 ## Edge key provisioning
@@ -799,7 +807,7 @@ plain `docker compose down` selects no profiled services and does nothing.
 `stop.sh` activates every profile and preserves all named volumes. Never add
 `-v` or `--volumes`.
 
-{control_bootstrap}{edge_bootstrap}
+{control_bootstrap}{edge_bootstrap}{vector_buffers}
 
 ## Listeners
 
