@@ -76,7 +76,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y bind9-dnsutils
-          python3 tests/e2e/parent_delegation.py
+          if ! python3 tests/e2e/parent_delegation.py > /tmp/cdnfoundry-parent-delegation.log 2>&1; then
+            tail -n 40 /tmp/cdnfoundry-parent-delegation.log
+            annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-parent-delegation.log)"
+            echo "::error title=Parent delegation qualification failed::${annotation}"
+            exit 1
+          fi
+          cat /tmp/cdnfoundry-parent-delegation.log
       - name: Check OpenAPI contract
         run: php artisan cdnf:api:openapi --check
 
@@ -387,7 +393,7 @@ jobs:
           } 2>&1 | tee /tmp/cdnfoundry-go.log
           status=${PIPESTATUS[0]}
           if (( status != 0 )); then
-            tail -n 40 /tmp/cdnfoundry-go.log > /tmp/cdnfoundry-go-tail.log
+            { grep -B 3 -A 5 '^--- FAIL:' /tmp/cdnfoundry-go.log || true; tail -n 20 /tmp/cdnfoundry-go.log; } > /tmp/cdnfoundry-go-tail.log
             {
               echo '### Go test/build failure tail'
               echo '```text'

@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -81,6 +83,20 @@ func TestRecoveryKeyRequiresPrivateTmpfsFile(t *testing.T) {
 	}
 	if err := memoryFile.Close(); err != nil {
 		t.Fatal(err)
+	}
+	swaps, err := os.ReadFile("/proc/swaps")
+	if err != nil {
+		t.Skip("swap state is unavailable")
+	}
+	if strings.Contains(strings.TrimSpace(string(swaps)), "\n") {
+		if _, err := readBackupKey(memoryFile.Name()); err == nil {
+			t.Fatal("memory key was accepted while swap is active")
+		}
+		return
+	}
+	var filesystem syscall.Statfs_t
+	if err := syscall.Statfs(memoryFile.Name(), &filesystem); err != nil || filesystem.Type != tmpfsMagic {
+		t.Skip("/dev/shm is not tmpfs on this host")
 	}
 	if _, err := readBackupKey(memoryFile.Name()); err != nil {
 		t.Fatalf("private tmpfs recovery key was rejected: %v", err)
