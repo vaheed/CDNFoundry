@@ -47,6 +47,14 @@ def main() -> None:
             config = run("docker", "exec", name, "cat", "/var/lib/nginx/tmp/nginx-without-syslog.conf").stdout
             if "access_log syslog:server=vector:9000" in config or "access_log /dev/stdout edge_json;" not in config:
                 raise RuntimeError("fallback configuration did not preserve bounded stdout logging")
+            run(
+                "docker", "exec", name, "wget", "-qO-", "--header",
+                "Referer: https://referrer.test/article?secret=cdnf-query-canary",
+                "http://127.0.0.1:8080/telemetry-probe", check=False,
+            )
+            log = run("docker", "logs", name).stdout
+            if "cdnf-query-canary" in log or "https://referrer.test/article" not in log:
+                raise RuntimeError("query string leaked to bounded stdout telemetry")
             print("edge_telemetry_startup=passed")
         finally:
             run("docker", "rm", "-f", name, check=False)
