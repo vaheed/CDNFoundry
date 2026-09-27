@@ -106,6 +106,13 @@ INSERT INTO records (domain_id,name,type,content,ttl,auth) VALUES
             print(json.dumps({'qualification': 'dns_images', 'images': identities, 'udp_tcp_answers': 'passed',
                               'a_aaaa_lua': 'passed', 'geoip_module_load': 'passed', 'metrics': 'passed',
                               'authenticated_zone_api': 'passed', 'telemetry_outage_serving': 'passed', 'auth_restart': 'passed'}))
+        except Exception as exc:
+            print(f'DNS fixture failure: {exc}', flush=True)
+            for container in containers:
+                state = run('docker', 'inspect', container, '--format', '{{.State.Status}} {{.State.ExitCode}}', check=False)
+                logs = run('docker', 'logs', '--tail', '12', container, check=False)
+                print(f'{container}: {state.stdout.strip()}\n{(logs.stdout + logs.stderr)[-1600:]}', flush=True)
+            raise
         finally:
             for container in reversed(containers):
                 run('docker', 'rm', '-f', container, check=False)

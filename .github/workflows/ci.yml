@@ -264,7 +264,15 @@ jobs:
       - name: Qualify edge serving without Vector DNS
         run: python3 tests/e2e/edge_telemetry_startup.py --image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
       - name: Qualify compiled DNS services and telemetry outage serving
-        run: sudo -E python3 tests/e2e/dns_images.py
+        run: |
+          if ! sudo -E python3 tests/e2e/dns_images.py > /tmp/cdnfoundry-dns-images.log 2>&1; then
+            tail -n 60 /tmp/cdnfoundry-dns-images.log
+            grep -Ei 'DNS fixture failure|compiled DNS|failed|error|exited|refused|timed out' /tmp/cdnfoundry-dns-images.log | tail -n 20 > /tmp/cdnfoundry-dns-images-errors.log || true
+            annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-dns-images-errors.log)"
+            echo "::error title=Compiled DNS qualification failed::${annotation}"
+            exit 1
+          fi
+          cat /tmp/cdnfoundry-dns-images.log
       - name: Qualify generated PowerDNS credentials and rotation
         run: sudo -E python3 tests/e2e/fleet_pdns.py
       - name: Qualify patched monitoring scrape and alert APIs
