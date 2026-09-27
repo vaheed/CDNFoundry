@@ -283,7 +283,15 @@ jobs:
           done
           exit 1
       - name: Qualify generated production observability topology
-        run: sudo -E python3 tests/e2e/production_observability.py --release ci
+        run: |
+          if ! sudo -E python3 tests/e2e/production_observability.py --release ci > /tmp/cdnfoundry-production-observability.log 2>&1; then
+            tail -n 45 /tmp/cdnfoundry-production-observability.log
+            tail -n 45 /tmp/cdnfoundry-production-observability.log > /tmp/cdnfoundry-production-observability-tail.log
+            annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-production-observability-tail.log)"
+            echo "::error title=Production observability qualification failed::${annotation}"
+            exit 1
+          fi
+          cat /tmp/cdnfoundry-production-observability.log
 
   backend-e2e:
     name: Backend and runtime E2E
@@ -309,7 +317,10 @@ jobs:
             fi
             echo "Development topology startup attempt ${attempt} failed."
           done
+          docker compose -f compose.dev.yml ps edge-a edge-b > /tmp/cdnfoundry-edge-state.log 2>&1
+          docker compose -f compose.dev.yml logs --tail=45 edge-a edge-b > /tmp/cdnfoundry-edge-logs.log 2>&1
           tail -n 80 /tmp/cdnfoundry-dev-up.log > /tmp/cdnfoundry-dev-up-tail.log
+          cat /tmp/cdnfoundry-edge-state.log /tmp/cdnfoundry-edge-logs.log >> /tmp/cdnfoundry-dev-up-tail.log
           annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-dev-up-tail.log)"
           echo "::error title=Development topology startup failed::${annotation}"
           exit "${status}"
