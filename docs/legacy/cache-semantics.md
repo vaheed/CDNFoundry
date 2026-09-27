@@ -14,7 +14,7 @@ Only successful `200` responses without `Set-Cookie`, `private`, `no-store`, or 
 
 The deterministic key includes the domain, cache policy hash, monotonic epoch, exact-URL purge generation, canonical host, scheme policy, normalized path, and the original query bytes when enabled. Time is not part of the key: NGINX freshness produces real `EXPIRED` behavior.
 
-`X-CDNFoundry-Cache` and the structured access log expose stable `MISS`, `HIT`, `BYPASS`, `EXPIRED`, and `STALE` states. Stale content is eligible only for the configured response-specific grace period. A zero grace or an elapsed grace returns the controlled origin error; no global NGINX stale directive can override the per-domain bound.
+`X-CDNF-Cache` and the structured access log expose stable `MISS`, `HIT`, `BYPASS`, `EXPIRED`, and `STALE` states. Stale content is eligible only for the configured response-specific grace period. A zero grace or an elapsed grace returns the controlled origin error; no global NGINX stale directive can override the per-domain bound.
 
 ## Purges
 

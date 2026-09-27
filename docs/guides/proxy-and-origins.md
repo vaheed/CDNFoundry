@@ -110,8 +110,8 @@ use the final upstream response; a successful retry does not record an origin
 failure. Exhausting retries records one failed request. The existing Nginx
 restriction on replaying a POST already sent to an origin remains in effect.
 
-`X-CDNFoundry-Origin` reports `primary` or `backup`.
-`X-CDNFoundry-Origin-Transition` reports `none`,
+`X-CDNF-Origin` reports `primary` or `backup`.
+`X-CDNF-Origin-Transition` reports `none`,
 `primary_failure_threshold`, `backup_failure`, or
 `primary_recovery_threshold`. The authenticated cell status response also
 lists active role, reason, and failback time without destination secrets.

@@ -734,6 +734,10 @@ If Vector is unavailable at startup, the cell serves using bounded Docker
 stdout logs and reports the telemetry fallback in its container log. Restart
 the cell after Vector recovers to restore direct syslog delivery. Edge logs
 remove query strings from paths and referrers before either output is written.
+Response headers use the `X-CDNF-` prefix, including `X-CDNF-Cache`,
+`X-CDNF-Origin`, and `X-CDNF-Security-Reason`. Update external probes and log
+parsers when rolling out the edge image; its runtime and WAF rules use the same
+prefix.
 """
             if node["role"] == "dns-edge":
                 edge_bootstrap += """

@@ -444,7 +444,7 @@ workstream does not replace an earlier product checkpoint.
    expect an origin failure, with no request reaching the origin. Restore the
    safe AAAA answer (or successful NODATA for IPv4-only service) and expect serving
    to recover. Record the DNS observations and actual request results.
-   Record `X-CDNFoundry-Origin`, request IDs, revisions, and comparison
+   Record `X-CDNF-Origin`, request IDs, revisions, and comparison
    traffic showing unrelated hosts remain available.
 3. Use **TLS mode** for managed DNS-01 and a valid custom certificate. Exercise
    **Renew managed certificate**, **Reissue managed certificate**, **Upload

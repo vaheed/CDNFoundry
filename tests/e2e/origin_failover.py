@@ -144,9 +144,9 @@ def main() -> None:
             wait_for_cell()
             run("docker", "exec", CELL, "sh", "-c", "if test -f /var/lib/nginx/tmp/nginx-without-syslog.conf; then openresty -t -c /var/lib/nginx/tmp/nginx-without-syslog.conf; else openresty -t; fi")
             healthy = request("failover.example")
-            assert "primary\n" in healthy and "X-CDNFoundry-Origin: primary" in healthy, healthy + runtime_file.read_text() + run("docker", "logs", CELL, check=False).stderr
+            assert "primary\n" in healthy and "X-CDNF-Origin: primary" in healthy, healthy + runtime_file.read_text() + run("docker", "logs", CELL, check=False).stderr
             stale_seed = request("stale-failover.example", "/resident")
-            assert "primary\n" in stale_seed and "X-CDNFoundry-Cache: MISS" in stale_seed, stale_seed
+            assert "primary\n" in stale_seed and "X-CDNF-Cache: MISS" in stale_seed, stale_seed
 
             # These disposable origins model an abrupt outage. A graceful
             # `docker stop` can wait up to ten seconds for OpenResty's upstream
@@ -158,7 +158,7 @@ def main() -> None:
             activated = request("failover.example", "/three")
             diagnostics = run("docker", "exec", CELL, "wget", "-qO-",
                 "--header=X-Edge-Status-Token: origin-failover-test", "http://127.0.0.1:9080/passive-failures", check=False).stdout
-            assert "backup\n" in activated and "X-CDNFoundry-Origin: backup" in activated, activated + diagnostics + run("docker", "logs", CELL, check=False).stderr
+            assert "backup\n" in activated and "X-CDNF-Origin: backup" in activated, activated + diagnostics + run("docker", "logs", CELL, check=False).stderr
             assert "primary_failure_threshold" in activated, activated
             held = request("failover.example", "/held")
             assert "backup\n" in held, held
@@ -191,15 +191,15 @@ def main() -> None:
             assert "primary_recovery_threshold" in recovered, recovered + recovery_diagnostics
 
             stale_seed = request("stale-failover.example", "/resident-final")
-            assert "primary\n" in stale_seed and "X-CDNFoundry-Cache: MISS" in stale_seed, stale_seed
+            assert "primary\n" in stale_seed and "X-CDNF-Cache: MISS" in stale_seed, stale_seed
             stale_resident = ""
             resident_deadline = time.monotonic() + 2
             while time.monotonic() < resident_deadline:
                 stale_resident = request("stale-failover.example", "/resident-final")
-                if "X-CDNFoundry-Cache: HIT" in stale_resident:
+                if "X-CDNF-Cache: HIT" in stale_resident:
                     break
                 time.sleep(0.1)
-            assert "primary\n" in stale_resident and "X-CDNFoundry-Cache: HIT" in stale_resident, stale_resident
+            assert "primary\n" in stale_resident and "X-CDNF-Cache: HIT" in stale_resident, stale_resident
             stale_seeded_at = time.monotonic()
             time.sleep(CACHE_TTL_SECONDS + 1.1)
             run("docker", "kill", PRIMARY, BACKUP)
@@ -209,7 +209,7 @@ def main() -> None:
             cache_files = run(
                 "docker", "exec", CELL, "find", "/var/cache/nginx", "-type", "f", "-ls", check=False
             )
-            assert "X-CDNFoundry-Cache: STALE" in stale and "primary\n" in stale, (
+            assert "X-CDNF-Cache: STALE" in stale and "primary\n" in stale, (
                 f"stale request failed after {stale_elapsed:.3f}s "
                 f"(configured window={STALE_IF_ERROR_SECONDS}s)\n{stale}"
                 f"\ncache files:\n{cache_files.stdout}{cache_files.stderr}"

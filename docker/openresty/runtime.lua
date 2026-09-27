@@ -28,7 +28,7 @@ local function security_reject(status, reason)
         events:set("host:" .. tostring(ngx.ctx.security_domain), ngx.ctx.security_hostname or "", 3600)
         events:set("time:" .. tostring(ngx.ctx.security_domain) .. ":" .. reason, ngx.time(), 3600)
     end
-    ngx.header["X-CDNFoundry-Security-Reason"] = reason
+    ngx.header["X-CDNF-Security-Reason"] = reason
     ngx.var.cdn_security_reason = reason
     ngx.var.cdn_security_action = "block"
     return ngx.exit(status)
@@ -448,9 +448,9 @@ function M.prepare_waf()
     ngx.var.cdn_waf_action = mode == "monitor" and "monitor" or (mode == "block" and "inspect" or "off")
     -- These headers are overwritten before ModSecurity runs and removed again
     -- before proxying. A client therefore cannot select another tenant's mode.
-    ngx.req.set_header("X-CDNFoundry-Internal-WAF-Mode", mode)
-    ngx.req.set_header("X-CDNFoundry-Internal-WAF-Threshold", tostring(threshold))
-    ngx.req.set_header("X-CDNFoundry-Internal-WAF-Paranoia", tostring(paranoia))
+    ngx.req.set_header("X-CDNF-Internal-WAF-Mode", mode)
+    ngx.req.set_header("X-CDNF-Internal-WAF-Threshold", tostring(threshold))
+    ngx.req.set_header("X-CDNF-Internal-WAF-Paranoia", tostring(paranoia))
     local uri = ngx.var.uri or "/"
     local args = ngx.req.get_uri_args(100)
     local cookies = ngx.req.get_headers()["cookie"] or ""
@@ -472,7 +472,7 @@ function M.prepare_waf()
             mode = "monitor"
             ngx.var.cdn_waf_action = "excluded"
             ngx.var.cdn_waf_exclusion_id = tostring(selected)
-            ngx.req.set_header("X-CDNFoundry-Internal-WAF-Mode", mode)
+            ngx.req.set_header("X-CDNF-Internal-WAF-Mode", mode)
         end
     end
 end
@@ -644,9 +644,9 @@ function M.origin_access()
     local host = (ngx.var.cdn_original_host ~= "" and ngx.var.cdn_original_host or ngx.var.host or ""):lower():gsub("%.$", "")
     local config = state.hosts[host]
     if not config then return security_reject(421, "unknown_host") end
-    ngx.req.clear_header("X-CDNFoundry-Internal-WAF-Mode")
-    ngx.req.clear_header("X-CDNFoundry-Internal-WAF-Threshold")
-    ngx.req.clear_header("X-CDNFoundry-Internal-WAF-Paranoia")
+    ngx.req.clear_header("X-CDNF-Internal-WAF-Mode")
+    ngx.req.clear_header("X-CDNF-Internal-WAF-Threshold")
+    ngx.req.clear_header("X-CDNF-Internal-WAF-Paranoia")
     ngx.ctx.security_domain = config.domain_id or config.domain
     ngx.ctx.security_hostname = host
     local security = config.security or {}
@@ -694,7 +694,7 @@ function M.origin_access()
     local address, err = resolve(origin.host, origin.private_allowlist, origin.blocked_networks, origin.blocked_addresses, origin.response_timeout_ms)
     if not address then
         ngx.log(ngx.WARN, "origin rejected: ", err)
-        ngx.header["X-CDNFoundry-Error"] = err
+        ngx.header["X-CDNF-Error"] = err
         -- Leave this as an ordinary upstream failure. The outer cache can then
         -- apply its bounded stale-if-error policy; security-controlled 503s
         -- retain their explicit reason and are never disguised as origin loss.
@@ -712,8 +712,8 @@ function M.origin_access()
     ngx.var.origin_response_timeout = tostring(math.min((tonumber(limits.origin_read_timeout) or 30) * 1000, math.max(500, math.min(60000, tonumber(origin.response_timeout_ms) or 5000))))
     local retry_limit = emergency.disable_origin_retries and 0 or (tonumber(limits.origin_retry_limit) or 0)
     ngx.var.origin_retry_count = tostring(math.max(0, math.min(retry_limit, tonumber(origin.retry_count) or tonumber(config.settings and config.settings.retry_count) or 0)))
-    ngx.header["X-CDNFoundry-Origin"] = role
-    ngx.header["X-CDNFoundry-Origin-Transition"] = transition
+    ngx.header["X-CDNF-Origin"] = role
+    ngx.header["X-CDNF-Origin-Transition"] = transition
     if origin.websocket == true and (ngx.var.http_upgrade or ""):lower() == "websocket" then
         ngx.var.origin_connection = "upgrade"
         ngx.var.origin_upgrade = "websocket"
@@ -748,7 +748,7 @@ function M.prepare_cache_response()
     local length = tonumber(headers["Content-Length"])
     if length and length > maximum then no_store = true end
     if no_store then
-        headers["X-CDNFoundry-No-Store"] = "1"
+        headers["X-CDNF-No-Store"] = "1"
         return
     end
     local edge_ttl = math.max(0, math.min(31536000, status_ttl or tonumber(cache.edge_ttl_seconds) or 0))
@@ -763,7 +763,7 @@ function M.prepare_cache_response()
         headers["Expires"] = nil
     end
     if edge_ttl <= 0 then
-        headers["X-CDNFoundry-No-Store"] = "1"
+        headers["X-CDNF-No-Store"] = "1"
         return
     end
     local browser = math.max(0, math.min(31536000, tonumber(cache.browser_ttl_seconds) or 0))
@@ -775,9 +775,9 @@ function M.prepare_cache_response()
 end
 
 function M.cache_status()
-    local no_store = ngx.var.upstream_http_x_cdnfoundry_no_store == "1"
+    local no_store = ngx.var.upstream_http_x_cdnf_no_store == "1"
     local admission_bypass = ngx.var.cdn_cache_no_store == "1" and ngx.var.upstream_cache_status ~= "HIT"
-    ngx.header["X-CDNFoundry-Cache"] = (ngx.var.cdn_cache_bypass == "1" or no_store or admission_bypass)
+    ngx.header["X-CDNF-Cache"] = (ngx.var.cdn_cache_bypass == "1" or no_store or admission_bypass)
         and "BYPASS" or (ngx.var.upstream_cache_status or "MISS")
 end
 
@@ -942,7 +942,7 @@ end
 
 function M.origin_failure()
     if ngx.var.cdn_security_reason ~= "" then
-        ngx.header["X-CDNFoundry-Security-Reason"] = ngx.var.cdn_security_reason
+        ngx.header["X-CDNF-Security-Reason"] = ngx.var.cdn_security_reason
         return ngx.exit(503)
     end
     -- The internal 444 lets the outer cache apply stale-if-error. It must

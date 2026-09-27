@@ -305,15 +305,15 @@ def main() -> None:
             known = wait_for("runtime.example")
             runtime_logs = run("docker", "logs", NAME, check=False)
             assert known.returncode == 0 and '"host":"origin-one.example"' in known.stdout, known.stderr + runtime_logs.stdout + runtime_logs.stderr
-            assert "X-CDNFoundry-Cache: MISS" in known.stderr, known.stderr
+            assert "X-CDNF-Cache: MISS" in known.stderr, known.stderr
             cached = request("runtime.example")
-            assert cached.returncode == 0 and "X-CDNFoundry-Cache: HIT" in cached.stderr, cached.stderr
+            assert cached.returncode == 0 and "X-CDNF-Cache: HIT" in cached.stderr, cached.stderr
             identity_headers = run(
                 "docker", "run", "--rm", "--network", f"container:{NAME}", "curlimages/curl:8.16.0",
                 "-sS", "-D", "-", "-o", "/dev/null", "-H", "Host: compression.example",
                 "-H", "Accept-Encoding: identity", "http://127.0.0.1:8080/compressible",
             ).stdout
-            assert "X-CDNFoundry-Cache: MISS" in identity_headers and "Content-Encoding:" not in identity_headers, identity_headers
+            assert "X-CDNF-Cache: MISS" in identity_headers and "Content-Encoding:" not in identity_headers, identity_headers
             identity_body = run(
                 "docker", "run", "--rm", "--network", f"container:{NAME}", "curlimages/curl:8.16.0",
                 "-sS", "-H", "Host: compression.example", "-H", "Accept-Encoding: identity",
@@ -326,7 +326,7 @@ def main() -> None:
                     "-H", f"Accept-Encoding: {encoding}", "http://127.0.0.1:8080/compressible",
                 ).stdout
                 assert f"Content-Encoding: {encoding}" in encoded_headers, encoded_headers
-                assert "X-CDNFoundry-Cache: HIT" in encoded_headers, encoded_headers
+                assert "X-CDNF-Cache: HIT" in encoded_headers, encoded_headers
                 encoded_body = run(
                     "docker", "run", "--rm", "--network", f"container:{NAME}", "curlimages/curl:8.16.0",
                     "-sS", "--compressed", "-H", "Host: compression.example",
@@ -365,28 +365,28 @@ def main() -> None:
             assert compression_emergency("compression-emergency-off", False)["accepted"] is True
             run("docker", "restart", NAME)
             persisted = wait_for("runtime.example")
-            assert "X-CDNFoundry-Cache: HIT" in persisted.stderr, persisted.stderr
+            assert "X-CDNF-Cache: HIT" in persisted.stderr, persisted.stderr
             authorized = request_with("runtime.example", headers=("Authorization: Bearer cache-bypass",))
-            assert "X-CDNFoundry-Cache: BYPASS" in authorized.stderr, authorized.stderr
+            assert "X-CDNF-Cache: BYPASS" in authorized.stderr, authorized.stderr
             cookie_bypass = request_with("runtime.example", headers=("Cookie: session_id=present",))
-            assert "X-CDNFoundry-Cache: BYPASS" in cookie_bypass.stderr, cookie_bypass.stderr
+            assert "X-CDNF-Cache: BYPASS" in cookie_bypass.stderr, cookie_bypass.stderr
             development = request("development.example")
-            assert "X-CDNFoundry-Cache: BYPASS" in development.stderr, development.stderr
+            assert "X-CDNF-Cache: BYPASS" in development.stderr, development.stderr
             query_a = request_with("runtime.example", "/asset.css?ignored=1&page=2")
-            assert "X-CDNFoundry-Cache: MISS" in query_a.stderr, query_a.stderr
-            assert "X-CDNFoundry-Cache: HIT" in request_with("runtime.example", "/asset.css?page=2&ignored=2").stderr
-            assert "X-CDNFoundry-Cache: MISS" in request_with("runtime.example", "/asset.css?page=3").stderr
+            assert "X-CDNF-Cache: MISS" in query_a.stderr, query_a.stderr
+            assert "X-CDNF-Cache: HIT" in request_with("runtime.example", "/asset.css?page=2&ignored=2").stderr
+            assert "X-CDNF-Cache: MISS" in request_with("runtime.example", "/asset.css?page=3").stderr
             assert "max-age=300" in cached.stderr, cached.stderr
             # The admission ceiling blocks creation of additional cache entries;
             # it must never bypass a resident entry and stampede the origin.
             time.sleep(1.05 - (time.time() % 1))
             admitted = request_with("admission-limit.example", "/resident")
             resident = request_with("admission-limit.example", "/resident")
-            assert "X-CDNFoundry-Cache: MISS" in admitted.stderr, admitted.stderr
-            assert "X-CDNFoundry-Cache: HIT" in resident.stderr, resident.stderr
+            assert "X-CDNF-Cache: MISS" in admitted.stderr, admitted.stderr
+            assert "X-CDNF-Cache: HIT" in resident.stderr, resident.stderr
             for _ in range(70):
                 resident = request_with("admission-limit.example", "/resident")
-                assert resident.returncode == 0 and "X-CDNFoundry-Cache: HIT" in resident.stderr, resident.stderr
+                assert resident.returncode == 0 and "X-CDNF-Cache: HIT" in resident.stderr, resident.stderr
             origin_container = run("docker", "compose", "-f", "compose.dev.yml", "ps", "-q", "origin-http").stdout.strip()
             def origin_fetches() -> int:
                 logs = run("docker", "logs", origin_container, check=False)
@@ -401,7 +401,7 @@ def main() -> None:
             before = origin_fetches()
             started = time.monotonic()
             stale_refresh = request_with("single-flight.example", "/single-flight")
-            assert stale_refresh.returncode == 0 and "X-CDNFoundry-Cache: STALE" in stale_refresh.stderr, stale_refresh.stderr
+            assert stale_refresh.returncode == 0 and "X-CDNF-Cache: STALE" in stale_refresh.stderr, stale_refresh.stderr
             assert time.monotonic() - started < 2, "stale response waited for origin refresh"
             with ThreadPoolExecutor(max_workers=6) as workers:
                 refresh_wave = list(workers.map(lambda _: request_with("single-flight.example", "/single-flight"), range(6)))
@@ -411,41 +411,41 @@ def main() -> None:
             for path in ("/set-cookie", "/private", "/no-store", "/vary-star", "/vary-language"):
                 first = request_with("admission.example", path)
                 second = request_with("admission.example", path)
-                assert "X-CDNFoundry-Cache: BYPASS" in first.stderr, f"{path}: {first.stderr}"
-                assert "X-CDNFoundry-Cache: BYPASS" in second.stderr, f"{path}: {second.stderr}"
+                assert "X-CDNF-Cache: BYPASS" in first.stderr, f"{path}: {first.stderr}"
+                assert "X-CDNF-Cache: BYPASS" in second.stderr, f"{path}: {second.stderr}"
             for path, expected in (("/negative", "404"), ("/redirect", "302")):
                 first_headers, second_headers = response_headers("admission.example", path), response_headers("admission.example", path)
-                assert expected in first_headers and "X-CDNFoundry-Cache: MISS" in first_headers, first_headers
-                assert expected in second_headers and "X-CDNFoundry-Cache: HIT" in second_headers, second_headers
+                assert expected in first_headers and "X-CDNF-Cache: MISS" in first_headers, first_headers
+                assert expected in second_headers and "X-CDNF-Cache: HIT" in second_headers, second_headers
             vary_encoding = request_with("admission.example", "/vary-encoding", headers=("Accept-Encoding: gzip, br",))
-            assert "X-CDNFoundry-Cache: MISS" in vary_encoding.stderr, vary_encoding.stderr
-            assert "X-CDNFoundry-Cache: HIT" in request_with("admission.example", "/vary-encoding", headers=("Accept-Encoding: gzip",)).stderr
+            assert "X-CDNF-Cache: MISS" in vary_encoding.stderr, vary_encoding.stderr
+            assert "X-CDNF-Cache: HIT" in request_with("admission.example", "/vary-encoding", headers=("Accept-Encoding: gzip",)).stderr
             ranged = request_with("admission.example", headers=("Range: bytes=0-4",))
-            assert "X-CDNFoundry-Cache: BYPASS" in ranged.stderr, ranged.stderr
+            assert "X-CDNF-Cache: BYPASS" in ranged.stderr, ranged.stderr
             posted = run("docker", "exec", NAME, "wget", "-S", "-O-", "--post-data=body", "--header=Host: admission.example", "http://127.0.0.1:8080/", check=False)
-            assert "X-CDNFoundry-Cache: BYPASS" in posted.stderr, posted.stderr
+            assert "X-CDNF-Cache: BYPASS" in posted.stderr, posted.stderr
             large_first = request_with("small-object.example", "/large-object")
             large_second = request_with("small-object.example", "/large-object")
-            assert "X-CDNFoundry-Cache: BYPASS" in large_first.stderr and "X-CDNFoundry-Cache: BYPASS" in large_second.stderr
+            assert "X-CDNF-Cache: BYPASS" in large_first.stderr and "X-CDNF-Cache: BYPASS" in large_second.stderr
             request_with("small-object.example", "/profile-object")
             request_with("small-object.example", "/profile-object")
             profile_files = run("docker", "exec", NAME, "sh", "-c", "find /var/cache/nginx/content/small -type f | wc -l")
             assert int(profile_files.stdout.strip()) > 0, profile_files
             origin_ttl = request_with("admission.example", "/origin-ttl")
-            assert "X-CDNFoundry-Cache: MISS" in origin_ttl.stderr
-            assert "X-CDNFoundry-Cache: HIT" in request_with("admission.example", "/origin-ttl").stderr
+            assert "X-CDNF-Cache: MISS" in origin_ttl.stderr
+            assert "X-CDNF-Cache: HIT" in request_with("admission.example", "/origin-ttl").stderr
             time.sleep(2.1)
             revalidated = request_with("admission.example", "/origin-ttl")
-            assert "s-maxage=1" in revalidated.stderr and "X-CDNFoundry-Cache:" in revalidated.stderr, revalidated.stderr
+            assert "s-maxage=1" in revalidated.stderr and "X-CDNF-Cache:" in revalidated.stderr, revalidated.stderr
             ignored_origin_ttl = request_with("origin-policy.example", "/origin-ttl")
             assert "max-age=7" in ignored_origin_ttl.stderr, ignored_origin_ttl.stderr
             time.sleep(1.2)
             ignored_origin_cached = request_with("origin-policy.example", "/origin-ttl")
-            assert "X-CDNFoundry-Cache: HIT" in ignored_origin_cached.stderr, ignored_origin_cached.stderr
+            assert "X-CDNF-Cache: HIT" in ignored_origin_cached.stderr, ignored_origin_cached.stderr
             stale_seed = request_with("stale.example", "/stale")
-            assert "X-CDNFoundry-Cache: MISS" in stale_seed.stderr
+            assert "X-CDNF-Cache: MISS" in stale_seed.stderr
             no_stale_seed = request_with("no-stale.example", "/stale")
-            assert "X-CDNFoundry-Cache: MISS" in no_stale_seed.stderr
+            assert "X-CDNF-Cache: MISS" in no_stale_seed.stderr
             # Nginx cache freshness is evaluated at whole-second resolution. Give
             # the one-second TTL a full additional clock tick before taking the
             # origin offline so slower CI runners cannot still observe a HIT.
@@ -454,7 +454,7 @@ def main() -> None:
             time.sleep(2.2)
             run("docker", "compose", "-f", "compose.dev.yml", "kill", "origin-http")
             stale = request_with("stale.example", "/stale")
-            assert stale.returncode == 0 and "X-CDNFoundry-Cache: STALE" in stale.stderr, stale.stderr
+            assert stale.returncode == 0 and "X-CDNF-Cache: STALE" in stale.stderr, stale.stderr
             no_stale = request_with("no-stale.example", "/stale")
             assert no_stale.returncode != 0 and "502 Bad Gateway" in no_stale.stderr, no_stale.stderr
             time.sleep(3.2)
@@ -477,12 +477,12 @@ def main() -> None:
             full_purge = cache_purge("runtime-purge-all-1", "all", [])
             assert full_purge["accepted"] is True and full_purge["replayed"] is False and full_purge["applied_keys"] == 0, full_purge
             after_full_purge = request("runtime.example")
-            assert "X-CDNFoundry-Cache: MISS" in after_full_purge.stderr, after_full_purge.stderr
-            assert "X-CDNFoundry-Cache: HIT" in request("runtime.example").stderr
+            assert "X-CDNF-Cache: MISS" in after_full_purge.stderr, after_full_purge.stderr
+            assert "X-CDNF-Cache: HIT" in request("runtime.example").stderr
             url_purge = cache_purge("runtime-purge-url-1", "urls", ["http|runtime.example|/"])
             assert url_purge["accepted"] is True and url_purge["applied_keys"] == 1, url_purge
             after_url_purge = request("runtime.example")
-            assert "X-CDNFoundry-Cache: MISS" in after_url_purge.stderr, after_url_purge.stderr
+            assert "X-CDNF-Cache: MISS" in after_url_purge.stderr, after_url_purge.stderr
             assert cache_purge("runtime-purge-url-1", "urls", ["http|runtime.example|/"])["replayed"] is True
             control("restart", "runtime-restart-1")
             for _ in range(20):

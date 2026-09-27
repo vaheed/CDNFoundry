@@ -296,6 +296,8 @@ def test_disabled_monitoring_does_not_require_clickhouse_credentials_on_edge(sto
     readme = (output / "edge-dubai/README.md").read_text(encoding="utf-8")
     assert "bounded Docker" in readme
     assert "remove query strings" in readme
+    assert "X-CDNF-Cache" in readme
+    assert "X-CDNF-Origin" in readme
 
 
 def test_dns_profile_includes_vector_when_monitoring_is_enabled(
