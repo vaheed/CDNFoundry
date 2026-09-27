@@ -542,7 +542,9 @@ function M.access()
     local second = ngx.time()
     local client_key = "security:req:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client) .. ":" .. second
     local domain_key = "security:req:domain:" .. tostring(config.domain) .. ":" .. second
-    local client_requests = dictionary:incr(client_key, 1, 0, 2)
+    -- Attacker-controlled client cardinality must never evict control and
+    -- per-domain counters. Nginx's limit_req remains a fixed-memory fallback.
+    local client_requests = ngx.shared.traffic_limits:incr(client_key, 1, 0, 2)
     local domain_requests = dictionary:incr(domain_key, 1, 0, 2)
     local rps = tonumber(limits.requests_per_second) or 100
     local burst = tonumber(limits.request_burst) or 200
@@ -550,15 +552,15 @@ function M.access()
     if domain_requests and domain_requests > rps * 8 + burst then return security_reject(429, "domain_rate_exceeded") end
     local client_connection_key = "security:conn:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client)
     local domain_connection_key = "security:conn:domain:" .. tostring(config.domain)
-    local client_connections = dictionary:incr(client_connection_key, 1, 0)
+    local client_connections = ngx.shared.traffic_limits:incr(client_connection_key, 1, 0)
     local domain_connections = dictionary:incr(domain_connection_key, 1, 0)
     if client_connections and client_connections > (tonumber(limits.connections_per_client) or 64) then
-        dictionary:incr(client_connection_key, -1, 0)
+        ngx.shared.traffic_limits:incr(client_connection_key, -1, 0)
         dictionary:incr(domain_connection_key, -1, 0)
         return security_reject(429, "client_connections_exceeded")
     end
     if domain_connections and domain_connections > (tonumber(limits.connections_per_domain) or 512) then
-        dictionary:incr(client_connection_key, -1, 0)
+        ngx.shared.traffic_limits:incr(client_connection_key, -1, 0)
         dictionary:incr(domain_connection_key, -1, 0)
         return security_reject(429, "domain_connections_exceeded")
     end
@@ -598,14 +600,16 @@ function M.access()
     end
     ngx.var.cdn_cache_zone = "cache_" .. profile_name
     local admissions = dictionary:incr("security:cache:" .. tostring(config.domain) .. ":" .. second, 1, 0, 2)
-    local admission_hits = dictionary:incr("cache:admit:" .. ngx.md5(cache_key), 1, 0, 60)
+    local cache_dictionary = ngx.shared.cache_limits
+    local admission_hits = cache_dictionary:incr("cache:admit:" .. ngx.md5(cache_key), 1, 0, 60)
     local admission_allowed = (not admissions or admissions <= (tonumber(profile.admissions_per_second) or tonumber(limits.cache_admissions_per_second) or 50))
         and (not admission_hits or admission_hits >= (tonumber(cache.admission_requests) or 1))
     local variant_resource = "cache:variants:" .. ngx.md5(cache_resource)
-    if dictionary:add(variant_resource .. ":" .. ngx.md5(cache_key), true, 60) then
-        dictionary:incr(variant_resource, 1, 0, 60)
+    if cache_dictionary:add(variant_resource .. ":" .. ngx.md5(cache_key), true, 60) then
+        cache_dictionary:incr(variant_resource, 1, 0, 60)
     end
-    local variants = tonumber(dictionary:get(variant_resource)) or 0
+    local variants = tonumber(cache_dictionary:get(variant_resource)) or 0
+    if not admission_hits then admission_allowed = false end
     if variants > (tonumber(cache.maximum_variants_per_resource) or 32) then admission_allowed = false end
     if #cache_key > (tonumber(limits.maximum_cache_key_length) or 4096) then ngx.var.cdn_security_reason = "cache_abuse_detected" end
     ngx.var.cdn_cache_key = cache_key
@@ -793,6 +797,16 @@ cache_control_directives = function(raw)
 end
 
 function M.balance()
+    -- The peer is numeric, so a rebinding DNS answer cannot change the TCP
+    -- destination after this check. Recheck on every retry as well.
+    local hostname = (ngx.var.cdn_original_host ~= "" and ngx.var.cdn_original_host or ngx.var.host or ""):lower():gsub("%.$", "")
+    local config = state.hosts[hostname]
+    local origin = config and config.origin
+    if origin and ngx.var.cdn_origin_role == "backup" then origin = origin.backup end
+    local peer = (ngx.var.origin_address or ""):gsub("^%[", ""):gsub("%]$", "")
+    if not origin or blocked(peer, origin.private_allowlist, origin.blocked_networks, origin.blocked_addresses) then
+        error("blocked_destination")
+    end
     local tls_name = ngx.var.origin_sni
     if tls_name == "" then
         tls_name = nil
@@ -843,11 +857,12 @@ function M.record_passive_failure()
 end
 
 function M.finish()
-    for _, key in ipairs({
-        ngx.var.cdn_security_client_connection_key,
-        ngx.var.cdn_security_domain_connection_key,
-        ngx.var.cdn_compression_connection_key,
-    }) do
+    local client_key = ngx.var.cdn_security_client_connection_key
+    if client_key and client_key ~= "" then
+        local current = ngx.shared.traffic_limits:incr(client_key, -1, 0)
+        if current and current <= 0 then ngx.shared.traffic_limits:delete(client_key) end
+    end
+    for _, key in ipairs({ngx.var.cdn_security_domain_connection_key, ngx.var.cdn_compression_connection_key}) do
         if key and key ~= "" then
             local current = ngx.shared.runtime_limits:incr(key, -1, 0)
             if current and current <= 0 then ngx.shared.runtime_limits:delete(key) end
