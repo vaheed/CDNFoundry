@@ -79,7 +79,8 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `ACME_ORDER_BUDGET_PER_HOUR` | control | New-order ceiling; default `20` |
 | `ACME_VERIFY_TLS` | optional | Verify ACME directory TLS; default true, false only for local Pebble |
 | `ACME_RENEW_BEFORE_DAYS` | optional | Renewal window; default `30` |
-| `ACME_DNS_TTL` | optional | Challenge TTL; default `60` |
+| `ACME_DNS_TTL` | optional | Challenge TTL; default `30` seconds |
+| `ACME_DNS_PROBE_SERVER` | optional | Direct DNSdist probe hostname for test or private installations; production defaults to each enabled cluster's nameservers |
 | `ACME_CHALLENGE_LIFETIME_MINUTES` | optional | Challenge expiry; default `120` |
 | `ACME_INITIAL_JITTER_SECONDS` | optional | Initial spread; default `300` |
 | `TLS_EXPIRY_ALERT_DAYS` | optional | Administrator expiry warning; default `14` |
@@ -201,7 +202,8 @@ the supported host collector.
 | `EDGE_QUARANTINE_HTTP_BIND` | edge | Quarantine HTTP, default `127.0.0.1:18080` |
 | `EDGE_QUARANTINE_HTTPS_BIND` | edge | Quarantine HTTPS, default `127.0.0.1:18443` |
 | `EDGE_RUNTIME_TLS_CERTIFICATE` | edge | Bootstrap listener certificate path |
-| `EDGE_RUNTIME_TLS_PRIVATE_KEY` | edge | Bootstrap listener key path |
+| `EDGE_RUNTIME_TLS_PRIVATE_KEY` | edge | Bootstrap listener key path on host tmpfs; production cells reject disk-backed paths |
+| `EDGE_STATE_ENCRYPTION_KEY_FILE` | edge agent | Host tmpfs path containing 32 random bytes as 64 hex characters; restores encrypted last-valid edge state without control-plane access |
 
 ## Edge control and identity
 

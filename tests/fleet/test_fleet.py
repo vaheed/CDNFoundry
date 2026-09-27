@@ -145,11 +145,14 @@ def source_repo(tmp_path: Path) -> Path:
                     "EDGE_STATUS_TOKEN": "${EDGE_STATUS_TOKEN:?required}",
                     "EDGE_CONTROL_URL": "${EDGE_CONTROL_URL:?required}",
                     "EDGE_CONTROL_CA_CERTIFICATE": "${EDGE_CONTROL_CA_CERTIFICATE:?required}",
+                    "EDGE_STATE_ENCRYPTION_KEY_FILE": "/run/secrets/edge-state-encryption.key",
                 },
                 "volumes": [
                     "${EDGE_CONTROL_CA_CERTIFICATE:?required}:/run/edge-control-ca.crt:ro",
                     "${EDGE_RUNTIME_TLS_CERTIFICATE:?required}:/run/node.crt:ro",
                     "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?required}:/run/node.key:ro",
+                    "${EDGE_STATE_ENCRYPTION_KEY_FILE:?required}:/run/secrets/edge-state-encryption.key:ro",
+                    "edge-runtime-memory:/var/lib/cdnfoundry/runtime",
                 ],
             },
             "cell-01": {
@@ -200,6 +203,7 @@ def source_repo(tmp_path: Path) -> Path:
             "pdns-db": {},
             "mmdb": {},
             "cell-01-cache": {},
+            "edge-runtime-memory": {"driver_opts": {"type": "tmpfs", "device": "tmpfs", "o": "size=512m,mode=0700"}},
             "clickhouse": {},
             "prometheus": {},
         },
@@ -973,6 +977,8 @@ def test_control_monitoring_bundle_uses_project_pki_contract(store: FleetState, 
     assert "DNS:edge-control.ops.example.com" in certificate
     readme = (bundle / "README.md").read_text(encoding="utf-8")
     assert "edge-control.ops.example.com" in readme
+
+
     assert "https://control.ops.example.com/api/ready" in readme
     assert "php artisan cdnf:admin:create" in readme
     compose = yaml.safe_load((bundle / "compose.yml").read_text(encoding="utf-8"))
@@ -992,6 +998,25 @@ def test_control_monitoring_bundle_uses_project_pki_contract(store: FleetState, 
     assert node_targets[0]["targets"] == ["node-exporter:9100"]
     assert env["LOG_METRICS_BIND"] == "0.0.0.0:9599"
     assert env["LOG_AUTH_TOKEN"]
+
+
+def test_real_edge_bundle_carries_runtime_security_configuration(store: FleetState, tmp_path: Path) -> None:
+    add(store, node("control-1", "control", "192.0.2.140"))
+    add(store, node("edge-1", "dns-edge", "192.0.2.141"))
+    output = tmp_path / "real-bundles"
+    Renderer(REPO_PATCH, store, output).render(store.load(), node_name="edge-1")
+    bundle = output / "edge-1"
+    compose = yaml.safe_load((bundle / "compose.yml").read_text(encoding="utf-8"))
+    assert compose["volumes"]["edge-runtime-memory"]["driver_opts"]["type"] == "tmpfs"
+    assert compose["services"]["cell-01"]["environment"]["EDGE_REQUIRE_MEMORY_TLS"] == "true"
+    assert compose["services"]["edge-agent"]["environment"]["EDGE_STATE_ENCRYPTION_KEY_FILE"] == "/run/secrets/edge-state-encryption.key"
+    assert not (bundle / "pki/node.key").exists()
+    assert env_values(bundle / ".env.prod")["DNS_API_SERVER_PRIVATE_KEY"] == "/dev/shm/cdnfoundry/node.key"
+    assert "MaxQPSIPRule" in (bundle / "docker/dnsdist/dnsdist.conf").read_text(encoding="utf-8")
+    assert "CDNF_VECTOR_IMAGE" in env_values(bundle / ".env.prod")
+    assert "security_edge_events" in (REPO_PATCH / "docker/vector/vector.yaml").read_text(encoding="utf-8")
+    assert "CDNF_EDGE_RUNTIME_IMAGE" in env_values(bundle / ".env.prod")
+    assert "traffic_limits" in (REPO_PATCH / "docker/nginx/edge-runtime.conf").read_text(encoding="utf-8")
 
 
 def test_dedicated_monitoring_uses_private_local_and_stable_remote_clickhouse_urls(
@@ -1266,7 +1291,17 @@ def test_edge_registration_command_uses_protected_token_file(source_repo: Path, 
     env = env_values(output_dir / "edge-1/.env.prod")
     assert env["EDGE_ID"] == "11111111-2222-3333-4444-555555555555"
     assert env["EDGE_BOOTSTRAP_TOKEN"] == "protected-one-time-token"
+    assert env["EDGE_RUNTIME_TLS_CERTIFICATE"] == "/dev/shm/cdnfoundry/edge-runtime.crt"
+    assert env["EDGE_RUNTIME_TLS_PRIVATE_KEY"] == "/dev/shm/cdnfoundry/edge-runtime.key"
+    assert env["EDGE_STATE_ENCRYPTION_KEY_FILE"] == "/dev/shm/cdnfoundry/edge-state-encryption.key"
+    assert env["DNS_API_SERVER_PRIVATE_KEY"] == "/dev/shm/cdnfoundry/node.key"
     assert json.loads(env["EDGE_GATEWAY_ADDRESS_MAP"]) == {"192.0.2.173": "192.0.2.173"}
+    validation = (output_dir / "edge-1/validate.sh").read_text(encoding="utf-8")
+    assert "stat -f -c '%T'" in validation
+    assert "certificate_public" in validation
+    assert "Do not copy" in (output_dir / "edge-1/README.md").read_text(encoding="utf-8")
+    edge_compose = yaml.safe_load((output_dir / "edge-1/compose.yml").read_text(encoding="utf-8"))
+    assert edge_compose["volumes"]["edge-runtime-memory"]["driver_opts"]["type"] == "tmpfs"
     start = (output_dir / "edge-1/start.sh").read_text(encoding="utf-8")
     assert "docker compose --env-file .env.prod --profile dns --profile edge up -d --wait" in start
     assert "scrub_bootstrap_token" not in start

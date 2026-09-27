@@ -293,10 +293,11 @@ DNS_BIND_V4=0.0.0.0
 HOST_BIND_IPV4=0.0.0.0
 DNS_API_HOSTNAME=dns-api-1.ops.example.com
 DNS_API_SERVER_CERTIFICATE=/etc/cdnfoundry/pki/dns-api-1.crt
-DNS_API_SERVER_PRIVATE_KEY=/etc/cdnfoundry/pki/dns-api-1.key
+DNS_API_SERVER_PRIVATE_KEY=/dev/shm/cdnfoundry/dns-api-1.key
 EDGE_CONTROL_CA_CERTIFICATE=/etc/cdnfoundry/pki/edge-server-ca.crt
 EDGE_RUNTIME_TLS_CERTIFICATE=/etc/cdnfoundry/pki/edge-runtime.crt
-EDGE_RUNTIME_TLS_PRIVATE_KEY=/etc/cdnfoundry/pki/edge-runtime.key
+EDGE_RUNTIME_TLS_PRIVATE_KEY=/dev/shm/cdnfoundry/edge-runtime.key
+EDGE_STATE_ENCRYPTION_KEY_FILE=/dev/shm/cdnfoundry/edge-state-encryption.key
 EDGE_GATEWAY_ADDRESS_MAP={}
 EDGE_GATEWAY_REQUIRE_ADDRESS_MAP=false
 EDGE_ID=
@@ -569,9 +570,18 @@ Restart one DNS or edge host at a time and verify it before continuing. Use
    processes. Restart Horizon cleanly by recreating it through Compose.
 5. On each DNS host, run `pdns-migrate`, then replace and verify one DNS host at
    a time.
-6. Replace and verify one edge at a time. Preserve `edge-state`,
-   `edge-agent-state`, gateway state, and cache volumes. Confirm the new runtime
-   acknowledgement before moving to the next edge.
+6. Before replacing an edge, provision the bootstrap listener key and a stable
+   32-byte recovery key from external secrets into host tmpfs (`0400`, readable
+   by UID 10101). Set `EDGE_RUNTIME_TLS_PRIVATE_KEY` and
+   `EDGE_STATE_ENCRYPTION_KEY_FILE` to those absolute paths. Replace and verify
+   one edge at a time. Preserve `edge-agent-state`, gateway state, and cache
+   volumes. `edge-runtime-memory` is tmpfs and is restored from its encrypted
+   snapshot or rebuilt from control desired state. Confirm the new runtime
+   acknowledgement before moving to the next edge. Existing deployments using
+   the old disk-backed `edge-state` volume need a control-plane-connected
+   migration; keep the previous serving cell active until the new cell is
+   ready, then securely retire the old plaintext volume under the operator's
+   storage policy.
 7. Upgrade telemetry last and run the versioned ClickHouse migrations required
    by the selected release documentation.
 

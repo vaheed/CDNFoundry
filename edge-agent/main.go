@@ -70,6 +70,7 @@ type generationMismatchReport struct {
 }
 type client struct {
 	base, dir, runtimeDir, statusToken string
+	backupKey                          []byte
 	gatewayBindings                    string
 	gatewayBindingsConfigured          bool
 	gatewayRevision                    uint64
@@ -150,11 +151,26 @@ func main() {
 	if err := os.MkdirAll(c.dir, 0700); err != nil {
 		fatal(err)
 	}
+	if c.backupKey, err = readBackupKey(env("EDGE_STATE_ENCRYPTION_KEY_FILE", "")); err != nil {
+		fatal(err)
+	}
+	if len(c.backupKey) > 0 {
+		if c.runtimeDir == "" {
+			fatal(errors.New("encrypted edge recovery requires a runtime directory"))
+		}
+		var filesystem syscall.Statfs_t
+		if err := syscall.Statfs(c.runtimeDir, &filesystem); err != nil || filesystem.Type != tmpfsMagic {
+			fatal(errors.New("active edge runtime must be on tmpfs"))
+		}
+	}
 	if err := c.loadOrRegister(); err != nil {
 		fatal(err)
 	}
 	if err := c.configureMutualTLS(); err != nil {
 		fatal(err)
+	}
+	if err := c.restoreBackup(); err != nil {
+		logger.Error("encrypted runtime recovery failed", "event", "runtime_recovery_failed", "edge_id", c.id.EdgeID, "error_code", "runtime_recovery_failed", "error", err.Error())
 	}
 	logger.Info("edge agent started", "event", "service_started", "edge_id", c.id.EdgeID, "version", version)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
@@ -677,10 +693,7 @@ func inNetworks(ip net.IP, cidrs []string) bool {
 func (c *client) loadOrRegister() error {
 	p := filepath.Join(c.dir, "identity.json")
 	bootstrapToken := env("EDGE_BOOTSTRAP_TOKEN", "")
-	if b, err := os.ReadFile(p); err == nil {
-		if err := json.Unmarshal(b, &c.id); err != nil {
-			return err
-		}
+	if err := c.readAgentSecret(p, &c.id); err == nil {
 		if c.id.Certificate == "" || c.id.PrivateKey == "" {
 			return errors.New("legacy edge identity requires administrator rotation")
 		}
@@ -699,8 +712,8 @@ func (c *client) loadOrRegister() error {
 	var pending struct {
 		EdgeID, CSR, PrivateKey string
 	}
-	if b, err := os.ReadFile(pendingPath); err == nil {
-		if err := json.Unmarshal(b, &pending); err != nil || pending.EdgeID != edgeID || pending.CSR == "" || pending.PrivateKey == "" {
+	if err := c.readAgentSecret(pendingPath, &pending); err == nil {
+		if pending.EdgeID != edgeID || pending.CSR == "" || pending.PrivateKey == "" {
 			return errors.New("invalid pending edge registration; rotate the bootstrap identity")
 		}
 	} else if errors.Is(err, os.ErrNotExist) {
@@ -709,7 +722,7 @@ func (c *client) loadOrRegister() error {
 			return err
 		}
 		pending.EdgeID, pending.CSR, pending.PrivateKey = edgeID, csr, privateKey
-		if err := atomicJSON(pendingPath, pending); err != nil {
+		if err := c.writeAgentSecret(pendingPath, pending); err != nil {
 			return err
 		}
 	} else {
@@ -728,7 +741,7 @@ func (c *client) loadOrRegister() error {
 		EdgeID: raw.Data["edge_id"], Certificate: raw.Data["identity_certificate"], PrivateKey: pending.PrivateKey,
 		PublicKey: raw.Data["signing_public_key"], BootstrapTokenHash: hashToken(bootstrapToken),
 	}
-	if err := atomicJSON(p, c.id); err != nil {
+	if err := c.writeAgentSecret(p, c.id); err != nil {
 		return err
 	}
 	if err := os.Remove(pendingPath); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -1170,6 +1183,9 @@ func (c *client) activate(s state) error {
 			return nil
 		})
 		if err != nil {
+			return err
+		}
+		if err := c.saveBackup(s); err != nil {
 			return err
 		}
 		c.derivedEnsured = true

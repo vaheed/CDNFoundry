@@ -26,8 +26,22 @@ stateDiagram-v2
 
 ::: danger Private-key handling
 Never log or expose certificate keys. Recovery needs the original application
-encryption key and externally retained TLS material.
+encryption key, the edge recovery key, and externally retained TLS material.
 :::
+
+Production edge runtime generations, including active certificate keys, live
+in the shared 512 MiB `edge-runtime-memory` tmpfs volume. Each successful activation
+also writes an AES-GCM encrypted recovery snapshot to `edge-agent-state`.
+The agent's own enrollment key is encrypted in that volume with the same
+externally supplied recovery key.
+After an edge restart, the agent verifies and restores that snapshot before
+contacting the control plane; a failed rotation preserves the current tmpfs
+generation and its last valid encrypted snapshot. The recovery key is a
+32-byte random value supplied from external secret storage into host tmpfs as
+64 hex characters in a `0400` file. The bootstrap listener key must also be
+supplied on host tmpfs. Cells and agent reject disk-backed mounts and active
+host swap. A missing or changed recovery key requires a control-plane rebuild
+of the edge snapshot; retain it with recovery material.
 
 A domain TLS mode is `managed`, `custom`, or `disabled`.
 
@@ -62,8 +76,14 @@ orders and their operation records commit together; queued issuance and edge
 reconciliation are released after commit. A failed write rolls back the plan
 so the job can retry without leaving a partial activation.
 
-The workflow writes DNS-01 challenges as desired TXT state, waits for every
-required DNS acknowledgement, validates with the ACME server, stores the
+The workflow writes DNS-01 challenges as desired TXT state with a default
+30-second TTL, waits for every required DNS acknowledgement, then requires an
+authoritative, exact TXT answer from each enabled cluster's nameservers before
+acknowledging the challenge to the ACME server. The development fixture probes
+its private DNSdist endpoint through `ACME_DNS_PROBE_SERVER`. DNSdist has no
+packet cache in the supported configuration, so no stale cache entry needs
+flushing. A missing or non-authoritative answer delays the order; it does not
+replace an active certificate. The issuer stores the
 encrypted private key and certificate, publishes a new edge revision, and
 cleans challenge records. New orders are globally bounded per hour and initial
 work is jittered.

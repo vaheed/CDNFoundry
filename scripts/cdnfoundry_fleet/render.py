@@ -103,7 +103,7 @@ class Renderer:
             certificate_node = dict(node)
             if node["role"] == "control":
                 certificate_node["additional_dns_names"] = [f"edge-control.{state['global']['operator_domain']}"]
-            self.pki.copy_node_material(certificate_node, tmp / "pki")
+            self.pki.copy_node_material(certificate_node, tmp / "pki", include_private_key=node["role"] not in {"edge", "dns-edge"})
             atomic_write(tmp / "compose.yml", dump_yaml(filtered), 0o600)
             atomic_write(tmp / ".env.prod", self._format_env(env), 0o600)
             self._write_generated_configs(state, node, tmp, monitoring_host)
@@ -260,10 +260,11 @@ class Renderer:
             "EDGE_CONTROL_SERVER_PRIVATE_KEY": "./pki/node.key",
             "EDGE_CONTROL_CA_CERTIFICATE": "./pki/edge-server-ca.crt",
             "EDGE_CONTROL_URL": self._edge_control_url(state),
-            "EDGE_RUNTIME_TLS_CERTIFICATE": "./pki/node.crt",
-            "EDGE_RUNTIME_TLS_PRIVATE_KEY": "./pki/node.key",
+            "EDGE_RUNTIME_TLS_CERTIFICATE": "/dev/shm/cdnfoundry/edge-runtime.crt",
+            "EDGE_RUNTIME_TLS_PRIVATE_KEY": "/dev/shm/cdnfoundry/edge-runtime.key",
+            "EDGE_STATE_ENCRYPTION_KEY_FILE": "/dev/shm/cdnfoundry/edge-state-encryption.key",
             "DNS_API_SERVER_CERTIFICATE": "./pki/node.crt",
-            "DNS_API_SERVER_PRIVATE_KEY": "./pki/node.key",
+            "DNS_API_SERVER_PRIVATE_KEY": "/dev/shm/cdnfoundry/node.key" if node["role"] == "dns-edge" else "./pki/node.key",
             "DNS_API_HOSTNAME": node["hostname"],
             "CONTROL_PUBLIC_IPV4_ALLOWLIST": self._control_allowlist(state),
             "EDGE_PUBLIC_IPV4_ALLOWLIST": self._edge_allowlist(state),
@@ -704,6 +705,29 @@ exec python3 ./reconcile-pdns-password.py
         database_mode = "external PostgreSQL" if self._uses_remote_control_db(node) else "embedded PostgreSQL"
         operator_domain = state["global"]["operator_domain"]
         control_bootstrap = ""
+        edge_bootstrap = ""
+        if node["role"] in {"edge", "dns-edge"}:
+            edge_bootstrap = """
+## Edge key provisioning
+
+Before `validate.sh` or `start.sh`, use external secret storage to provision a
+dedicated bootstrap listener certificate and matching private key at
+`/dev/shm/cdnfoundry/edge-runtime.crt` and
+`/dev/shm/cdnfoundry/edge-runtime.key`. Provision the stable edge recovery key
+as 64 hex characters at `/dev/shm/cdnfoundry/edge-state-encryption.key`.
+Both private files must be on tmpfs, owned by UID 10101, and mode `0400`.
+Disable host swap and restore them from external secret storage after every
+host boot. Do not copy
+the node identity key into these paths: that key also identifies control or
+DNS services and must remain separate from the serving listener key.
+"""
+            if node["role"] == "dns-edge":
+                edge_bootstrap += """
+This combined DNS/edge bundle deliberately excludes `pki/node.key`. Provision
+the matching node certificate private key from external secret storage into
+`/dev/shm/cdnfoundry/node.key` (UID 10101, mode `0400`) before starting the
+DNS API listener. The public certificate remains at `pki/node.crt`.
+"""
         if node["role"] == "control":
             control_bootstrap = f"""
 ## First administrator and public readiness
@@ -766,7 +790,7 @@ plain `docker compose down` selects no profiled services and does nothing.
 `stop.sh` activates every profile and preserves all named volumes. Never add
 `-v` or `--volumes`.
 
-{control_bootstrap}
+{control_bootstrap}{edge_bootstrap}
 
 ## Listeners
 
@@ -783,7 +807,7 @@ docker compose --env-file .env.prod logs --since 10m --no-color
 
 ## Upgrade and rollback
 
-Replace the bundle atomically, run `./validate.sh`, pull images, then use `./start.sh`. If validation or startup fails, restore the `.previous` bundle and rerun `./start.sh`. Never use `docker compose down -v` and never delete PostgreSQL, Valkey, ClickHouse, Loki, Prometheus, Grafana, edge-state, cache, or MMDB volumes.
+Replace the bundle atomically, run `./validate.sh`, pull images, then use `./start.sh`. If validation or startup fails, restore the `.previous` bundle and rerun `./start.sh`. Never use `docker compose down -v` and never delete PostgreSQL, Valkey, ClickHouse, Loki, Prometheus, Grafana, edge-agent-state, cache, or MMDB volumes. The edge-runtime-memory volume is tmpfs; restore it from the encrypted snapshot with the external recovery key.
 
 ## Cleanup
 
@@ -831,6 +855,30 @@ docker compose --env-file .env.prod --profile '*' ps
     def _validate_script(self, node: dict[str, Any], compose: dict[str, Any]) -> str:
         identity_key_validation = ""
         pdns_validation = ""
+        edge_key_validation = ""
+        if node["role"] in {"edge", "dns-edge"}:
+            edge_key_validation = """test ! -e pki/node.key
+for key_path in /dev/shm/cdnfoundry/edge-runtime.key /dev/shm/cdnfoundry/edge-state-encryption.key; do
+    test -f "$key_path"
+    test "$(stat -f -c '%T' "$key_path")" = tmpfs
+    test "$(stat -c '%a:%u' "$key_path")" = 400:10101
+done
+test "$(wc -l < /proc/swaps)" -le 1
+test -f /dev/shm/cdnfoundry/edge-runtime.crt
+test "$(wc -c < /dev/shm/cdnfoundry/edge-state-encryption.key)" -ge 64
+test "$(wc -c < /dev/shm/cdnfoundry/edge-state-encryption.key)" -le 65
+certificate_public="$(openssl x509 -in /dev/shm/cdnfoundry/edge-runtime.crt -pubkey -noout | openssl pkey -pubin -outform DER | sha256sum)"
+private_public="$(openssl pkey -in /dev/shm/cdnfoundry/edge-runtime.key -pubout -outform DER | sha256sum)"
+test "$certificate_public" = "$private_public"
+"""
+            if node["role"] == "dns-edge":
+                edge_key_validation += """test -f /dev/shm/cdnfoundry/node.key
+test "$(stat -f -c '%T' /dev/shm/cdnfoundry/node.key)" = tmpfs
+test "$(stat -c '%a:%u' /dev/shm/cdnfoundry/node.key)" = 400:10101
+dns_certificate_public="$(openssl x509 -in pki/node.crt -pubkey -noout | openssl pkey -pubin -outform DER | sha256sum)"
+dns_private_public="$(openssl pkey -in /dev/shm/cdnfoundry/node.key -pubout -outform DER | sha256sum)"
+test "$dns_certificate_public" = "$dns_private_public"
+"""
         if node["role"] in {"dns", "dns-edge"}:
             pdns_validation = """pdns_mode="$(stat -c '%a' docker/pdns/pdns.conf)"
 case "$pdns_mode" in
@@ -869,12 +917,13 @@ test "$(stat -c '%u:%g' secrets/metrics-token)" = "0:82"
                     f"docker compose --env-file .env.prod run --rm --no-deps {service} "
                     f"caddy adapt --adapter caddyfile --config {config} >/dev/null\n"
                 )
+        node_key_validation = "test \"$(stat -c '%a' pki/node.key)\" = 600\n" if node["role"] not in {"edge", "dns-edge"} else ""
         return f"""#!/usr/bin/env sh
 set -eu
 umask 077
 test "$(stat -c '%a' .env.prod)" = 600
-test "$(stat -c '%a' pki/node.key)" = 600
-{identity_key_validation}{metrics_validation}{pdns_validation}docker compose --env-file .env.prod config --quiet
+{node_key_validation}
+{identity_key_validation}{metrics_validation}{pdns_validation}{edge_key_validation}docker compose --env-file .env.prod config --quiet
 images="$(docker compose --env-file .env.prod --profile '*' config --images)"
 printf '%s\n' "$images" | while IFS= read -r image; do
     case "$image" in
