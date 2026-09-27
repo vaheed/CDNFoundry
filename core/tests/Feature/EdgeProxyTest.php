@@ -355,8 +355,13 @@ class EdgeProxyTest extends TestCase
         $record = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records", $this->record('www', '8.8.8.8'))->assertCreated()->json('data.id');
         $artifact = EdgeArtifact::query()->where('edge_id', $id)->where('domain_id', $domain->id)->latest('sequence')->firstOrFail();
         $this->assertTrue(sodium_crypto_sign_verify_detached(hex2bin($artifact->signature), $artifact->checksum, hex2bin($registered->json('data.signing_public_key'))));
-        $this->withHeaders($identity)->getJson("/edge/v1/config/artifacts/{$artifact->checksum}")->assertOk()
+        $delivered = $this->withHeaders($identity)->getJson("/edge/v1/config/artifacts/{$artifact->checksum}")->assertOk()
             ->assertJsonPath('encoded_payload', base64_encode(ArtifactSigner::encode($artifact->payload)));
+        $this->assertTrue(sodium_crypto_sign_verify_detached(
+            hex2bin($delivered->json('delivery_signature')),
+            $artifact->checksum.'|'.$artifact->sequence.'|'.$delivered->json('expires_at'),
+            hex2bin($registered->json('data.signing_public_key')),
+        ));
         $this->withHeaders($identity)->getJson('/edge/v1/config/manifest?cursor=0')->assertOk()
             ->assertJsonFragment(['checksum' => $artifact->checksum]);
         $full = $this->withHeaders($identity)->getJson('/edge/v1/config/full')->assertOk()
@@ -364,6 +369,12 @@ class EdgeProxyTest extends TestCase
         $snapshot = json_decode(gzdecode(base64_decode($full->json('encoded_snapshot'), true)), true, flags: JSON_THROW_ON_ERROR);
         $this->assertSame($domain->refresh()->revision, $snapshot['artifacts'][0]['revision']);
         $this->assertTrue(sodium_crypto_sign_verify_detached(hex2bin($full->json('signature')), $full->json('checksum'), hex2bin($full->json('signing_public_key'))));
+        $this->assertSame($artifact->sequence, $full->json('sequence'));
+        $this->assertTrue(sodium_crypto_sign_verify_detached(
+            hex2bin($full->json('delivery_signature')),
+            $full->json('checksum').'|'.$full->json('sequence').'|'.$full->json('expires_at'),
+            hex2bin($full->json('signing_public_key')),
+        ));
         $this->withHeaders($identity)->postJson('/edge/v1/config/applied', ['sequence' => $artifact->sequence + 100])->assertUnprocessable();
         // Keep the readiness evidence independent of runner speed. Production
         // agents heartbeat every five seconds while downloading and validating

@@ -48,6 +48,8 @@ shown rather than restarting unrelated containers.
 Inspect the agent's bounded rejection reason:
 
 - signature/checksum: verify the shared artifact signing key and transfer;
+- expired delivery or sequence replay: check edge/control clocks and current
+  artifact sequence; never reset the edge sequence to make an old download fit;
 - incompatible artifact: compare agent and compatibility versions;
 - candidate validation: inspect domain/pool runtime data and cell name;
 - activation failure: check runtime directory ownership and filesystem capacity.
@@ -67,7 +69,11 @@ limits.
 Use the stable result to distinguish DNS, unsafe destination, connect timeout,
 TLS validation, HTTP status, or response timeout. Recheck SNI and `Host`
 separately. Origin addresses are validated again after resolution; a DNS change
-to a blocked address is intentionally rejected.
+to a blocked address is intentionally rejected. The numeric peer is checked
+again in the balancer immediately before each TCP attempt, including retries.
+Client and cache-key counters occupy separate fixed-size shared zones; a full
+cache-admission zone skips new stores, while per-domain rate and origin
+concurrency counters fail closed for that domain.
 
 Follow [Edge or cell failure](../operations/runbooks.md#edge-or-cell-failure) before
 draining or restarting.

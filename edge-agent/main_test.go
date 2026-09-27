@@ -38,6 +38,17 @@ func TestVerifyAndCompatibility(t *testing.T) {
 	if _, err := verify(base64.StdEncoding.EncodeToString(append(payload, 'x')), checksum, hex.EncodeToString(signature), hex.EncodeToString(public)); err == nil {
 		t.Fatal("tampered payload accepted")
 	}
+	expiresAt := time.Now().Add(5 * time.Minute).Unix()
+	delivery := hex.EncodeToString(ed25519.Sign(private, []byte(checksum+"|2|"+strconv.FormatInt(expiresAt, 10))))
+	if err := verifyDelivery(checksum, 2, expiresAt, delivery, hex.EncodeToString(public)); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyDelivery(checksum, 1, expiresAt, delivery, hex.EncodeToString(public)); err == nil {
+		t.Fatal("replayed sequence accepted")
+	}
+	if err := verifyDelivery(checksum, 2, time.Now().Add(-time.Second).Unix(), delivery, hex.EncodeToString(public)); err == nil {
+		t.Fatal("expired delivery accepted")
+	}
 	if !compatible("1.0.0", "1.99.99") || compatible("1.0.0", "1.0.99") {
 		t.Fatal("compatibility bounds are incorrect")
 	}
@@ -339,7 +350,7 @@ func generationFixture(value string) func(string, string) error {
 }
 
 func TestRuntimeAssignsSupplementalCertificatesPerHostname(t *testing.T) {
-	domain := json.RawMessage(`{"domain":"example.test","revision":1,"pools":["shared-default"],"settings":{"enabled":true},"cache":{},"tls":{"mode":"managed","certificates":[{"id":"base","certificate_pem":"base-cert","private_key_pem":"base-key"},{"id":"deep","certificate_pem":"deep-cert","private_key_pem":"deep-key"}]},"hostnames":[{"hostname":"www.example.test","tls_certificate_id":"base","origin":{"host":"origin.example"}},{"hostname":"a.b.example.test","tls_certificate_id":"deep","origin":{"host":"origin.example"}}]}`)
+	domain := json.RawMessage(`{"schema_version":1,"domain":"example.test","revision":1,"pools":["shared-default"],"settings":{"enabled":true},"cache":{},"tls":{"mode":"managed","certificates":[{"id":"base","certificate_pem":"base-cert","private_key_pem":"base-key"},{"id":"deep","certificate_pem":"deep-cert","private_key_pem":"deep-key"}]},"hostnames":[{"hostname":"www.example.test","tls_certificate_id":"base","origin":{"host":"origin.example"}},{"hostname":"a.b.example.test","tls_certificate_id":"deep","origin":{"host":"origin.example"}}]}`)
 	_, pools, err := compileRuntime(state{Sequence: 1, Domains: map[string]json.RawMessage{"1": domain}})
 	if err != nil {
 		t.Fatal(err)
@@ -358,7 +369,7 @@ func TestRuntimeAssignsSupplementalCertificatesPerHostname(t *testing.T) {
 }
 
 func TestRuntimePreservesWAFAndCompressionForAssignedCell(t *testing.T) {
-	domain := json.RawMessage(`{"domain":"example.test","domain_id":1,"revision":7,"cells":["cell-01"],"settings":{"enabled":true},"cache":{},"compression":{"profile_name":"standard","gzip":true},"security":{},"waf":{"name":"balanced","blocking":true,"inbound_threshold":5},"tls":{"mode":"managed"},"hostnames":[{"hostname":"example.test","origin":{"host":"origin.example"}}]}`)
+	domain := json.RawMessage(`{"schema_version":1,"domain":"example.test","domain_id":1,"revision":7,"cells":["cell-01"],"settings":{"enabled":true},"cache":{},"compression":{"profile_name":"standard","gzip":true},"security":{},"waf":{"name":"balanced","blocking":true,"inbound_threshold":5},"tls":{"mode":"managed"},"hostnames":[{"hostname":"example.test","origin":{"host":"origin.example"}}]}`)
 	active, cells, err := compileRuntime(state{Sequence: 7, Domains: map[string]json.RawMessage{"1": domain}})
 	if err != nil {
 		t.Fatal(err)
@@ -372,7 +383,7 @@ func TestRuntimePreservesWAFAndCompressionForAssignedCell(t *testing.T) {
 }
 
 func TestRuntimeTargetsOnlySelectedCellsWithinOnePool(t *testing.T) {
-	domain := json.RawMessage(`{"domain":"example.test","domain_id":7,"revision":2,"pools":["shared-default"],"cells":["cell-02"],"settings":{"enabled":true},"cache":{},"tls":{"mode":"disabled"},"hostnames":[{"hostname":"www.example.test","origin":{"host":"origin.example"}}]}`)
+	domain := json.RawMessage(`{"schema_version":1,"domain":"example.test","domain_id":7,"revision":2,"pools":["shared-default"],"cells":["cell-02"],"settings":{"enabled":true},"cache":{},"tls":{"mode":"disabled"},"hostnames":[{"hostname":"www.example.test","origin":{"host":"origin.example"}}]}`)
 	_, runtimes, err := compileRuntime(state{Sequence: 9, Domains: map[string]json.RawMessage{"7": domain}})
 	if err != nil {
 		t.Fatal(err)
@@ -574,19 +585,22 @@ func TestFreshFullSnapshotThenIncrementalArtifact(t *testing.T) {
 	incrementalChecksum := sha256.Sum256(incrementalPayload)
 	incrementalChecksumHex := hex.EncodeToString(incrementalChecksum[:])
 	incrementalSignature := hex.EncodeToString(ed25519.Sign(private, []byte(incrementalChecksumHex)))
+	expiresAt := time.Now().Add(5 * time.Minute).Unix()
+	fullDeliverySignature := hex.EncodeToString(ed25519.Sign(private, []byte(fullChecksum+"|4|"+strconv.FormatInt(expiresAt, 10))))
+	incrementalDeliverySignature := hex.EncodeToString(ed25519.Sign(private, []byte(incrementalChecksumHex+"|5|"+strconv.FormatInt(expiresAt, 10))))
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.URL.Path == "/edge/v1/config/full":
-			_ = json.NewEncoder(w).Encode(map[string]any{"encoded_snapshot": fullPayload, "checksum": fullChecksum, "signature": fullSignature, "signing_public_key": publicHex})
+			_ = json.NewEncoder(w).Encode(map[string]any{"encoded_snapshot": fullPayload, "checksum": fullChecksum, "signature": fullSignature, "signing_public_key": publicHex, "sequence": 4, "expires_at": expiresAt, "delivery_signature": fullDeliverySignature})
 		case r.URL.Path == "/edge/v1/config/manifest":
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{
-				"sequence": 5, "kind": "domain", "domain_id": 1, "checksum": incrementalChecksumHex,
+				"sequence": 5, "kind": "domain", "domain_id": 1, "revision": 5, "checksum": incrementalChecksumHex,
 				"signature": incrementalSignature, "schema_version": 1,
 				"minimum_agent_version": "1.0.0", "maximum_agent_version": "1.99.0",
 			}}})
 		case strings.HasPrefix(r.URL.Path, "/edge/v1/config/artifacts/"):
-			_ = json.NewEncoder(w).Encode(map[string]any{"encoded_payload": base64.StdEncoding.EncodeToString(incrementalPayload)})
+			_ = json.NewEncoder(w).Encode(map[string]any{"encoded_payload": base64.StdEncoding.EncodeToString(incrementalPayload), "data": map[string]any{"sequence": 5}, "expires_at": expiresAt, "delivery_signature": incrementalDeliverySignature})
 		default:
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"accepted": true}})
 		}
@@ -620,11 +634,13 @@ func TestFreshEmptyFullSnapshotActivatesBootstrapGeneration(t *testing.T) {
 		"schema_version": 1, "minimum_agent_version": "1.0.0", "maximum_agent_version": "1.99.0",
 		"artifacts": []map[string]any{},
 	})
+	expiresAt := time.Now().Add(5 * time.Minute).Unix()
+	deliverySignature := hex.EncodeToString(ed25519.Sign(private, []byte(fullChecksum+"|0|"+strconv.FormatInt(expiresAt, 10))))
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/edge/v1/config/full":
-			_ = json.NewEncoder(w).Encode(map[string]any{"encoded_snapshot": fullPayload, "checksum": fullChecksum, "signature": fullSignature, "signing_public_key": publicHex})
+			_ = json.NewEncoder(w).Encode(map[string]any{"encoded_snapshot": fullPayload, "checksum": fullChecksum, "signature": fullSignature, "signing_public_key": publicHex, "sequence": 0, "expires_at": expiresAt, "delivery_signature": deliverySignature})
 		default:
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"accepted": true}})
 		}
@@ -1150,7 +1166,7 @@ func signedJSON(t *testing.T, private ed25519.PrivateKey, value any) (string, st
 }
 
 func runtimeDomain(revision int) json.RawMessage {
-	return json.RawMessage(`{"domain":"example.test","revision":` + strconv.Itoa(revision) + `,"pools":["shared-default"],"settings":{"enabled":true},"cache":{"enabled":true,"epoch":2},"hostnames":[{"hostname":"www.example.test","origin":{"host":"origin.example"}}]}`)
+	return json.RawMessage(`{"schema_version":1,"domain_id":1,"domain":"example.test","revision":` + strconv.Itoa(revision) + `,"pools":["shared-default"],"settings":{"enabled":true},"cache":{"enabled":true,"epoch":2},"hostnames":[{"hostname":"www.example.test","origin":{"host":"origin.example"}}]}`)
 }
 
 func TestRuntimeUpgradeWritesOnlyBoundedIntentAndWaitsForReportedVersions(t *testing.T) {

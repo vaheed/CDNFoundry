@@ -50,6 +50,12 @@ signature, schema version, and minimum/maximum agent version. Agent version
 4. version bounds;
 5. compiled per-pool runtime structure.
 
+Artifact and full-snapshot downloads also carry a five-minute expiration and
+an Ed25519 signature binding the checksum, sequence and expiration. The agent
+rejects expired or far-future deliveries, sequence mismatches, and incremental
+sequences that do not increase. Deploy the updated control plane before the
+updated agent, since the agent requires these response fields.
+
 Rejected candidates never replace active state.
 
 When gateway mode is configured, the heartbeat `gateway` object reports
