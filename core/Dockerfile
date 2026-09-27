@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/tmp/composer-cache \
         sleep $((attempt * 5)); \
     done
 
-FROM node:26-alpine@sha256:233761595746769ebfdb6090f44fc7cdf818ae0ce62d2b37e0367723b9823e36 AS frontend-assets
+FROM node:26-alpine@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80 AS frontend-assets
 
 WORKDIR /app
 
