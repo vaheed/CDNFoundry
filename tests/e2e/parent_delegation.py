@@ -55,7 +55,7 @@ def run(*args: str, **kwargs) -> subprocess.CompletedProcess:
 
 
 def main() -> None:
-    run('docker', 'build', '-t', IMAGE, '-', input=f'FROM {BASE}\nRUN apk add --no-cache bind=9.20.27-r0 bind-tools=9.20.27-r0 bind-dnssec-tools=9.20.27-r0\nENTRYPOINT ["named"]\n')
+    run('docker', 'build', '-t', IMAGE, '-', input=f'FROM {BASE}\nRUN apk add --no-cache bind=9.20.29-r0 bind-tools=9.20.29-r0 bind-dnssec-tools=9.20.29-r0\nENTRYPOINT ["named"]\n')
     image = json.loads(run('docker', 'image', 'inspect', IMAGE).stdout)[0]['Id']
     results = []
     with tempfile.TemporaryDirectory(prefix='cdnf-parent-qualification-') as temporary:
