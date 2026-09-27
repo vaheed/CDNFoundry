@@ -175,7 +175,7 @@ sinks:
     auth: { strategy: basic, user: "${CLICKHOUSE_USER}", password: "${CLICKHOUSE_PASSWORD}" }
     compression: gzip
     batch: { max_events: 500, timeout_secs: 1 }
-    buffer: { type: disk, max_size: 268435456, when_full: drop_newest }
+    buffer: { type: disk, max_size: 268435488, when_full: drop_newest }
     request: { retry_initial_backoff_secs: 1, retry_max_duration_secs: 300, timeout_secs: 10 }
   clickhouse_dns:
     type: clickhouse
@@ -186,7 +186,7 @@ sinks:
     auth: { strategy: basic, user: "${CLICKHOUSE_USER}", password: "${CLICKHOUSE_PASSWORD}" }
     compression: gzip
     batch: { max_events: 1000, timeout_secs: 2 }
-    buffer: { type: disk, max_size: 268435456, when_full: drop_newest }
+    buffer: { type: disk, max_size: 268435488, when_full: drop_newest }
     request: { retry_initial_backoff_secs: 1, retry_max_duration_secs: 300, timeout_secs: 10 }
   prometheus:
     type: prometheus_exporter

@@ -249,6 +249,8 @@ jobs:
             check config /etc/prometheus/prometheus.yml
           docker run --rm --entrypoint /bin/promtool -v "$PWD/docker/prometheus:/etc/prometheus:ro" ghcr.io/vaheed/cdnfoundry-prometheus:ci \
             test rules /etc/prometheus/alerts.test.yml
+      - name: Qualify bounded Vector buffers at runtime
+        run: python3 tests/e2e/vector_buffer_startup.py --image ghcr.io/vaheed/cdnfoundry-vector:ci
       - name: Qualify origin destination safety and IPv6 HTTP/TLS
         run: python3 tests/e2e/origin_destinations.py --image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
       - name: Qualify edge serving without Vector DNS
