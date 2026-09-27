@@ -251,6 +251,8 @@ jobs:
             test rules /etc/prometheus/alerts.test.yml
       - name: Qualify origin destination safety and IPv6 HTTP/TLS
         run: python3 tests/e2e/origin_destinations.py --image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
+      - name: Qualify edge serving without Vector DNS
+        run: python3 tests/e2e/edge_telemetry_startup.py --image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
       - name: Qualify compiled DNS services and telemetry outage serving
         run: sudo -E python3 tests/e2e/dns_images.py
       - name: Qualify generated PowerDNS credentials and rotation
@@ -285,8 +287,9 @@ jobs:
       - name: Qualify generated production observability topology
         run: |
           if ! sudo -E python3 tests/e2e/production_observability.py --release ci > /tmp/cdnfoundry-production-observability.log 2>&1; then
-            tail -n 45 /tmp/cdnfoundry-production-observability.log
-            tail -n 45 /tmp/cdnfoundry-production-observability.log > /tmp/cdnfoundry-production-observability-tail.log
+            grep -Ei 'unhealthy|dependency failed|error response|permission denied|returned non-zero|failed to|invalid|timed out' /tmp/cdnfoundry-production-observability.log | tail -n 35 > /tmp/cdnfoundry-production-observability-tail.log || true
+            tail -n 12 /tmp/cdnfoundry-production-observability.log >> /tmp/cdnfoundry-production-observability-tail.log
+            cat /tmp/cdnfoundry-production-observability-tail.log
             annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-production-observability-tail.log)"
             echo "::error title=Production observability qualification failed::${annotation}"
             exit 1
@@ -317,10 +320,9 @@ jobs:
             fi
             echo "Development topology startup attempt ${attempt} failed."
           done
-          docker compose -f compose.dev.yml ps edge-a edge-b > /tmp/cdnfoundry-edge-state.log 2>&1
-          docker compose -f compose.dev.yml logs --tail=45 edge-a edge-b > /tmp/cdnfoundry-edge-logs.log 2>&1
-          tail -n 80 /tmp/cdnfoundry-dev-up.log > /tmp/cdnfoundry-dev-up-tail.log
-          cat /tmp/cdnfoundry-edge-state.log /tmp/cdnfoundry-edge-logs.log >> /tmp/cdnfoundry-dev-up-tail.log
+          tail -n 10 /tmp/cdnfoundry-dev-up.log > /tmp/cdnfoundry-dev-up-tail.log
+          docker compose -f compose.dev.yml ps edge-a edge-b >> /tmp/cdnfoundry-dev-up-tail.log 2>&1
+          docker compose -f compose.dev.yml logs --no-color edge-a edge-b 2>&1 | grep -Ei 'emerg|error|Vector DNS|nginx:|permission denied' | tail -n 20 >> /tmp/cdnfoundry-dev-up-tail.log || true
           annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-dev-up-tail.log)"
           echo "::error title=Development topology startup failed::${annotation}"
           exit "${status}"
