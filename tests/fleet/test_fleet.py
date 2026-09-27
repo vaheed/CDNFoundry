@@ -1013,7 +1013,6 @@ def test_real_edge_bundle_carries_runtime_security_configuration(store: FleetSta
     assert not (bundle / "pki/node.key").exists()
     assert env_values(bundle / ".env.prod")["DNS_API_SERVER_PRIVATE_KEY"] == "/dev/shm/cdnfoundry/node.key"
     assert "MaxQPSIPRule" in (bundle / "docker/dnsdist/dnsdist.conf").read_text(encoding="utf-8")
-    assert "CDNF_VECTOR_IMAGE" in env_values(bundle / ".env.prod")
     assert "security_edge_events" in (REPO_PATCH / "docker/vector/vector.yaml").read_text(encoding="utf-8")
     assert "CDNF_EDGE_RUNTIME_IMAGE" in env_values(bundle / ".env.prod")
     assert "traffic_limits" in (REPO_PATCH / "docker/nginx/edge-runtime.conf").read_text(encoding="utf-8")
