@@ -724,7 +724,8 @@ DNS services and must remain separate from the serving listener key.
 Each cell checks its local `/healthz` after a bounded startup grace period.
 If Vector is unavailable at startup, the cell serves using bounded Docker
 stdout logs and reports the telemetry fallback in its container log. Restart
-the cell after Vector recovers to restore direct syslog delivery.
+the cell after Vector recovers to restore direct syslog delivery. Edge logs
+remove query strings from paths and referrers before either output is written.
 """
             if node["role"] == "dns-edge":
                 edge_bootstrap += """

@@ -58,7 +58,8 @@ The system reports:
 - ClickHouse and Vector probes;
 - edge cells continue serving with bounded Docker stdout logs when Vector is
   absent at startup; their container log reports this fallback, and they need
-  a restart after Vector recovers to restore direct syslog delivery;
+  a restart after Vector recovers to restore direct syslog delivery. Query
+  strings are removed from edge paths and referrers before either log output;
 - maximum host clock offset from Prometheus;
 - MMDB presence, readability, size, and age;
 - enabled/fresh edges and listener readiness;
