@@ -37,7 +37,7 @@ and reported through Vector metrics.
 | `client_ip` | string, 45 characters |
 | `country`, `continent` | upper-case two-character code |
 | `user_agent` | 256 characters |
-| `referrer` | 512 characters |
+| `referrer` | query removed, 512 characters |
 | `event_type` | low-cardinality string, 32 characters |
 | `compression_encoding` | `identity`, `gzip`, or `br` |
 | `compression_ratio` | float clamped to 1–100,000 |

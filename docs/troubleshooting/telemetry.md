@@ -29,6 +29,13 @@ Inspect Vector transform errors, discarded-event counters, disk-buffer bytes,
 delivery errors, and ClickHouse insert errors. Events dropped after the buffer
 fills cannot be reconstructed.
 
+The edge request/billing sink has a 1 GiB disk cap, security events have a
+separate 256 MiB cap, and DNS telemetry has a 256 MiB cap. All use
+`drop_newest` when full. Security traffic therefore cannot be displaced by a
+flood of ordinary requests, and DNS has a smaller loss budget. A prolonged
+ClickHouse outage can still exhaust any cap; reconcile billing against other
+durable records before using incomplete intervals.
+
 The administrator telemetry page aggregates labeled Vector Prometheus series:
 buffer bytes/events are current gauges, while discarded events and component
 errors are lifetime counters since Vector started. An available collector shows
