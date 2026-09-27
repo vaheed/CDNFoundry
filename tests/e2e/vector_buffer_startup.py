@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import tempfile
 import time
@@ -48,6 +49,13 @@ def main() -> None:
             print("vector_buffer_startup=passed")
         finally:
             run("docker", "rm", "-f", name, check=False)
+            # Vector writes buffer files as container root. Return ownership
+            # of this disposable directory before TemporaryDirectory cleans it.
+            run(
+                "docker", "run", "--rm", "--network", "none", "--entrypoint", "chown",
+                "-v", f"{directory}:/vector-data-dir", image,
+                "-R", f"{os.getuid()}:{os.getgid()}", "/vector-data-dir",
+            )
 
 
 if __name__ == "__main__":
