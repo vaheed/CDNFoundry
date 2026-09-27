@@ -138,7 +138,7 @@ def main() -> None:
             "cdnfoundry/edge-runtime:test")
         try:
             wait_for_cell()
-            run("docker", "exec", CELL, "openresty", "-t")
+            run("docker", "exec", CELL, "sh", "-c", "if test -f /var/lib/nginx/tmp/nginx-without-syslog.conf; then openresty -t -c /var/lib/nginx/tmp/nginx-without-syslog.conf; else openresty -t; fi")
             healthy = request("failover.example")
             assert "primary\n" in healthy and "X-CDNFoundry-Origin: primary" in healthy, healthy + runtime_file.read_text() + run("docker", "logs", CELL, check=False).stderr
             stale_seed = request("stale-failover.example", "/resident")

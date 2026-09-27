@@ -47,6 +47,7 @@ def main() -> None:
             config = run("docker", "exec", name, "cat", "/var/lib/nginx/tmp/nginx-without-syslog.conf").stdout
             if "access_log syslog:server=vector:9000" in config or "access_log /dev/stdout edge_json;" not in config:
                 raise RuntimeError("fallback configuration did not preserve bounded stdout logging")
+            run("docker", "exec", name, "openresty", "-t", "-c", "/var/lib/nginx/tmp/nginx-without-syslog.conf")
             run(
                 "docker", "exec", name, "wget", "-qO-", "--header",
                 "Referer: https://referrer.test/article?secret=cdnf-query-canary",

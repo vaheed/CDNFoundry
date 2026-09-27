@@ -324,7 +324,7 @@ def main() -> None:
             "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro", "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
             "-v", f"{MMDB_VOLUME}:/mmdb:ro", "cdnfoundry/edge-runtime:phase6")
         try:
-            run("docker", "exec", NAME, "openresty", "-t")
+            run("docker", "exec", NAME, "sh", "-c", "if test -f /var/lib/nginx/tmp/nginx-without-syslog.conf; then openresty -t -c /var/lib/nginx/tmp/nginx-without-syslog.conf; else openresty -t; fi")
             time.sleep(1.2)
             status(curl("unknown.example"), 421, "unknown_host")
             status(curl("healthy.example", method="TRACE"), 405, "invalid_method")

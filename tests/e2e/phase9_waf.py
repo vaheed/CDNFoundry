@@ -89,7 +89,7 @@ def main() -> None:
             "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro", "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
             "--tmpfs", "/var/cache/nginx:rw,noexec,nosuid,size=64m,mode=0777", IMAGE)
         try:
-            configuration = run("docker", "exec", CELL, "openresty", "-t", check=False)
+            configuration = run("docker", "exec", CELL, "sh", "-c", "if test -f /var/lib/nginx/tmp/nginx-without-syslog.conf; then openresty -t -c /var/lib/nginx/tmp/nginx-without-syslog.conf; else openresty -t; fi", check=False)
             if configuration.returncode:
                 logs = run("docker", "logs", CELL, check=False)
                 raise RuntimeError(
