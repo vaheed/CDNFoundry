@@ -17,6 +17,7 @@ never repair deployment state by editing a dashboard or derived metric.
 | --- | --- | --- |
 | `/up` | framework | Laravel process health route |
 | `/api/health` | public | Process liveness only |
+| `/health` | public | Sanitized status page from the latest scheduled component snapshot |
 | `/api/ready` | public | Required database, queue, and worker readiness |
 | `/api/admin/system/status` | administrator | Control status summary |
 | `/api/admin/system/health` | administrator | Overall health and components |
@@ -25,6 +26,18 @@ never repair deployment state by editing a dashboard or derived metric.
 
 Do not use `/api/health` as proof that DNS, edge, telemetry, or reconciliation is
 healthy.
+
+The home page links to `/health`. Browsers opening `/api/health` are redirected
+there; API clients requesting JSON continue to receive the original liveness
+response. The scheduler runs `cdnf:health:publish` once per minute and stores
+only names and states for DNS, edge delivery, TLS, cache/runtime work, security,
+telemetry, and control-plane checks. Counts, addresses, exception messages, and
+credentials remain in the administrator view. The public page changes to
+**Status unavailable** if the latest snapshot is over 150 seconds old or cannot
+be read. It shows the last observation as historical until cache expiry.
+Keep the Fleet control node's `scheduler`, `core`, and `web` services on the same
+release when deploying this page. No DNS or customer HTTP request uses Laravel
+for serving; these status signals report control and reconciliation health.
 
 For a read-only path check, run `python3 tests/e2e/staging_health.py` with
 `--control`, `--grafana`, `--zone`, one or more `--dns-server` values, and

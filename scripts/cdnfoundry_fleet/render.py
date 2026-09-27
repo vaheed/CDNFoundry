@@ -750,6 +750,9 @@ docker compose --env-file .env.prod exec core php artisan cdnf:admin:create \\
 
 Then sign in at `https://control.{operator_domain}/admin`. Create the bootstrap
 administrator only once; create later users through the authenticated panel.
+The public service status page is `https://control.{operator_domain}/health`.
+Its first operational snapshot appears after the scheduler's next minute tick;
+the page reports an unknown state when that snapshot becomes stale.
 """
         return f"""# CDNFoundry node bundle: {node['name']}
 

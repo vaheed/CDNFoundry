@@ -980,6 +980,7 @@ def test_control_monitoring_bundle_uses_project_pki_contract(store: FleetState, 
 
 
     assert "https://control.ops.example.com/api/ready" in readme
+    assert "https://control.ops.example.com/health" in readme
     assert "php artisan cdnf:admin:create" in readme
     compose = yaml.safe_load((bundle / "compose.yml").read_text(encoding="utf-8"))
     assert "core" in compose["services"]
@@ -998,6 +999,20 @@ def test_control_monitoring_bundle_uses_project_pki_contract(store: FleetState, 
     assert node_targets[0]["targets"] == ["node-exporter:9100"]
     assert env["LOG_METRICS_BIND"] == "0.0.0.0:9599"
     assert env["LOG_AUTH_TOKEN"]
+
+
+def test_real_control_bundle_serves_scheduled_public_health(store: FleetState, tmp_path: Path) -> None:
+    add(store, node("control-1", "control", "192.0.2.140"))
+    output = tmp_path / "real-bundles"
+    Renderer(REPO_PATCH, store, output).render(store.load(), node_name="control-1")
+    bundle = output / "control-1"
+    compose = yaml.safe_load((bundle / "compose.yml").read_text(encoding="utf-8"))
+    env = env_values(bundle / ".env.prod")
+    assert "scheduler" in compose["services"]
+    assert "web" in compose["services"]
+    assert "CDNF_CORE_IMAGE" in env
+    assert "CDNF_WEB_IMAGE" in env
+    assert "https://control.ops.example.com/health" in (bundle / "README.md").read_text(encoding="utf-8")
 
 
 def test_real_edge_bundle_carries_runtime_security_configuration(store: FleetState, tmp_path: Path) -> None:

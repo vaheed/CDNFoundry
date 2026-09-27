@@ -82,6 +82,15 @@ so existing clusters, edges and domains are reused rather than duplicated.
    in screenshots or the shared report.
    Status: **Not run** for these new checkpoints. Earlier login passes do not
    cover timezone changes or dashboard corrections.
+   From the public home page, click **Service health**. Expect `/health` with
+   DNS, edge delivery, TLS, cache and origin, security, telemetry, and control
+   plane groups, a UTC update time, and readable status at desktop and narrow
+   viewport widths. Open `/api/health` in a browser and expect the same page;
+   open `/api/health?format=json` and expect `{"status":"ok"}`. Stop the
+   scheduler for over 150 seconds in a coordinated maintenance window and
+   refresh: expect **Status unavailable** and a stale-report notice. Restart
+   the scheduler and expect the next minute snapshot to restore component
+   states. Status: **Not run — owner execution required**.
 2. Open **Infrastructure → DNS clusters**. For each prepared PoP, create its
    record disabled with **API URL**, **API key**, **Server ID**, and **Zone
    capacity** from the protected installation configuration, or inspect the
