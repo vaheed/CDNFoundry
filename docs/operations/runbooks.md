@@ -79,7 +79,9 @@ Do not allow a broad private CIDR to bypass built-in unsafe ranges.
 
 1. Inspect the latest order and challenge state.
 2. Confirm the domain is active, delegated, verified, and proxied.
-3. Verify challenge TXT acknowledgement on every DNS target.
+3. Verify challenge TXT acknowledgement on every DNS target, then query each
+   configured authoritative nameserver directly for the exact TXT value with
+   the `aa` flag. DNSdist's supported configuration has no packet cache.
 4. Check CA directory access, account contact, clock, order budget, and names.
 5. Repair the dependency, then use renew or reissue.
 

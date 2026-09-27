@@ -9,6 +9,7 @@ use App\Models\Domain;
 use App\Models\Operation;
 use App\Models\TlsOrder;
 use App\Support\AcmeClient;
+use App\Support\AcmeDnsPropagation;
 use App\Support\ManagedCertificateNames;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -43,7 +44,7 @@ class IssueManagedCertificate implements ShouldBeUnique, ShouldQueue
         return $this->orderId;
     }
 
-    public function handle(AcmeClient $client): void
+    public function handle(AcmeClient $client, ?AcmeDnsPropagation $propagation = null): void
     {
         $order = TlsOrder::query()->with(['challenges'])->find($this->orderId);
         if ($order === null || in_array($order->status, ['succeeded', 'failed', 'obsolete'], true)) {
@@ -75,7 +76,7 @@ class IssueManagedCertificate implements ShouldBeUnique, ShouldQueue
         try {
             match ($order->status) {
                 'pending' => $this->create($order, $client),
-                'publishing' => $this->publish($order, $client),
+                'publishing' => $this->publish($order, $client, $propagation ?? app(AcmeDnsPropagation::class)),
                 'validating' => $this->validate($order, $client),
                 'finalizing' => $this->finalize($order, $client),
                 default => throw new RuntimeException("Unknown managed certificate order state: {$order->status}"),
@@ -183,7 +184,7 @@ class IssueManagedCertificate implements ShouldBeUnique, ShouldQueue
         $this->release(5);
     }
 
-    private function publish(TlsOrder $order, AcmeClient $client): void
+    private function publish(TlsOrder $order, AcmeClient $client, AcmeDnsPropagation $propagation): void
     {
         $clusters = DnsCluster::query()->where('enabled', true)->count();
         $deployed = $order->dns_revision !== null && $order->domain_id !== null
@@ -196,6 +197,12 @@ class IssueManagedCertificate implements ShouldBeUnique, ShouldQueue
                 Operation::coalesceDomain('dns.zone_reconcile', $order->domain_id);
                 ReconcileDnsZone::dispatch($order->domain_id)->afterCommit();
             }
+            $order->update(['next_poll_at' => now()->addSeconds(10)]);
+            $this->release(10);
+
+            return;
+        }
+        if (! $propagation->visible($order)) {
             $order->update(['next_poll_at' => now()->addSeconds(10)]);
             $this->release(10);
 

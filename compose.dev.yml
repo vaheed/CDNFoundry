@@ -26,6 +26,7 @@ x-core-env: &core-env
   ACME_VERIFY_TLS: "false"
   ACME_CONTACT_EMAIL: admin@example.test
   ACME_INITIAL_JITTER_SECONDS: "1"
+  ACME_DNS_PROBE_SERVER: dnsdist
   EDGE_IDENTITY_CA_CERTIFICATE: /run/dev-pki/edge-identity-ca.crt
   EDGE_IDENTITY_CA_PRIVATE_KEY: /run/dev-pki/edge-identity-ca.key
   CLICKHOUSE_URL: http://clickhouse:8123
@@ -72,7 +73,7 @@ x-core: &core
     vendor-init: { condition: service_completed_successfully }
     control-db: { condition: service_healthy }
     redis: { condition: service_healthy }
-  networks: [control, telemetry]
+  networks: [control, telemetry, dns]
   restart: unless-stopped
 
 x-dev-cell-env: &dev-cell-env

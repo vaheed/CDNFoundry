@@ -53,9 +53,14 @@ class DnsReconciliationTest extends TestCase
         ], $domain->name));
         $cluster = DnsCluster::query()->create($this->clusterData());
         $this->platformIdentity();
-        Http::fake(function (Request $request) {
+        $published = null;
+        Http::fake(function (Request $request) use (&$published) {
             if ($request->method() === 'GET') {
-                return Http::response([], 404);
+                return $published === null ? Http::response([], 404) : Http::response(['rrsets' => $published]);
+            }
+
+            if ($request->method() === 'PATCH') {
+                $published = collect($request->data()['rrsets'])->where('changetype', 'REPLACE')->map(fn (array $rrset): array => collect($rrset)->except('changetype')->all())->values()->all();
             }
 
             return Http::response([], $request->method() === 'POST' ? 201 : 204);
@@ -96,6 +101,36 @@ class DnsReconciliationTest extends TestCase
         $this->assertSame(1, $deployment->deployed_revision);
         $this->assertEquals($previous, $deployment->active_rrsets);
         $this->assertStringContainsString('503', $deployment->last_error);
+    }
+
+    public function test_read_back_mismatch_attempts_rollback_and_keeps_previous_deployment(): void
+    {
+        $domain = $this->domain();
+        $cluster = DnsCluster::query()->create($this->clusterData());
+        $this->platformIdentity();
+        $previous = [['name' => 'example.com.', 'type' => 'A', 'ttl' => 300, 'records' => [['content' => '192.0.2.1', 'disabled' => false]]]];
+        DnsDeployment::query()->create([
+            'domain_id' => $domain->id, 'dns_cluster_id' => $cluster->id, 'desired_revision' => 1,
+            'deployed_revision' => 1, 'status' => 'succeeded', 'active_checksum' => str_repeat('a', 64), 'active_rrsets' => $previous,
+        ]);
+        $domain->update(['revision' => 2]);
+        Http::fake(fn (Request $request) => $request->method() === 'GET'
+            ? Http::response(['rrsets' => $previous]) : Http::response([], 204));
+
+        try {
+            (new ReconcileDnsZone($domain->id))->handle(app(PowerDnsClient::class));
+            $this->fail('A mismatched runtime must not be acknowledged.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('read-back', $exception->getMessage());
+        }
+
+        $deployment = DnsDeployment::query()->firstOrFail();
+        $this->assertSame(1, $deployment->deployed_revision);
+        $this->assertEquals($previous, $deployment->active_rrsets);
+        $this->assertSame('failed', $deployment->status);
+        Http::assertSentCount(5); // existence read, candidate patch, read-back, rollback patch, rollback read-back
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'PATCH'
+            && collect($request->data()['rrsets'] ?? [])->contains(fn (array $rrset): bool => ($rrset['type'] ?? null) === 'A' && ($rrset['records'][0]['content'] ?? null) === '192.0.2.1'));
     }
 
     public function test_powerdns_client_uses_the_configured_private_ca(): void

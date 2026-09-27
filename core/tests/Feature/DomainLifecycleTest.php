@@ -85,9 +85,14 @@ class DomainLifecycleTest extends TestCase
         Queue::assertPushed(ReconcileDnsZone::class, 1);
         Queue::assertNotPushed(VerifyDomainNameservers::class);
 
-        Http::fake(function ($request) {
+        $published = null;
+        Http::fake(function ($request) use (&$published) {
             if ($request->method() === 'GET') {
-                return Http::response([], 404);
+                return $published === null ? Http::response([], 404) : Http::response(['rrsets' => $published]);
+            }
+
+            if ($request->method() === 'PATCH') {
+                $published = collect($request->data()['rrsets'])->filter(fn (array $rrset): bool => $rrset['changetype'] === 'REPLACE')->values()->all();
             }
 
             return Http::response([], $request->method() === 'POST' ? 201 : 204);

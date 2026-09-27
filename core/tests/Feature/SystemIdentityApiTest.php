@@ -36,11 +36,7 @@ class SystemIdentityApiTest extends TestCase
             'api_url' => 'http://pdns-auth:8081', 'api_key' => 'private-test-key', 'server_id' => 'localhost',
             'nameservers' => [['hostname' => 'ns1.cdnf.test'], ['hostname' => 'ns2.cdnf.test']],
         ]);
-        Http::fake(fn (Request $request) => match ($request->method()) {
-            'GET' => Http::response([], 404),
-            'POST' => Http::response([], 201),
-            'PATCH' => Http::response([], 204),
-        });
+        $this->fakePowerDnsPublication();
 
         $validation = $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)
             ->assertOk()->assertJsonPath('data.valid', true);
@@ -121,11 +117,7 @@ class SystemIdentityApiTest extends TestCase
             'input' => ['settings_id' => 1, 'revision' => 1],
         ]);
         PlatformDnsSetting::query()->create(['id' => 1, ...$this->validPayload(), 'revision' => 1]);
-        Http::fake(fn (Request $request) => match ($request->method()) {
-            'GET' => Http::response([], 404),
-            'POST' => Http::response([], 201),
-            'PATCH' => Http::response([], 204),
-        });
+        $this->fakePowerDnsPublication();
 
         (new ApplyPlatformDnsSettings($operation->id))->handle(app(PowerDnsClient::class));
 
@@ -281,6 +273,21 @@ class SystemIdentityApiTest extends TestCase
 
         $this->actingAs($other)->getJson('/api/admin/system/settings/dns')->assertForbidden();
         $this->actingAs($other)->getJson("/api/operations/$operation->id")->assertForbidden();
+    }
+
+    private function fakePowerDnsPublication(): void
+    {
+        $published = null;
+        Http::fake(function (Request $request) use (&$published) {
+            if ($request->method() === 'GET') {
+                return $published === null ? Http::response([], 404) : Http::response(['rrsets' => $published]);
+            }
+            if ($request->method() === 'PATCH') {
+                $published = collect($request->data()['rrsets'])->filter(fn (array $rrset): bool => $rrset['changetype'] === 'REPLACE')->values()->all();
+            }
+
+            return Http::response([], $request->method() === 'POST' ? 201 : 204);
+        });
     }
 
     private function validPayload(): array

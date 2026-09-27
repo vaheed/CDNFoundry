@@ -17,6 +17,7 @@ use App\Models\TlsCertificate;
 use App\Models\TlsOrder;
 use App\Models\User;
 use App\Support\AcmeClient;
+use App\Support\AcmeDnsPropagation;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -108,6 +109,16 @@ PEM,
 
     public function test_managed_dns01_order_activates_only_after_dns_ack_and_cleans_challenges(): void
     {
+        $propagation = new class extends AcmeDnsPropagation
+        {
+            public bool $ready = false;
+
+            public function visible(TlsOrder $order): bool
+            {
+                return $this->ready;
+            }
+        };
+        $this->app->instance(AcmeDnsPropagation::class, $propagation);
         Queue::fake();
         config()->set('services.acme.enabled', true);
         config()->set('services.acme.contact_email', 'admin@example.test');
@@ -154,6 +165,11 @@ PEM,
         ]);
         DnsDeployment::query()->where('domain_id', $domain->id)->update(['status' => 'succeeded', 'deployed_revision' => $order->dns_revision]);
 
+        $order->update(['next_poll_at' => now()->subSecond()]);
+        $job->handle($client);
+        $this->assertSame('publishing', $order->refresh()->status, 'The CA must wait for an authoritative TXT response.');
+        $propagation->ready = true;
+
         foreach (['publishing', 'validating', 'finalizing'] as $expected) {
             $order->update(['next_poll_at' => now()->subSecond()]);
             $job->handle($client);
@@ -165,6 +181,16 @@ PEM,
         $this->assertNotSame($certificate->private_key_ciphertext, DB::table('tls_certificates')->where('id', $certificate->id)->value('private_key_ciphertext'));
         $this->assertDatabaseHas('acme_challenges', ['status' => 'cleaned']);
         $this->assertDatabaseHas('operations', ['type' => 'tls.managed_certificate', 'status' => 'succeeded']);
+    }
+
+    public function test_acme_txt_probe_requires_authoritative_exact_value(): void
+    {
+        $header = ";; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 1\n;; flags: qr aa; QUERY: 1, ANSWER: 1\n";
+        $answer = "_acme-challenge.example.test. 30 IN TXT \"owned-token\"\n";
+        $this->assertTrue(AcmeDnsPropagation::hasAnswer($header.$answer, '_acme-challenge.example.test', 'owned-token'));
+        $this->assertFalse(AcmeDnsPropagation::hasAnswer($header.$answer, '_acme-challenge.example.test', 'other-token'));
+        $this->assertFalse(AcmeDnsPropagation::hasAnswer(str_replace('qr aa', 'qr ra', $header).$answer, '_acme-challenge.example.test', 'owned-token'));
+        $this->assertFalse(AcmeDnsPropagation::hasAnswer($header.$answer, '_acme-challenge.other.test', 'owned-token'));
     }
 
     public function test_lost_finalize_response_reuses_persisted_key_and_request(): void
