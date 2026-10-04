@@ -93,7 +93,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Prepare disposable runner space for source image builds
         run: bash scripts/prepare-image-runner.sh
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
           buildkitd-config-inline: |
             [worker.oci]
@@ -105,7 +105,7 @@ jobs:
           echo "BUILD_DATE=$(git show -s --format=%cI HEAD)" >> "$GITHUB_ENV"
           python3 scripts/ci/images.py cache "$IMAGE_GROUP"
       - name: Build and cache this image group
-        uses: docker/bake-action@5be5f02ff8819ecd3092ea6b2e6261c31774f2b4 # v6
+        uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
         env:
           SOURCE_REVISION: ${{ github.sha }}
           RELEASE_VERSION: ${{ github.ref_name }}
@@ -163,7 +163,7 @@ jobs:
       - name: Validate Python syntax
         run: python3 -m compileall -q tests/e2e tests/docs tests/fleet tests/qualification tests/supply_chain scripts/cdnfoundry_fleet scripts/ci
       - name: Download exact production images
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: production-images-*
           path: storage/ci-images
@@ -445,7 +445,7 @@ jobs:
     steps:
       - name: Deploy VitePress to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
 
   production-dependencies:
     name: Scan immutable production dependency images
@@ -498,7 +498,7 @@ jobs:
             "${RELEASE}" "${RELEASE_REF_NAME}" "${WORKFLOW_RUN_ID}" \
             > release-evidence/build-context.txt
       - name: Download exact production images
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: production-images-*
           path: storage/ci-images
