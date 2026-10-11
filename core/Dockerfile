@@ -1,4 +1,4 @@
-FROM php:8.5-fpm-alpine@sha256:9dc81f4086ea5402227a6bcc489b04b4baba12394624d9621faa92ed812fb8ee AS php-dependencies
+FROM php:8.5-fpm-alpine@sha256:fa01fb1645cd0fc566a5f146b099adace33b906571f972f71f2182a7c12d1cd7 AS php-dependencies
 
 RUN apk add --no-cache --upgrade curl=8.22.0-r0 libcurl=8.22.0-r0 libcrypto3=3.5.8-r0 libssl3=3.5.8-r0 openssl=3.5.8-r0 bind-tools icu-libs libpq libzip libmaxminddb nginx supervisor su-exec postgresql-client restic \
     && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS icu-dev postgresql-dev libzip-dev \
