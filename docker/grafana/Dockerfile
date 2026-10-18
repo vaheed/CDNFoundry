@@ -1,5 +1,5 @@
 ARG GRAFANA_IMAGE=grafana/grafana:12.4.11@sha256:3ea272e5cab64a4a62240c682e2c62433b25614d956d44c299a10cb6994f6f2e
-FROM golang:1.26.8-alpine@sha256:ce864e7223ac17b1775e6fd0b4c0db580c2eb50e7953a427916379e4b92a1628 AS clickhouse-plugin
+FROM golang:1.27.2-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS clickhouse-plugin
 RUN apk add --no-cache git
 RUN git clone --filter=blob:none --no-checkout https://github.com/grafana/clickhouse-datasource.git /src \
     && git -C /src checkout --detach 551f9c4e32359f3844f659ce7ffd51fe7df77a07
@@ -8,7 +8,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     go mod download && go mod verify \
     && CGO_ENABLED=0 GOMAXPROCS=2 GOMEMLIMIT=1GiB go build -p=2 -mod=readonly -trimpath -ldflags='-s -w' -o /plugin ./pkg
 
-FROM golang:1.26.8-alpine@sha256:ce864e7223ac17b1775e6fd0b4c0db580c2eb50e7953a427916379e4b92a1628 AS backend
+FROM golang:1.27.2-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS backend
 RUN apk add --no-cache git patch
 WORKDIR /src
 ADD --checksum=sha256:07622e9c2b67eded2a9c2ad52d8d8e26cb6f17e594152046f447302aed975ef1 \
