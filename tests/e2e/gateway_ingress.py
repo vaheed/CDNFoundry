@@ -33,8 +33,16 @@ def runtime(volume: str = STATE_VOLUME) -> tuple[dict, dict]:
         "print(json.dumps(json.load(open('/state/gateway.json'))));"
         "print(json.dumps(json.load(open('/state/active.json'))))"
     )
-    output = run("docker", "run", "--rm", "-v", f"{volume}:/state:ro", "python:3.13-alpine", "python", "-c", script).stdout
-    gateway, cell = output.splitlines()
+    result = subprocess.run(
+        ["docker", "run", "--rm", "-v", f"{volume}:/state:ro", "python:3.13-alpine", "python", "-c", script],
+        cwd=ROOT, text=True, capture_output=True,
+    )
+    if result.returncode:
+        raise RuntimeError(f"Could not read gateway state from {volume}: {result.stderr.strip()}")
+    lines = result.stdout.splitlines()
+    if len(lines) != 2:
+        raise RuntimeError(f"Expected two gateway state documents from {volume}, received {len(lines)}")
+    gateway, cell = lines
     return json.loads(gateway), json.loads(cell)
 
 

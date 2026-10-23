@@ -1,5 +1,4 @@
 /.env.dev
-/.env.prod
 /.dev/
 /edge-agent/edge-agent
 /docs/node_modules/
@@ -10,4 +9,8 @@
 __pycache__/
 *.py[cod]
 storage
-.prod/*
+.stage/
+.prod/
+
+stage-configs/
+
