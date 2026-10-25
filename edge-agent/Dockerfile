@@ -1,4 +1,4 @@
-FROM golang:1.26.8-alpine@sha256:ce864e7223ac17b1775e6fd0b4c0db580c2eb50e7953a427916379e4b92a1628 AS build
+FROM golang:1.27.3-alpine@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c AS build
 ENV GOMAXPROCS=2 GOFLAGS=-p=2
 WORKDIR /src
 COPY go.mod ./
