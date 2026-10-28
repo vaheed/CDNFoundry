@@ -37,7 +37,7 @@ COPY --from=backend --chmod=0755 /out/grafana /usr/share/grafana/bin/grafana
 ADD --checksum=sha256:${CLICKHOUSE_PLUGIN_SHA256} \
     https://grafana.com/api/plugins/grafana-clickhouse-datasource/versions/${CLICKHOUSE_PLUGIN_VERSION}/download?os=linux&arch=amd64 \
     /tmp/grafana-clickhouse-datasource.zip
-RUN apk add --no-cache --upgrade libcrypto3=3.5.8-r0 libssl3=3.5.8-r0 \
+RUN apk add --no-cache --upgrade 'libcrypto3>=3.5.8-r0' 'libssl3>=3.5.8-r0' \
     && mkdir -p /usr/share/grafana/cdnfoundry-plugins \
     && unzip -q /tmp/grafana-clickhouse-datasource.zip -d /usr/share/grafana/cdnfoundry-plugins \
     && rm /tmp/grafana-clickhouse-datasource.zip \
