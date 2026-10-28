@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/vaheed/CDNFoundry/actions/workflows/ci.yml/badge.svg)](https://github.com/vaheed/CDNFoundry/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/vaheed/CDNFoundry?display_name=tag)](https://github.com/vaheed/CDNFoundry/releases)
-[![License: MIT](https://img.shields.io/badge/license-MIT-0f6f8f.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-0f6f8f.svg)](LICENSE)
 [![PHP 8.3+](https://img.shields.io/badge/PHP-8.3%2B-777bb4.svg)](core/composer.json)
 [![Go 1.24](https://img.shields.io/badge/Go-1.24-00add8.svg)](edge-agent/go.mod)
 [![Documentation website](https://img.shields.io/badge/docs-VitePress-1c9a7d.svg)](https://vaheed.github.io/CDNFoundry/)
@@ -243,4 +243,4 @@ Read [AGENTS.md](AGENTS.md) before modifying behavior. In particular:
 - preserve previous valid runtime state when a candidate fails;
 
 See [Contributing](CONTRIBUTING.md), [Security](SECURITY.md),
-[Code of conduct](CODE_OF_CONDUCT.md), and [MIT license](LICENSE).
+[Code of conduct](CODE_OF_CONDUCT.md), and [Apache-2.0 license](LICENSE).
