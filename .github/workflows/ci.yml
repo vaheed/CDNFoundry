@@ -94,7 +94,7 @@ jobs:
       fail-fast: false
       max-parallel: 9
       matrix:
-        group: [application, edge, dashboards, authoritative-dns, dns-routing, monitoring, agents, logging, storage]
+        group: [application, edge, agents]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Prepare disposable runner space for source image builds
@@ -221,7 +221,7 @@ jobs:
             -v "$PWD/docker/vector/host-journal.yaml:/etc/vector/host-journal.yaml:ro" \
             -v /var/run/docker.sock:/var/run/docker.sock:ro \
             -v /tmp:/vector-data-dir \
-            ghcr.io/vaheed/cdnfoundry-vector:ci \
+            timberio/vector:0.58.0-debian@sha256:1c1ea358c617ea0b23003d5af87f7a678b30f8f7096437e680380c47fc13d2d9 \
             validate --skip-healthchecks /etc/vector/operational.yaml /etc/vector/host-journal.yaml
           docker run --rm \
             -e VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true \
@@ -232,10 +232,10 @@ jobs:
             -v "$PWD/docker/vector/operational.yaml:/etc/vector/operational.yaml:ro" \
             -v /var/run/docker.sock:/var/run/docker.sock:ro \
             -v /tmp:/vector-data-dir \
-            ghcr.io/vaheed/cdnfoundry-vector:ci \
+            timberio/vector:0.58.0-debian@sha256:1c1ea358c617ea0b23003d5af87f7a678b30f8f7096437e680380c47fc13d2d9 \
             test /etc/vector/operational.yaml
           docker run --rm -e LOKI_RETENTION_PERIOD=168h -e LOKI_MAX_QUERY_LENGTH=168h \
-            ghcr.io/vaheed/cdnfoundry-loki:ci -config.file=/etc/loki/loki.yml -config.expand-env=true -verify-config=true
+            grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193 -config.file=/etc/loki/loki.yml -config.expand-env=true -verify-config=true
           docker run --rm --entrypoint /bin/promtool \
             -v "$PWD/docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
             -v "$PWD/docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro" \
@@ -245,13 +245,13 @@ jobs:
             -v "$PWD/docker/prometheus/dns-targets.dev.yml:/etc/prometheus/dns-targets.yml:ro" \
             -v "$PWD/docker/prometheus/edge-targets.dev.yml:/etc/prometheus/edge-targets.yml:ro" \
             -v "$PWD/docker/prometheus/operational-log-targets.dev.yml:/etc/prometheus/operational-log-targets.yml:ro" \
-            ghcr.io/vaheed/cdnfoundry-prometheus:ci \
+            prom/prometheus:v3.13.3@sha256:6976aa8a60fec930796ce5772b8d12da7a318a5daa8d40d69c5c7819a05eeed7 \
             check config /etc/prometheus/prometheus.yml
-          docker run --rm --entrypoint /bin/promtool -v "$PWD/docker/prometheus:/etc/prometheus:ro" ghcr.io/vaheed/cdnfoundry-prometheus:ci \
+          docker run --rm --entrypoint /bin/promtool -v "$PWD/docker/prometheus:/etc/prometheus:ro" prom/prometheus:v3.13.3@sha256:6976aa8a60fec930796ce5772b8d12da7a318a5daa8d40d69c5c7819a05eeed7 \
             test rules /etc/prometheus/alerts.test.yml
       - name: Qualify bounded Vector buffers at runtime
         run: |
-          if ! python3 tests/e2e/vector_buffer_startup.py --image ghcr.io/vaheed/cdnfoundry-vector:ci > /tmp/cdnfoundry-vector-startup.log 2>&1; then
+          if ! python3 tests/e2e/vector_buffer_startup.py --image timberio/vector:0.58.0-debian@sha256:1c1ea358c617ea0b23003d5af87f7a678b30f8f7096437e680380c47fc13d2d9 > /tmp/cdnfoundry-vector-startup.log 2>&1; then
             df -h /tmp /var/lib/docker
             tail -n 20 /tmp/cdnfoundry-vector-startup.log
             annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-vector-startup.log)"
@@ -286,7 +286,7 @@ jobs:
       - name: Qualify ClickHouse LTS data upgrade and permissions
         run: python3 tests/e2e/clickhouse_upgrade.py
       - name: Qualify patched Caddy with production configs and real TLS
-        run: python3 tests/e2e/caddy_ingress.py --image ghcr.io/vaheed/cdnfoundry-caddy:ci
+        run: python3 tests/e2e/caddy_ingress.py --image caddy:2.11-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
       - name: Qualify uploaded certificate chains with real TLS clients
         run: python3 tests/e2e/uploaded_tls.py --core-image cdnfoundry/core:ci --edge-image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
       - name: Smoke-test the read-only core image
@@ -572,7 +572,7 @@ jobs:
           WORKFLOW_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
-          images=(core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater grafana loki postgres vector node-exporter alertmanager prometheus pdns dnsdist caddy)
+          images=(core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater)
           aliases=()
           push_with_retry() {
             local image="$1"

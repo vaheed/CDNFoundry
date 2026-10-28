@@ -339,23 +339,18 @@ services:
 
   loki:
     logging: *bounded-logging
-    build:
-      context: ./docker/loki
+    image: grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193
+    command: [-config.file=/etc/loki/loki.yml, -config.expand-env=true]
     ports: ["127.0.0.1:3100:3100"]
     environment:
       LOKI_RETENTION_PERIOD: 168h
       LOKI_MAX_QUERY_LENGTH: 168h
-    volumes: [loki-data:/loki]
+    volumes: [./docker/loki/loki.yml:/etc/loki/loki.yml:ro, loki-data:/loki]
     depends_on:
       loki-data-init: { condition: service_completed_successfully }
     networks: [telemetry]
     restart: unless-stopped
-    healthcheck:
-      test: [CMD, /usr/local/bin/busybox, wget, -qO-, http://127.0.0.1:3100/ready]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 10s
+    healthcheck: { disable: true }
 
   log-collector:
     logging: *bounded-logging
@@ -421,10 +416,23 @@ services:
     networks: [control]
     restart: "no"
 
+  grafana-plugins-init:
+    logging: *bounded-logging
+    image: alpine:3.22.6@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
+    command:
+      - sh
+      - -ec
+      - if [ -f /plugins/grafana-clickhouse-datasource/plugin.json ]; then echo present; exit 0; fi; wget -qO /tmp/plugin.zip 'https://grafana.com/api/plugins/grafana-clickhouse-datasource/versions/4.21.3/download?os=linux&arch=amd64' && echo '53c0602214e7ca1af1733962779293587386b0b9a8c544ecead80b819e5f560b  /tmp/plugin.zip' | sha256sum -c - && unzip -q /tmp/plugin.zip -d /plugins && rm /tmp/plugin.zip
+    volumes: [grafana-plugins:/plugins]
+    networks: [telemetry, control]
+    restart: "no"
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+
   grafana:
     logging: *bounded-logging
-    build:
-      context: ./docker/grafana
+    image: grafana/grafana:12.4.11@sha256:3ea272e5cab64a4a62240c682e2c62433b25614d956d44c299a10cb6994f6f2e
     ports: ["127.0.0.1:3000:3000"]
     environment:
       GF_SECURITY_ADMIN_USER: admin
@@ -435,7 +443,7 @@ services:
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
       GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
-      GF_PATHS_PLUGINS: /usr/share/grafana/cdnfoundry-plugins
+      GF_PATHS_PLUGINS: /var/lib/grafana/plugins
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/system-command-center.json
       GRAFANA_CLICKHOUSE_HOST: clickhouse
       GRAFANA_CLICKHOUSE_PORT: 9000
@@ -452,9 +460,11 @@ services:
       GRAFANA_LOKI_URL: http://loki:3100
     volumes:
       - grafana-data:/var/lib/grafana
+      - grafana-plugins:/var/lib/grafana/plugins:ro
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
+      grafana-plugins-init: { condition: service_completed_successfully }
       clickhouse: { condition: service_healthy }
       grafana-control-db-provision: { condition: service_completed_successfully }
       prometheus: { condition: service_started }
@@ -949,6 +959,7 @@ volumes:
   loki-data: {}
   prometheus: {}
   grafana-data: {}
+  grafana-plugins:
   mmdb: {}
   dev-pki: {}
   edge-a-state: {}

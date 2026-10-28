@@ -37,24 +37,11 @@ class ImageReferenceTests(unittest.TestCase):
                 patch.object(policy, 'production_release_images', return_value=references), \
                 patch.object(policy.subprocess, 'run', side_effect=execute):
             with self.assertRaises(SystemExit):
-                policy.scan_production_dependencies(Path(directory), release='ci')
+                policy.scan_release_images(Path(directory), 'ci')
             summary = json.loads((Path(directory) / 'summary.json').read_text())
             self.assertEqual(['failed', 'passed'], [row['status'] for row in summary['results']])
         self.assertFalse(any(command[:2] == ['docker', 'pull'] for command in commands))
         self.assertTrue(any(command[-1] == references[1] for command in commands))
-
-    def test_dependency_scan_includes_role_overrides_and_deduplicates(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            overrides = root / 'deploy/production'
-            overrides.mkdir(parents=True)
-            (root / 'compose.prod.yml').write_text('services:\n  core:\n    image: "${CDNF_CORE_IMAGE:?required}"\n  database:\n    image: '+PIN+'\n')
-            second = 'vendor/service@sha256:'+'b'*64
-            (overrides / 'logs.yml').write_text('services:\n  duplicate:\n    image: '+PIN+'\n  collector:\n    image: '+second+'\n')
-            self.assertEqual(sorted([PIN, second]), policy.production_dependency_images(root))
-            (overrides / 'logs.yml').write_text('services:\n  collector:\n    image: vendor/service:latest\n')
-            with self.assertRaises(ValueError):
-                policy.production_dependency_images(root)
 
     def test_compose_images_require_a_digest_or_the_checked_runtime_variable(self):
         for reference in ('alpine:latest', 'postgres:18', '${ARBITRARY_IMAGE}', '${CDNF_CORE_IMAGE:-mutable}'):

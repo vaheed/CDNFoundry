@@ -36,7 +36,7 @@ def main() -> None:
                 '--memory', '256m', '--tmpfs', '/var/lib/postgresql:rw,size=128m',
                 '-e', 'POSTGRES_USER=pdns', '-e', 'POSTGRES_PASSWORD=pdns-dev-only', '-e', 'POSTGRES_DB=pdns',
                 '-v', f'{ROOT}/docker/postgres/pdns-schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro',
-                'ghcr.io/vaheed/cdnfoundry-postgres:ci')
+                'postgres:18.6-alpine3.24@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd')
             # The entrypoint's temporary initialization server accepts Unix socket
             # queries, then stops before the final server starts. TCP is ready only
             # after that handoff, so both the probe and fixture insert use TCP.
@@ -65,7 +65,7 @@ INSERT INTO records (domain_id,name,type,content,ttl,auth) VALUES
             run('docker', 'run', '-d', '--name', auth, '--network', name, '--network-alias', 'pdns-auth',
                 '--memory', '256m', '--group-add', '82', '-v', f'{root}/pdns.conf:/etc/powerdns/pdns.conf:ro',
                 '-v', f'{ROOT}/docker/pdns/geoip-zones.yml:/etc/powerdns/geoip-zones.yml:ro',
-                'ghcr.io/vaheed/cdnfoundry-pdns:ci')
+                'powerdns/pdns-auth-51:5.1.4@sha256:bb5b1c133bcca1dd455075321de7d55db4945a8d7f2ba23339e3c7bbe416b205')
             for _ in range(60):
                 if run('docker', 'exec', auth, 'pdns_control', 'rping', check=False).returncode == 0:
                     break
@@ -78,7 +78,7 @@ INSERT INTO records (domain_id,name,type,content,ttl,auth) VALUES
             run('docker', 'run', '-d', '--name', dnsdist, '--network', name, '--network-alias', 'vector',
                 '--memory', '256m', '-p', '127.0.0.1::53/udp', '-p', '127.0.0.1::53/tcp',
                 '-v', f'{ROOT}/docker/dnsdist/dnsdist.conf:/etc/dnsdist/dnsdist.conf:ro',
-                'ghcr.io/vaheed/cdnfoundry-dnsdist:ci')
+                'powerdns/dnsdist-21:2.1.2@sha256:efabf173811e27438bebee5f1f40e047f263ea39093a8f7d6097df494cf1ed67')
             for transport in ('udp', 'tcp'):
                 port = run('docker', 'port', dnsdist, '53/'+transport).stdout.strip().rsplit(':', 1)[1]
                 for hostname, kind, expected in [('www.qualification.test', 'A', '192.0.2.42'),
@@ -106,8 +106,10 @@ INSERT INTO records (domain_id,name,type,content,ttl,auth) VALUES
                 time.sleep(0.5)
             else:
                 raise RuntimeError('Compiled PowerDNS did not recover after restart')
-            identities = {c: run('docker', 'image', 'inspect', f'ghcr.io/vaheed/cdnfoundry-{c}:ci', '--format', '{{.Id}}').stdout.strip()
-                          for c in ('pdns', 'dnsdist', 'postgres')}
+            identities = {c: run('docker', 'image', 'inspect', ref, '--format', '{{.Id}}').stdout.strip()
+                          for c, ref in (('pdns', 'powerdns/pdns-auth-51:5.1.4@sha256:bb5b1c133bcca1dd455075321de7d55db4945a8d7f2ba23339e3c7bbe416b205'),
+                                         ('dnsdist', 'powerdns/dnsdist-21:2.1.2@sha256:efabf173811e27438bebee5f1f40e047f263ea39093a8f7d6097df494cf1ed67'),
+                                         ('postgres', 'postgres:18.6-alpine3.24@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd'))}
             print(json.dumps({'qualification': 'dns_images', 'images': identities, 'udp_tcp_answers': 'passed',
                               'a_aaaa_lua': 'passed', 'geoip_module_load': 'passed', 'metrics': 'passed',
                               'authenticated_zone_api': 'passed', 'telemetry_outage_serving': 'passed', 'auth_restart': 'passed'}))

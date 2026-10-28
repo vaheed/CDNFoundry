@@ -24,10 +24,10 @@ remain rebuildable rather than becoming hidden sources of truth.
 | `edge-agent/` | Go enrollment, sync, activation, heartbeat, and task agent |
 | `docker/openresty/` | Data-driven request/runtime Lua |
 | `docker/nginx/` | Web, edge-control, OpenResty, proxy, cache, and fixtures |
-| `docker/pdns`, `docker/dnsdist` | Authoritative DNS runtime |
+| `docker/pdns`, `docker/dnsdist` | Authoritative DNS configuration mounted into upstream images |
 | `docker/postgres` | PowerDNS base schema and separate runtime migrations |
 | `docker/vector`, `docker/clickhouse` | Telemetry pipeline and schema |
-| `docker/prometheus`, `docker/alertmanager` | Metrics and alerts |
+| `docker/prometheus`, `docker/alertmanager` | Metrics and alert configuration mounted into upstream images |
 | `compose.dev.yml` | Persistent full development topology |
 | `compose.prod.yml` | Role-based production service definitions |
 | `deploy/production/` | Fleet examples and production deployment assets |

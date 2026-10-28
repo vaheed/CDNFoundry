@@ -119,9 +119,11 @@ x-core: &core
 services:
   caddy:
     logging: *bounded-logging
-    image: ${CDNF_CADDY_IMAGE:?CDNF_CADDY_IMAGE must be an immutable image reference}
+    image: caddy:2.11-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
     profiles: [control]
     environment:
+      XDG_CONFIG_HOME: /config
+      XDG_DATA_HOME: /data
       CONTROL_HOSTNAME: ${CONTROL_HOSTNAME:?CONTROL_HOSTNAME is required}
       TELEMETRY_HOSTNAME: ${TELEMETRY_HOSTNAME:?TELEMETRY_HOSTNAME is required}
       GRAFANA_HOSTNAME: ${GRAFANA_HOSTNAME:?GRAFANA_HOSTNAME is required}
@@ -144,9 +146,11 @@ services:
 
   dns-api:
     logging: *bounded-logging
-    image: ${CDNF_CADDY_IMAGE:?CDNF_CADDY_IMAGE must be an immutable image reference}
+    image: caddy:2.11-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
     profiles: [dns]
     environment:
+      XDG_CONFIG_HOME: /config
+      XDG_DATA_HOME: /data
       DNS_API_HOSTNAME: ${DNS_API_HOSTNAME:?DNS_API_HOSTNAME is required}
       CONTROL_PUBLIC_IPV4_ALLOWLIST: ${CONTROL_PUBLIC_IPV4_ALLOWLIST}
       CONTROL_PUBLIC_IPV6_ALLOWLIST: ${CONTROL_PUBLIC_IPV6_ALLOWLIST}
@@ -163,9 +167,11 @@ services:
 
   telemetry-gateway:
     logging: *bounded-logging
-    image: ${CDNF_CADDY_IMAGE:?CDNF_CADDY_IMAGE must be an immutable image reference}
+    image: caddy:2.11-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
     profiles: [telemetry]
     environment:
+      XDG_CONFIG_HOME: /config
+      XDG_DATA_HOME: /data
       TELEMETRY_HOSTNAME: ${TELEMETRY_HOSTNAME:?TELEMETRY_HOSTNAME is required}
       GRAFANA_HOSTNAME: ${GRAFANA_HOSTNAME:?GRAFANA_HOSTNAME is required}
       ACME_CONTACT_EMAIL: ${ACME_CONTACT_EMAIL:?ACME_CONTACT_EMAIL is required}
@@ -259,7 +265,7 @@ services:
 
   control-db:
     logging: *bounded-logging
-    image: ${CDNF_POSTGRES_IMAGE:?CDNF_POSTGRES_IMAGE must be an immutable image reference}
+    image: postgres:18.6-alpine3.24@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
     profiles: [control]
     environment:
       POSTGRES_DB: cdnf
@@ -290,7 +296,7 @@ services:
 
   pdns-db:
     logging: *bounded-logging
-    image: ${CDNF_POSTGRES_IMAGE:?CDNF_POSTGRES_IMAGE must be an immutable image reference}
+    image: postgres:18.6-alpine3.24@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
     profiles: [dns]
     environment:
       POSTGRES_DB: pdns
@@ -310,7 +316,10 @@ services:
 
   pdns-auth:
     logging: *bounded-logging
-    image: ${CDNF_PDNS_IMAGE:?CDNF_PDNS_IMAGE must be an immutable image reference}
+    image: powerdns/pdns-auth-51:5.1.4@sha256:bb5b1c133bcca1dd455075321de7d55db4945a8d7f2ba23339e3c7bbe416b205
+    entrypoint: [/usr/local/sbin/pdns_server]
+    command: [--disable-syslog, --daemon=no, --guardian=no]
+    init: true
     profiles: [dns]
     volumes:
       - ./docker/pdns/pdns.conf:/etc/powerdns/pdns.conf:ro
@@ -329,7 +338,7 @@ services:
 
   pdns-migrate:
     logging: *bounded-logging
-    image: ${CDNF_POSTGRES_IMAGE:?CDNF_POSTGRES_IMAGE must be an immutable image reference}
+    image: postgres:18.6-alpine3.24@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
     profiles: [tools]
     command: [psql, -v, ON_ERROR_STOP=1, -h, pdns-db, -U, pdns, -d, pdns, -f, /migrations/2026_07_17_000001_add_powerdns_metadata_tables.sql]
     environment: { PGPASSWORD: "${PDNS_DB_PASSWORD}" }
@@ -341,7 +350,10 @@ services:
 
   dnsdist:
     logging: *bounded-logging
-    image: ${CDNF_DNSDIST_IMAGE:?CDNF_DNSDIST_IMAGE must be an immutable image reference}
+    image: powerdns/dnsdist-21:2.1.2@sha256:efabf173811e27438bebee5f1f40e047f263ea39093a8f7d6097df494cf1ed67
+    entrypoint: [/usr/local/bin/dnsdist]
+    command: [--supervised, --disable-syslog]
+    init: true
     profiles: [dns]
     ports:
       - "${DNS_BIND_V4}:53:53/udp"
@@ -386,7 +398,7 @@ services:
 
   vector:
     logging: *bounded-logging
-    image: ${CDNF_VECTOR_IMAGE:?CDNF_VECTOR_IMAGE must be an immutable image reference}
+    image: timberio/vector:0.58.0-debian@sha256:1c1ea358c617ea0b23003d5af87f7a678b30f8f7096437e680380c47fc13d2d9
     profiles: [telemetry, dns, edge]
     environment:
       VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION: "true"
@@ -415,12 +427,13 @@ services:
 
   loki:
     logging: *bounded-logging
-    image: ${CDNF_LOKI_IMAGE:?CDNF_LOKI_IMAGE must be an immutable image reference}
+    image: grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193
+    command: [-config.file=/etc/loki/loki.yml, -config.expand-env=true]
     profiles: [telemetry]
     environment:
       LOKI_RETENTION_PERIOD: ${LOKI_RETENTION_PERIOD}
       LOKI_MAX_QUERY_LENGTH: ${LOKI_MAX_QUERY_LENGTH}
-    volumes: [loki-data:/loki]
+    volumes: [./docker/loki/loki.yml:/etc/loki/loki.yml:ro, loki-data:/loki]
     depends_on:
       loki-data-init: { condition: service_completed_successfully }
     networks: [telemetry]
@@ -431,19 +444,14 @@ services:
     cpus: 1
     pids_limit: 128
     cap_drop: [ALL]
-    healthcheck:
-      test: [CMD, /usr/local/bin/busybox, wget, -qO-, http://127.0.0.1:3100/ready]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 10s
+    healthcheck: { disable: true }
     deploy:
       resources:
         limits: { memory: 1g, cpus: "1", pids: 128 }
 
   log-collector:
     logging: *bounded-logging
-    image: ${CDNF_VECTOR_IMAGE:?CDNF_VECTOR_IMAGE must be an immutable image reference}
+    image: timberio/vector:0.58.0-debian@sha256:1c1ea358c617ea0b23003d5af87f7a678b30f8f7096437e680380c47fc13d2d9
     profiles: [logs]
     command: [--config, /etc/vector/operational.yaml]
     environment:
@@ -475,7 +483,7 @@ services:
 
   prometheus:
     logging: *bounded-logging
-    image: ${CDNF_PROMETHEUS_IMAGE:?CDNF_PROMETHEUS_IMAGE must be an immutable image reference}
+    image: prom/prometheus:v3.13.3@sha256:6976aa8a60fec930796ce5772b8d12da7a318a5daa8d40d69c5c7819a05eeed7
     profiles: [telemetry]
     group_add: ["82"]
     volumes:
@@ -497,9 +505,24 @@ services:
       retries: 20
       start_period: 10s
 
+  grafana-plugins-init:
+    logging: *bounded-logging
+    image: alpine:3.22.6@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
+    profiles: [telemetry]
+    command:
+      - sh
+      - -ec
+      - if [ -f /plugins/grafana-clickhouse-datasource/plugin.json ]; then echo present; exit 0; fi; wget -qO /tmp/plugin.zip 'https://grafana.com/api/plugins/grafana-clickhouse-datasource/versions/4.21.3/download?os=linux&arch=amd64' && echo '53c0602214e7ca1af1733962779293587386b0b9a8c544ecead80b819e5f560b  /tmp/plugin.zip' | sha256sum -c - && unzip -q /tmp/plugin.zip -d /plugins && rm /tmp/plugin.zip
+    volumes: [grafana-plugins:/plugins]
+    networks: [egress]
+    restart: "no"
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+
   grafana-control-db-provision:
     logging: *bounded-logging
-    image: ${CDNF_POSTGRES_IMAGE:?CDNF_POSTGRES_IMAGE must be an immutable image reference}
+    image: postgres:18.6-alpine3.24@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
     profiles: [telemetry]
     environment:
       PGHOST: ${GRAFANA_POSTGRES_PROVISION_HOST}
@@ -522,7 +545,7 @@ services:
 
   grafana:
     logging: *bounded-logging
-    image: ${CDNF_GRAFANA_IMAGE:?CDNF_GRAFANA_IMAGE must be an immutable image reference}
+    image: grafana/grafana:12.4.11@sha256:3ea272e5cab64a4a62240c682e2c62433b25614d956d44c299a10cb6994f6f2e
     profiles: [telemetry]
     ports: ["${GRAFANA_BIND}:3000"]
     environment:
@@ -536,7 +559,7 @@ services:
       GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_SECURITY_COOKIE_SECURE: ${GRAFANA_COOKIE_SECURE}
-      GF_PATHS_PLUGINS: /usr/share/grafana/cdnfoundry-plugins
+      GF_PATHS_PLUGINS: /var/lib/grafana/plugins
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/system-command-center.json
       GRAFANA_LOKI_URL: ${GRAFANA_LOKI_URL}
       GRAFANA_CLICKHOUSE_HOST: ${GRAFANA_CLICKHOUSE_HOST}
@@ -553,11 +576,13 @@ services:
       GRAFANA_POSTGRES_SSLMODE: ${GRAFANA_POSTGRES_SSLMODE}
     volumes:
       - grafana-data:/var/lib/grafana
+      - grafana-plugins:/var/lib/grafana/plugins:ro
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       clickhouse: { condition: service_healthy }
       grafana-control-db-provision: { condition: service_completed_successfully }
+      grafana-plugins-init: { condition: service_completed_successfully }
       prometheus: { condition: service_healthy }
     networks: [telemetry, control, egress]
     restart: unless-stopped
@@ -579,7 +604,7 @@ services:
 
   node-exporter:
     logging: *bounded-logging
-    image: ${CDNF_NODE_EXPORTER_IMAGE:?CDNF_NODE_EXPORTER_IMAGE must be an immutable image reference}
+    image: prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
     profiles: [control, dns, edge, telemetry]
     command: [--path.procfs=/host/proc, --path.sysfs=/host/sys, --path.rootfs=/host/root, --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)]
     pid: host
@@ -593,7 +618,7 @@ services:
 
   alertmanager:
     logging: *bounded-logging
-    image: ${CDNF_ALERTMANAGER_IMAGE:?CDNF_ALERTMANAGER_IMAGE must be an immutable image reference}
+    image: prom/alertmanager:v0.34.1@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a
     profiles: [telemetry]
     volumes: [./docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro]
     networks: [telemetry]
@@ -806,6 +831,7 @@ volumes:
   loki-data: {}
   prometheus: {}
   grafana-data: {}
+  grafana-plugins:
   edge-runtime-memory:
     driver_opts:
       type: tmpfs

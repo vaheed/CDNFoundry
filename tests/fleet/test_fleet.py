@@ -1448,7 +1448,8 @@ def test_production_compose_uses_env_file_contract_and_control_has_mmdb_updater(
     assert "${" in compose_text
     assert ":-" not in compose_text
     assert "${CDNF_CORE_IMAGE:?" in compose_text
-    assert "${CDNF_GRAFANA_IMAGE:?" in compose_text
+    assert "grafana/grafana:12.4.11@sha256:" in compose_text
+    assert "${CDNF_GRAFANA_IMAGE" not in compose_text
     assert "ghcr.io/vaheed/cdnfoundry-core:${CDNF_RELEASE" not in compose_text
 
     compose = yaml.safe_load((root / "compose.prod.yml").read_text(encoding="utf-8"))

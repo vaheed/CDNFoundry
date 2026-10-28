@@ -15,15 +15,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 DOCKERFILES = [
     ROOT / "core/Dockerfile", ROOT / "edge-agent/Dockerfile", ROOT / "edge-gateway/Dockerfile",
     ROOT / "docker/nginx/Dockerfile.production", ROOT / "docker/openresty/Dockerfile",
-    ROOT / "docker/mmdb-updater/Dockerfile", ROOT / "docker/grafana/Dockerfile", ROOT / "docker/loki/Dockerfile",
-    ROOT / "docker/caddy/Dockerfile",
-    ROOT / "docker/dnsdist/Dockerfile",
-    ROOT / "docker/pdns/Dockerfile",
-    ROOT / "docker/prometheus/Dockerfile",
-    ROOT / "docker/alertmanager/Dockerfile",
-    ROOT / "docker/node-exporter/Dockerfile",
-    ROOT / "docker/vector-runtime/Dockerfile",
-    ROOT / "docker/postgres/Dockerfile",
+    ROOT / "docker/mmdb-updater/Dockerfile",
 ]
 REQUIRED_LABELS = ["image.source", "image.revision", "image.version", "image.created", "image.description", "image.licenses"]
 
@@ -234,9 +226,7 @@ def main() -> None:
     for manifest, lockfile in [("core/composer.json", "core/composer.lock"), ("core/package.json", "core/package-lock.json"), ("docs/package.json", "docs/package-lock.json")]:
         if not (ROOT / manifest).is_file() or not (ROOT / lockfile).is_file():
             fail(f"{manifest} lacks required lockfile {lockfile}")
-    for module in [ROOT / "edge-agent/go.mod", ROOT / "edge-gateway/go.mod", ROOT / "docker/caddy/go.mod",
-                   ROOT / "docker/alertmanager/upstream.go.mod", ROOT / "docker/prometheus/upstream.go.mod",
-                   ROOT / "docker/node-exporter/upstream.go.mod"]:
+    for module in [ROOT / "edge-agent/go.mod", ROOT / "edge-gateway/go.mod"]:
         if "require " in module.read_text() and not module.with_suffix(".sum").is_file():
             fail(f"{module.relative_to(ROOT)} has dependencies but no go.sum")
 

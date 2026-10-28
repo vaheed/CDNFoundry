@@ -19,7 +19,7 @@ def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument('--image', default='ghcr.io/vaheed/cdnfoundry-vector:ci')
+    parser.add_argument('--image', default='timberio/vector:0.58.0-debian@sha256:1c1ea358c617ea0b23003d5af87f7a678b30f8f7096437e680380c47fc13d2d9')
     image = parser.parse_args().image
     name = 'cdnf-vector-journal-' + uuid.uuid4().hex[:12]
     marker = name+'-event'
@@ -39,7 +39,7 @@ def main() -> None:
                       '-v', f'{root}:/fixture:ro', image, '--directory=/fixture/journal', '--no-pager', '-o', 'json').stdout
         assert marker in journal, 'Synthetic binary journal did not contain the fixture event'
         document = {'data_dir': '/tmp', 'sources': {'journal': {'type': 'journald',
-                    'current_boot_only': False, 'since_now': False,
+                    'since_now': False,
                     'extra_args': ['--directory=/fixture/journal']}},
                     'sinks': {'result': {'type': 'file', 'inputs': ['journal'], 'path': '/result/events.json',
                                          'encoding': {'codec': 'json'}}}}

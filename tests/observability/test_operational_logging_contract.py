@@ -42,10 +42,9 @@ class OperationalLoggingContractTest(unittest.TestCase):
         self.assertTrue(service["read_only"])
         self.assertEqual(128, service["pids_limit"])
         self.assertTrue(any(volume.get("source") == "loki-data" and volume.get("target") == "/loki" for volume in service["volumes"]))
-        dockerfile = (ROOT / "docker/loki/Dockerfile").read_text()
         self.assertRegex(
-            dockerfile,
-            re.compile(r"^FROM grafana/loki:\d+\.\d+\.\d+@sha256:[0-9a-f]{64}$", re.MULTILINE),
+            service["image"],
+            re.compile(r"^grafana/loki:\d+\.\d+\.\d+@sha256:[0-9a-f]{64}$"),
         )
         for contract in ("store: tsdb", "object_store: filesystem", "retention_enabled: true", "max_line_size: 65536", "query_timeout: 30s"):
             self.assertIn(contract, self.loki)
