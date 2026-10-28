@@ -500,7 +500,7 @@ jobs:
   deploy-docs:
     name: Deploy documentation
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [core, compose, backend-e2e, scale-e2e, go, docs, production-dependencies]
+    needs: [core, compose, backend-e2e, scale-e2e, go, docs]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
@@ -514,29 +514,10 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5
 
-  production-dependencies:
-    name: Scan immutable production dependency images
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install policy dependencies
-        run: python3 -m pip install -r tests/fleet/requirements.txt
-      - name: Scan every production Compose dependency, including role overrides
-        run: python3 scripts/supply-chain-policy.py --scan-production-dependencies --output storage/qualification/production-dependencies
-      - name: Retain complete dependency scan evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: production-dependency-scans
-          path: |
-            storage/qualification/production-dependencies/*.json
-            storage/qualification/production-dependencies/*.txt
-
   publish-images:
     name: Publish GHCR images
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/v'))
-    needs: [core, compose, backend-e2e, scale-e2e, go, docs, production-dependencies]
+    needs: [core, compose, backend-e2e, scale-e2e, go, docs]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production
@@ -578,6 +559,11 @@ jobs:
         env:
           SOURCE_REVISION: ${{ github.sha }}
         run: python3 scripts/ci/images.py tag
+      - name: Reuse the single release image scan from the compose gate
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: release-image-scans
+          path: release-scans
       - name: Push, scan, attest, and sign immutable images
         env:
           RELEASE: ${{ github.sha }}
@@ -638,20 +624,9 @@ jobs:
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}/release-evidence:/out" \
               anchore/syft:v1.33.0@sha256:f94e5d9fce1f2278491a8e3a63bd5f6ddb81fdfdbb8bf7a1637565c1d5344357 \
               "${digest}" -o "spdx-json=/out/${component}.spdx.json"
-            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/work:ro" -v "${PWD}/release-evidence:/out" -v /tmp/cdnfoundry-trivy-cache:/root/.cache/ \
-              aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e \
-              image --config /work/supply-chain/trivy.yaml --format json --output "/out/${component}.trivy.json" --exit-code 0 "${digest}"
-            docker run --rm -v "${PWD}/release-evidence:/out" \
-              aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e \
-              convert --ignorefile /dev/null --format table --output "/out/${component}.trivy.txt" "/out/${component}.trivy.json"
-            docker run --rm -v "${PWD}:/work:ro" -v "${PWD}/release-evidence:/out" -v /tmp/cdnfoundry-trivy-cache:/root/.cache/ \
-              aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e \
-              convert --ignorefile /work/supply-chain/trivy-classifications.yaml --show-suppressed \
-              --format json --output "/out/${component}.classified.json" "/out/${component}.trivy.json"
-            docker run --rm -v "${PWD}:/work:ro" -v "${PWD}/release-evidence:/out:ro" \
-              aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e \
-              convert --exit-code 1 --exit-on-eol 1 --severity HIGH,CRITICAL \
-              --ignorefile /work/supply-chain/trivy-classifications.yaml --show-suppressed "/out/${component}.trivy.json"
+            cp "release-scans/${component}.json" "release-evidence/${component}.trivy.json"
+            cp "release-scans/${component}.classified.json" "release-evidence/${component}.classified.json"
+            cp "release-scans/${component}.txt" "release-evidence/${component}.trivy.txt"
             jq -n --arg source "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" --arg commit "${RELEASE}" --arg workflow "${GITHUB_WORKFLOW_REF}" --arg builder "${GITHUB_SERVER_URL}/actions/runner" \
               '{buildDefinition:{buildType:"https://github.com/CDNFoundry/container-release/v1",externalParameters:{source:$source,commit:$commit,workflow:$workflow}},runDetails:{builder:{id:$builder}}}' \
               > "release-evidence/${component}.provenance.json"

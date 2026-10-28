@@ -933,7 +933,7 @@ Counts are package findings, including repeated advisories across packages, not
 distinct exploitable defects. “No fix reported” means Trivy supplied no fixed
 package version for that selected image; it is not proof that every alternative
 image is affected. Exact pins remain in the source and complete JSON/table reports
-are retained in the CI `production-dependency-scans` artifact and local ignored
+are retained in the CI `release-image-scans` artifact and local ignored
 `storage/qualification/dev-dependencies` directory.
 
 | Selected image | High/Critical findings | No fix reported |

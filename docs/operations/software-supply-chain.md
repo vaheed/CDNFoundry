@@ -168,17 +168,11 @@ and a readable table, then evaluates that same JSON with `convert`. Approved
 classifications apply only during conversion. Additional `*.classified.json`
 reports retain the excluded findings, reasons and policy path through Trivy's
 `ExperimentalModifiedFindings` field; the original reports remain unchanged.
-The same gate scans all digest-pinned third-party production Compose images,
-including role overrides, before publication. It is also an agent-owned check
-in the production qualification runner:
-
-```sh
-python3 scripts/supply-chain-policy.py --scan-production-dependencies
-```
-
-The command retains complete JSON/table reports and a summary with commands
-and exit codes under `storage/qualification/production-dependencies`. A failed
-image does not skip scanning the remaining images. No High finding is accepted automatically. An exception must name
+Supply-chain scanning covers only images built from this repository. Upstream
+images referenced by Compose (for example Grafana, Prometheus, or PostgreSQL)
+are outside this scope; they are pinned by digest and maintained by their
+publishers. The scan runs once per release image, in the compose gate, and
+publication reuses that report. No High finding is accepted automatically. An exception must name
 the CVE, affected component/digest, compensating control, owner, approval, and
 an expiry no later than 30 days. Exceptions are narrow reviewed policy changes;
 permanent wildcards and broad ignore files are forbidden. Keep scanner version and database freshness metadata with the reports.
@@ -186,7 +180,7 @@ permanent wildcards and broad ignore files are forbidden. Keep scanner version a
 ### Approved Tempo false-positive classification
 
 Owner **vaheed** explicitly approved the following two classifications on
-**2026-09-19**, expiring at **2026-10-19 UTC**. After expiry the scanner blocks
+**2026-09-19**, renewed on **2026-10-29** and expiring at **2026-11-28 UTC**. After expiry the scanner blocks
 these findings again. Scope is the Grafana backend at
 `usr/share/grafana/bin/grafana` and exactly
 `github.com/grafana/tempo@v1.5.1-0.20260427112133-525d1bab07e0`.

@@ -158,10 +158,10 @@ or a warm standby. The current architecture provides bounded application-layer
 controls and continues serving only while the edge host, network, and upstream
 capacity remain available.
 
-The `production-dependencies` agent check invokes the existing supply-chain tool
-against all immutable production Compose dependencies and role overrides. It
-fails on High/Critical or end-of-life findings, retains complete JSON/table
-reports, and does not let first-party image scans substitute for dependency
+Supply-chain qualification covers only CDNFoundry-built images. Upstream Compose
+images are outside that scope and are not scanned by this project. The release
+image gate fails on High/Critical or end-of-life findings and retains complete
+JSON/table reports; no separate dependency scan substitutes for
 coverage. The `postgres-claims` check also exercises concurrent durable edge
 acknowledgements and idempotency process-death recovery on its disposable database.
 

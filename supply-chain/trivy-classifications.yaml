@@ -1,4 +1,4 @@
-# Owner: vaheed (repository owner). Explicit approval: 2026-09-19.
+# Owner: vaheed (repository owner). Explicit approval: 2026-09-19. Renewed 2026-10-29 for 30 days.
 # Evidence and scope: docs/operations/software-supply-chain.md.
 # Keep both the binary path and exact package version; neither is a wildcard.
 vulnerabilities:
@@ -7,9 +7,9 @@ vulnerabilities:
       - usr/share/grafana/bin/grafana
     purls:
       - pkg:golang/github.com/grafana/tempo@v1.5.1-0.20260427112133-525d1bab07e0
-    expired_at: 2026-10-19
+    expired_at: 2026-11-28
     statement: >-
-      Owner-approved false positive, 2026-09-19. This exact Tempo commit contains
+      Owner-approved false positive, 2026-09-19; renewed 2026-10-29. This exact Tempo commit contains
       the bounded search fix; Grafana links only Tempo protobuf packages, not the
       affected server. See docs/operations/software-supply-chain.md.
   - id: CVE-2026-28377
@@ -17,8 +17,8 @@ vulnerabilities:
       - usr/share/grafana/bin/grafana
     purls:
       - pkg:golang/github.com/grafana/tempo@v1.5.1-0.20260427112133-525d1bab07e0
-    expired_at: 2026-10-19
+    expired_at: 2026-11-28
     statement: >-
-      Owner-approved false positive, 2026-09-19. This exact Tempo commit uses the
+      Owner-approved false positive, 2026-09-19; renewed 2026-10-29. This exact Tempo commit uses the
       secret encryption-key type; Grafana links only Tempo protobuf packages, not
       the affected server. See docs/operations/software-supply-chain.md.

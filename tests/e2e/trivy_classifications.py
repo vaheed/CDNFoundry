@@ -41,7 +41,7 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix='cdnf-trivy-classifications-') as directory:
         work = Path(directory)
         (work / 'approved.yaml').write_text(policy)
-        (work / 'expired.yaml').write_text(policy.replace('2026-10-19', '2000-01-01'))
+        (work / 'expired.yaml').write_text(policy.replace('2026-11-28', '2000-01-01'))
         for name, vulnerabilities, target, expired, eol, remaining, suppressed in cases:
             fixture = copy.deepcopy(report)
             fixture['Results'][0].update(Target=target, Vulnerabilities=vulnerabilities)
