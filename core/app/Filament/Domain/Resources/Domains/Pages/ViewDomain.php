@@ -13,6 +13,7 @@ use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
 use App\Models\DnsCluster;
+use App\Models\Domain;
 use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
 use App\Models\EdgeArtifact;
@@ -40,6 +41,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
@@ -48,6 +50,23 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class ViewDomain extends ViewRecord
 {
     protected static string $resource = DomainResource::class;
+
+    /**
+     * Page loads keep the assignment-scoped lookup (not found for unassigned domains). A Livewire request on an
+     * already-open page re-resolves the record, so a user revoked mid-session is authorized by policy instead
+     * and receives 403, matching the API.
+     */
+    protected function resolveRecord(int|string $key): Model
+    {
+        if (! request()->hasHeader('X-Livewire')) {
+            return parent::resolveRecord($key);
+        }
+
+        $domain = Domain::query()->findOrFail($key);
+        Gate::authorize('view', $domain);
+
+        return $domain;
+    }
 
     public function getTitle(): string
     {
