@@ -18,6 +18,7 @@
     "js-yaml": "5.5.0",
     "markdown-it": "15.0.3",
     "vite": "6.4.5",
-    "smol-toml": "1.7.1"
+    "smol-toml": "1.9.0",
+    "katex": "0.19.1"
   }
 }
