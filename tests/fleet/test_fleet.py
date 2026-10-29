@@ -4,6 +4,7 @@ import argparse
 import base64
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -1009,7 +1010,7 @@ def test_control_monitoring_bundle_uses_project_pki_contract(store: FleetState, 
     ).stdout
     assert "DNS:edge-control.ops.example.com" in certificate
     readme = (bundle / "README.md").read_text(encoding="utf-8")
-    assert "edge-control.ops.example.com" in readme
+    assert re.search(r"(?<![\w.-])edge-control\.ops\.example\.com(?![\w.-])", readme)
 
 
     assert "https://control.ops.example.com/api/ready" in readme
