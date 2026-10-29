@@ -235,6 +235,7 @@ jobs:
             timberio/vector:0.58.0-debian@sha256:1c1ea358c617ea0b23003d5af87f7a678b30f8f7096437e680380c47fc13d2d9 \
             test /etc/vector/operational.yaml
           docker run --rm -e LOKI_RETENTION_PERIOD=168h -e LOKI_MAX_QUERY_LENGTH=168h \
+            -v "$PWD/docker/loki/loki.yml:/etc/loki/loki.yml:ro" \
             grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193 -config.file=/etc/loki/loki.yml -config.expand-env=true -verify-config=true
           docker run --rm --entrypoint /bin/promtool \
             -v "$PWD/docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
