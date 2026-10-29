@@ -575,6 +575,22 @@ jobs:
           set -euo pipefail
           images=(core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater)
           aliases=()
+          # A rebuilt image with identical content reproduces the same digest. Sigstore
+          # then reports the entry as already recorded (HTTP 409); accept only that
+          # conflict, so a rerun for an unchanged digest publishes instead of failing.
+          cosign_once() {
+            local output
+            if output="$("$@" 2>&1)"; then
+              printf '%s\n' "${output}"
+              return 0
+            fi
+            if grep -q 'already exists in the transparency log' <<<"${output}"; then
+              echo "transparency log already records this entry; continuing"
+              return 0
+            fi
+            printf '%s\n' "${output}" >&2
+            return 1
+          }
           push_with_retry() {
             local image="$1"
             local attempt delay
@@ -633,7 +649,7 @@ jobs:
             jq -n --arg source "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" --arg commit "${RELEASE}" --arg workflow "${GITHUB_WORKFLOW_REF}" --arg builder "${GITHUB_SERVER_URL}/actions/runner" \
               '{buildDefinition:{buildType:"https://github.com/CDNFoundry/container-release/v1",externalParameters:{source:$source,commit:$commit,workflow:$workflow}},runDetails:{builder:{id:$builder}}}' \
               > "release-evidence/${component}.provenance.json"
-            docker run --rm \
+            cosign_once docker run --rm \
               -e ACTIONS_ID_TOKEN_REQUEST_TOKEN \
               -e ACTIONS_ID_TOKEN_REQUEST_URL \
               -e DOCKER_CONFIG=/docker-config \
@@ -642,7 +658,7 @@ jobs:
               gcr.io/projectsigstore/cosign:v3.0.2@sha256:b29487e48205d875c324c79583e2806d9d269c0fa299e0861bbec023d8430c8b \
               sign --yes "${digest}"
 
-            docker run --rm \
+            cosign_once docker run --rm \
               -e ACTIONS_ID_TOKEN_REQUEST_TOKEN \
               -e ACTIONS_ID_TOKEN_REQUEST_URL \
               -e DOCKER_CONFIG=/docker-config \
@@ -654,7 +670,7 @@ jobs:
               --predicate "/evidence/${component}.spdx.json" \
               "${digest}"
 
-            docker run --rm \
+            cosign_once docker run --rm \
               -e ACTIONS_ID_TOKEN_REQUEST_TOKEN \
               -e ACTIONS_ID_TOKEN_REQUEST_URL \
               -e DOCKER_CONFIG=/docker-config \
