@@ -43,5 +43,5 @@ the relevant steps in `docs/manual-browser-qualification.md` for UI changes.
   roadmap only when the result has been verified.
 - Keep commits focused and explain observable behaviour in the pull request.
 
-By contributing, you agree that your contribution is licensed under the MIT
-License in [LICENSE](LICENSE).
+By contributing, you agree that your contribution is licensed under the Apache
+License, Version 2.0 in [LICENSE](LICENSE).

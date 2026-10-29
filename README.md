@@ -16,10 +16,6 @@ It combines a Laravel and Filament control plane with PowerDNS, DNSdist,
 OpenResty, a Go edge agent, Vector, ClickHouse, Prometheus, and bounded
 role-based Docker Compose deployments.
 
-**Current release: v1.2.1** (see [`VERSION`](VERSION), the
-[changelog](CHANGELOG.md) and the [release notes](docs/operations/releases/v1.2.1.md)).
-v1.2.1 is a zero-state release: deploy it from scratch.
-
 ## Who it is for
 
 For hosting providers, ISPs and companies with Linux, Docker and DNS skills who

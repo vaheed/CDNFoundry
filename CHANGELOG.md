@@ -5,6 +5,16 @@ All notable changes are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). The root `VERSION` file is the
 single source of truth; `make version-check` enforces it.
 
+## [Unreleased]
+
+### Changed
+
+- The documentation site footer and the archived README and CONTRIBUTING
+  pages state the Apache License 2.0; CONTRIBUTING records that contributions
+  are licensed under the same terms.
+- `docs/roadmap.md` is now the active platform rebuild roadmap: audit gap
+  register, target designs, and ordered phases toward a breaking 2.0.
+
 ## [1.2.1]
 
 v1.2.1 is a zero-state release: deploy it from scratch. There is no supported

@@ -106,4 +106,4 @@ commit SHA or exact release tag for deployment. Follow the
 
 Contributions are welcome under [CONTRIBUTING.md](CONTRIBUTING.md). Please report
 security issues through the private process in [SECURITY.md](SECURITY.md), not a
-public issue. CDNFoundry is available under the [MIT License](LICENSE).
+public issue. CDNFoundry is available under the [Apache License, Version 2.0](LICENSE).

@@ -26,3 +26,9 @@ last-valid runtime state and persistent development volumes.
 
 For documentation changes, follow
 [Documentation contributions](docs/contributing/documentation.md).
+
+## License
+
+CDNFoundry is licensed under the [Apache License, Version 2.0](LICENSE). By
+contributing, you agree that your contribution is licensed under the same terms,
+as described in section 5 of the license.
