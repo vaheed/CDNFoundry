@@ -5,6 +5,38 @@ description: Completed audit batch, actual test evidence, remaining jobs, and de
 
 # Development branch handoff
 
+## v0.9.9 staging rollout
+
+Recorded 2026-09-23.
+
+The exact source `3c230c001d3a1f5b841dae9c5e8a7660224b41e0` passed the
+[dev CI run](https://github.com/vaheed/CDNFoundry/actions/runs/35898009139),
+including non-UI E2E, Compose, image scans and publication. Its release artifact
+archive matched GitHub's published SHA-256. The signed manifest matched that
+source and run, and all 17 image signatures, SPDX attestations and SLSA
+provenance passed verification against the official `refs/heads/dev` workflow.
+
+The release was activated on staging control, then PoP 1, then PoP 2. A
+PostgreSQL custom-format snapshot passed `pg_restore --list` before activation.
+Each host retained its previous Compose/environment files, host-specific
+overrides, enrolled edge IDs and named volumes. No database migration was due.
+Each host's running services became healthy; all running CDNFoundry image
+references matched the verified manifest. Control public health/readiness and
+Grafana health passed. From the control host, both PoPs answered authoritative
+SOA over UDP and TCP. Direct TLS-verified HTTPS on each PoP returned the
+expected disposable static resource hash. Both edge API records reported a
+ready gateway and listener, eight cells, and a fresh heartbeat. Temporary
+administrator API tokens used for inspection were revoked through logout.
+Protected reports and rollback copies remain under ignored `.prod/`.
+
+The owner-requested `main` fast-forward and annotated `v0.9.9` tag both point
+to this exact tested source. This is **staging qualification**, not a full
+production acceptance result. There is no live production deployment; the
+owner-run browser checklist and Phase 9 measured production acceptance remain
+open. Follow the [v0.9.9 release notes](releases/v0.9.9.md),
+[production quick start](../deployment/production-quick-start.md), and
+[production qualification](production-qualification.md) before customer traffic.
+
 ## Staging pop-2 gateway status repair (2026-09-23)
 
 The owner reported **Degraded** for `staging-pop-2` while its heartbeat was

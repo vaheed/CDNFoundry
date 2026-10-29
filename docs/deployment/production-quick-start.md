@@ -81,7 +81,7 @@ alone does not qualify a staging installation or establish production readiness.
 
 Before installation, complete [release verification and Fleet image projection](../operations/software-supply-chain.md#verify-a-release).
 Populate the topology below, then use that procedure to produce
-`fleet.verified.json` with all nine verified component digests. Use that file in
+`fleet.verified.json` with all 17 verified component digests. Use that file in
 subsequent setup commands. No published tag or example digest is assumed here.
 
 ## 2. Create your topology file

@@ -369,7 +369,10 @@ complete release qualification**.
 
 ## Start the next bounded job
 
-Current request: **continue implementation and agent-owned qualification through
-the roadmap while the owner defers browser checks until the final pass.** Keep
-each manual gate open and record its actual results when supplied. Do not infer
-a browser pass from implementation or non-browser qualification.
+Current checkpoint: the owner requested the successful build be deployed to
+staging, merged to `main`, and tagged `v0.9.9`, then work stop. The
+[staging rollout record](operations/development-handoff.md)
+records the exact tested source and runtime evidence. The owner browser gate
+and full Phase 9 production acceptance remain open. There is no live
+production deployment, so the release must not be described as
+production-accepted.
