@@ -31,7 +31,7 @@ Work from an immutable checkout. For a fresh operator host:
 ```bash
 git clone https://github.com/vaheed/CDNFoundry.git cdnfoundry
 cd cdnfoundry
-git checkout v1.0.0
+git checkout v1.2.1
 git rev-parse --verify HEAD
 ```
 
@@ -107,7 +107,7 @@ Equivalent non-interactive command:
   setup \
   --operator-domain ops.example.com \
   --platform-domain example.net \
-  --release v1.0.0 \
+  --release v1.2.1 \
   --preset control-monitoring \
   --control-ipv4 192.0.2.10 \
   --non-interactive
@@ -146,7 +146,7 @@ For repeatable automation, use a JSON file:
   "global": {
     "operator_domain": "ops.example.com",
     "platform_domain": "example.net",
-    "release": "v1.0.0",
+    "release": "v1.2.1",
     "acme_email": "operations@example.com",
     "ipv6": false
   },
@@ -495,7 +495,7 @@ Change a release or address:
 
 ```bash
 ./scripts/cdnfoundry-fleet --state-dir ./.cdnfoundry-fleet update-node \
-  --node edge-tokyo --release v1.1.0 --public-ipv4 192.0.2.81 \
+  --node edge-tokyo --release v1.2.1 --public-ipv4 192.0.2.81 \
   --non-interactive
 ```
 

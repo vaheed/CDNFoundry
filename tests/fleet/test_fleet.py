@@ -220,7 +220,7 @@ def store(tmp_path: Path) -> FleetState:
             {
                 "operator_domain": "ops.example.com",
                 "platform_domain": "example.net",
-                "release": "v1.0.0",
+                "release": "v1.2.1",
                 "acme_email": "ops@example.com",
             }
         )
@@ -604,7 +604,7 @@ def test_production_control_validation_parses_caddyfile(store: FleetState, tmp_p
 
 def test_dry_run_does_not_create_state_or_secrets(tmp_path: Path) -> None:
     store = FleetState(tmp_path / "dry-state", dry_run=True)
-    state = store.init({"operator_domain": "ops.example.com", "platform_domain": "example.net", "release": "v1.0.0"})
+    state = store.init({"operator_domain": "ops.example.com", "platform_domain": "example.net", "release": "v1.2.1"})
     assert state["schema_version"] == 1
     assert not store.state_dir.exists()
 
@@ -620,7 +620,7 @@ def test_setup_dry_run_uses_in_memory_state(source_repo: Path, tmp_path: Path) -
                 "global": {
                     "operator_domain": "ops.example.com",
                     "platform_domain": "example.net",
-                    "release": "v1.0.0",
+                    "release": "v1.2.1",
                 },
                 "nodes": [node("control-1", "control", "192.0.2.10")],
             }
@@ -866,7 +866,7 @@ def test_cli_end_to_end_dns_nodes_keep_separate_local_credentials(source_repo: P
         "--platform-domain",
         "example.net",
         "--release",
-        "v1.0.0",
+        "v1.2.1",
         "--non-interactive",
     )
     run(
@@ -1193,7 +1193,7 @@ def test_setup_command_generates_control_monitoring_fleet(source_repo: Path, tmp
             "setup",
             "--operator-domain", "ops.example.com",
             "--platform-domain", "example.net",
-            "--release", "v1.0.0",
+            "--release", "v1.2.1",
             "--preset", "control-monitoring",
             "--control-ipv4", "192.0.2.150",
             "--non-interactive",
@@ -1227,7 +1227,7 @@ def test_status_and_doctor_are_actionable(source_repo: Path, tmp_path: Path) -> 
             "setup",
             "--operator-domain", "ops.example.com",
             "--platform-domain", "example.net",
-            "--release", "v1.0.0",
+            "--release", "v1.2.1",
             "--preset", "control-monitoring",
             "--control-ipv4", "192.0.2.161",
             "--non-interactive",
@@ -1297,7 +1297,7 @@ def test_edge_registration_command_uses_protected_token_file(source_repo: Path, 
     subprocess.run(
         common + [
             "init", "--operator-domain", "ops.example.com", "--platform-domain", "example.net",
-            "--release", "v1.0.0", "--non-interactive",
+            "--release", "v1.2.1", "--non-interactive",
         ],
         check=True,
     )
@@ -1403,7 +1403,7 @@ def test_set_secret_replaces_external_database_password(source_repo: Path, tmp_p
     subprocess.run(
         common + [
             "init", "--operator-domain", "ops.example.com", "--platform-domain", "example.net",
-            "--release", "v1.0.0", "--non-interactive",
+            "--release", "v1.2.1", "--non-interactive",
         ],
         check=True,
     )
@@ -1491,7 +1491,7 @@ def test_setup_config_rejects_unknown_fields(source_repo: Path, tmp_path: Path) 
         "global": {
             "operator_domain": "ops.example.com",
             "platform_domain": "example.net",
-            "release": "v1.0.0",
+            "release": "v1.2.1",
         },
         "nodes": [{
             "name": "control-1", "role": "control", "region": "global", "location": "primary",

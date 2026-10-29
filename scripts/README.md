@@ -9,7 +9,7 @@ Clone an immutable release or commit, then inspect the CLI:
 ```bash
 git clone https://github.com/vaheed/CDNFoundry.git cdnfoundry
 cd cdnfoundry
-git checkout v1.0.0
+git checkout v1.2.1
 ./scripts/cdnfoundry-fleet doctor
 ```
 

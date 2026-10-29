@@ -49,7 +49,7 @@ CDNFOUNDRY_FLEET_OUTPUT_DIR
   "global": {
     "operator_domain": "ops.example.com",
     "platform_domain": "example.net",
-    "release": "v1.0.0",
+    "release": "v1.2.1",
     "acme_email": "operations@example.com",
     "ipv6": false
   },
@@ -112,7 +112,7 @@ Example:
   "bind_ipv4": "0.0.0.0",
   "bind_ipv6": "::",
   "monitor_ipv4": "10.30.0.40",
-  "release": "v1.0.0",
+  "release": "v1.2.1",
   "extra_env": {},
   "enabled": true,
   "draining": false

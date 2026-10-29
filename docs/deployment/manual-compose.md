@@ -81,13 +81,13 @@ Check out the same immutable revision on all three hosts:
 ```bash
 git clone https://github.com/vaheed/CDNFoundry.git /opt/cdnfoundry
 cd /opt/cdnfoundry
-git checkout v1.0.0
+git checkout v1.2.1
 git rev-parse --verify HEAD
 docker version
 docker compose version
 ```
 
-Replace `v1.0.0` with the selected immutable release. If GHCR requires
+Replace `v1.2.1` with the selected immutable release. If GHCR requires
 authentication, use a read-only package token with `docker login ghcr.io`.
 
 Create protected configuration directories on each host:
@@ -240,7 +240,7 @@ start the corresponding service.
 Set the exact same release and installation-wide credentials on all hosts:
 
 ```dotenv
-CDNF_RELEASE=v1.0.0
+CDNF_RELEASE=v1.2.1
 CDNF_CORE_IMAGE=ghcr.io/vaheed/cdnfoundry-core@sha256:REPLACE_FROM_RELEASE_MANIFEST
 CDNF_WEB_IMAGE=ghcr.io/vaheed/cdnfoundry-web@sha256:REPLACE_FROM_RELEASE_MANIFEST
 # Set every CDNF_*_IMAGE entry from release-manifest.json in the same way.
