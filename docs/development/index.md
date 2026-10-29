@@ -56,4 +56,5 @@ docker compose -f compose.dev.yml exec core \
 ```
 
 Continue with [Testing](testing.md), [Project layout](project-layout.md),
-[Frontend](frontend.md), and [Scripts and CI](scripts-and-ci.md).
+[Frontend](frontend.md), [Scripts and CI](scripts-and-ci.md), and
+[Coding agents](coding-agents.md).

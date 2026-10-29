@@ -322,7 +322,8 @@ export default defineConfig({
             { text: 'Testing', link: '/development/testing' },
             { text: 'Project layout', link: '/development/project-layout' },
             { text: 'Frontend', link: '/development/frontend' },
-            { text: 'Scripts and CI', link: '/development/scripts-and-ci' }
+            { text: 'Scripts and CI', link: '/development/scripts-and-ci' },
+            { text: 'Coding agents', link: '/development/coding-agents' }
           ]
         }
       ],

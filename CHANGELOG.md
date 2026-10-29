@@ -7,6 +7,14 @@ single source of truth; `make version-check` enforces it.
 
 ## [Unreleased]
 
+### Added
+
+- Coding-agent tooling: rewritten project skills with front matter, real file
+  paths, commands, tests, and known traps, plus a new `cdnf-codebase-map`
+  skill; `.claude/skills` links to `.agents/skills`; `.mcp.json` registers the
+  local CodeGraph MCP server (pinned 1.6.2, telemetry off). See
+  `docs/development/coding-agents.md`.
+
 ### Changed
 
 - The documentation site footer and the archived README and CONTRIBUTING

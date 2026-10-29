@@ -87,6 +87,7 @@ cleanup.
 | L4 | 69 archived files under `docs/legacy/`, and test files named after roadmap phases (`phase2_dns.py` … `phase9_waf.py`). | `docs/legacy/`, `tests/e2e/` |
 | L5 | `GET /revisions` returns raw Eloquent models instead of an API resource, so any new column is exposed automatically (this is the root cause of C1). | `ProxyController::revisions` |
 | L6 | Edge identity relies on FastCGI parameters set by `edge-control.conf`. Anything else that can reach PHP-FPM on the internal network can claim to be an edge by sending the public certificate. | `AuthenticateEdge`, `docker/nginx/*.conf` |
+| L7 | Browser qualification is a manual, owner-run checklist of about 960 lines, and `AGENTS.md` forbids agents from running a browser. Every UI change waits for a human pass. | `docs/manual-browser-qualification.md`, `AGENTS.md` |
 
 ## Phases
 
@@ -227,9 +228,9 @@ Fixes H8, M11, M12, L6.
 **Exit:** E2E passes over IPv6 only. A scoped token cannot exceed its scope.
 Killing the agent process is detected and restarted.
 
-### Phase 6: Simple setup and an agentic test harness
+### Phase 6: Simple setup and agent-run browser qualification
 
-Fixes M15, L1.
+Fixes M15, L1, L7.
 
 - [ ] One installer for control and one join command per PoP. PKI, TSIG
       keys, and bootstrap tokens are generated automatically, and a new PoP
@@ -237,9 +238,15 @@ Fixes M15, L1.
 - [ ] A first-run wizard in the admin panel. All settings have visible
       defaults and a reset action.
 - [ ] Remove the edge management address fields.
-- [ ] Amend `AGENTS.md` to allow agents to run the browser suite against
-      non-production stacks. Add a Playwright suite under `tests/browser` that
-      covers every screen, and add it to the phase gate from here on.
+- [ ] Replace manual browser qualification with agent-run qualification.
+      Delete `docs/manual-browser-qualification.md` and every reference to it
+      (README, CONTRIBUTING, the pull request template, the docs, the skills,
+      and `tests/docs`). Amend `AGENTS.md` and `RepositoryContractTest` so
+      agents run the browser suite against non-production stacks.
+- [ ] Add a Playwright suite under `tests/browser` that signs in to both
+      panels and covers every screen and every workflow from the removed
+      checklist, at desktop and phone width. Agents run it and report its
+      results, and it joins the phase gate from here on.
 - [ ] Rewrite the quick start around the new installer. A scripted run on
       fresh virtual machines must reach an active proxied domain with no
       undocumented step.
@@ -247,7 +254,7 @@ Fixes M15, L1.
 **Exit:** the scripted quick start passes on fresh VMs, and the browser suite
 passes.
 
-### Phase 7: Cleanup, documentation, and agent tooling
+### Phase 7: Cleanup and documentation
 
 Fixes L2, L3, L4.
 
@@ -257,9 +264,8 @@ Fixes L2, L3, L4.
 - [ ] Rewrite the documentation: one page per concept, the command or screen
       first, and the explanation after it. Run every shell block marked
       `test` in CI.
-- [ ] Rewrite the agent skills for 2.0. Add a code map, and a project MCP
-      server for the isolated test command, single E2E files, and read-only
-      dev database queries.
+- [ ] Update the project skills in `.agents/skills/` to match every behavior
+      changed by Phases 1–6.
 
 **Exit:** the docs build, link checks, and executable-block tests pass, and no
 legacy file remains.

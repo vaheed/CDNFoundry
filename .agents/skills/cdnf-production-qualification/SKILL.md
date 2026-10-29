@@ -1,22 +1,42 @@
+---
+name: cdnf-production-qualification
+description: Qualify CDNFoundry on a real or staging fleet: runtime E2E, DNS, HTTP/S, IPv4/IPv6, failure injection, backup/restore, and release evidence. Use before a release or when asked to qualify a change end to end.
+---
+
 # cdnf-production-qualification
 
 ## Purpose
-Qualify runtime behavior before module or Part One completion.
+Prove the platform works on real infrastructure, and record evidence that cannot be mistaken for unexecuted tests.
+
 ## When to use
-Before completing runtime-changing modules and final Part One acceptance.
+Before tagging a release, after a roadmap phase, or when asked to qualify a change on a real or staging fleet.
+
 ## Required inputs
-Hardware/topology, dataset, limits, browser flow, runtime paths, outage/restart/rollback matrix, compatible versions.
+The release or commit, the fleet (control host, PoPs, regions, address families), the domains used, and the scope of the change.
+
 ## Files normally touched
-Qualification scripts, fixtures, results, and runbooks; production code only for defects.
+`tests/e2e/production_qualification.py`, `tests/e2e/staging_*.py`, `docs/operations/production-qualification.md`, `docs/operations/releases/*.md`, `CHANGELOG.md`.
+
 ## Procedure
-Record environment; execute browser E2E, DNS, HTTP/S, IPv4/IPv6, restart, outage, last-valid, load/noisy-neighbor, queue-starvation, backup/restore, mixed-version canary/rollback; preserve measurements and failures.
+1. Record the environment: commit, image digests, hosts, and address families.
+2. Run the runtime suites: `make dev-e2e` locally, then `tests/e2e/staging_*.py` and `production_qualification.py` against the fleet.
+3. Inject the failure scenarios from the roadmap's critical and high findings: control outage, bad artifact, PoP loss, DNS host loss, purge after restart, and IPv6-only resolution.
+4. Check backup and restore: `cdnf:backups:create`, restore preflight, and recovery with the encryption and signing keys.
+5. Record every result, including failures and skipped checks, with its command and output.
+6. Browser qualification is owner-run under the current AGENTS.md. Hand it over as not run.
+
 ## Validation commands
-Repository qualification scripts and explicit documented Compose/runtime commands.
+- `make dev-e2e`, `make dev-scale-e2e`, `python3 tests/e2e/production_qualification.py --help`.
+- `make config-check`, `make docs-check`, `make supply-chain-check`.
+
 ## Definition of done
-Every criterion is recorded as Passed, Failed, Not executed, Blocked, or Observed limits with evidence.
+Every listed check has a recorded result, and the release notes state what was and was not qualified.
+
 ## Stop conditions
-Stop completion claims when tests are unexecuted, environment differs materially, or ceilings are absent.
+Stop if a check would touch production customer data, or would need secrets printed to the log.
+
 ## Forbidden shortcuts
-No mocked-only runtime qualification, omitted environment/dataset, hidden failures, or converting blocked into pass.
+Never report an unexecuted test as passed, and never replace a real runtime check with a mock.
+
 ## Expected completion summary
-Passed; Failed; Not executed; Blocked; Observed limits.
+Environment, checks run with their results, failures, skipped items with reasons, and the browser job status.
