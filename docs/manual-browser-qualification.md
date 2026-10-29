@@ -933,7 +933,7 @@ remains **Not run** until the owner records actual results and artifacts.
 ## Edge identity security upgrade job
 
 Status: **Not run — owner execution required.** Use an isolated canary edge and
-follow [the ingress-before-core upgrade order](deployment/upgrade.md#september-2026-security-changes).
+follow [the update order](deployment/upgrade.md#order).
 
 1. Sign in as administrator. Open **Infrastructure → Edges**, open the canary
    edge and record its edge UUID, heartbeat time and active revision. Confirm

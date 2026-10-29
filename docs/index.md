@@ -125,5 +125,17 @@ Grafana is a read-only operations component in the telemetry role. It has no
 request-path or reconciliation responsibility: an observability outage cannot
 change desired state or stop DNS and HTTP serving.
 
+## Start here: the journey from zero to production
+
+1. **Evaluate** — [private CDN design](getting-started/private-cdn-design.md) and [topology](deployment/topology.md).
+2. **Plan** — [reference architectures](architecture/production-reference-architectures.md), [services and ports](reference/services-and-ports.md).
+3. **Deploy** — [production quick start](deployment/production-quick-start.md) (or the [multi-region variant](deployment/production-quick-start-multi-region.md)).
+4. **Operate your first domain** — [first domain](getting-started/first-domain.md), [guides](guides/index.md).
+5. **Accept** — [production qualification](operations/production-qualification.md).
+6. **Run** — [operations](operations/index.md), [backup and recovery](operations/backup-and-recovery.md), [troubleshooting](troubleshooting/index.md).
+7. **Try locally first** — [installation](getting-started/installation.md) (`make dev-*`).
+
+CDNFoundry v1.2.1 is a zero-state release; see the [release notes](operations/releases/v1.2.1.md).
+
 Start with [the product overview](getting-started/index.md), or choose a destination
 from the audience cards above.

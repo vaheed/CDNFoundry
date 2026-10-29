@@ -4,7 +4,7 @@
 [![Latest release](https://img.shields.io/github/v/release/vaheed/CDNFoundry?display_name=tag)](https://github.com/vaheed/CDNFoundry/releases)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-0f6f8f.svg)](LICENSE)
 [![PHP 8.3+](https://img.shields.io/badge/PHP-8.3%2B-777bb4.svg)](core/composer.json)
-[![Go 1.24](https://img.shields.io/badge/Go-1.24-00add8.svg)](edge-agent/go.mod)
+[![Go 1.24+](https://img.shields.io/badge/Go-1.24%2B-00add8.svg)](edge-agent/go.mod)
 [![Documentation website](https://img.shields.io/badge/docs-VitePress-1c9a7d.svg)](https://vaheed.github.io/CDNFoundry/)
 
 CDNFoundry is an open-source, production-oriented **private CDN platform** for
@@ -16,10 +16,34 @@ It combines a Laravel and Filament control plane with PowerDNS, DNSdist,
 OpenResty, a Go edge agent, Vector, ClickHouse, Prometheus, and bounded
 role-based Docker Compose deployments.
 
-For the current development delivery, read the
-[handoff report](docs/operations/development-handoff.md) and
-[phased roadmap](docs/roadmap.md). The `dev` images target early staging tests;
-full production qualification remains a separate acceptance gate.
+**Current release: v1.2.1** (see [`VERSION`](VERSION), the
+[changelog](CHANGELOG.md) and the [release notes](docs/operations/releases/v1.2.1.md)).
+v1.2.1 is a zero-state release: deploy it from scratch.
+
+## Who it is for
+
+For hosting providers, ISPs and companies with Linux, Docker and DNS skills who
+want to run their own CDN. It is **not** for teams that want a managed service, a
+single-host install with no operations work, or volumetric DDoS scrubbing.
+
+## Qualification status
+
+Automated suites and non-UI real-runtime qualification run in CI on every change;
+images are built once, scanned, signed and published with SBOM and provenance.
+Manual browser qualification is **not run** and is owner-run. Customer traffic on
+physical edges, public IPv6, Anycast routing and load limits for your hardware
+must be qualified by you with the
+[production qualification](docs/operations/production-qualification.md) before
+you send customer traffic. See the
+[support statement](docs/operations/releases/v1.2.1.md#support-statement).
+
+## Path to your first domain
+
+1. Read the [self-hosted design guide](https://vaheed.github.io/CDNFoundry/getting-started/private-cdn-design) and plan three hosts.
+2. Follow the [production quick start](docs/deployment/production-quick-start.md).
+3. Add your [first domain](docs/getting-started/first-domain.md) and run the acceptance checks.
+
+To try it on one machine first, see [Local development](#local-development).
 
 Before deploying, read the [self-hosted private CDN design
 guide](https://vaheed.github.io/CDNFoundry/getting-started/private-cdn-design)
