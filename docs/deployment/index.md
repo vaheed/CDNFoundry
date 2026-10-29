@@ -35,12 +35,13 @@ Before deploying, read:
 2. [Production best practices](../operations/production-best-practices.md) for
    the readiness and change contract.
 3. [Production quick start](production-quick-start.md) for an end-to-end first installation.
-4. [Manual Docker Compose deployment](manual-compose.md) when deliberately
+4. [Production setup after quick start](production-setup-after-quick-start.md) for administrator handoff and daily operations.
+5. [Manual Docker Compose deployment](manual-compose.md) when deliberately
    operating without Fleet, scripts, or Make.
-5. [Topology](topology.md) for networks, profiles, and public ports.
-6. [Certificates](certificates.md) for the edge-control and DNS API PKI.
-7. [Configuration](../reference/configuration.md) for every `.env.prod` key.
-8. [Upgrade](upgrade.md) for schema, worker, DNS, and edge sequencing.
+6. [Topology](topology.md) for networks, profiles, and public ports.
+7. [Certificates](certificates.md) for the edge-control and DNS API PKI.
+8. [Configuration](../reference/configuration.md) for every `.env.prod` key.
+9. [Upgrade](upgrade.md) for schema, worker, DNS, and edge sequencing.
 
 For separated roles across several failure domains, continue with the [multi-region Fleet quick start](production-quick-start-multi-region.md). The [Fleet operator guide](production-fleet-operator-guide.md), [configuration reference](production-fleet-config-reference.md), and [architecture reference](production-fleet.md) cover lifecycle operations, the JSON schema, and role boundaries.
 

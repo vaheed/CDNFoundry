@@ -1620,11 +1620,11 @@ stoppable and must pass the normal public-destination safety policy.
    result contains status/latency but does not disclose credentials or private
    keys.
 4. Request uncached paths while both origins are healthy. Expect the primary
-   marker and `X-CDNFoundry-Origin: primary`. Confirm analytics stores
+   marker and `X-CDNF-Origin: primary`. Confirm analytics stores
    `origin_role=primary` and a bounded transition reason.
 5. Stop the primary and send concurrent MISS traffic. Before the configured
    failure threshold expect bounded failures; afterward expect the backup
-   marker, `X-CDNFoundry-Origin: backup`, and
+   marker, `X-CDNF-Origin: backup`, and
    `primary_failure_threshold`. Record transition time, origin pressure,
    errors, CPU, memory, and p50/p95/p99 latency.
 6. Keep the primary unavailable past the hold-down and verify traffic remains

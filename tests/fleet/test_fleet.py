@@ -145,11 +145,14 @@ def source_repo(tmp_path: Path) -> Path:
                     "EDGE_STATUS_TOKEN": "${EDGE_STATUS_TOKEN:?required}",
                     "EDGE_CONTROL_URL": "${EDGE_CONTROL_URL:?required}",
                     "EDGE_CONTROL_CA_CERTIFICATE": "${EDGE_CONTROL_CA_CERTIFICATE:?required}",
+                    "EDGE_STATE_ENCRYPTION_KEY_FILE": "/run/secrets/edge-state-encryption.key",
                 },
                 "volumes": [
                     "${EDGE_CONTROL_CA_CERTIFICATE:?required}:/run/edge-control-ca.crt:ro",
                     "${EDGE_RUNTIME_TLS_CERTIFICATE:?required}:/run/node.crt:ro",
                     "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?required}:/run/node.key:ro",
+                    "${EDGE_STATE_ENCRYPTION_KEY_FILE:?required}:/run/secrets/edge-state-encryption.key:ro",
+                    "edge-runtime-memory:/var/lib/cdnfoundry/runtime",
                 ],
             },
             "cell-01": {
@@ -200,6 +203,7 @@ def source_repo(tmp_path: Path) -> Path:
             "pdns-db": {},
             "mmdb": {},
             "cell-01-cache": {},
+            "edge-runtime-memory": {"driver_opts": {"type": "tmpfs", "device": "tmpfs", "o": "size=512m,mode=0700"}},
             "clickhouse": {},
             "prometheus": {},
         },
@@ -216,7 +220,7 @@ def store(tmp_path: Path) -> FleetState:
             {
                 "operator_domain": "ops.example.com",
                 "platform_domain": "example.net",
-                "release": "v1.0.0",
+                "release": "v1.2.1",
                 "acme_email": "ops@example.com",
             }
         )
@@ -287,6 +291,13 @@ def test_disabled_monitoring_does_not_require_clickhouse_credentials_on_edge(sto
     env = env_values(output / "edge-dubai/.env.prod")
     assert "vector" not in compose["services"]
     assert "CLICKHOUSE_PASSWORD" not in env
+    production = yaml.safe_load((REPO_PATCH / "compose.prod.yml").read_text(encoding="utf-8"))
+    assert production["services"]["cell-01"]["healthcheck"]["start_period"] == "120s"
+    readme = (output / "edge-dubai/README.md").read_text(encoding="utf-8")
+    assert "bounded Docker" in readme
+    assert "remove query strings" in readme
+    assert "X-CDNF-Cache" in readme
+    assert "X-CDNF-Origin" in readme
 
 
 def test_dns_profile_includes_vector_when_monitoring_is_enabled(
@@ -302,6 +313,7 @@ def test_dns_profile_includes_vector_when_monitoring_is_enabled(
 
     assert "vector" in compose["services"]
     assert set(compose["services"]["vector"]["profiles"]) == {"dns", "edge", "telemetry"}
+    assert "268435488 bytes" in (output / "dns-1/README.md").read_text(encoding="utf-8")
 
 
 def test_duplicate_ip_and_malicious_node_input_are_rejected(store: FleetState) -> None:
@@ -412,6 +424,22 @@ def test_monitoring_files_are_readable_by_non_root_consumers(
         assert stat.S_IMODE((bundle / f"generated/prometheus-{name}-targets.yml").stat().st_mode) == 0o644
     start = (bundle / "start.sh").read_text(encoding="utf-8")
     assert "! -path 'docker/pdns/pdns.conf' -exec chmod a+r" in start
+
+
+def test_control_start_waits_only_on_services_with_active_healthchecks(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
+    # Regression: `up --wait` fails on services whose healthcheck is explicitly disabled
+    # (Loki), which left Caddy and Grafana uncreated on the stage control host.
+    add(store, node("control-1", "control", "192.0.2.10"))
+    output = tmp_path / "bundles"
+    Renderer(source_repo, store, output).render(store.load())
+
+    start = (output / "control-1/start.sh").read_text(encoding="utf-8")
+    assert "healthy_services=" in start
+    assert "--profile control --profile telemetry --profile logs up -d\n" in start or "up -d\n" in start
+    assert 'if [ -n "$healthy_services" ]; then' in start
+    assert 'and not (service.get("healthcheck") or {}).get("disable")' in start
+    wait_line = [line for line in start.splitlines() if "up -d --wait --wait-timeout 300 $healthy_services" in line]
+    assert wait_line, "activation must wait on the healthy-service list, not on every service"
 
 
 def test_control_start_restricts_identity_ca_key_for_php_worker(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
@@ -576,7 +604,7 @@ def test_production_control_validation_parses_caddyfile(store: FleetState, tmp_p
 
 def test_dry_run_does_not_create_state_or_secrets(tmp_path: Path) -> None:
     store = FleetState(tmp_path / "dry-state", dry_run=True)
-    state = store.init({"operator_domain": "ops.example.com", "platform_domain": "example.net", "release": "v1.0.0"})
+    state = store.init({"operator_domain": "ops.example.com", "platform_domain": "example.net", "release": "v1.2.1"})
     assert state["schema_version"] == 1
     assert not store.state_dir.exists()
 
@@ -592,7 +620,7 @@ def test_setup_dry_run_uses_in_memory_state(source_repo: Path, tmp_path: Path) -
                 "global": {
                     "operator_domain": "ops.example.com",
                     "platform_domain": "example.net",
-                    "release": "v1.0.0",
+                    "release": "v1.2.1",
                 },
                 "nodes": [node("control-1", "control", "192.0.2.10")],
             }
@@ -620,7 +648,16 @@ def test_setup_dry_run_uses_in_memory_state(source_repo: Path, tmp_path: Path) -
         capture_output=True,
     )
     assert "Fleet validation passed (1 node(s))." in result.stdout
+    assert "Dry run, not persisted: Initialized fleet state" in result.stdout
+    assert "Dry run, not persisted: Generated 1 node bundle(s)" in result.stdout
+    persisted_wording = [
+        line for line in result.stdout.splitlines()
+        if line.startswith(("Initialized", "Added", "Generated", "Updated"))
+    ]
+    assert persisted_wording == [], persisted_wording
+    assert '"status": "validated"' in result.stdout
     assert not state_dir.exists()
+    assert not (tmp_path / "dry-bundles").exists()
 
 
 def test_explicit_rotation_changes_only_target_dns_node(store: FleetState) -> None:
@@ -829,7 +866,7 @@ def test_cli_end_to_end_dns_nodes_keep_separate_local_credentials(source_repo: P
         "--platform-domain",
         "example.net",
         "--release",
-        "v1.0.0",
+        "v1.2.1",
         "--non-interactive",
     )
     run(
@@ -973,7 +1010,10 @@ def test_control_monitoring_bundle_uses_project_pki_contract(store: FleetState, 
     assert "DNS:edge-control.ops.example.com" in certificate
     readme = (bundle / "README.md").read_text(encoding="utf-8")
     assert "edge-control.ops.example.com" in readme
+
+
     assert "https://control.ops.example.com/api/ready" in readme
+    assert "https://control.ops.example.com/health" in readme
     assert "php artisan cdnf:admin:create" in readme
     compose = yaml.safe_load((bundle / "compose.yml").read_text(encoding="utf-8"))
     assert "core" in compose["services"]
@@ -992,6 +1032,38 @@ def test_control_monitoring_bundle_uses_project_pki_contract(store: FleetState, 
     assert node_targets[0]["targets"] == ["node-exporter:9100"]
     assert env["LOG_METRICS_BIND"] == "0.0.0.0:9599"
     assert env["LOG_AUTH_TOKEN"]
+
+
+def test_real_control_bundle_serves_scheduled_public_health(store: FleetState, tmp_path: Path) -> None:
+    add(store, node("control-1", "control", "192.0.2.140"))
+    output = tmp_path / "real-bundles"
+    Renderer(REPO_PATCH, store, output).render(store.load(), node_name="control-1")
+    bundle = output / "control-1"
+    compose = yaml.safe_load((bundle / "compose.yml").read_text(encoding="utf-8"))
+    env = env_values(bundle / ".env.prod")
+    assert "scheduler" in compose["services"]
+    assert "web" in compose["services"]
+    assert "CDNF_CORE_IMAGE" in env
+    assert "CDNF_WEB_IMAGE" in env
+    assert "https://control.ops.example.com/health" in (bundle / "README.md").read_text(encoding="utf-8")
+
+
+def test_real_edge_bundle_carries_runtime_security_configuration(store: FleetState, tmp_path: Path) -> None:
+    add(store, node("control-1", "control", "192.0.2.140"))
+    add(store, node("edge-1", "dns-edge", "192.0.2.141"))
+    output = tmp_path / "real-bundles"
+    Renderer(REPO_PATCH, store, output).render(store.load(), node_name="edge-1")
+    bundle = output / "edge-1"
+    compose = yaml.safe_load((bundle / "compose.yml").read_text(encoding="utf-8"))
+    assert compose["volumes"]["edge-runtime-memory"]["driver_opts"]["type"] == "tmpfs"
+    assert compose["services"]["cell-01"]["environment"]["EDGE_REQUIRE_MEMORY_TLS"] == "true"
+    assert compose["services"]["edge-agent"]["environment"]["EDGE_STATE_ENCRYPTION_KEY_FILE"] == "/run/secrets/edge-state-encryption.key"
+    assert not (bundle / "pki/node.key").exists()
+    assert env_values(bundle / ".env.prod")["DNS_API_SERVER_PRIVATE_KEY"] == "/dev/shm/cdnfoundry/node.key"
+    assert "MaxQPSIPRule" in (bundle / "docker/dnsdist/dnsdist.conf").read_text(encoding="utf-8")
+    assert "security_edge_events" in (REPO_PATCH / "docker/vector/vector.yaml").read_text(encoding="utf-8")
+    assert "CDNF_EDGE_RUNTIME_IMAGE" in env_values(bundle / ".env.prod")
+    assert "traffic_limits" in (REPO_PATCH / "docker/nginx/edge-runtime.conf").read_text(encoding="utf-8")
 
 
 def test_dedicated_monitoring_uses_private_local_and_stable_remote_clickhouse_urls(
@@ -1121,7 +1193,7 @@ def test_setup_command_generates_control_monitoring_fleet(source_repo: Path, tmp
             "setup",
             "--operator-domain", "ops.example.com",
             "--platform-domain", "example.net",
-            "--release", "v1.0.0",
+            "--release", "v1.2.1",
             "--preset", "control-monitoring",
             "--control-ipv4", "192.0.2.150",
             "--non-interactive",
@@ -1155,7 +1227,7 @@ def test_status_and_doctor_are_actionable(source_repo: Path, tmp_path: Path) -> 
             "setup",
             "--operator-domain", "ops.example.com",
             "--platform-domain", "example.net",
-            "--release", "v1.0.0",
+            "--release", "v1.2.1",
             "--preset", "control-monitoring",
             "--control-ipv4", "192.0.2.161",
             "--non-interactive",
@@ -1225,7 +1297,7 @@ def test_edge_registration_command_uses_protected_token_file(source_repo: Path, 
     subprocess.run(
         common + [
             "init", "--operator-domain", "ops.example.com", "--platform-domain", "example.net",
-            "--release", "v1.0.0", "--non-interactive",
+            "--release", "v1.2.1", "--non-interactive",
         ],
         check=True,
     )
@@ -1266,7 +1338,17 @@ def test_edge_registration_command_uses_protected_token_file(source_repo: Path, 
     env = env_values(output_dir / "edge-1/.env.prod")
     assert env["EDGE_ID"] == "11111111-2222-3333-4444-555555555555"
     assert env["EDGE_BOOTSTRAP_TOKEN"] == "protected-one-time-token"
+    assert env["EDGE_RUNTIME_TLS_CERTIFICATE"] == "/dev/shm/cdnfoundry/edge-runtime.crt"
+    assert env["EDGE_RUNTIME_TLS_PRIVATE_KEY"] == "/dev/shm/cdnfoundry/edge-runtime.key"
+    assert env["EDGE_STATE_ENCRYPTION_KEY_FILE"] == "/dev/shm/cdnfoundry/edge-state-encryption.key"
+    assert env["DNS_API_SERVER_PRIVATE_KEY"] == "/dev/shm/cdnfoundry/node.key"
     assert json.loads(env["EDGE_GATEWAY_ADDRESS_MAP"]) == {"192.0.2.173": "192.0.2.173"}
+    validation = (output_dir / "edge-1/validate.sh").read_text(encoding="utf-8")
+    assert "stat -f -c '%T'" in validation
+    assert "certificate_public" in validation
+    assert "Do not copy" in (output_dir / "edge-1/README.md").read_text(encoding="utf-8")
+    edge_compose = yaml.safe_load((output_dir / "edge-1/compose.yml").read_text(encoding="utf-8"))
+    assert edge_compose["volumes"]["edge-runtime-memory"]["driver_opts"]["type"] == "tmpfs"
     start = (output_dir / "edge-1/start.sh").read_text(encoding="utf-8")
     assert "docker compose --env-file .env.prod --profile dns --profile edge up -d --wait" in start
     assert "scrub_bootstrap_token" not in start
@@ -1321,7 +1403,7 @@ def test_set_secret_replaces_external_database_password(source_repo: Path, tmp_p
     subprocess.run(
         common + [
             "init", "--operator-domain", "ops.example.com", "--platform-domain", "example.net",
-            "--release", "v1.0.0", "--non-interactive",
+            "--release", "v1.2.1", "--non-interactive",
         ],
         check=True,
     )
@@ -1391,7 +1473,8 @@ def test_production_compose_uses_env_file_contract_and_control_has_mmdb_updater(
     assert "${" in compose_text
     assert ":-" not in compose_text
     assert "${CDNF_CORE_IMAGE:?" in compose_text
-    assert "${CDNF_GRAFANA_IMAGE:?" in compose_text
+    assert "grafana/grafana:12.4.11@sha256:" in compose_text
+    assert "${CDNF_GRAFANA_IMAGE" not in compose_text
     assert "ghcr.io/vaheed/cdnfoundry-core:${CDNF_RELEASE" not in compose_text
 
     compose = yaml.safe_load((root / "compose.prod.yml").read_text(encoding="utf-8"))
@@ -1408,7 +1491,7 @@ def test_setup_config_rejects_unknown_fields(source_repo: Path, tmp_path: Path) 
         "global": {
             "operator_domain": "ops.example.com",
             "platform_domain": "example.net",
-            "release": "v1.0.0",
+            "release": "v1.2.1",
         },
         "nodes": [{
             "name": "control-1", "role": "control", "region": "global", "location": "primary",

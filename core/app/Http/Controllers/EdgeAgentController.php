@@ -277,10 +277,13 @@ class EdgeAgentController extends Controller
     {
         $edge = $request->attributes->get('edge');
         $artifact = $edge->artifacts()->where('checksum', $checksum)->firstOrFail();
+        $expiresAt = now()->addMinutes(5)->timestamp;
 
         return response()->json([
             'data' => ['sequence' => $artifact->sequence, 'kind' => $artifact->kind, 'domain_id' => $artifact->domain_id, 'revision' => $artifact->revision],
             'encoded_payload' => base64_encode(ArtifactSigner::encode($artifact->payload)),
+            'expires_at' => $expiresAt,
+            'delivery_signature' => ArtifactSigner::sign($artifact->checksum.'|'.$artifact->sequence.'|'.$expiresAt),
         ]);
     }
 
@@ -303,8 +306,10 @@ class EdgeAgentController extends Controller
         $compressed = gzencode($encoded, 6, ZLIB_ENCODING_GZIP);
         throw_if($compressed === false, RuntimeException::class, 'Unable to compress the edge snapshot.');
         $checksum = hash('sha256', $compressed);
+        $sequence = (int) $latest->max('sequence');
+        $expiresAt = now()->addMinutes(5)->timestamp;
 
-        return response()->json(['data' => ['artifact_count' => $latest->count(), 'maximum_domains' => 100000], 'encoding' => 'gzip', 'encoded_snapshot' => base64_encode($compressed), 'checksum' => $checksum, 'signature' => ArtifactSigner::sign($checksum), 'signing_public_key' => ArtifactSigner::publicKey()]);
+        return response()->json(['data' => ['artifact_count' => $latest->count(), 'maximum_domains' => 100000], 'encoding' => 'gzip', 'encoded_snapshot' => base64_encode($compressed), 'checksum' => $checksum, 'signature' => ArtifactSigner::sign($checksum), 'signing_public_key' => ArtifactSigner::publicKey(), 'sequence' => $sequence, 'expires_at' => $expiresAt, 'delivery_signature' => ArtifactSigner::sign($checksum.'|'.$sequence.'|'.$expiresAt)]);
     }
 
     public function applied(Request $request): JsonResponse

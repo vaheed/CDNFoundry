@@ -22,7 +22,7 @@ def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument('--image', default='ghcr.io/vaheed/cdnfoundry-caddy:ci')
+    parser.add_argument('--image', default='caddy:2.11-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f')
     image = parser.parse_args().image
     ensure_image(BUSYBOX)
     name = 'cdnf-caddy-' + uuid.uuid4().hex[:12]

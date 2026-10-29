@@ -23,7 +23,7 @@ def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 def main() -> None:
     name = 'cdnf-vector-traffic-' + uuid.uuid4().hex[:12]
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--image', default='ghcr.io/vaheed/cdnfoundry-vector:ci')
+    parser.add_argument('--image', default='timberio/vector:0.58.0-debian@sha256:1c1ea358c617ea0b23003d5af87f7a678b30f8f7096437e680380c47fc13d2d9')
     parser.add_argument('--edge-id', default='')
     args = parser.parse_args()
     image = args.image

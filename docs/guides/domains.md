@@ -155,7 +155,7 @@ retain platform wildcard records during rollback. Do not roll back to code that
 accepts shared delegation for new claims; use a forward fix and suspend new
 claim verification if necessary. No migration is automatically applied by web
 requests or image startup. Production/public registrar qualification remains a
-separate gate in the [audit report](../operations/security-audit.md).
+separate gate recorded in the [production qualification](../operations/production-qualification.md).
 
 The packaged PSL snapshot and its upstream commit/checksum are in
 `core/resources/data/public_suffix_list.*`. Update both from the official

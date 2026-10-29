@@ -965,7 +965,7 @@ Counts are package findings, including repeated advisories across packages, not
 distinct exploitable defects. “No fix reported” means Trivy supplied no fixed
 package version for that selected image; it is not proof that every alternative
 image is affected. Exact pins remain in the source and complete JSON/table reports
-are retained in the CI `production-dependency-scans` artifact and local ignored
+are retained in the CI `release-image-scans` artifact and local ignored
 `storage/qualification/dev-dependencies` directory.
 
 | Selected image | High/Critical findings | No fix reported |
@@ -1086,16 +1086,7 @@ A successful `publish-images` job publishes these GHCR repositories:
 | Edge agent | `ghcr.io/vaheed/cdnfoundry-edge-agent` |
 | Edge gateway | `ghcr.io/vaheed/cdnfoundry-edge-gateway` |
 | MMDB updater | `ghcr.io/vaheed/cdnfoundry-mmdb-updater` |
-| Grafana | `ghcr.io/vaheed/cdnfoundry-grafana` |
-| Loki | `ghcr.io/vaheed/cdnfoundry-loki` |
-| postgres | `ghcr.io/vaheed/cdnfoundry-postgres` |
-| vector | `ghcr.io/vaheed/cdnfoundry-vector` |
-| node-exporter | `ghcr.io/vaheed/cdnfoundry-node-exporter` |
-| alertmanager | `ghcr.io/vaheed/cdnfoundry-alertmanager` |
-| prometheus | `ghcr.io/vaheed/cdnfoundry-prometheus` |
-| pdns | `ghcr.io/vaheed/cdnfoundry-pdns` |
-| dnsdist | `ghcr.io/vaheed/cdnfoundry-dnsdist` |
-| Caddy ingress | `ghcr.io/vaheed/cdnfoundry-caddy` |
+| Grafana, Loki, Prometheus, Alertmanager, node-exporter, Vector, PostgreSQL, PowerDNS, dnsdist, Caddy | Upstream images pinned by digest in `compose.prod.yml`; not built or signed by this project |
 
 Each has the full source-SHA tag. `dev` and `dev-latest` are convenience aliases;
 use the immutable digest references in the signed manifest for deployment.

@@ -16,7 +16,7 @@
                     <span class="cdn-landing-mark" aria-hidden="true">C</span>
                     <span>CDNFoundry</span>
                 </a>
-                <a class="cdn-landing-link" href="/api/health">Service health</a>
+                <a class="cdn-landing-link" href="{{ route('service-health') }}">Service health</a>
             </header>
 
             <section class="cdn-landing-hero">

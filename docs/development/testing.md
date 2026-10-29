@@ -11,6 +11,12 @@ to verify exact package/version/path scope, unapproved findings, expiry and
 end-of-life failure. CI runs it before production image builds. Full image scans
 remain separate; these fixtures do not establish that an image is vulnerability-free.
 
+CI runs `sudo -E python3 tests/e2e/dns_images.py` after loading the compiled
+PostgreSQL, PowerDNS, and DNSdist images tagged `:ci`. The fixture uses a disposable
+Docker network and database, waits for PostgreSQL's final TCP server after schema
+initialization, then verifies DNS answers, APIs, telemetry-outage serving, and
+PowerDNS restart recovery. It removes only its own containers and network.
+
 Run `python3 tests/e2e/gateway_ingress.py` for the non-browser gateway runtime
 qualification. It requires the development edge profile and the locally built
 `cdnfoundry/edge-gateway:qualification` image. Coding agents must not run the separate

@@ -41,6 +41,26 @@ class OriginDestinationSafetyTest extends TestCase
         $this->assertSame(0, Operation::query()->where('type', 'edge.domain_reconcile')->count());
     }
 
+    public function test_control_plane_address_cannot_be_an_origin_even_without_an_edge_or_endpoint_row(): void
+    {
+        // Regression: the stage control host accepted a proxied origin on its own public address,
+        // and the edge health probes reached the control plane. APP_URL is the control address.
+        Queue::fake();
+        config(['app.url' => 'https://8.8.4.4']);
+        $owner = User::factory()->create();
+        $domain = Domain::query()->create(['name' => 'control-origin.example', 'display_name' => 'Control origin',
+            'lifecycle_state' => 'active', 'nameservers_verified_at' => now(), 'revision' => 1]);
+        $domain->users()->attach($owner);
+        $original = $this->origin('1.1.1.1');
+        $record = $domain->dnsRecords()->create(['type' => 'A', 'mode' => 'proxied', 'name' => 'www.control-origin.example',
+            'content' => '1.1.1.1', 'content_hash' => hash('sha256', '1.1.1.1'), 'ttl' => 60, 'origin' => $original]);
+
+        $this->actingAs($owner)->putJson("/api/domains/{$domain->id}/dns/records/{$record->id}/origin", $this->origin('8.8.4.4'))
+            ->assertUnprocessable()->assertJsonValidationErrors('host');
+        $this->assertSame($original, $record->refresh()->origin);
+        $this->assertSame(0, Operation::query()->where('type', 'edge.domain_reconcile')->count());
+    }
+
     public static function deniedOrigins(): iterable
     {
         $cases = [

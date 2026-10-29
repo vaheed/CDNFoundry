@@ -174,7 +174,7 @@ def main() -> None:
                     "curl", "-fsS", "-D", "-", "-o", "/dev/null", "-H", f"Host: {hostname}",
                     f"http://127.0.0.1:{HTTP_PORT}/phase8-throughput",
                 ).stdout.lower()
-                if "x-cdnfoundry-cache: hit" not in hit:
+                if "x-cdnf-cache: hit" not in hit:
                     raise AssertionError(f"throughput path for {hostname} was not a cache HIT: {hit}")
             edge_address = run(
                 "docker", "inspect", "--format={{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", NAME,

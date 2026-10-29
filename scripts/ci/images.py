@@ -67,10 +67,11 @@ def load(revision: str) -> None:
     if seen != expected:
         raise ValueError(f'Incomplete image artifacts; missing: {sorted(expected - seen)}')
     for manifest, archive in manifests:
+        # The archive checksum above binds the exact bytes. Docker may assign a different
+        # local image ID on load, so the revision label is the post-transfer identity check.
         subprocess.run(['docker', 'load', '-i', str(archive)], check=True)
-        for image, expected_id in manifest['images'].items():
-            if identity(image, revision) != expected_id:
-                raise ValueError(f'Image identity changed in transfer: {image}')
+        for image in manifest['images']:
+            identity(image, revision)
         archive.unlink()  # Recover runner space as soon as the verified image is loaded.
     run('docker', 'tag', 'ghcr.io/vaheed/cdnfoundry-core:ci', 'cdnfoundry/core:ci')
 

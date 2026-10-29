@@ -42,13 +42,19 @@ The agent separately verifies the edge-control server against
 
 Descriptors include sequence, kind, domain/revision identity, checksum,
 signature, schema version, and minimum/maximum agent version. Agent version
-`1.1.0` accepts the current `1.x` compatibility envelope. It verifies:
+`1.2.1` accepts the current `1.x` compatibility envelope. It verifies:
 
 1. SHA-256 of canonical encoded payload;
 2. Ed25519 signature over the checksum;
 3. schema version;
 4. version bounds;
 5. compiled per-pool runtime structure.
+
+Artifact and full-snapshot downloads also carry a five-minute expiration and
+an Ed25519 signature binding the checksum, sequence and expiration. The agent
+rejects expired or far-future deliveries, sequence mismatches, and incremental
+sequences that do not increase. Deploy the updated control plane before the
+updated agent, since the agent requires these response fields.
 
 Rejected candidates never replace active state.
 

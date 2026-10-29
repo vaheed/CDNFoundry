@@ -200,6 +200,10 @@ final class PlatformSettings
 
     private function currentPersistedValues(string $group, array $values): array
     {
+        if ($group === 'dns_lifecycle') {
+            // Older nodes may still read this retired field during a rolling upgrade.
+            return array_diff_key($values, ['domain_claim_lifetime_hours' => true]);
+        }
         if ($group !== 'edge_runtime') {
             return $values;
         }

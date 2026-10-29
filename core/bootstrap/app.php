@@ -27,7 +27,12 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(AttachRequestContext::class);
         $middleware->statefulApi();
-        $middleware->trustProxies(at: '*', headers: Request::HEADER_X_FORWARDED_FOR);
+        // Caddy terminates TLS in front of the control plane. Trust its forwarded
+        // scheme and host so generated links (pagination, redirects) keep https.
+        $middleware->trustProxies(at: '*', headers: Request::HEADER_X_FORWARDED_FOR
+            | Request::HEADER_X_FORWARDED_HOST
+            | Request::HEADER_X_FORWARDED_PORT
+            | Request::HEADER_X_FORWARDED_PROTO);
         $middleware->redirectGuestsTo(fn (Request $request): ?string => $request->is('api/*') ? null : '/');
         $middleware->alias([
             'account.active' => EnsureAccountIsActive::class,

@@ -60,6 +60,12 @@ maximum object, origin-header respect, query inclusion, no bypass cookies,
 approved status TTLs, two-request admission, 60 seconds of stale-if-error,
 30 seconds of stale-while-revalidate, normal serving, and 32 variants.
 
+Expired objects inside the stale-while-revalidate window are served while one
+background refresh runs. Nginx's per-key cache lock also coalesces cold misses;
+its wait and lock age are both capped at 65 seconds, matching the outer origin
+read deadline. Full purge still changes
+the domain epoch, so a stale object from an earlier epoch is never selected.
+
 Requests with authorization, unsafe methods, configured cookies, `Set-Cookie`,
 private/no-store responses, unsupported `Vary`, ranges, and disallowed status
 codes follow the runtime bypass or no-store rules. Cache keys and URL purge use

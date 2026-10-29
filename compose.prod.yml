@@ -60,7 +60,7 @@ x-edge-cell: &edge-cell
   volumes:
     - ${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro
     - ${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro
-    - edge-state:/var/lib/cdnfoundry/runtime:ro
+    - edge-runtime-memory:/var/lib/cdnfoundry/runtime:ro
     - mmdb:/mmdb:ro
   depends_on:
     mmdb-updater: { condition: service_healthy }
@@ -81,6 +81,12 @@ x-edge-cell: &edge-cell
   deploy:
     resources:
       limits: { memory: 512m, cpus: "0.5", pids: 128 }
+  healthcheck:
+    test: [CMD, wget, -qO-, http://127.0.0.1:8080/healthz]
+    interval: 10s
+    timeout: 3s
+    retries: 10
+    start_period: 120s
 
 x-core: &core
   image: ${CDNF_CORE_IMAGE:?CDNF_CORE_IMAGE must be an immutable image reference}
@@ -113,9 +119,11 @@ x-core: &core
 services:
   caddy:
     logging: *bounded-logging
-    image: ${CDNF_CADDY_IMAGE:?CDNF_CADDY_IMAGE must be an immutable image reference}
+    image: caddy:2.11-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
     profiles: [control]
     environment:
+      XDG_CONFIG_HOME: /config
+      XDG_DATA_HOME: /data
       CONTROL_HOSTNAME: ${CONTROL_HOSTNAME:?CONTROL_HOSTNAME is required}
       TELEMETRY_HOSTNAME: ${TELEMETRY_HOSTNAME:?TELEMETRY_HOSTNAME is required}
       GRAFANA_HOSTNAME: ${GRAFANA_HOSTNAME:?GRAFANA_HOSTNAME is required}
@@ -138,9 +146,11 @@ services:
 
   dns-api:
     logging: *bounded-logging
-    image: ${CDNF_CADDY_IMAGE:?CDNF_CADDY_IMAGE must be an immutable image reference}
+    image: caddy:2.11-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
     profiles: [dns]
     environment:
+      XDG_CONFIG_HOME: /config
+      XDG_DATA_HOME: /data
       DNS_API_HOSTNAME: ${DNS_API_HOSTNAME:?DNS_API_HOSTNAME is required}
       CONTROL_PUBLIC_IPV4_ALLOWLIST: ${CONTROL_PUBLIC_IPV4_ALLOWLIST}
       CONTROL_PUBLIC_IPV6_ALLOWLIST: ${CONTROL_PUBLIC_IPV6_ALLOWLIST}
@@ -157,9 +167,11 @@ services:
 
   telemetry-gateway:
     logging: *bounded-logging
-    image: ${CDNF_CADDY_IMAGE:?CDNF_CADDY_IMAGE must be an immutable image reference}
+    image: caddy:2.11-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
     profiles: [telemetry]
     environment:
+      XDG_CONFIG_HOME: /config
+      XDG_DATA_HOME: /data
       TELEMETRY_HOSTNAME: ${TELEMETRY_HOSTNAME:?TELEMETRY_HOSTNAME is required}
       GRAFANA_HOSTNAME: ${GRAFANA_HOSTNAME:?GRAFANA_HOSTNAME is required}
       ACME_CONTACT_EMAIL: ${ACME_CONTACT_EMAIL:?ACME_CONTACT_EMAIL is required}
@@ -172,7 +184,7 @@ services:
       LOG_AUTH_TOKEN: ${LOG_AUTH_TOKEN:?LOG_AUTH_TOKEN is required}
     ports: ["${HOST_BIND_IPV4}:80:80/tcp", "${HOST_BIND_IPV4}:443:443/tcp", "${HOST_BIND_IPV4}:8444:8444/tcp"]
     volumes: [./deploy/production/Caddyfile.telemetry:/etc/caddy/Caddyfile:ro, telemetry-caddy-data:/data, telemetry-caddy-config:/config]
-    depends_on: { clickhouse: { condition: service_healthy }, loki: { condition: service_healthy }, grafana: { condition: service_healthy } }
+    depends_on: { clickhouse: { condition: service_healthy }, loki: { condition: service_started }, grafana: { condition: service_healthy } }
     # The gateway must be dual-homed: ingress receives public HTTPS and
     # telemetry keeps ClickHouse, Loki, and Grafana private.
     networks: [ingress, telemetry]
@@ -253,7 +265,7 @@ services:
 
   control-db:
     logging: *bounded-logging
-    image: ${CDNF_POSTGRES_IMAGE:?CDNF_POSTGRES_IMAGE must be an immutable image reference}
+    image: postgres:18.6-alpine3.24@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
     profiles: [control]
     environment:
       POSTGRES_DB: cdnf
@@ -284,7 +296,7 @@ services:
 
   pdns-db:
     logging: *bounded-logging
-    image: ${CDNF_POSTGRES_IMAGE:?CDNF_POSTGRES_IMAGE must be an immutable image reference}
+    image: postgres:18.6-alpine3.24@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
     profiles: [dns]
     environment:
       POSTGRES_DB: pdns
@@ -304,7 +316,10 @@ services:
 
   pdns-auth:
     logging: *bounded-logging
-    image: ${CDNF_PDNS_IMAGE:?CDNF_PDNS_IMAGE must be an immutable image reference}
+    image: powerdns/pdns-auth-51:5.1.4@sha256:bb5b1c133bcca1dd455075321de7d55db4945a8d7f2ba23339e3c7bbe416b205
+    entrypoint: [/usr/local/sbin/pdns_server]
+    command: [--disable-syslog, --daemon=no, --guardian=no]
+    init: true
     profiles: [dns]
     volumes:
       - ./docker/pdns/pdns.conf:/etc/powerdns/pdns.conf:ro
@@ -323,7 +338,7 @@ services:
 
   pdns-migrate:
     logging: *bounded-logging
-    image: ${CDNF_POSTGRES_IMAGE:?CDNF_POSTGRES_IMAGE must be an immutable image reference}
+    image: postgres:18.6-alpine3.24@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
     profiles: [tools]
     command: [psql, -v, ON_ERROR_STOP=1, -h, pdns-db, -U, pdns, -d, pdns, -f, /migrations/2026_07_17_000001_add_powerdns_metadata_tables.sql]
     environment: { PGPASSWORD: "${PDNS_DB_PASSWORD}" }
@@ -335,7 +350,10 @@ services:
 
   dnsdist:
     logging: *bounded-logging
-    image: ${CDNF_DNSDIST_IMAGE:?CDNF_DNSDIST_IMAGE must be an immutable image reference}
+    image: powerdns/dnsdist-21:2.1.2@sha256:efabf173811e27438bebee5f1f40e047f263ea39093a8f7d6097df494cf1ed67
+    entrypoint: [/usr/local/bin/dnsdist]
+    command: [--supervised, --disable-syslog]
+    init: true
     profiles: [dns]
     ports:
       - "${DNS_BIND_V4}:53:53/udp"
@@ -380,7 +398,7 @@ services:
 
   vector:
     logging: *bounded-logging
-    image: ${CDNF_VECTOR_IMAGE:?CDNF_VECTOR_IMAGE must be an immutable image reference}
+    image: timberio/vector:0.58.0-debian@sha256:1c1ea358c617ea0b23003d5af87f7a678b30f8f7096437e680380c47fc13d2d9
     profiles: [telemetry, dns, edge]
     environment:
       VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION: "true"
@@ -409,12 +427,13 @@ services:
 
   loki:
     logging: *bounded-logging
-    image: ${CDNF_LOKI_IMAGE:?CDNF_LOKI_IMAGE must be an immutable image reference}
+    image: grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193
+    command: [-config.file=/etc/loki/loki.yml, -config.expand-env=true]
     profiles: [telemetry]
     environment:
       LOKI_RETENTION_PERIOD: ${LOKI_RETENTION_PERIOD}
       LOKI_MAX_QUERY_LENGTH: ${LOKI_MAX_QUERY_LENGTH}
-    volumes: [loki-data:/loki]
+    volumes: [./docker/loki/loki.yml:/etc/loki/loki.yml:ro, loki-data:/loki]
     depends_on:
       loki-data-init: { condition: service_completed_successfully }
     networks: [telemetry]
@@ -425,19 +444,14 @@ services:
     cpus: 1
     pids_limit: 128
     cap_drop: [ALL]
-    healthcheck:
-      test: [CMD, /usr/local/bin/busybox, wget, -qO-, http://127.0.0.1:3100/ready]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 10s
+    healthcheck: { disable: true }
     deploy:
       resources:
         limits: { memory: 1g, cpus: "1", pids: 128 }
 
   log-collector:
     logging: *bounded-logging
-    image: ${CDNF_VECTOR_IMAGE:?CDNF_VECTOR_IMAGE must be an immutable image reference}
+    image: timberio/vector:0.58.0-debian@sha256:1c1ea358c617ea0b23003d5af87f7a678b30f8f7096437e680380c47fc13d2d9
     profiles: [logs]
     command: [--config, /etc/vector/operational.yaml]
     environment:
@@ -469,7 +483,7 @@ services:
 
   prometheus:
     logging: *bounded-logging
-    image: ${CDNF_PROMETHEUS_IMAGE:?CDNF_PROMETHEUS_IMAGE must be an immutable image reference}
+    image: prom/prometheus:v3.13.3@sha256:6976aa8a60fec930796ce5772b8d12da7a318a5daa8d40d69c5c7819a05eeed7
     profiles: [telemetry]
     group_add: ["82"]
     volumes:
@@ -491,9 +505,24 @@ services:
       retries: 20
       start_period: 10s
 
+  grafana-plugins-init:
+    logging: *bounded-logging
+    image: alpine:3.22.6@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
+    profiles: [telemetry]
+    command:
+      - sh
+      - -ec
+      - if [ -f /plugins/grafana-clickhouse-datasource/plugin.json ]; then echo present; exit 0; fi; wget -qO /tmp/plugin.zip 'https://grafana.com/api/plugins/grafana-clickhouse-datasource/versions/4.21.3/download?os=linux&arch=amd64' && echo '53c0602214e7ca1af1733962779293587386b0b9a8c544ecead80b819e5f560b  /tmp/plugin.zip' | sha256sum -c - && unzip -q /tmp/plugin.zip -d /plugins && rm /tmp/plugin.zip
+    volumes: [grafana-plugins:/plugins]
+    networks: [egress]
+    restart: "no"
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+
   grafana-control-db-provision:
     logging: *bounded-logging
-    image: ${CDNF_POSTGRES_IMAGE:?CDNF_POSTGRES_IMAGE must be an immutable image reference}
+    image: postgres:18.6-alpine3.24@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
     profiles: [telemetry]
     environment:
       PGHOST: ${GRAFANA_POSTGRES_PROVISION_HOST}
@@ -516,7 +545,7 @@ services:
 
   grafana:
     logging: *bounded-logging
-    image: ${CDNF_GRAFANA_IMAGE:?CDNF_GRAFANA_IMAGE must be an immutable image reference}
+    image: grafana/grafana:12.4.11@sha256:3ea272e5cab64a4a62240c682e2c62433b25614d956d44c299a10cb6994f6f2e
     profiles: [telemetry]
     ports: ["${GRAFANA_BIND}:3000"]
     environment:
@@ -530,7 +559,7 @@ services:
       GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_SECURITY_COOKIE_SECURE: ${GRAFANA_COOKIE_SECURE}
-      GF_PATHS_PLUGINS: /usr/share/grafana/cdnfoundry-plugins
+      GF_PATHS_PLUGINS: /var/lib/grafana/plugins
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/system-command-center.json
       GRAFANA_LOKI_URL: ${GRAFANA_LOKI_URL}
       GRAFANA_CLICKHOUSE_HOST: ${GRAFANA_CLICKHOUSE_HOST}
@@ -547,11 +576,13 @@ services:
       GRAFANA_POSTGRES_SSLMODE: ${GRAFANA_POSTGRES_SSLMODE}
     volumes:
       - grafana-data:/var/lib/grafana
+      - grafana-plugins:/var/lib/grafana/plugins:ro
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       clickhouse: { condition: service_healthy }
       grafana-control-db-provision: { condition: service_completed_successfully }
+      grafana-plugins-init: { condition: service_completed_successfully }
       prometheus: { condition: service_healthy }
     networks: [telemetry, control, egress]
     restart: unless-stopped
@@ -573,7 +604,7 @@ services:
 
   node-exporter:
     logging: *bounded-logging
-    image: ${CDNF_NODE_EXPORTER_IMAGE:?CDNF_NODE_EXPORTER_IMAGE must be an immutable image reference}
+    image: prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
     profiles: [control, dns, edge, telemetry]
     command: [--path.procfs=/host/proc, --path.sysfs=/host/sys, --path.rootfs=/host/root, --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)]
     pid: host
@@ -587,7 +618,7 @@ services:
 
   alertmanager:
     logging: *bounded-logging
-    image: ${CDNF_ALERTMANAGER_IMAGE:?CDNF_ALERTMANAGER_IMAGE must be an immutable image reference}
+    image: prom/alertmanager:v0.34.1@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a
     profiles: [telemetry]
     volumes: [./docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro]
     networks: [telemetry]
@@ -601,11 +632,11 @@ services:
   cell-01: &cell-01
     <<: *edge-cell
     ports: ["127.0.0.1:18081:8081", "127.0.0.1:18444:8444", "127.0.0.1:19081:9080"]
-    environment: { EDGE_CELL_NAME: cell-01, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-01.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    environment: { EDGE_CELL_NAME: cell-01, EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-01.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
     volumes:
       - ${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro
       - ${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro
-      - edge-state:/var/lib/cdnfoundry/runtime:ro
+      - edge-runtime-memory:/var/lib/cdnfoundry/runtime:ro
       - mmdb:/mmdb:ro
       - cell-01-cache:/var/cache/nginx
     networks:
@@ -616,11 +647,11 @@ services:
     logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18082:8081", "127.0.0.1:18445:8444", "127.0.0.1:19082:9080"]
-    environment: { EDGE_CELL_NAME: cell-02, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-02.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    environment: { EDGE_CELL_NAME: cell-02, EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-02.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
     volumes:
       - ${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro
       - ${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro
-      - edge-state:/var/lib/cdnfoundry/runtime:ro
+      - edge-runtime-memory:/var/lib/cdnfoundry/runtime:ro
       - mmdb:/mmdb:ro
       - cell-02-cache:/var/cache/nginx
     networks:
@@ -631,43 +662,43 @@ services:
     logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18083:8081", "127.0.0.1:18446:8444", "127.0.0.1:19083:9080"]
-    environment: { EDGE_CELL_NAME: cell-03, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-03.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
-    volumes: [edge-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-03-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
+    environment: { EDGE_CELL_NAME: cell-03, EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-03.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    volumes: [edge-runtime-memory:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-03-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-04:
     logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18084:8081", "127.0.0.1:18447:8444", "127.0.0.1:19084:9080"]
-    environment: { EDGE_CELL_NAME: cell-04, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-04.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
-    volumes: [edge-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-04-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
+    environment: { EDGE_CELL_NAME: cell-04, EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-04.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    volumes: [edge-runtime-memory:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-04-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-05:
     logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18085:8081", "127.0.0.1:18448:8444", "127.0.0.1:19085:9080"]
-    environment: { EDGE_CELL_NAME: cell-05, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-05.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
-    volumes: [edge-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-05-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
+    environment: { EDGE_CELL_NAME: cell-05, EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-05.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    volumes: [edge-runtime-memory:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-05-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-06:
     logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18086:8081", "127.0.0.1:18449:8444", "127.0.0.1:19086:9080"]
-    environment: { EDGE_CELL_NAME: cell-06, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-06.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
-    volumes: [edge-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-06-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
+    environment: { EDGE_CELL_NAME: cell-06, EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-06.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    volumes: [edge-runtime-memory:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-06-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-07:
     logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18087:8081", "127.0.0.1:18450:8444", "127.0.0.1:19087:9080"]
-    environment: { EDGE_CELL_NAME: cell-07, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-07.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
-    volumes: [edge-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-07-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
+    environment: { EDGE_CELL_NAME: cell-07, EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-07.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    volumes: [edge-runtime-memory:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-07-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-08:
     logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18088:8081", "127.0.0.1:18451:8444", "127.0.0.1:19088:9080"]
-    environment: { EDGE_CELL_NAME: cell-08, EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-08.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
-    volumes: [edge-state:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-08-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
+    environment: { EDGE_CELL_NAME: cell-08, EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-08.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    volumes: [edge-runtime-memory:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-08-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   edge-agent:
     logging: *bounded-logging
@@ -680,6 +711,7 @@ services:
       EDGE_BOOTSTRAP_TOKEN: ${EDGE_BOOTSTRAP_TOKEN}
       EDGE_STATE_DIR: /var/lib/cdnfoundry/agent
       EDGE_RUNTIME_DIR: /var/lib/cdnfoundry/runtime
+      EDGE_STATE_ENCRYPTION_KEY_FILE: /run/secrets/edge-state-encryption.key
       EDGE_GATEWAY_STATUS_URL: ${EDGE_GATEWAY_STATUS_URL}
       EDGE_GATEWAY_ADDRESS_MAP: ${EDGE_GATEWAY_ADDRESS_MAP}
       EDGE_GATEWAY_REQUIRE_ADDRESS_MAP: ${EDGE_GATEWAY_REQUIRE_ADDRESS_MAP}
@@ -689,7 +721,8 @@ services:
       EDGE_STATUS_TOKEN: ${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}
     volumes:
       - edge-agent-state:/var/lib/cdnfoundry/agent
-      - edge-state:/var/lib/cdnfoundry/runtime
+      - edge-runtime-memory:/var/lib/cdnfoundry/runtime
+      - ${EDGE_STATE_ENCRYPTION_KEY_FILE:?EDGE_STATE_ENCRYPTION_KEY_FILE is required}:/run/secrets/edge-state-encryption.key:ro
       - ${EDGE_CONTROL_CA_CERTIFICATE:?EDGE_CONTROL_CA_CERTIFICATE is required}:/run/secrets/edge-control-ca.crt:ro
     networks:
       edge:
@@ -700,13 +733,13 @@ services:
     stop_grace_period: 30s
     read_only: true
     tmpfs: [/tmp]
-    mem_limit: 128m
+    mem_limit: 256m
     cpus: 0.25
     pids_limit: 64
     deploy:
       resources:
         limits:
-          memory: 128m
+          memory: 256m
           cpus: "0.25"
           pids: 64
 
@@ -720,7 +753,7 @@ services:
       GATEWAY_METRICS_ADDRESS: ${EDGE_GATEWAY_METRICS_ADDRESS}
       GATEWAY_MAX_CONNECTIONS: ${EDGE_GATEWAY_MAX_CONNECTIONS}
     volumes:
-      - edge-state:/var/lib/cdnfoundry/runtime:ro
+      - edge-runtime-memory:/var/lib/cdnfoundry/runtime:ro
       - edge-gateway-state:/var/lib/cdnfoundry/gateway-state
     network_mode: host
     depends_on:
@@ -798,7 +831,12 @@ volumes:
   loki-data: {}
   prometheus: {}
   grafana-data: {}
-  edge-state: {}
+  grafana-plugins:
+  edge-runtime-memory:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=512m,uid=10101,gid=10101,mode=0700,nosuid,nodev,noexec
   edge-agent-state: {}
   edge-gateway-state: {}
   mmdb: {}

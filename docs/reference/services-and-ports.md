@@ -78,8 +78,12 @@ firewalls.
 ## Durable volumes
 
 The base production file defines `core-storage`, `control-db`, `redis`,
-`pdns-db`, `clickhouse`, `vector-data`, `operational-vector-data`, `loki-data`, `prometheus`, `grafana-data`, `edge-state`,
+`pdns-db`, `clickhouse`, `vector-data`, `operational-vector-data`, `loki-data`, `prometheus`, `grafana-data`,
 `edge-agent-state`, `mmdb`, and Caddy data/config volumes.
+
+`edge-runtime-memory` is a bounded tmpfs volume shared by the edge agent and
+cells. The persistent `edge-agent-state` volume contains an encrypted runtime
+recovery snapshot; the edge recovery key remains in external secret storage.
 
 Do not remove these volumes during routine stop, upgrade, or testing. Recovery
 requires the control database plus its encryption/signing keys and external TLS

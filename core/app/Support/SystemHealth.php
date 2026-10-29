@@ -28,6 +28,70 @@ final class SystemHealth
 {
     public const QUEUES = ['interactive', 'runtime', 'certificate_purge', 'bulk_maintenance'];
 
+    public const PUBLIC_CACHE_KEY = 'service_health:public_snapshot';
+
+    public const PUBLIC_FRESH_SECONDS = 150;
+
+    private const PUBLIC_GROUPS = [
+        'dns' => ['label' => 'DNS', 'description' => 'Authoritative service and zone delivery', 'checks' => ['authoritative_dns' => 'Nameservers', 'dns_deployments' => 'Zone changes']],
+        'edge' => ['label' => 'Edge delivery', 'description' => 'Serving capacity and configuration', 'checks' => ['edges' => 'Edge nodes', 'edge_listeners' => 'Listeners', 'edge_cells' => 'Serving cells', 'service_pools' => 'Service pools', 'edge_configuration' => 'Configuration', 'edge_placements' => 'Placement', 'edge_capacity' => 'Capacity']],
+        'tls' => ['label' => 'TLS', 'description' => 'Certificate issuance and renewal', 'checks' => ['tls' => 'Certificates']],
+        'cache' => ['label' => 'Cache and origin', 'description' => 'Purge and runtime task delivery', 'checks' => ['purges' => 'Cache purges', 'runtime_tasks' => 'Runtime tasks']],
+        'security' => ['label' => 'Security', 'description' => 'Emergency controls and IP intelligence', 'checks' => ['emergency_modes' => 'Emergency modes', 'mmdb' => 'GeoIP data']],
+        'telemetry' => ['label' => 'Telemetry', 'description' => 'Collection and usage processing', 'checks' => ['vector' => 'Event collection', 'clickhouse' => 'Analytics storage', 'usage' => 'Usage rollups']],
+        'control' => ['label' => 'Control plane', 'description' => 'Database, jobs, scheduling, and recovery', 'checks' => ['control_database' => 'Database', 'queue_backend' => 'Queue backend', 'queue_workers' => 'Workers', 'scheduler' => 'Scheduler', 'host_clock' => 'Clock', 'operations' => 'Operations', 'fleet_rollouts' => 'Fleet rollouts', 'backups' => 'Backups']],
+    ];
+
+    public function publicSnapshot(array $components, array $queues): array
+    {
+        $groups = [];
+        foreach (self::PUBLIC_GROUPS as $key => $group) {
+            $checks = [];
+            foreach ($group['checks'] as $component => $label) {
+                $checks[] = ['name' => $label, 'status' => $this->publicState($components[$component]['status'] ?? null)];
+            }
+            if ($key === 'control') {
+                foreach (self::QUEUES as $queue) {
+                    $checks[] = ['name' => str($queue)->replace('_', ' ')->headline().' queue', 'status' => $this->publicState($queues[$queue]['status'] ?? null)];
+                }
+            }
+            $groups[] = [
+                'key' => $key,
+                'label' => $group['label'],
+                'description' => $group['description'],
+                'status' => $this->aggregatePublicState(array_column($checks, 'status')),
+                'checks' => $checks,
+            ];
+        }
+
+        return [
+            'status' => $this->aggregatePublicState(array_column($groups, 'status')),
+            'checked_at' => now()->toIso8601String(),
+            'groups' => $groups,
+        ];
+    }
+
+    private function publicState(?string $status): string
+    {
+        return match ($status) {
+            'healthy' => 'operational',
+            'degraded' => 'degraded',
+            'unavailable' => 'outage',
+            default => 'unknown',
+        };
+    }
+
+    private function aggregatePublicState(array $statuses): string
+    {
+        foreach (['outage', 'degraded', 'unknown'] as $status) {
+            if (in_array($status, $statuses, true)) {
+                return $status;
+            }
+        }
+
+        return 'operational';
+    }
+
     public function components(): array
     {
         $components = [];

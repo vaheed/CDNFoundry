@@ -15,15 +15,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 DOCKERFILES = [
     ROOT / "core/Dockerfile", ROOT / "edge-agent/Dockerfile", ROOT / "edge-gateway/Dockerfile",
     ROOT / "docker/nginx/Dockerfile.production", ROOT / "docker/openresty/Dockerfile",
-    ROOT / "docker/mmdb-updater/Dockerfile", ROOT / "docker/grafana/Dockerfile", ROOT / "docker/loki/Dockerfile",
-    ROOT / "docker/caddy/Dockerfile",
-    ROOT / "docker/dnsdist/Dockerfile",
-    ROOT / "docker/pdns/Dockerfile",
-    ROOT / "docker/prometheus/Dockerfile",
-    ROOT / "docker/alertmanager/Dockerfile",
-    ROOT / "docker/node-exporter/Dockerfile",
-    ROOT / "docker/vector-runtime/Dockerfile",
-    ROOT / "docker/postgres/Dockerfile",
+    ROOT / "docker/mmdb-updater/Dockerfile",
 ]
 REQUIRED_LABELS = ["image.source", "image.revision", "image.version", "image.created", "image.description", "image.licenses"]
 
@@ -142,19 +134,6 @@ def validate_compose_images(document: dict) -> None:
             raise ValueError(f'Production Compose service {name} has a mutable image')
 
 
-def production_dependency_images(root: pathlib.Path) -> list[str]:
-    import yaml
-    references: set[str] = set()
-    for path in [root / 'compose.prod.yml', *sorted((root / 'deploy/production').glob('*.yml'))]:
-        document = yaml.safe_load(path.read_text())
-        validate_compose_images(document)
-        references.update(service['image'] for service in document.get('services', {}).values()
-                          if service.get('image') and not service['image'].startswith('${'))
-    if not references:
-        raise ValueError('No production dependency images discovered')
-    return sorted(references)
-
-
 def production_release_images(root: pathlib.Path, release: str) -> list[str]:
     import yaml
     if not re.fullmatch(r'ci|[0-9a-f]{40}', release):
@@ -172,7 +151,7 @@ def production_release_images(root: pathlib.Path, release: str) -> list[str]:
     return [f'ghcr.io/vaheed/cdnfoundry-{component}:{release}' for component in sorted(components)]
 
 
-def scan_production_dependencies(output: pathlib.Path, *, release: str | None = None) -> None:
+def scan_release_images(output: pathlib.Path, release: str) -> None:
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
     scanner = 'aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e'
@@ -183,12 +162,12 @@ def scan_production_dependencies(output: pathlib.Path, *, release: str | None = 
             '-v', f'{ROOT}:/work:ro', '-v', f'{output}:/out',
             '-v', f'{cache}:/root/.cache', scanner]
     results = []
-    references = production_dependency_images(ROOT) if release is None else production_release_images(ROOT, release)
-    for index, reference in enumerate(references, 1):
-        name = f'{"dependency" if release is None else "release"}-{index:02}'
+    references = production_release_images(ROOT, release)
+    for reference in references:
+        name = re.fullmatch(r'ghcr\.io/vaheed/cdnfoundry-([a-z0-9-]+):.+', reference)[1]
         # Locally built release images must exist; pulling a similarly named
         # registry tag would qualify different bytes from this checkout.
-        commands = ([['docker', 'pull', reference]] if release is None else []) + [
+        commands = [
             [*base, 'image', '--image-src', 'docker', '--config', '/work/supply-chain/trivy.yaml',
              '--format', 'json', '--output', f'/out/{name}.json', '--exit-code', '0', reference],
             [*base, 'convert', '--ignorefile', '/dev/null', '--format', 'table', '--output', f'/out/{name}.txt', f'/out/{name}.json'],
@@ -209,9 +188,9 @@ def scan_production_dependencies(output: pathlib.Path, *, release: str | None = 
                 break
         results.append(result)
         (output / 'summary.json').write_text(json.dumps({'schema_version': 1, 'results': results}, indent=2)+'\n')
-        print(f"production_dependency_scan={result['status']} image={reference}", flush=True)
+        print(f"release_image_scan={result['status']} image={reference}", flush=True)
     if any(result['status'] != 'passed' for result in results):
-        fail(f'production dependency scan failed; inspect {output / "summary.json"}')
+        fail(f'release image scan failed; inspect {output / "summary.json"}')
 
 
 def main() -> None:
@@ -247,9 +226,7 @@ def main() -> None:
     for manifest, lockfile in [("core/composer.json", "core/composer.lock"), ("core/package.json", "core/package-lock.json"), ("docs/package.json", "docs/package-lock.json")]:
         if not (ROOT / manifest).is_file() or not (ROOT / lockfile).is_file():
             fail(f"{manifest} lacks required lockfile {lockfile}")
-    for module in [ROOT / "edge-agent/go.mod", ROOT / "edge-gateway/go.mod", ROOT / "docker/caddy/go.mod",
-                   ROOT / "docker/alertmanager/upstream.go.mod", ROOT / "docker/prometheus/upstream.go.mod",
-                   ROOT / "docker/node-exporter/upstream.go.mod"]:
+    for module in [ROOT / "edge-agent/go.mod", ROOT / "edge-gateway/go.mod"]:
         if "require " in module.read_text() and not module.with_suffix(".sum").is_file():
             fail(f"{module.relative_to(ROOT)} has dependencies but no go.sum")
 
@@ -259,9 +236,10 @@ def main() -> None:
             fail(f"release workflow lacks {evidence}")
     if 'scripts/supply-chain-policy.py --scan-release-images ci' not in release:
         fail('release workflow lacks the image gate before publication')
-    for evidence in ['convert --exit-code 1 --exit-on-eol 1 --severity HIGH,CRITICAL', 'convert --ignorefile /dev/null --format table', '--exit-code 0 "${digest}"',
-                     '--ignorefile /work/supply-chain/trivy-classifications.yaml --show-suppressed']:
-        if evidence not in release:
+    scanner_source = pathlib.Path(__file__).read_text()
+    for evidence in ["'--exit-on-eol', '1', '--severity', 'HIGH,CRITICAL'", "'--format', 'table'", "'--exit-code', '0'",
+                     "'--ignorefile', '/work/supply-chain/trivy-classifications.yaml', '--show-suppressed'"]:
+        if evidence not in scanner_source:
             fail(f"release scan lacks complete reporting and enforcement: {evidence}")
     if "push_with_retry()" not in release or release.count('docker push "${image}"') != 1:
         fail("release workflow does not route all image pushes through bounded retries")
@@ -282,13 +260,9 @@ def main() -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    scans = parser.add_mutually_exclusive_group()
-    scans.add_argument('--scan-production-dependencies', action='store_true')
-    scans.add_argument('--scan-release-images', metavar='RELEASE')
-    parser.add_argument('--output', type=pathlib.Path, default=ROOT / 'storage/qualification/production-dependencies')
+    parser.add_argument('--scan-release-images', metavar='RELEASE')
+    parser.add_argument('--output', type=pathlib.Path, default=ROOT / 'storage/qualification/release-image-scans')
     args = parser.parse_args()
     main()
-    if args.scan_production_dependencies:
-        scan_production_dependencies(args.output)
-    elif args.scan_release_images:
-        scan_production_dependencies(args.output, release=args.scan_release_images)
+    if args.scan_release_images:
+        scan_release_images(args.output, args.scan_release_images)

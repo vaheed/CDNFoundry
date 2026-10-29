@@ -62,16 +62,6 @@ def build_images(release: str) -> None:
         ("edge-agent", "edge-agent/Dockerfile", "edge-agent"),
         ("edge-gateway", "edge-gateway/Dockerfile", "edge-gateway"),
         ("mmdb-updater", "docker/mmdb-updater/Dockerfile", "docker/mmdb-updater"),
-        ("loki", "docker/loki/Dockerfile", "docker/loki"),
-        ("grafana", "docker/grafana/Dockerfile", "docker/grafana"),
-        ("caddy", "docker/caddy/Dockerfile", "docker/caddy"),
-        ("dnsdist", "docker/dnsdist/Dockerfile", "docker/dnsdist"),
-        ("pdns", "docker/pdns/Dockerfile", "docker/pdns"),
-        ("prometheus", "docker/prometheus/Dockerfile", "docker/prometheus"),
-        ("alertmanager", "docker/alertmanager/Dockerfile", "docker/alertmanager"),
-        ("node-exporter", "docker/node-exporter/Dockerfile", "docker/node-exporter"),
-        ("vector", "docker/vector-runtime/Dockerfile", "docker/vector-runtime"),
-        ("postgres", "docker/postgres/Dockerfile", "docker/postgres"),
     ):
         run("docker", "build", "-t", f"ghcr.io/vaheed/cdnfoundry-{image}:{release}",
             "-f", dockerfile, context, cwd=ROOT)
@@ -90,7 +80,7 @@ def main() -> int:
     # Immutable local image IDs qualify the exact local build without requiring
     # a registry push or treating mutable qualification tags as deployment pins.
     local_images = {}
-    for component in ('core', 'web', 'edge-control', 'edge-runtime', 'edge-agent', 'edge-gateway', 'mmdb-updater', 'grafana', 'loki', 'postgres', 'vector', 'node-exporter', 'alertmanager', 'prometheus', 'pdns', 'dnsdist', 'caddy'):
+    for component in ('core', 'web', 'edge-control', 'edge-runtime', 'edge-agent', 'edge-gateway', 'mmdb-updater'):
         tag = f'ghcr.io/vaheed/cdnfoundry-{component}:{args.release}'
         local_images['CDNF_'+component.upper().replace('-', '_')+'_IMAGE'] = run('docker', 'image', 'inspect', tag, '--format', '{{.Id}}', cwd=ROOT, capture=True).stdout.strip()
 

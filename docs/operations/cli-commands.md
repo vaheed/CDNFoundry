@@ -90,6 +90,12 @@ docker compose --env-file .env.prod -f compose.prod.yml exec core php artisan cd
 docker compose -f compose.dev.yml run --rm core php artisan cdnf:edge:reconcile-stale-placements --limit=50
 ```
 
+## Service health
+
+| Command and syntax | Purpose and effects | Scheduled |
+| --- | --- | --- |
+| `cdnf:health:publish` | Samples existing system and queue checks once, then caches only public component names and states for the status page. It performs no runtime mutation. | Every minute |
+
 ## Platform settings
 
 | Command and syntax | Purpose and effects | Scheduled |
@@ -135,6 +141,7 @@ or internal non-command work, which is intentionally not renamed here.
 | `cdnf:edge:reconcile-stale-placements` | Every minute | Retry stale placements |
 | `cdnf:edge:dispatch-origin-checks` | Every minute | Queue due opt-in origin checks |
 | `cdnf:edge:prune-revisions` | Daily at 02:30 | Remove expired derived revision history |
+| `cdnf:health:publish` | Every minute | Refresh the sanitized public status page snapshot |
 | `cdnf:tls:dispatch-maintenance` | Hourly | Maintain managed certificates and alerts |
 | `cdnf:security:reconcile-readiness` | Every minute | Advance bounded security recovery |
 | `cdnf:waf:expire-exclusions` | Every minute | Remove due WAF exclusions |

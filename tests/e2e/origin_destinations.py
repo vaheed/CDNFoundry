@@ -345,9 +345,9 @@ server {
                 status, body = request(hostname, '/?case=' + label + '-recovered', response_headers=headers)
                 active = origin_connections()
                 results.append({'case': label + '-recovered', 'expected': 200, 'status': status, 'origin_connections': active,
-                    'origin_role': headers.get('x-cdnfoundry-origin'),
+                    'origin_role': headers.get('x-cdnf-origin'),
                     'passed': status == 200 and body == 'synthetic-origin-canary' and active == 0
-                    and headers.get('x-cdnfoundry-origin') == 'primary'})
+                    and headers.get('x-cdnf-origin') == 'primary'})
 
             for label, address, expected, overrides in cases:
                 headers = {'X-Forwarded-For': overrides['forwarded']} if 'forwarded' in overrides else {}
@@ -360,7 +360,7 @@ server {
                 case = f'dns-backup-attempt-{index}'
                 headers = {}
                 status, body = request('dns-backup.example', '/?case=' + case, response_headers=headers)
-                role = headers.get('x-cdnfoundry-origin')
+                role = headers.get('x-cdnf-origin')
                 results.append({'case': case, 'expected': expected, 'status': status, 'origin_role': role,
                     'passed': status == expected and ('synthetic-origin-canary' in body) == (expected == 200)
                     and (expected != 200 or role == 'backup')})
@@ -373,7 +373,7 @@ server {
                 case = 'dns-backup-' + suffix
                 headers = {}
                 status, body = request('dns-backup.example', '/?case=' + case, response_headers=headers)
-                role = headers.get('x-cdnfoundry-origin')
+                role = headers.get('x-cdnf-origin')
                 results.append({'case': case, 'expected': expected, 'status': status, 'origin_role': role,
                     'passed': status == expected and ('synthetic-origin-canary' in body) == (expected == 200)
                     and (expected != 200 or role == 'backup')})

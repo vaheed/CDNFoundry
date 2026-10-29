@@ -35,7 +35,7 @@ import (
 	"time"
 )
 
-const version = "1.2.0"
+var version = "1.2.1"
 
 const (
 	generationMismatchGrace       = 15 * time.Second
@@ -70,6 +70,7 @@ type generationMismatchReport struct {
 }
 type client struct {
 	base, dir, runtimeDir, statusToken string
+	backupKey                          []byte
 	gatewayBindings                    string
 	gatewayBindingsConfigured          bool
 	gatewayRevision                    uint64
@@ -150,11 +151,26 @@ func main() {
 	if err := os.MkdirAll(c.dir, 0700); err != nil {
 		fatal(err)
 	}
+	if c.backupKey, err = readBackupKey(env("EDGE_STATE_ENCRYPTION_KEY_FILE", "")); err != nil {
+		fatal(err)
+	}
+	if len(c.backupKey) > 0 {
+		if c.runtimeDir == "" {
+			fatal(errors.New("encrypted edge recovery requires a runtime directory"))
+		}
+		var filesystem syscall.Statfs_t
+		if err := syscall.Statfs(c.runtimeDir, &filesystem); err != nil || filesystem.Type != tmpfsMagic {
+			fatal(errors.New("active edge runtime must be on tmpfs"))
+		}
+	}
 	if err := c.loadOrRegister(); err != nil {
 		fatal(err)
 	}
 	if err := c.configureMutualTLS(); err != nil {
 		fatal(err)
+	}
+	if err := c.restoreBackup(); err != nil {
+		logger.Error("encrypted runtime recovery failed", "event", "runtime_recovery_failed", "edge_id", c.id.EdgeID, "error_code", "runtime_recovery_failed", "error", err.Error())
 	}
 	logger.Info("edge agent started", "event", "service_started", "edge_id", c.id.EdgeID, "version", version)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
@@ -677,10 +693,7 @@ func inNetworks(ip net.IP, cidrs []string) bool {
 func (c *client) loadOrRegister() error {
 	p := filepath.Join(c.dir, "identity.json")
 	bootstrapToken := env("EDGE_BOOTSTRAP_TOKEN", "")
-	if b, err := os.ReadFile(p); err == nil {
-		if err := json.Unmarshal(b, &c.id); err != nil {
-			return err
-		}
+	if err := c.readAgentSecret(p, &c.id); err == nil {
 		if c.id.Certificate == "" || c.id.PrivateKey == "" {
 			return errors.New("legacy edge identity requires administrator rotation")
 		}
@@ -699,8 +712,8 @@ func (c *client) loadOrRegister() error {
 	var pending struct {
 		EdgeID, CSR, PrivateKey string
 	}
-	if b, err := os.ReadFile(pendingPath); err == nil {
-		if err := json.Unmarshal(b, &pending); err != nil || pending.EdgeID != edgeID || pending.CSR == "" || pending.PrivateKey == "" {
+	if err := c.readAgentSecret(pendingPath, &pending); err == nil {
+		if pending.EdgeID != edgeID || pending.CSR == "" || pending.PrivateKey == "" {
 			return errors.New("invalid pending edge registration; rotate the bootstrap identity")
 		}
 	} else if errors.Is(err, os.ErrNotExist) {
@@ -709,7 +722,7 @@ func (c *client) loadOrRegister() error {
 			return err
 		}
 		pending.EdgeID, pending.CSR, pending.PrivateKey = edgeID, csr, privateKey
-		if err := atomicJSON(pendingPath, pending); err != nil {
+		if err := c.writeAgentSecret(pendingPath, pending); err != nil {
 			return err
 		}
 	} else {
@@ -728,7 +741,7 @@ func (c *client) loadOrRegister() error {
 		EdgeID: raw.Data["edge_id"], Certificate: raw.Data["identity_certificate"], PrivateKey: pending.PrivateKey,
 		PublicKey: raw.Data["signing_public_key"], BootstrapTokenHash: hashToken(bootstrapToken),
 	}
-	if err := atomicJSON(p, c.id); err != nil {
+	if err := c.writeAgentSecret(p, c.id); err != nil {
 		return err
 	}
 	if err := os.Remove(pendingPath); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -799,6 +812,7 @@ func (c *client) sync() error {
 			Sequence            uint64  `json:"sequence"`
 			Kind                string  `json:"kind"`
 			DomainID            *uint64 `json:"domain_id"`
+			Revision            uint64  `json:"revision"`
 			Checksum, Signature string
 			SchemaVersion       int    `json:"schema_version"`
 			Minimum             string `json:"minimum_agent_version"`
@@ -814,18 +828,29 @@ func (c *client) sync() error {
 	logger.Info("runtime candidate received", "event", "runtime_candidate_received", "edge_id", c.id.EdgeID, "revision_id", response.Data[len(response.Data)-1].Sequence)
 	candidate := state{Sequence: current.Sequence, Domains: clone(current.Domains)}
 	for _, item := range response.Data {
-		if item.SchemaVersion != 1 || !compatible(item.Minimum, item.Maximum) {
+		if item.Sequence <= candidate.Sequence || item.DomainID == nil || (item.Kind != "domain" && item.Kind != "tombstone") || item.SchemaVersion != 1 || !compatible(item.Minimum, item.Maximum) {
 			logger.Warn("runtime candidate rejected; previous valid state preserved", "event", "runtime_candidate_rejected", "edge_id", c.id.EdgeID, "revision_id", item.Sequence, "error_code", "incompatible_artifact")
 			c.queueAck(ack{Sequence: item.Sequence, Rejected: true, Reason: "incompatible_artifact"})
 			return nil
 		}
 		var artifact struct {
-			Encoded string `json:"encoded_payload"`
+			Encoded           string `json:"encoded_payload"`
+			ExpiresAt         int64  `json:"expires_at"`
+			DeliverySignature string `json:"delivery_signature"`
+			Data              struct {
+				Sequence uint64 `json:"sequence"`
+			} `json:"data"`
 		}
 		if err := c.request("GET", "/edge/v1/config/artifacts/"+item.Checksum, nil, &artifact, true); err != nil {
 			return err
 		}
 		payload, err := verify(artifact.Encoded, item.Checksum, item.Signature, c.id.PublicKey)
+		if err == nil && artifact.Data.Sequence != item.Sequence {
+			err = errors.New("artifact sequence mismatch")
+		}
+		if err == nil {
+			err = verifyDelivery(item.Checksum, item.Sequence, artifact.ExpiresAt, artifact.DeliverySignature, c.id.PublicKey)
+		}
 		if err != nil {
 			logger.Warn("runtime candidate rejected; previous valid state preserved", "event", "runtime_candidate_rejected", "edge_id", c.id.EdgeID, "revision_id", item.Sequence, "error_code", "signature_or_checksum_invalid")
 			c.queueAck(ack{Sequence: item.Sequence, Rejected: true, Reason: "signature_or_checksum_invalid", Details: err.Error()})
@@ -833,6 +858,25 @@ func (c *client) sync() error {
 		}
 		if item.DomainID != nil {
 			key := strconv.FormatUint(*item.DomainID, 10)
+			var metadata struct {
+				SchemaVersion int    `json:"schema_version"`
+				DomainID      uint64 `json:"domain_id"`
+				Revision      uint64 `json:"revision"`
+			}
+			if err := json.Unmarshal(payload, &metadata); err != nil || metadata.Revision != item.Revision ||
+				(item.Kind == "domain" && (metadata.SchemaVersion != 1 || metadata.DomainID != *item.DomainID)) {
+				c.queueAck(ack{Sequence: item.Sequence, Rejected: true, Reason: "invalid_artifact_schema"})
+				return nil
+			}
+			if previous := candidate.Domains[key]; previous != nil {
+				var active struct {
+					Revision uint64 `json:"revision"`
+				}
+				if json.Unmarshal(previous, &active) != nil || metadata.Revision < active.Revision {
+					c.queueAck(ack{Sequence: item.Sequence, Rejected: true, Reason: "artifact_revision_replay"})
+					return nil
+				}
+			}
 			if item.Kind == "tombstone" {
 				delete(candidate.Domains, key)
 			} else {
@@ -1017,7 +1061,11 @@ func (c *client) gatewayActiveRevision(sequence uint64) uint64 {
 }
 
 func (c *client) full() error {
-	var response struct{ Encoded, Checksum, Signature, Public string }
+	var response struct {
+		Encoded, Checksum, Signature, Public, DeliverySignature string
+		Sequence                                                uint64
+		ExpiresAt                                               int64
+	}
 	var raw map[string]json.RawMessage
 	if err := c.requestLimit("GET", "/edge/v1/config/full", nil, &raw, true, 96<<20); err != nil {
 		return err
@@ -1026,11 +1074,17 @@ func (c *client) full() error {
 	json.Unmarshal(raw["checksum"], &response.Checksum)
 	json.Unmarshal(raw["signature"], &response.Signature)
 	json.Unmarshal(raw["signing_public_key"], &response.Public)
+	json.Unmarshal(raw["sequence"], &response.Sequence)
+	json.Unmarshal(raw["expires_at"], &response.ExpiresAt)
+	json.Unmarshal(raw["delivery_signature"], &response.DeliverySignature)
 	if c.id.PublicKey != response.Public {
 		return errors.New("full snapshot signing key changed")
 	}
 	payload, err := verify(response.Encoded, response.Checksum, response.Signature, c.id.PublicKey)
 	if err != nil {
+		return err
+	}
+	if err := verifyDelivery(response.Checksum, response.Sequence, response.ExpiresAt, response.DeliverySignature, c.id.PublicKey); err != nil {
 		return err
 	}
 	reader, err := gzip.NewReader(bytes.NewReader(payload))
@@ -1073,6 +1127,9 @@ func (c *client) full() error {
 		if a.DomainID != nil && a.Kind != "tombstone" {
 			next.Domains[strconv.FormatUint(*a.DomainID, 10)] = a.Payload
 		}
+	}
+	if next.Sequence != response.Sequence {
+		return errors.New("full snapshot sequence mismatch")
 	}
 	if err := c.activate(next); err != nil {
 		return err
@@ -1126,6 +1183,9 @@ func (c *client) activate(s state) error {
 			return nil
 		})
 		if err != nil {
+			return err
+		}
+		if err := c.saveBackup(s); err != nil {
 			return err
 		}
 		c.derivedEnsured = true
@@ -1275,18 +1335,19 @@ func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) 
 	cellCertificates := map[string]map[string]any{}
 	for _, raw := range s.Domains {
 		var domain struct {
-			Domain      string         `json:"domain"`
-			DomainID    uint64         `json:"domain_id"`
-			Revision    uint64         `json:"revision"`
-			Settings    map[string]any `json:"settings"`
-			Cache       map[string]any `json:"cache"`
-			Compression map[string]any `json:"compression"`
-			Security    map[string]any `json:"security"`
-			WAF         map[string]any `json:"waf"`
-			TLS         map[string]any `json:"tls"`
-			Pools       []string       `json:"pools"`
-			Cells       []string       `json:"cells"`
-			Hostnames   []struct {
+			SchemaVersion int            `json:"schema_version"`
+			Domain        string         `json:"domain"`
+			DomainID      uint64         `json:"domain_id"`
+			Revision      uint64         `json:"revision"`
+			Settings      map[string]any `json:"settings"`
+			Cache         map[string]any `json:"cache"`
+			Compression   map[string]any `json:"compression"`
+			Security      map[string]any `json:"security"`
+			WAF           map[string]any `json:"waf"`
+			TLS           map[string]any `json:"tls"`
+			Pools         []string       `json:"pools"`
+			Cells         []string       `json:"cells"`
+			Hostnames     []struct {
 				Hostname         string         `json:"hostname"`
 				Origin           map[string]any `json:"origin"`
 				TLSCertificateID string         `json:"tls_certificate_id"`
@@ -1295,7 +1356,7 @@ func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) 
 		if err := json.Unmarshal(raw, &domain); err != nil {
 			return nil, nil, err
 		}
-		if domain.Domain == "" || len(domain.Hostnames) > 10000 {
+		if domain.SchemaVersion != 1 || domain.Domain == "" || len(domain.Hostnames) > 10000 {
 			return nil, nil, errors.New("invalid runtime domain")
 		}
 		if domain.Settings == nil {
@@ -1837,6 +1898,25 @@ func verify(encoded, checksum, signature, public string) (json.RawMessage, error
 		return nil, errors.New("signature mismatch")
 	}
 	return b, nil
+}
+func verifyDelivery(checksum string, sequence uint64, expiresAt int64, signature, public string) error {
+	now := time.Now().Unix()
+	if expiresAt <= now || expiresAt > now+600 {
+		return errors.New("artifact delivery expired or outside clock bound")
+	}
+	pk, err := hex.DecodeString(public)
+	if err != nil || len(pk) != ed25519.PublicKeySize {
+		return errors.New("invalid delivery signing key")
+	}
+	sig, err := hex.DecodeString(signature)
+	if err != nil || len(sig) != ed25519.SignatureSize {
+		return errors.New("invalid delivery signature")
+	}
+	message := checksum + "|" + strconv.FormatUint(sequence, 10) + "|" + strconv.FormatInt(expiresAt, 10)
+	if !ed25519.Verify(pk, []byte(message), sig) {
+		return errors.New("delivery signature mismatch")
+	}
+	return nil
 }
 func compatible(min, max string) bool {
 	return semver(version) >= semver(min) && semver(version) <= semver(max)

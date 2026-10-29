@@ -46,7 +46,7 @@ def probe(hostname, address, path, scheme):
         if len(body) > 1024 * 1024:
             raise ValueError('Static resource exceeds 1 MiB')
         return {'status': response.status,
-                'cache': response.getheader('X-CDNFoundry-Cache'),
+                'cache': response.getheader('X-CDNF-Cache'),
                 'body_sha256': hashlib.sha256(body).hexdigest(), 'bytes': len(body),
                 'certificate_sha256': fingerprint, 'tls_verified': scheme == 'https'}
     finally:

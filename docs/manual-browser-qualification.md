@@ -5,7 +5,7 @@ description: Owner-run browser and real-runtime checklist for atomic edge genera
 
 # Production hardening manual qualification
 
-This is the manual, owner-run qualification job for the [current roadmap](roadmap.md). Coding agents must not launch or automate a browser. Automated tests and API probes support this job but never replace rendered UI or owner-observed real-traffic checkpoints.
+This is the manual, owner-run qualification job for the [closed roadmap](roadmap.md). Coding agents must not launch or automate a browser. Automated tests and API probes support this job but never replace rendered UI or owner-observed real-traffic checkpoints.
 
 Record every checkpoint as **Passed**, **Failed**, **Blocked**, or **Not run**. A missing menu, field, action, status, event, artifact, or runtime result is **Failed**. Do not mark a workstream complete until its implementation, documentation, automated/runtime qualification, and this manual qualification are independently complete.
 
@@ -51,7 +51,7 @@ traffic buckets were separately explained by the first incomplete UTC hour;
 later direct application checks found a fresh completed bucket. This is the bounded
 browser checkpoint for `staging-install-and-smoke`, not the entire later production
 acceptance job. Use the selected staging release and disposable zone recorded in
-the [staging job report](operations/development-handoff.md#staging-install-and-smoke-job).
+the archived staging job report in `docs/legacy/development-handoff.md`.
 Record each step separately with expected/actual result and sanitized evidence.
 The agent owns non-browser installation/runtime checks; coordinate shared setup
 so existing clusters, edges and domains are reused rather than duplicated.
@@ -82,6 +82,15 @@ so existing clusters, edges and domains are reused rather than duplicated.
    in screenshots or the shared report.
    Status: **Not run** for these new checkpoints. Earlier login passes do not
    cover timezone changes or dashboard corrections.
+   From the public home page, click **Service health**. Expect `/health` with
+   DNS, edge delivery, TLS, cache and origin, security, telemetry, and control
+   plane groups, a UTC update time, and readable status at desktop and narrow
+   viewport widths. Open `/api/health` in a browser and expect the same page;
+   open `/api/health?format=json` and expect `{"status":"ok"}`. Stop the
+   scheduler for over 150 seconds in a coordinated maintenance window and
+   refresh: expect **Status unavailable** and a stale-report notice. Restart
+   the scheduler and expect the next minute snapshot to restore component
+   states. Status: **Not run — owner execution required**.
 2. Open **Infrastructure → DNS clusters**. For each prepared PoP, create its
    record disabled with **API URL**, **API key**, **Server ID**, and **Zone
    capacity** from the protected installation configuration, or inspect the
@@ -435,7 +444,7 @@ workstream does not replace an earlier product checkpoint.
    expect an origin failure, with no request reaching the origin. Restore the
    safe AAAA answer (or successful NODATA for IPv4-only service) and expect serving
    to recover. Record the DNS observations and actual request results.
-   Record `X-CDNFoundry-Origin`, request IDs, revisions, and comparison
+   Record `X-CDNF-Origin`, request IDs, revisions, and comparison
    traffic showing unrelated hosts remain available.
 3. Use **TLS mode** for managed DNS-01 and a valid custom certificate. Exercise
    **Renew managed certificate**, **Reissue managed certificate**, **Upload
@@ -924,7 +933,7 @@ remains **Not run** until the owner records actual results and artifacts.
 ## Edge identity security upgrade job
 
 Status: **Not run — owner execution required.** Use an isolated canary edge and
-follow [the ingress-before-core upgrade order](deployment/upgrade.md#september-2026-security-changes).
+follow [the update order](deployment/upgrade.md#order).
 
 1. Sign in as administrator. Open **Infrastructure → Edges**, open the canary
    edge and record its edge UUID, heartbeat time and active revision. Confirm

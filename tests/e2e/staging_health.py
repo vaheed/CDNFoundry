@@ -12,6 +12,7 @@ import ipaddress
 import json
 import os
 import re
+import secrets
 import subprocess
 import tempfile
 import urllib.error
@@ -19,6 +20,8 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+
+from staging_traffic import probe as edge_probe
 
 
 def https_origin(value: str) -> str:
@@ -83,6 +86,11 @@ def main() -> int:
     parser.add_argument("--grafana", type=https_origin, required=True)
     parser.add_argument("--zone")
     parser.add_argument("--dns-server", action="append", default=[], type=ipaddress.ip_address)
+    parser.add_argument("--edge-hostname")
+    parser.add_argument("--edge", action="append", default=[], type=ipaddress.ip_address)
+    parser.add_argument("--cache-path")
+    parser.add_argument("--origin-probe-prefix")
+    parser.add_argument("--origin-expected-status", type=int, choices=[200, 204], default=200)
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
     if bool(args.zone) != bool(args.dns_server) or len(args.dns_server) > 8:
@@ -90,6 +98,14 @@ def main() -> int:
     zone = (args.zone or "").lower().rstrip(".")
     if zone and not re.fullmatch(r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}", zone):
         parser.error("Use a canonical public DNS zone")
+    edge_options = bool(args.edge_hostname or args.edge or args.cache_path or args.origin_probe_prefix)
+    if edge_options and not (args.edge_hostname and args.edge and args.cache_path and args.origin_probe_prefix):
+        parser.error("Supply edge hostname, 1–8 edge addresses, cache path, and origin probe prefix together")
+    if len(args.edge) > 8 or (args.edge_hostname and not re.fullmatch(r"[a-z0-9.-]{1,253}", args.edge_hostname, re.I)):
+        parser.error("Use 1–8 edge addresses and a DNS hostname")
+    for path in (args.cache_path, args.origin_probe_prefix):
+        if path is not None and (not path.startswith("/") or any(character in path for character in "?#\r\n")):
+            parser.error("Use paths without queries, fragments, or newlines")
     checks = []
 
     def record(name, operation):
@@ -110,8 +126,28 @@ def main() -> int:
     dns = [row for row in checks if row["check"].startswith("dns-")]
     if dns and all(row["outcome"] == "passed" for row in dns):
         checks.append({"check": "dns-serial-parity", "outcome": "passed" if len({row["actual"]["serial"] for row in dns}) == 1 else "failed"})
+    for address in args.edge:
+        def cache_path(address=address):
+            samples = [edge_probe(args.edge_hostname, str(address), args.cache_path, "https") for _ in range(4)]
+            if any(sample["status"] != 200 or not sample["tls_verified"] for sample in samples):
+                raise ValueError("Verified TLS or cache resource failed")
+            if len({sample["body_sha256"] for sample in samples}) != 1 or not any(sample["cache"] == "HIT" for sample in samples):
+                raise ValueError("Cache hit path did not return the stable resource")
+            return {"tls_verified": True, "certificate_sha256": samples[0]["certificate_sha256"],
+                    "cache_statuses": [sample["cache"] for sample in samples]}
+
+        record(f"tls-cache-{address}", cache_path)
+
+        def origin_path(address=address):
+            path = args.origin_probe_prefix.rstrip("/") + "/" + secrets.token_hex(8)
+            sample = edge_probe(args.edge_hostname, str(address), path, "https")
+            if sample["status"] != args.origin_expected_status or sample["cache"] not in {"MISS", "BYPASS"}:
+                raise ValueError("Fresh origin fetch path failed")
+            return {"status": sample["status"], "cache": sample["cache"], "tls_verified": sample["tls_verified"]}
+
+        record(f"origin-fetch-{address}", origin_path)
     passed = all(row["outcome"] == "passed" for row in checks)
-    report = {"scope": "public health/authentication and optional authoritative SOA only",
+    report = {"scope": "public health/authentication, authoritative DNS, and optional verified edge TLS/cache/origin paths",
               "recorded_at": datetime.now(timezone.utc).isoformat(), "outcome": "passed" if passed else "failed", "checks": checks}
     args.report.parent.mkdir(parents=True, exist_ok=True)
     descriptor, candidate = tempfile.mkstemp(prefix=".staging-health-", dir=args.report.parent)

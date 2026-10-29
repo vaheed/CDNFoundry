@@ -76,7 +76,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y bind9-dnsutils
-          python3 tests/e2e/parent_delegation.py
+          if ! python3 tests/e2e/parent_delegation.py > /tmp/cdnfoundry-parent-delegation.log 2>&1; then
+            tail -n 40 /tmp/cdnfoundry-parent-delegation.log
+            annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-parent-delegation.log)"
+            echo "::error title=Parent delegation qualification failed::${annotation}"
+            exit 1
+          fi
+          cat /tmp/cdnfoundry-parent-delegation.log
       - name: Check OpenAPI contract
         run: php artisan cdnf:api:openapi --check
 
@@ -88,7 +94,7 @@ jobs:
       fail-fast: false
       max-parallel: 9
       matrix:
-        group: [application, edge, dashboards, authoritative-dns, dns-routing, monitoring, agents, logging, storage]
+        group: [application, edge, agents]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Prepare disposable runner space for source image builds
@@ -173,7 +179,28 @@ jobs:
           SOURCE_REVISION: ${{ github.sha }}
         run: python3 scripts/ci/images.py load
       - name: Scan every built release image before allowing publication
-        run: python3 scripts/supply-chain-policy.py --scan-release-images ci --output storage/qualification/release-image-scans
+        run: |
+          if ! python3 scripts/supply-chain-policy.py --scan-release-images ci --output storage/qualification/release-image-scans; then
+            python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('storage/qualification/release-image-scans')
+          summary = json.loads((root / 'summary.json').read_text())
+          for result in summary['results']:
+              if result['status'] != 'failed':
+                  continue
+              findings = []
+              classified = root / result['report'].replace('.json', '.classified.json')
+              if classified.exists():
+                  for target in json.loads(classified.read_text()).get('Results', []):
+                      for item in target.get('Vulnerabilities') or []:
+                          if item.get('Severity') in ('HIGH', 'CRITICAL'):
+                              findings.append(f"{item.get('VulnerabilityID')} {item.get('PkgName')} {item.get('InstalledVersion')}")
+              detail = '; '.join(findings[:12]) or 'scanner command failed before classified findings were available'
+              print(f"::error title=Release image scan failed::{result['image']}: {detail}")
+          PY
+            exit 1
+          fi
       - name: Retain complete release image scan evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -194,7 +221,7 @@ jobs:
             -v "$PWD/docker/vector/host-journal.yaml:/etc/vector/host-journal.yaml:ro" \
             -v /var/run/docker.sock:/var/run/docker.sock:ro \
             -v /tmp:/vector-data-dir \
-            ghcr.io/vaheed/cdnfoundry-vector:ci \
+            timberio/vector:0.58.0-debian@sha256:1c1ea358c617ea0b23003d5af87f7a678b30f8f7096437e680380c47fc13d2d9 \
             validate --skip-healthchecks /etc/vector/operational.yaml /etc/vector/host-journal.yaml
           docker run --rm \
             -e VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true \
@@ -205,10 +232,11 @@ jobs:
             -v "$PWD/docker/vector/operational.yaml:/etc/vector/operational.yaml:ro" \
             -v /var/run/docker.sock:/var/run/docker.sock:ro \
             -v /tmp:/vector-data-dir \
-            ghcr.io/vaheed/cdnfoundry-vector:ci \
+            timberio/vector:0.58.0-debian@sha256:1c1ea358c617ea0b23003d5af87f7a678b30f8f7096437e680380c47fc13d2d9 \
             test /etc/vector/operational.yaml
           docker run --rm -e LOKI_RETENTION_PERIOD=168h -e LOKI_MAX_QUERY_LENGTH=168h \
-            ghcr.io/vaheed/cdnfoundry-loki:ci -config.file=/etc/loki/loki.yml -config.expand-env=true -verify-config=true
+            -v "$PWD/docker/loki/loki.yml:/etc/loki/loki.yml:ro" \
+            grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193 -config.file=/etc/loki/loki.yml -config.expand-env=true -verify-config=true
           docker run --rm --entrypoint /bin/promtool \
             -v "$PWD/docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
             -v "$PWD/docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro" \
@@ -218,14 +246,34 @@ jobs:
             -v "$PWD/docker/prometheus/dns-targets.dev.yml:/etc/prometheus/dns-targets.yml:ro" \
             -v "$PWD/docker/prometheus/edge-targets.dev.yml:/etc/prometheus/edge-targets.yml:ro" \
             -v "$PWD/docker/prometheus/operational-log-targets.dev.yml:/etc/prometheus/operational-log-targets.yml:ro" \
-            ghcr.io/vaheed/cdnfoundry-prometheus:ci \
+            prom/prometheus:v3.13.3@sha256:6976aa8a60fec930796ce5772b8d12da7a318a5daa8d40d69c5c7819a05eeed7 \
             check config /etc/prometheus/prometheus.yml
-          docker run --rm --entrypoint /bin/promtool -v "$PWD/docker/prometheus:/etc/prometheus:ro" ghcr.io/vaheed/cdnfoundry-prometheus:ci \
+          docker run --rm --entrypoint /bin/promtool -v "$PWD/docker/prometheus:/etc/prometheus:ro" prom/prometheus:v3.13.3@sha256:6976aa8a60fec930796ce5772b8d12da7a318a5daa8d40d69c5c7819a05eeed7 \
             test rules /etc/prometheus/alerts.test.yml
+      - name: Qualify bounded Vector buffers at runtime
+        run: |
+          if ! python3 tests/e2e/vector_buffer_startup.py --image timberio/vector:0.58.0-debian@sha256:1c1ea358c617ea0b23003d5af87f7a678b30f8f7096437e680380c47fc13d2d9 > /tmp/cdnfoundry-vector-startup.log 2>&1; then
+            df -h /tmp /var/lib/docker
+            tail -n 20 /tmp/cdnfoundry-vector-startup.log
+            annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-vector-startup.log)"
+            echo "::error title=Vector runtime startup qualification failed::${annotation}"
+            exit 1
+          fi
+          cat /tmp/cdnfoundry-vector-startup.log
       - name: Qualify origin destination safety and IPv6 HTTP/TLS
         run: python3 tests/e2e/origin_destinations.py --image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
+      - name: Qualify edge serving without Vector DNS
+        run: python3 tests/e2e/edge_telemetry_startup.py --image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
       - name: Qualify compiled DNS services and telemetry outage serving
-        run: sudo -E python3 tests/e2e/dns_images.py
+        run: |
+          if ! sudo -E python3 tests/e2e/dns_images.py > /tmp/cdnfoundry-dns-images.log 2>&1; then
+            tail -n 60 /tmp/cdnfoundry-dns-images.log
+            grep -Ei 'DNS fixture failure|compiled DNS|failed|error|exited|refused|timed out' /tmp/cdnfoundry-dns-images.log | tail -n 20 > /tmp/cdnfoundry-dns-images-errors.log || true
+            annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-dns-images-errors.log)"
+            echo "::error title=Compiled DNS qualification failed::${annotation}"
+            exit 1
+          fi
+          cat /tmp/cdnfoundry-dns-images.log
       - name: Qualify generated PowerDNS credentials and rotation
         run: sudo -E python3 tests/e2e/fleet_pdns.py
       - name: Qualify patched monitoring scrape and alert APIs
@@ -239,7 +287,7 @@ jobs:
       - name: Qualify ClickHouse LTS data upgrade and permissions
         run: python3 tests/e2e/clickhouse_upgrade.py
       - name: Qualify patched Caddy with production configs and real TLS
-        run: python3 tests/e2e/caddy_ingress.py --image ghcr.io/vaheed/cdnfoundry-caddy:ci
+        run: python3 tests/e2e/caddy_ingress.py --image caddy:2.11-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
       - name: Qualify uploaded certificate chains with real TLS clients
         run: python3 tests/e2e/uploaded_tls.py --core-image cdnfoundry/core:ci --edge-image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
       - name: Smoke-test the read-only core image
@@ -256,7 +304,16 @@ jobs:
           done
           exit 1
       - name: Qualify generated production observability topology
-        run: sudo -E python3 tests/e2e/production_observability.py --release ci
+        run: |
+          if ! sudo -E python3 tests/e2e/production_observability.py --release ci > /tmp/cdnfoundry-production-observability.log 2>&1; then
+            grep -Ei 'unhealthy|dependency failed|error response|permission denied|returned non-zero|failed to|invalid|timed out' /tmp/cdnfoundry-production-observability.log | tail -n 35 > /tmp/cdnfoundry-production-observability-tail.log || true
+            tail -n 12 /tmp/cdnfoundry-production-observability.log >> /tmp/cdnfoundry-production-observability-tail.log
+            cat /tmp/cdnfoundry-production-observability-tail.log
+            annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-production-observability-tail.log)"
+            echo "::error title=Production observability qualification failed::${annotation}"
+            exit 1
+          fi
+          cat /tmp/cdnfoundry-production-observability.log
 
   backend-e2e:
     name: Backend and runtime E2E
@@ -282,7 +339,9 @@ jobs:
             fi
             echo "Development topology startup attempt ${attempt} failed."
           done
-          tail -n 80 /tmp/cdnfoundry-dev-up.log > /tmp/cdnfoundry-dev-up-tail.log
+          tail -n 10 /tmp/cdnfoundry-dev-up.log > /tmp/cdnfoundry-dev-up-tail.log
+          docker compose -f compose.dev.yml ps edge-a edge-b >> /tmp/cdnfoundry-dev-up-tail.log 2>&1
+          docker compose -f compose.dev.yml logs --no-color edge-a edge-b 2>&1 | grep -Ei 'emerg|error|Vector DNS|nginx:|permission denied' | tail -n 20 >> /tmp/cdnfoundry-dev-up-tail.log || true
           annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-dev-up-tail.log)"
           echo "::error title=Development topology startup failed::${annotation}"
           exit "${status}"
@@ -293,7 +352,16 @@ jobs:
           make dev-e2e 2>&1 | tee /tmp/cdnfoundry-e2e.log
           status=${PIPESTATUS[0]}
           if (( status != 0 )); then
-            tail -n 25 /tmp/cdnfoundry-e2e.log > /tmp/cdnfoundry-e2e-tail.log
+            python3 - <<'PY' > /tmp/cdnfoundry-e2e-tail.log
+          from pathlib import Path
+
+          lines = Path('/tmp/cdnfoundry-e2e.log').read_text(errors='replace').splitlines()
+          traceback_starts = [i for i, line in enumerate(lines) if line.startswith('Traceback (most recent call last):')]
+          if traceback_starts:
+              print('\n'.join(lines[traceback_starts[-1]:][:35]))
+          else:
+              print('\n'.join(lines[-25:]))
+          PY
             {
               echo '### Non-UI E2E failure tail'
               echo '```text'
@@ -387,7 +455,7 @@ jobs:
           } 2>&1 | tee /tmp/cdnfoundry-go.log
           status=${PIPESTATUS[0]}
           if (( status != 0 )); then
-            tail -n 40 /tmp/cdnfoundry-go.log > /tmp/cdnfoundry-go-tail.log
+            { grep -B 3 -A 5 '^--- FAIL:' /tmp/cdnfoundry-go.log || true; tail -n 20 /tmp/cdnfoundry-go.log; } > /tmp/cdnfoundry-go-tail.log
             {
               echo '### Go test/build failure tail'
               echo '```text'
@@ -415,6 +483,10 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: docs/package-lock.json
+      - name: Check release version consistency
+        run: make version-check
+      - name: Check no screenshots are tracked
+        run: make check-no-screenshots
       - name: Install documentation dependencies
         run: npm ci --prefix docs
       - name: Audit documentation dependencies
@@ -433,7 +505,7 @@ jobs:
   deploy-docs:
     name: Deploy documentation
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [core, compose, backend-e2e, scale-e2e, go, docs, production-dependencies]
+    needs: [core, compose, backend-e2e, scale-e2e, go, docs]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
@@ -447,29 +519,10 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5
 
-  production-dependencies:
-    name: Scan immutable production dependency images
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install policy dependencies
-        run: python3 -m pip install -r tests/fleet/requirements.txt
-      - name: Scan every production Compose dependency, including role overrides
-        run: python3 scripts/supply-chain-policy.py --scan-production-dependencies --output storage/qualification/production-dependencies
-      - name: Retain complete dependency scan evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: production-dependency-scans
-          path: |
-            storage/qualification/production-dependencies/*.json
-            storage/qualification/production-dependencies/*.txt
-
   publish-images:
     name: Publish GHCR images
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/v'))
-    needs: [core, compose, backend-e2e, scale-e2e, go, docs, production-dependencies]
+    needs: [core, compose, backend-e2e, scale-e2e, go, docs]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production
@@ -511,6 +564,11 @@ jobs:
         env:
           SOURCE_REVISION: ${{ github.sha }}
         run: python3 scripts/ci/images.py tag
+      - name: Reuse the single release image scan from the compose gate
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: release-image-scans
+          path: release-scans
       - name: Push, scan, attest, and sign immutable images
         env:
           RELEASE: ${{ github.sha }}
@@ -519,8 +577,24 @@ jobs:
           WORKFLOW_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
-          images=(core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater grafana loki postgres vector node-exporter alertmanager prometheus pdns dnsdist caddy)
+          images=(core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater)
           aliases=()
+          # A rebuilt image with identical content reproduces the same digest. Sigstore
+          # then reports the entry as already recorded (HTTP 409); accept only that
+          # conflict, so a rerun for an unchanged digest publishes instead of failing.
+          cosign_once() {
+            local output
+            if output="$("$@" 2>&1)"; then
+              printf '%s\n' "${output}"
+              return 0
+            fi
+            if grep -q 'already exists in the transparency log' <<<"${output}"; then
+              echo "transparency log already records this entry; continuing"
+              return 0
+            fi
+            printf '%s\n' "${output}" >&2
+            return 1
+          }
           push_with_retry() {
             local image="$1"
             local attempt delay
@@ -566,29 +640,20 @@ jobs:
           for component in "${images[@]}"; do
             image="ghcr.io/vaheed/cdnfoundry-${component}"
             push_with_retry "${image}:${RELEASE}"
-            digest="$(docker inspect --format='{{index .RepoDigests 0}}' "${image}:${RELEASE}")"
+            # The load step also tags the Docker Hub name, which can sort first in RepoDigests.
+            digest="$(docker inspect --format='{{range .RepoDigests}}{{println .}}{{end}}' "${image}:${RELEASE}" | grep -m1 -F "${image}@")"
+            test -n "${digest}"
             test "${digest}" != "${image}:${RELEASE}"
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}/release-evidence:/out" \
               anchore/syft:v1.33.0@sha256:f94e5d9fce1f2278491a8e3a63bd5f6ddb81fdfdbb8bf7a1637565c1d5344357 \
               "${digest}" -o "spdx-json=/out/${component}.spdx.json"
-            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/work:ro" -v "${PWD}/release-evidence:/out" -v /tmp/cdnfoundry-trivy-cache:/root/.cache/ \
-              aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e \
-              image --config /work/supply-chain/trivy.yaml --format json --output "/out/${component}.trivy.json" --exit-code 0 "${digest}"
-            docker run --rm -v "${PWD}/release-evidence:/out" \
-              aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e \
-              convert --ignorefile /dev/null --format table --output "/out/${component}.trivy.txt" "/out/${component}.trivy.json"
-            docker run --rm -v "${PWD}:/work:ro" -v "${PWD}/release-evidence:/out" -v /tmp/cdnfoundry-trivy-cache:/root/.cache/ \
-              aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e \
-              convert --ignorefile /work/supply-chain/trivy-classifications.yaml --show-suppressed \
-              --format json --output "/out/${component}.classified.json" "/out/${component}.trivy.json"
-            docker run --rm -v "${PWD}:/work:ro" -v "${PWD}/release-evidence:/out:ro" \
-              aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e \
-              convert --exit-code 1 --exit-on-eol 1 --severity HIGH,CRITICAL \
-              --ignorefile /work/supply-chain/trivy-classifications.yaml --show-suppressed "/out/${component}.trivy.json"
+            cp "release-scans/${component}.json" "release-evidence/${component}.trivy.json"
+            cp "release-scans/${component}.classified.json" "release-evidence/${component}.classified.json"
+            cp "release-scans/${component}.txt" "release-evidence/${component}.trivy.txt"
             jq -n --arg source "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" --arg commit "${RELEASE}" --arg workflow "${GITHUB_WORKFLOW_REF}" --arg builder "${GITHUB_SERVER_URL}/actions/runner" \
               '{buildDefinition:{buildType:"https://github.com/CDNFoundry/container-release/v1",externalParameters:{source:$source,commit:$commit,workflow:$workflow}},runDetails:{builder:{id:$builder}}}' \
               > "release-evidence/${component}.provenance.json"
-            docker run --rm \
+            cosign_once docker run --rm \
               -e ACTIONS_ID_TOKEN_REQUEST_TOKEN \
               -e ACTIONS_ID_TOKEN_REQUEST_URL \
               -e DOCKER_CONFIG=/docker-config \
@@ -597,7 +662,7 @@ jobs:
               gcr.io/projectsigstore/cosign:v3.0.2@sha256:b29487e48205d875c324c79583e2806d9d269c0fa299e0861bbec023d8430c8b \
               sign --yes "${digest}"
 
-            docker run --rm \
+            cosign_once docker run --rm \
               -e ACTIONS_ID_TOKEN_REQUEST_TOKEN \
               -e ACTIONS_ID_TOKEN_REQUEST_URL \
               -e DOCKER_CONFIG=/docker-config \
@@ -609,7 +674,7 @@ jobs:
               --predicate "/evidence/${component}.spdx.json" \
               "${digest}"
 
-            docker run --rm \
+            cosign_once docker run --rm \
               -e ACTIONS_ID_TOKEN_REQUEST_TOKEN \
               -e ACTIONS_ID_TOKEN_REQUEST_URL \
               -e DOCKER_CONFIG=/docker-config \

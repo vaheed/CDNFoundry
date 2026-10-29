@@ -267,8 +267,8 @@ export default defineConfig({
         {
           text: 'Operations',
           items: [
-            { text: 'Development handoff', link: '/operations/development-handoff' },
-            { text: 'Staged delivery roadmap', link: '/roadmap' },
+            { text: 'Release notes v1.2.1', link: '/operations/releases/v1.2.1' },
+            { text: 'Roadmap (closed)', link: '/roadmap' },
             { text: 'Operations index', link: '/operations/' },
             { text: 'Production best practices', link: '/operations/production-best-practices' },
             { text: 'CLI commands', link: '/operations/cli-commands' },
@@ -331,8 +331,7 @@ export default defineConfig({
           text: 'Contributing',
           items: [
             { text: 'Contribution guide', link: '/contributing/' },
-            { text: 'Documentation', link: '/contributing/documentation' },
-            { text: 'Documentation audit', link: '/contributing/documentation-audit' }
+            { text: 'Documentation', link: '/contributing/documentation' }
           ]
         }
       ]

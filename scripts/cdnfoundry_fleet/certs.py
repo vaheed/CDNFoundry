@@ -186,7 +186,7 @@ class PKI:
             atomic_json(meta, expected, 0o600)
         return ca, cert, key
 
-    def copy_node_material(self, node: dict[str, object], destination: Path) -> None:
+    def copy_node_material(self, node: dict[str, object], destination: Path, *, include_private_key: bool = True) -> None:
         server_ca, cert, key = self.ensure_node_certificate(node)
         destination.mkdir(parents=True, exist_ok=True, mode=0o700)
         if self.dry_run:
@@ -196,7 +196,8 @@ class PKI:
         shutil.copy2(server_ca, destination / "edge-server-ca.crt")
         shutil.copy2(server_ca, destination / "fleet-ca.crt")
         shutil.copy2(cert, destination / "node.crt")
-        shutil.copy2(key, destination / "node.key")
+        if include_private_key:
+            shutil.copy2(key, destination / "node.key")
 
         if str(node.get("role")) == "control":
             shutil.copy2(self.root / "edge-identity-ca.crt", destination / "edge-identity-ca.crt")

@@ -1,0 +1,26 @@
+CDNFoundry
+Copyright 2026 CDNFoundry contributors
+
+This product is licensed under the Apache License, Version 2.0. See LICENSE.
+
+Third-party components
+
+Container images built from this repository bundle third-party software, and some of them are upstream projects compiled here. Each
+component remains under its own license, which is not changed by this project.
+The license declared on an image describes that image's first-party content.
+
+- OpenResty (nginx distribution), BSD-2-Clause
+- ModSecurity, Apache-2.0
+- ModSecurity-nginx connector, Apache-2.0
+- ngx_brotli, MIT
+- OWASP Core Rule Set, Apache-2.0
+- Caddy, Apache-2.0 (upstream source and standard modules)
+- PostgreSQL, PostgreSQL License
+- Grafana, AGPL-3.0-only (built from upstream sources by this repository)
+- Loki, AGPL-3.0-only (built from upstream sources by this repository)
+- Prometheus, Alertmanager, node-exporter, Apache-2.0 (built from upstream sources)
+- Vector, MPL-2.0 (upstream image)
+- PowerDNS Authoritative Server, GPL-2.0-only (built from upstream sources)
+- DNSdist, GPL-2.0-only (built from upstream sources)
+
+Consult each upstream project for its complete license text and notices.

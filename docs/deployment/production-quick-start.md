@@ -118,7 +118,7 @@ python3 -m json.tool fleet.json >/dev/null
 ./scripts/cdnfoundry-fleet --config fleet.json --non-interactive --dry-run setup
 ```
 
-The dry run performs topology, role, address, feature, and Compose validation without writing Fleet state or bundles. It does not establish signatures, public DNS/TLS reachability, or production readiness; use the verified image projection before actual setup.
+The dry run performs topology, role, address, feature, and Compose validation without writing Fleet state or bundles. Its output says `Dry run, not persisted:` before every message that would otherwise report a written state or bundle, and its JSON status is `validated`, not `configured`. It does not establish signatures, public DNS/TLS reachability, or production readiness; use the verified image projection before actual setup.
 
 ### Publish the control-host management records
 
@@ -170,6 +170,26 @@ The command creates secrets and private PKI once, validates the complete desired
 
 Never commit `fleet.json`, Fleet state, generated bundles, `.env.prod`, or private keys.
 
+### Issue the edge listener material
+
+Each DNS/edge bundle needs a dedicated serving certificate and a stable recovery
+key in `/dev/shm/cdnfoundry/` (see step 4). The fleet does not create them. Issue
+them from the fleet's edge-server CA on the workstation that holds the state:
+
+```bash
+sudo ./scripts/issue-edge-listener-material.sh \
+  --state-dir /var/lib/cdnfoundry-fleet \
+  --hostname pop-1.ops.example.com \
+  --public-ipv4 198.51.100.20 \
+  --output /root/cdnfoundry-edge-material/pop-1
+```
+
+Then copy the node key from `pki/nodes/<pop>/node.key` in the same state directory
+and the three edge files to the PoP's `/dev/shm/cdnfoundry` with owner UID 10101
+and mode `0400`. Keep the recovery key with the Fleet state backup: losing it
+loses the encrypted edge state on that PoP. Rerunning the script never rotates an
+existing key.
+
 ## 4. Inspect before transfer
 
 ```bash
@@ -187,8 +207,15 @@ sudo ./scripts/cdnfoundry-fleet \
 
 For every bundle, review `README.md`. Before running `./validate.sh`, prepare
 its metrics token ownership when the file is present (control or monitoring
-roles). Run these commands from the protected bundle directory on both the
-validation workstation and the destination host after transfer:
+roles). A combined DNS/edge bundle also needs its externally held node key,
+dedicated edge listener certificate and key, and stable recovery key provisioned
+at the `/dev/shm/cdnfoundry/` paths specified in its README. Provision them on
+both the validation workstation and destination host before validating there;
+the generated bundle deliberately excludes these private files. Keep the keys
+on tmpfs with the documented UID and mode, and disable host swap. See
+[edge key provisioning](production-fleet-operator-guide.md#pki-layout)
+for the exact paths and ownership. Run these commands from the protected bundle
+directory on both hosts:
 
 ```bash
 if [ -f secrets/metrics-token ]; then
@@ -306,7 +333,8 @@ Transfer `bundles/pop-1` and `bundles/pop-2` over authenticated channels to
 
 ```bash
 cd /opt/cdnfoundry
-# Apply the metrics-token ownership step above if that file is present.
+# Provision the externally held tmpfs keys and apply the metrics-token
+# ownership step above before validating this combined DNS/edge bundle.
 sudo ./validate.sh
 sudo ./start.sh
 docker compose --env-file .env.prod ps

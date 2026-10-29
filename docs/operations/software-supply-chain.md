@@ -17,21 +17,25 @@ scanned, signed keylessly, and given SPDX JSON and SLSA provenance attestations.
 Mutable channel tags are convenience aliases only. Deploy the `image` digest
 from `release-manifest.json`.
 
-The release includes the nine application components, managed Caddy ingress, PostgreSQL, Vector, the three Prometheus monitoring components, and both DNS services.
-Caddy 2.11.4 is rebuilt with the committed Go module locks and patched Go
-toolchain; all three ingress services use `CDNF_CADDY_IMAGE` from the same
-verified manifest. Existing configuration and certificate volumes are retained.
-Rebuilding upstream binaries makes their dependency updates our responsibility.
+The release contains only the seven CDNFoundry-built images: `core`, `web`,
+`edge-control`, `edge-runtime`, `edge-agent`, `edge-gateway`, and `mmdb-updater`.
+Supply-chain verification, scanning, signing, and provenance cover these images
+only.
 
-PostgreSQL 18.6 retains the official entrypoint and data directory. Its `gosu`
-1.19 helper is rebuilt from the pinned upstream commit with Go 1.26.8.
-All database and migration services use `CDNF_POSTGRES_IMAGE`; make a verified
-backup before upgrading an existing installation.
+Upstream software (Caddy, PostgreSQL, Vector, Prometheus, Alertmanager,
+node-exporter, Grafana, Loki, PowerDNS, and dnsdist) is not built, scanned, or
+signed by this project. Compose references each upstream image by its exact
+registry digest, for example `caddy:2.11-alpine@sha256:...`, and mounts the
+configuration files that CDNFoundry owns. Those upstream images are maintained
+by their publishers; upgrading one means changing its pinned digest in compose
+and qualifying it.
 
-Vector 0.58.0 uses a pinned Ubuntu 26.04 runtime with `journalctl`. Both traffic
-and operational collectors use `CDNF_VECTOR_IMAGE`; their configuration paths
-and persistent buffer volumes remain the same. Vector 0.58 disables environment
-interpolation by default, so the two operator-controlled services explicitly set
+PostgreSQL uses the official image and entrypoint with its data directory
+unchanged. Make a verified backup before upgrading an existing installation.
+
+Vector uses the official `timberio/vector` image with the same configuration
+and persistent buffer volumes. Vector 0.58 disables environment interpolation by
+default, so the two operator-controlled services explicitly set
 `VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true` for their existing endpoint,
 authentication and metadata variables. These configuration files must remain
 operator-owned and read-only to workloads; do not load tenant-supplied configuration.
@@ -78,7 +82,7 @@ cosign verify-blob \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   release-manifest.json
 jq -e --arg commit "$CDNF_SOURCE_COMMIT" '.source_commit == $commit and
-  (.images | length == 17 and all(.image | test("@sha256:[0-9a-f]{64}$")))' release-manifest.json
+  (.images | length == 7 and all(.image | test("@sha256:[0-9a-f]{64}$")))' release-manifest.json
 ```
 
 For every digest in the manifest:
@@ -127,7 +131,7 @@ fleet = json.loads(Path('fleet.json').read_text())
 commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
 require(manifest['source_commit'] == commit, 'Manifest source differs from checkout')
 components = {'core', 'web', 'edge-control', 'edge-runtime', 'edge-agent',
-              'edge-gateway', 'mmdb-updater', 'grafana', 'loki', 'postgres', 'vector', 'node-exporter', 'alertmanager', 'prometheus', 'pdns', 'dnsdist', 'caddy'}
+              'edge-gateway', 'mmdb-updater'}
 rows = manifest['images']
 require(len(rows) == len(components) and {r['component'] for r in rows} == components,
         'Manifest components are missing or duplicated')
@@ -168,17 +172,11 @@ and a readable table, then evaluates that same JSON with `convert`. Approved
 classifications apply only during conversion. Additional `*.classified.json`
 reports retain the excluded findings, reasons and policy path through Trivy's
 `ExperimentalModifiedFindings` field; the original reports remain unchanged.
-The same gate scans all digest-pinned third-party production Compose images,
-including role overrides, before publication. It is also an agent-owned check
-in the production qualification runner:
-
-```sh
-python3 scripts/supply-chain-policy.py --scan-production-dependencies
-```
-
-The command retains complete JSON/table reports and a summary with commands
-and exit codes under `storage/qualification/production-dependencies`. A failed
-image does not skip scanning the remaining images. No High finding is accepted automatically. An exception must name
+Supply-chain scanning covers only images built from this repository. Upstream
+images referenced by Compose (for example Grafana, Prometheus, or PostgreSQL)
+are outside this scope; they are pinned by digest and maintained by their
+publishers. The scan runs once per release image, in the compose gate, and
+publication reuses that report. No High finding is accepted automatically. An exception must name
 the CVE, affected component/digest, compensating control, owner, approval, and
 an expiry no later than 30 days. Exceptions are narrow reviewed policy changes;
 permanent wildcards and broad ignore files are forbidden. Keep scanner version and database freshness metadata with the reports.
@@ -186,7 +184,7 @@ permanent wildcards and broad ignore files are forbidden. Keep scanner version a
 ### Approved Tempo false-positive classification
 
 Owner **vaheed** explicitly approved the following two classifications on
-**2026-09-19**, expiring at **2026-10-19 UTC**. After expiry the scanner blocks
+**2026-09-19**, renewed on **2026-10-29** and expiring at **2026-11-28 UTC**. After expiry the scanner blocks
 these findings again. Scope is the Grafana backend at
 `usr/share/grafana/bin/grafana` and exactly
 `github.com/grafana/tempo@v1.5.1-0.20260427112133-525d1bab07e0`.

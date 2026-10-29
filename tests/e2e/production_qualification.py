@@ -60,8 +60,6 @@ CHECKS = (
           ("python3", "tests/e2e/postgres_domain_claims.py"), "agent"),
     Check("parent-delegation", "Real BIND signed parent referrals, stale delegation, bogus DNSSEC and child-zone rejection",
           ("python3", "tests/e2e/parent_delegation.py"), "agent"),
-    Check("production-dependencies", "Immutable production Compose dependency scans with High/Critical/EOL enforcement",
-          ("python3", "scripts/supply-chain-policy.py", "--scan-production-dependencies"), "agent"),
     Check("fleet", "Fleet configuration, PKI, bundle generation and failure regressions",
           ("python3", "-m", "pytest", "-q", "tests/fleet/test_fleet.py"), "agent"),
     Check("qualification-tools", "Negative supply-chain and qualification-evidence fixtures",

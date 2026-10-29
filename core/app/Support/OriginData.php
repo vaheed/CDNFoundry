@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\DnsCluster;
 use App\Models\Edge;
 use App\Models\EdgePoolEndpoint;
 use Illuminate\Support\Facades\Validator;
@@ -153,6 +154,7 @@ final class OriginData
         }
         if (Edge::query()->where('management_ipv4', $address)->orWhere('management_ipv6', $address)->exists()
             || EdgePoolEndpoint::query()->where('ipv4', $address)->orWhere('ipv6', $address)->exists()
+            || in_array($address, self::platformNodeAddresses(), true)
             || collect(app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_addresses'))
                 ->contains(fn (string $denied): bool => NetworkAddress::inCidr($address, $denied))) {
             return true;
@@ -175,6 +177,27 @@ final class OriginData
         }
 
         return false;
+    }
+
+    /**
+     * The control plane and DNS API hosts are platform infrastructure, so they are never origins
+     * even when no edge or endpoint row records them. Resolved on each check; the set is bounded
+     * by the configured control URL and the registered DNS clusters.
+     *
+     * @return list<string>
+     */
+    private static function platformNodeAddresses(): array
+    {
+        $hosts = [(string) parse_url((string) config('app.url'), PHP_URL_HOST)];
+        foreach (DnsCluster::query()->pluck('api_url') as $url) {
+            $hosts[] = (string) parse_url((string) $url, PHP_URL_HOST);
+        }
+        $addresses = [];
+        foreach (array_unique(array_filter($hosts)) as $host) {
+            $addresses = array_merge($addresses, filter_var($host, FILTER_VALIDATE_IP) ? [$host] : (gethostbynamel($host) ?: []));
+        }
+
+        return array_values(array_unique($addresses));
     }
 
     private static function validHost(string $host): bool

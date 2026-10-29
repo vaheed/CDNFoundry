@@ -1099,7 +1099,7 @@ custom signature parser. See the
 [OpenSSL authentication-level and explicit-trust options](https://docs.openssl.org/3.5/man1/openssl-verification-options/)
 and [standard-input verification contract](https://docs.openssl.org/3.5/man1/openssl-verify/).
 
-`core/Dockerfile` now explicitly installs `openssl=3.5.8-r0` alongside the
+`core/Dockerfile` now explicitly installs `openssl>=3.5.8-r0` alongside the
 already-pinned libraries. The existing compatible image contained OpenSSL
 3.5.7. An isolated qualification layer upgraded its CLI and both libraries to
 3.5.8 successfully in **9.132 seconds** (`tls-strength-image`); this small layer

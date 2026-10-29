@@ -22,7 +22,7 @@ def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument('--image', default='ghcr.io/vaheed/cdnfoundry-postgres:ci')
+    parser.add_argument('--image', default='postgres:18.6-alpine3.24@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd')
     image = parser.parse_args().image
     ensure_image(PREVIOUS)
     name = 'cdnf-postgres-' + uuid.uuid4().hex[:12]

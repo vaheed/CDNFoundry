@@ -16,6 +16,12 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 
 
+UPSTREAM_IMAGES = {
+    'node-exporter': 'prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0',
+    'alertmanager': 'prom/alertmanager:v0.34.1@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a',
+    'prometheus': 'prom/prometheus:v3.13.3@sha256:6976aa8a60fec930796ce5772b8d12da7a318a5daa8d40d69c5c7819a05eeed7',
+}
+
 def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, check=check, capture_output=True, text=True, timeout=120)
 
@@ -34,7 +40,7 @@ def main() -> None:
             for component in ('node-exporter', 'alertmanager', 'prometheus'):
                 container = name+'-'+component
                 containers.append(container)
-                image = f'ghcr.io/vaheed/cdnfoundry-{component}:ci'
+                image = UPSTREAM_IMAGES[component]
                 port = {'node-exporter': '9100', 'alertmanager': '9093', 'prometheus': '9090'}[component]
                 args = ['docker', 'run', '-d', '--name', container, '--network', name,
                         '--read-only', '--memory', '256m', '-p', '127.0.0.1::'+port]
@@ -77,7 +83,7 @@ def main() -> None:
             assert any(a['labels'].get('instance') == name for a in alerts)
             run('docker', 'exec', name+'-alertmanager', 'amtool', 'check-config', '/etc/alertmanager/alertmanager.yml')
             run('docker', 'exec', name+'-prometheus', 'promtool', 'check', 'config', '/etc/prometheus/prometheus.yml')
-            identities = {c: run('docker', 'image', 'inspect', f'ghcr.io/vaheed/cdnfoundry-{c}:ci', '--format', '{{.Id}}').stdout.strip() for c in ports}
+            identities = {c: run('docker', 'image', 'inspect', UPSTREAM_IMAGES[c], '--format', '{{.Id}}').stdout.strip() for c in ports}
             print(json.dumps({'qualification': 'monitoring_images', 'images': identities, 'real_scrape_query': 'passed',
                               'node_metrics': 'passed', 'alert_ingestion': 'passed', 'configuration_tools': 'passed'}))
         finally:

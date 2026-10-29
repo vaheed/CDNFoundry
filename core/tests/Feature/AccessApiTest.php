@@ -65,14 +65,14 @@ class AccessApiTest extends TestCase
 
         $user->update(['disabled_at' => now()]);
         $this->app['auth']->forgetGuards();
-        $this->getJson('/api/me')->assertForbidden()->assertJsonPath('error.code', 'account_disabled');
+        $this->getJson('/api/me')->assertForbidden()->assertJsonPath('code', 'account_disabled');
     }
 
     public function test_disabled_user_cannot_login(): void
     {
         $user = User::factory()->disabled()->create(['password' => 'CorrectHorseBattery9']);
         $this->postJson('/api/auth/login', ['email' => $user->email, 'password' => 'CorrectHorseBattery9'])
-            ->assertForbidden()->assertJsonPath('error.code', 'account_disabled');
+            ->assertForbidden()->assertJsonPath('code', 'account_disabled');
     }
 
     public function test_domain_user_cannot_access_admin_users(): void
@@ -117,7 +117,7 @@ class AccessApiTest extends TestCase
         $this->actingAs($admin)->withHeader('Idempotency-Key', $key)->postJson('/api/admin/users', $payload)
             ->assertCreated()->assertHeader('Idempotency-Replayed', 'true')->assertJsonPath('data.id', $first->json('data.id'));
         $this->actingAs($admin)->withHeader('Idempotency-Key', $key)->postJson('/api/admin/users', [...$payload, 'name' => 'Changed'])
-            ->assertConflict()->assertJsonPath('error.code', 'idempotency_conflict');
+            ->assertConflict()->assertJsonPath('code', 'idempotency_conflict');
         $this->assertDatabaseCount('users', 2);
     }
 

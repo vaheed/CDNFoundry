@@ -26,6 +26,8 @@ A database snapshot alone is insufficient. Retain:
 - `APP_KEY` and any `APP_PREVIOUS_KEYS`;
 - `EDGE_ARTIFACT_SIGNING_KEY`;
 - edge identity and server CA private keys;
+- the external `EDGE_STATE_ENCRYPTION_KEY_FILE` contents and a tested way to
+  provision that key and the bootstrap listener key into edge host tmpfs;
 - control, runtime, and DNS API listener identities;
 - `.env.prod` or an equivalent secret inventory;
 - Restic repository password stored separately from the repository;
@@ -36,6 +38,12 @@ A database snapshot alone is insufficient. Retain:
 Managed TLS private keys are encrypted in PostgreSQL and require the same
 application key. PowerDNS data, edge snapshots, artifacts, and analytics can be
 rebuilt, but they affect recovery time.
+
+The edge agent keeps its enrollment identity and a last-valid serving snapshot
+encrypted in `edge-agent-state`. With its external recovery key, it restores
+the bounded `edge-runtime-memory` tmpfs generation after an edge restart even
+when control is unavailable. If both the recovery snapshot and control plane
+are unavailable, the edge cannot reconstruct certificate keys after reboot.
 
 The control Restic job does not include `loki-data`. Loki operational logs are
 derived, retention-bounded incident data and are not required to recover

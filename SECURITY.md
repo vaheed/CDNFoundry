@@ -9,9 +9,15 @@ sanitized evidence. Never include customer data, tokens, passwords, database
 dumps, certificate private keys, CA keys, signing keys, backup credentials, or
 raw telemetry.
 
-The repository does not currently encode a fixed response SLA or
-supported-version matrix. Operators should deploy immutable versions and
-qualify security updates promptly.
+## Supported versions
+
+| Version | Supported |
+| --- | --- |
+| 1.2.x | Yes |
+| 0.x | No. v1.2.1 is a zero-state release; deploy it from scratch. |
+
+There is no fixed response SLA. Operators should deploy immutable, verified
+releases and qualify security updates promptly.
 
 See the full [security reporting guide](docs/security/reporting.md) and
 [deployment hardening](docs/security/hardening.md).

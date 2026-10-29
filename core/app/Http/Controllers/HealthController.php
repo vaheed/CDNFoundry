@@ -2,7 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\SystemHealth;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
 use Throwable;
@@ -11,9 +16,38 @@ class HealthController extends Controller
 {
     private const QUEUES = ['interactive', 'runtime', 'certificate_purge', 'bulk_maintenance'];
 
-    public function health(): JsonResponse
+    public function health(Request $request): JsonResponse|RedirectResponse
     {
+        if ($request->query('format') !== 'json' && str_contains((string) $request->header('Accept'), 'text/html')) {
+            return redirect('/health');
+        }
+
         return response()->json(['status' => 'ok']);
+    }
+
+    public function page(): Response
+    {
+        try {
+            $snapshot = Cache::get(SystemHealth::PUBLIC_CACHE_KEY);
+        } catch (Throwable) {
+            $snapshot = null;
+        }
+
+        $checkedAt = is_array($snapshot) ? ($snapshot['checked_at'] ?? null) : null;
+        $timestamp = is_string($checkedAt) ? strtotime($checkedAt) : false;
+        $fresh = $timestamp !== false && abs(now()->timestamp - $timestamp) <= SystemHealth::PUBLIC_FRESH_SECONDS;
+        if (! is_array($snapshot) || ! is_array($snapshot['groups'] ?? null)) {
+            $snapshot = ['status' => 'unknown', 'checked_at' => null, 'groups' => []];
+        }
+        if ($timestamp === false) {
+            $snapshot['checked_at'] = null;
+        }
+
+        return response()->view('service-health', [
+            'snapshot' => $snapshot,
+            'status' => $fresh ? $snapshot['status'] : 'unknown',
+            'fresh' => $fresh,
+        ])->header('Cache-Control', 'no-store');
     }
 
     public function ready(): JsonResponse

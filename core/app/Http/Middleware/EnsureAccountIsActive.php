@@ -13,7 +13,7 @@ class EnsureAccountIsActive
         if ($request->user()?->isDisabled()) {
             $request->user()->tokens()->delete();
 
-            return response()->json(['error' => ['code' => 'account_disabled', 'message' => 'This account is disabled.']], 403);
+            return response()->json(['message' => 'This account is disabled.', 'code' => 'account_disabled', 'details' => (object) []], 403);
         }
 
         return $next($request);

@@ -13,6 +13,7 @@ description: Manage records, zone import and export, clusters, reconciliation, a
 | Mutation | One monotonic domain revision; bulk/import is atomic |
 | Target bounds | 16 clusters and 8 nameserver identities |
 | Failure rule | Invalid candidate never replaces active RRsets |
+| Query ceiling | DNSdist drops traffic over 500 queries/second per source IP or IPv6 /64 and over 50,000 queries/second globally |
 
 ```mermaid
 flowchart LR

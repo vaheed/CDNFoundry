@@ -28,7 +28,7 @@ local function security_reject(status, reason)
         events:set("host:" .. tostring(ngx.ctx.security_domain), ngx.ctx.security_hostname or "", 3600)
         events:set("time:" .. tostring(ngx.ctx.security_domain) .. ":" .. reason, ngx.time(), 3600)
     end
-    ngx.header["X-CDNFoundry-Security-Reason"] = reason
+    ngx.header["X-CDNF-Security-Reason"] = reason
     ngx.var.cdn_security_reason = reason
     ngx.var.cdn_security_action = "block"
     return ngx.exit(status)
@@ -448,9 +448,9 @@ function M.prepare_waf()
     ngx.var.cdn_waf_action = mode == "monitor" and "monitor" or (mode == "block" and "inspect" or "off")
     -- These headers are overwritten before ModSecurity runs and removed again
     -- before proxying. A client therefore cannot select another tenant's mode.
-    ngx.req.set_header("X-CDNFoundry-Internal-WAF-Mode", mode)
-    ngx.req.set_header("X-CDNFoundry-Internal-WAF-Threshold", tostring(threshold))
-    ngx.req.set_header("X-CDNFoundry-Internal-WAF-Paranoia", tostring(paranoia))
+    ngx.req.set_header("X-CDNF-Internal-WAF-Mode", mode)
+    ngx.req.set_header("X-CDNF-Internal-WAF-Threshold", tostring(threshold))
+    ngx.req.set_header("X-CDNF-Internal-WAF-Paranoia", tostring(paranoia))
     local uri = ngx.var.uri or "/"
     local args = ngx.req.get_uri_args(100)
     local cookies = ngx.req.get_headers()["cookie"] or ""
@@ -472,7 +472,7 @@ function M.prepare_waf()
             mode = "monitor"
             ngx.var.cdn_waf_action = "excluded"
             ngx.var.cdn_waf_exclusion_id = tostring(selected)
-            ngx.req.set_header("X-CDNFoundry-Internal-WAF-Mode", mode)
+            ngx.req.set_header("X-CDNF-Internal-WAF-Mode", mode)
         end
     end
 end
@@ -542,30 +542,38 @@ function M.access()
     local second = ngx.time()
     local client_key = "security:req:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client) .. ":" .. second
     local domain_key = "security:req:domain:" .. tostring(config.domain) .. ":" .. second
-    local client_requests = dictionary:incr(client_key, 1, 0, 2)
-    local domain_requests = dictionary:incr(domain_key, 1, 0, 2)
+    -- Attacker-controlled client cardinality must never evict control and
+    -- per-domain counters. Nginx's limit_req remains a fixed-memory fallback.
+    local client_requests = ngx.shared.traffic_limits:incr(client_key, 1, 0, 2)
+    local domain_dictionary = ngx.shared.domain_limits
+    local domain_requests = domain_dictionary:incr(domain_key, 1, 0, 2)
+    if not domain_requests then return security_reject(503, "domain_rate_exceeded") end
     local rps = tonumber(limits.requests_per_second) or 100
     local burst = tonumber(limits.request_burst) or 200
     if client_requests and client_requests > rps + burst then return security_reject(429, "client_rate_exceeded") end
     if domain_requests and domain_requests > rps * 8 + burst then return security_reject(429, "domain_rate_exceeded") end
     local client_connection_key = "security:conn:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client)
     local domain_connection_key = "security:conn:domain:" .. tostring(config.domain)
-    local client_connections = dictionary:incr(client_connection_key, 1, 0)
-    local domain_connections = dictionary:incr(domain_connection_key, 1, 0)
+    local client_connections = ngx.shared.traffic_limits:incr(client_connection_key, 1, 0)
+    local domain_connections = domain_dictionary:incr(domain_connection_key, 1, 0)
+    if not domain_connections then
+        if client_connections then ngx.shared.traffic_limits:incr(client_connection_key, -1, 0) end
+        return security_reject(503, "domain_connections_exceeded")
+    end
     if client_connections and client_connections > (tonumber(limits.connections_per_client) or 64) then
-        dictionary:incr(client_connection_key, -1, 0)
-        dictionary:incr(domain_connection_key, -1, 0)
+        ngx.shared.traffic_limits:incr(client_connection_key, -1, 0)
+        domain_dictionary:incr(domain_connection_key, -1, 0)
         return security_reject(429, "client_connections_exceeded")
     end
     if domain_connections and domain_connections > (tonumber(limits.connections_per_domain) or 512) then
-        dictionary:incr(client_connection_key, -1, 0)
-        dictionary:incr(domain_connection_key, -1, 0)
+        ngx.shared.traffic_limits:incr(client_connection_key, -1, 0)
+        domain_dictionary:incr(domain_connection_key, -1, 0)
         return security_reject(429, "domain_connections_exceeded")
     end
     -- ngx.exec enters a named cache location and may replace ngx.ctx. Nginx
     -- request variables survive that redirect and let the log phase release
     -- the active-request counters reliably.
-    ngx.var.cdn_security_client_connection_key = client_connection_key
+    ngx.var.cdn_security_client_connection_key = client_connections and client_connection_key or ""
     ngx.var.cdn_security_domain_connection_key = domain_connection_key
     if config.settings and config.settings.redirect_https == true and ngx.var.scheme == "http" then
         return ngx.redirect("https://" .. host .. ngx.var.request_uri, 308)
@@ -598,14 +606,16 @@ function M.access()
     end
     ngx.var.cdn_cache_zone = "cache_" .. profile_name
     local admissions = dictionary:incr("security:cache:" .. tostring(config.domain) .. ":" .. second, 1, 0, 2)
-    local admission_hits = dictionary:incr("cache:admit:" .. ngx.md5(cache_key), 1, 0, 60)
+    local cache_dictionary = ngx.shared.cache_limits
+    local admission_hits = cache_dictionary:incr("cache:admit:" .. ngx.md5(cache_key), 1, 0, 60)
     local admission_allowed = (not admissions or admissions <= (tonumber(profile.admissions_per_second) or tonumber(limits.cache_admissions_per_second) or 50))
         and (not admission_hits or admission_hits >= (tonumber(cache.admission_requests) or 1))
     local variant_resource = "cache:variants:" .. ngx.md5(cache_resource)
-    if dictionary:add(variant_resource .. ":" .. ngx.md5(cache_key), true, 60) then
-        dictionary:incr(variant_resource, 1, 0, 60)
+    if cache_dictionary:add(variant_resource .. ":" .. ngx.md5(cache_key), true, 60) then
+        cache_dictionary:incr(variant_resource, 1, 0, 60)
     end
-    local variants = tonumber(dictionary:get(variant_resource)) or 0
+    local variants = tonumber(cache_dictionary:get(variant_resource)) or 0
+    if not admission_hits then admission_allowed = false end
     if variants > (tonumber(cache.maximum_variants_per_resource) or 32) then admission_allowed = false end
     if #cache_key > (tonumber(limits.maximum_cache_key_length) or 4096) then ngx.var.cdn_security_reason = "cache_abuse_detected" end
     ngx.var.cdn_cache_key = cache_key
@@ -634,9 +644,9 @@ function M.origin_access()
     local host = (ngx.var.cdn_original_host ~= "" and ngx.var.cdn_original_host or ngx.var.host or ""):lower():gsub("%.$", "")
     local config = state.hosts[host]
     if not config then return security_reject(421, "unknown_host") end
-    ngx.req.clear_header("X-CDNFoundry-Internal-WAF-Mode")
-    ngx.req.clear_header("X-CDNFoundry-Internal-WAF-Threshold")
-    ngx.req.clear_header("X-CDNFoundry-Internal-WAF-Paranoia")
+    ngx.req.clear_header("X-CDNF-Internal-WAF-Mode")
+    ngx.req.clear_header("X-CDNF-Internal-WAF-Threshold")
+    ngx.req.clear_header("X-CDNF-Internal-WAF-Paranoia")
     ngx.ctx.security_domain = config.domain_id or config.domain
     ngx.ctx.security_hostname = host
     local security = config.security or {}
@@ -662,9 +672,10 @@ function M.origin_access()
         if open_until > now then return security_reject(503, "origin_circuit_open") end
     end
     local origin_key = "security:origin:connections:" .. tostring(config.domain) .. ":" .. role
-    local active = dictionary:incr(origin_key, 1, 0)
+    local active = ngx.shared.domain_limits:incr(origin_key, 1, 0)
+    if not active then return security_reject(503, "origin_capacity_exceeded") end
     if active and active > (tonumber(limits.origin_max_connections) or 128) then
-        dictionary:incr(origin_key, -1, 0)
+        ngx.shared.domain_limits:incr(origin_key, -1, 0)
         return security_reject(503, "origin_capacity_exceeded")
     end
     -- Keep the acquired reservation across named proxy/error redirects, which
@@ -683,7 +694,7 @@ function M.origin_access()
     local address, err = resolve(origin.host, origin.private_allowlist, origin.blocked_networks, origin.blocked_addresses, origin.response_timeout_ms)
     if not address then
         ngx.log(ngx.WARN, "origin rejected: ", err)
-        ngx.header["X-CDNFoundry-Error"] = err
+        ngx.header["X-CDNF-Error"] = err
         -- Leave this as an ordinary upstream failure. The outer cache can then
         -- apply its bounded stale-if-error policy; security-controlled 503s
         -- retain their explicit reason and are never disguised as origin loss.
@@ -701,8 +712,8 @@ function M.origin_access()
     ngx.var.origin_response_timeout = tostring(math.min((tonumber(limits.origin_read_timeout) or 30) * 1000, math.max(500, math.min(60000, tonumber(origin.response_timeout_ms) or 5000))))
     local retry_limit = emergency.disable_origin_retries and 0 or (tonumber(limits.origin_retry_limit) or 0)
     ngx.var.origin_retry_count = tostring(math.max(0, math.min(retry_limit, tonumber(origin.retry_count) or tonumber(config.settings and config.settings.retry_count) or 0)))
-    ngx.header["X-CDNFoundry-Origin"] = role
-    ngx.header["X-CDNFoundry-Origin-Transition"] = transition
+    ngx.header["X-CDNF-Origin"] = role
+    ngx.header["X-CDNF-Origin-Transition"] = transition
     if origin.websocket == true and (ngx.var.http_upgrade or ""):lower() == "websocket" then
         ngx.var.origin_connection = "upgrade"
         ngx.var.origin_upgrade = "websocket"
@@ -737,7 +748,7 @@ function M.prepare_cache_response()
     local length = tonumber(headers["Content-Length"])
     if length and length > maximum then no_store = true end
     if no_store then
-        headers["X-CDNFoundry-No-Store"] = "1"
+        headers["X-CDNF-No-Store"] = "1"
         return
     end
     local edge_ttl = math.max(0, math.min(31536000, status_ttl or tonumber(cache.edge_ttl_seconds) or 0))
@@ -752,7 +763,7 @@ function M.prepare_cache_response()
         headers["Expires"] = nil
     end
     if edge_ttl <= 0 then
-        headers["X-CDNFoundry-No-Store"] = "1"
+        headers["X-CDNF-No-Store"] = "1"
         return
     end
     local browser = math.max(0, math.min(31536000, tonumber(cache.browser_ttl_seconds) or 0))
@@ -764,9 +775,9 @@ function M.prepare_cache_response()
 end
 
 function M.cache_status()
-    local no_store = ngx.var.upstream_http_x_cdnfoundry_no_store == "1"
+    local no_store = ngx.var.upstream_http_x_cdnf_no_store == "1"
     local admission_bypass = ngx.var.cdn_cache_no_store == "1" and ngx.var.upstream_cache_status ~= "HIT"
-    ngx.header["X-CDNFoundry-Cache"] = (ngx.var.cdn_cache_bypass == "1" or no_store or admission_bypass)
+    ngx.header["X-CDNF-Cache"] = (ngx.var.cdn_cache_bypass == "1" or no_store or admission_bypass)
         and "BYPASS" or (ngx.var.upstream_cache_status or "MISS")
 end
 
@@ -793,6 +804,16 @@ cache_control_directives = function(raw)
 end
 
 function M.balance()
+    -- The peer is numeric, so a rebinding DNS answer cannot change the TCP
+    -- destination after this check. Recheck on every retry as well.
+    local hostname = (ngx.var.cdn_original_host ~= "" and ngx.var.cdn_original_host or ngx.var.host or ""):lower():gsub("%.$", "")
+    local config = state.hosts[hostname]
+    local origin = config and config.origin
+    if origin and ngx.var.cdn_origin_role == "backup" then origin = origin.backup end
+    local peer = (ngx.var.origin_address or ""):gsub("^%[", ""):gsub("%]$", "")
+    if not origin or blocked(peer, origin.private_allowlist, origin.blocked_networks, origin.blocked_addresses) then
+        error("blocked_destination")
+    end
     local tls_name = ngx.var.origin_sni
     if tls_name == "" then
         tls_name = nil
@@ -843,11 +864,17 @@ function M.record_passive_failure()
 end
 
 function M.finish()
-    for _, key in ipairs({
-        ngx.var.cdn_security_client_connection_key,
-        ngx.var.cdn_security_domain_connection_key,
-        ngx.var.cdn_compression_connection_key,
-    }) do
+    local client_key = ngx.var.cdn_security_client_connection_key
+    if client_key and client_key ~= "" then
+        local current = ngx.shared.traffic_limits:incr(client_key, -1, 0)
+        if current and current <= 0 then ngx.shared.traffic_limits:delete(client_key) end
+    end
+    local domain_key = ngx.var.cdn_security_domain_connection_key
+    if domain_key and domain_key ~= "" then
+        local current = ngx.shared.domain_limits:incr(domain_key, -1, 0)
+        if current and current <= 0 then ngx.shared.domain_limits:delete(domain_key) end
+    end
+    for _, key in ipairs({ngx.var.cdn_compression_connection_key}) do
         if key and key ~= "" then
             local current = ngx.shared.runtime_limits:incr(key, -1, 0)
             if current and current <= 0 then ngx.shared.runtime_limits:delete(key) end
@@ -864,7 +891,7 @@ function M.origin_done()
     local config = state.hosts[host]
     local role = (ngx.var.cdn_origin_role ~= "" and ngx.var.cdn_origin_role) or ngx.ctx.origin_role or "primary"
     local domain = config and tostring(config.domain) or ngx.ctx.origin_domain
-    dictionary:incr(connection_key, -1, 0)
+    ngx.shared.domain_limits:incr(connection_key, -1, 0)
     dictionary:incr("capacity:origin_connections", -1, 0)
     if not domain then return end
     local status = tonumber((ngx.var.upstream_status or ""):match("(%d+)%s*$")) or tonumber(ngx.status) or 0
@@ -915,7 +942,7 @@ end
 
 function M.origin_failure()
     if ngx.var.cdn_security_reason ~= "" then
-        ngx.header["X-CDNFoundry-Security-Reason"] = ngx.var.cdn_security_reason
+        ngx.header["X-CDNF-Security-Reason"] = ngx.var.cdn_security_reason
         return ngx.exit(503)
     end
     -- The internal 444 lets the outer cache apply stale-if-error. It must

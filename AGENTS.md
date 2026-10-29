@@ -1,6 +1,6 @@
 # CDNFoundry implementation contract
 
-The product contract is [docs/roadmap.md](docs/roadmap.md). Build a small, production-grade private CDN with predictable failure behavior, bounded resource use, and low operational complexity. Stop when an implementation idea conflicts with this file or the roadmap.
+The staged roadmap is finished ([docs/roadmap.md](docs/roadmap.md); the archived plan is `docs/legacy/staged-delivery-roadmap.md`). This file and the current documentation are the product contract. Build a small, production-grade private CDN with predictable failure behavior, bounded resource use, and low operational complexity. Stop when an implementation idea conflicts with this file or the documented behavior.
 
 ## Product invariants
 
@@ -13,7 +13,7 @@ The product contract is [docs/roadmap.md](docs/roadmap.md). Build a small, produ
 
 ## Scope and architecture
 
-Implement only accepted Part One behavior or explicitly admitted Part Two work. Do not add microservices, Kafka, Kubernetes requirements, CQRS, event sourcing, GraphQL, custom RBAC, reseller or billing hierarchies, plugin runtimes, custom expression languages, multiple dashboards, or a second backend/frontend.
+Implement only documented behavior or work the owner explicitly admits. Do not add microservices, Kafka, Kubernetes requirements, CQRS, event sourcing, GraphQL, custom RBAC, reseller or billing hierarchies, plugin runtimes, custom expression languages, multiple dashboards, or a second backend/frontend.
 
 Use standard Laravel controllers, form requests, API resources, policies, Eloquent models, jobs, commands, events, notifications, Scheduler, and Horizon. Normal CRUD belongs in controllers and Eloquent. Do not create repository wrappers, manager/service layers for ordinary CRUD, empty abstractions, or interface/implementation pairs without a genuine second implementation or external boundary.
 
@@ -52,7 +52,7 @@ Use production-safe migrations and expand/contract for mixed-version fields. Add
 
 ## Tests and change discipline
 
-Before coding, identify the roadmap requirement, durable state, external effects, rollback, bounds, permissions, and real tests. Cover happy path, permissions, validation, idempotency, retry/failure, rollback/last-valid-state, IPv4/IPv6, and real runtime behavior where applicable. Do not replace runtime qualification with mocks.
+Before coding, identify the documented requirement, durable state, external effects, rollback, bounds, permissions, and real tests. Cover happy path, permissions, validation, idempotency, retry/failure, rollback/last-valid-state, IPv4/IPv6, and real runtime behavior where applicable. Do not replace runtime qualification with mocks.
 
 Browser E2E qualification is manual and user-owned. Coding agents must not launch Chromium, Playwright, Selenium, Cypress, or any other browser automation, even when a browser script exists in the repository. Agents may maintain the manual browser job when UI behavior changes, but must report it as not run and hand the job to the user.
 
@@ -60,6 +60,6 @@ Non-UI end-to-end and real-runtime qualification is agent-owned and uses Python 
 
 Before completion run relevant non-browser tests, formatting/static checks, Compose validation, artifact validation, and documentation updates. Report files changed, behavior, tests actually executed, migrations/operations, the manual browser job status, and limitations. Never report an unexecuted test as passed.
 
-Work roadmap phases in order. A phase is complete only after its implementation is present, its operator/user documentation is current, agent-owned automated and real-runtime tests pass, and its owner-run manual browser checklist is written with exact step-by-step fields and expected results. Keep `docs/manual-browser-qualification.md` limited to implemented/current phases; do not invent future screens. End every documented phase with a completion gate that separately records implementation, documentation, automated/runtime qualification, and manual browser status. Any unavailable UI is a failed current-phase checkpoint, not a future-phase placeholder.
+The roadmap is closed. Owner-admitted work proceeds as bounded increments in order. An increment is complete only after its implementation is present, its operator/user documentation is current, agent-owned automated and real-runtime tests pass, and its owner-run manual browser checklist is written with exact step-by-step fields and expected results. Keep `docs/manual-browser-qualification.md` limited to implemented/current phases; do not invent future screens. End every documented phase with a completion gate that separately records implementation, documentation, automated/runtime qualification, and manual browser status. Any unavailable UI is a failed current-phase checkpoint, not a future-phase placeholder.
 
 Development PostgreSQL and named Compose volumes persist across every roadmap phase. Never remove volumes, run destructive database refreshes, or run `RefreshDatabase` tests against PostgreSQL. Laravel tests must fail closed unless `APP_ENV=testing`, `DB_CONNECTION=sqlite`, and `DB_DATABASE=:memory:` are effective. Use the supported isolated test command and verify its effective database before any test capable of migrations or truncation. Preserve and extend `docs/manual-browser-qualification.md` through the final roadmap phase whenever browser menus, fields, credentials, ports, runtime diagnostics, or operator workflows change.

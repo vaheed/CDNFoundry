@@ -201,7 +201,7 @@ def qualify_profile_control_plane() -> None:
     assert first_status == replay_status == 202 and first == replay, (first, replay)
     conflict_payload = profile_payload("manual", {**manual_limits, "requests_per_second": manual_limits["requests_per_second"] + 1})
     conflict = expect_api_error(409, "PATCH", path, payload=conflict_payload, token=token, idempotency_key=replay_key)
-    assert conflict.payload["error"]["code"] == "idempotency_conflict", conflict.payload
+    assert conflict.payload["code"] == "idempotency_conflict", conflict.payload
 
     _, persisted_manual = api("GET", path, token=token)
     assert persisted_manual["data"]["profile"] == "manual", persisted_manual
@@ -281,7 +281,7 @@ def curl(hostname: str, path: str = "/", method: str = "GET", headers: tuple[str
 def status(response: subprocess.CompletedProcess[str], expected: int, reason: str | None = None) -> None:
     assert f"HTTP/1.1 {expected}" in response.stdout, response.stdout + response.stderr
     if reason:
-        assert f"X-CDNFoundry-Security-Reason: {reason}".lower() in response.stdout.lower(), response.stdout
+        assert f"X-CDNF-Security-Reason: {reason}".lower() in response.stdout.lower(), response.stdout
 
 
 def control(task_id: str, active: bool, actions: list[str], expires_at: int | None = None) -> dict:
@@ -324,7 +324,7 @@ def main() -> None:
             "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro", "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
             "-v", f"{MMDB_VOLUME}:/mmdb:ro", "cdnfoundry/edge-runtime:phase6")
         try:
-            run("docker", "exec", NAME, "openresty", "-t")
+            run("docker", "exec", NAME, "sh", "-c", "if test -f /var/lib/nginx/tmp/nginx-without-syslog.conf; then openresty -t -c /var/lib/nginx/tmp/nginx-without-syslog.conf; else openresty -t; fi")
             time.sleep(1.2)
             status(curl("unknown.example"), 421, "unknown_host")
             status(curl("healthy.example", method="TRACE"), 405, "invalid_method")
@@ -335,13 +335,13 @@ def main() -> None:
             status(curl("geo.example", headers=("X-Forwarded-For: 8.8.8.8",)), 403, "domain_restricted")
             status(curl("quarantine.example"), 429, "domain_quarantined")
 
-            # Send one concurrent burst so the assertion cannot straddle two
-            # one-second limiter buckets and accidentally place three requests
-            # in each bucket, which is exactly the configured rps + burst limit.
+            # The limiter allows three requests per one-second bucket. Send
+            # enough concurrent requests to exceed two adjacent buckets even
+            # when a slow runner starts the burst near a second boundary.
             rate_results = run(
                 "docker", "run", "--rm", "--network", f"container:{NAME}",
                 "--entrypoint", "sh", "curlimages/curl:8.16.0", "-c",
-                "for n in 1 2 3 4 5 6; do "
+                "for n in 1 2 3 4 5 6 7 8 9 10 11 12; do "
                 "curl -sS -D /tmp/rate-$n -o /dev/null -H 'Host: rate.example' http://127.0.0.1:8080/ & "
                 "done; wait; cat /tmp/rate-*",
                 check=False,
