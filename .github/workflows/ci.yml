@@ -620,7 +620,9 @@ jobs:
           for component in "${images[@]}"; do
             image="ghcr.io/vaheed/cdnfoundry-${component}"
             push_with_retry "${image}:${RELEASE}"
-            digest="$(docker inspect --format='{{index .RepoDigests 0}}' "${image}:${RELEASE}")"
+            # The load step also tags the Docker Hub name, which can sort first in RepoDigests.
+            digest="$(docker inspect --format='{{range .RepoDigests}}{{println .}}{{end}}' "${image}:${RELEASE}" | grep -m1 -F "${image}@")"
+            test -n "${digest}"
             test "${digest}" != "${image}:${RELEASE}"
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}/release-evidence:/out" \
               anchore/syft:v1.33.0@sha256:f94e5d9fce1f2278491a8e3a63bd5f6ddb81fdfdbb8bf7a1637565c1d5344357 \
