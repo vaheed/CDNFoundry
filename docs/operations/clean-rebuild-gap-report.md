@@ -29,6 +29,9 @@ in the starter guide; no code change), **open** (decision or further work needed
 | P10 | Endpoint `acknowledged_at` stays null after `ready`. | Reported from the wrong field name. | **retracted**. The field is `gateway_acknowledged_at`; it is set (2026-10-29T10:37:44Z on both endpoints). |
 | P11 | Pagination links use `http://` behind the TLS proxy. | `meta.path` on `GET /admin/dns/clusters`. | **fixed**. Trusted proxy headers now include forwarded proto, host and port. Test: `ProxiedRequestSchemeTest`. The change needs a new core image; the running control still returns `http://` until it is redeployed. |
 
+| P12 | Proxied origins accepted the control host's own public address; edge health probes reached the control plane. | `PATCH /domains/1/dns/records/1` returned 200 with origin `195.230.107.76`; `edge.origin_test` succeeded through the control's Caddy (308). | **fixed in code**: `OriginData` blocks `APP_URL` and DNS cluster API hosts, resolved, even without an edge or endpoint row. Test: `test_control_plane_address_cannot_be_an_origin_even_without_an_edge_or_endpoint_row`. **Stage mitigation applied**: `origin_safety.blocked_origin_addresses` set to the three stage hosts (revision 2); the same PATCH now returns 422. Needs redeploy to pick up the code fix. |
+| P13 | Nameserver verification flapped between "Parent authorities disagree" and "did not return the exact delegation" while the `.ir` authorities converged. | Verifier queries each parent from the core container; answers were consistent when retried. | **environment**, not a code defect. Retry after propagation. Activation succeeded on the retry. |
+
 ## Documentation gaps
 
 | ID | Gap | Status |

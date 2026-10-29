@@ -97,6 +97,18 @@ Hosts: control `195.230.107.76`, pop-1 `195.230.107.78`, pop-2 `195.230.107.77`.
 | Backups and restore | `/backups` | **not run**: backups disabled in the fleet topology |
 | Operations listing and pagination | `GET /admin/operations`, `GET /admin/edges` cursors | partly run (operations list works); cursor pagination not exercised |
 
+## Customer test zone (2026-10-29, later)
+
+| Feature | Evidence | Result |
+| --- | --- | --- |
+| Claim creation and assigned nameservers | `POST /domains` for `10dl.ir` | passed (`pending_verification`, assigned NS) |
+| Initial SOA/NS deployment to both PoPs | `GET /domains/1/dns/deployment` | passed (revision 1 succeeded on both clusters) |
+| Nameserver verification and activation | `POST /domains/1/verify-nameservers` after registrar delegation | passed (`active`) |
+| DNS-only A record and deployment | `POST /domains/1/dns/records` (`192.0.2.50`) | passed (revision 3 succeeded on both; UDP and TCP answers; `aa`) |
+| Proxied origin validation: platform address rejected | `PATCH …/dns/records/1` with the control address | **failed before the fix** (200; edges reached the control). Fixed in code (P12). Passes at the API after the stage setting (422). |
+| Proxied origin reachable from edges | origin test | not run: no public customer origin available; stage hosts are all platform addresses |
+| Managed TLS, cache, purge, security, WAF, analytics | — | not run: needs a reachable customer origin and live traffic |
+
 ## Gaps found in this pass
 
 See [clean rebuild gap report](clean-rebuild-gap-report.md). Product gaps P1 to P5 and
