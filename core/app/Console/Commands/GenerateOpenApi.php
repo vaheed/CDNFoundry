@@ -85,7 +85,7 @@ class GenerateOpenApi extends Command
 
         $document = [
             'openapi' => '3.1.0',
-            'info' => ['title' => 'CDNFoundry Control Plane API', 'version' => '1.0.0'],
+            'info' => ['title' => 'CDNFoundry Control Plane API', 'version' => config('release.version')],
             'servers' => [['url' => '/api']],
             'paths' => $paths,
             'components' => [

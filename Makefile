@@ -3,7 +3,7 @@ COMPOSE_TEST := $(COMPOSE_DEV) -f compose.test.yml
 COMPOSE_PROD := docker compose --env-file .env.prod -f compose.prod.yml
 COMPOSE_PROD_EXAMPLE := docker compose --env-file .env.prod.example -f compose.prod.yml
 
-.PHONY: backend-test contract-check dev-assets dev-control-up dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-waf-image dev-phase9-e2e dev-gateway-e2e dev-cache-e2e dev-compression-e2e dev-origin-failover-e2e dev-phase7-e2e dev-phase8-e2e dev-phase8-recovery-e2e dev-phase8-upgrade-e2e dev-phase8-throughput-e2e dev-phase8-mmdb-e2e dev-scale-e2e dev-grafana-smoke dev-operational-logs-smoke dev-production-qualification dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge prod-logs config-check openapi-check docs-dev docs-build docs-check
+.PHONY: backend-test contract-check dev-assets dev-control-up dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-pdns-migrate dev-test dev-e2e dev-waf-image dev-phase9-e2e dev-gateway-e2e dev-cache-e2e dev-compression-e2e dev-origin-failover-e2e dev-phase7-e2e dev-phase8-e2e dev-phase8-recovery-e2e dev-phase8-upgrade-e2e dev-phase8-throughput-e2e dev-phase8-mmdb-e2e dev-scale-e2e dev-grafana-smoke dev-operational-logs-smoke dev-production-qualification dev-logs prod-pull prod-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge prod-logs config-check openapi-check version-check check-no-screenshots docs-dev docs-build docs-check
 
 backend-test: dev-test
 
@@ -152,6 +152,12 @@ config-check:
 	$(COMPOSE_PROD_EXAMPLE) config --quiet
 	bash tests/config/generate-production-env.sh
 	./scripts/validate-production-overrides.sh
+
+version-check:
+	python3 scripts/ci/version_check.py
+
+check-no-screenshots:
+	python3 scripts/ci/check_no_screenshots.py
 
 openapi-check:
 	$(COMPOSE_DEV) run --rm --no-deps vendor-init
