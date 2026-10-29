@@ -260,8 +260,9 @@ def main() -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--scan-release-images', metavar='RELEASE', required=True)
+    parser.add_argument('--scan-release-images', metavar='RELEASE')
     parser.add_argument('--output', type=pathlib.Path, default=ROOT / 'storage/qualification/release-image-scans')
     args = parser.parse_args()
     main()
-    scan_release_images(args.output, args.scan_release_images)
+    if args.scan_release_images:
+        scan_release_images(args.output, args.scan_release_images)

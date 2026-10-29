@@ -184,7 +184,7 @@ services:
       LOG_AUTH_TOKEN: ${LOG_AUTH_TOKEN:?LOG_AUTH_TOKEN is required}
     ports: ["${HOST_BIND_IPV4}:80:80/tcp", "${HOST_BIND_IPV4}:443:443/tcp", "${HOST_BIND_IPV4}:8444:8444/tcp"]
     volumes: [./deploy/production/Caddyfile.telemetry:/etc/caddy/Caddyfile:ro, telemetry-caddy-data:/data, telemetry-caddy-config:/config]
-    depends_on: { clickhouse: { condition: service_healthy }, loki: { condition: service_healthy }, grafana: { condition: service_healthy } }
+    depends_on: { clickhouse: { condition: service_healthy }, loki: { condition: service_started }, grafana: { condition: service_healthy } }
     # The gateway must be dual-homed: ingress receives public HTTPS and
     # telemetry keeps ClickHouse, Loki, and Grafana private.
     networks: [ingress, telemetry]

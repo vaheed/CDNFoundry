@@ -119,7 +119,7 @@ def main() -> None:
     backup = wait_backup(token, created["data"]["backup_id"])
     snapshot = backup["snapshot_id"]
     assert isinstance(snapshot, str) and len(snapshot) == 64
-    compose("exec", "-T", "core", "restic", "check", "--read-data-subset=100%", timeout=180)
+    compose("exec", "-T", "--user", "www-data", "core", "restic", "check", "--read-data-subset=100%", timeout=180)
 
     wrong, _ = request("POST", f"/api/admin/backups/{backup['id']}/restore", {"confirmation": "wrong", "current_password": PASSWORD}, token, str(uuid.uuid4()))
     assert wrong == 422
@@ -128,14 +128,14 @@ def main() -> None:
 
     run("docker", "run", "-d", "--rm", "--name", RESTORE_CONTAINER, "--network", "cdnfoundry-dev_control",
         "-e", "POSTGRES_DB=cdnf_restore", "-e", "POSTGRES_USER=cdnf_restore", "-e", "POSTGRES_PASSWORD=phase8-restore-only",
-        "--tmpfs", "/var/lib/postgresql:rw,nosuid,size=1g", "postgres:18.4-alpine")
+        "-v", "/var/lib/postgresql", "postgres:18.4-alpine")
     try:
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline:
             if run("docker", "exec", RESTORE_CONTAINER, "pg_isready", "-U", "cdnf_restore", "-d", "cdnf_restore", check=False).returncode == 0:
                 break
             time.sleep(1)
-        compose("exec", "-T", "-e", f"PGHOST={RESTORE_CONTAINER}", "-e", "PGPORT=5432", "-e", "PGDATABASE=cdnf_restore",
+        compose("exec", "-T", "--user", "www-data", "-e", f"PGHOST={RESTORE_CONTAINER}", "-e", "PGPORT=5432", "-e", "PGDATABASE=cdnf_restore",
                 "-e", "PGUSER=cdnf_restore", "-e", "PGPASSWORD=phase8-restore-only", "core", "/usr/local/bin/cdnf-backup-restore", snapshot, timeout=180)
         restored = counts(RESTORE_CONTAINER, "cdnf_restore", "cdnf_restore")
         source_sql = "SELECT 'users='||count(*) FROM users UNION ALL SELECT 'domains='||count(*) FROM domains UNION ALL SELECT 'dns_records='||count(*) FROM dns_records UNION ALL SELECT 'migrations='||count(*) FROM migrations;"

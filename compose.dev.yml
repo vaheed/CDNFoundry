@@ -370,7 +370,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - operational-vector-data:/vector-data-dir
     depends_on:
-      loki: { condition: service_healthy }
+      loki: { condition: service_started }
     ports: ["127.0.0.1:9599:9599"]
     networks: [telemetry]
     restart: unless-stopped
@@ -468,7 +468,7 @@ services:
       clickhouse: { condition: service_healthy }
       grafana-control-db-provision: { condition: service_completed_successfully }
       prometheus: { condition: service_started }
-      loki: { condition: service_healthy }
+      loki: { condition: service_started }
     networks: [telemetry, control]
     restart: unless-stopped
     healthcheck:
