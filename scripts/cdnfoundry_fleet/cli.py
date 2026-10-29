@@ -411,6 +411,10 @@ def _apply_setup_features(store: FleetState, state: dict[str, Any], config: dict
 def _setup(args: argparse.Namespace, store: FleetState, output_dir: Path, config: dict[str, Any]) -> int:
     _validate_setup_config(config)
     durable_store = store
+
+    def say(message: str) -> None:
+        # Dry runs compute the candidate in memory; never report it as written.
+        print(f"Dry run, not persisted: {message}" if args.dry_run else message)
     # Assemble a complete candidate without persisting intermediate nodes.
     store = FleetState(store.state_dir, dry_run=True)
     global_cfg = config.get("global", config)
@@ -436,7 +440,7 @@ def _setup(args: argparse.Namespace, store: FleetState, output_dir: Path, config
                 "ipv6": args.dual_stack or global_cfg.get("ipv6", False),
             }
         )
-        print(f"Initialized fleet state: {store.state_file}")
+        say(f"Initialized fleet state: {store.state_file}")
     else:
         state = store.load()
         # Setup is repeatable; it must not silently ignore conflicting identity
@@ -480,10 +484,10 @@ def _setup(args: argparse.Namespace, store: FleetState, output_dir: Path, config
             current = state
             if name in current["nodes"]:
                 state = store.update_node(current, name, payload)
-                print(f"Updated node: {name}")
+                say(f"Updated node: {name}")
             else:
                 state = store.add_node(current, payload)
-                print(f"Added node: {name}")
+                say(f"Added node: {name}")
     elif created or not state["nodes"]:
         control_payload = {
             "name": args.control_name,
@@ -499,20 +503,20 @@ def _setup(args: argparse.Namespace, store: FleetState, output_dir: Path, config
         elif not args.control_ipv4:
             raise ValidationError("--control-ipv4 or a config nodes list is required in non-interactive setup")
         state = store.add_node(state, control_payload)
-        print(f"Added control node: {control_payload['name']}")
+        say(f"Added control node: {control_payload['name']}")
 
         if preset == "dedicated-monitoring":
             if args.non_interactive:
                 raise ValidationError("Dedicated monitoring in non-interactive mode requires a monitoring node in --config")
             monitor_payload = _interactive_node(state, role="monitoring", defaults={"name": "monitoring-1"})
             state = store.add_node(state, monitor_payload)
-            print(f"Added monitoring node: {monitor_payload['name']}")
+            say(f"Added monitoring node: {monitor_payload['name']}")
 
         if not args.non_interactive:
             while _prompt_yes_no("Add a DNS or edge node now?", default=False):
                 payload = _interactive_node(state)
                 state = store.add_node(state, payload)
-                print(f"Added node: {payload['name']}")
+                say(f"Added node: {payload['name']}")
 
     state = _apply_setup_features(store, state, config, preset)
     store.validate(state, require_secrets=False)
@@ -536,16 +540,16 @@ def _setup(args: argparse.Namespace, store: FleetState, output_dir: Path, config
             with store.transaction() as candidate:
                 candidate["metadata"]["last_successful_validation"] = utc_now()
                 candidate["metadata"]["last_successful_render"] = utc_now()
-        print(f"Generated {len(paths)} node bundle(s) in {output_dir}")
-        for path in paths:
+        say(f"Generated {len(paths)} node bundle(s) in {output_dir}")
+        for path in paths if not args.dry_run else []:
             print(f"  - {path}")
     result = {
-        "status": "configured",
+        "status": "validated" if args.dry_run else "configured",
         "preset": preset,
         "state_dir": str(store.state_dir),
         "output_dir": str(output_dir),
         "nodes": sorted(state["nodes"]),
-        "bundles": [str(path) for path in paths],
+        "bundles": [str(path) for path in paths] if not args.dry_run else [],
     }
     print(json.dumps(result))
     return EXIT_OK

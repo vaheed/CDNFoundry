@@ -426,6 +426,22 @@ def test_monitoring_files_are_readable_by_non_root_consumers(
     assert "! -path 'docker/pdns/pdns.conf' -exec chmod a+r" in start
 
 
+def test_control_start_waits_only_on_services_with_active_healthchecks(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
+    # Regression: `up --wait` fails on services whose healthcheck is explicitly disabled
+    # (Loki), which left Caddy and Grafana uncreated on the stage control host.
+    add(store, node("control-1", "control", "192.0.2.10"))
+    output = tmp_path / "bundles"
+    Renderer(source_repo, store, output).render(store.load())
+
+    start = (output / "control-1/start.sh").read_text(encoding="utf-8")
+    assert "healthy_services=" in start
+    assert "--profile control --profile telemetry --profile logs up -d\n" in start or "up -d\n" in start
+    assert 'if [ -n "$healthy_services" ]; then' in start
+    assert 'and not (service.get("healthcheck") or {}).get("disable")' in start
+    wait_line = [line for line in start.splitlines() if "up -d --wait --wait-timeout 300 $healthy_services" in line]
+    assert wait_line, "activation must wait on the healthy-service list, not on every service"
+
+
 def test_control_start_restricts_identity_ca_key_for_php_worker(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
     add(store, node("control-1", "control", "192.0.2.10"))
     output = tmp_path / "bundles"
@@ -632,7 +648,16 @@ def test_setup_dry_run_uses_in_memory_state(source_repo: Path, tmp_path: Path) -
         capture_output=True,
     )
     assert "Fleet validation passed (1 node(s))." in result.stdout
+    assert "Dry run, not persisted: Initialized fleet state" in result.stdout
+    assert "Dry run, not persisted: Generated 1 node bundle(s)" in result.stdout
+    persisted_wording = [
+        line for line in result.stdout.splitlines()
+        if line.startswith(("Initialized", "Added", "Generated", "Updated"))
+    ]
+    assert persisted_wording == [], persisted_wording
+    assert '"status": "validated"' in result.stdout
     assert not state_dir.exists()
+    assert not (tmp_path / "dry-bundles").exists()
 
 
 def test_explicit_rotation_changes_only_target_dns_node(store: FleetState) -> None:

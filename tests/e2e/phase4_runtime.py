@@ -100,8 +100,10 @@ def raw_request(payload: str) -> str:
 
 
 def wait_for(host: str, container: str = NAME) -> subprocess.CompletedProcess[str]:
+    # A restarted runtime reloads persisted generations before it listens again;
+    # 30 seconds is a bounded budget for that, not a fixed sleep.
     result = request(host, container)
-    for _ in range(9):
+    for _ in range(60):
         if result.returncode == 0:
             return result
         time.sleep(0.5)
@@ -453,14 +455,18 @@ def main() -> None:
             # keepalive connections longer than this deliberately short window.
             time.sleep(2.2)
             run("docker", "compose", "-f", "compose.dev.yml", "kill", "origin-http")
-            stale = request_with("stale.example", "/stale")
-            assert stale.returncode == 0 and "X-CDNF-Cache: STALE" in stale.stderr, stale.stderr
-            no_stale = request_with("no-stale.example", "/stale")
-            assert no_stale.returncode != 0 and "502 Bad Gateway" in no_stale.stderr, no_stale.stderr
-            time.sleep(3.2)
-            expired_stale = request_with("stale.example", "/stale")
-            assert expired_stale.returncode != 0 and "502 Bad Gateway" in expired_stale.stderr, expired_stale.stderr
-            run("docker", "compose", "-f", "compose.dev.yml", "up", "-d", "origin-http")
+            try:
+                stale = request_with("stale.example", "/stale")
+                assert stale.returncode == 0 and "X-CDNF-Cache: STALE" in stale.stderr, stale.stderr
+                no_stale = request_with("no-stale.example", "/stale")
+                assert no_stale.returncode != 0 and "502 Bad Gateway" in no_stale.stderr, no_stale.stderr
+                time.sleep(3.2)
+                expired_stale = request_with("stale.example", "/stale")
+                assert expired_stale.returncode != 0 and "502 Bad Gateway" in expired_stale.stderr, expired_stale.stderr
+            finally:
+                # Restore the origin even when an assertion fails; a stopped origin
+                # otherwise breaks every later run until someone starts it by hand.
+                run("docker", "compose", "-f", "compose.dev.yml", "up", "-d", "origin-http")
             assert wait_for("runtime.example").returncode == 0
             master = run("docker", "exec", NAME, "cat", "/usr/local/openresty/nginx/logs/nginx.pid").stdout.strip()
             children = worker_children(NAME, master)

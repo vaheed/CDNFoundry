@@ -24,7 +24,7 @@ class AuthController extends Controller
             throw ValidationException::withMessages(['email' => ['The provided credentials are incorrect.']]);
         }
         if ($user->isDisabled()) {
-            return response()->json(['error' => ['code' => 'account_disabled', 'message' => 'This account is disabled.']], 403);
+            return response()->json(['message' => 'This account is disabled.', 'code' => 'account_disabled', 'details' => (object) []], 403);
         }
 
         $token = DB::transaction(function () use ($request, $user): string {

@@ -966,7 +966,25 @@ openssl verify -CAfile pki/edge-server-ca.crt pki/node.crt
     def _start_script(self, state: dict[str, Any], node: dict[str, Any]) -> str:
         migration = self._node_start_order(node)
         profiles = self._start_profiles(state, node)
-        activation = f"docker compose --env-file .env.prod {profiles} up -d --wait --wait-timeout 300" if profiles else ":"
+        activation = (
+            f"""docker compose --env-file .env.prod {profiles} up -d
+# Compose --wait fails on services whose healthcheck is explicitly disabled
+# (for example Loki, whose image has no probe binary). Start every service,
+# then wait only for services that define an active healthcheck.
+healthy_services="$(docker compose --env-file .env.prod {profiles} config --format json | python3 -c '
+import json, sys
+services = json.load(sys.stdin)["services"]
+print(" ".join(sorted(
+    name for name, service in services.items()
+    if (service.get("healthcheck") or {{}}).get("test") and not (service.get("healthcheck") or {{}}).get("disable")
+)))
+')"
+if [ -n "$healthy_services" ]; then
+    docker compose --env-file .env.prod {profiles} up -d --wait --wait-timeout 300 $healthy_services
+fi"""
+            if profiles
+            else ":"
+        )
         enrollment_validation = ""
         if node["role"] in {"edge", "dns-edge"}:
             enrollment_validation = """# Resolve the host's current enrollment through Compose; never source env files.

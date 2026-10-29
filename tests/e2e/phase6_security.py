@@ -201,7 +201,7 @@ def qualify_profile_control_plane() -> None:
     assert first_status == replay_status == 202 and first == replay, (first, replay)
     conflict_payload = profile_payload("manual", {**manual_limits, "requests_per_second": manual_limits["requests_per_second"] + 1})
     conflict = expect_api_error(409, "PATCH", path, payload=conflict_payload, token=token, idempotency_key=replay_key)
-    assert conflict.payload["error"]["code"] == "idempotency_conflict", conflict.payload
+    assert conflict.payload["code"] == "idempotency_conflict", conflict.payload
 
     _, persisted_manual = api("GET", path, token=token)
     assert persisted_manual["data"]["profile"] == "manual", persisted_manual

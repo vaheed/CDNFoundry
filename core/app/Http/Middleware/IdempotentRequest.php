@@ -22,7 +22,7 @@ class IdempotentRequest
             return $next($request);
         }
         if (! Str::isUuid($key)) {
-            return response()->json(['error' => ['code' => 'invalid_idempotency_key', 'message' => 'Idempotency-Key must be a UUID.']], 422);
+            return response()->json(['message' => 'Idempotency-Key must be a UUID.', 'code' => 'invalid_idempotency_key', 'details' => (object) []], 422);
         }
 
         $userId = $request->user()?->getKey();
@@ -37,7 +37,7 @@ class IdempotentRequest
                 if (DB::getDriverName() === 'pgsql') {
                     $acquired = DB::selectOne('SELECT pg_try_advisory_xact_lock(1128549959, hashtext(?)) AS acquired', [(string) $userId.'|'.$key])->acquired;
                     if (! $acquired) {
-                        return response()->json(['error' => ['code' => 'idempotency_busy', 'message' => 'A request with this idempotency key is still being processed.']], 409);
+                        return response()->json(['message' => 'A request with this idempotency key is still being processed.', 'code' => 'idempotency_busy', 'details' => (object) []], 409);
                     }
                 }
                 $existing = IdempotencyKey::query()->where('user_id', $userId)->where('key', $key)->first();
@@ -47,7 +47,7 @@ class IdempotentRequest
                     $legacyHash = hash('sha256', $request->method().'|'.$request->path().'|'.$request->getContent());
                     if (! hash_equals($existing->request_hash, $hash)
                         && ($request->getQueryString() !== null || ! hash_equals($existing->request_hash, $legacyHash))) {
-                        return response()->json(['error' => ['code' => 'idempotency_conflict', 'message' => 'This key was used with a different request.']], 409);
+                        return response()->json(['message' => 'This key was used with a different request.', 'code' => 'idempotency_conflict', 'details' => (object) []], 409);
                     }
 
                     return response()->json($existing->response_body, $existing->response_status)
@@ -73,7 +73,7 @@ class IdempotentRequest
                 return $response;
             }));
         } catch (LockTimeoutException) {
-            return response()->json(['error' => ['code' => 'idempotency_busy', 'message' => 'A request with this idempotency key is still being processed.']], 409);
+            return response()->json(['message' => 'A request with this idempotency key is still being processed.', 'code' => 'idempotency_busy', 'details' => (object) []], 409);
         }
     }
 

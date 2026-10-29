@@ -163,7 +163,7 @@ def main() -> None:
         token=admin_token,
         idempotency_key=create_key,
     )
-    assert conflict.payload["error"]["code"] == "idempotency_conflict"
+    assert conflict.payload["code"] == "idempotency_conflict"
 
     user_token = login(USER_EMAIL, USER_PASSWORD)
     expect_error(403, "GET", "/api/admin/users", token=user_token)
