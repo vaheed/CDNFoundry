@@ -79,6 +79,43 @@ Select the source commit from an available signed release manifest. Do not
 deploy from a moving branch or mutable image tag. Select the exact successful publication run and verify its evidence. Publication
 alone does not qualify a staging installation or establish production readiness.
 
+### Configure the registry mirror on every host
+
+Some networks block Docker Hub. Upstream images in the bundles (Caddy, PostgreSQL,
+PowerDNS, dnsdist, Vector, node-exporter, Alpine) are pulled by digest, so every
+host, including the administrative workstation, needs the mirror before the first
+`validate.sh`. Create or merge `/etc/docker/daemon.json`; keep any existing keys:
+
+```json
+{
+    "registry-mirrors": ["https://registry.vaheed.net:2053"]
+}
+```
+
+Then restart Docker and confirm the mirror is active:
+
+```bash
+sudo systemctl restart docker
+docker info --format '{{.RegistryConfig.Mirrors}}'
+```
+
+Restarting the daemon briefly restarts running containers. Restart them on a
+host that already runs a bundle only in a maintenance window.
+
+If the host cannot reach any registry for an upstream image, export that image by
+its tag from a host that can, load it, and tag the loaded image by the repository
+and tag the bundle references. A plain `docker save` of a digest-only reference
+loads without a name, and Compose then falls back to a registry pull:
+
+```bash
+docker pull caddy:2.11-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
+docker save caddy:2.11-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f | ssh HOST 'sudo docker load -q'
+ssh HOST 'sudo docker tag EB4D35B7452D caddy:2.11-alpine'
+```
+
+Use the loaded image ID for the `docker tag` line. Repeat for every upstream
+digest in the bundle's Compose file.
+
 Before installation, complete [release verification and Fleet image projection](../operations/software-supply-chain.md#verify-a-release).
 Populate the topology below, then use that procedure to produce
 `fleet.verified.json` with all nine verified component digests. Use that file in
@@ -118,7 +155,7 @@ python3 -m json.tool fleet.json >/dev/null
 ./scripts/cdnfoundry-fleet --config fleet.json --non-interactive --dry-run setup
 ```
 
-The dry run performs topology, role, address, feature, and Compose validation without writing Fleet state or bundles. It does not establish signatures, public DNS/TLS reachability, or production readiness; use the verified image projection before actual setup.
+The dry run performs topology, role, address, feature, and Compose validation without writing Fleet state or bundles. Its output says `Dry run, not persisted:` before every message that would otherwise report a written state or bundle, and its JSON status is `validated`, not `configured`. It does not establish signatures, public DNS/TLS reachability, or production readiness; use the verified image projection before actual setup.
 
 ### Publish the control-host management records
 
@@ -169,6 +206,26 @@ sudo ./scripts/cdnfoundry-fleet \
 The command creates secrets and private PKI once, validates the complete desired topology, renders bundles atomically, and prints start order. Each node bundle contains its filtered Compose manifest, complete `.env.prod`, required runtime files, certificates, secrets, and operator scripts.
 
 Never commit `fleet.json`, Fleet state, generated bundles, `.env.prod`, or private keys.
+
+### Issue the edge listener material
+
+Each DNS/edge bundle needs a dedicated serving certificate and a stable recovery
+key in `/dev/shm/cdnfoundry/` (see step 4). The fleet does not create them. Issue
+them from the fleet's edge-server CA on the workstation that holds the state:
+
+```bash
+sudo ./scripts/issue-edge-listener-material.sh \
+  --state-dir /var/lib/cdnfoundry-fleet \
+  --hostname pop-1.ops.example.com \
+  --public-ipv4 198.51.100.20 \
+  --output /root/cdnfoundry-edge-material/pop-1
+```
+
+Then copy the node key from `pki/nodes/<pop>/node.key` in the same state directory
+and the three edge files to the PoP's `/dev/shm/cdnfoundry` with owner UID 10101
+and mode `0400`. Keep the recovery key with the Fleet state backup: losing it
+loses the encrypted edge state on that PoP. Rerunning the script never rotates an
+existing key.
 
 ## 4. Inspect before transfer
 
@@ -255,6 +312,24 @@ optional `AAAA` records above, inbound TCP 80/443, and the Caddy log for ACME
 errors. A healthy `caddy` container only confirms its local process health; it
 does not confirm public DNS, certificate issuance, or the external TLS path.
 Do not proceed to PoP setup until the control health request succeeds.
+
+### Grafana plugin download (403 blocks telemetry)
+
+The telemetry profile downloads the ClickHouse Grafana datasource from
+`grafana.com` and verifies its checksum. Some networks receive HTTP 403 for that
+download. The control activation then reports `grafana-plugins-init` as failed,
+and `start.sh` stops before Grafana and Caddy are created. Do not disable the
+checksum. Seed the volume from a copy of the same pinned version instead:
+
+```bash
+docker exec SOURCE_GRAFANA tar -C /var/lib/grafana/plugins -cf - grafana-clickhouse-datasource \
+  | docker run --rm -i -v cdnfoundry_grafana-plugins:/plugins alpine:3.22.6 tar -C /plugins -xf -
+```
+
+`SOURCE_GRAFANA` is a Grafana container that already runs
+`grafana-clickhouse-datasource` version `4.21.3`. The init service skips the
+download when `/plugins/grafana-clickhouse-datasource/plugin.json` exists. Then
+rerun `sudo ./start.sh`.
 
 ### Create the first administrator and sign in
 
