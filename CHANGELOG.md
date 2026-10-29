@@ -5,6 +5,29 @@ All notable changes are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). The root `VERSION` file is the
 single source of truth; `make version-check` enforces it.
 
+## [Unreleased]
+
+### Added
+
+- Coding-agent tooling: rewritten project skills with front matter, real file
+  paths, commands, tests, and known traps, plus a new `cdnf-codebase-map`
+  skill; `.claude/skills` links to `.agents/skills`; `.mcp.json` registers the
+  local CodeGraph MCP server (pinned 1.6.2, telemetry off). See
+  `docs/development/coding-agents.md`.
+
+### Changed
+
+- The documentation site footer and the archived README and CONTRIBUTING
+  pages state the Apache License 2.0; CONTRIBUTING records that contributions
+  are licensed under the same terms.
+- `docs/roadmap.md` is now the active platform rebuild roadmap: audit finding
+  register from a code audit, and risk-ordered phases toward a breaking 2.0.
+- `docs/roadmap.md` merges the 2026-10-30 codebase audit
+  (`docs/audit/2026-10-30-codebase-audit.md`): findings A1–A46 join the
+  register, every A item is assigned to a phase with updated exit criteria,
+  a "Before Phase 1" list holds date-bound and disclosure work, stale code
+  references are corrected, and M11 moves to Phase 2.
+
 ## [1.2.1]
 
 v1.2.1 is a zero-state release: deploy it from scratch. There is no supported

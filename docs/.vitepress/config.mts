@@ -268,7 +268,7 @@ export default defineConfig({
           text: 'Operations',
           items: [
             { text: 'Release notes v1.2.1', link: '/operations/releases/v1.2.1' },
-            { text: 'Roadmap (closed)', link: '/roadmap' },
+            { text: 'Roadmap', link: '/roadmap' },
             { text: 'Operations index', link: '/operations/' },
             { text: 'Production best practices', link: '/operations/production-best-practices' },
             { text: 'CLI commands', link: '/operations/cli-commands' },
@@ -322,7 +322,8 @@ export default defineConfig({
             { text: 'Testing', link: '/development/testing' },
             { text: 'Project layout', link: '/development/project-layout' },
             { text: 'Frontend', link: '/development/frontend' },
-            { text: 'Scripts and CI', link: '/development/scripts-and-ci' }
+            { text: 'Scripts and CI', link: '/development/scripts-and-ci' },
+            { text: 'Coding agents', link: '/development/coding-agents' }
           ]
         }
       ],
@@ -345,7 +346,7 @@ export default defineConfig({
     },
     footer: {
       message: 'CDNFoundry documentation',
-      copyright: 'Licensed under MIT'
+      copyright: 'Licensed under the Apache License, Version 2.0'
     }
   }
 })

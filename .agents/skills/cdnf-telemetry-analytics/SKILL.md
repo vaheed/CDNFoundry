@@ -1,22 +1,44 @@
+---
+name: cdnf-telemetry-analytics
+description: Work on CDNFoundry telemetry: Vector pipelines, ClickHouse schema and retention, analytics and log queries, and usage rollups. Use for any change to events, dashboards, or analytics APIs.
+---
+
 # cdnf-telemetry-analytics
 
 ## Purpose
-Implement bounded traffic telemetry, analytics, rollups, and export.
+Collect bounded, redacted events from edges and DNS straight into ClickHouse, and query them with strict tenant and time scoping.
+
 ## When to use
-For Vector, ClickHouse, analytics, logs, usage summaries, or billing export.
+Changes to `docker/vector/*.yaml`, `docker/clickhouse/**`, `AnalyticsStore`, analytics and log endpoints, usage rollups, or Grafana dashboards.
+
 ## Required inputs
-Event schema, redaction, buffer/retention limits, query scope, aggregates, and accuracy dataset.
+The event fields, redaction, retention, query bounds (range, rows, execution time), and the tenant scope.
+
 ## Files normally touched
-Vector, ClickHouse schema/views, bounded Laravel API/UI, rollups, tests and docs.
+`docker/vector/vector.yaml`, `docker/vector/operational.yaml`, `docker/clickhouse/init.sql`, `docker/clickhouse/migrations/*`, `core/app/Support/AnalyticsStore.php`, `core/app/Http/Controllers/AnalyticsController.php`, `DomainLogController.php`, `UsageController.php`, `core/app/Jobs/BuildUsageRollups.php`, `docs/reference/telemetry-schema.md`, `docs/guides/analytics.md`.
+
 ## Procedure
-Define bounded redacted events; send Vector directly to ClickHouse; cap buffers/retention; build aggregates; enforce domain/time/filter/result/execution limits; keep compact PostgreSQL summaries; test traffic accuracy and outage.
+1. Every event that belongs to a tenant carries `domain_id`. Scope tenant queries by `domain_id`, never by name suffix. DNS events currently use `domain_id = 0` and are scoped by zone name, which leaks across tenants (roadmap H9).
+2. Use ClickHouse query parameters (`{name:Type}`) for every value. Only fixed column and table names may be interpolated.
+3. Bound everything: the range (90 days for analytics, 24 hours for raw logs), the `LIMIT`, the execution time, and the Vector buffers.
+4. Redact client data according to `docs/reference/telemetry-schema.md`.
+5. A ClickHouse outage must never stop serving. The API returns `AnalyticsUnavailableException` instead.
+
 ## Validation commands
-Schema/config tests, generated traffic comparison, query-bound and outage tests.
+- Backend: `make dev-test`, or one class with `docker compose -f compose.dev.yml -f compose.test.yml run --rm --no-deps core php artisan test --compact --filter <Class>` (the test override forces in-memory SQLite; never run tests against PostgreSQL).
+- Style: `docker compose -f compose.dev.yml -f compose.test.yml run --rm --no-deps core vendor/bin/pint --test`.
+- Feature: `AnalyticsApiTest`, `TelemetryBrowserExportTest`.
+- Contract: `make contract-check` (Grafana and logging contracts).
+- Runtime: `python3 tests/e2e/phase7_analytics.py`, `vector_traffic.py`, `vector_buffer_startup.py`.
+
 ## Definition of done
-Analytics are scoped/accurate/bounded and failure cannot interrupt serving.
+Counts match generated traffic, tenants see only their own events, and outages degrade analytics without affecting traffic.
+
 ## Stop conditions
-Stop if sensitive fields, retention, bounds, or outage behavior is undefined.
+Stop if raw telemetry would pass through Laravel, or a query could run unbounded.
+
 ## Forbidden shortcuts
-No raw logs through Laravel/Redis/PostgreSQL, secrets/bodies/cookies, or unbounded labels/queries/buffers.
+No string-built values in SQL, no unscoped admin queries reused for tenants, and no retention-free tables.
+
 ## Expected completion summary
-Schemas, redaction/retention/bounds, accuracy and outage results.
+Schema changes, scoping, bounds, redaction, accuracy evidence, and outage behavior.
