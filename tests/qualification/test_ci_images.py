@@ -66,14 +66,14 @@ class ImageTransferTests(unittest.TestCase):
                         images.load('expected')
                     docker.assert_not_called()
 
-    def test_changed_image_identity_is_rejected_and_archive_retained(self):
+    def test_loaded_image_without_expected_revision_is_rejected_and_archive_retained(self):
         with tempfile.TemporaryDirectory() as directory:
             self.fixture(directory)
             with patch.object(images, 'OUTPUT', Path(directory)), \
                     patch.object(images, 'targets', return_value={'core': {'tags': [IMAGE]}}), \
                     patch.object(images.subprocess, 'run'), \
-                    patch.object(images, 'identity', return_value='sha256:changed'):
-                with self.assertRaisesRegex(ValueError, 'identity changed'):
+                    patch.object(images, 'identity', side_effect=ValueError('Image revision does not match this workflow: ' + IMAGE)):
+                with self.assertRaisesRegex(ValueError, 'revision'):
                     images.load('expected')
                 self.assertTrue((Path(directory) / 'application.tar.gz').exists())
 
