@@ -1,6 +1,6 @@
 # CDNFoundry implementation contract
 
-The staged roadmap is finished (archived as `docs/legacy/staged-delivery-roadmap.md`). The active owner-admitted work is the platform rebuild in [docs/roadmap.md](docs/roadmap.md): it is a breaking 2.0 line with no backward compatibility, executed phase by phase on the `dev` branch. Until its Phase 0 amends this file, every rule below still applies. This file and the current documentation are the product contract. Build a small, production-grade private CDN with predictable failure behavior, bounded resource use, and low operational complexity. Stop when an implementation idea conflicts with this file or the documented behavior.
+The staged roadmap is finished (archived as `docs/legacy/staged-delivery-roadmap.md`). The active owner-admitted work is the platform rebuild in [docs/roadmap.md](docs/roadmap.md): it is a breaking 2.0 line with no backward compatibility, executed phase by phase on the `dev` branch. Until its Phase 6 amends this file, every rule below still applies. This file and the current documentation are the product contract. Build a small, production-grade private CDN with predictable failure behavior, bounded resource use, and low operational complexity. Stop when an implementation idea conflicts with this file or the documented behavior.
 
 ## Product invariants
 

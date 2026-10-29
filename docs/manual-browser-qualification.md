@@ -5,7 +5,7 @@ description: Owner-run browser and real-runtime checklist for atomic edge genera
 
 # Production hardening manual qualification
 
-This is the manual, owner-run qualification job for the delivered 1.2.1 screens. Phase 0 of the [platform rebuild roadmap](roadmap.md) replaces it with an agentic browser suite. Coding agents must not launch or automate a browser. Automated tests and API probes support this job but never replace rendered UI or owner-observed real-traffic checkpoints.
+This is the manual, owner-run qualification job for the delivered 1.2.1 screens. Phase 6 of the [2.0 roadmap](roadmap.md) replaces it with an agentic browser suite. Coding agents must not launch or automate a browser. Automated tests and API probes support this job but never replace rendered UI or owner-observed real-traffic checkpoints.
 
 Record every checkpoint as **Passed**, **Failed**, **Blocked**, or **Not run**. A missing menu, field, action, status, event, artifact, or runtime result is **Failed**. Do not mark a workstream complete until its implementation, documentation, automated/runtime qualification, and this manual qualification are independently complete.
 

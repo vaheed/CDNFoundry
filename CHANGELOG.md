@@ -12,8 +12,8 @@ single source of truth; `make version-check` enforces it.
 - The documentation site footer and the archived README and CONTRIBUTING
   pages state the Apache License 2.0; CONTRIBUTING records that contributions
   are licensed under the same terms.
-- `docs/roadmap.md` is now the active platform rebuild roadmap: audit gap
-  register, target designs, and ordered phases toward a breaking 2.0.
+- `docs/roadmap.md` is now the active platform rebuild roadmap: audit finding
+  register from a code audit, and risk-ordered phases toward a breaking 2.0.
 
 ## [1.2.1]
 

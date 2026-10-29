@@ -1,550 +1,300 @@
 ---
 title: Roadmap
-description: The platform rebuild roadmap. It covers the audit gap register, target designs, setup, daily operations, and ordered phases that each end with a working product.
+description: The 2.0 rebuild roadmap. Every item comes from an audit of the 1.2.1 code and is ordered by the risk it removes.
 ---
 
-# Platform rebuild roadmap
+# Roadmap to 2.0
 
-**Status: active.** This roadmap replaces the closed staged-delivery roadmap.
-CDNFoundry is not in production yet, so this plan makes breaking changes on
-purpose: **no backward compatibility, no data migration from 1.2.x, and no
-legacy code paths.** Every phase starts from a fresh install
-(zero state) and ends with a platform that installs, serves traffic, and passes
-its tests.
+**Status: active.** CDNFoundry is not in production yet, so 2.0 makes breaking
+changes with no backward compatibility and no data migration from 1.2.x. Work
+happens on `dev`. A phase merges to `main` only after its gate passes.
 
-All work happens on the `dev` branch. `main` receives a phase only after that
-phase's completion gate passes.
+This roadmap comes from an audit of the 1.2.1 code. Every finding below names
+the code that causes it. Findings marked **reproduced** were confirmed by
+running the code (a throwaway SQLite feature test). The others were confirmed
+by reading the code path end to end.
 
-## How to read this roadmap
+## Phase gate
 
-1. [Audit gap register](#audit-gap-register) lists every confirmed problem,
-   with its evidence in the code and the phase that fixes it.
-2. [Target designs](#target-designs) describe the decisions the phases build:
-   the PoP model, anycast DNS, nameserver pairs, and defaults-first setup.
-3. [Target setup](#target-setup-after-the-roadmap) and
-   [daily checks](#target-day-to-day-checks) describe the administrator
-   experience the platform must deliver at the end.
-4. [Phases](#phases) are ordered. Do not start a phase until the previous
-   gate passes.
+A phase is complete only when all four fields pass:
 
-### Definition of done for every phase
-
-A phase is complete only when all five are true:
-
-| Gate field | Required evidence |
+| Field | Required evidence |
 | --- | --- |
-| Implementation | The code is merged to `dev`. Removed code and files are actually deleted. Nothing is left behind a flag "for later". |
-| Documentation | Every page touched by the change is rewritten to match it. Docs never describe behavior that does not exist. |
-| Automated tests | Unit, feature, and static checks pass in the isolated SQLite test command. |
-| Runtime tests | Python E2E under `tests/e2e` passes against a real Compose stack, including IPv4 and IPv6. |
-| Browser tests | From Phase 0 onward, the agentic browser suite covers every screen the phase changed and passes. |
+| Implementation | Merged to `dev`. Replaced code is deleted, not left behind a flag. |
+| Regression tests | Each finding fixed in the phase has a test that failed before the fix and passes after it. |
+| Runtime tests | Python E2E under `tests/e2e` passes on a real Compose stack, over IPv4 and IPv6. |
+| Documentation | Every page affected by the change is rewritten to match the new behavior. |
 
-A gate that has any failing field means the phase is still open.
+From Phase 6 onward, agentic browser tests are a fifth gate field.
 
-## Audit gap register
+## Findings
 
-The audit read the domain, DNS, PoP (edge), delegation, setup, test, and
-documentation code paths in full. For proxy, cache, TLS, WAF, security, and
-analytics it reviewed their scope and interfaces. Phase 5 audits those modules
-line by line. Gaps marked **verify** are suspected but not yet proven.
+Severity means: **critical** leaks secrets or can take down every domain;
+**high** breaks a feature or blocks deployment for many domains; **medium**
+is wrong behavior with limited blast radius, or a scaling limit; **low** is
+cleanup.
 
-### Licensing and repository hygiene
+### Critical
 
-| ID | Gap | Evidence | Phase |
+| ID | Finding | Where | Impact |
 | --- | --- | --- | --- |
-| G01 | The docs site footer said "Licensed under MIT", and the archived README/CONTRIBUTING said MIT. The `LICENSE`, `NOTICE`, package manifests, and image labels were already Apache-2.0. | `docs/.vitepress/config.mts`, `docs/legacy/root/*` | 0 (**fixed**) |
-| G02 | 69 archived files under `docs/legacy/` are still tracked and searchable. They contradict the current behavior. | `git ls-files docs/legacy` | 0 |
-| G03 | Test files carry roadmap phase numbers in their names, against the naming rule in `AGENTS.md`. | `tests/e2e/phase2_dns.py` … `phase9_waf.py` | 0 |
-| G04 | The 53 migrations contain expand/contract history from earlier releases, for example `remove_legacy_cell_addresses_and_name_management_addresses`. A zero-state product does not need that history. | `core/database/migrations/` | 0 |
-| G05 | Compatibility branches for older installs remain in the code. Example: the "legacy verified installations" fallback in `Domain::assignedNameservers()`. | `core/app/Models/Domain.php:99` | 0, 3 |
+| C1 | **TLS private keys leak to domain users (reproduced).** The edge snapshot holds the decrypted private key. `EdgeRevision` is serialized without hiding anything, and `GET /domains/{domain}/revisions` returns it to any user assigned to the domain. | `ReconcileEdgeDomain.php:132`, `ProxyController::revisions`, `EdgeRevision` | Any domain user can download the platform-issued private key for that domain. |
+| C2 | **Private keys are stored in plaintext in PostgreSQL.** `tls_certificates` encrypts the key, but every `edge_revisions.snapshot` and every per-edge `edge_artifacts.payload` stores it as plain JSON, for every revision that is kept, and backups copy them. | same, plus `EdgeArtifact` casts | Breaks the "encrypt private keys" rule. A database dump or backup exposes every certificate key. |
+| C3 | **Healthy PoPs drop out of DNS when control stops hearing from them.** A pool endpoint is published only while the PoP's heartbeat is fresh. The platform zone is re-rendered every minute, and a pool with no fresh endpoint publishes **no** address. If heartbeats stop reaching control (edge-control nginx down, CA or certificate expiry, rate limiting, a network partition), every proxied domain stops resolving within about a minute, although the edges still serve. | `EdgePoolEndpoint::readinessReason()`, `PlatformDnsZone::render()`, scheduler `ReconcilePlatformDnsIdentity` every minute | A control-plane fault becomes a global data-plane outage. |
+| C4 | **One bad artifact freezes a whole PoP.** The agent applies the manifest as one batch. A rejected artifact aborts the batch without moving the cursor, so the next sync fetches and rejects the same artifact again, forever. Two of the agent's rejection reasons (`invalid_artifact_schema`, `artifact_revision_replay`) are not accepted by the server's validation (422), so the ack queue also stops at the first rejection and holds every later "applied" ack. | `edge-agent/main.go` `sync()`, `flushAcks()`; `EdgeAgentController::rejected()` | One domain's bad payload stops every domain on that PoP from updating, and no placement on it is ever promoted. |
 
-### PoPs (edges)
+### High
 
-| ID | Gap | Evidence | Phase |
+| ID | Finding | Where | Impact |
 | --- | --- | --- | --- |
-| G06 | PoPs have optional management IPv4/IPv6 addresses in the model, API, Filament form/table, and validation. Nothing needs them: the agent connects outbound, and traffic addresses belong to service endpoints. | `EdgeController.php:30,53`, `EdgeResource.php:45-46,107-108`, `OriginData.php:155`, `EdgePoolEndpointData.php:30`, `ReconcileEdgeDomain.php:120`, `docs/guides/edges.md:59-62` | 1 |
-| G07 | Serving a domain needs four separate operator concepts: edges, pools, cell slots, and per-pool endpoints. Cell assignment is manual ("There is no fleet-wide reconcile or automatic assignment step"). A new PoP serves nothing until an administrator assigns its cells by hand. | `docs/operations/simple-anycast.md`, `docs/concepts/edges-and-cells.md` | 1 |
-| G08 | Each edge needs a manual `EDGE_GATEWAY_ADDRESS_MAP` that maps public service addresses to local addresses. | `docs/operations/simple-anycast.md` step 6 | 1, 4 |
-| G09 | Geo-Unicast endpoints repeat the PoP's public address for every pool. The address belongs to the PoP and should be entered once. | `EdgePoolEndpoint`, `POST /edge-pools/{pool}/edges/{edge}/endpoint` | 1 |
+| H1 | **New domains land in the quarantine pool (reproduced).** Placement hashes the domain name across **all** enabled pools, including `quarantine`, `reserved`, and `dedicated`. On a default install, 20 of 40 new domains were placed in `quarantine-default`. | `ReconcileEdgeDomain.php:79-83` | Half of normal traffic shares the cells meant for abusive domains. |
+| H2 | **WAF can wedge a domain.** Neither default pool is WAF-capable. The API accepts `PATCH /waf` with 202, and then every edge reconcile for that domain throws "No enabled WAF-capable pool exists". All later changes to the domain fail until an administrator creates a WAF pool. | `WafController::update`, `ReconcileEdgeDomain.php:64-71` | Domain users can block their own deployments with one click. |
+| H3 | **One offline PoP blocks deployment for its pool.** Promotion waits until **every** participating edge acknowledges. One PoP that is down, wedged (C4), or slow keeps every new domain and every change in that pool in `deploying`. | `PromoteReadyEdgePlacements` (`every`) | A single PoP failure stops deployment for the whole pool. |
+| H4 | **A proxied record blocks the whole zone.** `PowerDnsZone::render()` throws when a proxied record has no active pool yet. On activation, edge placement is still deploying, so the zone (MX, TXT, everything) is not published until the edges acknowledge. Combined with H3 or C4, a newly delegated domain does not resolve at all. | `PowerDnsZone.php:26-30` | Outage at onboarding, and customers cannot edit any DNS record while the edges are unready. |
+| H5 | **URL purge does not match the cache key.** PHP builds the purge key from the raw path and does not decode `+`. Lua builds the cache key from the decoded, normalized `ngx.var.uri` and from `get_uri_args`, which decodes `+`. Purging a URL with `%20`, `+`, `..`, or `//` silently does nothing. | `CacheKey::fromUrl`, `runtime.lua` `request_cache_key` | Breaks the "one deterministic key" rule, and customers see stale content after a "successful" purge. |
+| H6 | **URL purges are forgotten.** A URL purge only increments a counter in the cell's `ngx.shared.runtime_limits` dictionary. That dictionary is lost on cell restart, and it is LRU-evicted under memory pressure because it also holds the per-second rate-limit counters. | `runtime.lua` control `cache_purge`, `edge-agent` `runCachePurge` | Purged objects come back after a restart, or during an attack. |
+| H7 | **DNS changes are not retried or repaired.** `ReconcileDnsZone` has 3 tries with no backoff, and the scheduler has no DNS drift or retry job (edges and TLS have one). A DNS host that is unreachable for more than a few seconds keeps stale zones until an administrator runs a global reconcile by hand. | `ReconcileDnsZone`, `routes/console.php` | Stale or missing records after any short DNS host outage. |
+| H8 | **No IPv6 in production.** `compose.prod.yml` publishes DNSdist and control on IPv4 only. `HOST_BIND_IPV6` is generated and never used. Platform settings still accept nameserver IPv6 addresses and publish AAAA glue for them. | `compose.prod.yml` ports, `PlatformDnsZone.php:36` | Resolvers that prefer IPv6 time out on our nameservers. |
+| H9 | **Domain users can read DNS logs of other tenants.** DNS telemetry has `domain_id = 0`, and DNS analytics and raw logs are scoped by zone-name suffix only. The owner of `example.com` sees queries, with client IPs, for another tenant's `shop.example.com`, and a new owner sees the previous owner's logs. | `vector.yaml` dnstap remap, `AnalyticsStore.php:63,113,141` | Cross-tenant personal-data leak. |
 
-### Authoritative DNS
+### Medium
 
-| ID | Gap | Evidence | Phase |
+| ID | Finding | Where | Impact |
 | --- | --- | --- | --- |
-| G10 | Laravel pushes every zone change to every DNS cluster through the PowerDNS HTTP API, so the work grows as zones × DNS hosts. Each DNS host also needs an inbound API gateway, a TLS certificate, and a `dns-api-N` hostname. This does not scale to 20 or more PoPs. | `ReconcileDnsZone.php:64`, `docs/deployment/topology.md:50,175` | 2 |
-| G11 | There is no anycast model for DNS. A nameserver is one hostname with one IPv4 address. Many nodes cannot share one nameserver address, and no node-health contract exists to withdraw a broken node's route. | `PlatformDnsSettingsRequest.php:19-22` | 2 |
-| G12 | The nameserver list is accepted as 2–8 entries in two places, platform settings and each DNS cluster. That makes two sources of truth for one fact. The product limit should be 2–4. | `PlatformDnsSettingsRequest.php:19`, `DnsClusterController.php:103`, `DnsCluster::$nameservers` | 2 |
-| G13 | Control has no per-node, per-zone serial view. It cannot tell that one DNS node is serving stale data. | `DnsDeployment` tracks clusters, not nodes | 2 |
-| G14 | Zones are unsigned, and DNSSEC is not supported. Customers must remove their DS record before onboarding. | `NameserverResolver.php:23` | 2 (owner decision) |
+| M1 | **Rollback writes unvalidated data.** Rollback copies `origin` from the snapshot, including the platform-injected `private_allowlist`, `blocked_networks`, and `blocked_addresses`, back into `dns_records.origin` without re-running `OriginData` validation. It also deletes non-proxied records that now use the same name, and it does not roll back WAF or TLS. | `ProxyRevisionRollback` | Platform policy is copied into customer JSONB. An origin that current policy prohibits can return, and the rollback is only partial. |
+| M2 | **The edge snapshot is not deterministic.** `blocked_addresses` is assembled from unordered `pluck()` queries. Any change in row order changes the checksum, which forces a revision bump and a recompile. Every domain also embeds the global address list, so one pool address change requires recompiling every domain. | `ReconcileEdgeDomain.php:120-123` | Breaks the "render deterministically" rule and causes fleet-wide fan-out for one edit. |
+| M3 | **The platform zone serial does not change with its content.** The SOA serial is `settings.revision`, but the content changes whenever heartbeat freshness changes, without a revision bump. | `PlatformDnsZone::render()` | Breaks the "monotonic serials" rule, and secondaries and caches cannot detect the change. |
+| M4 | **DNS fan-out does not scale.** Every zone change is pushed through the PowerDNS HTTP API to every DNS cluster, one after another (10 s timeout, 2 retries each), inside the shared 3-worker `runtime` lane. Each DNS host needs an inbound API gateway, a certificate, and a `dns-api-N` hostname, and there is no anycast model for nameservers. | `ReconcileDnsZone.php:64`, `PowerDnsClient`, `horizon.php:215` | One slow DNS host stalls edge deploys and nameserver checks, and the work grows as zones × hosts. |
+| M5 | **One queue lane carries all runtime work.** DNS pushes, edge compiles, nameserver verification (up to 45 s of `dig`), platform-zone renders, and origin tests all share the `runtime` lane. Certificate issuance (500 tries) shares the `certificate_purge` lane with purges. | `config/horizon.php` | Breaks the "bulk cannot starve interactive/runtime" rule. |
+| M6 | **Cells reload the full state every second.** Every OpenResty worker reads and JSON-decodes its whole runtime file (up to 64 MiB) every second, whether or not it changed. | `runtime.lua` `M.start()` timer | Constant CPU cost that grows with the domain count. |
+| M7 | **The agent rewrites everything on every change.** Each change rewrites the full `state.json`, every pool runtime, and a backup, including all certificates. | `edge-agent` `activate()` | Each change costs O(all domains) on every PoP. |
+| M8 | **No per-client limit at the gateway.** The edge gateway has one global connection-slot limit and no limit per source address, so one client can hold every slot. | `edge-gateway/main.go` `accept()` | Breaks the "bounded per client" protection claim. |
+| M9 | **Cache key truncates query arguments.** `get_uri_args(128)` ignores arguments after the 128th, while the origin receives all of them. | `runtime.lua` `request_cache_key` | Different URLs share one cache entry (cache poisoning). |
+| M10 | **The API allows slot counts the deployment cannot run.** Production Compose always runs exactly 8 cells (4 GiB per PoP), but the API accepts 1–32 slots per edge. | `compose.prod.yml`, `EdgeController` `cell_slot_count` | An edge with 16 slots has 8 that never run, and small PoPs pay for 8. |
+| M11 | **Critical services have no health check.** `edge-agent`, `edge-gateway`, `edge-control`, `horizon`, and `scheduler` have none, so Compose cannot restart them when they hang. | `compose.prod.yml` | Silent stalls. |
+| M12 | **API tokens are unbounded.** Sanctum tokens never expire and have no abilities or domain scope. There is no second factor for administrators. | `config/sanctum.php` `expiration => null`, `TokenController` | One leaked administrator token is permanent full control. |
+| M13 | **First claim wins a domain name.** `domains.name` is globally unique, so a pending claim blocks the real owner for 7 days. A domain whose registrant changed can never be reclaimed by the new registrant while the old zone is active. | `create_domains_tables.php:23`, `Domain::createPendingFor()` | Squatting, and no legitimate takeover path. |
+| M14 | **Delegation names are random hex labels behind a wildcard.** Nameservers look like `<32 hex>.ns1.example.net`, and a wildcard A/AAAA record answers any label. | `Domain::initializeDelegationClaim()`, `PlatformDnsZone.php:34-37` | Hard to read and type, and typos are never caught. |
+| M15 | **Setup has too many steps.** The starter quick start is 773 lines. A first domain needs fleet JSON, bundles, tmpfs keys, DNS API certificates, edge listener material, address maps, two DNS zones, and manual cell-to-pool assignment, because new PoPs get no automatic assignment. | `docs/deployment/production-quick-start.md`, `docs/operations/simple-anycast.md` | High chance of operator error, and slow adoption. |
 
-### Delegation and domain ownership
+### Low (cleanup)
 
-| ID | Gap | Evidence | Phase |
-| --- | --- | --- | --- |
-| G15 | Each domain gets a random 32-hex label, for example `3f9a…c1.ns1.example.net`. Users find it hard to read and type, and no mainstream CDN works this way. | `Domain.php:119-127` | 3 |
-| G16 | A wildcard `*.nsN` A/AAAA record answers every label. A random name such as `anything.ns1.example.net` resolves, so typos are never caught. | `PlatformDnsZone.php:34-37` | 3 |
-| G17 | `domains.name` is globally unique, so the first claim wins. A squatter's pending claim blocks the real owner for 7 days. A previous owner's active zone blocks a new legitimate registrant permanently, because no re-delegation takeover path exists. | migration `create_domains_tables.php:23`, `Domain.php:72-74` | 3 |
-| G18 | **verify**: A claim for a subdomain of another customer's zone (`shop.example.com` while `example.com` belongs to someone else) is not checked when the claim is created. | `Domain::createPendingFor()` | 3 |
-
-### Setup and administration
-
-| ID | Gap | Evidence | Phase |
-| --- | --- | --- | --- |
-| G19 | The starter quick start is 773 lines long, and the full set of deployment pages is about 2,800 lines. An administrator has to understand fleet JSON, bundles, tmpfs keys, metrics-token ownership, DNS API certificates, and edge listener material before the first domain works. | `docs/deployment/production-quick-start.md` | 4 |
-| G20 | Two DNS zones are required: an external operator zone with `control`, `edge-control`, `telemetry`, `grafana`, and `dns-api-N`, plus the platform zone. Phase 2 removes the `dns-api-N` names. The rest should be reduced to as few external records as possible. | `docs/deployment/topology.md:32-50` | 2, 4 |
-| G21 | There is no first-run wizard. Platform DNS identity, clusters, pools, and cells are separate screens with an order the administrator must already know. | `Filament/Admin/Pages`, `Resources` | 4, 7 |
-
-### Quality, tests, and agent tooling
-
-| ID | Gap | Evidence | Phase |
-| --- | --- | --- | --- |
-| G22 | Browser qualification is manual only, because `AGENTS.md` forbids agents from running browser automation. The owner now requires agentic browser tests. | `AGENTS.md`, `docs/manual-browser-qualification.md` | 0 |
-| G23 | There is no customer CLI. Testing "API, CLI, and web for every feature" needs one. | route list (196 API routes), operator-only Artisan commands | 6 |
-| G24 | Agent skills live in `.agents/skills/` and describe the 1.2.x design. There is no project MCP server and no compact code map, so agents spend tokens rediscovering the structure. | `.agents/skills/*/SKILL.md` | 9 |
-| G25 | No test follows the documentation itself. A broken quick start is only found by a human. | `tests/docs` checks links only | 10 |
-
-### Modules for line-by-line audit in Phase 5
-
-These modules were reviewed only at the scope and interface level. Phase 5
-turns each row into confirmed gaps or a "no defect" record:
-
-| Module | Questions to answer |
-| --- | --- |
-| Proxy and origin | Is a DNS name re-resolved before every connection and checked against the unsafe address list (rebinding)? Are hop-by-hop and forwarding headers normalized in one place? Are retries bounded per request and per origin? |
-| Cache | Do lookup, URL purge, and full-purge epoch use the same key function in PHP and Lua? Is the `Vary` header bounded? Does development mode expire on time? |
-| TLS | Is renewal spread across days? Is the previous certificate kept active when a renewal fails? Does DNS-01 run only for proxied hostnames? Is uploaded-chain validation complete? |
-| WAF and security | Are rule imports bounded? Do exclusions expire? Are per-client, per-domain, and per-cell limits enforced in the cell, not in Laravel? |
-| Analytics and logs | Do retention, query time windows, and redaction match the docs? What happens when ClickHouse is down? |
-| Fleet rollouts and backups | Does rollback restore the previous valid generation? Does a restore preflight detect missing keys? |
-
-## Target designs
-
-### D1 — PoP model
-
-A **PoP** is one site that runs any of the `dns` and `edge` roles. It has:
-
-- a name, a country, and a continent (used for Geo-DNS and placement);
-- its **public service addresses**: IPv4 and optional IPv6, entered once;
-- its roles.
-
-It does **not** have management addresses. The agent always connects
-outbound to control. Control records the agent's observed source address
-automatically, as read-only diagnostic data, for example for the zone transfer
-access list in D2.
-
-Pools and cells remain as internal capacity mechanisms, but the defaults handle
-them:
-
-- A fresh platform has one `shared` pool and one `quarantine` pool.
-- A new PoP automatically joins the `shared` pool. Its first cell serves
-  `shared` and its second cell serves `quarantine`.
-- The edge gateway binds the PoP's public service addresses by default. An
-  address map is needed only behind NAT or a load balancer. In that case the
-  agent reports its local addresses and the administrator picks the mapping
-  once.
-- Dedicated and reserved pools, manual cell moves, and extra endpoints become
-  advanced actions. They are never setup steps.
-
-### D2 — Authoritative DNS at any scale (2 to 20+ PoPs)
-
-**Two separate ideas, kept separate:**
-
-- **Nameserver endpoints**: the public addresses that resolvers query. There
-  are at least 2 and at most 4. Each one is a hostname with an IPv4 address and
-  an optional IPv6 address, for example `ns1.example.net` and
-  `ns2.example.net`. Each endpoint is either `unicast` (exactly one DNS node
-  serves it) or `anycast` (many DNS nodes announce the same address).
-- **DNS nodes**: the PoPs with the `dns` role. Their number has no relation to
-  the number of endpoints. Each node serves one or more endpoints (by default,
-  all of them). The node limit is bounded, at 64 per platform initially.
-
-**Example with 20 PoPs.** The administrator gets two anycast addresses,
-ideally from two different prefixes and upstreams:
-
-```text
-ns1.example.net  → 203.0.113.53   (anycast prefix A)
-ns2.example.net  → 198.51.100.53  (anycast prefix B)
-
-20 PoPs, each running DNSdist + PowerDNS secondary:
-  every PoP announces prefix A and prefix B   → best latency
-  or PoPs 1–10 announce A, PoPs 11–20 announce B → a bad
-     announcement or route leak can affect only one nameserver
-```
-
-Resolvers reach the nearest healthy PoP for each nameserver.
-
-**How 20 nodes get updated.** Zone changes cannot be pushed to an anycast
-address, because a packet sent to it reaches only the nearest node. So DNS
-uses a hidden primary and pull-based secondaries:
-
-```mermaid
-flowchart LR
-  L[Laravel desired state] -->|one API target| P[Hidden primary PowerDNS<br/>control plane, private]
-  P -->|catalog zone + AXFR, TSIG| N1[DNS node 1]
-  P --> N2[DNS node 2]
-  P --> N20[DNS node 20]
-  A1[agent on node] -.->|outbound long-poll: DNS revision| L
-  A1 -.->|trigger retrieve| N1
-  N1 -->|heartbeat: catalog serial, lagging zones| L
-```
-
-1. Laravel writes each zone to **one** hidden primary PowerDNS. The primary is
-   private, in the control plane, and is the only API target. The
-   per-cluster push loop and the `dns-api-N` gateways are deleted (G10).
-2. A **catalog zone** lists every customer zone and the platform zone. Every
-   node consumes the catalog, so adding a zone needs no per-node work.
-3. Nodes fetch zones with AXFR, authenticated by a per-node TSIG key. The
-   transfer listener on control accepts only TSIG-signed requests from the
-   nodes' observed agent addresses (D1).
-4. The PoP agent, which is already on every PoP, long-polls control for the
-   DNS revision and tells the local PowerDNS to retrieve changed zones. Changes
-   therefore reach every node within seconds, with no inbound port on the
-   node. A short SOA refresh is the fallback if the agent is down.
-5. Each agent heartbeat reports the catalog serial and the number of lagging
-   zones. Control shows convergence per node and alerts when a node falls
-   behind.
-6. Each node exposes a local health endpoint. It fails when PowerDNS is down,
-   when the node is behind by more than a bounded time, or when the MMDB is
-   invalid. **CDNFoundry still does not run BGP.** The documentation ships
-   tested BIRD and ExaBGP health-check examples, so the operator's routing
-   withdraws a broken node automatically.
-7. Geo-DNS LUA records transfer as normal records (PowerDNS to PowerDNS).
-   Each node evaluates them against its local MMDB. No query reaches Laravel.
-
-Validation: 2 ≤ endpoints ≤ 4, endpoint addresses are unique and public, and
-every endpoint has at least one enabled node before it is published.
-
-**Owner decision (G14):** DNSSEC. The recommendation is to sign zones on the
-hidden primary, with online keys stored encrypted, so nodes transfer signed
-zones. Phase 2 builds the primary so that DNSSEC can be enabled later, and
-Phase 5 delivers it if the owner approves.
-
-### D3 — Nameserver pairs (replaces random tokens)
-
-The owner's idea is sound, and it is the same principle Cloudflare uses: a
-new claim must use nameservers that are **different from the ones the domain
-uses now**. Only the real registrant can change the delegation at the
-registrar, so a successful switch proves control of the domain. The design
-below keeps that idea and adds two improvements.
-
-**Setup.** From the 2–4 nameserver endpoints (D2), the platform generates
-**nameserver pairs**. A pair has two names, each on a different endpoint. The
-names use short, readable words from a fixed list:
-
-```text
-Pair A:  mary.ns1.example.net   car.ns2.example.net
-Pair B:  lake.ns1.example.net   rose.ns2.example.net
-```
-
-The default is 2 pairs (4 names), and the administrator can configure 2 to 8.
-The administrator may edit the words before the first domain is added. Each
-name gets explicit A/AAAA records for its endpoint, and the wildcard is
-removed (G16). Every DNS node serves every zone on every name, so pairs cost
-nothing at runtime.
-
-**Claim rules.**
-
-1. When a user adds `example.com`, control queries the parent registry, as
-   `NameserverResolver` already does, for the current delegation.
-2. If the domain is currently delegated to one of our pairs, the claim gets a
-   **different** pair. If it is delegated elsewhere, the claim gets the
-   account's **home pair** (improvement 1: a user sees the same two
-   nameservers for all their domains, like Cloudflare).
-3. A claim reserves its pair for that domain. Two open claims for the same
-   domain never share a pair, and no open claim uses the pair that is
-   delegated now. If no pair is free, the user gets a clear `409
-   claim_in_progress` with the time it frees.
-4. Verification succeeds only when the parent delegation **exactly** equals the
-   claim's pair. The pair observed when the claim was created never qualifies.
-5. On success, the claim becomes the active zone. If another account held
-   the active zone for the same name, that zone moves to `disabled`
-   immediately and then follows the normal deprovision path. The previous
-   owner is notified. This is the takeover path that G17 is missing.
-
-**Data model.** The global unique index on `domains.name` is replaced by a
-partial unique index over active, disabled, and deprovisioning states. Each
-pending claim stores the account, the assigned pair, the observed delegation,
-and its expiry (default 3 days, down from 7). There is a unique constraint on
-(name, pair) for open claims. Improvement 2: a claim for a name inside
-another account's active zone (G18) is refused, and a claim for a parent of
-an existing zone requires administrator approval.
-
-**Why this is safe.** A user who never controls the registrar cannot make
-the parent delegation equal a pair that is different from the current one.
-The random-token design proved the same thing with ugly names. The pair
-design proves it with readable names, and it adds a real takeover path.
-
-### D4 — Defaults first
-
-- One installer command asks only: platform domain, administrator email,
-  nameserver endpoint addresses, and the PoP list (name, country, public
-  addresses, roles). Everything else has a safe default that can be changed
-  later in **Platform settings**.
-- Internal PKI, the TSIG keys, the agent bootstrap tokens, and the
-  cache/WAF/TLS defaults are generated automatically.
-- A PoP joins with one command (`cdnfoundry pop join <token>`). The token
-  carries the control URL and the CA fingerprint.
-- Advanced settings remain available but never appear in the quick start.
-
-## Target setup after the roadmap
-
-This is the administrator journey that Phase 10 tests on real servers. The
-Quick start page will contain exactly these steps.
-
-1. **Prepare servers.** One control host and at least two PoP hosts with
-   Docker installed. Open the ports listed on one page.
-2. **Create two external DNS records** at your existing DNS provider:
-   `control.<platform-domain>` and `ns1`/`ns2` glue at your registrar.
-3. **Install control:** `cdnfoundry install` answers the four questions from
-   D4 and starts the control plane.
-4. **Sign in.** The first-run wizard confirms the platform domain, the
-   nameserver endpoints (anycast or unicast), and the generated pairs.
-5. **Join PoPs:** copy one join command per PoP from **PoPs → Add PoP** and
-   run it on that host. Each PoP shows `ready` when DNS and HTTP pass their
-   local checks.
-6. **Confirm health:** the dashboard shows the nameservers answering, all PoPs
-   converged, and certificates valid.
-7. **Add the first domain:** create a user, add the domain, set the two
-   nameservers shown, and wait for `active`. Turn on proxy for one hostname
-   with its origin.
-
-## Target day-to-day checks
-
-The admin dashboard shows each check as a single green, amber, or red row
-with a link to the fix. The `cdnfoundry status` CLI prints the same rows.
-
-| Check | Green means | Where |
+| ID | Finding | Where |
 | --- | --- | --- |
-| Nameservers | Every endpoint answers SOA from at least one external probe, over IPv4 and IPv6 | Dashboard, DNS |
-| DNS convergence | Every node's catalog serial is current. Zero lagging zones | PoPs |
-| PoP health | Every PoP heartbeat is fresh, its cells are ready, and its gateway revision is acknowledged | PoPs |
-| Queues | No failed jobs. Runtime lane latency is under its bound | Operations |
-| Certificates | None expiring within 14 days without a renewal in progress | TLS |
-| Origins | No proxied hostname is failing its origin checks | Domains |
-| Security | No cell at its protection limits. WAF block rate is normal | Security |
-| Telemetry | Vector to ClickHouse lag is under its bound, and disk is under 80% | Telemetry |
-| Backups | The last backup succeeded within 24 hours, and the last restore preflight passed | Backups |
-
-Weekly: review the audit log and pending claims. Monthly: run a restore
-preflight and rotate one PoP identity as a drill.
+| L1 | Edge management IPv4/IPv6 fields exist in the model, API, UI, and validation, but nothing operational uses them. | `EdgeController`, `EdgeResource`, `OriginData`, `EdgePoolEndpointData` |
+| L2 | The agent has two activation code paths (with and without `runtimeDir`). Only one is deployed. | `edge-agent` `activate()` |
+| L3 | Compatibility code for earlier installs: the legacy nameserver fallback, the `legacy-<sequence>` generation id in Lua, and expand/contract migrations. | `Domain::assignedNameservers()`, `runtime.lua` `load()`, migrations |
+| L4 | 69 archived files under `docs/legacy/`, and test files named after roadmap phases (`phase2_dns.py` … `phase9_waf.py`). | `docs/legacy/`, `tests/e2e/` |
+| L5 | `GET /revisions` returns raw Eloquent models instead of an API resource, so any new column is exposed automatically (this is the root cause of C1). | `ProxyController::revisions` |
+| L6 | Edge identity relies on FastCGI parameters set by `edge-control.conf`. Anything else that can reach PHP-FPM on the internal network can claim to be an edge by sending the public certificate. | `AuthenticateEdge`, `docker/nginx/*.conf` |
 
 ## Phases
 
-Each phase lists its goal, its tasks, and its exit criteria. Every phase
-ends with the five-field gate from
-[Definition of done](#definition-of-done-for-every-phase).
+Phases are ordered by risk: first stop leaks, then stop outages, then fix
+correctness, then scale, then simplify. Each phase leaves a working
+platform.
 
-### Phase 0 — Baseline, contract, and test harness
+### Phase 1: Stop secret and tenant leaks
 
-**Goal:** a clean repository and the test tools that every later phase uses.
+Fixes C1, C2, H9, M1, L5.
 
-- [x] Change all license statements to Apache-2.0 (G01).
-- [ ] Amend `AGENTS.md`: point to this roadmap, record "no backward
-      compatibility until 2.0", and allow agents to run the
-      browser suite in `tests/browser` against non-production stacks (G22).
-- [ ] Delete `docs/legacy/` and any code, scripts, or fixtures used only by it
-      (G02).
-- [ ] Rename phase-numbered E2E files to feature names, for example
-      `phase2_dns.py` → `dns_zones.py` (G03).
-- [ ] Squash migrations into one fresh baseline per schema (G04). Delete
-      compatibility branches (G05).
-- [ ] Add the agentic browser suite: Playwright with Python under
-      `tests/browser`, run by `make test-browser` against the Compose dev
-      stack. Convert every step in `docs/manual-browser-qualification.md` into
-      a test, then delete the manual checklist.
-- [ ] Add `make qualify`, which runs static checks, unit tests, Compose
-      validation, E2E, and browser tests, and writes one summary file.
+- [ ] Remove private keys from snapshots and artifacts. Artifacts carry a
+      certificate id. The agent fetches the key over mTLS from a key endpoint,
+      encrypted to that edge's identity key, and the key is never written to
+      PostgreSQL except in `tls_certificates`.
+- [ ] Purge the existing key material from history. Since 2.0 is zero-state,
+      this means only that the new schema has no column that could hold a key.
+- [ ] Return revisions through an API resource with an explicit field list
+      (revision, status, checksum, created_at, and a diff summary).
+- [ ] Tag DNS telemetry with `domain_id` at the DNS node, from the zone the
+      authoritative server answered from. Scope analytics and logs by
+      `domain_id` and by the time since the current owner's activation.
+- [ ] Rewrite rollback: restore only customer-owned fields, re-validate them
+      with `OriginData`, `CachePolicy`, and `SecurityConfig`, and roll back
+      WAF and TLS mode as well, or refuse.
 
-**Exit:** `make qualify` passes on a fresh `dev` stack, and no legacy files
-remain.
+**Exit:** a regression test proves a domain user receives no key material
+from any endpoint, a tenant cannot see a nested or previous tenant's DNS
+logs, and rollback never writes platform fields.
 
-### Phase 1 — PoP model and default capacity
+### Phase 2: Stop control-plane faults from becoming outages
 
-**Goal:** a PoP is one simple object, and a new PoP serves traffic without
-manual cell work (D1).
+Fixes C3, C4, H3, H4.
 
-- [ ] Remove management IPv4/IPv6 from the schema, API, Filament, validation,
-      origin and endpoint checks, and docs (G06).
-- [ ] Rename "edge" to "PoP" in the UI and docs. API resources become
-      `/pops`.
-- [ ] Add public service addresses to the PoP, and derive pool endpoints
-      from them (G09).
-- [ ] Auto-join the `shared` pool and auto-assign the default cells on
-      enrollment (G07). Keep manual moves as an advanced action.
-- [ ] Make the gateway bind PoP addresses by default. Add an agent-reported
-      local address list and an optional one-time mapping (G08).
-- [ ] Record the agent's observed source address as read-only data.
+- [ ] **Fail static.** Withdraw a PoP from DNS only on a positive signal
+      (drain, disable, or a failed external health probe), never on missing
+      heartbeats alone. Never publish an empty answer set for a pool: keep
+      the last published set and alert.
+- [ ] Add external health probes, run from at least two vantage points, that
+      check each PoP's HTTP/TLS listener directly. Withdrawal needs a quorum.
+- [ ] Make the agent apply artifacts per domain. A bad artifact is rejected
+      and skipped, the cursor advances, and the server records the rejection
+      for that domain only.
+- [ ] Make agent and server agree on one rejection-reason list, defined once
+      and tested by a contract test. An unknown reason is stored, never
+      returned as 422.
+- [ ] Promote a placement when a quorum of participating PoPs (default: all
+      that are healthy, at least one) have acknowledged. Lagging PoPs catch
+      up without blocking the pool.
+- [ ] Publish proxied records independently of placement: before a placement
+      is active, render the default pool's hostname, so the zone always
+      publishes.
 
-**Exit:** E2E adds two PoPs with only name, country, addresses, and roles.
-A proxied hostname is served over IPv4 and IPv6 from both PoPs. The browser
-suite creates a PoP without any cell or pool step.
+**Exit:** E2E stops edge-control and verifies that every domain keeps
+resolving and serving. It injects a bad artifact and verifies that the other
+domains on that PoP still update. It kills one PoP and verifies that
+deployments complete on the others. It activates a new domain with a proxied
+apex and verifies that MX resolves immediately.
 
-### Phase 2 — Authoritative DNS distribution and anycast
+### Phase 3: Make domain features correct
 
-**Goal:** DNS scales from 2 to 64 nodes with one write target, and
-nameserver endpoints support anycast (D2).
+Fixes H1, H2, H5, H6, H7, M3, M9, M13, M14.
 
-- [ ] Model nameserver endpoints (2–4, unicast or anycast) and DNS nodes
-      (PoPs with the `dns` role). Delete `DnsCluster.nameservers` and the
-      2–8 validation (G11, G12).
-- [ ] Add the hidden primary PowerDNS to the control profile. Laravel
-      reconciles only the primary. Delete the per-cluster push, the DNS API
-      gateway, `dns-api-N` names, and their certificates (G10, G20).
-- [ ] Turn PoP DNS into catalog-zone consumers with per-node TSIG keys, and
-      add agent-triggered retrieval.
-- [ ] Report per-node serial and lagging zones in the heartbeat. Show DNS
-      convergence and alert on lag (G13).
-- [ ] Add the local DNS health endpoint, plus tested BIRD and ExaBGP example
-      configurations in the docs.
-- [ ] Prepare primary-side DNSSEC (G14) and record the owner decision.
+- [ ] Restrict automatic placement to `shared` pools. Only explicit
+      administrator actions select `quarantine`, `reserved`, or `dedicated`.
+- [ ] Ship the default `shared` pool WAF-capable, or reject a WAF profile
+      change with a clear 409 when no WAF-capable pool exists. Never accept
+      work that cannot run.
+- [ ] Define the cache key once (path normalization, query decoding, and
+      ordering). Generate the PHP and Lua implementations' test vectors from
+      one shared fixture file, and run it in both test suites.
+- [ ] Make URL purges durable. The agent persists purge generations and
+      replays them on cell start. Keep them in a dedicated shared dictionary
+      that cannot be evicted by rate-limit counters, and give each entry a
+      TTL equal to the cache's maximum TTL.
+- [ ] Reject requests with more than 128 query arguments, or hash the full
+      argument set into the key.
+- [ ] Add DNS retry with backoff, plus a scheduled drift check that compares
+      each DNS target's served serial and checksum with desired state and
+      repairs differences.
+- [ ] Derive the platform zone serial from a content checksum, so it changes
+      exactly when the content changes.
+- [ ] Replace first-claim-wins with re-delegation proof. Each platform
+      offers a small set of readable nameserver pairs. A new claim gets a
+      pair different from the domain's current delegation, verification
+      requires the parent delegation to equal that pair, and success moves
+      the name from the previous owner. Replace the global unique index with
+      a partial index over active states, and remove the hex labels and the
+      wildcard.
 
-**Exit:** E2E with 2 nodes and with a 20-node simulation (20 node
-containers): a record change converges on every node within the documented
-bound. A stopped node fails health and catches up after it restarts. A node
-that is killed during a transfer never serves a partial zone. Anycast mode is
-tested with two nodes that share an address in an isolated network.
+**Exit:** the reproduced H1 test shows 0 domains in non-shared pools. Purge
+fixture tests pass in PHP and Lua. A cell restart does not bring back purged
+content. A DNS host outage of 10 minutes self-heals. The claim test suite
+covers squatting, takeover, and competing claims.
 
-### Phase 3 — Nameserver pairs and safe claims
+### Phase 4: Scale the runtime
 
-**Goal:** readable nameservers and a domain that a non-owner cannot hijack
-(D3).
+Fixes M2, M4, M5, M6, M7, M8, M10.
 
-- [ ] Add pair generation from the word list, explicit name records, and
-      wildcard removal (G15, G16).
-- [ ] Add account home pairs and the claim rules 1–5 from D3.
-- [ ] Replace the global unique index on `domains.name` with the partial
-      index, and add the (name, pair) unique constraint for open claims
-      (G17).
-- [ ] Add the takeover path: the old zone is disabled, the owner is notified,
-      and the normal deprovision follows.
-- [ ] Add nested and parent zone checks (G18).
-- [ ] Delete the token columns, the token code, and the legacy fallback (G05).
+- [ ] Move DNS to a hidden-primary design. Laravel writes to one private
+      primary. DNS nodes are PowerDNS secondaries that use a catalog zone and
+      TSIG-signed transfers, triggered by the PoP agent, outbound only. This
+      removes the per-host API gateways and `dns-api-N` names, and it allows
+      anycast nameserver addresses served by any number of nodes. Node
+      convergence (serial per node) is reported in the heartbeat.
+- [ ] Split queue lanes: `dns`, `edge`, `verification`, `tls`, and `purge`,
+      each with its own worker bound.
+- [ ] Make snapshots deterministic: sort every list. Move the global address
+      blocklist out of per-domain snapshots into one PoP-level artifact.
+- [ ] Make the agent incremental: store one file per domain, write only what
+      changed, and keep the generation swap atomic.
+- [ ] Reload cells by generation: Lua checks a small generation file and
+      decodes the state only when it changes.
+- [ ] Add a per-source-address connection limit and an idle timeout to the
+      gateway.
+- [ ] Generate the cell services from the PoP's slot count, or fix the slot
+      count to what Compose runs. Allow small PoPs to run fewer cells.
 
-**Exit:** E2E with a real parent-zone fixture covers: first claim; a claim
-while the domain is already on pair A (gets pair B); two competing claims;
-`409` when no pair is free; a verification attempt with the old pair
-(refused); a successful takeover; and nested-name refusal. The browser suite
-shows the pair to the user and the takeover notice.
+**Exit:** a load test with 10,000 domains on one PoP shows bounded CPU when
+idle, and one domain change touches only that domain's files. A 20-node DNS
+simulation converges within the documented bound. One client cannot exhaust
+gateway slots.
 
-### Phase 4 — One-command setup and defaults
+### Phase 5: Production readiness and security hardening
 
-**Goal:** a new operator reaches a working domain by following the seven
-setup steps above (D4).
+Fixes H8, M11, M12, L6.
 
-- [ ] Add `cdnfoundry install` and `cdnfoundry pop join`, replacing the fleet
-      JSON, bundle, and tmpfs-key steps for the default path.
-- [ ] Generate PKI, TSIG, and bootstrap tokens automatically. Keep secrets on
-      the host, and never print them.
-- [ ] Add the first-run wizard in the admin panel (G21).
-- [ ] Group every setting into **Platform settings** with its default
-      visible and a reset-to-default action.
-- [ ] Reduce the external DNS records to the documented minimum (G20).
+- [ ] Publish IPv6 in production for DNS, control, and edges. Block saving a
+      nameserver IPv6 address until that address answers from an external
+      probe.
+- [ ] Add health checks for every long-running service, including agent,
+      gateway, Horizon, and scheduler liveness.
+- [ ] Add token expiry, token abilities (read-only, DNS-only, purge-only),
+      and optional per-domain token scope. Add TOTP for administrators.
+- [ ] Bind PHP-FPM only to the nginx containers' private network, and add a
+      shared secret between nginx and PHP for the edge identity parameters.
 
-**Exit:** a scripted run of the quick start on fresh virtual machines, with
-no undocumented command, reaches an active proxied domain.
+**Exit:** E2E passes over IPv6 only. A scoped token cannot exceed its scope.
+Killing the agent process is detected and restarted.
 
-### Phase 5 — Feature logic audit and fixes
+### Phase 6: Simple setup and an agentic test harness
 
-**Goal:** every domain feature is correct, bounded, and proven.
+Fixes M15, L1.
 
-- [ ] Run the line-by-line audit of the Phase 5 module table. Add each
-      finding to this register, then fix it.
-- [ ] Add DNSSEC if the owner approved it.
-- [ ] Write one E2E file per feature: DNS records and import/export, Geo-DNS,
-      proxy and origin failover, cache and purge, compression, TLS
-      managed/custom/renewal, WAF and exclusions, security rules and DDoS
-      limits, emergency mode, analytics and logs, usage, users and tokens.
+- [ ] One installer for control and one join command per PoP. PKI, TSIG
+      keys, and bootstrap tokens are generated automatically, and a new PoP
+      joins the default `shared` pool with default cells.
+- [ ] A first-run wizard in the admin panel. All settings have visible
+      defaults and a reset action.
+- [ ] Remove the edge management address fields.
+- [ ] Amend `AGENTS.md` to allow agents to run the browser suite against
+      non-production stacks. Add a Playwright suite under `tests/browser` that
+      covers every screen, and add it to the phase gate from here on.
+- [ ] Rewrite the quick start around the new installer. A scripted run on
+      fresh virtual machines must reach an active proxied domain with no
+      undocumented step.
 
-**Exit:** every feature has a passing E2E file and a passing browser test. The
-register has no open Phase 5 rows.
+**Exit:** the scripted quick start passes on fresh VMs, and the browser suite
+passes.
 
-### Phase 6 — Operations, monitoring, and CLI
+### Phase 7: Cleanup, documentation, and agent tooling
 
-**Goal:** daily operation is a single screen and a single command.
+Fixes L2, L3, L4.
 
-- [ ] Build the daily-check dashboard rows and `cdnfoundry status` from
-      [Target day-to-day checks](#target-day-to-day-checks).
-- [ ] Add a customer and operator CLI (`cdnf`), generated from the OpenAPI
-      document, with the same authentication and policies as the API (G23).
-- [ ] Add alert rules for every check, and a runbook link in every alert.
-- [ ] Rehearse the backup, restore, and PoP identity rotation drills in E2E.
+- [ ] Delete `docs/legacy/`, the second agent activation path, every
+      compatibility branch, and squash migrations into a fresh baseline.
+- [ ] Rename phase-numbered tests after the feature they test.
+- [ ] Rewrite the documentation: one page per concept, the command or screen
+      first, and the explanation after it. Run every shell block marked
+      `test` in CI.
+- [ ] Rewrite the agent skills for 2.0. Add a code map, and a project MCP
+      server for the isolated test command, single E2E files, and read-only
+      dev database queries.
 
-**Exit:** each red state can be triggered in E2E and appears in the
-dashboard, the CLI, and an alert.
+**Exit:** the docs build, link checks, and executable-block tests pass, and no
+legacy file remains.
 
-### Phase 7 — User interface
+### Phase 8: Real production qualification
 
-**Goal:** a professional, consistent, and fast UI for both panels.
+- [ ] On real servers (one control host and at least three PoPs in two
+      regions, IPv4 and IPv6), an agent follows the documentation word for
+      word. Every deviation is a documentation defect to fix and retest.
+- [ ] Test every feature through the API, the CLI, and the browser suite,
+      against real domains.
+- [ ] Re-run every critical and high finding's regression scenario on the
+      real fleet: control outage, bad artifact, PoP loss, DNS host loss,
+      purge after restart, and IPv6-only resolution.
+- [ ] Publish the 2.0.0 release notes with the evidence.
 
-- [ ] Add a domain onboarding flow: add domain → show pair → live delegation
-      status → enable proxy.
-- [ ] Give every list the same filters, status badges, empty states, and
-      bulk actions.
-- [ ] Put help next to each field, and make every error message say what to
-      do next.
-- [ ] Test light and dark themes and phone width in the browser suite.
+**Exit:** every test passes on real servers and is recorded in the release
+notes.
 
-**Exit:** the browser suite covers every screen at desktop and phone width.
+## Daily checks this roadmap must make visible
 
-### Phase 8 — Documentation rewrite
+Each check maps to a failure mode found in the audit. The admin dashboard
+and a status command show every check by Phase 5.
 
-**Goal:** documentation that is strong, simple, and clear.
-
-- [ ] Restructure the docs into: Start here → Quick start (one page) →
-      Multi-region → Concepts → Guides per feature → Operations → Reference.
-- [ ] Rewrite every page to the current behavior, and delete the pages that
-      the new design removes.
-- [ ] Use short sentences. Show the command or screen first and the
-      explanation after it. Give each concept one page.
-- [ ] Add a docs test that runs every shell block marked `test` in a fresh
-      environment (G25).
-
-**Exit:** the docs build, link checks, and executable-block tests pass. No
-page mentions removed concepts.
-
-### Phase 9 — Agent tooling
-
-**Goal:** coding agents work with fewer tokens and fewer mistakes.
-
-- [ ] Rewrite the skills for the new design and move them to
-      `.claude/skills/`. Keep `.agents/skills/` as a link for other tools.
-- [ ] Add `docs/development/code-map.md`: one line per module, with its
-      entry points and tests.
-- [ ] Add a project MCP server (`.mcp.json`) that wraps safe local actions:
-      run the isolated test command, run one E2E file, read the effective
-      configuration, query the dev database read-only, and call the dev API.
-- [ ] Make tool output terse by default, and verbose only on request.
-
-**Exit:** a fresh agent session completes a scripted small change by using
-the skills and the MCP server, and `make qualify` passes.
-
-### Phase 10 — Real production qualification
-
-**Goal:** proof on real servers that a new user can build and run
-CDNFoundry from the documentation alone.
-
-- [ ] Provision real servers: one control host and at least three PoPs in two
-      regions, with IPv4 and IPv6, and anycast nameserver addresses if they
-      are available (otherwise unicast).
-- [ ] **Docs-follow test:** an agent follows Quick start, Multi-region, and
-      the Docker setup pages word for word. Every deviation is a docs defect
-      to fix and retest.
-- [ ] **Full feature test through all three interfaces:** API (Python E2E),
-      CLI (`cdnf`), and web (agentic browser suite). The tests run against the
-      real servers and real domains, and cover every feature in Phase 5 plus
-      monitoring, backups, and rollouts.
-- [ ] **Failure tests:** kill a PoP, kill a DNS node, stop ClickHouse, fail an
-      origin, and expire a certificate. Each one shows the documented
-      behavior, and serving continues.
-- [ ] **External checks:** resolution from public probes on several
-      continents, TLS grading, and HTTP/2 and HTTP/3 if they are enabled.
-- [ ] Publish the release notes for 2.0.0 with the qualification evidence.
-
-**Exit:** every test passes on real servers, and every result is recorded in
-the 2.0.0 release notes.
+| Check | Catches |
+| --- | --- |
+| Every PoP's applied sequence is equal to the latest artifact sequence, or close behind it | C4, H3 |
+| Every DNS target's serial equals the desired serial | H7, M3, M4 |
+| No pool's published address set has shrunk without an operator action | C3 |
+| No placement has stayed in `deploying` longer than its bound | H2, H3, H4 |
+| Queue latency of each lane is under its bound | M5 |
+| No certificate expires within 14 days without a renewal in progress | TLS |
+| The last backup and the last restore preflight succeeded | Recovery |
 
 ## Out of scope unless the owner admits it
 
 BGP control by CDNFoundry, Kubernetes, microservices, billing or reseller
 hierarchies, plugin runtimes, and multi-origin load balancing.
-These remain excluded by `AGENTS.md`.
