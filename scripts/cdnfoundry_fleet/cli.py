@@ -484,10 +484,10 @@ def _setup(args: argparse.Namespace, store: FleetState, output_dir: Path, config
             current = state
             if name in current["nodes"]:
                 state = store.update_node(current, name, payload)
-                say(f"Updated node: {name}")
+                say("Updated a node from the setup configuration")
             else:
                 state = store.add_node(current, payload)
-                say(f"Added node: {name}")
+                say("Added a node from the setup configuration")
     elif created or not state["nodes"]:
         control_payload = {
             "name": args.control_name,
@@ -503,20 +503,20 @@ def _setup(args: argparse.Namespace, store: FleetState, output_dir: Path, config
         elif not args.control_ipv4:
             raise ValidationError("--control-ipv4 or a config nodes list is required in non-interactive setup")
         state = store.add_node(state, control_payload)
-        say(f"Added control node: {control_payload['name']}")
+        say("Added the control node")
 
         if preset == "dedicated-monitoring":
             if args.non_interactive:
                 raise ValidationError("Dedicated monitoring in non-interactive mode requires a monitoring node in --config")
             monitor_payload = _interactive_node(state, role="monitoring", defaults={"name": "monitoring-1"})
             state = store.add_node(state, monitor_payload)
-            say(f"Added monitoring node: {monitor_payload['name']}")
+            say("Added the monitoring node")
 
         if not args.non_interactive:
             while _prompt_yes_no("Add a DNS or edge node now?", default=False):
                 payload = _interactive_node(state)
                 state = store.add_node(state, payload)
-                say(f"Added node: {payload['name']}")
+                say("Added a node")
 
     state = _apply_setup_features(store, state, config, preset)
     store.validate(state, require_secrets=False)
