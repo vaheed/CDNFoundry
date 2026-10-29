@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-"""Fail when raster images are tracked outside the allowlist."""
+"""Fail when raster images are tracked outside the explicit allowlist."""
 import pathlib
 import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 RASTER = (".png", ".jpg", ".jpeg", ".gif", ".webp")
-ALLOWLIST: set[str] = set()
+# The product screenshots are intentionally kept; any new raster image must be added here deliberately.
+ALLOWLIST = {
+    "docs/public/images/screencapture-admin.png",
+    "docs/public/images/screencapture-edges.png",
+    "docs/public/images/screencapture-telemetry.png",
+}
 
 
 def main() -> int:

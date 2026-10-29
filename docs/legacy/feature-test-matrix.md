@@ -64,12 +64,12 @@ design question; see the gap report.
 
 ## Stage (rebuilt from the starter guide, 2026-10-29)
 
-Hosts: control `195.230.107.76`, pop-1 `195.230.107.78`, pop-2 `195.230.107.77`.
+Hosts: control `203.0.113.10`, pop-1 `203.0.113.11`, pop-2 `203.0.113.12`.
 
 | Feature | Evidence | Result |
 | --- | --- | --- |
-| Control health, readiness, admin login (HTTPS, Let's Encrypt) | `curl --resolve control.cdnf.vaheed.net:443:195.230.107.76` on `/api/health`, `/api/ready`, `/admin/login` | passed (200, verified TLS) |
-| Grafana health (HTTPS) | `curl` on `grafana.cdnf.vaheed.net/api/health` | passed (200) |
+| Control health, readiness, admin login (HTTPS, Let's Encrypt) | `curl --resolve control.cdnf.example.net:443:203.0.113.10` on `/api/health`, `/api/ready`, `/admin/login` | passed (200, verified TLS) |
+| Grafana health (HTTPS) | `curl` on `grafana.cdnf.example.net/api/health` | passed (200) |
 | Admin creation (CLI) | `php artisan cdnf:admin:create` over stdin | passed |
 | Admin API login, bearer token | `POST /api/auth/login` | passed |
 | Domain user cannot reach admin resources | login as `user`; `GET /admin/edges`, `/admin/users`, `/admin/dns/clusters`, `/admin/edge-pools` | passed (403 on all four) |
@@ -80,13 +80,13 @@ Hosts: control `195.230.107.76`, pop-1 `195.230.107.78`, pop-2 `195.230.107.77`.
 | Idempotency: same key, different body | same UUID key, changed body | passed (409 `idempotency_conflict`) |
 | DNS cluster create, test, enable (pop-1, pop-2) | `POST /admin/dns/clusters`, `…/test`, `…/enable` | passed (operations succeeded; `healthy: true`) |
 | Platform DNS identity: validate, save | `POST …/dns/validate`, `PATCH /admin/system/settings/dns` | passed (revision 1) |
-| Authoritative SOA on both PoPs, UDP and TCP | `dig @PoP faratar.ir SOA +norecurse` from control host | passed (`aa`, serial 2026102901) |
+| Authoritative SOA on both PoPs, UDP and TCP | `dig @PoP example.net SOA +norecurse` from control host | passed (`aa`, serial 2026102901) |
 | Recursion refused for foreign names | `dig @PoP google.com` from control host | passed (REFUSED) |
 | Edge enrollment and heartbeat (pop-1, pop-2) | `POST /admin/edges`, one-time token into `.env.prod`, `start.sh` | passed (enrolled, heartbeating, agent 1.2.0, 8/8 cells ready each) |
 | Shared service pool: cells, endpoints, enable | `PUT …/cells/{id}`, `POST …/edges/{id}/endpoint`, `POST …/enable` | passed (`routing_status: ready`, both endpoints `ready`) |
 | Endpoint acknowledgement timestamp | `gateway_acknowledged_at` on endpoints | passed (set on both endpoints; an earlier check read the wrong field name) |
 | Seeded pools disabled when unused | `POST /admin/edge-pools/{1,2}/disable` | passed |
-| Customer domain create, verify nameservers, activation | `POST /domains`, `POST /domains/{id}/verify-nameservers` | **not run**: no owned disposable zone (ROADMAP P-03, 10dl.ir claim expired) |
+| Customer domain create, verify nameservers, activation | `POST /domains`, `POST /domains/{id}/verify-nameservers` | **not run**: no owned disposable zone (ROADMAP P-03, customer.example.com claim expired) |
 | DNS records, DNS-only and proxied | `POST /domains/{d}/dns/records` | **not run**: depends on customer domain |
 | Origin validation and origin probe | `POST …/origin/test` | **not run**: depends on customer domain |
 | Managed TLS (DNS-01 issuance, uploads) | `…/tls`, `…/tls/status` | **not run**: depends on customer domain |
@@ -101,7 +101,7 @@ Hosts: control `195.230.107.76`, pop-1 `195.230.107.78`, pop-2 `195.230.107.77`.
 
 | Feature | Evidence | Result |
 | --- | --- | --- |
-| Claim creation and assigned nameservers | `POST /domains` for `10dl.ir` | passed (`pending_verification`, assigned NS) |
+| Claim creation and assigned nameservers | `POST /domains` for `customer.example.com` | passed (`pending_verification`, assigned NS) |
 | Initial SOA/NS deployment to both PoPs | `GET /domains/1/dns/deployment` | passed (revision 1 succeeded on both clusters) |
 | Nameserver verification and activation | `POST /domains/1/verify-nameservers` after registrar delegation | passed (`active`) |
 | DNS-only A record and deployment | `POST /domains/1/dns/records` (`192.0.2.50`) | passed (revision 3 succeeded on both; UDP and TCP answers; `aa`) |

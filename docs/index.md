@@ -126,6 +126,4 @@ request-path or reconciliation responsibility: an observability outage cannot
 change desired state or stop DNS and HTTP serving.
 
 Start with [the product overview](getting-started/index.md), or choose a destination
-from the audience cards above. The [documentation audit](contributing/documentation-audit.md)
-records how this site was reconstructed from the implementation and what remains
-outside the verified product boundary.
+from the audience cards above.

@@ -1,6 +1,6 @@
 # Contributing to CDNFoundry
 
-Read [AGENTS.md](AGENTS.md), the [roadmap](docs/roadmap.md), and the full
+Read [AGENTS.md](AGENTS.md), the [closed roadmap](docs/roadmap.md), and the full
 [contribution guide](docs/contributing/index.md) before opening a change.
 
 Use the supported Compose workflow:

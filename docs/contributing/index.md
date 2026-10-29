@@ -6,7 +6,7 @@ description: Contribute to CDNFoundry within its architecture, scope, safety, an
 # Contributing
 
 ::: info Start with the product contract
-Read `AGENTS.md` and `docs/roadmap.md` before implementation. A locally elegant
+Read `AGENTS.md` before implementation. A locally elegant
 change is still invalid when it breaks bounded resources, asynchronous effects,
 last-valid rollback, authorization, or the one-monolith architecture.
 :::
@@ -26,5 +26,4 @@ as phase numbers into production filenames or classes. Normal CRUD belongs in
 controllers and Eloquent; add abstractions only for real external boundaries or
 genuinely reusable policy.
 
-See [Documentation contributions](documentation.md) and the
-[Documentation audit](documentation-audit.md).
+See [Documentation contributions](documentation.md).

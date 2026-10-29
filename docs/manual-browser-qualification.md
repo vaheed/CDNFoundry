@@ -5,7 +5,7 @@ description: Owner-run browser and real-runtime checklist for atomic edge genera
 
 # Production hardening manual qualification
 
-This is the manual, owner-run qualification job for the [current roadmap](roadmap.md). Coding agents must not launch or automate a browser. Automated tests and API probes support this job but never replace rendered UI or owner-observed real-traffic checkpoints.
+This is the manual, owner-run qualification job for the [closed roadmap](roadmap.md). Coding agents must not launch or automate a browser. Automated tests and API probes support this job but never replace rendered UI or owner-observed real-traffic checkpoints.
 
 Record every checkpoint as **Passed**, **Failed**, **Blocked**, or **Not run**. A missing menu, field, action, status, event, artifact, or runtime result is **Failed**. Do not mark a workstream complete until its implementation, documentation, automated/runtime qualification, and this manual qualification are independently complete.
 
@@ -51,7 +51,7 @@ traffic buckets were separately explained by the first incomplete UTC hour;
 later direct application checks found a fresh completed bucket. This is the bounded
 browser checkpoint for `staging-install-and-smoke`, not the entire later production
 acceptance job. Use the selected staging release and disposable zone recorded in
-the [staging job report](operations/development-handoff.md#staging-install-and-smoke-job).
+the archived staging job report in `docs/legacy/development-handoff.md`.
 Record each step separately with expected/actual result and sanitized evidence.
 The agent owns non-browser installation/runtime checks; coordinate shared setup
 so existing clusters, edges and domains are reused rather than duplicated.
