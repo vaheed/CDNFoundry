@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\DomainLifecycleState;
+use App\Jobs\AllocateNameserverPair;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\VerifyDomainNameservers;
 use App\Models\Domain;
@@ -43,9 +44,11 @@ class DomainApiTest extends TestCase
         $this->actingAs($other)->getJson('/api/domains')->assertOk()->assertJsonCount(0, 'data');
         $this->assertDatabaseHas('audit_logs', ['action' => 'domain.created', 'subject_id' => (string) $domain->id]);
         $this->assertSame(1, Operation::query()->where('type', 'domain.nameservers_verify')->where('input->domain_id', $domain->id)->count());
-        $this->assertSame(1, Operation::query()->where('type', 'dns.zone_reconcile')->where('input->domain_id', $domain->id)->count());
-        Queue::assertPushed(ReconcileDnsZone::class, 1);
+        // The pair is chosen asynchronously against the parent delegation; the zone follows the assignment.
+        Queue::assertPushed(AllocateNameserverPair::class, 1);
+        Queue::assertNotPushed(ReconcileDnsZone::class);
         Queue::assertNotPushed(VerifyDomainNameservers::class);
+        $this->assertNull($domain->delegation_nameservers);
     }
 
     public function test_canonical_duplicates_punycode_collisions_and_public_suffixes_are_rejected(): void

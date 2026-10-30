@@ -20,6 +20,7 @@ use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
 use App\Filament\Domain\Resources\Domains\RelationManagers\DnsRecordsRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\UsersRelationManager;
 use App\Filament\Shared\Pages\ApiTokens;
+use App\Jobs\AllocateNameserverPair;
 use App\Jobs\BuildUsageRollups;
 use App\Jobs\ReconcileAllDnsZones;
 use App\Jobs\ReconcileAllEdgeDomains;
@@ -143,15 +144,11 @@ class FilamentWorkflowTest extends TestCase
 
         $domain = Domain::query()->where('name', 'onboarding.example.com')->firstOrFail();
         $this->assertSame(DomainLifecycleState::PendingVerification, $domain->lifecycle_state);
-        $this->assertDatabaseHas('operations', [
-            'type' => 'dns.zone_reconcile',
-            'status' => 'pending',
-        ]);
+        Queue::assertPushed(AllocateNameserverPair::class, fn ($job): bool => $job->domainId === $domain->id);
         $this->assertDatabaseHas('operations', [
             'type' => 'domain.nameservers_verify',
             'status' => 'pending',
         ]);
-        Queue::assertPushed(ReconcileDnsZone::class, 1);
         Queue::assertNotPushed(VerifyDomainNameservers::class);
     }
 

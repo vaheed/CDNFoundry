@@ -382,6 +382,12 @@ A40, A41.
       requires the parent delegation to equal that pair, and success moves
       the name from the previous owner. Keep the partial unique index over
       active states only, and remove the hex labels and the wildcard.
+      Delivered as a separate customer pair pool
+      (`customer_nameserver_pairs`, administrator-configured, explicit A/AAAA,
+      never in the apex NS set), asynchronous allocation against the actual
+      parent delegation under the canonical-name lock (`AllocateNameserverPair`),
+      a `(name, pair)` reservation index, a deployed-before-offered rule, and
+      loss of access for the previous owner at transfer.
 
 **Exit:**
 

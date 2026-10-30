@@ -97,6 +97,18 @@ re-checked immediately before each target is changed, so an older revision never
 overwrites a newer one. The operation stays `running`, with the last error
 visible, until the retry window ends; only then is it `failed`.
 
+## Customer nameserver pairs
+
+The platform DNS identity holds two separate sets. `nameservers` are the platform
+zone's own authoritative NS records. `customer_nameserver_pairs` (one to eight
+pairs of two hostnames with public IPv4 and optional IPv6) are what customer
+claims are delegated to. Pair hostnames are published as explicit A/AAAA records in
+the platform zone, never as apex NS records and never through a wildcard. Changing
+the pool is an audited, revisioned platform DNS operation; a new pair is offered to
+claims only after every enabled DNS cluster's platform deployment publishes its
+address records. See [Domain lifecycle](domains.md#nameserver-pairs) for
+allocation, reservation and takeover.
+
 ## Drift
 
 PowerAdmin is diagnostic only. Treat direct runtime edits as drift. Reconcile

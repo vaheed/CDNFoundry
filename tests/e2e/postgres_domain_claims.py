@@ -235,8 +235,10 @@ if ($mode === 'init') {
             echo json_encode(['status' => $status, ...$domain->refresh()->only(['revision', 'tls_mode', 'active_tls_certificate_id'])])."\n";
         } elseif ($mode === 'tls-upload') {
             try {
-                $status = app(App\Http\Controllers\TlsController::class)->upload(
-                    $request(json_decode(file_get_contents(getenv('CDNF_TLS_BUNDLE')), true)), $domain)->getStatusCode();
+                $bundle = json_decode(file_get_contents(getenv('CDNF_TLS_BUNDLE')), true);
+                // Uploaded chains must reach a trusted root; this fixture's root is trusted for this process only.
+                Tests\Support\CertificateChain::trust($bundle['chain']);
+                $status = app(App\Http\Controllers\TlsController::class)->upload($request($bundle), $domain)->getStatusCode();
             } catch (Illuminate\Validation\ValidationException) {
                 $status = 422;
             } catch (Symfony\Component\HttpKernel\Exception\HttpException $exception) {
@@ -303,6 +305,29 @@ if ($mode === 'init') {
         $status = $exception->getStatusCode();
     }
     echo json_encode(['status' => $status, 'active_sequence' => $edge->refresh()->active_sequence])."\n";
+} elseif ($mode === 'pool') {
+    // Three readable pairs, as an administrator would configure them.
+    App\Models\PlatformDnsSetting::query()->create([
+        'id' => 1, 'platform_domain' => 'cdnf.test', 'proxy_hostname' => 'proxy.cdnf.test',
+        'nameservers' => collect(range(1, 6))->map(fn (int $number): array => ['hostname' => "ns{$number}.cdnf.test", 'ipv4' => '8.8.8.'.$number])->all(),
+        'soa_primary' => 'ns1.cdnf.test', 'soa_mailbox' => 'hostmaster.cdnf.test', 'soa_refresh' => 3600, 'soa_retry' => 600,
+        'soa_expire' => 604800, 'soa_minimum_ttl' => 300, 'default_ttl' => 300, 'cluster_targets' => ['pdns.test'],
+    ]);
+    echo "pool=3\n";
+} elseif ($mode === 'allocate') {
+    // The parent publishes a registrar delegation that is not one of the pool's pairs.
+    app()->bind(App\Support\NameserverResolver::class, fn () => new class extends App\Support\NameserverResolver
+    {
+        public function delegation(string $domain): array
+        {
+            return ['ns1.registrar.test', 'ns2.registrar.test'];
+        }
+    });
+    $domain = App\Models\Domain::findOrFail((int) $argv[2]);
+    App\Models\Operation::query()->where('type', 'domain.nameservers_verify')->where('input->domain_id', $domain->id)
+        ->update(['status' => 'pending', 'error' => null, 'finished_at' => null]);
+    (new App\Jobs\AllocateNameserverPair($domain->id))->handle(app(App\Support\NameserverResolver::class), app(App\Support\DomainNameserverVerification::class));
+    echo json_encode($domain->refresh()->delegation_nameservers)."\n";
 } elseif ($mode === 'create') {
     try {
         $domain = App\Models\Domain::createPendingFor(App\Models\User::findOrFail((int) $argv[2]), $argv[3]);
@@ -311,15 +336,29 @@ if ($mode === 'init') {
         echo 'rejected:'.json_encode($exception->errors())."\n";
     }
 } elseif ($mode === 'verify') {
-    $domain = App\Models\Domain::query()->where('name', 'race.example.com')->sole();
-    if ($domain->users()->count() !== 1 || App\Models\Domain::query()->count() !== 1) {
-        throw new RuntimeException('Concurrent claim isolation failed.');
+    $claims = App\Models\Domain::query()->where('name', 'race.example.com')->orderBy('id')->get();
+    if ($claims->count() !== 2 || $claims->contains(fn ($claim): bool => $claim->users()->count() !== 1)) {
+        throw new RuntimeException('Competing claims must be separate rows, each with only its own applicant.');
+    }
+    $pairs = $claims->map(fn ($claim): string => implode(',', $claim->delegation_nameservers ?? []));
+    if ($pairs->contains('') || $pairs->unique()->count() !== 2 || $claims->contains(fn ($claim): bool => str_contains(implode('', $claim->delegation_nameservers), '*') || preg_match('/^[0-9a-f]{32}\\./', $claim->delegation_nameservers[0]) === 1)) {
+        throw new RuntimeException('Concurrent allocation must give each claim its own readable pair.');
     }
     try {
-        App\Models\Domain::query()->create(['name' => $domain->name, 'display_name' => 'duplicate']);
-        throw new RuntimeException('Active domain uniqueness constraint did not reject duplicate.');
+        App\Models\Domain::query()->whereKey($claims[1]->id)->update(['delegation_nameservers' => $claims[0]->delegation_nameservers]);
+        throw new RuntimeException('Pair reservation uniqueness constraint did not reject a reused pair.');
     } catch (Illuminate\Database\UniqueConstraintViolationException) {
     }
+    $claims[0]->forceFill(['lifecycle_state' => 'active', 'nameservers_verified_at' => now()])->save();
+    try {
+        $claims[1]->forceFill(['lifecycle_state' => 'active', 'nameservers_verified_at' => now()])->save();
+        throw new RuntimeException('Active domain uniqueness constraint did not allow only one holder.');
+    } catch (Illuminate\Database\UniqueConstraintViolationException) {
+    }
+    $domain = $claims[0];
+    $loser = $claims[1]->refresh();
+    $loser->forceFill(['lifecycle_state' => App\Enums\DomainLifecycleState::Deprovisioning, 'deprovision_after' => now()->subMinute()])->save();
+    (new App\Jobs\FinalizeDomainDeprovisioning($loser->id))->handle();
     $domain->forceFill(['lifecycle_state' => App\Enums\DomainLifecycleState::Deprovisioning,
         'deprovision_after' => now()->subMinute()])->save();
     (new App\Jobs\FinalizeDomainDeprovisioning($domain->id))->handle();
@@ -538,12 +577,22 @@ def main() -> None:
                 return ['php', str(script), *args]
             initialized = subprocess.run(command('init'), env=env, check=True, capture_output=True, text=True)
             assert initialized.stdout.strip() == 'initialized', {'stdout': initialized.stdout, 'stderr': initialized.stderr}
+            pool = subprocess.check_output(command('pool'), env=env, text=True).strip()
+            assert pool == 'pool=3', pool
             processes = [subprocess.Popen(command('create', str(actor), name), env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                          for actor, name in ((1, 'Race.Example.COM.'), (2, 'race.example.com'))]
             results = [process.communicate(timeout=30) for process in processes]
             assert all(process.returncode == 0 for process in processes), results
-            assert sum(output.startswith('created:') for output, _ in results) == 1, results
-            assert sum(output.startswith('rejected:') for output, _ in results) == 1, results
+            # Claiming is not first-come: both applicants get their own claim.
+            assert all(output.startswith('created:') for output, _ in results), results
+            claim_ids = [int(output.split(':')[1]) for output, _ in results]
+            allocators = [subprocess.Popen(command('allocate', str(claim_id)), env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                          for claim_id in claim_ids]
+            allocated = [allocator.communicate(timeout=30) for allocator in allocators]
+            assert all(allocator.returncode == 0 for allocator in allocators), allocated
+            assigned = [json.loads(output.strip().splitlines()[-1]) for output, _ in allocated]
+            assert assigned[0] != assigned[1] and all(len(pair) == 2 for pair in assigned), assigned
+            assert all(not name.startswith('*') for pair in assigned for name in pair), assigned
             subprocess.run(command('verify'), env=env, check=True, capture_output=True)
             reclaim = subprocess.check_output(command('create', '2', 'RACE.EXAMPLE.COM.'), env=env, text=True)
             assert 'reclaim cooldown' in reclaim

@@ -70,7 +70,8 @@ class Domain extends Model
             }
             // Another owner or claim does not block this claim: ownership is decided by who can
             // delegate the name to the pair this claim is given, never by who asked first.
-            if ($actor->domains()->where('domains.name', $name)->exists() || ($actor->isAdmin() && self::query()->where('name', $name)->exists())) {
+            if ($actor->domains()->where('domains.name', $name)->where(fn ($live) => $live->where('domains.lifecycle_state', '!=', DomainLifecycleState::Deprovisioning->value)->orWhereNotNull('domains.nameservers_verified_at')
+                ->orWhereNotExists(fn ($held) => $held->from('domains as holder')->whereColumn('holder.name', 'domains.name')->whereNull('holder.deleted_at')->whereIn('holder.lifecycle_state', [DomainLifecycleState::Active->value, DomainLifecycleState::Disabled->value])->selectRaw('1')))->exists() || ($actor->isAdmin() && self::query()->where('name', $name)->exists())) {
                 throw ValidationException::withMessages(['name' => 'You already manage or have claimed this domain.']);
             }
             if (DomainNameTombstone::query()->where('name', $name)->first()?->reclaim_after?->isFuture()) {
@@ -122,31 +123,52 @@ class Domain extends Model
             ->exists();
     }
 
-    /** Pairs used by the other live domains that share this domain's name. @return list<list<string>> */
+    /** owner, awaiting_assignment, pending_delegation, expired, or superseded: what an applicant is waiting on. */
+    public function claimStatus(): string
+    {
+        return match (true) {
+            $this->nameservers_verified_at !== null => 'owner',
+            $this->lifecycle_state === DomainLifecycleState::Deprovisioning => 'superseded',
+            $this->claim_expires_at?->isPast() === true => 'expired',
+            $this->delegation_nameservers === null => 'awaiting_assignment',
+            default => 'pending_delegation',
+        };
+    }
+
+    /** Pairs reserved by the other live claims on this name. @return list<list<string>> */
     public function competingPairs(): array
     {
         return self::query()->where('name', $this->name)->whereKeyNot($this->getKey())
+            ->where('lifecycle_state', '!=', DomainLifecycleState::Deprovisioning->value)
             ->whereNotNull('delegation_nameservers')->pluck('delegation_nameservers')
             ->map(fn ($pair): array => collect($pair)->sort()->values()->all())->all();
     }
 
-    public function initializeDelegationClaim(): void
+    /**
+     * Reserve a pair for this claim: one that the parent does not publish now and no other live
+     * claim on the name holds. Runs under the canonical-name lock; the unique index backs it.
+     * Returns false, assigning nothing, when no deployed pair is available.
+     *
+     * @param  list<string>  $currentDelegation
+     */
+    public function reserveNameserverPair(array $currentDelegation): bool
     {
-        if ($this->delegation_nameservers !== null) {
-            return;
+        self::lockCanonicalName($this->name);
+        $locked = self::query()->lockForUpdate()->findOrFail($this->getKey());
+        if ($locked->delegation_nameservers !== null) {
+            return true;
         }
-        $settings = PlatformDnsSetting::query()->find(1);
-        if ($settings === null) {
-            return;
-        }
-        $pair = NameserverPairs::choose($this->name, $this->competingPairs(), $settings);
+        $pair = NameserverPairs::choose($locked->name, $locked->competingPairs(), $currentDelegation);
         if ($pair === null) {
-            throw ValidationException::withMessages(['name' => 'Every nameserver pair is already used by another claim on this name. Try again after an existing claim expires.']);
+            return false;
         }
-        $this->forceFill([
-            'delegation_token' => $this->delegation_token ?? bin2hex(random_bytes(16)), 'delegation_nameservers' => $pair,
-            'claim_expires_at' => $this->claim_expires_at ?? now()->addDays(7),
+        $locked->forceFill([
+            'delegation_nameservers' => $pair,
+            'claim_expires_at' => $locked->claim_expires_at ?? now()->addDays(7),
         ])->save();
+        $this->setRawAttributes($locked->getAttributes(), true);
+
+        return true;
     }
 
     public function hasManagedAncestor(): bool

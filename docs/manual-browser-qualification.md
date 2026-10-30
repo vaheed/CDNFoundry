@@ -1002,6 +1002,29 @@ qualification installation after the Phase 3 migrations.
    test pool and expect a returned operation id.
 7. As administrator, open **System → DNS identity**. Enter an odd number of
    nameservers and save: expect a validation error asking for pairs.
+8. On the same page open **Customer nameserver pairs**. Confirm at least one
+   row of **First hostname / First IPv4 / First IPv6 / Second hostname / Second
+   IPv4 / Second IPv6**. Add a second pair `ns3.<platform>` / `ns4.<platform>`
+   with public IPv4 addresses and press **Preview**. Expect the review modal; save.
+   Enter a hostname outside the platform domain, a `10.0.0.1` address, or the same
+   hostname in both slots: each must show a validation error. Wait for the
+   operation to succeed.
+9. As domain user A create `claim-test.example.com`. Open the domain: expect
+   **Claim status** `awaiting_assignment`, then (after the worker runs and you
+   refresh) `pending_delegation` with two readable **Assigned nameservers**
+   (no hexadecimal label). Copy them with the copy buttons.
+10. Mark the domain active as in the domain-claim job. As domain user B create
+    `claim-test.example.com`. Expect creation to succeed and B's page to show only
+    B's own **Assigned nameservers**, a pair different from A's and not equal to the
+    name's current registrar delegation, and nothing of A's records. As user A open
+    the domain: expect it still **Active**, with records intact.
+11. As administrator, with only one pair configured, create a third claim for the
+    same name: expect the latest verification to show a failure containing
+    `No deployed nameserver pair is free`. Add a pair as in step 8 and request
+    **Verify nameservers** again: expect a pair assigned.
+12. Delegate the name at the registrar to B's pair. Press **Verify nameservers**
+    as B: expect **Active** and **Claim status** `owner`. As A open the domain:
+    expect denied access (404). A third claim's page shows `superseded`.
 
 Completion gate: implementation and documentation present; automated and real
 runtime qualification recorded separately in the roadmap; this manual job

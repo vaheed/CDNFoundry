@@ -51,7 +51,10 @@ class VerifyDomainNameservers implements ShouldBeUnique, ShouldQueue
             }
             $expected = $domain->assignedNameservers();
             if (count($expected) < 2) {
-                throw new RuntimeException('Request nameserver verification again to initialize this delegation assignment.');
+                $operation->update(['status' => 'pending']);
+                AllocateNameserverPair::dispatch($domain->id);
+
+                return;
             }
             $observed = $resolver->resolve($domain->name);
             if ($observed !== $expected) {

@@ -45,7 +45,9 @@ class SystemDnsIdentity extends Page
 
     public function mount(): void
     {
-        $this->form->fill(PlatformDnsSetting::query()->find(1)?->toArray() ?? [
+        $stored = PlatformDnsSetting::query()->find(1)?->toArray();
+        $stored = $stored === null ? null : $this->withPairRows($stored);
+        $this->form->fill($stored ?? [
             'nameservers' => [[], []],
             'cluster_targets' => [],
             'soa_refresh' => 3600,
@@ -98,6 +100,16 @@ class SystemDnsIdentity extends Page
                         TextInput::make('ipv4')->label('IPv4')->required()->ipv4(),
                         TextInput::make('ipv6')->label(FilamentHelp::label('IPv6', 'Optional. Leave empty for IPv4-only authoritative DNS.'))->ipv6(),
                     ])->columns(['default' => 1, 'md' => 3]),
+                    Repeater::make('customer_pairs')->label('Customer nameserver pairs')
+                        ->helperText('Readable pairs offered to customers for delegation, separate from the apex NS set above. Each pair needs two hostnames inside the platform domain with public addresses. A competing claim on a name always gets a different pair, so offer at least two.')
+                        ->minItems(1)->maxItems(8)->schema([
+                            TextInput::make('first_hostname')->label('First hostname')->required()->maxLength(253),
+                            TextInput::make('first_ipv4')->label('First IPv4')->required()->ipv4(),
+                            TextInput::make('first_ipv6')->label('First IPv6')->ipv6(),
+                            TextInput::make('second_hostname')->label('Second hostname')->required()->maxLength(253),
+                            TextInput::make('second_ipv4')->label('Second IPv4')->required()->ipv4(),
+                            TextInput::make('second_ipv6')->label('Second IPv6')->ipv6(),
+                        ])->columns(['default' => 1, 'md' => 3]),
                     Select::make('cluster_targets')
                         ->label('DNS cluster targets')
                         ->helperText('Select the registered clusters that should receive the platform SOA, NS, glue, and proxy records.')
@@ -124,8 +136,8 @@ class SystemDnsIdentity extends Page
 
     public function previewChanges(): void
     {
-        $data = PlatformDnsSettingsRequest::validateInput($this->form->getState());
-        $this->form->fill($data);
+        $data = PlatformDnsSettingsRequest::validateInput($this->formState());
+        $this->form->fill($this->withPairRows($data));
         $this->preview = $data;
         $this->confirmationToken = PlatformDnsConfirmation::issue($data);
         $this->mountAction('confirmDnsIdentity');
@@ -236,7 +248,7 @@ class SystemDnsIdentity extends Page
 
     private function saveDnsIdentity(): void
     {
-        $data = PlatformDnsSettingsRequest::validateInput($this->form->getState());
+        $data = PlatformDnsSettingsRequest::validateInput($this->formState());
         abort_unless(PlatformDnsConfirmation::valid($this->confirmationToken, $data), 409, 'Preview and confirm this exact DNS identity payload before applying it.');
         $operation = DB::transaction(function () use ($data): Operation {
             $current = PlatformDnsSetting::query()->lockForUpdate()->find(1);
@@ -258,5 +270,31 @@ class SystemDnsIdentity extends Page
         $this->preview = null;
         $this->confirmationToken = null;
         Notification::make()->success()->title('DNS identity update queued')->body("Operation {$operation->getKey()}")->send();
+    }
+
+    /** The form state with the editable pair rows turned back into the typed pair structure. */
+    private function formState(): array
+    {
+        $state = $this->form->getState();
+        if (isset($state['customer_pairs'])) {
+            $state['customer_nameserver_pairs'] = collect($state['customer_pairs'])->map(fn (array $row): array => [
+                ['hostname' => $row['first_hostname'] ?? null, 'ipv4' => $row['first_ipv4'] ?? null, 'ipv6' => $row['first_ipv6'] ?? null],
+                ['hostname' => $row['second_hostname'] ?? null, 'ipv4' => $row['second_ipv4'] ?? null, 'ipv6' => $row['second_ipv6'] ?? null],
+            ])->values()->all();
+        }
+        unset($state['customer_pairs']);
+
+        return $state;
+    }
+
+    /** @param array<string, mixed> $settings */
+    private function withPairRows(array $settings): array
+    {
+        $settings['customer_pairs'] = collect($settings['customer_nameserver_pairs'] ?? [])->map(fn (array $pair): array => [
+            'first_hostname' => $pair[0]['hostname'] ?? null, 'first_ipv4' => $pair[0]['ipv4'] ?? null, 'first_ipv6' => $pair[0]['ipv6'] ?? null,
+            'second_hostname' => $pair[1]['hostname'] ?? null, 'second_ipv4' => $pair[1]['ipv4'] ?? null, 'second_ipv6' => $pair[1]['ipv6'] ?? null,
+        ])->all();
+
+        return $settings;
     }
 }

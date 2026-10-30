@@ -76,6 +76,10 @@ class SystemIdentityApiTest extends TestCase
                 : $value];
         })->all();
 
+        $payload['customer_pairs'] = [[
+            'first_hostname' => 'ns1.cdnf.test', 'first_ipv4' => '8.8.8.8', 'first_ipv6' => null,
+            'second_hostname' => 'ns2.cdnf.test', 'second_ipv4' => '8.8.4.4', 'second_ipv6' => null,
+        ]];
         $component = Livewire::actingAs($admin)
             ->test(SystemDnsIdentity::class)
             ->fillForm($payload)

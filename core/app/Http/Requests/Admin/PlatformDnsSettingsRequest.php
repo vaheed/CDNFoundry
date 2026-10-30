@@ -20,6 +20,11 @@ class PlatformDnsSettingsRequest extends FormRequest
             'nameservers.*.hostname' => ['required', 'distinct', 'string', 'max:253', self::HOSTNAME],
             'nameservers.*.ipv4' => ['required', 'ipv4'],
             'nameservers.*.ipv6' => ['nullable', 'ipv6'],
+            'customer_nameserver_pairs' => ['required', 'array', 'min:1', 'max:8'],
+            'customer_nameserver_pairs.*' => ['required', 'array', 'size:2'],
+            'customer_nameserver_pairs.*.*.hostname' => ['required', 'string', 'max:253', self::HOSTNAME],
+            'customer_nameserver_pairs.*.*.ipv4' => ['required', 'ipv4'],
+            'customer_nameserver_pairs.*.*.ipv6' => ['nullable', 'ipv6'],
             'soa_primary' => ['required', 'string', 'max:253', self::HOSTNAME],
             'soa_mailbox' => ['required', 'string', 'max:253', self::HOSTNAME],
             'soa_refresh' => ['required', 'integer', 'between:300,86400'],
@@ -81,6 +86,30 @@ class PlatformDnsSettingsRequest extends FormRequest
                     }
                 }
             }
+            $hostnames = [];
+            foreach ($data['customer_nameserver_pairs'] ?? [] as $pairIndex => $pair) {
+                foreach (is_array($pair) ? $pair : [] as $index => $nameserver) {
+                    $hostname = $nameserver['hostname'] ?? null;
+                    if (! $insidePlatform($hostname)) {
+                        $validator->errors()->add("customer_nameserver_pairs.$pairIndex.$index.hostname", 'Customer nameserver hostnames must be inside the platform domain.');
+                    }
+                    if (is_string($hostname)) {
+                        if (isset($hostnames[$hostname])) {
+                            $validator->errors()->add("customer_nameserver_pairs.$pairIndex.$index.hostname", 'A hostname can belong to only one pair.');
+                        }
+                        $hostnames[$hostname] = true;
+                        if (str_contains($hostname, '*')) {
+                            $validator->errors()->add("customer_nameserver_pairs.$pairIndex.$index.hostname", 'Wildcard nameserver names are not allowed.');
+                        }
+                    }
+                    foreach (['ipv4', 'ipv6'] as $family) {
+                        $address = $nameserver[$family] ?? null;
+                        if (is_string($address) && NetworkAddress::isUnsafe($address)) {
+                            $validator->errors()->add("customer_nameserver_pairs.$pairIndex.$index.$family", 'Glue addresses must be public unicast service addresses.');
+                        }
+                    }
+                }
+            }
             if (isset($data['soa_primary']) && ! $insidePlatform($data['soa_primary'])) {
                 $validator->errors()->add('soa_primary', 'The SOA primary must be inside the platform domain.');
             }
@@ -122,6 +151,19 @@ class PlatformDnsSettingsRequest extends FormRequest
                 $input['nameservers'][$index]['hostname'] = mb_strtolower(rtrim(trim($nameserver['hostname']), '.'));
             }
             $input['nameservers'][$index]['ipv6'] = filled($nameserver['ipv6'] ?? null) ? $nameserver['ipv6'] : null;
+        }
+        if (! isset($input['customer_nameserver_pairs']) && is_array($input['nameservers'] ?? null)) {
+            // Omitted: offer the platform nameservers two at a time, as the stored default.
+            $input['customer_nameserver_pairs'] = array_values(array_filter(array_chunk($input['nameservers'], 2), fn (array $pair): bool => count($pair) === 2));
+        }
+        foreach ($input['customer_nameserver_pairs'] ?? [] as $pairIndex => $pair) {
+            foreach (is_array($pair) ? $pair : [] as $index => $nameserver) {
+                if (isset($nameserver['hostname']) && is_string($nameserver['hostname'])) {
+                    $input['customer_nameserver_pairs'][$pairIndex][$index]['hostname'] = mb_strtolower(rtrim(trim($nameserver['hostname']), '.'));
+                }
+                $input['customer_nameserver_pairs'][$pairIndex][$index]['ipv6'] = filled($nameserver['ipv6'] ?? null) ? $nameserver['ipv6'] : null;
+            }
+            $input['customer_nameserver_pairs'][$pairIndex] = array_values((array) $pair);
         }
         foreach ($input['cluster_targets'] ?? [] as $index => $target) {
             if (is_string($target)) {

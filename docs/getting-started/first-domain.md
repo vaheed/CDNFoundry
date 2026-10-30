@@ -37,6 +37,7 @@ In `/admin/system-dns-identity`, enter:
 
 - a platform zone such as `cdn.example.net`;
 - nameservers such as `ns1.cdn.example.net` and `ns2.cdn.example.net`;
+- at least two **customer nameserver pairs** (for example `ns1`/`ns2` and `ns3`/`ns4`) with public glue addresses; a second pair is what lets a competing claim on one name prove control;
 - one IPv4 glue address for each nameserver, and IPv6 only where reachable;
 - a proxy hostname such as `proxy.cdn.example.net`;
 - SOA values within the displayed validation bounds.
@@ -57,15 +58,18 @@ normalizes it to lower-case ASCII/Punycode and rejects public suffixes, IP
 addresses, single labels, wildcards, URLs, ports, and names still inside reclaim
 cooldown.
 
-Creation writes desired DNS state, queues the initial SOA/NS zone deployment,
+Creation queues the allocation of a nameserver pair (chosen against the
+delegation the parent publishes now), then the initial SOA/NS zone deployment,
 and automatically queues public nameserver verification after that deployment
 succeeds. It does not require an origin and does not issue a certificate.
 
 ## Delegate and activate
 
 1. Create the customer domain and copy its **Assigned nameservers**. Each fresh
-   claim has its own assignment and a seven-day expiry; do not reuse the global
-   shared nameserver pair or a previous claim's assignment.
+   claim has its own readable pair and a seven-day expiry; never reuse another
+   claim's pair. If the name is already managed by someone else, you still get a
+   claim and a different pair: the current owner keeps the name until you change
+   the registrar delegation to your pair and verification succeeds.
 2. At the registrar (or authoritative parent for a delegated subdomain), set
    exactly those names. Remove stale DS records from the previous provider;
    CDNFoundry customer zones are unsigned.

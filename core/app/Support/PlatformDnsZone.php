@@ -67,6 +67,18 @@ final class PlatformDnsZone
             }
         }
 
+        // Customer nameservers get explicit address records only; they are never apex NS records and
+        // there is no wildcard, so a hostname resolves exactly when an administrator configured it.
+        foreach ($settings->customer_nameserver_pairs ?? [] as $pair) {
+            foreach ($pair as $nameserver) {
+                $hostname = rtrim($nameserver['hostname'], '.').'.';
+                $rows->push(['name' => $hostname, 'type' => 'A', 'ttl' => $settings->default_ttl, 'content' => $nameserver['ipv4']]);
+                if (filled($nameserver['ipv6'] ?? null)) {
+                    $rows->push(['name' => $hostname, 'type' => 'AAAA', 'ttl' => $settings->default_ttl, 'content' => $nameserver['ipv6']]);
+                }
+            }
+        }
+
         $proxy = rtrim($settings->proxy_hostname, '.').'.';
         $defaultSharedPool = EdgePool::defaultShared();
         foreach (EdgePool::query()->where('enabled', true)->where('withdrawn', false)->orderBy('id')->get() as $pool) {
@@ -117,7 +129,7 @@ final class PlatformDnsZone
                     'name' => $first['name'],
                     'type' => $first['type'],
                     'ttl' => $group->min('ttl'),
-                    'records' => $group->pluck('content')->sort()->map(fn (string $content): array => ['content' => $content, 'disabled' => false])->values()->all(),
+                    'records' => $group->pluck('content')->unique()->sort()->map(fn (string $content): array => ['content' => $content, 'disabled' => false])->values()->all(),
                 ];
             })->sortKeys()->values()->all();
     }

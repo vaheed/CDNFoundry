@@ -26,11 +26,19 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
+use Tests\Concerns\AllocatesNameserverPairs;
 use Tests\TestCase;
 
 class DomainClaimSecurityTest extends TestCase
 {
+    use AllocatesNameserverPairs;
     use RefreshDatabase;
+
+    /** Submit a claim, then run its queued pair allocation against a parent publishing a registrar delegation. */
+    private function claim(User $user, string $name): Domain
+    {
+        return $this->allocatePair(Domain::createPendingFor($user, $name));
+    }
 
     public function test_audit_uses_client_ip_forwarded_by_public_ingress(): void
     {
@@ -142,16 +150,20 @@ class DomainClaimSecurityTest extends TestCase
         $this->assertSame([$user->id], $domain->users()->pluck('users.id')->all());
     }
 
-    public function test_duplicate_creation_rolls_back_without_assigning_the_other_applicant(): void
+    public function test_a_competing_api_claim_is_accepted_but_never_grants_access_to_the_owners_domain(): void
     {
         Queue::fake();
         $owner = User::factory()->create();
-        $attacker = User::factory()->create();
+        $other = User::factory()->create();
         $domain = Domain::createPendingFor($owner, 'Example.COM.');
-        $this->actingAs($attacker)->postJson('/api/domains', ['name' => 'example.com'])->assertUnprocessable();
+
+        $claim = $this->actingAs($other)->postJson('/api/domains', ['name' => 'example.com'])->assertCreated()
+            ->assertJsonPath('data.claim_status', 'awaiting_assignment');
         $this->getJson("/api/domains/{$domain->id}")->assertNotFound();
         $this->assertSame([$owner->id], $domain->users()->pluck('users.id')->all());
-        $this->assertDatabaseCount('domains', 1);
+        $this->assertSame([$other->id], Domain::findOrFail($claim->json('data.id'))->users()->pluck('users.id')->all());
+        $this->actingAs($other)->postJson('/api/domains', ['name' => 'example.com'])->assertUnprocessable();
+        $this->assertDatabaseCount('domains', 2);
     }
 
     public function test_queued_verification_cannot_restore_disabled_or_revoked_access(): void
@@ -171,7 +183,7 @@ class DomainClaimSecurityTest extends TestCase
         ]);
         foreach (['disabled_domain', 'deprovisioning', 'disabled_user', 'unassigned_user', 'cancelled_operation'] as $scenario) {
             $user = User::factory()->create();
-            $domain = Domain::createPendingFor($user, str_replace('_', '-', $scenario).'.example.com');
+            $domain = $this->claim($user, str_replace('_', '-', $scenario).'.example.com');
             $operation = Operation::query()->where('type', 'domain.nameservers_verify')->where('input->domain_id', $domain->id)->sole();
             match ($scenario) {
                 'disabled_domain' => $domain->update(['lifecycle_state' => DomainLifecycleState::Disabled, 'disabled_at' => now()]),
@@ -204,10 +216,10 @@ class DomainClaimSecurityTest extends TestCase
         Queue::fake();
         $this->platformWithPairs(2);
         $owner = User::factory()->create();
-        $held = Domain::createPendingFor($owner, 'stale.example.com')->refresh();
+        $held = $this->claim($owner, 'stale.example.com')->refresh();
         $held->forceFill(['lifecycle_state' => DomainLifecycleState::Active, 'nameservers_verified_at' => now()])->save();
         $applicant = User::factory()->create();
-        $claim = Domain::createPendingFor($applicant, 'stale.example.com');
+        $claim = $this->claim($applicant, 'stale.example.com');
         $this->assertNotEquals($held->assignedNameservers(), $claim->assignedNameservers(), 'a new claim never gets the current delegation');
         $stale = $held->assignedNameservers();
         $resolver = new class($stale) extends NameserverResolver
@@ -247,8 +259,8 @@ class DomainClaimSecurityTest extends TestCase
     {
         Queue::fake();
         $user = User::factory()->create();
-        $pending = Domain::createPendingFor($user, 'pending.example.com');
-        $verified = Domain::createPendingFor($user, 'verified.example.com');
+        $pending = $this->claim($user, 'pending.example.com');
+        $verified = $this->claim($user, 'verified.example.com');
         $verified->update(['nameservers_verified_at' => now(), 'lifecycle_state' => DomainLifecycleState::Active]);
         $this->travel(8)->days();
         $this->artisan('cdnf:domains:expire-claims')->assertSuccessful();
@@ -264,8 +276,8 @@ class DomainClaimSecurityTest extends TestCase
         Queue::fake();
         $parentOwner = User::factory()->create();
         $applicant = User::factory()->create();
-        Domain::createPendingFor($parentOwner, 'example.com');
-        $child = Domain::createPendingFor($applicant, 'child.example.com');
+        $this->claim($parentOwner, 'example.com');
+        $child = $this->claim($applicant, 'child.example.com');
         Http::preventStrayRequests();
         (new ReconcileDnsZone($child->id))->handle(app(PowerDnsClient::class));
         $this->assertDatabaseCount('dns_deployments', 0);
@@ -287,7 +299,7 @@ class DomainClaimSecurityTest extends TestCase
     {
         Queue::fake();
         $user = User::factory()->create();
-        $domain = Domain::createPendingFor($user, 'disabled.example.com');
+        $domain = $this->claim($user, 'disabled.example.com');
         $domain->update(['lifecycle_state' => DomainLifecycleState::Disabled]);
         $this->travel(8)->days();
         $this->artisan('cdnf:domains:expire-claims')->assertSuccessful();
@@ -299,7 +311,7 @@ class DomainClaimSecurityTest extends TestCase
         Queue::fake();
         $user = User::factory()->create();
         foreach (range(1, 20) as $index) {
-            Domain::createPendingFor($user, "claim-{$index}.example.com");
+            $this->claim($user, "claim-{$index}.example.com");
         }
         $this->actingAs($user)->postJson('/api/domains', ['name' => 'over-budget.example.com'])->assertUnprocessable();
         $this->actingAs(User::factory()->create())->postJson('/api/domains', ['name' => 'other-user.example.com'])->assertCreated();
