@@ -16,6 +16,18 @@ if [ "${EDGE_REQUIRE_MEMORY_TLS:-false}" = true ]; then
     }
 fi
 
+# PROXY protocol headers are trusted only from these networks (the gateway's).
+# With none configured, no peer is trusted and every client keeps the address of
+# the connection that reached the cell.
+trust=/var/lib/nginx/tmp/real-ip-trust.conf
+: > "$trust"
+for cidr in $(printf '%s' "${EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS:-}" | tr ',' ' '); do
+    case "$cidr" in
+        *[!0-9a-fA-F:./]*) echo "EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS contains an invalid network: $cidr" >&2; exit 1 ;;
+    esac
+    printf 'set_real_ip_from %s;\n' "$cidr" >> "$trust"
+done
+
 mkdir -p \
     /var/cache/nginx/content/small \
     /var/cache/nginx/content/standard \

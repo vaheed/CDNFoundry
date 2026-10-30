@@ -264,15 +264,25 @@ local function reject(status)
     return security_reject(status, "malformed_request")
 end
 
+-- The connection address is already the PROXY-protocol address when the peer is
+-- the gateway (nginx trusts PROXY headers only from the gateway's networks).
+-- X-Forwarded-For is read only when that address is a configured trusted proxy,
+-- walking from the right and stopping at the first address that is not one.
 local function client_address(security)
     local remote = ngx.var.remote_addr or ""
-    if allowed(remote, security.trusted_proxy_cidrs) then
-        local forwarded = (ngx.var.http_x_forwarded_for or ""):match("^%s*([^,%s]+)")
-        if forwarded and (#forwarded <= 45) and (ipv4_number(forwarded) or forwarded:find(":", 1, true)) then
-            return forwarded
-        end
+    local trusted = security.trusted_proxy_cidrs
+    if type(trusted) ~= "table" or #trusted == 0 or not allowed(remote, trusted) then return remote end
+    local entries = {}
+    for entry in (ngx.var.http_x_forwarded_for or ""):gmatch("[^,]+") do
+        entries[#entries + 1] = entry:match("^%s*(.-)%s*$")
+        if #entries > 32 then return remote end
     end
-    return remote
+    for index = #entries, 1, -1 do
+        local entry = entries[index]
+        if not packed_address(entry) then return remote end
+        if not allowed(entry, trusted) then return entry end
+    end
+    return entries[1] or remote
 end
 
 local function geography(ip)
@@ -516,6 +526,7 @@ local function tls_host_matches_sni(host)
 end
 
 function M.access()
+    ngx.req.clear_header("X-CDN-Client-Address")
     ngx.var.cdn_telemetry_proof = telemetry_proof_value()
     local dictionary = ngx.shared.runtime_limits
     dictionary:incr("capacity:requests:" .. ngx.time(), 1, 0, 2)
@@ -552,6 +563,9 @@ function M.access()
     local client = client_address(security)
     local country, continent = geography(client)
     ngx.var.cdn_client_ip = client
+    -- One internal header carries the address to the origin hop; nothing from
+    -- the client is ever trusted in its place.
+    ngx.req.set_header("X-CDN-Client-Address", client)
     ngx.var.cdn_country = country or "ZZ"
     ngx.var.cdn_continent = continent or "ZZ"
     for _, rule in ipairs(security.rules or {}) do
