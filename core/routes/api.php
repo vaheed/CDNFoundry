@@ -66,8 +66,8 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:account'])->group
     Route::post('/domains/{domain}/activate', [DomainLifecycleController::class, 'activate'])->middleware('idempotent');
     Route::get('/domains/{domain}/dns/records', [DnsRecordController::class, 'index']);
     Route::post('/domains/{domain}/dns/records', [DnsRecordController::class, 'store'])->middleware('idempotent');
-    Route::post('/domains/{domain}/dns/records/bulk', [DnsRecordController::class, 'bulk'])->middleware(['idempotent', 'throttle:bulk']);
-    Route::post('/domains/{domain}/dns/import', [DnsZoneController::class, 'import'])->middleware(['idempotent', 'throttle:bulk']);
+    Route::post('/domains/{domain}/dns/records/bulk', [DnsRecordController::class, 'bulk'])->middleware(['throttle:bulk', 'idempotent']);
+    Route::post('/domains/{domain}/dns/import', [DnsZoneController::class, 'import'])->middleware(['throttle:bulk', 'idempotent']);
     Route::get('/domains/{domain}/dns/export', [DnsZoneController::class, 'export']);
     Route::get('/domains/{domain}/dns/records/{record}', [DnsRecordController::class, 'show']);
     Route::get('/domains/{domain}/dns/records/{record}/geo', [GeoDnsController::class, 'show']);
@@ -81,7 +81,7 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:account'])->group
     Route::patch('/domains/{domain}/proxy', [ProxyController::class, 'update'])->middleware('idempotent');
     Route::get('/domains/{domain}/dns/records/{record}/origin', [ProxyController::class, 'origin']);
     Route::put('/domains/{domain}/dns/records/{record}/origin', [ProxyController::class, 'updateOrigin'])->middleware('idempotent');
-    Route::post('/domains/{domain}/dns/records/{record}/origin/test', [ProxyController::class, 'testOrigin'])->middleware(['idempotent', 'throttle:origin-test']);
+    Route::post('/domains/{domain}/dns/records/{record}/origin/test', [ProxyController::class, 'testOrigin'])->middleware(['throttle:origin-test', 'idempotent']);
     Route::get('/domains/{domain}/dns/records/{record}/origin/health', [ProxyController::class, 'health']);
     Route::get('/domains/{domain}/deployment', [ProxyController::class, 'deployment']);
     Route::post('/domains/{domain}/deploy', [ProxyController::class, 'deploy'])->middleware('idempotent');
@@ -91,14 +91,14 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:account'])->group
     Route::patch('/domains/{domain}/cache', [CacheController::class, 'update'])->middleware('idempotent');
     Route::post('/domains/{domain}/cache/development-mode', [CacheController::class, 'enableDevelopmentMode'])->middleware('idempotent');
     Route::delete('/domains/{domain}/cache/development-mode', [CacheController::class, 'disableDevelopmentMode'])->middleware('idempotent');
-    Route::post('/domains/{domain}/cache/purge', [CacheController::class, 'purge'])->middleware(['idempotent', 'throttle:bulk']);
+    Route::post('/domains/{domain}/cache/purge', [CacheController::class, 'purge'])->middleware(['throttle:bulk', 'idempotent']);
     Route::get('/domains/{domain}/cache/purges', [CacheController::class, 'purges']);
     Route::get('/domains/{domain}/cache/purges/{purge}', [CacheController::class, 'purgeStatus']);
     Route::get('/domains/{domain}/tls', [TlsController::class, 'show']);
     Route::get('/domains/{domain}/tls/status', [TlsController::class, 'status']);
     Route::patch('/domains/{domain}/tls', [TlsController::class, 'update'])->middleware('idempotent');
-    Route::post('/domains/{domain}/tls/reissue', [TlsController::class, 'reissue'])->middleware(['idempotent', 'throttle:bulk']);
-    Route::post('/domains/{domain}/tls/renew', [TlsController::class, 'renew'])->middleware(['idempotent', 'throttle:bulk']);
+    Route::post('/domains/{domain}/tls/reissue', [TlsController::class, 'reissue'])->middleware(['throttle:bulk', 'idempotent']);
+    Route::post('/domains/{domain}/tls/renew', [TlsController::class, 'renew'])->middleware(['throttle:bulk', 'idempotent']);
     Route::post('/domains/{domain}/tls/upload', [TlsController::class, 'upload'])->middleware('idempotent');
     Route::delete('/domains/{domain}/tls/custom-certificate', [TlsController::class, 'destroyCustom'])->middleware('idempotent');
     Route::get('/domains/{domain}/security', [SecurityController::class, 'show']);
@@ -107,7 +107,7 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:account'])->group
     Route::post('/domains/{domain}/security/rules', [SecurityController::class, 'storeRule'])->middleware('idempotent');
     Route::patch('/domains/{domain}/security/rules/{rule}', [SecurityController::class, 'updateRule'])->middleware('idempotent');
     Route::delete('/domains/{domain}/security/rules/{rule}', [SecurityController::class, 'destroyRule'])->middleware('idempotent');
-    Route::post('/domains/{domain}/security/rules/import', [SecurityController::class, 'importRules'])->middleware(['idempotent', 'throttle:bulk']);
+    Route::post('/domains/{domain}/security/rules/import', [SecurityController::class, 'importRules'])->middleware(['throttle:bulk', 'idempotent']);
     Route::get('/domains/{domain}/security/ddos', [SecurityController::class, 'ddos']);
     Route::patch('/domains/{domain}/security/ddos', [SecurityController::class, 'updateDdos'])->middleware('idempotent');
     Route::get('/domains/{domain}/security/ddos/status', [SecurityController::class, 'status']);
