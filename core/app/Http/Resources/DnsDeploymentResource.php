@@ -16,7 +16,7 @@ class DnsDeploymentResource extends JsonResource
             'desired_revision' => $this->desired_revision,
             'deployed_revision' => $this->deployed_revision,
             'status' => $this->status,
-            'last_error' => $this->last_error,
+            'last_error' => $this->when($request->user()?->isAdmin() === true, $this->last_error),
             'attempts' => $this->attempts,
             'last_attempted_at' => $this->last_attempted_at?->toIso8601String(),
             'deployed_at' => $this->deployed_at?->toIso8601String(),

@@ -87,7 +87,9 @@ class CacheController extends Controller
     {
         Gate::authorize('view', $domain);
 
-        return response()->json(['data' => CachePurge::query()->where('domain_id', $domain->id)->latest('created_at')->cursorPaginate(50)]);
+        $page = CachePurge::query()->where('domain_id', $domain->id)->latest('created_at')->cursorPaginate(50);
+
+        return response()->json(['data' => $page->getCollection()->map(fn (CachePurge $purge): array => $this->purgeData($purge))->all(), 'next_cursor' => $page->nextCursor()?->encode()]);
     }
 
     public function purgeStatus(Domain $domain, CachePurge $purge): JsonResponse

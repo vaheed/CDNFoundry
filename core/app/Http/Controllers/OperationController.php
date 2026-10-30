@@ -19,6 +19,7 @@ use App\Jobs\TestDnsCluster;
 use App\Jobs\VerifyDomainNameservers;
 use App\Models\AuditLog;
 use App\Models\Domain;
+use App\Http\Resources\OperationResource;
 use App\Models\Operation;
 use App\Support\PlatformSettings;
 use Illuminate\Http\JsonResponse;
@@ -39,12 +40,12 @@ class OperationController extends Controller
             abort_unless($domain !== null && Gate::forUser($request->user())->allows('view', $domain), 403);
         }
 
-        return JsonResource::make($operation);
+        return OperationResource::make($operation);
     }
 
     public function index(): AnonymousResourceCollection
     {
-        return JsonResource::collection(Operation::query()->latest()->cursorPaginate(50));
+        return OperationResource::collection(Operation::query()->latest()->cursorPaginate(50));
     }
 
     public function retry(Request $request, Operation $operation): JsonResponse
@@ -73,6 +74,6 @@ class OperationController extends Controller
             'edge.origin_test' => DispatchOriginTest::dispatch($operation->getKey()),
         };
 
-        return response()->json(['data' => $operation->refresh()], 202);
+        return response()->json(['data' => OperationResource::make($operation->refresh())->resolve()], 202);
     }
 }

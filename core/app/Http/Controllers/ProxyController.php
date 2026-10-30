@@ -102,7 +102,7 @@ class ProxyController extends Controller
     {
         Gate::authorize('view', $domain);
 
-        return response()->json(['data' => ['desired_revision' => $domain->revision, 'active_revision' => $domain->active_edge_revision, 'placement' => DB::table('domain_edge_placements')->where('domain_id', $domain->id)->first()]]);
+        return response()->json(['data' => ['desired_revision' => $domain->revision, 'active_revision' => $domain->active_edge_revision, 'placement' => DB::table('domain_edge_placements')->where('domain_id', $domain->id)->first(['state', 'desired_revision', 'drain_after', 'updated_at'])]]);
     }
 
     public function deploy(Request $request, Domain $domain): JsonResponse

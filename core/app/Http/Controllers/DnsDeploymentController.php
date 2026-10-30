@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DomainLifecycleState;
+use App\Http\Resources\DnsDeploymentResource;
+use App\Http\Resources\OperationResource;
 use App\Jobs\ReconcileDnsZone;
 use App\Models\Domain;
 use App\Models\Operation;
@@ -15,9 +17,9 @@ class DnsDeploymentController extends Controller
     public function show(Domain $domain): JsonResponse
     {
         Gate::authorize('view', $domain);
-        $deployments = $domain->dnsDeployments()->with('cluster:id,name,location,enabled')->orderBy('dns_cluster_id')->get();
+        $deployments = $domain->dnsDeployments()->with(['domain:id,name', 'cluster:id,name,location,enabled'])->orderBy('dns_cluster_id')->get();
 
-        return response()->json(['data' => ['domain_id' => $domain->id, 'desired_revision' => $domain->revision, 'deployments' => $deployments]]);
+        return response()->json(['data' => ['domain_id' => $domain->id, 'desired_revision' => $domain->revision, 'deployments' => DnsDeploymentResource::collection($deployments)->resolve()]]);
     }
 
     public function reconcile(Request $request, Domain $domain): JsonResponse
@@ -34,6 +36,6 @@ class DnsDeploymentController extends Controller
             ReconcileDnsZone::dispatch($domain->id)->afterCommit();
         }
 
-        return response()->json(['data' => $operation], 202);
+        return response()->json(['data' => OperationResource::make($operation)->resolve()], 202);
     }
 }

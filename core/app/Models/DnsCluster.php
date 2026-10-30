@@ -25,6 +25,8 @@ class DnsCluster extends Model
         return $this->hasMany(DnsDeployment::class);
     }
 
+    protected $hidden = ['api_key'];
+
     protected function casts(): array
     {
         return [

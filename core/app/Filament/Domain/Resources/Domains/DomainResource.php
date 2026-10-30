@@ -134,7 +134,7 @@ class DomainResource extends Resource
                                 $deployment->deployed_at === null ? '' : ' · '.$deployment->deployed_at->copy()->setTimezone(app(PlatformSettings::class)->displayTimezone())->format('Y-m-d H:i:s P e'),
                             ))->all())
                         ->listWithLineBreaks()->placeholder('Not deployed'),
-                    TextEntry::make('dnsDeployments.last_error')->label('Deployment errors')->placeholder('None'),
+                    TextEntry::make('dnsDeployments.last_error')->label('Deployment errors')->placeholder('None')->visible(fn (): bool => auth()->user()?->isAdmin() === true),
                 ])->columns(['default' => 1, 'md' => 3])->collapsible(),
             Section::make(FilamentHelp::label('Cache', 'Desired cache policy, epoch-based invalidation, and temporary development bypass.'))
                 ->icon('heroicon-o-circle-stack')
