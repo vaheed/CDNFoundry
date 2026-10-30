@@ -100,6 +100,7 @@ Edit `fleet.json` and replace every example value:
 - each required `CDNF_*_IMAGE` node `extra_env` value: the matching verified
   `@sha256` reference from `release-manifest.json`;
 - `acme_email`: monitored certificate contact;
+- `alert_webhook_url`: the `https://` notifier that receives every alert and the always-firing `Watchdog`; Alertmanager refuses to start without it;
 - every `hostname`, `public_ipv4`, region, and location;
 - `public_ipv6` and `bind_ipv6` when deploying dual stack.
 

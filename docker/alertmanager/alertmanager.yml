@@ -1,5 +1,18 @@
+# Every alert goes to one webhook notifier. start.sh writes the URL to
+# /tmp/alert-webhook-url from ALERT_WEBHOOK_URL and refuses to start without it.
 route:
-  receiver: local
+  receiver: notifier
+  group_by: [alertname]
+  group_wait: 5s
+  group_interval: 1m
+  repeat_interval: 4h
+  routes:
+    # The heartbeat is repeated often so a notifier can page when it stops.
+    - matchers: [alertname = Watchdog]
+      receiver: notifier
+      repeat_interval: 1m
 receivers:
-  - name: local
-
+  - name: notifier
+    webhook_configs:
+      - url_file: /tmp/alert-webhook-url
+        send_resolved: true

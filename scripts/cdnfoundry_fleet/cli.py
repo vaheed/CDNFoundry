@@ -28,7 +28,7 @@ EXIT_STATE = 4
 EXIT_RENDER = 5
 EXIT_EXTERNAL = 6
 
-SETUP_GLOBAL_FIELDS = {"operator_domain", "platform_domain", "release", "acme_email", "ipv6"}
+SETUP_GLOBAL_FIELDS = {"operator_domain", "platform_domain", "release", "acme_email", "alert_webhook_url", "ipv6"}
 SETUP_TOP_LEVEL_FIELDS = {"preset", "global", "nodes", "features"} | SETUP_GLOBAL_FIELDS
 SETUP_FEATURE_FIELDS = {
     "monitoring": {"mode", "host"},
@@ -437,6 +437,7 @@ def _setup(args: argparse.Namespace, store: FleetState, output_dir: Path, config
                 "platform_domain": platform,
                 "release": release,
                 "acme_email": args.acme_email or global_cfg.get("acme_email", ""),
+                "alert_webhook_url": global_cfg.get("alert_webhook_url", ""),
                 "ipv6": args.dual_stack or global_cfg.get("ipv6", False),
             }
         )
@@ -654,6 +655,7 @@ def execute(args: argparse.Namespace) -> int:
                     "platform_domain": platform,
                     "release": release,
                     "acme_email": args.acme_email or values.get("acme_email", ""),
+                    "alert_webhook_url": values.get("alert_webhook_url", ""),
                     "ipv6": args.dual_stack or bool(values.get("ipv6", False)),
                 }
             )

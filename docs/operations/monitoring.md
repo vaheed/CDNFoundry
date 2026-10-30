@@ -117,9 +117,25 @@ Key alert rules are:
 | `TelemetryBufferNearLimit` | buffer over 80% of 1 GiB |
 | `TelemetryCollectorUnavailable` | Vector scrape down |
 
-The shipped Alertmanager has a local placeholder receiver. Configure a real
-receiver in deployment-specific secret/config management before relying on
-notifications.
+Alertmanager sends every alert to one webhook, `ALERT_WEBHOOK_URL`, and
+**refuses to start** when it is empty or not an `https://` URL (development sets
+`ALERT_WEBHOOK_ALLOW_HTTP=true` and points it at the `alert-sink` container).
+Prometheus also fires an always-on `Watchdog` alert that is forwarded like any
+other, repeated every minute: if your notifier stops receiving `Watchdog`, alerting is broken. Point the
+webhook at a service that pages you when `Watchdog` stops arriving.
+
+| Alert | Fires when |
+| --- | --- |
+| `Watchdog` | always |
+| `EdgeHeartbeatStale` | a registered edge has sent no heartbeat for 3 minutes; DNS still publishes it |
+| `PoolServingLastPublishedSet` | every endpoint of a pool looks unhealthy, so DNS keeps the last set |
+| `EdgeIdentityCertificateExpiring` | an edge identity certificate expires within 30 days, meaning renewal is failing |
+
+Control containers have health checks: `edge-control` (`/healthz`), `horizon`
+(`horizon:status`), and `scheduler` (`cdnf:scheduler:check`, which needs a
+heartbeat from the last 150 seconds). The edge agent (`edge-agent --healthcheck`,
+its loop ran in the last 3 minutes) and the gateway (`/healthz`) are checked too,
+so Compose restarts a hung process.
 
 ## First response
 

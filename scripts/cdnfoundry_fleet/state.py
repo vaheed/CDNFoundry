@@ -64,6 +64,14 @@ NODE_SECRET_NAMES = {
 }
 
 
+def validate_alert_webhook(value: Any) -> str:
+    """Empty is allowed in state; Alertmanager refuses to start until a notifier is set."""
+    text = str(value or "")
+    if text and not text.startswith("https://"):
+        raise ValidationError("global.alert_webhook_url must be an https:// URL")
+    return text
+
+
 class FleetState:
     def __init__(self, state_dir: Path, *, dry_run: bool = False) -> None:
         self.state_dir = state_dir.resolve()
@@ -116,6 +124,7 @@ class FleetState:
                 "platform_domain": validate_hostname(global_cfg["platform_domain"]),
                 "release": validate_release(global_cfg["release"]),
                 "acme_email": str(global_cfg.get("acme_email", "")),
+                "alert_webhook_url": validate_alert_webhook(global_cfg.get("alert_webhook_url", "")),
                 "ipv6": validate_bool(global_cfg.get("ipv6", False), "global.ipv6"),
             },
             "features": {

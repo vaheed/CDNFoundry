@@ -51,6 +51,7 @@ CDNFOUNDRY_FLEET_OUTPUT_DIR
     "platform_domain": "example.net",
     "release": "v1.2.1",
     "acme_email": "operations@example.com",
+    "alert_webhook_url": "https://alerts.example.com/cdnfoundry",
     "ipv6": false
   },
   "nodes": [],
