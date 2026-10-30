@@ -175,6 +175,17 @@ class DnsReconciliationTest extends TestCase
         $this->assertSame('succeeded', DnsDeployment::query()->firstOrFail()->status);
     }
 
+    public function test_a_deleted_domain_ends_the_job_without_retrying(): void
+    {
+        $domain = $this->domain();
+        $operation = Operation::coalesceDomain('dns.zone_reconcile', $domain->id);
+        $domain->delete();
+
+        (new ReconcileDnsZone($domain->id))->handle(app(PowerDnsClient::class));
+
+        $this->assertSame('failed', $operation->refresh()->status);
+    }
+
     public function test_the_operation_fails_only_when_the_retry_window_ends(): void
     {
         $domain = $this->domain();

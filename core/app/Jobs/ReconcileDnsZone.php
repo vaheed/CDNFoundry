@@ -61,7 +61,13 @@ class ReconcileDnsZone implements ShouldBeUniqueUntilProcessing, ShouldQueue
 
     public function handle(PowerDnsClient $client): void
     {
-        $domain = Domain::query()->findOrFail($this->domainId);
+        $domain = Domain::query()->find($this->domainId);
+        if ($domain === null) {
+            // The domain was deleted; retrying cannot help.
+            $this->operations()->update(['status' => 'failed', 'error' => 'The domain no longer exists.', 'finished_at' => now()]);
+
+            return;
+        }
         if (! in_array($domain->lifecycle_state, [DomainLifecycleState::PendingVerification, DomainLifecycleState::Active], true)) {
             $this->operations()->update(['status' => 'failed', 'error' => 'Only pending-verification or active domains can be reconciled.', 'finished_at' => now()]);
 

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Filament\Admin\Pages\SystemDnsIdentity;
 use App\Jobs\ApplyPlatformDnsSettings;
+use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\DnsCluster;
 use App\Models\Edge;
 use App\Models\EdgePool;
@@ -128,6 +129,13 @@ class SystemIdentityApiTest extends TestCase
         $this->assertSame(['A', 'AAAA', 'NS', 'SOA'], collect($deployment->active_rrsets)->pluck('type')->unique()->sort()->values()->all());
         $this->assertSame('succeeded', $operation->refresh()->status);
         $this->assertSame(1, $operation->result['targets']);
+
+        // A later revision with unchanged content keeps the zone and serial but is still acknowledged.
+        $serial = PlatformDnsSetting::query()->find(1)->soa_serial;
+        PlatformDnsSetting::query()->find(1)->update(['revision' => 5]);
+        (new ReconcilePlatformDnsIdentity)->handle(app(PowerDnsClient::class));
+        $this->assertSame(5, $deployment->refresh()->deployed_revision);
+        $this->assertSame($serial, PlatformDnsSetting::query()->find(1)->soa_serial);
     }
 
     public function test_the_platform_zone_serial_changes_exactly_when_the_content_changes(): void

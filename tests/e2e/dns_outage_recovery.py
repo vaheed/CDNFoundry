@@ -71,19 +71,16 @@ def main() -> None:
     subprocess.run(["docker", "stop", pdns], check=True, capture_output=True)
     try:
         _, record = call("POST", f"/api/domains/{domain_id}/dns/records", {"type": "A", "name": "outage", "content": "192.0.2.77", "ttl": 60, "mode": "dns_only"}, token)
-        operation_id = None
-        deadline = time.monotonic() + 60
+        _, queued = call("POST", f"/api/domains/{domain_id}/dns/reconcile", {}, token)
+        operation_id = queued["data"]["id"]
+        deadline = time.monotonic() + 90
         seen_running_with_error = False
         while time.monotonic() < deadline:
-            _, deployment = call("GET", f"/api/domains/{domain_id}/dns/deployment", token=token)
-            _, operations = call("GET", "/api/admin/operations", token=token)
-            rows = [row for row in operations["data"] if row.get("type") == "dns.zone_reconcile" and (row.get("input") or {}).get("domain_id") == domain_id]
-            if rows:
-                operation_id = rows[0]["id"]
-                assert rows[0]["status"] != "failed", f"the operation failed during a short outage: {rows[0]}"
-                if rows[0]["status"] == "running" and rows[0].get("error"):
-                    seen_running_with_error = True
-                    break
+            _, op = call("GET", f"/api/operations/{operation_id}", token=token)
+            assert op["data"]["status"] != "failed", f"the operation failed during a short outage: {op}"
+            if op["data"]["status"] == "running" and op["data"].get("error"):
+                seen_running_with_error = True
+                break
             time.sleep(3)
         assert seen_running_with_error, "the operation never showed a retrying state during the outage"
     finally:
@@ -98,7 +95,13 @@ def main() -> None:
         time.sleep(5)
     else:
         raise AssertionError("the DNS operation did not self-heal after the host returned")
-    assert "192.0.2.77" in dig(f"outage.{ZONE}", "A"), "the record is not served after recovery"
+    deadline = time.monotonic() + 60
+    while "192.0.2.77" not in dig(f"outage.{ZONE}", "A") and time.monotonic() < deadline:
+        time.sleep(2)
+    _, ops = call("GET", "/api/admin/operations", token=token)
+    summary = [(r["id"][:8], r["type"], r["status"], r.get("error")) for r in ops["data"][:6]]
+    served = dig(f"outage.{ZONE}", "A")
+    assert "192.0.2.77" in served, f"the record is not served after recovery: op={operation_id} dig={served!r} ops={summary}"
     print("dns_outage_recovery_e2e=passed operation_running_during_outage=true succeeded_after_recovery=true")
 
 

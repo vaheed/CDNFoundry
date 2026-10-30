@@ -59,6 +59,9 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
             $targets++;
             $deployment = PlatformDnsDeployment::query()->firstOrCreate(['dns_cluster_id' => $cluster->id]);
             if ($deployment->status === 'succeeded' && $deployment->active_zone === $zone && hash_equals((string) $deployment->active_checksum, $checksum)) {
+                // Unchanged content keeps its serial; the revision is still acknowledged as deployed.
+                $deployment->update(['desired_revision' => $revision, 'deployed_revision' => $revision]);
+
                 continue;
             }
             $deployment->update([

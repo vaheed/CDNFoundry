@@ -91,7 +91,25 @@ target retains its previous active RRsets.
 Administrators can reconcile one domain, all DNS zones, or the platform DNS
 identity. Global work is chunked at 500 domain IDs.
 
+A failed push is retried with backoff (10, 30, 60, 120, then 300 seconds) for up
+to 30 minutes. One reconcile runs per domain at a time and the revision is
+re-checked immediately before each target is changed, so an older revision never
+overwrites a newer one. The operation stays `running`, with the last error
+visible, until the retry window ends; only then is it `failed`.
+
 ## Drift
 
 PowerAdmin is diagnostic only. Treat direct runtime edits as drift. Reconcile
 from PostgreSQL rather than copying runtime data back into desired state.
+
+`cdnf:dns:repair-drift` runs every five minutes. For up to 100 deployments, oldest
+check first, it compares the zone each DNS target actually serves (records and
+SOA serial) with what was deployed, and what was deployed with the current
+desired state. Any difference, and any failed deployment, queues one coalesced
+reconcile and writes a `dns.drift_repair_queued` audit entry. A target that
+cannot be reached is not treated as drift. A DNS host that was down longer than
+the retry window is therefore repaired automatically once it returns.
+
+DNSdist resolves the `pdns-auth` backend again every 15 seconds, so a recreated
+PowerDNS container that receives a new address is picked up without restarting
+DNSdist.

@@ -395,6 +395,43 @@ A40, A41.
 - Every domain member can poll a coalesced operation.
 - The claim test suite covers squatting, takeover, and competing claims.
 
+**Completion gate (2026-10-31).** The four fields are recorded separately.
+
+| Field | Status | Evidence |
+| --- | --- | --- |
+| Implementation | Complete, with the deviations marked above | Commits on `dev`; replaced code is deleted. Also fixed while qualifying: DNSdist re-resolves its backend every 15 seconds (a recreated PowerDNS container kept DNSdist pinned to a dead address), and the platform zone acknowledges a revision whose content did not change |
+| Regression tests | Pass (455+ PHP tests) | `PlacementResilienceTest`, `ManagedWafTest`, `CacheKeyVectorsTest`, `CacheApiTest`, `DnsReconciliationTest` (outage, retry window, drift, deleted domain), `SystemIdentityApiTest` (serial), `OperationsApiTest`, `ErrorContractTest`, `TlsApiTest`, `ManagedTlsTest`, `DomainClaimTakeoverTest`, `DomainClaimSecurityTest`. Go: `cache_purges_test.go`. Contract: `tests/contract/test_cache_key_vectors.py` runs the same fixture as PHP against the Lua module |
+| Runtime tests | Pass for the items marked below | `phase4_runtime.py` (real OpenResty: cache-key collisions, no key for ambiguous paths, purge survives a container restart), `phase3_geo_dns.py` (ECS override through DNSdist), `dns_outage_recovery.py` (PowerDNS stopped: the operation stays `running`, then `succeeded`, record served), `uploaded_tls.py` (real OpenSSL 3.5 and OpenResty). IPv4 only |
+| Documentation | Updated | cache, DNS, domains, TLS, security and managed-WAF guides; operations and API references; configuration; CLI commands |
+| Manual browser | Not run; checklist added | `docs/manual-browser-qualification.md` ("Phase 3 — domain features regression job", and the updated claim job) |
+
+Exit items and how each was checked:
+
+| Exit item | Check |
+| --- | --- |
+| 0 domains in non-shared pools | Regression: `test_automatic_placement_never_selects_a_non_shared_pool` (40 domains) |
+| Cache-key and purge fixtures, including encoded-path collisions, in PHP and Lua | Regression (both suites, one fixture) and runtime (`phase4_runtime.py`) |
+| A cell restart does not bring back purged content | Runtime: `phase4_runtime.py` with a real container restart and the replay protocol. The agent's replay loop is covered by Go tests, not run against a live agent and cell restart |
+| A DNS host outage self-heals, the operation ends `succeeded` | Runtime: `dns_outage_recovery.py` with a roughly one-minute outage. A full 10 minutes was not run; the retry window is 30 minutes and covered by unit tests |
+| A Geo-DNS override answers a query with ECS from that country | Runtime: `phase3_geo_dns.py`. The path where DNSdist adds ECS for a resolver that sent none was not exercised with a public client address |
+| Every domain member can poll a coalesced operation | Regression only (`OperationsApiTest`) |
+| The claim suite covers squatting, takeover, and competing claims | Regression only (`DomainClaimTakeoverTest`); the real registrar delegation check is not run |
+
+Known limitations and deviations:
+
+- A request whose cache key is ambiguous passes through uncached instead of
+  being refused with `400`.
+- The platform zone serial is stored and incremented when a content checksum
+  changes; it is not the checksum itself, because a serial must increase.
+- `phase4_control_plane.py` was run and fails at the drain step after the
+  simple-anycast stage (the shared pool's test endpoints are no longer
+  published in DNS). It reached that step only after the fixes above and the
+  failure is in the PoP probe behavior delivered in Phase 2, not in a Phase 3
+  area; it needs its own follow-up. The dev PostgreSQL volume was migrated
+  forward and kept.
+- The operation receipt for a fleet rollout mirrors rollout
+  progress; paused rollouts stay `running`.
+
 ### Phase 4: Scale the runtime
 
 Fixes M2, M4, M5, M6, M7, M8, M10, A18, A20, A21, A22, A25, A32, A34, A43.
