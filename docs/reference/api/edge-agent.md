@@ -24,7 +24,7 @@ valid client certificate whose serial belongs to the enabled edge.
 | `GET` | `/config/artifacts/{checksum}` | Fetch one signed encoded artifact |
 | `GET` | `/config/full` | Fetch a bounded signed gzip recovery snapshot |
 | `POST` | `/config/applied` | Acknowledge successful sequence activation |
-| `POST` | `/config/rejected` | Record bounded rejection reason/details |
+| `POST` | `/config/rejected` | Record that one domain's artifact was rejected. The reason is a lowercase identifier; an unknown reason is stored as reported and never refused |
 | `GET` | `/tasks` | Fetch up to 100 pending/retryable tasks |
 | `POST` | `/tasks/{task}/result` | Complete or fail an assigned task |
 

@@ -1,0 +1,10 @@
+{
+  "reasons": [
+    "incompatible_artifact",
+    "signature_or_checksum_invalid",
+    "candidate_validation_failed",
+    "invalid_artifact_schema",
+    "artifact_revision_replay",
+    "artifact_unavailable"
+  ]
+}

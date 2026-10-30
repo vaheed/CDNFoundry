@@ -132,6 +132,26 @@ acknowledges the current revision there, updates DNS, waits
 
 Never delete the active source before the target is ready.
 
+## A bad artifact affects one domain
+
+The agent verifies and applies artifacts per domain. An artifact that fails
+verification, schema checks, replay checks, or compilation is rejected and
+skipped: the domain keeps its previous state, the cursor moves past it, and the
+agent reports the rejection for that domain only. Every other domain in the
+same batch still updates. If a batch fails only when its artifacts are combined
+(for example two domains claim one hostname), the agent halves the batch until
+the conflicting artifact stands alone and rejects only that one.
+
+A failure that is not about the artifact (a full disk, an unreachable control
+plane, a missing certificate key) rejects nothing. The sync fails, keeps the
+previous state, and retries. The same rules apply to a full recovery snapshot,
+so a new PoP serves every domain that compiles. Rejections are sent before the
+applied sequence. The control plane marks that domain's placement failed, shows
+the latest rejection on the edge, and clears it when the domain's next artifact
+is acknowledged. The reason list is one file shared by the agent and the control
+plane (`rejection_reasons.json`), and a refused acknowledgement is dropped
+instead of holding back the later ones.
+
 ## Recovery
 
 If the manifest gap is too large or local state is lost, the agent fetches

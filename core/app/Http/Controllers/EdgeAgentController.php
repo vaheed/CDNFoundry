@@ -23,6 +23,7 @@ use App\Models\TlsCertificate;
 use App\Support\ArtifactSigner;
 use App\Support\EdgeCertificateAuthority;
 use App\Support\EdgeKeyEnvelope;
+use App\Support\EdgeRejectionReasons;
 use App\Support\PlatformSettings;
 use App\Support\RuntimeVersions;
 use App\Support\SecurityConfig;
@@ -334,10 +335,31 @@ class EdgeAgentController extends Controller
         $updated = Edge::query()->whereKey($edge->id)->where('active_sequence', '<=', $data['sequence'])
             ->update(['active_sequence' => $data['sequence']]);
         abort_unless($updated === 1, 409, 'An edge cannot acknowledge a sequence older than its active state.');
+        $this->clearResolvedRejection($edge, $data['sequence']);
         PromoteReadyEdgePlacements::execute();
         $this->completeAcknowledgedTombstones();
 
         return response()->json(['data' => ['accepted' => true]]);
+    }
+
+    /**
+     * A rejection describes one domain. It stays on the edge until that domain
+     * has a newer artifact that the edge acknowledged.
+     */
+    private function clearResolvedRejection(Edge $edge, int $appliedSequence): void
+    {
+        $fresh = Edge::query()->findOrFail($edge->id);
+        $rejection = ($fresh->capacity ?? [])['last_rejection'] ?? null;
+        if (! is_array($rejection) || ! isset($rejection['domain_id'], $rejection['sequence'])) {
+            return;
+        }
+        $resolved = $edge->artifacts()->where('domain_id', $rejection['domain_id'])
+            ->where('sequence', '>', $rejection['sequence'])->where('sequence', '<=', $appliedSequence)->exists();
+        if ($resolved) {
+            $capacity = $fresh->capacity ?? [];
+            unset($capacity['last_rejection']);
+            $fresh->update(['capacity' => $capacity]);
+        }
     }
 
     public function rejected(Request $request): JsonResponse
@@ -345,11 +367,16 @@ class EdgeAgentController extends Controller
         $edge = $request->attributes->get('edge');
         $data = $request->validate([
             'sequence' => ['required', 'integer', 'min:1'],
-            'reason' => ['required', 'in:incompatible_artifact,signature_or_checksum_invalid,candidate_validation_failed'],
+            // An unknown reason is stored as reported, never refused: a refusal
+            // would hold back every later acknowledgement from the agent.
+            'reason' => ['required', 'string', 'regex:/^[a-z][a-z0-9_]{0,63}$/'],
             'details' => ['nullable', 'string', 'max:4000'],
         ]);
         $artifact = $edge->artifacts()->where('sequence', $data['sequence'])->firstOrFail();
-        $edge->update(['capacity' => array_merge($edge->capacity ?? [], ['last_rejection' => $data])]);
+        $edge->update(['capacity' => array_merge($edge->capacity ?? [], ['last_rejection' => [
+            ...$data, 'domain_id' => $artifact->domain_id, 'known_reason' => in_array($data['reason'], EdgeRejectionReasons::all(), true),
+            'reported_at' => now()->toIso8601String(),
+        ]])]);
         if ($artifact->domain_id !== null) {
             $message = $data['reason'].(filled($data['details'] ?? null) ? ': '.$data['details'] : '');
             DomainEdgePlacement::query()->where('domain_id', $artifact->domain_id)

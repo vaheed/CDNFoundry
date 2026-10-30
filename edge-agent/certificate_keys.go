@@ -76,7 +76,7 @@ func (c *client) keyDirectory() string { return filepath.Join(c.dir, "keys") }
 func (c *client) certificateKeys(s state) (map[string]string, error) {
 	ids, err := requiredCertificateIDs(s)
 	if err != nil {
-		return nil, err
+		return nil, candidateError{err}
 	}
 	keys := make(map[string]string, len(ids))
 	for _, id := range ids {
@@ -106,7 +106,7 @@ func (c *client) certificateKeys(s state) (map[string]string, error) {
 		}
 		key, err := openKeyEnvelope(c.id.PrivateKey, c.id.EdgeID, id, response.Data)
 		if err != nil {
-			return nil, fmt.Errorf("certificate key %s rejected: %w", id, err)
+			return nil, candidateError{fmt.Errorf("certificate key %s rejected: %w", id, err)}
 		}
 		if err := os.MkdirAll(c.keyDirectory(), 0700); err != nil {
 			return nil, err

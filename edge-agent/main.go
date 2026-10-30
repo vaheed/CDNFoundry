@@ -809,16 +809,7 @@ func (c *client) sync() error {
 		return err
 	}
 	var response struct {
-		Data []struct {
-			Sequence            uint64  `json:"sequence"`
-			Kind                string  `json:"kind"`
-			DomainID            *uint64 `json:"domain_id"`
-			Revision            uint64  `json:"revision"`
-			Checksum, Signature string
-			SchemaVersion       int    `json:"schema_version"`
-			Minimum             string `json:"minimum_agent_version"`
-			Maximum             string `json:"maximum_agent_version"`
-		} `json:"data"`
+		Data []manifestItem `json:"data"`
 	}
 	if err := c.request("GET", "/edge/v1/config/manifest?cursor="+strconv.FormatUint(current.Sequence, 10), nil, &response, true); err != nil {
 		return err
@@ -827,74 +818,38 @@ func (c *client) sync() error {
 		return c.heartbeat(current.Sequence)
 	}
 	logger.Info("runtime candidate received", "event", "runtime_candidate_received", "edge_id", c.id.EdgeID, "revision_id", response.Data[len(response.Data)-1].Sequence)
-	candidate := state{Sequence: current.Sequence, Domains: clone(current.Domains)}
+	last := current.Sequence
+	var prepared []preparedArtifact
+	var rejections []rejection
 	for _, item := range response.Data {
-		if item.Sequence <= candidate.Sequence || item.DomainID == nil || (item.Kind != "domain" && item.Kind != "tombstone") || item.SchemaVersion != 1 || !compatible(item.Minimum, item.Maximum) {
-			logger.Warn("runtime candidate rejected; previous valid state preserved", "event", "runtime_candidate_rejected", "edge_id", c.id.EdgeID, "revision_id", item.Sequence, "error_code", "incompatible_artifact")
-			c.queueAck(ack{Sequence: item.Sequence, Rejected: true, Reason: "incompatible_artifact"})
-			return nil
+		if item.Sequence > last {
+			last = item.Sequence
 		}
-		var artifact struct {
-			Encoded           string `json:"encoded_payload"`
-			ExpiresAt         int64  `json:"expires_at"`
-			DeliverySignature string `json:"delivery_signature"`
-			Data              struct {
-				Sequence uint64 `json:"sequence"`
-			} `json:"data"`
-		}
-		if err := c.request("GET", "/edge/v1/config/artifacts/"+item.Checksum, nil, &artifact, true); err != nil {
+		artifact, rejected, err := c.prepareArtifact(item, current.Sequence)
+		if err != nil {
 			return err
 		}
-		payload, err := verify(artifact.Encoded, item.Checksum, item.Signature, c.id.PublicKey)
-		if err == nil && artifact.Data.Sequence != item.Sequence {
-			err = errors.New("artifact sequence mismatch")
+		if rejected != nil {
+			rejections = append(rejections, *rejected)
+			continue
 		}
-		if err == nil {
-			err = verifyDelivery(item.Checksum, item.Sequence, artifact.ExpiresAt, artifact.DeliverySignature, c.id.PublicKey)
-		}
-		if err != nil {
-			logger.Warn("runtime candidate rejected; previous valid state preserved", "event", "runtime_candidate_rejected", "edge_id", c.id.EdgeID, "revision_id", item.Sequence, "error_code", "signature_or_checksum_invalid")
-			c.queueAck(ack{Sequence: item.Sequence, Rejected: true, Reason: "signature_or_checksum_invalid", Details: err.Error()})
-			return nil
-		}
-		if item.DomainID != nil {
-			key := strconv.FormatUint(*item.DomainID, 10)
-			var metadata struct {
-				SchemaVersion int    `json:"schema_version"`
-				DomainID      uint64 `json:"domain_id"`
-				Revision      uint64 `json:"revision"`
-			}
-			if err := json.Unmarshal(payload, &metadata); err != nil || metadata.Revision != item.Revision ||
-				(item.Kind == "domain" && (metadata.SchemaVersion != 1 || metadata.DomainID != *item.DomainID)) {
-				c.queueAck(ack{Sequence: item.Sequence, Rejected: true, Reason: "invalid_artifact_schema"})
-				return nil
-			}
-			if previous := candidate.Domains[key]; previous != nil {
-				var active struct {
-					Revision uint64 `json:"revision"`
-				}
-				if json.Unmarshal(previous, &active) != nil || metadata.Revision < active.Revision {
-					c.queueAck(ack{Sequence: item.Sequence, Rejected: true, Reason: "artifact_revision_replay"})
-					return nil
-				}
-			}
-			if item.Kind == "tombstone" {
-				delete(candidate.Domains, key)
-			} else {
-				candidate.Domains[key] = payload
-			}
-		}
-		candidate.Sequence = item.Sequence
+		prepared = append(prepared, artifact)
 	}
-	if err := c.activate(candidate); err != nil {
-		logger.Error("runtime candidate rejected; previous valid state preserved", "event", "runtime_activation_failed", "edge_id", c.id.EdgeID, "revision_id", candidate.Sequence, "error_code", "candidate_validation_failed", "error", err.Error())
-		c.queueAck(ack{Sequence: candidate.Sequence, Rejected: true, Reason: "candidate_validation_failed", Details: err.Error()})
-		return nil
+	applied, more, err := c.applyArtifacts(current, prepared, last)
+	if err != nil {
+		return err
 	}
-	c.queueAck(ack{Sequence: candidate.Sequence})
-	logger.Info("runtime candidate activated", "event", "runtime_candidate_activated", "edge_id", c.id.EdgeID, "revision_id", candidate.Sequence)
+	rejections = append(rejections, more...)
+	sortRejections(rejections)
+	// Rejections are queued before the applied sequence so the control plane
+	// marks those domains failed before it counts the sequence as applied.
+	for _, item := range rejections {
+		c.queueAck(ack{Sequence: item.Sequence, Rejected: true, Reason: item.Reason, Details: item.Details})
+	}
+	c.queueAck(ack{Sequence: applied.Sequence})
+	logger.Info("runtime candidate activated", "event", "runtime_candidate_activated", "edge_id", c.id.EdgeID, "revision_id", applied.Sequence, "rejected_artifacts", len(rejections))
 	_ = c.flushAcks()
-	return c.heartbeat(candidate.Sequence)
+	return c.heartbeat(applied.Sequence)
 }
 
 func (c *client) activeStatePath() string {
@@ -1120,20 +1075,46 @@ func (c *client) full() error {
 	if snapshot.SchemaVersion != 1 || !compatible(snapshot.Minimum, snapshot.Maximum) {
 		return errors.New("full snapshot is incompatible")
 	}
-	next := state{Domains: map[string]json.RawMessage{}}
+	var prepared []preparedArtifact
+	var rejections []rejection
+	var last uint64
 	for _, a := range snapshot.Artifacts {
-		if a.Sequence > next.Sequence {
-			next.Sequence = a.Sequence
+		if a.Sequence > last {
+			last = a.Sequence
 		}
-		if a.DomainID != nil && a.Kind != "tombstone" {
-			next.Domains[strconv.FormatUint(*a.DomainID, 10)] = a.Payload
+		if a.DomainID == nil || a.Kind == "tombstone" {
+			continue
 		}
+		key := strconv.FormatUint(*a.DomainID, 10)
+		// One domain that cannot compile must not stop a new PoP from serving
+		// every other domain.
+		if _, _, err := compileRuntime(state{Sequence: a.Sequence, Domains: map[string]json.RawMessage{key: a.Payload}}, nil); err != nil {
+			logger.Warn("snapshot artifact rejected; the domain is skipped", "event", "runtime_candidate_rejected", "edge_id", c.id.EdgeID, "revision_id", a.Sequence, "error_code", reasonCandidateValidation)
+			rejections = append(rejections, rejection{Sequence: a.Sequence, Reason: reasonCandidateValidation, Details: err.Error()})
+			continue
+		}
+		prepared = append(prepared, preparedArtifact{Sequence: a.Sequence, Kind: "domain", DomainKey: key, Payload: a.Payload})
 	}
-	if next.Sequence != response.Sequence {
+	if last != response.Sequence {
 		return errors.New("full snapshot sequence mismatch")
 	}
-	if err := c.activate(next); err != nil {
-		return err
+	next := state{Sequence: last, Domains: map[string]json.RawMessage{}}
+	if len(prepared) == 0 {
+		// An empty snapshot still activates the bootstrap generation.
+		if err := c.activate(next); err != nil {
+			return err
+		}
+	} else {
+		applied, more, err := c.applyArtifacts(state{Domains: map[string]json.RawMessage{}}, prepared, last)
+		if err != nil {
+			return err
+		}
+		next = applied
+		rejections = append(rejections, more...)
+	}
+	sortRejections(rejections)
+	for _, item := range rejections {
+		c.queueAck(ack{Sequence: item.Sequence, Rejected: true, Reason: item.Reason, Details: item.Details})
 	}
 	c.queueAck(ack{Sequence: next.Sequence})
 	return c.flushAcks()
@@ -1163,7 +1144,7 @@ func (c *client) activateWithKeys(s state, keys map[string]string) error {
 			}
 			runtime, pools, err := compileRuntime(s, keys)
 			if err != nil {
-				return err
+				return candidateError{err}
 			}
 			runtime["generation_id"] = generationID
 			for _, poolRuntime := range pools {
@@ -1215,7 +1196,7 @@ func (c *client) activateWithKeys(s state, keys map[string]string) error {
 	}
 	runtime, pools, err := compileRuntime(s, keys)
 	if err != nil {
-		return err
+		return candidateError{err}
 	}
 	active, previous := filepath.Join(c.dir, "active"), filepath.Join(c.dir, "previous")
 	os.RemoveAll(previous)
@@ -1859,6 +1840,13 @@ func (c *client) flushAcks() error {
 			body = map[string]any{"sequence": a.Sequence, "reason": a.Reason, "details": a.Details}
 		}
 		if e = c.request("POST", path, body, &map[string]any{}, true); e != nil {
+			// An acknowledgement the control plane refuses for good must not
+			// hold back every later one.
+			var status *httpStatusError
+			if errors.As(e, &status) && status.permanent() {
+				logger.Warn("edge acknowledgement refused and dropped", "event", "edge_ack_dropped", "edge_id", c.id.EdgeID, "revision_id", a.Sequence, "error_code", "edge_ack_refused", "error", e.Error())
+				continue
+			}
 			_ = atomicJSON(p, q[i:])
 			return e
 		}
@@ -1899,7 +1887,7 @@ func (c *client) requestLimit(method, path string, body any, out any, auth bool,
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
-		return fmt.Errorf("%s: %s", res.Status, string(b))
+		return &httpStatusError{Status: res.Status, Code: res.StatusCode, Body: string(b)}
 	}
 	return json.NewDecoder(io.LimitReader(res.Body, responseLimit)).Decode(out)
 }
