@@ -409,6 +409,7 @@ services:
       CLICKHOUSE_ENDPOINT: ${CLICKHOUSE_URL:?CLICKHOUSE_URL is required}
       CLICKHOUSE_USER: cdnf_ingest
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_INGEST_PASSWORD:?CLICKHOUSE_INGEST_PASSWORD is required}
+      EDGE_STATUS_TOKEN: ${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}
     volumes:
       - ./docker/vector/vector.yaml:/etc/vector/vector.yaml:ro
       - vector-data:/vector-data-dir

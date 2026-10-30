@@ -7,7 +7,10 @@ ffi.cdef[[
 int kill(int pid, int sig);
 int inet_pton(int af, const char *src, void *dst);
 ]]
+local resty_sha256 = require "resty.sha256"
+local resty_string = require "resty.string"
 local M = {}
+local telemetry_proof
 local state = { hosts = {}, certificates = {}, sequence = 0, generation_id = "bootstrap" }
 local path = os.getenv("EDGE_RUNTIME_FILE") or "/var/lib/cdnfoundry/runtime/active.json"
 local restart_generation = 0
@@ -496,7 +499,20 @@ local function request_body_safety(config)
     end
 end
 
+-- Proves to the local Vector that an access-log line came from this cell. Other
+-- containers on the cell network do not hold the node secret, so Vector drops
+-- any event they forge.
+local function telemetry_proof_value()
+    if telemetry_proof == nil then
+        local digest = resty_sha256:new()
+        digest:update("cdnf-telemetry-v1|" .. (os.getenv("EDGE_STATUS_TOKEN") or ""))
+        telemetry_proof = resty_string.to_hex(digest:final())
+    end
+    return telemetry_proof
+end
+
 function M.access()
+    ngx.var.cdn_telemetry_proof = telemetry_proof_value()
     local dictionary = ngx.shared.runtime_limits
     dictionary:incr("capacity:requests:" .. ngx.time(), 1, 0, 2)
     if dictionary:get("control:drained") == true then return security_reject(503, "edge_emergency_mode") end
@@ -636,6 +652,7 @@ function M.access()
 end
 
 function M.invalid_method()
+    ngx.var.cdn_telemetry_proof = telemetry_proof_value()
     return security_reject(405, ngx.var.cdn_security_reason ~= "" and ngx.var.cdn_security_reason or "invalid_method")
 end
 

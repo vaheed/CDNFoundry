@@ -10,10 +10,20 @@ sources:
     type: http_server
     address: 0.0.0.0:8686
     decoding: { codec: json }
+    auth:
+      strategy: custom
+      source: |
+        # Cells and DNS nodes present this node's secret; nothing else may post events.
+        .headers.authorization == "Basic " + encode_base64("cdnf:" + get_env_var!("EDGE_STATUS_TOKEN"))
   dns_events:
     type: http_server
     address: 0.0.0.0:8687
     decoding: { codec: json }
+    auth:
+      strategy: custom
+      source: |
+        # Cells and DNS nodes present this node's secret; nothing else may post events.
+        .headers.authorization == "Basic " + encode_base64("cdnf:" + get_env_var!("EDGE_STATUS_TOKEN"))
   dns_dnstap:
     type: dnstap
     address: 0.0.0.0:6000
@@ -32,6 +42,11 @@ transforms:
     source: |
       envelope = parse_regex!(to_string!(.message), r'(?P<payload>\{.*\})$')
       . = parse_json!(envelope.payload)
+      # Only this node's cells hold the node secret; drop lines other containers forge.
+      expected_proof = sha2!("cdnf-telemetry-v1|" + get_env_var!("EDGE_STATUS_TOKEN"), variant: "SHA-256")
+      presented_proof = string(.telemetry_proof) ?? ""
+      if presented_proof != expected_proof { abort }
+      del(.telemetry_proof)
   safe_edge_events:
     type: remap
     inputs: [edge_events, decoded_edge_syslog]
@@ -194,6 +209,13 @@ sinks:
     address: 0.0.0.0:9598
 
 tests:
+  - name: drop_syslog_events_without_the_node_proof
+    inputs:
+      - insert_at: decoded_edge_syslog
+        type: log
+        log_fields:
+          message: '<190>cdnfoundry_edge: {"domain_id":7,"telemetry_proof":"forged"}'
+    no_outputs_from: [decoded_edge_syslog]
   - name: redact_referrer_query_before_billing_buffer
     inputs:
       - insert_at: safe_edge_events

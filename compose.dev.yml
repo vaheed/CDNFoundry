@@ -327,6 +327,7 @@ services:
       CLICKHOUSE_ENDPOINT: http://clickhouse:8123
       CLICKHOUSE_USER: cdnf_ingest
       CLICKHOUSE_PASSWORD: cdnf-ingest-dev-only
+      EDGE_STATUS_TOKEN: ${CDNF_DEV_EDGE_STATUS_TOKEN:-cdnf-dev-edge-status-only}
     volumes:
       - ./docker/vector/vector.yaml:/etc/vector/vector.yaml:ro
       - vector-data:/vector-data-dir

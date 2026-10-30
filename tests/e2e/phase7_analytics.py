@@ -2,6 +2,7 @@
 """Real Phase 7 telemetry, analytics, outage, privacy, and usage qualification."""
 
 import datetime as dt
+import base64
 import json
 import os
 import pathlib
@@ -131,6 +132,7 @@ def restart_vector(reconnect_sources: bool = False) -> None:
 def vector_event(port: int, event: dict[str, object]) -> None:
     compose(
         "exec", "-T", "vector", "wget", "-qO-", "--header", "Content-Type: application/json",
+        "--header", "Authorization: Basic " + base64.b64encode(b"cdnf:" + os.environ.get("CDNF_DEV_EDGE_STATUS_TOKEN", "cdnf-dev-edge-status-only").encode()).decode(),
         "--post-data", json.dumps(event, separators=(",", ":")), f"http://127.0.0.1:{port}/",
     )
 

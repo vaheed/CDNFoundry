@@ -26,8 +26,9 @@ flowchart LR
 | Raw logs | Domain/admin scoped, maximum 24-hour query |
 | Aggregates | Bounded analytics, maximum 90-day query |
 | Usage | Compact PostgreSQL rows for stable export |
-| Client address | IPv4/IPv6 masking applied |
-| Sensitive fields | Authorization, cookies, bodies, and query strings removed |
+| Client address | Stored in full in raw events for seven days; API, export, and UI reads mask it to the platform prefix. Hourly and daily rollups contain no client address or user agent |
+| Sensitive fields | Authorization, cookies, bodies, request query strings, and referrer query strings are removed before storage |
+| Ingest authenticity | Vector accepts edge events only with the node secret (HTTP `Authorization`, or the proof every cell adds to its access-log line). Forged events are dropped |
 
 ::: warning Analytics is not authoritative
 ClickHouse loss can create partial intervals, but it cannot change DNS, edge
@@ -83,8 +84,17 @@ shows the outage instead of failing the serving plane.
 
 Vector strips authorization, cookies, request bodies, and query strings.
 Paths, user agents, referrers, errors, names, and addresses are length bounded.
-Normal views and exports mask client addresses using the platform IPv4 and IPv6
-prefix settings.
+Raw events keep the full client address and user agent for the seven-day TTL;
+normal views and exports mask client addresses using the platform IPv4 and
+IPv6 prefix settings. Long-lived rollups never hold either field.
+
+### DNS log ownership
+
+DNS events carry the queried zone, not a domain id. A domain user sees queries
+for their own zone and its subdomains, except names under another registered
+domain (including deleted ones), and only from the moment the current domain
+record was created. A new owner of a name never sees the previous owner's
+queries, and a parent zone never sees a child domain's queries.
 
 Raw ClickHouse tables have a seven-day TTL. Hourly aggregates have a 400-day
 TTL and daily aggregates a three-year TTL in the shipped schema. Platform

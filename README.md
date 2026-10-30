@@ -69,7 +69,7 @@ tradeoffs against a managed CDN.
   mode, stale policy, URL purge tasks, and epoch-based full purge.
 - **Application security:** ordered IP/CIDR/geography rules, bounded profiles,
   target readiness, quarantine, and expiring emergency controls.
-- **Direct telemetry:** Vector sends redacted DNS and edge events directly to
+- **Direct telemetry:** Vector sends DNS and edge events (query strings, cookies, and bodies removed) directly to
   ClickHouse; analytics failure cannot block serving.
 - **Operational recovery:** explicit migrations, immutable images, health and
   readiness, four queue lanes, optional Restic backup/restore, runbooks, and
