@@ -2,7 +2,9 @@
 
 namespace App\Jobs;
 
+use App\Actions\EvaluateEndpointPublication;
 use App\Models\DnsCluster;
+use App\Models\EdgePoolEndpoint;
 use App\Models\Operation;
 use App\Models\PlatformDnsDeployment;
 use App\Models\PlatformDnsSetting;
@@ -106,6 +108,19 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
     public function uniqueId(): string
     {
         return 'platform-dns-identity';
+    }
+
+    /**
+     * Probe results arrive every few seconds. Re-render only when they change
+     * what DNS would publish, so a healthy fleet does not bump the zone serial.
+     */
+    public static function dispatchForProbeChange(): void
+    {
+        $before = EdgePoolEndpoint::query()->orderBy('id')->pluck('dns_published', 'id')->all();
+        EvaluateEndpointPublication::execute();
+        if (EdgePoolEndpoint::query()->orderBy('id')->pluck('dns_published', 'id')->all() !== $before) {
+            self::dispatchForRoutingChange();
+        }
     }
 
     public static function dispatchForRoutingChange(): void

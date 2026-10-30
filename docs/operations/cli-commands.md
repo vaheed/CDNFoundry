@@ -84,6 +84,7 @@ docker compose --env-file .env.prod -f compose.prod.yml exec core php artisan cd
 | `cdnf:edge:complete-placement-drains {--limit=100}` | Promotes ready target pools after DNS drain, advances desired revisions, records audit events, and queues edge reconciliation. Limit is clamped to 1–1,000. | Every minute |
 | `cdnf:edge:dispatch-origin-checks {--limit=100}` | Dispatches a jittered, bounded batch of explicitly enabled origin checks. Limit is clamped to 1–500 and at most five checks are selected per domain. | Every minute |
 | `cdnf:edge:prune-revisions {--limit=1000}` | Permanently removes expired derived edge revisions and artifacts while retaining active and rollback-protected state. Limit is clamped to 1–10,000. | Daily at 02:30 |
+| `cdnf:scheduler:check {--max-age=150}` | Exits non-zero unless the scheduler recorded its heartbeat within the allowed seconds. Used as the scheduler container health check. | Every 30 seconds by Compose |
 | `cdnf:edge:promote-placements {--chunk=100} {--chunks=50}` | Promotes deploying placements whose healthy PoPs have acknowledged (the quorum), paging through every deploying placement in chunks. A PoP that has not acknowledged within the promotion grace window stops counting and catches up on its own. | Every minute |
 | `cdnf:edge:reconcile-stale-placements {--limit=100}` | Requeues interrupted stale placement deployments so they converge. Limit is clamped to 1–1,000. | Every minute |
 

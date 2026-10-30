@@ -105,6 +105,18 @@ protocol routes, or a size over 32 MiB.
 
 The gateway sends PROXY protocol version 2 to private cell ports `8081` and `8444`.
 This is the trusted client-identity contract for HTTP and encrypted HTTPS.
+Cells honor the PROXY header only from the networks in
+`EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS` (production Compose passes the fixed `edge`
+network, `EDGE_NETWORK_SUBNET`, default `172.29.250.0/24`); a header from any
+other peer is ignored and that peer keeps its own address. With the variable
+empty, no peer is trusted. The client address then reaches the origin in
+`X-Forwarded-For` and `Forwarded` (IPv6 quoted and bracketed), set only by the
+cell from that address. A client-supplied `X-Forwarded-For`, `Forwarded`, or
+internal `X-CDN-Client-Address` header never reaches the origin. A domain that
+sits behind its own trusted proxies lists them as `trusted_proxy_cidrs`; only
+then is `X-Forwarded-For` read, from the right, stopping at the first address
+that is not a trusted proxy. The gateway forwards every byte it buffered after
+the HTTP headers, so POST bodies on port 80 are not delayed.
 Cell ports `8080` and `8443` are not published. All customer traffic is forced
 through the gateway and reaches cells only on the private contract ports.
 

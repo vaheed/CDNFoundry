@@ -86,6 +86,7 @@ type client struct {
 	http                               *http.Client
 	id                                 identity
 	generationMismatches               generationMismatchTracker
+	renewalRetryAt                     time.Time
 }
 type manifest struct {
 	Sequence                              uint64  `json:"sequence"`
@@ -98,6 +99,9 @@ func main() {
 	if len(os.Args) == 2 && os.Args[1] == "--version" {
 		fmt.Println(version)
 		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == "--healthcheck" {
+		os.Exit(healthcheck(env("EDGE_STATE_DIR", "/var/lib/cdnfoundry/agent")))
 	}
 	c := &client{
 		base: strings.TrimRight(required("EDGE_CONTROL_URL"), "/"), dir: env("EDGE_STATE_DIR", "/var/lib/cdnfoundry/agent"),
@@ -177,9 +181,18 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 	once := env("EDGE_ONCE", "false") == "true"
+	if !once {
+		go c.probeLoop(ctx)
+	}
 	var lastFailure string
 	var lastFailureAt time.Time
 	for {
+		// Liveness is the loop itself. An unreachable control plane must not
+		// restart the agent, but a hung loop must.
+		touchLiveness(c.dir)
+		if err := c.renewIdentityIfDue(time.Now()); err != nil {
+			logger.Error("edge identity renewal failed", "event", "edge_identity_renewal_failed", "edge_id", c.id.EdgeID, "error_code", "edge_identity_renewal_failed", "error", err.Error())
+		}
 		if err := c.sync(); err != nil {
 			if err.Error() != lastFailure || time.Since(lastFailureAt) >= time.Minute {
 				logger.Error("edge synchronization failed", "event", "edge_sync_failed", "edge_id", c.id.EdgeID, "error_code", "edge_sync_failed", "error", err.Error())
@@ -787,6 +800,10 @@ func (c *client) configureMutualTLS() error {
 		transport.TLSClientConfig = transport.TLSClientConfig.Clone()
 	}
 	transport.TLSClientConfig.Certificates = []tls.Certificate{certificate}
+	if previous, ok := c.http.Transport.(*http.Transport); ok {
+		// Connections opened with the previous certificate must not outlive it.
+		previous.CloseIdleConnections()
+	}
 	c.http.Transport = transport
 	return nil
 }
@@ -1623,6 +1640,9 @@ func (c *client) heartbeat(sequence uint64) error {
 	}
 	if versions := runtimeVersions(); len(versions) == 4 {
 		payload["runtime_versions"] = versions
+	}
+	if _, notAfter, err := c.identityValidity(); err == nil {
+		payload["identity_expires_at"] = notAfter.Unix()
 	}
 	return c.request("POST", "/edge/v1/heartbeat", payload, &map[string]any{}, true)
 }

@@ -107,6 +107,20 @@ Start the role explicitly with
 not inspect enrollment state or edit `.env.prod`. Always keep the agent state
 volume.
 
+## Identity renewal
+
+Edge identity certificates last `EDGE_IDENTITY_VALIDITY_DAYS` (default 365). At
+two thirds of that lifetime the agent generates a new key, asks
+`POST /edge/v1/identity/renew` over mTLS for a certificate, and authenticates
+once with it. Until then control accepts both the old and the new certificate;
+the first successful use makes the new one current and the old one invalid. The
+agent stores the new identity only after that proof, resumes an unfinished
+renewal after a restart, and retries a failed one every 10 minutes. The
+heartbeat reports the expiry of the certificate in use, and
+`EdgeIdentityCertificateExpiring` fires 30 days before it if renewal keeps
+failing. A PoP whose certificate has already expired needs a new bootstrap
+token.
+
 ## Promotion by quorum
 
 A new placement is promoted when the healthy participating PoPs have

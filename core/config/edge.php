@@ -5,4 +5,6 @@ return [
     'identity_ca_certificate' => env('EDGE_IDENTITY_CA_CERTIFICATE', '/run/secrets/edge-identity-ca.crt'),
     'identity_ca_private_key' => env('EDGE_IDENTITY_CA_PRIVATE_KEY', '/run/secrets/edge-identity-ca.key'),
     'identity_ca_private_key_passphrase' => env('EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE', ''),
+    // Edge identity certificates are renewed over mTLS at two thirds of this lifetime.
+    'identity_validity_days' => max(2, min(3650, (int) env('EDGE_IDENTITY_VALIDITY_DAYS', 365))),
 ];

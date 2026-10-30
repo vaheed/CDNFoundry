@@ -15,6 +15,7 @@ use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
 use App\Models\EdgeArtifact;
 use App\Models\EdgePoolEndpoint;
+use App\Models\EdgeProbeResult;
 use App\Models\EdgeTask;
 use App\Models\FleetRolloutEdge;
 use App\Models\Operation;
@@ -59,6 +60,51 @@ class EdgeAgentController extends Controller
         );
 
         return response()->json(['data' => ['revision' => $revision, 'bindings' => $bindings]]);
+    }
+
+    /** The listeners this PoP should probe from the outside: every other PoP's own addresses. */
+    public function probeTargets(Request $request): JsonResponse
+    {
+        /** @var Edge $edge */
+        $edge = $request->attributes->get('edge');
+        $targets = EdgePoolEndpoint::query()->with('edge')->where('edge_id', '!=', $edge->id)->where('withdrawn', false)
+            ->whereHas('edge', fn ($query) => $query->where('enabled', true)->whereNotNull('registered_at')->whereNull('identity_revoked_at'))
+            ->orderBy('id')->limit(256)->get()
+            ->flatMap(fn (EdgePoolEndpoint $endpoint): array => collect([$endpoint->ipv4, $endpoint->ipv6])->filter()
+                ->map(fn (string $address): array => ['edge_id' => $endpoint->edge_id, 'address' => $address])->all())
+            ->unique(fn (array $target): string => $target['edge_id'].'|'.$target['address'])->take(128)->values();
+
+        return response()->json(['data' => ['targets' => $targets, 'ports' => ['http' => 80, 'tls' => 443]]]);
+    }
+
+    public function probeResults(Request $request): JsonResponse
+    {
+        /** @var Edge $edge */
+        $edge = $request->attributes->get('edge');
+        $data = $request->validate([
+            'results' => ['required', 'array', 'max:128'],
+            'results.*.edge_id' => ['required', 'uuid'],
+            'results.*.address' => ['required', 'ip'],
+            'results.*.ok' => ['required', 'boolean'],
+            'results.*.detail' => ['nullable', 'string', 'max:120'],
+        ]);
+        $known = EdgePoolEndpoint::query()->where('edge_id', '!=', $edge->id)->get(['edge_id', 'ipv4', 'ipv6'])
+            ->flatMap(fn (EdgePoolEndpoint $endpoint): array => collect([$endpoint->ipv4, $endpoint->ipv6])->filter()->map(fn (string $address): string => $endpoint->edge_id.'|'.$address)->all())
+            ->flip();
+        $accepted = 0;
+        foreach ($data['results'] as $result) {
+            if (! $known->has($result['edge_id'].'|'.$result['address'])) {
+                continue;
+            }
+            EdgeProbeResult::query()->updateOrCreate(
+                ['observer_edge_id' => $edge->id, 'target_edge_id' => $result['edge_id'], 'address' => $result['address']],
+                ['ok' => $result['ok'], 'detail' => $result['detail'] ?? null, 'checked_at' => now()],
+            );
+            $accepted++;
+        }
+        ReconcilePlatformDnsIdentity::dispatchForProbeChange();
+
+        return response()->json(['data' => ['accepted' => $accepted]]);
     }
 
     public function register(Request $request): JsonResponse
@@ -119,6 +165,40 @@ class EdgeAgentController extends Controller
         return response()->json(['data' => $identity], 201);
     }
 
+    /**
+     * Sign a new identity certificate for an authenticated edge. The current
+     * certificate stays valid; the new one becomes current the first time the
+     * edge authenticates with it.
+     */
+    public function renewIdentity(Request $request): JsonResponse
+    {
+        /** @var Edge $edge */
+        $edge = $request->attributes->get('edge');
+        $data = $request->validate(['certificate_request' => ['required', 'string', 'max:8192']]);
+        $identity = DB::transaction(function () use ($edge, $data): array {
+            $locked = Edge::query()->lockForUpdate()->findOrFail($edge->id);
+            $csrHash = hash('sha256', $data['certificate_request']);
+            if ($locked->pending_identity_certificate !== null && hash_equals((string) $locked->pending_identity_csr_hash, $csrHash)
+                && $locked->pending_identity_certificate_expires_at?->isFuture()) {
+                return ['identity_certificate' => $locked->pending_identity_certificate, 'identity_certificate_serial' => $locked->pending_identity_certificate_serial,
+                    'identity_certificate_expires_at' => $locked->pending_identity_certificate_expires_at->toIso8601String()];
+            }
+            try {
+                $signed = EdgeCertificateAuthority::sign($data['certificate_request'], $locked->id);
+            } catch (RuntimeException $exception) {
+                throw ValidationException::withMessages(['certificate_request' => $exception->getMessage()]);
+            }
+            $locked->update([
+                'pending_identity_certificate' => $signed['certificate'], 'pending_identity_certificate_serial' => $signed['serial'],
+                'pending_identity_certificate_expires_at' => CarbonImmutable::parse($signed['expires_at']), 'pending_identity_csr_hash' => $csrHash,
+            ]);
+
+            return ['identity_certificate' => $signed['certificate'], 'identity_certificate_serial' => $signed['serial'], 'identity_certificate_expires_at' => $signed['expires_at']];
+        });
+
+        return response()->json(['data' => $identity], 201);
+    }
+
     public function heartbeat(Request $request): JsonResponse
     {
         $edge = $request->attributes->get('edge');
@@ -130,6 +210,7 @@ class EdgeAgentController extends Controller
             'runtime_versions.normal_cell' => ['required_with:runtime_versions', 'string', 'max:255'],
             'runtime_versions.waf_cell' => ['required_with:runtime_versions', 'string', 'max:255'],
             'active_sequence' => ['required', 'integer', 'min:0'], 'cells' => ['required', 'array', 'max:32'],
+            'identity_expires_at' => ['sometimes', 'integer', 'min:0'],
             'gateway' => ['sometimes', 'array', 'max:12'],
             'gateway.ready' => ['required_with:gateway', 'boolean'],
             'gateway.active_revision' => ['sometimes', 'integer', 'min:0'],
@@ -183,6 +264,7 @@ class EdgeAgentController extends Controller
         $listenerReady = $data['listener_ready'] && $computedReady;
         $edge->update([
             'last_heartbeat_at' => now(), 'agent_version' => $data['agent_version'],
+            ...(isset($data['identity_expires_at']) ? ['reported_identity_expires_at' => CarbonImmutable::createFromTimestamp($data['identity_expires_at'])] : []),
             // Evaluate against the durable row, not the middleware's stale model.
             'active_sequence' => DB::raw('CASE WHEN active_sequence < '.(int) $data['active_sequence'].' THEN '.(int) $data['active_sequence'].' ELSE active_sequence END'),
             'bootstrap_token_hash' => null, 'bootstrap_consumed_at' => null,

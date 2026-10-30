@@ -10,7 +10,10 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('edge/v1')->middleware('api')->group(function (): void {
     Route::post('/register', [EdgeAgentController::class, 'register'])->middleware('throttle:edge-register');
     Route::middleware(['edge.auth', 'throttle:edge-agent'])->group(function (): void {
+        Route::post('/identity/renew', [EdgeAgentController::class, 'renewIdentity']);
         Route::post('/heartbeat', [EdgeAgentController::class, 'heartbeat']);
+        Route::get('/probes/targets', [EdgeAgentController::class, 'probeTargets']);
+        Route::post('/probes', [EdgeAgentController::class, 'probeResults']);
         Route::get('/gateway/config', [EdgeAgentController::class, 'gatewayConfig']);
         Route::get('/config/manifest', [EdgeAgentController::class, 'manifest']);
         Route::get('/config/artifacts/{checksum}', [EdgeAgentController::class, 'artifact']);

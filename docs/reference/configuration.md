@@ -350,3 +350,10 @@ backup at 3700 seconds), or a job that is still running is delivered a second
 time. `make config-check` runs `QueueTimingContractTest` to enforce this. A job
 whose worker dies without cleanup is redelivered after this interval, and the
 scheduled repair jobs cover the gap.
+
+`ALERT_WEBHOOK_URL` is required on the host that runs Alertmanager. It must be
+an `https://` URL; `ALERT_WEBHOOK_ALLOW_HTTP=true` permits `http://` for
+development. `EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS` (cells) lists the networks
+whose PROXY protocol headers are honored; production Compose derives it from
+`EDGE_NETWORK_SUBNET`. `EDGE_IDENTITY_VALIDITY_DAYS` (control, 2–3650, default
+365) sets the lifetime of newly signed edge identity certificates.

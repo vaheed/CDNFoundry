@@ -19,6 +19,9 @@ valid client certificate whose serial belongs to the enabled edge.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `POST` | `/register` | Exchange edge UUID, one-time token, version, and CSR for identity |
+| `POST` | `/identity/renew` | Exchange a CSR (common name = edge ID) for a renewed identity certificate. It becomes current on its first authenticated use |
+| `GET` | `/probes/targets` | List the other PoPs' endpoint addresses to probe on ports 80 and 443 |
+| `POST` | `/probes` | Report up to 128 probe results; results for unknown targets are ignored |
 | `POST` | `/heartbeat` | Report sequence, listener readiness, bounded gateway/cell capacity, origin health, and security |
 | `GET` | `/config/manifest?cursor=` | Fetch up to 500 newer artifact descriptors |
 | `GET` | `/config/artifacts/{checksum}` | Fetch one signed encoded artifact |

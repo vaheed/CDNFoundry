@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Actions\EvaluateEndpointPublication;
 use App\Models\EdgePool;
 use App\Models\EdgePoolEndpoint;
 use App\Models\PlatformDnsSetting;
@@ -11,6 +12,7 @@ final class PlatformDnsZone
     /** @return list<array{name:string,type:string,ttl:int,records:list<array{content:string,disabled:bool}>}> */
     public static function render(PlatformDnsSetting $settings): array
     {
+        EvaluateEndpointPublication::execute();
         $zone = rtrim($settings->platform_domain, '.').'.';
         $rows = collect([[
             'name' => $zone,
@@ -42,8 +44,7 @@ final class PlatformDnsZone
         $defaultSharedPool = EdgePool::defaultShared();
         foreach (EdgePool::query()->where('enabled', true)->where('withdrawn', false)->orderBy('id')->get() as $pool) {
             $configuredEndpoints = EdgePoolEndpoint::query()->with(['edge', 'pool'])->where('edge_pool_id', $pool->id)->orderBy('edge_id')->get();
-            $endpoints = $configuredEndpoints->where('withdrawn', false)
-                ->filter(fn (EdgePoolEndpoint $endpoint): bool => $endpoint->isReady())->values();
+            $endpoints = $configuredEndpoints->where('withdrawn', false)->where('dns_published', true)->values();
             if ($endpoints->isNotEmpty()) {
                 if ($pool->isSimpleAnycast()) {
                     foreach (['A' => 'anycast_ipv4', 'AAAA' => 'anycast_ipv6'] as $family => $field) {

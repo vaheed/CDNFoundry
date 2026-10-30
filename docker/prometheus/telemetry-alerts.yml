@@ -1,6 +1,32 @@
 groups:
   - name: cdnfoundry-operations
     rules:
+      # Always firing. A notifier that stops receiving it means alerting is
+      # broken, so the absence of alerts is never mistaken for health.
+      - alert: Watchdog
+        expr: vector(1)
+        labels: { severity: none }
+        annotations:
+          summary: Alerting pipeline heartbeat; it must always be firing
+      # A silent PoP is reported, never withdrawn from DNS on that evidence alone.
+      - alert: EdgeHeartbeatStale
+        expr: cdnfoundry_edge_heartbeat_age_seconds > 180 or cdnfoundry_edge_heartbeat_age_seconds < 0
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: A registered edge has stopped sending heartbeats; DNS still publishes it
+      - alert: PoolServingLastPublishedSet
+        expr: cdnfoundry_pool_dns_fail_static == 1
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: Every endpoint of a pool looks unhealthy; DNS keeps the last published set
+      - alert: EdgeIdentityCertificateExpiring
+        expr: cdnfoundry_edge_identity_expires_seconds < 30 * 86400
+        for: 10m
+        labels: { severity: critical }
+        annotations:
+          summary: An edge identity certificate expires within 30 days and has not been renewed
       - alert: ControlPlaneMetricsUnavailable
         expr: up{job="cdnfoundry-control"} == 0
         for: 2m

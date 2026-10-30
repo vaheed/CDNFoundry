@@ -89,6 +89,8 @@ does not migrate ClickHouse tables automatically.
 | `placement_drain_seconds` | 300 | 30–86,400 |
 | `promotion_quorum_percent` | 100 | 1–100 |
 | `promotion_grace_seconds` | 120 | 30–3,600 |
+| `probe_min_vantage_points` | 2 | 2–20 |
+| `probe_result_max_age_seconds` | 180 | 30–3,600 |
 | `max_domain_artifact_bytes` | 2,097,152 | 65,536–16,777,216 |
 
 Existing rows may still contain the older telemetry quorum, maximum-age and

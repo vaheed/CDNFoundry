@@ -16,7 +16,7 @@ final class EdgeCertificateAuthority
         }
         [$certificateAuthority, $privateKey] = self::authority();
         $serial = random_int(1, PHP_INT_MAX);
-        $certificate = openssl_csr_sign($csrPem, $certificateAuthority, $privateKey, 365, [
+        $certificate = openssl_csr_sign($csrPem, $certificateAuthority, $privateKey, (int) config('edge.identity_validity_days'), [
             'digest_alg' => 'sha256',
             'config' => resource_path('crypto/edge-identity.cnf'),
             'x509_extensions' => 'edge_identity',

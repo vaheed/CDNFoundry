@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DnsDeployment;
 use App\Models\Edge;
 use App\Models\EdgeCell;
+use App\Models\EdgePool;
 use App\Models\EdgePoolEndpoint;
 use App\Models\FleetRollout;
 use App\Models\Operation;
@@ -85,7 +86,18 @@ class MetricsController extends Controller
         });
         EdgePoolEndpoint::query()->orderBy('id')->limit(1000)->get()->each(function (EdgePoolEndpoint $endpoint) use (&$lines): void {
             $lines[] = sprintf('cdnfoundry_pool_endpoint_state{edge="%s",pool="%s",endpoint="%s",status="%s",revision="%d"} 1', $endpoint->edge_id, $endpoint->edge_pool_id, $endpoint->id, $endpoint->gateway_state, $endpoint->revision);
+            $lines[] = sprintf('cdnfoundry_pool_endpoint_published{edge="%s",pool="%s",endpoint="%s",reason="%s"} %d', $endpoint->edge_id, $endpoint->edge_pool_id, $endpoint->id, $endpoint->dns_reason ?? 'unknown', $endpoint->dns_published ? 1 : 0);
             $lines[] = sprintf('cdnfoundry_pool_endpoint_revision_mismatch{edge="%s",pool="%s",endpoint="%s"} %d', $endpoint->edge_id, $endpoint->edge_pool_id, $endpoint->id, $endpoint->gateway_revision < $endpoint->revision ? 1 : 0);
+        });
+        EdgePool::query()->where('enabled', true)->orderBy('id')->limit(1000)->get(['id', 'dns_fail_static'])->each(function (EdgePool $pool) use (&$lines): void {
+            $lines[] = sprintf('cdnfoundry_pool_dns_fail_static{pool="%d"} %d', $pool->id, $pool->dns_fail_static ? 1 : 0);
+        });
+        Edge::query()->where('enabled', true)->whereNotNull('registered_at')->orderBy('id')->limit(1000)->get(['id', 'last_heartbeat_at', 'identity_certificate_expires_at', 'reported_identity_expires_at'])->each(function (Edge $edge) use (&$lines): void {
+            $lines[] = sprintf('cdnfoundry_edge_heartbeat_age_seconds{edge="%s"} %d', $edge->id, $edge->last_heartbeat_at === null ? -1 : (int) $edge->last_heartbeat_at->diffInSeconds(now()));
+            $expires = $edge->reported_identity_expires_at ?? $edge->identity_certificate_expires_at;
+            if ($expires !== null) {
+                $lines[] = sprintf('cdnfoundry_edge_identity_expires_seconds{edge="%s"} %d', $edge->id, $expires->timestamp - now()->timestamp);
+            }
         });
         $lines[] = 'cdnfoundry_fleet_rollouts_paused '.FleetRollout::query()->where('status', 'paused')->count();
         $lines[] = 'cdnfoundry_tls_certificates_expiring '.TlsCertificate::query()->where('status', 'active')->where('expires_at', '<=', now()->addDays((int) config('services.acme.expiry_alert_days')))->count();
