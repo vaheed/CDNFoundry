@@ -37,7 +37,8 @@ final class AnalyticsStore
         $scope = $domain === null ? '1' : 'domain_id = {domain_id:UInt64}';
         $parameters = $this->parameters($range, $domain);
         $edge = $this->query("SELECT sum(requests) AS requests, sum(bytes_in) AS bytes_in, sum(bytes_out) AS bytes_out, sumIf(requests, cache_status = 'HIT') AS cache_hits, sum(origin_errors) AS origin_errors, sum(tls_failures) AS tls_failures, sum(security_blocks) AS security_blocks FROM cdnf.edge_hourly WHERE {$scope} AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64}", $parameters)[0] ?? [];
-        $dns = $this->query("SELECT sum(queries) AS dns_queries FROM cdnf.dns_hourly WHERE {$scope} AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64}", $parameters)[0] ?? [];
+        $dnsScope = $domain === null ? '1' : $this->dnsScope('interval_start', true);
+        $dns = $this->query("SELECT sum(queries) AS dns_queries FROM cdnf.dns_hourly WHERE {$dnsScope} AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64}", $parameters)[0] ?? [];
         $requests = (int) ($edge['requests'] ?? 0);
 
         return [...$edge, ...$dns, 'cache_ratio' => $requests === 0 ? 0 : round(((int) ($edge['cache_hits'] ?? 0)) / $requests, 6)];
@@ -60,7 +61,7 @@ final class AnalyticsStore
             default => throw ValidationException::withMessages(['view' => 'The analytics view is invalid.']),
         };
         if ($view === 'dns' && $domain !== null) {
-            $scope = '(domain_id = {domain_id:UInt64} OR zone = {domain_name:String} OR endsWith(zone, concat(\'.\', {domain_name:String})))';
+            $scope = $this->dnsScope('interval_start', true);
         }
         $groupSql = $group === '' ? '' : " GROUP BY {$group}";
 
@@ -110,7 +111,7 @@ final class AnalyticsStore
     {
         $scope = $domain === null
             ? '1'
-            : '(domain_id = {domain_id:UInt64} OR zone = {domain_name:String} OR endsWith(zone, concat(\'.\', {domain_name:String})))';
+            : $this->dnsScope('interval_start', true);
 
         return $this->query(
             "SELECT toStartOfHour(interval_start) AS bucket,
@@ -139,7 +140,7 @@ final class AnalyticsStore
         $cursorSql = '(occurred_at, event_id) < ({cursor_time:DateTime64}, {cursor_id:UUID})';
         if ($stream === 'dns') {
             if ($domain !== null) {
-                $scope = '(domain_id = {domain_id:UInt64} OR zone = {domain_name:String} OR endsWith(zone, concat(\'.\', {domain_name:String})))';
+                $scope = $this->dnsScope('occurred_at', false);
             }
             $rows = $this->query("SELECT occurred_at, event_id, domain_id, zone, qname, qtype, rcode, client_ip, dns_cluster, country, continent, outcome FROM cdnf.dns_events WHERE {$scope} AND occurred_at >= {from:DateTime64} AND occurred_at < {to:DateTime64} AND {$cursorSql} ORDER BY occurred_at DESC, event_id DESC LIMIT 101", $parameters);
         } else {
@@ -181,6 +182,8 @@ final class AnalyticsStore
         if ($domains === []) {
             return [];
         }
+        // The most specific domain must win when zones are nested.
+        uasort($domains, fn (string $a, string $b): int => strlen($b) <=> strlen($a));
         $ids = array_keys($domains);
         $names = array_values($domains);
         $parameters = [
@@ -230,7 +233,36 @@ final class AnalyticsStore
         }
     }
 
+    /**
+     * DNS telemetry carries no domain id, so ownership comes from the queried
+     * zone. A tenant sees its own zone and subdomains, except names under
+     * another registered domain (current or deleted) and anything logged before
+     * the current owner's domain row existed.
+     */
+    private function dnsScope(string $timeColumn, bool $hourly): string
+    {
+        $since = $hourly ? 'toStartOfHour({owned_since:DateTime64})' : '{owned_since:DateTime64}';
+
+        return "((zone = {domain_name:String} OR endsWith(zone, concat('.', {domain_name:String}))) "
+            ."AND NOT arrayExists(child -> zone = child OR endsWith(zone, concat('.', child)), {excluded_zones:Array(String)}) "
+            ."AND {$timeColumn} >= {$since})";
+    }
+
     private function parameters(array $range, ?Domain $domain): array
+    {
+        $dns = [];
+        if ($domain !== null) {
+            $children = Domain::withTrashed()->where('name', 'like', '%.'.addcslashes($domain->name, '%_\\'))->limit(1000)->pluck('name');
+            $dns = [
+                'excluded_zones' => '['.$children->map(fn (string $name): string => "'".str_replace(["\\", "'"], ["\\\\", "\\'"], $name)."'")->implode(',').']',
+                'owned_since' => ($domain->created_at ?? now())->clone()->utc()->format('Y-m-d H:i:s.u'),
+            ];
+        }
+
+        return [...$dns, ...$this->baseParameters($range, $domain)];
+    }
+
+    private function baseParameters(array $range, ?Domain $domain): array
     {
         return array_filter(['from' => $range['from']->format('Y-m-d H:i:s.u'), 'to' => $range['to']->format('Y-m-d H:i:s.u'), 'domain_id' => $domain?->getKey(), 'domain_name' => $domain?->name], fn ($value): bool => $value !== null);
     }

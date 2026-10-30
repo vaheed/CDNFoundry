@@ -79,7 +79,7 @@ PARTITION BY toYYYYMM(interval_start)
 ORDER BY (domain_id, interval_start, hostname, status, cache_status, country, continent, edge_id)
 TTL interval_start + INTERVAL 400 DAY DELETE;
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS cdnf.edge_hourly_mv TO cdnf.edge_hourly AS
+CREATE MATERIALIZED VIEW IF NOT EXISTS cdnf.edge_hourly_mv TO cdnf.edge_hourly DEFINER = cdnf SQL SECURITY DEFINER AS
 SELECT toStartOfHour(occurred_at) AS interval_start, domain_id, hostname, status,
        cache_status, country, continent, edge_id, count() AS requests,
        sum(bytes_in) AS bytes_in, sum(bytes_out) AS bytes_out,
@@ -103,7 +103,7 @@ PARTITION BY toYYYYMM(interval_start)
 ORDER BY (domain_id, zone, interval_start, qtype, rcode, country, continent, dns_cluster)
 TTL interval_start + INTERVAL 400 DAY DELETE;
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS cdnf.dns_hourly_mv TO cdnf.dns_hourly AS
+CREATE MATERIALIZED VIEW IF NOT EXISTS cdnf.dns_hourly_mv TO cdnf.dns_hourly DEFINER = cdnf SQL SECURITY DEFINER AS
 SELECT toStartOfHour(occurred_at) AS interval_start, domain_id, zone, qtype, rcode,
        country, continent, dns_cluster, count() AS queries
 FROM cdnf.dns_events
@@ -114,7 +114,7 @@ ENGINE = SummingMergeTree PARTITION BY toYYYYMM(interval_start)
 ORDER BY (domain_id, interval_start, hostname, status, cache_status, country, continent, edge_id)
 TTL interval_start + INTERVAL 3 YEAR DELETE;
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS cdnf.edge_daily_mv TO cdnf.edge_daily AS
+CREATE MATERIALIZED VIEW IF NOT EXISTS cdnf.edge_daily_mv TO cdnf.edge_daily DEFINER = cdnf SQL SECURITY DEFINER AS
 SELECT toStartOfDay(interval_start) AS interval_start, domain_id, hostname, status, cache_status,
        country, continent, edge_id, sum(requests) AS requests, sum(bytes_in) AS bytes_in,
        sum(bytes_out) AS bytes_out, sum(origin_latency_sum) AS origin_latency_sum,
@@ -127,7 +127,7 @@ ENGINE = SummingMergeTree PARTITION BY toYYYYMM(interval_start)
 ORDER BY (domain_id, zone, interval_start, qtype, rcode, country, continent, dns_cluster)
 TTL interval_start + INTERVAL 3 YEAR DELETE;
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS cdnf.dns_daily_mv TO cdnf.dns_daily AS
+CREATE MATERIALIZED VIEW IF NOT EXISTS cdnf.dns_daily_mv TO cdnf.dns_daily DEFINER = cdnf SQL SECURITY DEFINER AS
 SELECT toStartOfDay(interval_start) AS interval_start, domain_id, zone, qtype, rcode,
        country, continent, dns_cluster, sum(queries) AS queries
 FROM cdnf.dns_hourly GROUP BY interval_start, domain_id, zone, qtype, rcode, country, continent, dns_cluster;

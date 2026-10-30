@@ -46,6 +46,8 @@ GLOBAL_SECRET_NAMES = {
     "grafana-clickhouse-password",
     "grafana-postgres-password",
     "clickhouse-password",
+    "clickhouse-ingest-password",
+    "clickhouse-reader-password",
     "metrics-token",
     "telemetry-token",
     "backup-password",

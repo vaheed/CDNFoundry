@@ -30,6 +30,24 @@ class AnalyticsApiTest extends TestCase
         $this->assertSame(12, $page->trafficLimit);
     }
 
+    public function test_dns_scope_excludes_nested_domains_and_history_before_the_current_owner(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        Domain::query()->create(['name' => 'shop.'.$domain->name, 'display_name' => 'Nested', 'revision' => 1]);
+        Http::fake(['*' => Http::response('')]);
+
+        $this->actingAs($user)->getJson("/api/domains/{$domain->id}/analytics/dns")->assertOk();
+
+        Http::assertSent(function ($request) use ($domain): bool {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+            return str_contains($request->body(), 'arrayExists(child -> zone = child')
+                && str_contains($request->body(), '>= toStartOfHour({owned_since:DateTime64})')
+                && $query['param_excluded_zones'] === "['shop.{$domain->name}']"
+                && ($query['param_owned_since'] ?? '') === $domain->created_at->clone()->utc()->format('Y-m-d H:i:s.u');
+        });
+    }
+
     public function test_domain_analytics_are_scoped_bounded_and_label_partial_data(): void
     {
         [$user, $domain] = $this->ownedDomain();

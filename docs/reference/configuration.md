@@ -49,7 +49,7 @@ Runtime product policy is not an environment variable. Manage it through
 The Compose file fixes `APP_ENV=production`, `APP_DEBUG=false`,
 `DB_CONNECTION=pgsql`, database/user `cdnf`, `CACHE_STORE=redis`,
 `SESSION_DRIVER=redis`, `QUEUE_CONNECTION=redis`, `REDIS_CLIENT=predis`,
-`CLICKHOUSE_DATABASE=cdnf`, `CLICKHOUSE_USER=cdnf`, and
+`CLICKHOUSE_DATABASE=cdnf`, `CLICKHOUSE_USER=cdnf_reader`, and
 `GEOIP_DATABASE=/mmdb/GeoLite2-City.mmdb`.
 
 ## Backup (optional)
@@ -115,7 +115,9 @@ object storage; other Restic backends need their own credential/mount wiring.
 
 | Variable | Required | Meaning and default |
 | --- | --- | --- |
-| `CLICKHOUSE_PASSWORD` | telemetry/control query | ClickHouse password |
+| `CLICKHOUSE_PASSWORD` | telemetry | Password of the ClickHouse administrator `cdnf`. Only the ClickHouse container uses it, for schema and migrations |
+| `CLICKHOUSE_INGEST_PASSWORD` | telemetry/edge/DNS | Password of `cdnf_ingest`, the insert-only account Vector uses. It can insert into `edge_events` and `dns_events` and nothing else |
+| `CLICKHOUSE_READER_PASSWORD` | control query | Password of `cdnf_reader`, the read-only account Laravel uses, with server-side limits on time, rows, and memory |
 | `CLICKHOUSE_URL` | telemetry/control query | Local `http://clickhouse:8123` or verified external endpoint |
 | `CLICKHOUSE_DATABASE` | internal/default | Database queried by Laravel; Compose fixes `cdnf` |
 | `GEOIP_DATABASE` | edge runtime | MMDB file path; Compose fixes `/mmdb/GeoLite2-City.mmdb` |
@@ -167,8 +169,10 @@ Grafana telemetry variables are:
 | `LOG_METRICS_BIND` | logs | Host metrics publication; generated bundles use `monitor_ipv4` or the local `bind_ipv4`, never an advertised NAT-only address |
 | `LOG_SOURCE_IPV4_ALLOWLIST` | telemetry gateway | Exact non-edge host sources allowed to push logs |
 
-Vector receives `CLICKHOUSE_ENDPOINT`, `CLICKHOUSE_USER`, and
-`CLICKHOUSE_PASSWORD` from Compose. `MMDB_DIR` is an internal updater override
+Vector receives `CLICKHOUSE_ENDPOINT` and logs in as `cdnf_ingest` with
+`CLICKHOUSE_INGEST_PASSWORD`. A compromised edge or DNS node can therefore
+write events but cannot read or drop telemetry. The telemetry account split is
+one ingest password per fleet; it is not yet one per node. `MMDB_DIR` is an internal updater override
 whose default is `/mmdb`.
 
 Laravel containers fix `LOG_CHANNEL=stderr`, `LOG_STACK=stderr`, and the

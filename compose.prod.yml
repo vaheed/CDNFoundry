@@ -39,8 +39,8 @@ x-core-env: &core-env
   PDNS_CA_CERTIFICATE: /run/secrets/pdns-api-ca.crt
   CLICKHOUSE_URL: ${CLICKHOUSE_URL:?CLICKHOUSE_URL is required}
   CLICKHOUSE_DATABASE: cdnf
-  CLICKHOUSE_USER: cdnf
-  CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
+  CLICKHOUSE_USER: cdnf_reader
+  CLICKHOUSE_PASSWORD: ${CLICKHOUSE_READER_PASSWORD:?CLICKHOUSE_READER_PASSWORD is required}
   PROMETHEUS_URL: http://prometheus:9090
   METRICS_TOKEN_FILE: /run/secrets/metrics-token
   RESTIC_REPOSITORY: ${RESTIC_REPOSITORY}
@@ -382,11 +382,14 @@ services:
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
       GRAFANA_CLICKHOUSE_PASSWORD: ${GRAFANA_CLICKHOUSE_PASSWORD:?GRAFANA_CLICKHOUSE_PASSWORD is required}
+      CLICKHOUSE_INGEST_PASSWORD: ${CLICKHOUSE_INGEST_PASSWORD:?CLICKHOUSE_INGEST_PASSWORD is required}
+      CLICKHOUSE_READER_PASSWORD: ${CLICKHOUSE_READER_PASSWORD:?CLICKHOUSE_READER_PASSWORD is required}
     volumes:
       - clickhouse:/var/lib/clickhouse
       - ./docker/clickhouse/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
       - ./docker/clickhouse/config.d/prometheus.xml:/etc/clickhouse-server/config.d/prometheus.xml:ro
       - ./docker/clickhouse/users.d/grafana.xml:/etc/clickhouse-server/users.d/grafana.xml:ro
+      - ./docker/clickhouse/users.d/telemetry.xml:/etc/clickhouse-server/users.d/telemetry.xml:ro
     networks: [telemetry]
     restart: unless-stopped
     healthcheck:
@@ -404,8 +407,8 @@ services:
       VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION: "true"
       CDNF_TELEMETRY_EDGE_ID: ${EDGE_ID}
       CLICKHOUSE_ENDPOINT: ${CLICKHOUSE_URL:?CLICKHOUSE_URL is required}
-      CLICKHOUSE_USER: cdnf
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
+      CLICKHOUSE_USER: cdnf_ingest
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_INGEST_PASSWORD:?CLICKHOUSE_INGEST_PASSWORD is required}
     volumes:
       - ./docker/vector/vector.yaml:/etc/vector/vector.yaml:ro
       - vector-data:/vector-data-dir

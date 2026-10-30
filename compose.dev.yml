@@ -31,8 +31,8 @@ x-core-env: &core-env
   EDGE_IDENTITY_CA_PRIVATE_KEY: /run/dev-pki/edge-identity-ca.key
   CLICKHOUSE_URL: http://clickhouse:8123
   CLICKHOUSE_DATABASE: cdnf
-  CLICKHOUSE_USER: cdnf
-  CLICKHOUSE_PASSWORD: cdnf-dev-only
+  CLICKHOUSE_USER: cdnf_reader
+  CLICKHOUSE_PASSWORD: cdnf-reader-dev-only
   PROMETHEUS_URL: http://prometheus:9090
   METRICS_TOKEN_FILE: /run/dev-metrics/metrics-token
   RESTIC_REPOSITORY: /app/storage/app/restic
@@ -305,11 +305,14 @@ services:
       CLICKHOUSE_PASSWORD: cdnf-dev-only
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
       GRAFANA_CLICKHOUSE_PASSWORD: cdnf-grafana-dev-only
+      CLICKHOUSE_INGEST_PASSWORD: cdnf-ingest-dev-only
+      CLICKHOUSE_READER_PASSWORD: cdnf-reader-dev-only
     volumes:
       - clickhouse:/var/lib/clickhouse
       - ./docker/clickhouse/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
       - ./docker/clickhouse/config.d/prometheus.xml:/etc/clickhouse-server/config.d/prometheus.xml:ro
       - ./docker/clickhouse/users.d/grafana.xml:/etc/clickhouse-server/users.d/grafana.xml:ro
+      - ./docker/clickhouse/users.d/telemetry.xml:/etc/clickhouse-server/users.d/telemetry.xml:ro
     networks: [telemetry]
     healthcheck:
       test: [CMD, wget, -qO-, http://127.0.0.1:8123/ping]
@@ -322,8 +325,8 @@ services:
     image: timberio/vector:0.55.0-alpine
     environment:
       CLICKHOUSE_ENDPOINT: http://clickhouse:8123
-      CLICKHOUSE_USER: cdnf
-      CLICKHOUSE_PASSWORD: cdnf-dev-only
+      CLICKHOUSE_USER: cdnf_ingest
+      CLICKHOUSE_PASSWORD: cdnf-ingest-dev-only
     volumes:
       - ./docker/vector/vector.yaml:/etc/vector/vector.yaml:ro
       - vector-data:/vector-data-dir

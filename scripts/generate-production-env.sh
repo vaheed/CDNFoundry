@@ -128,7 +128,7 @@ if [[ $role == control ]]; then
         backup_secret_key=
         backup_region=us-east-1
     fi
-    ask_secret clickhouse_password 'Shared telemetry ingestion password (store it in your password manager)'
+    ask_secret clickhouse_ingest_password 'Shared telemetry ingestion password for Vector on edge and DNS nodes (store it in your password manager)'
     clickhouse_url=http://clickhouse:8123
     loki_endpoint=http://loki:3100
     log_role=control
@@ -149,7 +149,7 @@ else
     dns_api_hostname="$dns_api_name.$ops_domain"
     dns_api_cert="/etc/cdnfoundry/pki/$dns_api_name.crt"
     dns_api_key="/etc/cdnfoundry/pki/$dns_api_name.key"
-    ask_secret clickhouse_password 'Shared telemetry ingestion password from the password manager'
+    ask_secret clickhouse_ingest_password 'Shared telemetry ingestion password from the password manager'
     clickhouse_url="https://telemetry.$ops_domain:8444"
     loki_endpoint="https://telemetry.$ops_domain:8444"
     log_role=dns-edge
@@ -160,7 +160,7 @@ fi
 
 ask_secret log_auth_token 'Shared Loki bearer token from the password manager'
 
-for value in "$clickhouse_password" "$backup_secret_key" "$log_auth_token"; do
+for value in "$clickhouse_ingest_password" "$backup_secret_key" "$log_auth_token"; do
     [[ -z $value ]] || valid_simple "$value" || { printf 'Secret contains characters unsupported by the environment-file format.\n' >&2; exit 2; }
 done
 
@@ -173,6 +173,8 @@ pdns_api_key=$(random_secret)
 edge_status_token=$(random_secret)
 grafana_admin_password=$(random_secret)
 grafana_clickhouse_password=$(random_secret)
+clickhouse_password=$(random_secret)
+clickhouse_reader_password=$(random_secret)
 grafana_postgres_password=$(random_secret)
 
 umask 077
@@ -197,6 +199,8 @@ awk -v app_key="$app_key" \
     -v pdns_db_password="$pdns_db_password" \
     -v pdns_api_key="$pdns_api_key" \
     -v clickhouse_password="$clickhouse_password" \
+    -v clickhouse_ingest_password="$clickhouse_ingest_password" \
+    -v clickhouse_reader_password="$clickhouse_reader_password" \
     -v clickhouse_url="$clickhouse_url" \
     -v grafana_admin_password="$grafana_admin_password" \
     -v grafana_clickhouse_password="$grafana_clickhouse_password" \
@@ -234,6 +238,7 @@ awk -v app_key="$app_key" \
       values["ACME_CONTACT_EMAIL"]=acme_email
       values["PDNS_DB_PASSWORD"]=pdns_db_password; values["PDNS_API_KEY"]=pdns_api_key
       values["DNS_BIND_V4"]=dns_bind_v4; values["CLICKHOUSE_PASSWORD"]=clickhouse_password
+      values["CLICKHOUSE_INGEST_PASSWORD"]=clickhouse_ingest_password; values["CLICKHOUSE_READER_PASSWORD"]=clickhouse_reader_password
       values["CLICKHOUSE_URL"]=clickhouse_url
       values["GRAFANA_ADMIN_PASSWORD"]=grafana_admin_password
       values["GRAFANA_CLICKHOUSE_PASSWORD"]=grafana_clickhouse_password
