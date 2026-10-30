@@ -35,8 +35,22 @@ state. Revision numbers are never reused.
 Long-running changes create an `operations` row and return its UUID. Poll
 `GET /api/operations/{operation}` until the status is `succeeded` or `failed`.
 Administrators can list all operations, inspect failures, and retry supported
-types. A user can read only an operation they initiated or that belongs to an
-assigned domain.
+types. A user can read an operation only through its domain: every user assigned
+to the domain can read every operation of that domain, including a coalesced
+operation another member started, and a request for any other operation
+answers `403`. Operations that belong to no domain, such as global
+reconciles, are administrator-only. The domain is stored as a typed column on
+the operation, and the database allows only one unfinished `dns.zone_reconcile`
+and one unfinished `edge.domain_reconcile` per domain.
+
+A DNS operation is marked `failed` only when its retry window ends. While a DNS
+host is unreachable the job retries with backoff (10, 30, 60, 120, then 300
+seconds) for up to 30 minutes, the operation stays `running` with the last
+error visible, and an outage that ends inside the window finishes
+`succeeded`. A scheduled drift check (`cdnf:dns:repair-drift`, every five
+minutes) later compares what each DNS host serves with desired state and queues
+a reconcile for any difference, so a host that was down longer is repaired once
+it returns.
 
 Operations are not a promise that every external target will succeed
 immediately. The operation response and the domain-specific deployment endpoint

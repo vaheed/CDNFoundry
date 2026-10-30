@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,6 +13,18 @@ class Operation extends Model
     use HasUuids;
 
     protected $guarded = [];
+
+    protected static function booted(): void
+    {
+        // The typed column is what authorization and uniqueness use; callers keep passing it in the input.
+        static::creating(function (self $operation): void {
+            $domainId = $operation->input['domain_id'] ?? null;
+            if ($operation->domain_id === null && (is_int($domainId) || (is_string($domainId) && ctype_digit($domainId)))
+                && Domain::query()->whereKey((int) $domainId)->exists()) {
+                $operation->domain_id = (int) $domainId;
+            }
+        });
+    }
 
     protected function casts(): array
     {
@@ -42,9 +55,14 @@ class Operation extends Model
 
     public static function coalesceDomain(string $type, int $domainId, ?int $actorId = null): self
     {
-        return self::query()->where('type', $type)->whereIn('status', ['pending', 'running'])
-            ->where('input->domain_id', $domainId)->first() ?? self::query()->create([
-                'actor_id' => $actorId, 'type' => $type, 'status' => 'pending', 'input' => ['domain_id' => $domainId],
+        $unfinished = fn () => self::query()->where('type', $type)->where('domain_id', $domainId)->whereIn('status', ['pending', 'running'])->first();
+        try {
+            return $unfinished() ?? self::query()->create([
+                'actor_id' => $actorId, 'domain_id' => $domainId, 'type' => $type, 'status' => 'pending', 'input' => ['domain_id' => $domainId],
             ]);
+        } catch (UniqueConstraintViolationException $exception) {
+            // A concurrent request created the unfinished operation first.
+            return $unfinished() ?? throw $exception;
+        }
     }
 }

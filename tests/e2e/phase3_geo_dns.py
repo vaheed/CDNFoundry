@@ -46,9 +46,9 @@ def artisan(expression: str) -> None:
     )
 
 
-def dig(owner: str, record_type: str) -> str:
+def dig(owner: str, record_type: str, subnet: str | None = None) -> str:
     return subprocess.run(
-        ["dig", "@127.0.0.1", "-p", "1053", owner, record_type, "+short"],
+        ["dig", "@127.0.0.1", "-p", "1053", owner, record_type, "+short", *([f"+subnet={subnet}"] if subnet else [])],
         check=True, text=True, capture_output=True, timeout=10,
     ).stdout.strip()
 
@@ -88,7 +88,18 @@ def main() -> None:
             "type": record_type, "name": name, "ttl": 60, "mode": "geo_dns",
             "geo": {"default": defaults, "countries": {"IR": defaults}}, **extra,
         }, token)
+    call("POST", f"/api/domains/{domain_id}/dns/records", {
+        "type": "A", "name": "override", "ttl": 60, "mode": "geo_dns",
+        "geo": {"default": ["192.0.2.40"], "countries": {"IR": ["192.0.2.41"]}},
+    }, token)
     wait_deployment(token, domain_id)
+
+    # A resolver's EDNS Client Subnet reaches PowerDNS through DNSdist, and a query
+    # without one is located by the client address DNSdist adds, never DNSdist's own.
+    override = f"override.{ZONE}"
+    assert dig(override, "A", "2.176.1.0/24") == "192.0.2.41", dig(override, "A", "2.176.1.0/24")
+    assert dig(override, "A", "8.8.8.0/24") == "192.0.2.40", dig(override, "A", "8.8.8.0/24")
+    assert dig(override, "A") == "192.0.2.40", dig(override, "A")
 
     expected = {
         (f"a.{ZONE}", "A"): "192.0.2.30",
@@ -101,7 +112,7 @@ def main() -> None:
     for query, answer in expected.items():
         output = dig(*query)
         assert answer in output, (query, output)
-    print("phase3_geo_dns_e2e=passed types=A,AAAA,CNAME,MX,TXT,SRV default_runtime=passed")
+    print("phase3_geo_dns_e2e=passed types=A,AAAA,CNAME,MX,TXT,SRV default_runtime=passed ecs_override=passed")
 
 
 if __name__ == "__main__":

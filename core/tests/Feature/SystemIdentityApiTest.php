@@ -130,6 +130,29 @@ class SystemIdentityApiTest extends TestCase
         $this->assertSame(1, $operation->result['targets']);
     }
 
+    public function test_the_platform_zone_serial_changes_exactly_when_the_content_changes(): void
+    {
+        $settings = PlatformDnsSetting::query()->create(['id' => 1, ...$this->validPayload(), 'revision' => 1]);
+        $serial = fn (PlatformDnsSetting $current): int => (int) explode(' ', collect(PlatformDnsZone::render($current))->firstWhere('type', 'SOA')['records'][0]['content'])[2];
+
+        $first = PlatformDnsZone::advanceSerial($settings);
+        $this->assertGreaterThan(0, $first->soa_serial);
+        $this->assertSame($first->soa_serial, $serial($first));
+
+        // The every-minute render with unchanged content, even after revision bumps, keeps the serial.
+        $first->update(['revision' => 7]);
+        $this->assertSame($first->soa_serial, PlatformDnsZone::advanceSerial($first->refresh())->soa_serial);
+
+        // A real content change advances it by exactly one.
+        $first->update(['nameservers' => [
+            ['hostname' => 'ns1.cdnf.test', 'ipv4' => '8.8.4.4', 'ipv6' => '2001:4860:4860::8888'],
+            ['hostname' => 'ns2.cdnf.test', 'ipv4' => '1.1.1.1', 'ipv6' => '2606:4700:4700::1111'],
+        ]]);
+        $changed = PlatformDnsZone::advanceSerial($first->refresh());
+        $this->assertSame($first->soa_serial + 1, $changed->soa_serial);
+        $this->assertSame($changed->soa_serial, PlatformDnsZone::advanceSerial($changed->refresh())->soa_serial);
+    }
+
     public function test_platform_identity_fails_when_no_healthy_cluster_matches_the_configured_targets(): void
     {
         $admin = User::factory()->admin()->create();

@@ -14,6 +14,7 @@ use App\Support\PowerDnsZone;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use RuntimeException;
 use Throwable;
 
@@ -21,13 +22,41 @@ class ReconcileDnsZone implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
     use Queueable;
 
-    public int $tries = 3;
+    // Retries are bounded by time, not by count: a DNS host outage of several
+    // minutes must heal without a person, and the operation fails only when the
+    // retry window ends. Obsolete retries are skipped by the revision checks below.
+    public int $tries = 0;
+
+    public const RETRY_WINDOW_MINUTES = 30;
 
     public int $uniqueFor = 300;
 
     public function __construct(public int $domainId)
     {
         $this->onQueue('runtime');
+    }
+
+    /** @return list<int> */
+    public function backoff(): array
+    {
+        return [10, 30, 60, 120, 300];
+    }
+
+    public function retryUntil(): \DateTimeInterface
+    {
+        return now()->addMinutes(self::RETRY_WINDOW_MINUTES);
+    }
+
+    /** @return list<object> */
+    public function middleware(): array
+    {
+        // One reconcile per domain at a time, so an older revision can never overwrite a newer one.
+        return [(new WithoutOverlapping('dns-zone-'.$this->domainId))->releaseAfter(10)->expireAfter(300)];
+    }
+
+    public function failed(Throwable $exception): void
+    {
+        $this->operations()->update(['status' => 'failed', 'error' => mb_substr($exception->getMessage(), 0, 4000), 'finished_at' => now()]);
     }
 
     public function handle(PowerDnsClient $client): void
@@ -53,8 +82,11 @@ class ReconcileDnsZone implements ShouldBeUniqueUntilProcessing, ShouldQueue
                 : PowerDnsZone::render($domain);
         } catch (Throwable $exception) {
             $message = mb_substr($exception->getMessage(), 0, 4000);
+            // A zone that cannot be rendered is a permanent failure; retrying cannot help.
             $this->operations()->update(['status' => 'failed', 'error' => $message, 'finished_at' => now()]);
-            throw new RuntimeException($message, previous: $exception);
+            $this->fail(new RuntimeException($message, previous: $exception));
+
+            return;
         }
         $checksum = hash('sha256', json_encode($rrsets, JSON_THROW_ON_ERROR));
         $this->operations()->update(['status' => 'running', 'started_at' => now()]);
@@ -98,7 +130,8 @@ class ReconcileDnsZone implements ShouldBeUniqueUntilProcessing, ShouldQueue
 
         if ($failures !== []) {
             $message = implode('; ', $failures);
-            $this->operations()->update(['status' => 'failed', 'error' => mb_substr($message, 0, 4000), 'finished_at' => now()]);
+            // Keep the operation running and visible while retries remain; failed() ends it.
+            $this->operations()->update(['status' => 'running', 'error' => mb_substr('Retrying: '.$message, 0, 4000)]);
             throw new RuntimeException($message);
         }
 
@@ -109,7 +142,7 @@ class ReconcileDnsZone implements ShouldBeUniqueUntilProcessing, ShouldQueue
                 ->whereNotNull('target_pool_id')->whereNull('drain_after')
                 ->update(['drain_after' => now()->addSeconds(app(PlatformSettings::class)->integer('edge_runtime', 'placement_drain_seconds'))]);
         }
-        $this->operations()->update(['status' => $status, 'result' => ['domain_id' => $domain->id, 'revision' => $revision], 'finished_at' => $status === 'succeeded' ? now() : null]);
+        $this->operations()->update(['status' => $status, 'error' => null, 'result' => ['domain_id' => $domain->id, 'revision' => $revision], 'finished_at' => $status === 'succeeded' ? now() : null]);
         if ($latest !== $revision) {
             self::dispatch($domain->id)->afterCommit();
         } elseif ($domain->lifecycle_state === DomainLifecycleState::PendingVerification && $domain->nameservers_verified_at === null

@@ -55,6 +55,11 @@ classifies the recursive resolver, which may be far from the end user. When ECS
 is supplied, the shipped PowerDNS runtime processes it. Direct test clients can
 also submit ECS, so treat it only as an answer-selection hint. Previewing an IP
 does not prove what a real resolver sends on the public query path.
+
+DNSdist, the only public DNS endpoint, forwards the ECS option a resolver sent and,
+when the query has none, adds the client network (`/24` for IPv4, `/56` for IPv6)
+before the query reaches PowerDNS. PowerDNS therefore never classifies DNSdist's
+own private address.
 :::
 
 ## Supported record types

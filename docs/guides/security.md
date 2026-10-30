@@ -72,7 +72,11 @@ quarantine pool, publish its addresses, then drain the shared source.
 ## Simple incident controls
 
 There is no generic emergency-action picker. Each scope has only controls with
-clear runtime behavior:
+clear runtime behavior. A cell enforces seven emergency actions
+(`disable_request_bodies`, `allow_get_head_only`, `disable_origin_retries`,
+`serve_cache_only`, `serve_stale_only`, `return_maintenance_response`, and
+`disable_compression`) and rejects any other name with `400`, so a protection
+that does nothing is never reported as active:
 
 | Scope | Control | Effect |
 | --- | --- | --- |

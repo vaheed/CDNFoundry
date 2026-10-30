@@ -1104,9 +1104,9 @@ function M.control()
     if command.action == "emergency_mode" then
         if type(command.active) ~= "boolean" or type(command.actions) ~= "table" or #command.actions > 12
             or (command.expires_at ~= nil and (type(command.expires_at) ~= "number" or command.expires_at <= ngx.time())) then return ngx.exit(400) end
-        local supported = {reject_unknown_hosts=true,disable_request_bodies=true,allow_get_head_only=true,reduce_keepalive=true,
-            reduce_origin_concurrency=true,disable_origin_retries=true,serve_cache_only=true,serve_stale_only=true,
-            return_maintenance_response=true,quarantine_domain=true,withdraw_service_ip_from_dns=true,disable_compression=true}
+        -- Only actions the cell enforces are accepted; the others are rejected, never ignored.
+        local supported = {disable_request_bodies=true,allow_get_head_only=true,disable_origin_retries=true,
+            serve_cache_only=true,serve_stale_only=true,return_maintenance_response=true,disable_compression=true}
         for _, action in ipairs(command.actions) do if not supported[action] then return ngx.exit(400) end end
     end
     if command.action == "cache_purge" then

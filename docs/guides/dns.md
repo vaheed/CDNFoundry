@@ -70,7 +70,10 @@ Imports over 64 KiB or 100 physical lines create a `dns.zone_import` operation
 on `bulk_maintenance` and return `202`. Smaller imports apply transactionally in
 the request. A failure leaves the previous zone and revision unchanged.
 
-SOA input is ignored because CDNFoundry owns SOA serial generation.
+SOA input is ignored because CDNFoundry owns SOA serial generation. The platform
+zone's serial is stored and incremented by exactly one whenever the zone's
+content changes, and it never changes when the content does not, so the
+every-minute render does not move it.
 
 ## Export
 

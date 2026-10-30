@@ -355,19 +355,19 @@ A40, A41.
       argument set into the key. Delivered as "no key": such a request is
       never cached, and the same URLs are refused when purged.
 - [x] Reject purge URLs that carry credentials or a fragment.
-- [ ] Add DNS retry with backoff, plus a scheduled drift check that compares
+- [x] Add DNS retry with backoff, plus a scheduled drift check that compares
       each DNS target's served serial and checksum with desired state and
       repairs differences.
-- [ ] Mark a DNS operation failed only after its last try, hold a per-domain
+- [x] Mark a DNS operation failed only after its last try, hold a per-domain
       lock, and re-check the revision just before activation.
-- [ ] Derive the platform zone serial from a content checksum, so it changes
+- [x] Derive the platform zone serial from a content checksum, so it changes
       exactly when the content changes.
-- [ ] Send the client subnet from DNSdist to PowerDNS (`useClientSubnet` or
+- [x] Send the client subnet from DNSdist to PowerDNS (`useClientSubnet` or
       PROXY protocol), so Geo-DNS sees the client network.
-- [ ] Authorize operation reads through the operation's domain policy, and
+- [x] Authorize operation reads through the operation's domain policy, and
       store the domain id as a typed column with a partial unique index for
       pending operations.
-- [ ] Implement each accepted emergency action, or reject it with a stable
+- [x] Implement each accepted emergency action, or reject it with a stable
       code and remove it from the documentation.
 - [ ] Return an operation id with every 202. Add stable codes for 405, 413,
       429, and 500. Return 404 for unauthorized bindings, and hide model

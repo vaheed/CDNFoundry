@@ -66,6 +66,24 @@ class PowerDnsClient
         }
     }
 
+    /**
+     * Whether the zone a cluster serves still matches the RRsets last deployed to it.
+     * A missing zone or a differing record set (including a lower SOA serial) is drift.
+     * Connection and server errors are thrown, never reported as drift.
+     *
+     * @param list<array{name:string,type:string,ttl:int,records:list<array{content:string,disabled:bool}>}> $rrsets
+     */
+    public function matches(DnsCluster $cluster, string $zone, array $rrsets): bool
+    {
+        $response = $this->request($cluster)->get('/api/v1/servers/'.$cluster->server_id.'/zones/'.rawurlencode($zone.'.'));
+        if ($response->status() === 404) {
+            return false;
+        }
+        $actual = $response->throw()->json('rrsets');
+
+        return is_array($actual) && self::sameRrsets($rrsets, $actual);
+    }
+
     private static function sameRrsets(array $expected, array $actual, array $absent = []): bool
     {
         $soa = static function (array $rrsets): ?array {

@@ -33,10 +33,9 @@ class OperationController extends Controller
     public function show(Request $request, Operation $operation): JsonResource
     {
         if (! $request->user()->isAdmin()) {
-            abort_unless($operation->actor_id === $request->user()->getKey(), 403);
-            $domainId = $operation->input['domain_id'] ?? null;
-            abort_unless(is_int($domainId) || (is_string($domainId) && ctype_digit($domainId)), 403);
-            $domain = Domain::query()->find((int) $domainId);
+            // Any member of the operation's domain may read it, including a coalesced
+            // operation another member started. Global operations are administrator-only.
+            $domain = $operation->domain_id === null ? null : Domain::query()->find($operation->domain_id);
             abort_unless($domain !== null && Gate::forUser($request->user())->allows('view', $domain), 403);
         }
 

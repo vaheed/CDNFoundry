@@ -25,6 +25,36 @@ class OperationsApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_every_member_can_poll_a_coalesced_operation_and_outsiders_cannot(): void
+    {
+        Queue::fake();
+        $first = User::factory()->create();
+        $second = User::factory()->create();
+        $outsider = User::factory()->create();
+        $domain = Domain::query()->create(['name' => 'shared-ops.example', 'display_name' => 'Shared', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain->users()->attach([$first->id, $second->id]);
+
+        $started = \App\Models\Operation::coalesceDomain('edge.domain_reconcile', $domain->id, $first->id);
+        $joined = \App\Models\Operation::coalesceDomain('edge.domain_reconcile', $domain->id, $second->id);
+
+        $this->assertTrue($started->is($joined));
+        $this->assertSame($domain->id, $started->domain_id);
+        $this->actingAs($first)->getJson("/api/operations/{$started->id}")->assertOk();
+        $this->actingAs($second)->getJson("/api/operations/{$started->id}")->assertOk();
+        $this->actingAs($outsider)->getJson("/api/operations/{$started->id}")->assertForbidden();
+        $global = \App\Models\Operation::query()->create(['actor_id' => $first->id, 'type' => 'dns.global_reconcile', 'status' => 'pending', 'input' => []]);
+        $this->actingAs($first)->getJson("/api/operations/{$global->id}")->assertForbidden();
+    }
+
+    public function test_the_database_refuses_a_second_unfinished_coalesced_operation_for_a_domain(): void
+    {
+        $domain = Domain::query()->create(['name' => 'unique-ops.example', 'display_name' => 'Unique', 'revision' => 1, 'lifecycle_state' => 'active']);
+        \App\Models\Operation::query()->create(['type' => 'dns.zone_reconcile', 'status' => 'running', 'input' => ['domain_id' => $domain->id]]);
+
+        $this->expectException(\Illuminate\Database\UniqueConstraintViolationException::class);
+        \App\Models\Operation::query()->create(['type' => 'dns.zone_reconcile', 'status' => 'pending', 'input' => ['domain_id' => $domain->id]]);
+    }
+
     public function test_component_health_is_admin_only_and_uses_stable_states(): void
     {
         Http::fake(['*' => Http::response('Ok.', 200)]);

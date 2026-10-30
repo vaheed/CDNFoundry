@@ -36,6 +36,7 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
         if ($settings === null) {
             return;
         }
+        $settings = PlatformDnsZone::advanceSerial($settings);
         $revision = $settings->revision;
         $rrsets = PlatformDnsZone::render($settings);
         $checksum = hash('sha256', json_encode($rrsets, JSON_THROW_ON_ERROR));
