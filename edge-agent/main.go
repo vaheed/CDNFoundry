@@ -76,6 +76,7 @@ type client struct {
 	gatewayRevision                    uint64
 	gatewayStatusURL                   string
 	derivedEnsured                     bool
+	keyUnassigned                      map[string]time.Time
 	statusURLs                         []string
 	cellAssignments                    map[string]string
 	cellTargets                        map[string]cellTarget
@@ -1342,6 +1343,7 @@ func compileRuntime(s state, keys map[string]string) (map[string]any, map[string
 	hosts := map[string]any{}
 	poolHosts := map[string]map[string]any{}
 	certificates := map[string]any{}
+	unassigned := map[string]bool{}
 	poolCertificates := map[string]map[string]any{}
 	cellHosts := map[string]map[string]any{}
 	cellCertificates := map[string]map[string]any{}
@@ -1401,9 +1403,13 @@ func compileRuntime(s state, keys map[string]string) (map[string]any, map[string
 					return nil, nil, errors.New("invalid runtime certificate")
 				}
 				id, _ := certificate["id"].(string)
-				key, available := keys[id]
-				if id == "" || certificate["certificate_pem"] == nil || !available {
+				if id == "" || certificate["certificate_pem"] == nil {
 					return nil, nil, errors.New("invalid runtime certificate")
+				}
+				key, available := keys[id]
+				if !available {
+					unassigned[id] = true
+					continue
 				}
 				certificate["private_key_pem"] = key
 				certificates[id] = certificate
@@ -1411,13 +1417,17 @@ func compileRuntime(s state, keys map[string]string) (map[string]any, map[string
 		}
 		if certificate, ok := domain.TLS["certificate"].(map[string]any); ok && certificate != nil {
 			certificateID, _ = certificate["id"].(string)
-			key, available := keys[certificateID]
-			if certificateID == "" || certificate["certificate_pem"] == nil || !available {
+			if certificateID == "" || certificate["certificate_pem"] == nil {
 				return nil, nil, errors.New("invalid runtime certificate")
 			}
-			certificate["private_key_pem"] = key
-			certificates[certificateID] = certificate
-			tlsReference["certificate_id"] = certificateID
+			if key, available := keys[certificateID]; available {
+				certificate["private_key_pem"] = key
+				certificates[certificateID] = certificate
+				tlsReference["certificate_id"] = certificateID
+			} else {
+				unassigned[certificateID] = true
+				certificateID = ""
+			}
 		}
 		for _, host := range domain.Hostnames {
 			name := strings.ToLower(strings.TrimSuffix(host.Hostname, "."))
@@ -1428,6 +1438,9 @@ func compileRuntime(s state, keys map[string]string) (map[string]any, map[string
 			hostCertificateID := host.TLSCertificateID
 			if hostCertificateID == "" {
 				hostCertificateID = certificateID
+			}
+			if hostCertificateID != "" && unassigned[hostCertificateID] {
+				hostCertificateID = ""
 			}
 			if hostCertificateID != "" {
 				if certificates[hostCertificateID] == nil {

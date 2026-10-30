@@ -117,6 +117,7 @@ object storage; other Restic backends need their own credential/mount wiring.
 | --- | --- | --- |
 | `CLICKHOUSE_PASSWORD` | telemetry | Password of the ClickHouse administrator `cdnf`. Only the ClickHouse container uses it, for schema and migrations |
 | `CLICKHOUSE_INGEST_PASSWORD` | telemetry/edge/DNS | Password of `cdnf_ingest`, the insert-only account Vector uses. It can insert into `edge_events` and `dns_events` and nothing else |
+| `CLICKHOUSE_USER` | internal | Account Laravel and Vector log in as. Compose fixes `cdnf_reader` for Laravel and `cdnf_ingest` for Vector |
 | `CLICKHOUSE_READER_PASSWORD` | control query | Password of `cdnf_reader`, the read-only account Laravel uses, with server-side limits on time, rows, and memory |
 | `CLICKHOUSE_URL` | telemetry/control query | Local `http://clickhouse:8123` or verified external endpoint |
 | `CLICKHOUSE_DATABASE` | internal/default | Database queried by Laravel; Compose fixes `cdnf` |
@@ -174,6 +175,22 @@ Vector receives `CLICKHOUSE_ENDPOINT` and logs in as `cdnf_ingest` with
 write events but cannot read or drop telemetry. The telemetry account split is
 one ingest password per fleet; it is not yet one per node. `MMDB_DIR` is an internal updater override
 whose default is `/mmdb`.
+
+### Moving an existing ClickHouse volume to the split accounts
+
+A new volume gets the accounts and the rollup views from the shipped schema. An
+existing volume needs two steps, both run once as the `cdnf` administrator:
+
+1. Restart ClickHouse with `CLICKHOUSE_INGEST_PASSWORD` and
+   `CLICKHOUSE_READER_PASSWORD` set and `docker/clickhouse/users.d/telemetry.xml`
+   mounted, as in `compose.prod.yml`. This creates `cdnf_ingest` and `cdnf_reader`.
+2. Run `docker/clickhouse/migrations/2026_10_30_materialized_view_definer.sql`.
+   Until then the insert-only account cannot update the hourly and daily rollup
+   views, and Vector logs `Not enough privileges` and keeps events in its disk
+   buffer.
+
+Then point Vector and Laravel at the new accounts. The old shared login stays
+valid for the administrator only.
 
 Laravel containers fix `LOG_CHANNEL=stderr`, `LOG_STACK=stderr`, and the
 allowlisting JSON formatter. Changing these back to a private file would bypass

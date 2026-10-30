@@ -688,6 +688,8 @@ steps below remain owner-run and must be recorded separately.
 3. Save each valid profile and confirm an asynchronous operation is created. Confirm the resulting revision and generation become active without an Nginx reload.
 4. Sign in as a domain user assigned to only one test domain. Confirm the user can view or change only authorized settings and cannot read or change the other hostname's WAF mode.
 5. Confirm migration/compatibility messaging does not silently enable blocking for a hostname that previously used detection-only behavior.
+6. As a domain owner, open the domain page, then the **Managed WAF exclusions** table. Expected: the table lists any stored exclusions with a delete action and shows no **New** or **Create** button. Delete one stored row and confirm an asynchronous operation is queued and the row disappears.
+7. As a domain owner, open the domain page and read the **DNS deployment** section. Expected: it shows each cluster's status and revisions but no **Deployment errors** entry. Sign in as an administrator, open the same domain, and confirm **Deployment errors** is visible there.
 
 ### Real shared-cell enforcement
 

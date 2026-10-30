@@ -18,7 +18,11 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
+
+// How long an unassigned certificate is not asked for again.
+const unassignedKeyRetry = 5 * time.Minute
 
 const keyEnvelopeAlgorithm = "ecdh-p256-hkdf-sha256-aes256gcm"
 
@@ -67,7 +71,8 @@ func requiredCertificateIDs(s state) ([]string, error) {
 func (c *client) keyDirectory() string { return filepath.Join(c.dir, "keys") }
 
 // certificateKeys returns the private key of every certificate the state needs,
-// reading the local cache and fetching missing keys over mTLS.
+// reading the local cache and fetching missing keys over mTLS. A certificate
+// that control reports as unassigned is left out of the result.
 func (c *client) certificateKeys(s state) (map[string]string, error) {
 	ids, err := requiredCertificateIDs(s)
 	if err != nil {
@@ -80,10 +85,23 @@ func (c *client) certificateKeys(s state) (map[string]string, error) {
 			keys[id] = string(cached)
 			continue
 		}
+		if checked, known := c.keyUnassigned[id]; known && time.Since(checked) < unassignedKeyRetry {
+			continue
+		}
 		var response struct {
 			Data keyEnvelope `json:"data"`
 		}
 		if err := c.request("GET", "/edge/v1/certificates/"+id+"/key", nil, &response, true); err != nil {
+			if strings.HasPrefix(err.Error(), "404 ") {
+				// Control says this edge is no longer assigned the certificate's domain.
+				// Serve nothing over TLS for it; any other failure keeps the previous state.
+				if c.keyUnassigned == nil {
+					c.keyUnassigned = map[string]time.Time{}
+				}
+				c.keyUnassigned[id] = time.Now()
+				logger.Warn("certificate key not assigned to this edge", "event", "certificate_key_unassigned", "edge_id", c.id.EdgeID, "certificate_id", id)
+				continue
+			}
 			return nil, fmt.Errorf("certificate key %s unavailable: %w", id, err)
 		}
 		key, err := openKeyEnvelope(c.id.PrivateKey, c.id.EdgeID, id, response.Data)

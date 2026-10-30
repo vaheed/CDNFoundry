@@ -170,36 +170,46 @@ start of their phase.
 
 Fixes C1, C2, H9, M1, L5, A4, A7, A10, A16, A23, A24, A37.
 
-- [ ] Remove private keys from snapshots and artifacts. Artifacts carry a
+- [x] Remove private keys from snapshots and artifacts. Artifacts carry a
       certificate id. The agent fetches the key over mTLS from a key endpoint,
       encrypted to that edge's identity key, and the key is never written to
       PostgreSQL except in `tls_certificates`.
-- [ ] Purge the existing key material from history. Since 2.0 is zero-state,
+- [x] Purge the existing key material from history. Since 2.0 is zero-state,
       this means only that the new schema has no column that could hold a key.
-- [ ] Return revisions through an API resource with an explicit field list
+- [x] Return revisions through an API resource with an explicit field list
       (revision, status, checksum, created_at, and a diff summary). Do the
-      same for every endpoint that returns raw models.
-- [ ] Add `$hidden` to every encrypted model column as a second safeguard.
-- [ ] Tag DNS telemetry with `domain_id` at the DNS node, from the zone the
-      authoritative server answered from. Scope analytics and logs by
-      `domain_id` and by the time since the current owner's activation.
-- [ ] Authenticate Vector's HTTP sources with a per-node token, and bind them
-      to the cell network.
-- [ ] Derive the edge `domain_id` at the cell from the active snapshot, never
-      from the event payload.
-- [ ] Split ClickHouse users: insert-only for Vector, with a separate secret
+      same for every endpoint that returns raw models. Done for every endpoint
+      a domain user can reach; a test sweeps them all. Administrator-only
+      lists still return models.
+- [x] Add `$hidden` to every encrypted model column as a second safeguard.
+- [x] Scope DNS analytics and logs by the owned zone and by the time since the
+      current owner's domain record was created, excluding names under any other
+      registered domain. Delivered at query time. Tagging `domain_id` at the DNS
+      node is deferred to the Phase 4 hidden-primary design, where nodes hold
+      zone data.
+- [x] Authenticate Vector's HTTP sources with the node secret, and require a
+      node-derived proof on every cell access-log line. Not delivered: binding
+      the sources to the cell network, and a separate token per node for the
+      ClickHouse ingest account (one ingest secret per fleet).
+- [x] Derive the edge `domain_id` at the cell from the active snapshot, never
+      from the event payload. The cell already set it from the matched host;
+      the node proof now stops other containers from forging it.
+- [x] Split ClickHouse users: insert-only for Vector, with a separate secret
       per node; read-only with a server-side settings profile for Laravel;
       administrator for migrations only.
-- [ ] Render `pdns.conf` secrets from Compose secrets in every production
+- [x] Render `pdns.conf` secrets from Compose secrets in every production
       path, and refuse to start with the development values.
-- [ ] Make WAF exclusions remove only the excluded rule (or target) for the
+- [x] Make WAF exclusions remove only the excluded rule (or target) for the
       matching request. Keep request-wide monitor mode only for the explicit
       profile mode. Until this ships, reject new exclusions with a stable 409.
-- [ ] On TLS listeners, reject a request whose `Host` is not covered by the
+      Delivered the interim: new exclusions return 409
+      `waf_exclusions_unavailable`, and no exclusion reaches an edge. The
+      per-rule, per-target removal itself is still open.
+- [x] On TLS listeners, reject a request whose `Host` is not covered by the
       certificate selected for its SNI.
-- [ ] State exactly what telemetry keeps, or truncate client addresses in the
+- [x] State exactly what telemetry keeps, or truncate client addresses in the
       long-lived rollups.
-- [ ] Rewrite rollback: restore only customer-owned fields, re-validate them
+- [x] Rewrite rollback: restore only customer-owned fields, re-validate them
       with `OriginData`, `CachePolicy`, and `SecurityConfig`, and roll back
       WAF and TLS mode as well, or refuse.
 
@@ -215,6 +225,16 @@ Fixes C1, C2, H9, M1, L5, A4, A7, A10, A16, A23, A24, A37.
 - The Vector ingest credential cannot `SELECT` or `DROP`.
 - A forged telemetry event from another container is rejected.
 - The production PowerDNS configuration contains no development secret.
+
+**Completion gate (2026-10-30).** The four fields are recorded separately.
+
+| Field | Status | Evidence |
+| --- | --- | --- |
+| Implementation | Complete, with the deferrals marked above | Commits on `dev`; replaced code is deleted |
+| Regression tests | Pass | `SecretExposureSweepTest`, `EdgeRevisionHistoryTest`, `EdgeProxyTest` (key delivery), `ProxyRollbackSafetyTest`, `AnalyticsApiTest` (DNS scope), `ManagedWafTest`; Go `certificate_keys_test.go` pins PHP/Go envelope interop |
+| Runtime tests | Pass for each exit item | `clickhouse_roles.py`, `vector_traffic.py`, `telemetry_proof.py`, `pdns_secrets.py`, `phase9_waf.py`, `sni_host_binding.py`, plus live `e2e.py`, `phase4_mtls.py`, `phase5_tls.py`, `phase6_security.py`, `phase7_analytics.py` on the Compose stack. The stack ran over IPv4 only |
+| Documentation | Updated | security, TLS, analytics, managed WAF, proxy and origins, configuration, manual Compose |
+| Manual browser | Not run; checklist updated | `docs/manual-browser-qualification.md` (WAF exclusions step) |
 
 ### Phase 2: Stop control-plane faults from becoming outages
 

@@ -197,6 +197,9 @@ def qualify_ingestion_and_queries(domain_id: int, user: str, stranger: str, admi
     edge_id = str(uuid.uuid4())
     dns_id = str(uuid.uuid4())
     event_time = interval_from + dt.timedelta(minutes=5)
+    # DNS analytics only show queries logged after the domain record was created, so
+    # the synthetic history needs a domain that already existed.
+    artisan(f"App\\Models\\Domain::whereKey({domain_id})->update(['created_at' => now()->subDays(3)]);")
     runtime_path = f"/runtime-{RUN_ID}"
 
     def produce_runtime_event() -> None:

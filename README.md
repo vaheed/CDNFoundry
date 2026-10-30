@@ -7,6 +7,12 @@
 [![Go 1.24+](https://img.shields.io/badge/Go-1.24%2B-00add8.svg)](edge-agent/go.mod)
 [![Documentation website](https://img.shields.io/badge/docs-VitePress-1c9a7d.svg)](https://vaheed.github.io/CDNFoundry/)
 
+> **Status: pre-production.** The 2.0 rebuild is under way on `dev`. Phase 1
+> (secret and tenant leaks, security bypasses) is complete on `dev`. The open
+> critical and high findings, such as control-plane faults that can withdraw
+> healthy PoPs from DNS, are listed in the [roadmap](docs/roadmap.md). Do not
+> treat the current release as production-ready until Phase 2 exits.
+
 CDNFoundry is an open-source, production-oriented **private CDN platform** for
 companies, hosting providers, and large ISPs that want to operate their own
 authoritative DNS, edge proxy, cache, TLS, security, and analytics
