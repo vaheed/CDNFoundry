@@ -566,6 +566,12 @@ class EdgeAgentController extends Controller
                     default => [],
                 });
             }
+            if (isset($row->payload['operation_id'])) {
+                Operation::query()->whereKey($row->payload['operation_id'])->update([
+                    'status' => $data['status'], 'error' => $data['status'] === 'failed' ? ($data['result']['failure_reason'] ?? 'cell_task_failed') : null,
+                    'finished_at' => now(),
+                ]);
+            }
         }
         if ($row->type === 'origin_test' && isset($row->payload['record_id'])) {
             $record = $row->currentOriginRecord(lock: true);

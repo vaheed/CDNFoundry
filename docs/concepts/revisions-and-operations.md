@@ -35,7 +35,9 @@ state. Revision numbers are never reused.
 Long-running changes create an `operations` row and return its UUID. Poll
 `GET /api/operations/{operation}` until the status is `succeeded` or `failed`.
 Administrators can list all operations, inspect failures, and retry supported
-types. A user can read an operation only through its domain: every user assigned
+types, including `usage.rebuild`. Every request that changes state or queues
+work, such as a deploy, an origin test, a DNS reconcile, or a usage rebuild,
+writes an audit entry with the actor and the operation id. A user can read an operation only through its domain: every user assigned
 to the domain can read every operation of that domain, including a coalesced
 operation another member started, and a request for any other operation
 answers `403`. Operations that belong to no domain, such as global

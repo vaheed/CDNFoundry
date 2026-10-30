@@ -8,6 +8,7 @@ use App\Http\Middleware\EnsureHorizonAdmin;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\IdempotentRequest;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -89,12 +90,26 @@ return Application::configure(basePath: dirname(__DIR__))
             }
 
             $status = $exception->getStatusCode();
-            $codes = [401 => 'unauthenticated', 403 => 'forbidden', 404 => 'not_found', 409 => 'conflict', 422 => 'unprocessable'];
+            $codes = [
+                401 => 'unauthenticated', 403 => 'forbidden', 404 => 'not_found', 405 => 'method_not_allowed', 409 => 'conflict',
+                413 => 'payload_too_large', 422 => 'unprocessable', 429 => 'too_many_requests',
+            ];
+            // Framework messages for missing models name internal classes; clients get a fixed sentence.
+            $message = $exception->getPrevious() instanceof ModelNotFoundException || str_starts_with($exception->getMessage(), 'No query results')
+                ? 'The requested resource was not found.'
+                : ($exception->getMessage() ?: 'The operation could not be completed.');
 
             return response()->json([
-                'message' => $exception->getMessage() ?: 'The operation could not be completed.',
-                'code' => $codes[$status] ?? 'http_error',
+                'message' => $message,
+                'code' => $codes[$status] ?? ($status >= 500 ? 'server_error' : 'http_error'),
                 'details' => (object) [],
             ], $status, $exception->getHeaders());
+        });
+        $exceptions->render(function (Throwable $exception, Request $request) {
+            if (! $request->is('api/*') && ! $request->is('edge/*') || config('app.debug')) {
+                return null;
+            }
+
+            return response()->json(['message' => 'The server could not complete the request.', 'code' => 'server_error', 'details' => (object) []], 500);
         });
     })->create();

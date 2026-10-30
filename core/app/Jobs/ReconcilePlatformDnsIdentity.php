@@ -21,6 +21,8 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
 {
     use Queueable;
 
+    public const ROUTING_OPERATION = 'platform_dns.routing_reconcile';
+
     public int $tries = 3;
 
     public int $uniqueFor = 300;
@@ -104,6 +106,8 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
             'error' => null,
             'finished_at' => now(),
         ]);
+        Operation::query()->where('type', self::ROUTING_OPERATION)->whereIn('status', ['pending', 'running'])
+            ->update(['status' => 'succeeded', 'result' => json_encode(['revision' => $revision, 'targets' => $targets]), 'finished_at' => now()]);
     }
 
     public function uniqueId(): string
@@ -124,15 +128,27 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
         }
     }
 
-    public static function dispatchForRoutingChange(): void
+    /** Queue a platform zone render and return the receipt callers can hand back with a 202. */
+    public static function dispatchForRoutingChange(?int $actorId = null): ?Operation
     {
-        DB::transaction(function (): void {
+        return DB::transaction(function () use ($actorId): ?Operation {
             $settings = PlatformDnsSetting::query()->lockForUpdate()->find(1);
             if ($settings === null) {
-                return;
+                return null;
             }
             $settings->update(['revision' => $settings->revision + 1]);
+            // One unfinished receipt covers every change the next render publishes.
+            $operation = Operation::query()->where('type', self::ROUTING_OPERATION)->whereIn('status', ['pending', 'running'])->first()
+                ?? Operation::query()->create(['actor_id' => $actorId, 'type' => self::ROUTING_OPERATION, 'status' => 'pending', 'input' => ['settings_id' => 1]]);
             self::dispatch()->afterCommit();
+
+            return $operation;
         });
+    }
+
+    public function failed(Throwable $exception): void
+    {
+        Operation::query()->where('type', self::ROUTING_OPERATION)->whereIn('status', ['pending', 'running'])
+            ->update(['status' => 'failed', 'error' => mb_substr($exception->getMessage(), 0, 4000), 'finished_at' => now()]);
     }
 }

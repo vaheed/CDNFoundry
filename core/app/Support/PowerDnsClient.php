@@ -71,7 +71,7 @@ class PowerDnsClient
      * A missing zone or a differing record set (including a lower SOA serial) is drift.
      * Connection and server errors are thrown, never reported as drift.
      *
-     * @param list<array{name:string,type:string,ttl:int,records:list<array{content:string,disabled:bool}>}> $rrsets
+     * @param  list<array{name:string,type:string,ttl:int,records:list<array{content:string,disabled:bool}>}>  $rrsets
      */
     public function matches(DnsCluster $cluster, string $zone, array $rrsets): bool
     {

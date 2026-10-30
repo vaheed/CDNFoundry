@@ -3,10 +3,10 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\UniqueConstraintViolationException;
 
 class Operation extends Model
 {
@@ -51,6 +51,15 @@ class Operation extends Model
     public function actor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'actor_id');
+    }
+
+    /** An accepted request's pollable receipt for work tracked by another record. */
+    public static function receipt(string $type, array $input, ?int $actorId, string $status = 'running'): self
+    {
+        return self::query()->create([
+            'actor_id' => $actorId, 'type' => $type, 'status' => $status, 'input' => $input,
+            'started_at' => now(), 'finished_at' => $status === 'running' ? null : now(),
+        ]);
     }
 
     public static function coalesceDomain(string $type, int $domainId, ?int $actorId = null): self

@@ -80,7 +80,7 @@ class DomainClaimSecurityTest extends TestCase
             ->patchJson("/api/domains/{$domain->id}", ['display_name' => 'Confidential label'])->assertOk();
         $domain->users()->detach($user);
         $this->actingAs($user)->withHeader('Idempotency-Key', $key)
-            ->patchJson("/api/domains/{$domain->id}", ['display_name' => 'Confidential label'])->assertForbidden();
+            ->patchJson("/api/domains/{$domain->id}", ['display_name' => 'Confidential label'])->assertNotFound();
     }
 
     public function test_revoked_assignment_cannot_read_earlier_domain_operation_input(): void
@@ -149,7 +149,7 @@ class DomainClaimSecurityTest extends TestCase
         $attacker = User::factory()->create();
         $domain = Domain::createPendingFor($owner, 'Example.COM.');
         $this->actingAs($attacker)->postJson('/api/domains', ['name' => 'example.com'])->assertUnprocessable();
-        $this->getJson("/api/domains/{$domain->id}")->assertForbidden();
+        $this->getJson("/api/domains/{$domain->id}")->assertNotFound();
         $this->assertSame([$owner->id], $domain->users()->pluck('users.id')->all());
         $this->assertDatabaseCount('domains', 1);
     }

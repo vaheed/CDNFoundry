@@ -29,8 +29,18 @@ Common framework mappings are:
 | 401 | `unauthenticated` |
 | 403 | `forbidden` |
 | 404 | `not_found` |
+| 405 | `method_not_allowed` |
 | 409 | `conflict` or a more specific controller code |
+| 413 | `payload_too_large` |
 | 422 | `unprocessable` |
+| 429 | `too_many_requests`, with `Retry-After` |
+| 5xx | `server_error`; the message is fixed and never carries internal detail |
+
+A domain you cannot view answers `404 not_found`, exactly like a domain that does
+not exist, so domain ids cannot be enumerated. A missing resource always answers
+with the fixed message "The requested resource was not found."; messages never
+name internal classes. `403 forbidden` remains for a resource you can see but
+may not change.
 
 Analytics dependency failure uses HTTP 503 and `analytics_unavailable`.
 Account disablement and idempotency conflicts use stable specific codes where

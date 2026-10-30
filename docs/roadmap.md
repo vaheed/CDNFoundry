@@ -369,10 +369,10 @@ A40, A41.
       pending operations.
 - [x] Implement each accepted emergency action, or reject it with a stable
       code and remove it from the documentation.
-- [ ] Return an operation id with every 202. Add stable codes for 405, 413,
+- [x] Return an operation id with every 202. Add stable codes for 405, 413,
       429, and 500. Return 404 for unauthorized bindings, and hide model
       class names.
-- [ ] Audit every mutation, and allow `usage.rebuild` to be retried.
+- [x] Audit every mutation, and allow `usage.rebuild` to be retried.
 - [ ] Verify uploaded chains against the system trust store, with the
       uploaded intermediates as untrusted. Honor ACME `Retry-After`, reuse
       `Replay-Nonce`, and lock ACME account creation.

@@ -26,7 +26,7 @@ class SecurityApiTest extends TestCase
         Queue::fake();
         [$user, $domain] = $this->ownedDomain();
         $stranger = User::factory()->create();
-        $this->actingAs($stranger)->getJson("/api/domains/{$domain->id}/security")->assertForbidden();
+        $this->actingAs($stranger)->getJson("/api/domains/{$domain->id}/security")->assertNotFound();
         $this->actingAs($user)->getJson("/api/domains/{$domain->id}/security")
             ->assertOk()->assertJsonPath('data.profile', 'standard')->assertJsonPath('data.platform_ceilings.requests_per_second', 100);
 

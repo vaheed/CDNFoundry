@@ -50,7 +50,7 @@ class ManagedWafTest extends TestCase
         $this->assertSame('off', $domain->fresh()->waf_profile);
         $this->assertSame(1, $domain->fresh()->revision);
         $this->actingAs($owner)->patchJson("/api/domains/{$domain->id}/waf", ['profile' => 'off'])->assertAccepted();
-            }
+    }
 
     public function test_fixed_profiles_are_revisioned_authorized_and_idempotent(): void
     {
@@ -58,7 +58,7 @@ class ManagedWafTest extends TestCase
         EdgePool::query()->where('kind', 'shared')->update(['waf_capable' => true, 'waf_runtime_version' => 'sha256:test']);
         [$owner, $domain] = $this->ownedDomain();
         $stranger = User::factory()->create();
-        $this->actingAs($stranger)->getJson("/api/domains/{$domain->id}/waf")->assertForbidden();
+        $this->actingAs($stranger)->getJson("/api/domains/{$domain->id}/waf")->assertNotFound();
         $this->actingAs($owner)->getJson("/api/domains/{$domain->id}/waf")
             ->assertOk()->assertJsonPath('data.name', 'off');
 

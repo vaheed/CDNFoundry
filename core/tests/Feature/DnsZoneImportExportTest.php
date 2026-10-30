@@ -211,8 +211,8 @@ ZONE;
         $this->get("/api/domains/{$domain->id}/dns/export")
             ->assertUnauthorized()
             ->assertJsonPath('code', 'unauthenticated');
-        $this->actingAs($other)->get("/api/domains/{$domain->id}/dns/export")->assertForbidden();
-        $this->actingAs($other)->postJson("/api/domains/{$domain->id}/dns/import", ['zone' => '@ 60 IN A 192.0.2.1'])->assertForbidden();
+        $this->actingAs($other)->get("/api/domains/{$domain->id}/dns/export")->assertNotFound();
+        $this->actingAs($other)->postJson("/api/domains/{$domain->id}/dns/import", ['zone' => '@ 60 IN A 192.0.2.1'])->assertNotFound();
         $this->actingAs($owner)->postJson("/api/domains/{$domain->id}/dns/import", ['zone' => str_repeat('x', 1048577)])->assertUnprocessable();
         $this->actingAs($owner)->postJson("/api/domains/{$domain->id}/dns/import", ['zone' => str_repeat('é', 600000)])->assertUnprocessable();
     }

@@ -80,8 +80,8 @@ class DnsRecordApiTest extends TestCase
         [$other, $otherDomain] = $this->ownedDomain('example.net');
         $record = $domain->dnsRecords()->create($this->record('A', '@', '192.0.2.10', $domain));
 
-        $this->actingAs($other)->getJson("/api/domains/{$domain->id}/dns/records")->assertForbidden();
-        $this->actingAs($owner)->getJson("/api/domains/{$otherDomain->id}/dns/records/{$record->id}")->assertForbidden();
+        $this->actingAs($other)->getJson("/api/domains/{$domain->id}/dns/records")->assertNotFound();
+        $this->actingAs($owner)->getJson("/api/domains/{$otherDomain->id}/dns/records/{$record->id}")->assertNotFound();
         $this->actingAs($owner)->getJson("/api/domains/{$domain->id}/dns/records/{$record->id}")->assertOk();
     }
 

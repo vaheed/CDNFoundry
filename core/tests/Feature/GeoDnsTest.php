@@ -22,8 +22,8 @@ class GeoDnsTest extends TestCase
             ->assertCreated()->assertJsonPath('data.mode', 'geo_dns')->assertJsonPath('data.geo.countries.IR.0', '203.0.113.30');
         $id = $response->json('data.id');
 
-        $this->actingAs($other)->getJson("/api/domains/{$domain->id}/dns/records/$id/geo")->assertForbidden();
-        $this->actingAs($user)->getJson("/api/domains/{$otherDomain->id}/dns/records/$id/geo")->assertForbidden();
+        $this->actingAs($other)->getJson("/api/domains/{$domain->id}/dns/records/$id/geo")->assertNotFound();
+        $this->actingAs($user)->getJson("/api/domains/{$otherDomain->id}/dns/records/$id/geo")->assertNotFound();
         $this->actingAs($user)->getJson("/api/domains/{$domain->id}/dns/records/$id/geo")
             ->assertOk()->assertJsonPath('data.continents.EU.0', '203.0.113.20');
 

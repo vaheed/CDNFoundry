@@ -39,7 +39,7 @@ class DomainApiTest extends TestCase
         $domain = Domain::findOrFail($created->json('data.id'));
         $this->assertTrue($domain->users()->whereKey($user->id)->exists());
         $this->actingAs($user)->getJson('/api/domains')->assertOk()->assertJsonCount(1, 'data');
-        $this->actingAs($other)->getJson("/api/domains/{$domain->id}")->assertForbidden();
+        $this->actingAs($other)->getJson("/api/domains/{$domain->id}")->assertNotFound();
         $this->actingAs($other)->getJson('/api/domains')->assertOk()->assertJsonCount(0, 'data');
         $this->assertDatabaseHas('audit_logs', ['action' => 'domain.created', 'subject_id' => (string) $domain->id]);
         $this->assertSame(1, Operation::query()->where('type', 'domain.nameservers_verify')->where('input->domain_id', $domain->id)->count());
@@ -95,7 +95,7 @@ class DomainApiTest extends TestCase
         $domain = Domain::query()->create(['name' => 'example.net', 'display_name' => 'example.net']);
         $domain->users()->attach($user);
 
-        $this->actingAs($other)->patchJson("/api/domains/{$domain->id}", ['display_name' => 'Denied'])->assertForbidden();
+        $this->actingAs($other)->patchJson("/api/domains/{$domain->id}", ['display_name' => 'Denied'])->assertNotFound();
         $this->actingAs($user)->patchJson("/api/domains/{$domain->id}", ['name' => 'renamed.example', 'display_name' => 'Customer site'])->assertOk()
             ->assertJsonPath('data.name', 'example.net')->assertJsonPath('data.display_name', 'Customer site');
         $this->assertDatabaseHas('audit_logs', ['action' => 'domain.updated', 'subject_id' => (string) $domain->id]);

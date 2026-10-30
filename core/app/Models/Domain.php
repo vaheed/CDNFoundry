@@ -25,12 +25,10 @@ class Domain extends Model
     public function resolveRouteBinding($value, $field = null)
     {
         $domain = parent::resolveRouteBinding($value, $field);
-        if ($domain !== null) {
-            // Bind before idempotency replay as well as controller execution.
-            Gate::authorize('view', $domain);
-        }
 
-        return $domain;
+        // Bind before idempotency replay as well as controller execution. A domain the caller
+        // may not view is indistinguishable from one that does not exist, so ids cannot be probed.
+        return $domain !== null && Gate::allows('view', $domain) ? $domain : null;
     }
 
     /** Serialize creation and finalization for a canonical name, including absent rows. */

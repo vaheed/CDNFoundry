@@ -13,7 +13,9 @@ use App\Models\Edge;
 use App\Models\EdgeCell;
 use App\Models\EdgePool;
 use App\Models\EmergencyMode;
+use App\Models\Operation;
 use App\Models\User;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -34,25 +36,25 @@ class OperationsApiTest extends TestCase
         $domain = Domain::query()->create(['name' => 'shared-ops.example', 'display_name' => 'Shared', 'revision' => 1, 'lifecycle_state' => 'active']);
         $domain->users()->attach([$first->id, $second->id]);
 
-        $started = \App\Models\Operation::coalesceDomain('edge.domain_reconcile', $domain->id, $first->id);
-        $joined = \App\Models\Operation::coalesceDomain('edge.domain_reconcile', $domain->id, $second->id);
+        $started = Operation::coalesceDomain('edge.domain_reconcile', $domain->id, $first->id);
+        $joined = Operation::coalesceDomain('edge.domain_reconcile', $domain->id, $second->id);
 
         $this->assertTrue($started->is($joined));
         $this->assertSame($domain->id, $started->domain_id);
         $this->actingAs($first)->getJson("/api/operations/{$started->id}")->assertOk();
         $this->actingAs($second)->getJson("/api/operations/{$started->id}")->assertOk();
         $this->actingAs($outsider)->getJson("/api/operations/{$started->id}")->assertForbidden();
-        $global = \App\Models\Operation::query()->create(['actor_id' => $first->id, 'type' => 'dns.global_reconcile', 'status' => 'pending', 'input' => []]);
+        $global = Operation::query()->create(['actor_id' => $first->id, 'type' => 'dns.global_reconcile', 'status' => 'pending', 'input' => []]);
         $this->actingAs($first)->getJson("/api/operations/{$global->id}")->assertForbidden();
     }
 
     public function test_the_database_refuses_a_second_unfinished_coalesced_operation_for_a_domain(): void
     {
         $domain = Domain::query()->create(['name' => 'unique-ops.example', 'display_name' => 'Unique', 'revision' => 1, 'lifecycle_state' => 'active']);
-        \App\Models\Operation::query()->create(['type' => 'dns.zone_reconcile', 'status' => 'running', 'input' => ['domain_id' => $domain->id]]);
+        Operation::query()->create(['type' => 'dns.zone_reconcile', 'status' => 'running', 'input' => ['domain_id' => $domain->id]]);
 
-        $this->expectException(\Illuminate\Database\UniqueConstraintViolationException::class);
-        \App\Models\Operation::query()->create(['type' => 'dns.zone_reconcile', 'status' => 'pending', 'input' => ['domain_id' => $domain->id]]);
+        $this->expectException(UniqueConstraintViolationException::class);
+        Operation::query()->create(['type' => 'dns.zone_reconcile', 'status' => 'pending', 'input' => ['domain_id' => $domain->id]]);
     }
 
     public function test_component_health_is_admin_only_and_uses_stable_states(): void

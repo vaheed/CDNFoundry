@@ -79,8 +79,8 @@ class OriginFailoverTest extends TestCase
         [, $domain, $record] = $this->proxiedRecord();
         $other = User::factory()->create();
 
-        $this->actingAs($other)->getJson("/api/domains/{$domain->id}/dns/records/{$record->id}/origin")->assertForbidden();
-        $this->actingAs($other)->putJson("/api/domains/{$domain->id}/dns/records/{$record->id}/origin", $this->origin('1.1.1.1'))->assertForbidden();
+        $this->actingAs($other)->getJson("/api/domains/{$domain->id}/dns/records/{$record->id}/origin")->assertNotFound();
+        $this->actingAs($other)->putJson("/api/domains/{$domain->id}/dns/records/{$record->id}/origin", $this->origin('1.1.1.1'))->assertNotFound();
     }
 
     public function test_artifact_applies_the_same_safety_envelope_to_both_origins(): void

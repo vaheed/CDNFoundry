@@ -46,7 +46,7 @@ class AccessApiTest extends TestCase
 
         $this->getJson('/api/domains')->assertOk()->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $assigned->id);
-        $this->getJson("/api/domains/{$other->id}")->assertForbidden();
+        $this->getJson("/api/domains/{$other->id}")->assertNotFound();
         $this->postJson('/api/auth/logout')->assertOk()->assertJsonPath('data.logged_out', true);
 
         $this->assertGuest('web');

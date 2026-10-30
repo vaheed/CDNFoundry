@@ -6,6 +6,7 @@ use App\Enums\DomainLifecycleState;
 use App\Filament\Admin\Pages\Telemetry;
 use App\Jobs\BuildUsageRollups;
 use App\Models\Domain;
+use App\Models\Operation;
 use App\Models\UsageRollup;
 use App\Models\User;
 use App\Support\AnalyticsStore;
@@ -13,6 +14,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class AnalyticsApiTest extends TestCase
@@ -56,7 +58,7 @@ class AnalyticsApiTest extends TestCase
             json_encode(['requests' => 10, 'bytes_in' => 120, 'bytes_out' => 900, 'cache_hits' => 8, 'origin_errors' => 1, 'tls_failures' => 0, 'security_blocks' => 2]),
         ]))->push(json_encode(['dns_queries' => 14]));
 
-        $this->actingAs($stranger)->getJson("/api/domains/{$domain->id}/analytics/summary")->assertForbidden();
+        $this->actingAs($stranger)->getJson("/api/domains/{$domain->id}/analytics/summary")->assertNotFound();
         $response = $this->actingAs($user)->getJson("/api/domains/{$domain->id}/analytics/summary")
             ->assertOk()->assertJsonPath('data.requests', 10)->assertJsonPath('data.dns_queries', 14)
             ->assertJsonPath('data.cache_ratio', 0.8)->assertJsonPath('meta.units.bandwidth', 'bytes')
@@ -158,6 +160,14 @@ class AnalyticsApiTest extends TestCase
         $this->actingAs($admin)->withHeaders($headers)->postJson('/api/admin/usage/rebuild', $payload)->assertAccepted()
             ->assertJsonPath('data.operation_id', $first->json('data.operation_id'));
         Queue::assertPushed(BuildUsageRollups::class, 1);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'usage.rebuild_requested', 'actor_id' => $admin->id]);
+
+        // A failed rebuild can be retried with its original range.
+        $operation = Operation::query()->findOrFail($first->json('data.operation_id'));
+        $operation->update(['status' => 'failed', 'error' => 'ClickHouse unavailable']);
+        $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())->postJson("/api/admin/operations/{$operation->id}/retry")->assertAccepted();
+        Queue::assertPushed(BuildUsageRollups::class, 2);
+        $this->assertSame('pending', $operation->refresh()->status);
 
         $this->actingAs($admin)->withHeaders(['Idempotency-Key' => 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'])->postJson('/api/admin/usage/rebuild', ['from' => '2026-07-20T08:30:00Z', 'to' => '2026-07-20T10:00:00Z'])
             ->assertUnprocessable();

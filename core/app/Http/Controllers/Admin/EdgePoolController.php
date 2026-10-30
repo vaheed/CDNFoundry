@@ -48,9 +48,9 @@ class EdgePoolController extends Controller
 
             return $endpoint;
         });
-        ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
+        $operation = ReconcilePlatformDnsIdentity::dispatchForRoutingChange($request->user()->id);
 
-        return response()->json(['data' => $endpoint->load(['edge', 'pool'])], 202);
+        return response()->json(['data' => $endpoint->load(['edge', 'pool']), 'operation_id' => $operation?->id], 202);
     }
 
     public function updateEndpoint(Request $request, EdgePool $pool, EdgePoolEndpoint $endpoint): JsonResponse
@@ -62,9 +62,9 @@ class EdgePoolController extends Controller
             $endpoint->update([...$data, 'revision' => $endpoint->revision + 1, 'gateway_state' => 'pending', 'readiness_reason' => 'gateway_not_acknowledged']);
             AuditLog::record($request->user(), 'edge.pool_endpoint_updated', $endpoint, ['revision' => $endpoint->revision], $request->ip());
         });
-        ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
+        $operation = ReconcilePlatformDnsIdentity::dispatchForRoutingChange($request->user()->id);
 
-        return response()->json(['data' => $endpoint->refresh()->load(['edge', 'pool'])], 202);
+        return response()->json(['data' => $endpoint->refresh()->load(['edge', 'pool']), 'operation_id' => $operation?->id], 202);
     }
 
     public function destroyEndpoint(Request $request, EdgePool $pool, EdgePoolEndpoint $endpoint): JsonResponse

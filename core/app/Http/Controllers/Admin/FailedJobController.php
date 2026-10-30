@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\Operation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
@@ -30,7 +31,9 @@ class FailedJobController extends Controller
         Artisan::call('queue:retry', ['id' => [$row->uuid]]);
         AuditLog::record($request->user(), 'failed_job.retry_requested', null, ['uuid' => $row->uuid, 'queue' => $row->queue], $request->ip());
 
-        return response()->json(['data' => ['uuid' => $row->uuid, 'status' => 'queued']], 202);
+        $operation = Operation::receipt('failed_job.retry', ['uuid' => $row->uuid, 'queue' => $row->queue], $request->user()->id, 'succeeded');
+
+        return response()->json(['data' => ['uuid' => $row->uuid, 'status' => 'queued', 'operation_id' => $operation->id]], 202);
     }
 
     public function destroy(Request $request, string $job): JsonResponse

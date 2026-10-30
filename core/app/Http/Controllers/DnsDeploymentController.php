@@ -6,6 +6,7 @@ use App\Enums\DomainLifecycleState;
 use App\Http\Resources\DnsDeploymentResource;
 use App\Http\Resources\OperationResource;
 use App\Jobs\ReconcileDnsZone;
+use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Models\Operation;
 use Illuminate\Http\JsonResponse;
@@ -34,6 +35,7 @@ class DnsDeploymentController extends Controller
                 'status' => 'pending', 'input' => ['domain_id' => $domain->id, 'revision' => $domain->revision],
             ]);
             ReconcileDnsZone::dispatch($domain->id)->afterCommit();
+            AuditLog::record($request->user(), 'dns.reconcile_requested', $domain, ['operation_id' => $operation->id, 'revision' => $domain->revision], $request->ip());
         }
 
         return response()->json(['data' => OperationResource::make($operation)->resolve()], 202);

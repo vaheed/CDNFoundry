@@ -13,6 +13,7 @@ use App\Models\PlatformDnsSetting;
 use App\Models\User;
 use App\Support\DnsRecordData;
 use App\Support\PowerDnsClient;
+use App\Support\PowerDnsZone;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -198,7 +199,7 @@ class DnsReconciliationTest extends TestCase
         $cluster = DnsCluster::query()->create($this->clusterData());
         $deployed = function (string $name, string $status = 'succeeded') use ($cluster): Domain {
             $domain = Domain::query()->create(['name' => $name, 'display_name' => $name, 'lifecycle_state' => 'active', 'revision' => 1]);
-            $rrsets = \App\Support\PowerDnsZone::render($domain);
+            $rrsets = PowerDnsZone::render($domain);
             DnsDeployment::query()->create([
                 'domain_id' => $domain->id, 'dns_cluster_id' => $cluster->id, 'desired_revision' => 1, 'deployed_revision' => 1,
                 'status' => $status, 'active_checksum' => hash('sha256', json_encode($rrsets)), 'active_rrsets' => $rrsets,
@@ -211,7 +212,7 @@ class DnsReconciliationTest extends TestCase
         $changed = $deployed('changed.example');
         $failed = $deployed('failed.example', 'failed');
         $unreachable = $deployed('unreachable.example');
-        Http::fake(function (Request $request) use ($healthy, $changed, $unreachable) {
+        Http::fake(function (Request $request) use ($healthy, $changed) {
             if (str_contains($request->url(), 'missing.example')) {
                 return Http::response([], 404);
             }
@@ -219,7 +220,7 @@ class DnsReconciliationTest extends TestCase
                 return Http::response(['error' => 'down'], 503);
             }
             $domain = str_contains($request->url(), 'changed.example') ? $changed : $healthy;
-            $rrsets = \App\Support\PowerDnsZone::render($domain);
+            $rrsets = PowerDnsZone::render($domain);
             if ($domain->is($changed)) {
                 $rrsets[0]['records'][0]['content'] .= ' tampered';
             }

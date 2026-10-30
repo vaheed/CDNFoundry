@@ -8,6 +8,7 @@ use App\Models\AuditLog;
 use App\Models\Edge;
 use App\Models\FleetRelease;
 use App\Models\FleetRollout;
+use App\Models\Operation;
 use App\Support\RuntimeVersions;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -72,6 +73,7 @@ class FleetRolloutController extends Controller
             $rollout = FleetRollout::query()->create([
                 ...collect($data)->except(['canary_edge_ids', 'edge_ids', 'wave_size'])->all(),
                 'created_by' => $request->user()->id,
+                'operation_id' => Operation::receipt('fleet.rollout', ['fleet_release_id' => $release->id], $request->user()->id)->id,
             ]);
             $canaries = array_flip($data['canary_edge_ids']);
             $later = 0;
@@ -89,18 +91,18 @@ class FleetRolloutController extends Controller
         });
         AdvanceFleetRollout::dispatch($rollout->id)->afterCommit();
 
-        return response()->json(['data' => ['id' => $rollout->id, 'status' => $rollout->status]], 202);
+        return response()->json(['data' => ['id' => $rollout->id, 'status' => $rollout->status, 'operation_id' => $rollout->operation_id]], 202);
     }
 
     public function resume(Request $request, FleetRollout $rollout): JsonResponse
     {
         abort_unless($rollout->status === 'paused', 409, 'Only a paused rollout can resume.');
         abort_if($rollout->edges()->where('status', 'failed')->exists(), 409, 'Resolve or roll back failed edges before resuming.');
-        $rollout->update(['status' => 'running', 'pause_reason' => null]);
+        $rollout->update(['status' => 'running', 'pause_reason' => null, 'operation_id' => Operation::receipt('fleet.rollout', ['fleet_rollout_id' => $rollout->id, 'action' => 'resume'], $request->user()->id)->id]);
         AuditLog::record($request->user(), 'fleet_rollout.resumed', $rollout, [], $request->ip());
         AdvanceFleetRollout::dispatch($rollout->id)->afterCommit();
 
-        return response()->json(['data' => ['id' => $rollout->id, 'status' => 'running']], 202);
+        return response()->json(['data' => ['id' => $rollout->id, 'status' => 'running', 'operation_id' => $rollout->operation_id]], 202);
     }
 
     public function rollback(Request $request, FleetRollout $rollout): JsonResponse
@@ -109,7 +111,7 @@ class FleetRolloutController extends Controller
         abort_if($rollout->previous_release_id === null, 409, 'No compatible previous release was recorded.');
         $previous = $rollout->previousRelease()->firstOrFail();
         DB::transaction(function () use ($request, $rollout, $previous): void {
-            $rollout->update(['status' => 'rolling_back', 'pause_reason' => null]);
+            $rollout->update(['status' => 'rolling_back', 'pause_reason' => null, 'operation_id' => Operation::receipt('fleet.rollout', ['fleet_rollout_id' => $rollout->id, 'action' => 'rollback'], $request->user()->id)->id]);
             $rollout->edges()->whereIn('status', ['succeeded', 'failed', 'dispatched'])->get()->each(function ($row) use ($previous): void {
                 $row->update(['status' => 'pending', 'desired_versions' => $previous->versions(), 'failure_reason' => null, 'started_at' => null, 'finished_at' => null]);
             });
@@ -117,6 +119,6 @@ class FleetRolloutController extends Controller
         });
         AdvanceFleetRollout::dispatch($rollout->id)->afterCommit();
 
-        return response()->json(['data' => ['id' => $rollout->id, 'status' => 'rolling_back']], 202);
+        return response()->json(['data' => ['id' => $rollout->id, 'status' => 'rolling_back', 'operation_id' => $rollout->operation_id]], 202);
     }
 }

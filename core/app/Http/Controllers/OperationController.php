@@ -50,7 +50,7 @@ class OperationController extends Controller
     public function retry(Request $request, Operation $operation): JsonResponse
     {
         abort_unless($operation->status === 'failed', 409, 'Only failed operations can be retried.');
-        abort_unless(in_array($operation->type, ['platform_dns_identity.update', 'system_settings.update', 'domain.nameservers_verify', 'dns.zone_reconcile', 'dns.zone_import', 'dns.cluster_test', 'dns.global_reconcile', 'edge.global_reconcile', 'edges.global_reconcile', 'tls.global_reconcile', 'purges.global_reconcile', 'usage.global_reconcile', 'backup.create', 'backup.restore', 'backup.delete', 'edge.domain_reconcile', 'edge.origin_test'], true), 422, 'Unsupported operation type.');
+        abort_unless(in_array($operation->type, ['platform_dns_identity.update', 'system_settings.update', 'domain.nameservers_verify', 'dns.zone_reconcile', 'dns.zone_import', 'dns.cluster_test', 'dns.global_reconcile', 'edge.global_reconcile', 'edges.global_reconcile', 'tls.global_reconcile', 'purges.global_reconcile', 'usage.global_reconcile', 'usage.rebuild', 'backup.create', 'backup.restore', 'backup.delete', 'edge.domain_reconcile', 'edge.origin_test'], true), 422, 'Unsupported operation type.');
         $operation->update(['status' => 'pending', 'error' => null, 'finished_at' => null]);
         AuditLog::record($request->user(), 'operation.retry_requested', $operation, [], $request->ip());
         match ($operation->type) {
@@ -65,6 +65,7 @@ class OperationController extends Controller
             'edges.global_reconcile' => ReconcileAllEdgeDomains::dispatch($operation->getKey()),
             'tls.global_reconcile' => ReconcileAllTls::dispatch($operation->getKey()),
             'purges.global_reconcile' => ReconcileAllPurges::dispatch($operation->getKey()),
+            'usage.rebuild' => BuildUsageRollups::dispatch($operation->input['from'], $operation->input['to'], $operation->input['domain_id'] ?? null, $operation->getKey()),
             'usage.global_reconcile' => BuildUsageRollups::dispatch($operation->input['from'], $operation->input['to'], null, $operation->getKey()),
             'backup.create' => CreateControlBackup::dispatch($operation->input['backup_id'], $operation->getKey()),
             'backup.restore' => PreflightBackupRestore::dispatch($operation->input['backup_id'], $operation->getKey()),

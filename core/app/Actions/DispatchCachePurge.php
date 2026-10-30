@@ -8,6 +8,7 @@ use App\Models\CachePurge;
 use App\Models\Domain;
 use App\Models\Edge;
 use App\Models\EdgeTask;
+use App\Models\Operation;
 use App\Models\User;
 use App\Support\CacheKey;
 use App\Support\CachePolicy;
@@ -35,15 +36,22 @@ final class DispatchCachePurge
             if ($type === 'all') {
                 $locked->increment('cache_epoch');
             }
+            $sequence = DB::getDriverName() === 'pgsql'
+                ? (int) DB::selectOne("SELECT nextval('cache_purge_sequence') AS number")->number
+                : (int) CachePurge::query()->max('sequence') + 1;
+            $operation = Operation::query()->create([
+                'actor_id' => $actor->id, 'domain_id' => $locked->id, 'type' => 'cache.purge', 'status' => 'running',
+                'started_at' => now(), 'input' => ['domain_id' => $locked->id, 'type' => $type, 'url_count' => count($keys ?? [])],
+            ]);
             $purge = CachePurge::query()->create([
-                'domain_id' => $locked->id, 'requested_by' => $actor->id, 'type' => $type,
-                'cache_epoch' => $locked->cache_epoch, 'cache_keys' => $keys, 'status' => 'pending',
+                'domain_id' => $locked->id, 'requested_by' => $actor->id, 'type' => $type, 'sequence' => $sequence,
+                'operation_id' => $operation->id, 'cache_epoch' => $locked->cache_epoch, 'cache_keys' => $keys, 'status' => 'pending',
             ]);
             foreach (Edge::query()->where('enabled', true)->whereNull('identity_revoked_at')->cursor() as $edge) {
                 EdgeTask::query()->create([
                     'id' => (string) Str::uuid(), 'edge_id' => $edge->id, 'cache_purge_id' => $purge->id,
                     'type' => 'cache_purge', 'payload' => [
-                        'purge_id' => $purge->id, 'domain_id' => $locked->id, 'domain' => $locked->name, 'type' => $type,
+                        'purge_id' => $sequence, 'domain_id' => $locked->id, 'domain' => $locked->name, 'type' => $type,
                         'cache_epoch' => $locked->cache_epoch, 'cache_keys' => $keys,
                     ], 'status' => 'pending',
                 ]);

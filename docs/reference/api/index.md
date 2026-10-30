@@ -93,7 +93,11 @@ curl --fail --request POST \
 
 ## Asynchronous operations
 
-External, global, or long work returns HTTP 202 with `operation_id`. Poll:
+External, global, or long work returns HTTP 202 with `operation_id`. Every `202`
+carries one, including cache settings, cache purges, Geo-DNS changes, pool and
+endpoint changes, cell actions, fleet rollouts, and failed-job retries. A purge
+also returns the same id as `data.operation_id`; a rollout's operation stays
+`running` while the rollout is running, paused, or rolling back. Poll:
 
 ```sh
 curl --fail \
