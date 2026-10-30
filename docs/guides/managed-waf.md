@@ -23,8 +23,11 @@ There are only two everyday decisions:
 
 The pool answers “where can WAF run?” The domain setting answers “what should
 WAF do for this website?” A domain using Observe, Recommended, or High
-sensitivity waits for a pool offering the pinned WAF runtime; CDNFoundry does
-not silently place it on a non-WAF runtime.
+sensitivity needs a pool offering the pinned WAF runtime. If no enabled
+WAF-capable shared pool exists, the API answers `409`
+`waf_capable_pool_unavailable` and changes nothing; CDNFoundry never accepts a
+profile it cannot run and never silently places the domain on a non-WAF
+runtime.
 
 **Under Attack mode** is separate. It temporarily tightens request and
 connection limits during an active incident. It does not turn WAF on or change

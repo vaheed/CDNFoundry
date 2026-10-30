@@ -92,6 +92,24 @@ class PlacementResilienceTest extends TestCase
         $this->assertSame($other->id, DomainEdgePlacement::query()->where('domain_id', $domain->id)->value('target_pool_id'));
     }
 
+    public function test_automatic_placement_never_selects_a_non_shared_pool(): void
+    {
+        foreach (['reserved', 'dedicated'] as $kind) {
+            EdgePool::query()->create(['name' => "extra-{$kind}", 'kind' => $kind, 'enabled' => true]);
+        }
+        $shared = EdgePool::query()->where('kind', 'shared')->firstOrFail();
+        $this->assertSame(1, EdgePool::query()->where('kind', 'quarantine')->count());
+        $origin = ['host' => '8.8.8.8', 'port' => 80, 'scheme' => 'http', 'host_header' => 'origin.example', 'sni' => null, 'verify_tls' => false, 'connect_timeout_ms' => 1000, 'response_timeout_ms' => 5000, 'retry_count' => 1];
+        for ($index = 0; $index < 40; $index++) {
+            $domain = Domain::query()->create(['name' => "spread-{$index}.example", 'display_name' => 'Spread', 'revision' => 1, 'lifecycle_state' => 'active']);
+            $domain->dnsRecords()->create(['type' => 'A', 'name' => "spread-{$index}.example", 'content' => '8.8.8.8', 'ttl' => 60, 'mode' => 'proxied', 'content_hash' => 'h', 'origin' => $origin]);
+            (new ReconcileEdgeDomain($domain->id))->handle();
+        }
+
+        $this->assertSame(40, DomainEdgePlacement::query()->where('target_pool_id', $shared->id)->count());
+        $this->assertSame(0, DomainEdgePlacement::query()->where('target_pool_id', '!=', $shared->id)->count());
+    }
+
     public function test_the_zone_publishes_proxied_names_before_any_placement_is_active(): void
     {
         $this->platformSettings();

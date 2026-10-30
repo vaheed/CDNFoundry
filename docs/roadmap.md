@@ -334,11 +334,12 @@ Exit items and how each was checked:
 Fixes H1, H2, H5, H6, H7, M3, M9, M13, M14, A5, A6, A14, A15, A19, A38, A39,
 A40, A41.
 
-- [ ] Restrict automatic placement to `shared` pools. Only explicit
+- [x] Restrict automatic placement to `shared` pools. Only explicit
       administrator actions select `quarantine`, `reserved`, or `dedicated`.
-- [ ] Ship the default `shared` pool WAF-capable, or reject a WAF profile
+- [x] Ship the default `shared` pool WAF-capable, or reject a WAF profile
       change with a clear 409 when no WAF-capable pool exists. Never accept
-      work that cannot run.
+      work that cannot run. Delivered as the 409
+      `waf_capable_pool_unavailable`.
 - [ ] Define the cache key once (path normalization, query decoding, and
       ordering), built from the raw request path. Keep `%2F` and `%3F`
       encoded, and reject requests that would normalize differently from the

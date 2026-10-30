@@ -40,9 +40,22 @@ class ManagedWafTest extends TestCase
         }
     }
 
+    public function test_profile_change_is_refused_with_409_when_no_waf_capable_pool_exists(): void
+    {
+        Queue::fake();
+        [$owner, $domain] = $this->ownedDomain();
+
+        $this->actingAs($owner)->patchJson("/api/domains/{$domain->id}/waf", ['profile' => 'balanced'])
+            ->assertConflict()->assertJsonPath('code', 'waf_capable_pool_unavailable');
+        $this->assertSame('off', $domain->fresh()->waf_profile);
+        $this->assertSame(1, $domain->fresh()->revision);
+        $this->actingAs($owner)->patchJson("/api/domains/{$domain->id}/waf", ['profile' => 'off'])->assertAccepted();
+            }
+
     public function test_fixed_profiles_are_revisioned_authorized_and_idempotent(): void
     {
         Queue::fake();
+        EdgePool::query()->where('kind', 'shared')->update(['waf_capable' => true, 'waf_runtime_version' => 'sha256:test']);
         [$owner, $domain] = $this->ownedDomain();
         $stranger = User::factory()->create();
         $this->actingAs($stranger)->getJson("/api/domains/{$domain->id}/waf")->assertForbidden();

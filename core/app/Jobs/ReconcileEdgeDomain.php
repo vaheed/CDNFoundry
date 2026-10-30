@@ -61,9 +61,13 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             DomainEdgeCell::query()->where('domain_id', $domain->id)->delete();
         } else {
             $requiresWaf = $domain->waf_profile !== 'off';
+            $current = DomainEdgePlacement::query()->where('domain_id', $domain->id)->first();
+            $currentPoolId = $current?->target_pool_id ?? $current?->active_pool_id;
+            // Automatic placement uses shared pools only. A non-shared pool is kept only
+            // when an administrator action already placed the domain there.
             $pools = EdgePool::query()->where('enabled', true)->where('withdrawn', false)
                 ->when($requiresWaf, fn ($query) => $query->where('waf_capable', true))
-                ->orderByRaw("CASE kind WHEN 'reserved' THEN 0 WHEN 'dedicated' THEN 1 WHEN 'quarantine' THEN 2 ELSE 3 END")
+                ->where(fn ($query) => $query->where('kind', 'shared')->when($currentPoolId !== null, fn ($q) => $q->orWhere('id', $currentPoolId)))
                 ->orderBy('id')->get();
             if ($pools->isEmpty()) {
                 throw new \RuntimeException($requiresWaf
@@ -84,7 +88,9 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
                 $preferredId = $placement->target_pool_id ?? $placement->active_pool_id;
                 $target = $preferredId !== null && $eligibleIds->contains($preferredId)
                     ? $pools->firstWhere('id', $preferredId)
-                    : $pools[abs(crc32($domain->name)) % $pools->count()];
+                    : ($pools->where('kind', 'shared')->values()->isNotEmpty()
+                        ? $pools->where('kind', 'shared')->values()[abs(crc32($domain->name)) % $pools->where('kind', 'shared')->count()]
+                        : $pools[0]);
                 $revisionIsActive = $placement->desired_revision === $revision && $currentDomain->active_edge_revision === $revision;
                 $alreadyActive = $placement->state === 'active' && $placement->active_pool_id === $target->id && $revisionIsActive;
                 $alreadyDraining = $placement->state === 'draining' && $placement->target_pool_id === $target->id && $revisionIsActive;

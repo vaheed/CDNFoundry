@@ -132,7 +132,7 @@ counting, keeps its own cursor, and catches up without blocking the pool.
 `cdnf:edge:promote-placements` walks every deploying placement each minute in
 chunks, so a backlog of stuck placements cannot hide newer ones.
 
-Automatic placement never chooses a withdrawn pool. A proxied name is published
+Automatic placement chooses only enabled, non-withdrawn pools of kind `shared`. Only an administrator action moves a domain to a `quarantine`, `reserved`, or `dedicated` pool, and the domain stays there until an administrator moves it. A proxied name is published
 in the zone even before its placement is active: it follows the default shared
 pool until the placement is promoted, so MX, TXT, and every other record
 resolve immediately after activation.

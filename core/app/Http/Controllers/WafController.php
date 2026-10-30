@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
 use App\Models\Domain;
+use App\Models\EdgePool;
 use App\Models\Operation;
 use App\Models\WafExclusion;
 use App\Support\ManagedWaf;
@@ -29,6 +30,12 @@ class WafController extends Controller
             'profile' => ['required', 'in:off,monitor,balanced,strict'],
             'rules' => ['prohibited'], 'configuration' => ['prohibited'], 'secrule' => ['prohibited'],
         ]);
+        if ($data['profile'] !== 'off' && ! $this->wafCapablePoolAvailable($domain)) {
+            return response()->json([
+                'message' => 'No enabled WAF-capable pool can host this domain. An administrator must enable a WAF-capable shared pool first.',
+                'code' => 'waf_capable_pool_unavailable', 'details' => (object) [],
+            ], 409);
+        }
         DB::transaction(function () use ($data, $domain, $request): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             Gate::authorize('update', $locked);
@@ -70,6 +77,16 @@ class WafController extends Controller
         });
 
         return $this->queue($request, $domain);
+    }
+
+    private function wafCapablePoolAvailable(Domain $domain): bool
+    {
+        $placement = $domain->edgePlacement ?? null;
+        $currentPoolId = $placement?->target_pool_id ?? $placement?->active_pool_id;
+
+        return EdgePool::query()->where('enabled', true)->where('withdrawn', false)->where('waf_capable', true)
+            ->where(fn ($query) => $query->where('kind', 'shared')->when($currentPoolId !== null, fn ($q) => $q->orWhere('id', $currentPoolId)))
+            ->exists();
     }
 
     private function queue(Request $request, Domain $domain): JsonResponse
