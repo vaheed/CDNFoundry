@@ -3,8 +3,6 @@
 namespace App\Support;
 
 use App\Models\Domain;
-use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 
 final class ManagedWaf
 {

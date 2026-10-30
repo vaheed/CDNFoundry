@@ -254,7 +254,7 @@ final class AnalyticsStore
         if ($domain !== null) {
             $children = Domain::withTrashed()->where('name', 'like', '%.'.addcslashes($domain->name, '%_\\'))->limit(1000)->pluck('name');
             $dns = [
-                'excluded_zones' => '['.$children->map(fn (string $name): string => "'".str_replace(["\\", "'"], ["\\\\", "\\'"], $name)."'")->implode(',').']',
+                'excluded_zones' => '['.$children->map(fn (string $name): string => "'".str_replace(['\\', "'"], ['\\\\', "\\'"], $name)."'")->implode(',').']',
                 'owned_since' => ($domain->created_at ?? now())->clone()->utc()->format('Y-m-d H:i:s.u'),
             ];
         }

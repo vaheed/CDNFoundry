@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Resources\OperationResource;
 use App\Jobs\ApplyPlatformDnsSettings;
 use App\Jobs\BuildUsageRollups;
 use App\Jobs\CreateControlBackup;
@@ -19,7 +20,6 @@ use App\Jobs\TestDnsCluster;
 use App\Jobs\VerifyDomainNameservers;
 use App\Models\AuditLog;
 use App\Models\Domain;
-use App\Http\Resources\OperationResource;
 use App\Models\Operation;
 use App\Support\PlatformSettings;
 use Illuminate\Http\JsonResponse;
