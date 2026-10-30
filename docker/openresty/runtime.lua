@@ -489,6 +489,32 @@ local function telemetry_proof_value()
     return telemetry_proof
 end
 
+local function certificate_covers(host, names)
+    for _, name in ipairs(names or {}) do
+        name = tostring(name):lower()
+        if name == host then return true end
+        local suffix = name:match("^%*(%..+)$")
+        if suffix and host:sub(-#suffix) == suffix and not host:sub(1, #host - #suffix):find(".", 1, true)
+            and #host > #suffix then
+            return true
+        end
+    end
+    return false
+end
+
+-- The certificate is chosen by SNI and the tenant by Host. A TLS request may
+-- only address a Host that the certificate selected for its SNI covers.
+local function tls_host_matches_sni(host)
+    if ngx.var.https ~= "on" then return true end
+    local sni = (ngx.var.ssl_server_name or ""):lower():gsub("%.$", "")
+    if sni == "" then return false end
+    if sni == host then return true end
+    local sni_config = state.hosts[sni]
+    local certificate_id = sni_config and sni_config.tls and sni_config.tls.certificate_id
+    local certificate = certificate_id and state.certificates[certificate_id]
+    return certificate ~= nil and certificate_covers(host, certificate.names)
+end
+
 function M.access()
     ngx.var.cdn_telemetry_proof = telemetry_proof_value()
     local dictionary = ngx.shared.runtime_limits
@@ -497,6 +523,7 @@ function M.access()
     local host = (ngx.var.host or ""):lower():gsub("%.$", "")
     local config = state.hosts[host]
     if not config then return security_reject(421, "unknown_host") end
+    if not tls_host_matches_sni(host) then return security_reject(421, "sni_host_mismatch") end
     ngx.var.cdn_original_host = host
     ngx.var.cdn_domain_id = tostring(config.domain_id or 0)
     ngx.var.cdn_edge_id = os.getenv("EDGE_CELL_NAME") or "unknown"

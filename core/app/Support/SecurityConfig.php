@@ -12,7 +12,7 @@ final class SecurityConfig
     public const MANUAL_PROFILE = 'manual';
 
     public const REASON_CODES = [
-        'unknown_host', 'unknown_sni', 'invalid_method', 'malformed_request', 'header_too_large',
+        'unknown_host', 'unknown_sni', 'sni_host_mismatch', 'invalid_method', 'malformed_request', 'header_too_large',
         'body_too_large', 'header_timeout', 'body_timeout', 'client_rate_exceeded',
         'domain_rate_exceeded', 'client_connections_exceeded', 'domain_connections_exceeded',
         'tls_handshake_rate_exceeded', 'origin_capacity_exceeded', 'origin_circuit_open',
