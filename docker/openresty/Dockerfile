@@ -74,6 +74,7 @@ COPY docker/nginx/proxy-cache.conf /etc/nginx/proxy-cache.conf
 COPY docker/nginx/cache-upstream.conf /etc/nginx/cache-upstream.conf
 COPY docker/nginx/origin-proxy.conf /etc/nginx/origin-proxy.conf
 COPY docker/openresty/runtime.lua /etc/cdnfoundry/runtime.lua
+COPY docker/openresty/cache_key.lua /etc/cdnfoundry/cache_key.lua
 COPY --chmod=755 docker/openresty/entrypoint.sh /usr/local/bin/cdnfoundry-edge-entrypoint
 
 ENTRYPOINT ["/usr/local/bin/cdnfoundry-edge-entrypoint"]

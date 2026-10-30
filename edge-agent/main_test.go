@@ -1027,10 +1027,10 @@ func TestCachePurgeFansOutToEveryAuthenticatedCell(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":{"accepted":true}}`))
 	}))
 	defer server.Close()
-	c := &client{http: server.Client(), statusToken: "status-secret", statusURLs: []string{server.URL + "/passive-failures", server.URL + "/passive-failures"}}
+	c := &client{http: server.Client(), statusToken: "status-secret", statusURLs: []string{server.URL + "/passive-failures", server.URL + "/passive-failures"}, dir: t.TempDir()}
 	var task edgeTask
 	task.ID, task.Type = "purge-1", "cache_purge"
-	task.Payload.Domain, task.Payload.PurgeType, task.Payload.CacheEpoch = "example.test", "urls", 4
+	task.Payload.Domain, task.Payload.PurgeType, task.Payload.CacheEpoch, task.Payload.PurgeID = "example.test", "urls", 4, 11
 	task.Payload.CacheKeys = []string{"https|example.test|/app.css?a=1"}
 	result, status := c.runCachePurge(task)
 	if status != "succeeded" || result["status"] != "completed" || result["applied_cells"] != 2 || calls != 2 {
@@ -1054,10 +1054,10 @@ func TestFullCachePurgeSendsAnEmptyArrayToCells(t *testing.T) {
 			}))
 			defer server.Close()
 			var task edgeTask
-			if err := json.Unmarshal([]byte(`{"id":"full-purge","type":"cache_purge","payload":{"domain":"example.test","type":"all","cache_epoch":4,"cache_keys":`+input+`}}`), &task); err != nil {
+			if err := json.Unmarshal([]byte(`{"id":"full-purge","type":"cache_purge","payload":{"domain":"example.test","type":"all","cache_epoch":4,"purge_id":12,"cache_keys":`+input+`}}`), &task); err != nil {
 				t.Fatal(err)
 			}
-			c := &client{http: server.Client(), statusToken: "status-secret", statusURLs: []string{server.URL + "/passive-failures", server.URL + "/passive-failures"}}
+			c := &client{http: server.Client(), statusToken: "status-secret", statusURLs: []string{server.URL + "/passive-failures", server.URL + "/passive-failures"}, dir: t.TempDir()}
 			result, status := c.runCachePurge(task)
 			if status != "succeeded" || result["applied_cells"] != 2 || calls != 2 {
 				t.Fatalf("full purge failed: status=%s result=%#v calls=%d", status, result, calls)
@@ -1075,10 +1075,10 @@ func TestFullCachePurgeAgainstRunningCell(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := &client{http: &http.Client{Timeout: 5 * time.Second}, statusToken: strings.TrimSpace(string(token)), statusURLs: []string{endpoint + "/passive-failures"}}
+	c := &client{http: &http.Client{Timeout: 5 * time.Second}, statusToken: strings.TrimSpace(string(token)), statusURLs: []string{endpoint + "/passive-failures"}, dir: t.TempDir()}
 	for _, input := range []string{`null`, `[]`} {
 		var task edgeTask
-		if err := json.Unmarshal([]byte(`{"id":"full-`+input+`","type":"cache_purge","payload":{"domain":"purge-qualification.invalid","type":"all","cache_epoch":4,"cache_keys":`+input+`}}`), &task); err != nil {
+		if err := json.Unmarshal([]byte(`{"id":"full-`+input+`","type":"cache_purge","payload":{"domain":"purge-qualification.invalid","type":"all","cache_epoch":4,"purge_id":13,"cache_keys":`+input+`}}`), &task); err != nil {
 			t.Fatal(err)
 		}
 		result, status := c.runCachePurge(task)

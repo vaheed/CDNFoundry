@@ -340,18 +340,21 @@ A40, A41.
       change with a clear 409 when no WAF-capable pool exists. Never accept
       work that cannot run. Delivered as the 409
       `waf_capable_pool_unavailable`.
-- [ ] Define the cache key once (path normalization, query decoding, and
+- [x] Define the cache key once (path normalization, query decoding, and
       ordering), built from the raw request path. Keep `%2F` and `%3F`
       encoded, and reject requests that would normalize differently from the
       origin request. Generate the PHP and Lua implementations' test vectors
-      from one shared fixture file, and run it in both test suites.
-- [ ] Make URL purges durable. The agent persists purge generations and
+      from one shared fixture file, and run it in both test suites. Delivered
+      as a request with no key that passes through uncached, not a `400`, so
+      no traffic is refused.
+- [x] Make URL purges durable. The agent persists purge generations and
       replays them on cell start. Keep them in a dedicated shared dictionary
       that cannot be evicted by rate-limit counters, and give each entry a
       TTL equal to the cache's maximum TTL.
-- [ ] Reject requests with more than 128 query arguments, or hash the full
-      argument set into the key.
-- [ ] Reject purge URLs that carry credentials or a fragment.
+- [x] Reject requests with more than 128 query arguments, or hash the full
+      argument set into the key. Delivered as "no key": such a request is
+      never cached, and the same URLs are refused when purged.
+- [x] Reject purge URLs that carry credentials or a fragment.
 - [ ] Add DNS retry with backoff, plus a scheduled drift check that compares
       each DNS target's served serial and checksum with desired state and
       repairs differences.

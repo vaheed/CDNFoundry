@@ -258,6 +258,7 @@ type edgeTask struct {
 		Domain             string            `json:"domain"`
 		PurgeType          string            `json:"type"`
 		CacheEpoch         uint64            `json:"cache_epoch"`
+		PurgeID            uint64            `json:"purge_id"`
 		CacheKeys          []string          `json:"cache_keys"`
 		CellNames          []string          `json:"cell_names"`
 		EmergencyActive    bool              `json:"active"`
@@ -399,7 +400,7 @@ func containsString(values []string, expected string) bool {
 }
 
 func (c *client) runCachePurge(task edgeTask) (map[string]any, string) {
-	if task.Payload.Domain == "" || (task.Payload.PurgeType != "all" && task.Payload.PurgeType != "urls") || task.Payload.CacheEpoch == 0 || len(task.Payload.CacheKeys) > 100 {
+	if task.Payload.Domain == "" || (task.Payload.PurgeType != "all" && task.Payload.PurgeType != "urls") || task.Payload.CacheEpoch == 0 || task.Payload.PurgeID == 0 || len(task.Payload.CacheKeys) > 100 {
 		return map[string]any{"status": "failed", "failure_reason": "invalid_cache_purge_task"}, "failed"
 	}
 	if task.Payload.PurgeType == "all" && len(task.Payload.CacheKeys) != 0 || task.Payload.PurgeType == "urls" && len(task.Payload.CacheKeys) == 0 {
@@ -413,7 +414,17 @@ func (c *client) runCachePurge(task edgeTask) (map[string]any, string) {
 	}
 	command := map[string]any{
 		"task_id": task.ID, "action": "cache_purge", "domain": task.Payload.Domain,
-		"type": task.Payload.PurgeType, "cache_epoch": task.Payload.CacheEpoch, "cache_keys": keys,
+		"type": task.Payload.PurgeType, "cache_epoch": task.Payload.CacheEpoch, "purge_id": task.Payload.PurgeID, "cache_keys": keys,
+	}
+	if err := c.persistPurge(persistedPurge{
+		PurgeID: task.Payload.PurgeID, Domain: task.Payload.Domain, Type: task.Payload.PurgeType,
+		Epoch: task.Payload.CacheEpoch, Keys: keys, At: time.Now().Unix(),
+	}); err != nil {
+		reason := "cache_purge_persist_failed"
+		if errors.Is(err, errPurgeCapacity) {
+			reason = "cache_purge_capacity_exceeded"
+		}
+		return map[string]any{"status": "failed", "failure_reason": reason}, "failed"
 	}
 	applied := 0
 	for _, endpoint := range c.statusURLs {
@@ -1753,6 +1764,9 @@ func (c *client) runtimeStatus() ([]map[string]any, []map[string]any, []map[stri
 		decoded, ok := c.runtimeEndpointStatus(endpoint)
 		if !ok {
 			continue
+		}
+		if restored, reported := decoded.Cell["purges_restored"].(bool); reported && !restored {
+			c.restorePurges(endpoint)
 		}
 		if decoded.Cell != nil && len(cells) < 32 {
 			name, _ := decoded.Cell["name"].(string)

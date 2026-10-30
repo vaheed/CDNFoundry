@@ -26,6 +26,8 @@ Platform settings may make a limit stricter within the documented bound.
 | BIND import | 1 MiB and 5,000 records |
 | Asynchronous import threshold | over 64 KiB or over 100 physical lines |
 | URL purge | 100 URLs, 2,048 characters each, 128 KiB payload |
+| Cache key | 128 query arguments; none is cached beyond that |
+| Persisted URL purges per PoP | 50,000 keys, kept one year |
 | Outstanding purges | 100 per domain |
 | Security rules | 1,000 per domain, 500 per import |
 | Usage export | 10,000 rows |

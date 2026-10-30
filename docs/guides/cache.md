@@ -69,8 +69,21 @@ the domain epoch, so a stale object from an earlier epoch is never selected.
 Requests with authorization, unsafe methods, configured cookies, `Set-Cookie`,
 private/no-store responses, unsupported `Vary`, ranges, and disallowed status
 codes follow the runtime bypass or no-store rules. Cache keys and URL purge use
-the same normalized scheme, lowercase hostname, path, sorted query pairs,
-policy generation, epoch, and URL generation. Range requests bypass admission.
+one definition of the key: scheme, lowercase hostname, the raw request path, and
+the sorted query pairs, then policy generation, epoch, and URL generation. Range
+requests bypass admission.
+
+The path is taken as the client sent it and stays percent-encoded. Only the case
+of escapes and escapes of unreserved characters change (`%7e` becomes `~`), so
+`%2F` never merges with `/` and `/x%3Fv=1` never shares an entry with `/x?v=1`.
+Query names and values are decoded (`+` is a space), sorted as strings by name
+and then value, and encoded again. A request has **no cache key**, and is never
+cached, when the origin could read it differently from the cache: dot segments
+(`/a/../b`, including `%2e%2e`), empty segments (`//`), malformed percent
+escapes, raw spaces or non-ASCII bytes in the path, or more than 128 query
+arguments (counted before the query policy applies). The same URLs are
+refused with `422` when you purge them. The PHP and Lua implementations are
+tested against one fixture file, `tests/fixtures/cache_key_vectors.json`.
 
 ## Pool profiles and storage
 
@@ -111,10 +124,21 @@ The payload is limited to 128 KiB. A domain may have at most 100 outstanding
 purges. The controller creates one durable task per eligible edge and returns
 `202`. Full and URL purges are idempotent through the request key and task ID.
 
+A purge URL must be absolute, use `http` or `https`, belong to the domain, use
+the default port, and carry no credentials (`user@`) and no fragment (`#`).
+
 The agent sends the task to every matching cell. OpenResty records the new epoch
-or bounded URL-key invalidations in shared memory. Failed delivery retains the
-same task, records `last_error`, and retries with bounded delay. Traffic
-continues throughout.
+or the URL invalidations in a dedicated shared-memory dictionary (`cache_purges`,
+16 MiB) that rate-limit counters cannot evict. Each URL entry holds the purge
+id and expires after one year, the longest cache lifetime. The agent first writes
+every URL purge to `cache-purges.json` in its state directory (at most 50,000
+keys, entries older than one year dropped). A cell reports `purges_restored:
+false` after it starts; the agent then replays the saved purges in batches of
+100 and marks the cell restored, so purged content does not return after a
+cell restart. A purge that would exceed the 50,000-key bound fails with
+`cache_purge_capacity_exceeded` instead of being forgotten. Failed delivery
+retains the same task, records `last_error`, and retries with bounded delay.
+Traffic continues throughout.
 
 ## Storage isolation
 

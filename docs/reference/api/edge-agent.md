@@ -73,7 +73,9 @@ Current tasks cover origin tests, cache purge, cell drain/undrain/restart, and
 emergency controls. The agent checks target ownership, sends token-protected
 internal control requests, persists drain/emergency state, and reports stable
 failure reasons such as `cell_not_found`, `control_request_failed`, or
-`invalid_cache_purge_task`.
+`invalid_cache_purge_task`, `cache_purge_persist_failed`, or
+`cache_purge_capacity_exceeded`. Cache purge tasks carry a `purge_id`, which the
+cells store as the URL generation.
 
 Task receipts are scoped to the authenticated edge and committed transactionally
 with their database effects. Concurrent reports serialize on the task and its

@@ -2,6 +2,7 @@ local cjson = require "cjson.safe"
 local resolver = require "resty.dns.resolver"
 local balancer = require "ngx.balancer"
 local bit = require "bit"
+local cache_target = require "cache_key"
 local ffi = require "ffi"
 ffi.cdef[[
 int kill(int pid, int sig);
@@ -348,34 +349,21 @@ local function request_header_size()
     return size
 end
 
+local PURGE_TTL_SECONDS = 31536000
+
+-- Returns the cache key, its edge TTL, and the resource base. A request whose
+-- target has no canonical form returns an unusable key with a zero TTL and a
+-- reason, so it is never cached.
 local function request_cache_key(domain, host, cache)
-    local request_uri = ngx.var.uri or "/"
     local query_policy = cache.query_policy or (cache.include_query_string == false and "ignore_all" or "include_all")
-    local selected = {}
-    for _, name in ipairs(cache.query_parameters or {}) do selected[name] = true end
-    local args = ngx.req.get_uri_args(128)
-    local names = {}
-    for name, _ in pairs(args) do
-        if query_policy == "include_all" or (query_policy == "include_selected" and selected[name])
-            or (query_policy == "ignore_selected" and not selected[name]) then names[#names + 1] = name end
-    end
-    table.sort(names)
-    local encoded = {}
-    for _, name in ipairs(names) do
-        local value = args[name]
-        local values = type(value) == "table" and value or {value}
-        table.sort(values, function(a, b) return tostring(a) < tostring(b) end)
-        for _, item in ipairs(values) do
-            encoded[#encoded + 1] = ngx.escape_uri(name) .. "=" .. ngx.escape_uri(item == true and "" or tostring(item))
-        end
-    end
-    if #encoded > 0 then request_uri = request_uri .. "?" .. table.concat(encoded, "&") end
-    local base = (ngx.var.scheme or "http") .. "|" .. host .. "|" .. request_uri
+    local target, reason = cache_target.target(ngx.var.request_uri or "", query_policy, cache.query_parameters)
+    if not target then return "uncacheable|" .. tostring(reason), 0, "uncacheable", reason end
+    local base = (ngx.var.scheme or "http") .. "|" .. host .. "|" .. target
     local dictionary = ngx.shared.runtime_limits
     local configured_epoch = tonumber(cache.epoch) or 1
     local runtime_epoch = tonumber(dictionary:get("cache:epoch:" .. domain)) or 0
     local epoch = math.max(configured_epoch, runtime_epoch)
-    local generation = dictionary:get("cache:url:" .. ngx.md5(base)) or 0
+    local generation = ngx.shared.cache_purges:get("u:" .. ngx.md5(base)) or 0
     local ttl = math.max(0, math.min(31536000, tonumber(cache.edge_ttl_seconds) or 0))
     local policy_query_parameters = {}
     for _, name in ipairs(cache.query_parameters or {}) do policy_query_parameters[#policy_query_parameters + 1] = name end
@@ -626,7 +614,8 @@ function M.access()
     end
     local cache = config.cache or {}
     prepare_compression(config, emergency)
-    local cache_key, cache_ttl, cache_resource = request_cache_key(config.domain, host, cache)
+    local cache_key, cache_ttl, cache_resource, key_reason = request_cache_key(config.domain, host, cache)
+    if key_reason == "too_many_query_arguments" then ngx.var.cdn_security_reason = "cache_abuse_detected" end
     local development_until = tonumber(cache.development_mode_until) or 0
     local cacheable = cache.enabled == true and cache_ttl > 0
         and (ngx.req.get_method() == "GET" or ngx.req.get_method() == "HEAD")
@@ -1074,6 +1063,7 @@ function M.passive_failures()
         cell = {
             name = os.getenv("EDGE_CELL_NAME") or "unknown",
             status = drained and "drained" or "ready",
+            purges_restored = ngx.shared.cache_purges:get("purge:restored") == true,
 			capacity = {
 				assigned_domain_count = assigned,
 				active_revision = state.sequence,
@@ -1108,7 +1098,7 @@ function M.control()
     if #raw == 0 or #raw > 128 * 1024 then return ngx.exit(400) end
     local command = cjson.decode(raw)
     if type(command) ~= "table" or type(command.task_id) ~= "string" or #command.task_id > 64
-        or (command.action ~= "drain" and command.action ~= "undrain" and command.action ~= "restart" and command.action ~= "cache_purge" and command.action ~= "emergency_mode") then
+        or (command.action ~= "drain" and command.action ~= "undrain" and command.action ~= "restart" and command.action ~= "cache_purge" and command.action ~= "cache_purges_restored" and command.action ~= "emergency_mode") then
         return ngx.exit(400)
     end
     if command.action == "emergency_mode" then
@@ -1123,6 +1113,7 @@ function M.control()
         if type(command.domain) ~= "string" or #command.domain == 0 or #command.domain > 253
             or (command.type ~= "all" and command.type ~= "urls")
             or type(command.cache_epoch) ~= "number" or command.cache_epoch < 1
+            or type(command.purge_id) ~= "number" or command.purge_id < 1 or command.purge_id % 1 ~= 0
             or type(command.cache_keys) ~= "table" or #command.cache_keys > 100
             or (command.type == "all" and #command.cache_keys ~= 0)
             or (command.type == "urls" and #command.cache_keys == 0) then
@@ -1146,6 +1137,8 @@ function M.control()
             if not already_drained then dictionary:set("control:restart_resume_at", ngx.now() + 2) end
             dictionary:set("control:last_restart_at", ngx.time())
             dictionary:incr("control:restart_generation", 1, 0)
+        elseif command.action == "cache_purges_restored" then
+            ngx.shared.cache_purges:set("purge:restored", true)
         elseif command.action == "emergency_mode" then
             if command.active then
                 dictionary:set("emergency:active", cjson.encode(command.actions))
@@ -1154,13 +1147,23 @@ function M.control()
                 dictionary:delete("emergency:active")
                 dictionary:delete("emergency:expires_at")
             end
-        elseif command.type == "all" then
+        elseif command.action == "cache_purge" and command.type == "all" then
             local epoch_key = "cache:epoch:" .. command.domain
             local current = dictionary:get(epoch_key) or 0
             if command.cache_epoch > current then dictionary:set(epoch_key, command.cache_epoch) end
         else
+            -- Purge generations live in their own dictionary so rate-limit counters can
+            -- never evict them, and are set to an absolute purge id so the agent can
+            -- replay them after a restart without double counting. A full dictionary
+            -- is reported, never silently evicted.
+            local purges = ngx.shared.cache_purges
             for _, key in ipairs(command.cache_keys) do
-                dictionary:incr("cache:url:" .. ngx.md5(key), 1, 0)
+                local name = "u:" .. ngx.md5(key)
+                local current = purges:get(name) or 0
+                if command.purge_id > current then
+                    local ok = purges:safe_set(name, command.purge_id, PURGE_TTL_SECONDS)
+                    if not ok then return ngx.exit(507) end
+                end
             end
         end
         dictionary:set("control:last_task_id", command.task_id)

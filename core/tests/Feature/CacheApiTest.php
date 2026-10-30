@@ -74,6 +74,23 @@ class CacheApiTest extends TestCase
             ->assertOk()->assertJsonPath('data.status', 'succeeded')->assertJsonPath('data.edges.0.edge_id', $edge->id);
     }
 
+    public function test_purge_urls_with_credentials_a_fragment_or_an_ambiguous_path_are_rejected(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $domain->update(['cache_settings' => $this->settings()]);
+
+        foreach ([
+            'https://user@example.test/a', 'https://user:pass@example.test/a', 'https://example.test/a#top', 'https://example.test/a#',
+            'https://example.test/a/../b', 'https://example.test//b', 'https://example.test/a%zz',
+        ] as $url) {
+            $this->actingAs($user)->postJson("/api/domains/{$domain->id}/cache/purge", ['type' => 'urls', 'urls' => [$url]])
+                ->assertUnprocessable()->assertJsonValidationErrors('urls');
+        }
+        $encoded = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/cache/purge", ['type' => 'urls', 'urls' => ['https://example.test/x%2fy%20z?q=a+b']])
+            ->assertAccepted();
+        $this->assertSame(['https|example.test|/x%2Fy%20z?q=a%20b'], CachePurge::query()->findOrFail($encoded->json('data.id'))->cache_keys);
+    }
+
     public function test_failed_edge_purge_retries_with_a_bound_and_same_task(): void
     {
         [$user, $domain] = $this->ownedDomain();

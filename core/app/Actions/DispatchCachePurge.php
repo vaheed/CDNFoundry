@@ -43,7 +43,7 @@ final class DispatchCachePurge
                 EdgeTask::query()->create([
                     'id' => (string) Str::uuid(), 'edge_id' => $edge->id, 'cache_purge_id' => $purge->id,
                     'type' => 'cache_purge', 'payload' => [
-                        'domain_id' => $locked->id, 'domain' => $locked->name, 'type' => $type,
+                        'purge_id' => $purge->id, 'domain_id' => $locked->id, 'domain' => $locked->name, 'type' => $type,
                         'cache_epoch' => $locked->cache_epoch, 'cache_keys' => $keys,
                     ], 'status' => 'pending',
                 ]);

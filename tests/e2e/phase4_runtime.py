@@ -7,6 +7,7 @@ import pathlib
 import subprocess
 import tempfile
 import time
+import zlib
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -122,10 +123,11 @@ def control(action: str, task_id: str, container: str = NAME) -> dict:
     return json.loads(response.stdout)["data"]
 
 
-def cache_purge(task_id: str, purge_type: str, keys: list[str], container: str = NAME) -> dict:
+def cache_purge(task_id: str, purge_type: str, keys: list[str], container: str = NAME, purge_id: int | None = None) -> dict:
     payload = {
         "task_id": task_id, "action": "cache_purge", "domain": "runtime.example",
         "type": purge_type, "cache_epoch": 2, "cache_keys": keys,
+        "purge_id": purge_id if purge_id is not None else int(zlib.crc32(task_id.encode())) + 1,
     }
     response = run(
         "docker", "exec", container, "wget", "-q", "-O-",
@@ -490,6 +492,43 @@ def main() -> None:
             after_url_purge = request("runtime.example")
             assert "X-CDNF-Cache: MISS" in after_url_purge.stderr, after_url_purge.stderr
             assert cache_purge("runtime-purge-url-1", "urls", ["http|runtime.example|/"])["replayed"] is True
+            # Encoded path characters never share a cache entry with their decoded form,
+            # and a purge of the canonical key reaches only that entry.
+            for suffix in ("/durable%3Fv=1", "/durable?v=1"):
+                assert "X-CDNF-Cache: MISS" in request_with("runtime.example", suffix).stderr, suffix
+            for suffix in ("/durable%3Fv=1", "/durable?v=1"):
+                assert "X-CDNF-Cache: HIT" in request_with("runtime.example", suffix).stderr, suffix
+            assert cache_purge("runtime-purge-encoded-1", "urls", ["http|runtime.example|/durable%3Fv=1"], purge_id=5001)["applied_keys"] == 1
+            assert "X-CDNF-Cache: MISS" in request_with("runtime.example", "/durable%3Fv=1").stderr
+            assert "X-CDNF-Cache: HIT" in request_with("runtime.example", "/durable?v=1").stderr
+            # Dot segments, empty segments, and malformed escapes have no cache key.
+            for suffix in ("/durable/../durable", "//durable", "/durable%zz"):
+                for _ in range(2):
+                    assert "X-CDNF-Cache: HIT" not in request_with("runtime.example", suffix).stderr, suffix
+            # A purge survives a cell restart once the agent replays it (the agent replay is
+            # covered by the Go tests; the cell must report that it was not restored).
+            assert "X-CDNF-Cache: MISS" in request_with("runtime.example", "/restart-durable").stderr
+            assert "X-CDNF-Cache: HIT" in request_with("runtime.example", "/restart-durable").stderr
+            assert cache_purge("runtime-purge-durable-1", "urls", ["http|runtime.example|/restart-durable"], purge_id=5002)["applied_keys"] == 1
+            marker = run("docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token", "http://127.0.0.1:9080/passive-failures")
+            assert '"purges_restored":false' in marker.stdout, marker.stdout
+            run("docker", "restart", NAME)
+            assert wait_for("runtime.example").returncode == 0
+            lost = run("docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token", "http://127.0.0.1:9080/passive-failures")
+            assert '"purges_restored":false' in lost.stdout, lost.stdout
+            replay = cache_purge("runtime-purge-durable-restore", "urls", ["http|runtime.example|/restart-durable"], purge_id=5002)
+            assert replay["applied_keys"] == 1, replay
+            restored = run(
+                "docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token",
+                "--header=Content-Type: application/json",
+                f"--post-data={json.dumps({'task_id': 'purges-restored-1', 'action': 'cache_purges_restored'})}",
+                "http://127.0.0.1:9080/control",
+            )
+            assert json.loads(restored.stdout)["data"]["accepted"] is True, restored.stdout
+            assert '"purges_restored":true' in run("docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token", "http://127.0.0.1:9080/passive-failures").stdout
+            assert "X-CDNF-Cache: MISS" in request_with("runtime.example", "/restart-durable").stderr
+            master = run("docker", "exec", NAME, "cat", "/usr/local/openresty/nginx/logs/nginx.pid").stdout.strip()
+            children = worker_children(NAME, master)
             control("restart", "runtime-restart-1")
             for _ in range(20):
                 time.sleep(0.25)

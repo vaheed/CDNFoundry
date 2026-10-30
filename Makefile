@@ -8,7 +8,7 @@ COMPOSE_PROD_EXAMPLE := docker compose --env-file .env.prod.example -f compose.p
 backend-test: dev-test
 
 contract-check: config-check openapi-check
-	python3 -m unittest tests/contract/test_edge_rejection_reasons.py tests/observability/test_grafana_contract.py tests/observability/test_operational_logging_contract.py
+	python3 -m unittest tests/contract/test_edge_rejection_reasons.py tests/contract/test_cache_key_vectors.py tests/observability/test_grafana_contract.py tests/observability/test_operational_logging_contract.py
 
 fleet-test:
 	python3 -m pytest -q tests/fleet/test_fleet.py
