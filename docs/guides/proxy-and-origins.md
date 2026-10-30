@@ -188,4 +188,11 @@ reconcile operation. Inspect `/deployment` and `/revisions`. `/revisions` return
 revision number, status, checksum, creation time, and a short summary (hostname
 count, TLS mode, pools). It never returns the stored snapshot or certificate
 keys. Rollback selects a
-retained validated revision and creates a new monotonic revision.
+retained validated revision and creates a new monotonic revision. It restores
+only customer-owned fields (proxied records and origins, proxy defaults, cache,
+security settings and rules, WAF profile, and TLS mode). Platform policy in the
+snapshot is never copied back, and every restored value is validated again
+against current rules. If any value no longer passes (for example an origin
+address that policy now blocks), or a DNS-only record now uses a proxied
+hostname, or a custom certificate is gone, the whole rollback is refused and
+nothing changes. WAF exclusions are not restored.
