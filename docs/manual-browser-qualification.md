@@ -904,8 +904,10 @@ Status: **Not run — owner execution required.** Run after the delegation-claim
 migration and worker upgrade in the isolated qualification installation.
 
 1. As administrator, confirm platform DNS contains the platform nameserver A
-   records and their wildcard assignment records; confirm the platform zone is
-   deployed on both DNS hosts. Keep management DNS at the independent provider.
+   records (there are no wildcard assignment records) and that the platform
+   nameserver list holds an even number of entries (`ns1`/`ns2`, `ns3`/`ns4`);
+   confirm the platform zone is deployed on both DNS hosts. Keep management DNS
+   at the independent provider.
 2. Sign in as user A, open **Domains → Create**, enter an owned test domain in
    **Name**, and select **Create**. Expect **Pending verification**, two or more
    **Assigned nameservers**, and a **Pending claim expires** timestamp seven days
@@ -916,8 +918,13 @@ migration and worker upgrade in the isolated qualification installation.
    disagreement between parent authorities must leave the domain pending with
    a visible failure. Correct stale DS records before retrying.
 4. Sign in as unrelated user B. Submit the same domain with upper case and a
-   trailing dot. Expect a field validation error and no new assignment. Visit
-   A's domain URL directly: expect denied access.
+   trailing dot. With a second nameserver pair configured, expect a new pending
+   claim whose **Assigned nameservers** differ from A's, and no change to A's
+   domain. With only one pair configured, expect a field validation error.
+   Visit A's domain URL directly: expect "not found" (A's domain is invisible
+   to B). After B's registrar delegation to B's pair and **Verify nameservers**,
+   expect B's claim **Active** and A's domain retiring with its records not
+   copied to B.
 5. Queue verification for another pending domain, then disable that domain as
    an authorized user before the worker executes. Expect it to stay disabled
    with no successful verification. Repeat with administrator disabling the
@@ -926,7 +933,8 @@ migration and worker upgrade in the isolated qualification installation.
    configured cooldown. During cooldown, submit its canonical, upper-case and
    Unicode/Punycode variants through **Create**: each must fail. After cooldown,
    a new claim must have different assigned nameservers. Old delegation alone
-   must leave it pending.
+   must leave it pending. Assigned nameservers are readable names such as
+   `ns3.example.net`, never hex labels.
 7. Check an existing verified domain after upgrade: its nameservers, user
    assignments, DNS answers and TLS certificate must remain unchanged.
 
@@ -961,3 +969,40 @@ follow [the update order](deployment/upgrade.md#order).
 Completion gate: implementation and documentation present; automated mTLS and
 application evidence recorded separately; this manual job remains **Not run**
 until the owner records every applicable outcome.
+
+## Phase 3 — domain features regression job
+
+Status: **Not run — owner execution required.** Run in the isolated
+qualification installation after the Phase 3 migrations.
+
+1. Sign in as a domain user with one proxied domain. Open the domain and
+   select **Web application firewall (WAF)**. With no WAF-capable shared pool,
+   choose **Recommended** and submit. Expect a red **WAF protection is
+   unavailable** notification and the profile unchanged. As administrator open
+   **Infrastructure → Service pools**, edit the shared pool, enable **Managed
+   WAF**, save; repeat as the domain user and expect **WAF protection change
+   queued**.
+2. As the domain user open **Cache**. Select **Purge** → **URLs**, enter
+   `https://<domain>/a/../b` in **URLs** and submit. Expect a validation error.
+   Enter `https://user@<domain>/x` and `https://<domain>/x#top`: each must fail.
+   Enter `https://<domain>/x%2Fy?b=2&a=1` and expect a queued purge.
+3. Open **Operations** (domain page → operations list). Open the purge's
+   operation: expect type `cache.purge`, status `running`, then `succeeded`
+   once the edges acknowledge. As a second user assigned to the same domain,
+   open the same operation: expect it to be readable. As a user with no
+   assignment, open it: expect denied access.
+4. Open **Upload certificate**. Confirm the field is labeled **Intermediate
+   certificates PEM** and is optional. Upload a self-signed certificate with its
+   own root as the chain: expect an error under **Intermediate certificates PEM**
+   that the certificate does not chain to a trusted root.
+5. Open **Geo-DNS** for a record. Change the default targets and save. Expect a
+   queued DNS operation (not an immediate success) that finishes `succeeded`.
+6. As administrator, open **System → Operations**. Open a recent
+   `platform_dns.routing_reconcile` operation: expect `succeeded`. Withdraw a
+   test pool and expect a returned operation id.
+7. As administrator, open **System → DNS identity**. Enter an odd number of
+   nameservers and save: expect a validation error asking for pairs.
+
+Completion gate: implementation and documentation present; automated and real
+runtime qualification recorded separately in the roadmap; this manual job
+remains **Not run** until the owner records actual results.

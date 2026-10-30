@@ -339,7 +339,12 @@ class ViewDomain extends ViewRecord
                     ])->helperText('Start with Observe. After checking security events, choose Recommended. Use High sensitivity only after application testing.')->required(),
                 ])->fillForm(fn (): array => ['profile' => $this->record->waf_profile])
                 ->action(function (array $data): void {
-                    app(WafController::class)->update(request()->merge(['profile' => $data['profile']]), $this->record);
+                    $response = app(WafController::class)->update(request()->merge(['profile' => $data['profile']]), $this->record);
+                    if ($response->getStatusCode() === 409) {
+                        Notification::make()->danger()->title('WAF protection is unavailable')->body('No enabled pool offers the managed WAF yet. Ask an administrator to enable a WAF-capable shared pool; nothing was changed.')->send();
+
+                        return;
+                    }
                     $this->record->refresh();
                     Notification::make()->success()->title('WAF protection change queued')->body(match ($data['profile']) {
                         'off' => 'Attack inspection will be turned off after the edge accepts this revision.',
