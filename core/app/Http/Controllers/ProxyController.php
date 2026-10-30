@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DomainLifecycleState;
+use App\Http\Resources\EdgeRevisionResource;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
@@ -115,7 +116,7 @@ class ProxyController extends Controller
     {
         Gate::authorize('view', $domain);
 
-        return response()->json(['data' => EdgeRevision::query()->where('domain_id', $domain->id)->orderByDesc('revision')->cursorPaginate(50)]);
+        return EdgeRevisionResource::collection(EdgeRevision::query()->where('domain_id', $domain->id)->orderByDesc('revision')->cursorPaginate(50));
     }
 
     public function rollback(Request $request, Domain $domain): JsonResponse

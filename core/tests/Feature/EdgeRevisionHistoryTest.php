@@ -7,6 +7,7 @@ use App\Models\Edge;
 use App\Models\EdgeArtifact;
 use App\Models\EdgeRevision;
 use App\Models\SystemSetting;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -33,6 +34,25 @@ class EdgeRevisionHistoryTest extends TestCase
         $domain->update(['revision' => 2]);
         $this->assertTrue($domain->refresh()->revision_changed_at->equalTo($changedAt));
         $this->travelBack();
+    }
+
+    public function test_revision_listing_exposes_an_explicit_field_list_and_never_key_material(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::query()->create(['name' => 'revision-leak.example.test', 'display_name' => 'Leak', 'revision' => 1]);
+        $domain->users()->attach($user);
+        $key = "-----BEGIN PRIVATE KEY-----\nSECRETKEYMATERIAL\n-----END PRIVATE KEY-----";
+        EdgeRevision::query()->create([
+            'domain_id' => $domain->id, 'revision' => 1, 'checksum' => str_repeat('a', 64), 'status' => 'validated',
+            'snapshot' => ['hostnames' => [['name' => 'www']], 'pools' => ['shared-default'], 'tls' => ['mode' => 'custom', 'certificate' => ['private_key_pem' => $key]]],
+        ]);
+
+        $response = $this->actingAs($user)->getJson("/api/domains/{$domain->id}/revisions")->assertOk()
+            ->assertJsonPath('data.0.revision', 1)->assertJsonPath('data.0.summary.hostnames', 1)
+            ->assertJsonPath('data.0.summary.tls_mode', 'custom');
+        $this->assertSame(['revision', 'status', 'checksum', 'summary', 'created_at'], array_keys($response->json('data.0')));
+        $this->assertStringNotContainsString('SECRETKEYMATERIAL', $response->getContent());
+        $this->assertStringNotContainsString('PRIVATE KEY', $response->getContent());
     }
 
     public function test_expired_history_is_bounded_without_reusing_numbers_or_removing_active_recent_or_rollback_revisions(): void

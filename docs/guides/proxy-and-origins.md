@@ -184,5 +184,8 @@ and stale behaviour.
 ## Deployment and rollback
 
 Every origin or proxy change increments the domain revision and queues an edge
-reconcile operation. Inspect `/deployment` and `/revisions`. Rollback selects a
+reconcile operation. Inspect `/deployment` and `/revisions`. `/revisions` returns only the
+revision number, status, checksum, creation time, and a short summary (hostname
+count, TLS mode, pools). It never returns the stored snapshot or certificate
+keys. Rollback selects a
 retained validated revision and creates a new monotonic revision.
