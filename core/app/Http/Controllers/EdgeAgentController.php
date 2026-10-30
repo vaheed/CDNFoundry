@@ -20,7 +20,9 @@ use App\Models\FleetRolloutEdge;
 use App\Models\Operation;
 use App\Models\SecurityEvent;
 use App\Support\ArtifactSigner;
+use App\Models\TlsCertificate;
 use App\Support\EdgeCertificateAuthority;
+use App\Support\EdgeKeyEnvelope;
 use App\Support\PlatformSettings;
 use App\Support\RuntimeVersions;
 use App\Support\SecurityConfig;
@@ -285,6 +287,18 @@ class EdgeAgentController extends Controller
             'expires_at' => $expiresAt,
             'delivery_signature' => ArtifactSigner::sign($artifact->checksum.'|'.$artifact->sequence.'|'.$expiresAt),
         ]);
+    }
+
+    public function certificateKey(Request $request, string $certificate): JsonResponse
+    {
+        /** @var Edge $edge */
+        $edge = $request->attributes->get('edge');
+        $record = TlsCertificate::query()->whereKey($certificate)->first();
+        $assigned = $record !== null && DomainEdgeCell::query()->where('domain_id', $record->domain_id)->where('edge_id', $edge->id)
+            ->where(fn ($query) => $query->whereNotNull('active_cell_id')->orWhereNotNull('target_cell_id'))->exists();
+        abort_unless($assigned && filled($edge->identity_certificate), 404, 'The certificate key is not available to this edge.');
+
+        return response()->json(['data' => EdgeKeyEnvelope::seal($record->private_key_ciphertext, $edge->identity_certificate, $edge->id, $record->id)]);
     }
 
     public function full(Request $request): JsonResponse

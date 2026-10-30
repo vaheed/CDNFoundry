@@ -350,8 +350,8 @@ func generationFixture(value string) func(string, string) error {
 }
 
 func TestRuntimeAssignsSupplementalCertificatesPerHostname(t *testing.T) {
-	domain := json.RawMessage(`{"schema_version":1,"domain":"example.test","revision":1,"pools":["shared-default"],"settings":{"enabled":true},"cache":{},"tls":{"mode":"managed","certificates":[{"id":"base","certificate_pem":"base-cert","private_key_pem":"base-key"},{"id":"deep","certificate_pem":"deep-cert","private_key_pem":"deep-key"}]},"hostnames":[{"hostname":"www.example.test","tls_certificate_id":"base","origin":{"host":"origin.example"}},{"hostname":"a.b.example.test","tls_certificate_id":"deep","origin":{"host":"origin.example"}}]}`)
-	_, pools, err := compileRuntime(state{Sequence: 1, Domains: map[string]json.RawMessage{"1": domain}})
+	domain := json.RawMessage(`{"schema_version":1,"domain":"example.test","revision":1,"pools":["shared-default"],"settings":{"enabled":true},"cache":{},"tls":{"mode":"managed","certificates":[{"id":"base","certificate_pem":"base-cert"},{"id":"deep","certificate_pem":"deep-cert"}]},"hostnames":[{"hostname":"www.example.test","tls_certificate_id":"base","origin":{"host":"origin.example"}},{"hostname":"a.b.example.test","tls_certificate_id":"deep","origin":{"host":"origin.example"}}]}`)
+	_, pools, err := compileRuntime(state{Sequence: 1, Domains: map[string]json.RawMessage{"1": domain}}, map[string]string{"base": "base-key", "deep": "deep-key"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +370,7 @@ func TestRuntimeAssignsSupplementalCertificatesPerHostname(t *testing.T) {
 
 func TestRuntimePreservesWAFAndCompressionForAssignedCell(t *testing.T) {
 	domain := json.RawMessage(`{"schema_version":1,"domain":"example.test","domain_id":1,"revision":7,"cells":["cell-01"],"settings":{"enabled":true},"cache":{},"compression":{"profile_name":"standard","gzip":true},"security":{},"waf":{"name":"balanced","blocking":true,"inbound_threshold":5},"tls":{"mode":"managed"},"hostnames":[{"hostname":"example.test","origin":{"host":"origin.example"}}]}`)
-	active, cells, err := compileRuntime(state{Sequence: 7, Domains: map[string]json.RawMessage{"1": domain}})
+	active, cells, err := compileRuntime(state{Sequence: 7, Domains: map[string]json.RawMessage{"1": domain}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -384,7 +384,7 @@ func TestRuntimePreservesWAFAndCompressionForAssignedCell(t *testing.T) {
 
 func TestRuntimeTargetsOnlySelectedCellsWithinOnePool(t *testing.T) {
 	domain := json.RawMessage(`{"schema_version":1,"domain":"example.test","domain_id":7,"revision":2,"pools":["shared-default"],"cells":["cell-02"],"settings":{"enabled":true},"cache":{},"tls":{"mode":"disabled"},"hostnames":[{"hostname":"www.example.test","origin":{"host":"origin.example"}}]}`)
-	_, runtimes, err := compileRuntime(state{Sequence: 9, Domains: map[string]json.RawMessage{"7": domain}})
+	_, runtimes, err := compileRuntime(state{Sequence: 9, Domains: map[string]json.RawMessage{"7": domain}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

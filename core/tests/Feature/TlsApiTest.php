@@ -41,7 +41,8 @@ class TlsApiTest extends TestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'tls.custom_uploaded', 'subject_id' => $certificate->id]);
         $snapshot = EdgeRevision::query()->where('domain_id', $domain->id)->latest('revision')->firstOrFail()->snapshot;
         $this->assertSame($certificate->id, $snapshot['tls']['certificate']['id']);
-        $this->assertSame(trim($bundle['private_key']), trim($snapshot['tls']['certificate']['private_key_pem']));
+        $this->assertArrayNotHasKey('private_key_pem', $snapshot['tls']['certificate']);
+        $this->assertStringNotContainsString('PRIVATE KEY', json_encode($snapshot));
     }
 
     public function test_custom_upload_rejects_wrong_key_missing_name_and_invalid_chain(): void

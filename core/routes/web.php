@@ -14,6 +14,7 @@ Route::prefix('edge/v1')->middleware('api')->group(function (): void {
         Route::get('/gateway/config', [EdgeAgentController::class, 'gatewayConfig']);
         Route::get('/config/manifest', [EdgeAgentController::class, 'manifest']);
         Route::get('/config/artifacts/{checksum}', [EdgeAgentController::class, 'artifact']);
+        Route::get('/certificates/{certificate}/key', [EdgeAgentController::class, 'certificateKey']);
         Route::get('/config/full', [EdgeAgentController::class, 'full']);
         Route::post('/config/applied', [EdgeAgentController::class, 'applied']);
         Route::post('/config/rejected', [EdgeAgentController::class, 'rejected']);

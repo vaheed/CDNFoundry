@@ -45,7 +45,14 @@ tunnel for remote operator access.
 
 Private keys are never returned by status APIs. Sanctum hashes API tokens.
 Custom and managed TLS private keys are encrypted with the application
-encryption key. DNS cluster API keys are encrypted and not echoed after storage.
+encryption key. PostgreSQL stores a private key only in `tls_certificates`:
+edge revisions and edge artifacts reference a certificate id and never contain
+key material. An edge fetches the key it needs from
+`GET /edge/v1/certificates/{id}/key` over mTLS. Control seals the key to that
+edge's identity key (ECDH P-256, HKDF-SHA256, AES-256-GCM, bound to the edge
+and certificate ids) and answers 404 unless the domain is assigned to the
+edge. The agent caches the key under its state directory with mode 0600 and
+removes keys that no active domain uses. DNS cluster API keys are encrypted and not echoed after storage.
 
 ## Secret classes
 

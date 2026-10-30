@@ -129,7 +129,7 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             : $domain->tlsCertificates->where('kind', 'managed')->where('status', 'active')->filter(fn ($certificate) => $certificate->expires_at->isFuture()));
         $certificatePayload = fn ($certificate): array => [
             'id' => $certificate->id, 'certificate_pem' => $certificate->certificate_pem,
-            'chain_pem' => $certificate->chain_pem, 'private_key_pem' => $certificate->private_key_ciphertext,
+            'chain_pem' => $certificate->chain_pem,
             'expires_at' => $certificate->expires_at->timestamp, 'names' => $certificate->names,
         ];
         $snapshot = [

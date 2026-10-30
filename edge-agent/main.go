@@ -1142,13 +1142,25 @@ func (c *client) activate(s state) error {
 	if s.Domains == nil || len(s.Domains) > 100000 {
 		return errors.New("invalid domain count")
 	}
+	keys, err := c.certificateKeys(s)
+	if err != nil {
+		return err
+	}
+	if err := c.activateWithKeys(s, keys); err != nil {
+		return err
+	}
+	c.pruneCertificateKeys(keys)
+	return nil
+}
+
+func (c *client) activateWithKeys(s state, keys map[string]string) error {
 	if c.runtimeDir != "" {
 		logger.Info("runtime generation activation started", "event", "runtime_generation_activation_started", "edge_id", c.id.EdgeID, "revision_id", s.Sequence)
 		manifest, err := replaceGeneration(c.runtimeDir, c.gatewayActiveRevision(s.Sequence), func(candidate, generationID string) error {
 			if err := atomicJSON(filepath.Join(candidate, "state.json"), s); err != nil {
 				return err
 			}
-			runtime, pools, err := compileRuntime(s)
+			runtime, pools, err := compileRuntime(s, keys)
 			if err != nil {
 				return err
 			}
@@ -1200,7 +1212,7 @@ func (c *client) activate(s state) error {
 	if err := atomicJSON(filepath.Join(candidate, "state.json"), s); err != nil {
 		return err
 	}
-	runtime, pools, err := compileRuntime(s)
+	runtime, pools, err := compileRuntime(s, keys)
 	if err != nil {
 		return err
 	}
@@ -1326,7 +1338,7 @@ func (c *client) rollbackActive(active, previous string, cause error) error {
 	return cause
 }
 
-func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) {
+func compileRuntime(s state, keys map[string]string) (map[string]any, map[string]map[string]any, error) {
 	hosts := map[string]any{}
 	poolHosts := map[string]map[string]any{}
 	certificates := map[string]any{}
@@ -1389,17 +1401,21 @@ func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) 
 					return nil, nil, errors.New("invalid runtime certificate")
 				}
 				id, _ := certificate["id"].(string)
-				if id == "" || certificate["certificate_pem"] == nil || certificate["private_key_pem"] == nil {
+				key, available := keys[id]
+				if id == "" || certificate["certificate_pem"] == nil || !available {
 					return nil, nil, errors.New("invalid runtime certificate")
 				}
+				certificate["private_key_pem"] = key
 				certificates[id] = certificate
 			}
 		}
 		if certificate, ok := domain.TLS["certificate"].(map[string]any); ok && certificate != nil {
 			certificateID, _ = certificate["id"].(string)
-			if certificateID == "" || certificate["certificate_pem"] == nil || certificate["private_key_pem"] == nil {
+			key, available := keys[certificateID]
+			if certificateID == "" || certificate["certificate_pem"] == nil || !available {
 				return nil, nil, errors.New("invalid runtime certificate")
 			}
+			certificate["private_key_pem"] = key
 			certificates[certificateID] = certificate
 			tlsReference["certificate_id"] = certificateID
 		}

@@ -17,6 +17,7 @@ use App\Models\PlatformDnsSetting;
 use App\Models\User;
 use App\Support\ArtifactSigner;
 use App\Support\EdgeCertificateAuthority;
+use App\Support\EdgeKeyEnvelope;
 use App\Support\PowerDnsZone;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -43,6 +44,52 @@ class EdgeProxyTest extends TestCase
         $this->withHeaders([...$headers, 'X-Edge-Certificate-Pem' => rawurlencode($other['certificate'])])
             ->getJson('/edge/v1/tasks')->assertUnauthorized();
         $this->withHeaders([...$headers, 'X-Edge-Certificate-Pem' => ''])->getJson('/edge/v1/tasks')->assertUnauthorized();
+    }
+
+    public function test_certificate_keys_are_sealed_to_the_assigned_edge_and_never_enter_artifacts(): void
+    {
+        $assigned = Edge::query()->create(['name' => 'key-assigned', 'country_code' => 'IR', 'continent_code' => 'AS']);
+        $other = Edge::query()->create(['name' => 'key-other', 'country_code' => 'IR', 'continent_code' => 'AS']);
+        $keys = [];
+        foreach ([$assigned, $other] as $edge) {
+            $signed = EdgeCertificateAuthority::sign($this->certificateRequest($edge->id, $keys[$edge->id]), $edge->id);
+            $edge->update(['identity_certificate' => $signed['certificate'], 'identity_certificate_serial' => $signed['serial'], 'identity_certificate_expires_at' => now()->addDay()]);
+        }
+        $cell = $assigned->cells()->create(['slot' => 1, 'status' => 'ready']);
+        $domain = Domain::query()->create(['name' => 'sealed.test', 'display_name' => 'Sealed', 'lifecycle_state' => 'active', 'revision' => 1]);
+        $secret = "-----BEGIN PRIVATE KEY-----\nSEALEDKEYMATERIAL\n-----END PRIVATE KEY-----";
+        $certificate = $domain->tlsCertificates()->create([
+            'kind' => 'custom', 'status' => 'active', 'certificate_pem' => 'cert', 'chain_pem' => '', 'private_key_ciphertext' => $secret,
+            'names' => ['sealed.test'], 'fingerprint_sha256' => str_repeat('a', 64), 'not_before' => now()->subDay(), 'expires_at' => now()->addMonth(),
+        ]);
+        DomainEdgeCell::query()->create(['domain_id' => $domain->id, 'edge_id' => $assigned->id, 'replica' => 1, 'active_cell_id' => $cell->id, 'desired_revision' => 1, 'state' => 'active']);
+
+        $response = $this->withHeaders($this->edgeIdentityHeaders($assigned->refresh()->identity_certificate_serial))
+            ->getJson("/edge/v1/certificates/{$certificate->id}/key")->assertOk();
+        $this->assertStringNotContainsString('SEALEDKEYMATERIAL', $response->getContent());
+        $envelope = $response->json('data');
+        $point = base64_decode($envelope['ephemeral_public_key']);
+        $spki = hex2bin('3059301306072a8648ce3d020106082a8648ce3d030107034200').$point;
+        $peer = "-----BEGIN PUBLIC KEY-----\n".chunk_split(base64_encode($spki), 64, "\n").'-----END PUBLIC KEY-----';
+        $context = EdgeKeyEnvelope::context($assigned->id, $certificate->id);
+        $aesKey = hash_hkdf('sha256', openssl_pkey_derive($peer, $keys[$assigned->id]), 32, $context);
+        $sealed = base64_decode($envelope['ciphertext']);
+        $plain = openssl_decrypt(substr($sealed, 0, -16), 'aes-256-gcm', $aesKey, OPENSSL_RAW_DATA, base64_decode($envelope['nonce']), substr($sealed, -16), $context);
+        $this->assertSame($secret, $plain);
+
+        $this->withHeaders($this->edgeIdentityHeaders($other->refresh()->identity_certificate_serial))
+            ->getJson("/edge/v1/certificates/{$certificate->id}/key")->assertNotFound();
+        $this->withHeaders($this->edgeIdentityHeaders($assigned->identity_certificate_serial))
+            ->getJson('/edge/v1/certificates/'.fake()->uuid().'/key')->assertNotFound();
+
+        $domain->update(['tls_mode' => 'custom', 'active_tls_certificate_id' => $certificate->id]);
+        $domain->dnsRecords()->create(['name' => 'sealed.test', 'type' => 'A', 'content' => '8.8.8.8', 'content_hash' => hash('sha256', '8.8.8.8'), 'mode' => 'proxied', 'ttl' => 60,
+            'origin' => ['host' => '8.8.8.8', 'port' => 80, 'scheme' => 'http', 'host_header' => 'sealed.test', 'sni' => null, 'verify_tls' => false, 'connect_timeout_ms' => 1000, 'response_timeout_ms' => 5000, 'retry_count' => 0, 'websocket' => false, 'health_check' => null]]);
+        (new ReconcileEdgeDomain($domain->id))->handle();
+        $stored = json_encode([EdgeRevision::query()->get()->toArray(), EdgeArtifact::query()->get()->toArray()]);
+        $this->assertStringContainsString($certificate->id, $stored);
+        $this->assertStringNotContainsString('SEALEDKEYMATERIAL', $stored);
+        $this->assertStringNotContainsString('private_key', $stored);
     }
 
     public function test_edge_telemetry_only_changes_domains_assigned_to_that_edge(): void
@@ -551,9 +598,10 @@ class EdgeProxyTest extends TestCase
         return ['type' => 'A', 'name' => $name, 'content' => $host, 'ttl' => 60, 'mode' => 'proxied', 'origin' => $this->origin($host)];
     }
 
-    private function certificateRequest(string $edgeId): string
+    private function certificateRequest(string $edgeId, ?string &$identityKeyPem = null): string
     {
         $privateKey = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
+        openssl_pkey_export($privateKey, $identityKeyPem);
         $request = openssl_csr_new(['commonName' => $edgeId], $privateKey, ['digest_alg' => 'sha256']);
         $this->assertTrue(openssl_csr_export($request, $pem));
 

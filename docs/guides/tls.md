@@ -84,7 +84,8 @@ its private DNSdist endpoint through `ACME_DNS_PROBE_SERVER`. DNSdist has no
 packet cache in the supported configuration, so no stale cache entry needs
 flushing. A missing or non-authoritative answer delays the order; it does not
 replace an active certificate. The issuer stores the
-encrypted private key and certificate, publishes a new edge revision, and
+encrypted private key and certificate, publishes a new edge revision that
+references the certificate by id (edges fetch the key separately), and
 cleans challenge records. New orders are globally bounded per hour and initial
 work is jittered.
 
