@@ -6,6 +6,7 @@ use App\Enums\DomainLifecycleState;
 use App\Enums\UserType;
 use App\Support\DomainName;
 use App\Support\DomainNameserverVerification;
+use App\Support\NameserverPairs;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -67,8 +68,10 @@ class Domain extends Model
                     throw ValidationException::withMessages(['name' => 'Platform and management namespaces cannot be claimed as customer zones.']);
                 }
             }
-            if (self::query()->where('name', $name)->exists()) {
-                throw ValidationException::withMessages(['name' => 'This canonical domain is already managed.']);
+            // Another owner or claim does not block this claim: ownership is decided by who can
+            // delegate the name to the pair this claim is given, never by who asked first.
+            if ($actor->domains()->where('domains.name', $name)->exists() || ($actor->isAdmin() && self::query()->where('name', $name)->exists())) {
+                throw ValidationException::withMessages(['name' => 'You already manage or have claimed this domain.']);
             }
             if (DomainNameTombstone::query()->where('name', $name)->first()?->reclaim_after?->isFuture()) {
                 throw ValidationException::withMessages(['name' => 'The domain is still in its post-deprovisioning reclaim cooldown.']);
@@ -88,46 +91,60 @@ class Domain extends Model
         });
     }
 
-    /** @return list<string> */
+    /**
+     * The nameserver pair this domain is delegated to. A claim is assigned a pair when it
+     * is first verified; a verified domain that has none falls back to the first pair.
+     *
+     * @return list<string>
+     */
     public function assignedNameservers(): array
     {
         if ($this->delegation_nameservers !== null) {
             return $this->delegation_nameservers;
         }
-        // Legacy verified installations continue using the original shared pair.
-        // A pending legacy claim may never verify against this fallback.
-        if ($this->nameservers_verified_at === null) {
-            return [];
+
+        return $this->nameservers_verified_at === null ? [] : (NameserverPairs::all()[0] ?? []);
+    }
+
+    /**
+     * A pending claim that must not publish a zone: the name is already held by another domain, or
+     * an older pending claim owns the delegation zone. Verification only needs the parent delegation.
+     */
+    public function isSecondaryClaim(): bool
+    {
+        if ($this->lifecycle_state !== DomainLifecycleState::PendingVerification) {
+            return false;
         }
 
-        return collect(PlatformDnsSetting::query()->find(1)?->nameservers ?? [])
-            ->pluck('hostname')->map(fn (string $name): string => strtolower(rtrim($name, '.')))
-            ->unique()->sort()->values()->all();
+        return self::query()->where('name', $this->name)->whereKeyNot($this->getKey())
+            ->where(fn ($query) => $query->whereIn('lifecycle_state', [DomainLifecycleState::Active->value, DomainLifecycleState::Disabled->value])
+                ->orWhere(fn ($pending) => $pending->where('lifecycle_state', DomainLifecycleState::PendingVerification->value)->where('id', '<', $this->getKey())))
+            ->exists();
+    }
+
+    /** Pairs used by the other live domains that share this domain's name. @return list<list<string>> */
+    public function competingPairs(): array
+    {
+        return self::query()->where('name', $this->name)->whereKeyNot($this->getKey())
+            ->whereNotNull('delegation_nameservers')->pluck('delegation_nameservers')
+            ->map(fn ($pair): array => collect($pair)->sort()->values()->all())->all();
     }
 
     public function initializeDelegationClaim(): void
     {
-        if ($this->nameservers_verified_at !== null || $this->delegation_nameservers !== null) {
+        if ($this->delegation_nameservers !== null) {
             return;
         }
         $settings = PlatformDnsSetting::query()->find(1);
         if ($settings === null) {
             return;
         }
-        $token = $this->delegation_token ?? bin2hex(random_bytes(16));
-        $nameservers = collect($settings->nameservers)->pluck('hostname')->map(function (string $hostname) use ($token): string {
-            $assigned = $token.'.'.strtolower(rtrim($hostname, '.'));
-            if (strlen($assigned) > 253) {
-                throw new \RuntimeException('Platform nameserver names must leave room for delegation assignments.');
-            }
-
-            return $assigned;
-        })->unique()->sort()->values()->all();
-        if (count($nameservers) < 2) {
-            throw new \RuntimeException('At least two platform nameservers are required for delegation assignments.');
+        $pair = NameserverPairs::choose($this->name, $this->competingPairs(), $settings);
+        if ($pair === null) {
+            throw ValidationException::withMessages(['name' => 'Every nameserver pair is already used by another claim on this name. Try again after an existing claim expires.']);
         }
         $this->forceFill([
-            'delegation_token' => $token, 'delegation_nameservers' => $nameservers,
+            'delegation_token' => $this->delegation_token ?? bin2hex(random_bytes(16)), 'delegation_nameservers' => $pair,
             'claim_expires_at' => $this->claim_expires_at ?? now()->addDays(7),
         ])->save();
     }

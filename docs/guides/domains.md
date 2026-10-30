@@ -62,12 +62,15 @@ Creation:
 
 ## Verify
 
-Creation assigns a random nameserver prefix, a seven-day pending-claim deadline
-and the creating user's assignment. Read **Assigned nameservers** on the domain
-page or `assigned_nameservers` in the API response. At the registrar (or parent
-zone for delegated children), set exactly these names. There is no customer TXT
-challenge. The assignment resolves to the existing bounded DNS hosts through
-platform wildcard A/AAAA records; no per-domain DNS process is created.
+Creation assigns a **nameserver pair**, a seven-day pending-claim deadline and the
+creating user's assignment. The platform offers a few readable pairs: `ns1` and
+`ns2` are the first pair, `ns3` and `ns4` the second, and so on, exactly as
+listed in the platform nameserver settings (which must hold an even number of
+entries). Read **Assigned nameservers** on the domain page or
+`assigned_nameservers` in the API response. At the registrar (or parent zone
+for delegated children), set exactly these two names. There is no customer TXT
+challenge. The pair resolves to the existing bounded DNS hosts through their
+normal A/AAAA records; no per-domain DNS process is created.
 
 The worker uses BIND `delv` with its root trust anchor to validate parent discovery
 and DS absence, then bounded nonrecursive `dig` queries to parent authorities.
@@ -91,16 +94,36 @@ The explicit administrator force-verification route remains audited; it is an
 operator override, not evidence that public delegation was checked.
 
 Each domain user may hold at most 20 unverified claims, including disabled or
-retiring claims. Administrator bulk operations remain separately authorized.
-An unverified claim expires after seven days even if the applicant disables it. The scheduler retires at most
-500 expired claims per minute through normal asynchronous deprovisioning and
-reclaim cooldown. Verified owners never expire on this deadline. For disputes,
-an administrator must inspect independent registrar/parent evidence and audit
-any deliberate assignment or override; a competing applicant cannot replace a
-verified configuration. Do not bypass cooldown or delete tombstones to recover
-a claim. Following retirement and cooldown, create a fresh claim with different
-nameservers. Repeated squatting or disputed registrar evidence requires operator
-review; automatic ownership transfer is not supported.
+retiring claims, and one claim per name. An unverified claim expires after seven
+days even if the applicant disables it. The scheduler retires at most 500
+expired claims per minute through normal asynchronous deprovisioning. Verified
+owners never expire on this deadline.
+
+### Competing claims and takeover
+
+Asking first does not own a name; delegating the name does. Anyone may claim a
+name another user already holds or has claimed:
+
+- the new claim gets a nameserver pair that no other live claim of that name
+  uses, so a delegation left over from the previous owner can never verify it;
+- while the claim is pending nothing changes for the holder, the claim publishes
+  no zone, and the holder never learns who asked;
+- a claim verifies only when the **parent delegation exactly equals** its pair,
+  which only the party that controls the registrar can set;
+- when a claim verifies, it takes the name. The previous holder and every other
+  pending claim of that name are retired, and the audit log records
+  `domain.taken_over` and `domain.claim_superseded`. Nothing of the previous
+  owner's records, origins, or certificates moves to the new owner; the zone is
+  replaced by the new owner's first publish, and the name gets no reclaim
+  cooldown because it never became free.
+
+A name can have at most as many concurrent claims as there are free pairs (the
+holder counts as using one). With a single pair and a holder, a competing claim
+is refused with a validation error until the platform adds a second pair.
+Only an active or disabled domain holds a name, enforced by a partial unique
+index; pending claims may coexist. An administrator can still use the audited
+force-verification route, which is an operator override and not evidence that
+public delegation was checked.
 
 ## Activate
 
@@ -134,28 +157,15 @@ of deleting durable state.
 
 ## Upgrade and recovery for claim assignments
 
-Before upgrading, drain or stop old runtime workers so older verification code
-cannot process pending claims. Apply the additive
-`2026_09_05_160000_add_domain_delegation_claims` migration explicitly, deploy the
-new control/worker image (including `bind-tools`), and resume workers. Reconcile
-platform identity and verify wildcard nameserver A/AAAA answers on every DNS
-host before onboarding new customers. Existing verified zones retain their
-nameservers and assignments. Existing pending claims receive a fresh assignment
-when **Verify nameservers** is requested again; old unverified claims older than
-seven days retire under the expiry rule.
-If an older installation already has `delegation_nameservers` as JSON but lacks
-the migration receipt, the migration preserves its values, converts the column
-to JSONB, and adds only missing claim fields. The conversion bounds lock wait
-to five seconds and execution to 30 seconds; a timeout leaves the transaction
-unapplied for a later explicit retry. Check migration status before resuming
-workers.
-
-The new nullable columns are recovery evidence. Preserve them in backups and
-retain platform wildcard records during rollback. Do not roll back to code that
-accepts shared delegation for new claims; use a forward fix and suspend new
-claim verification if necessary. No migration is automatically applied by web
-requests or image startup. Production/public registrar qualification remains a
-separate gate recorded in the [production qualification](../operations/production-qualification.md).
+Claim assignments are stored in `delegation_nameservers` (the pair) and
+`delegation_token`, and a partial unique index allows one active or disabled
+domain per name. Preserve both columns in backups. The 2.0 migration clears
+earlier hex-label assignments; domains re-read their pair, and pending claims
+receive a fresh one when **Verify nameservers** is requested again. A verified
+domain with no stored pair is shown the first platform pair. Before onboarding
+customers, confirm the platform nameserver list holds the pairs you intend to
+offer and that every DNS host answers for each nameserver name. No migration is
+applied by web requests or image startup.
 
 The packaged PSL snapshot and its upstream commit/checksum are in
 `core/resources/data/public_suffix_list.*`. Update both from the official

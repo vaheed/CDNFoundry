@@ -376,7 +376,7 @@ A40, A41.
 - [x] Verify uploaded chains against the system trust store, with the
       uploaded intermediates as untrusted. Honor ACME `Retry-After`, reuse
       `Replay-Nonce`, and lock ACME account creation.
-- [ ] Replace first-claim-wins with re-delegation proof. Each platform
+- [x] Replace first-claim-wins with re-delegation proof. Each platform
       offers a small set of readable nameserver pairs. A new claim gets a
       pair different from the domain's current delegation, verification
       requires the parent delegation to equal that pair, and success moves

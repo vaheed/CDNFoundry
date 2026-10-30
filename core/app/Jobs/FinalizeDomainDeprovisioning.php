@@ -62,11 +62,14 @@ class FinalizeDomainDeprovisioning implements ShouldBeUnique, ShouldQueue
             if ($locked === null || $locked->lifecycle_state !== DomainLifecycleState::Deprovisioning || $locked->deprovision_after?->isFuture()) {
                 return;
             }
-            DomainNameTombstone::query()->updateOrCreate(['name' => $locked->name], [
-                'source_domain_id' => $locked->id,
-                'deprovisioned_at' => now(),
-                'reclaim_after' => now()->addDays(app(PlatformSettings::class)->integer('dns_lifecycle', 'domain_reclaim_cooldown_days')),
-            ]);
+            // A name another domain now holds is not released, so it gets no reclaim cooldown.
+            if (! Domain::query()->where('name', $locked->name)->whereKeyNot($locked->id)->exists()) {
+                DomainNameTombstone::query()->updateOrCreate(['name' => $locked->name], [
+                    'source_domain_id' => $locked->id,
+                    'deprovisioned_at' => now(),
+                    'reclaim_after' => now()->addDays(app(PlatformSettings::class)->integer('dns_lifecycle', 'domain_reclaim_cooldown_days')),
+                ]);
+            }
             $locked->users()->detach();
             AuditLog::record(null, 'domain.deprovisioned', $locked, ['reclaim_after' => now()->addDays(app(PlatformSettings::class)->integer('dns_lifecycle', 'domain_reclaim_cooldown_days'))->toIso8601String()]);
             $locked->delete();

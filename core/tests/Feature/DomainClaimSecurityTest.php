@@ -199,34 +199,48 @@ class DomainClaimSecurityTest extends TestCase
         }
     }
 
-    public function test_stale_shared_delegation_never_activates_a_new_applicant(): void
+    public function test_stale_delegation_to_the_current_owners_pair_never_activates_a_new_applicant(): void
     {
         Queue::fake();
+        $this->platformWithPairs(2);
+        $owner = User::factory()->create();
+        $held = Domain::createPendingFor($owner, 'stale.example.com')->refresh();
+        $held->forceFill(['lifecycle_state' => DomainLifecycleState::Active, 'nameservers_verified_at' => now()])->save();
+        $applicant = User::factory()->create();
+        $claim = Domain::createPendingFor($applicant, 'stale.example.com');
+        $this->assertNotEquals($held->assignedNameservers(), $claim->assignedNameservers(), 'a new claim never gets the current delegation');
+        $stale = $held->assignedNameservers();
+        $resolver = new class($stale) extends NameserverResolver
+        {
+            public function __construct(private array $answer) {}
+
+            public function resolve(string $domain): array
+            {
+                return $this->answer;
+            }
+        };
+
+        try {
+            (new VerifyDomainNameservers($claim->id))->handle($resolver);
+            $this->fail('The current owner\'s delegation cannot prove the applicant\'s control.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('assigned to this claim', $exception->getMessage());
+        }
+        $this->assertNull($claim->refresh()->nameservers_verified_at);
+        $this->assertSame(DomainLifecycleState::PendingVerification, $claim->lifecycle_state);
+        $this->assertSame(DomainLifecycleState::Active, $held->refresh()->lifecycle_state);
+        $this->assertCount(2, $claim->assignedNameservers());
+    }
+
+    private function platformWithPairs(int $pairs): void
+    {
         PlatformDnsSetting::query()->create([
             'id' => 1, 'platform_domain' => 'cdnf.test', 'proxy_hostname' => 'proxy.cdnf.test',
-            'nameservers' => [['hostname' => 'ns1.cdnf.test'], ['hostname' => 'ns2.cdnf.test']],
+            'nameservers' => collect(range(1, $pairs * 2))->map(fn (int $number): array => ['hostname' => "ns{$number}.cdnf.test", 'ipv4' => '8.8.8.'.$number])->all(),
             'soa_primary' => 'ns1.cdnf.test', 'soa_mailbox' => 'hostmaster.cdnf.test',
             'soa_refresh' => 3600, 'soa_retry' => 600, 'soa_expire' => 604800,
             'soa_minimum_ttl' => 300, 'default_ttl' => 300, 'cluster_targets' => [],
         ]);
-        $user = User::factory()->create();
-        $domain = Domain::createPendingFor($user, 'stale.example.com');
-        $resolver = new class extends NameserverResolver
-        {
-            public function resolve(string $domain): array
-            {
-                return ['ns1.cdnf.test', 'ns2.cdnf.test'];
-            }
-        };
-        try {
-            (new VerifyDomainNameservers($domain->id))->handle($resolver);
-            $this->fail('Shared stale delegation cannot prove applicant control.');
-        } catch (\RuntimeException $exception) {
-            $this->assertStringContainsString('assigned to this claim', $exception->getMessage());
-        }
-        $this->assertNull($domain->refresh()->nameservers_verified_at);
-        $this->assertSame(32, strlen($domain->delegation_token));
-        $this->assertCount(2, $domain->assignedNameservers());
     }
 
     public function test_expired_claims_are_bounded_and_verified_ownership_is_preserved(): void

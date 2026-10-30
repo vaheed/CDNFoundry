@@ -67,6 +67,9 @@ class PlatformDnsSettingsRequest extends FormRequest
             if (isset($data['proxy_hostname']) && (! $insidePlatform($data['proxy_hostname']) || rtrim($data['proxy_hostname'], '.') === $platform)) {
                 $validator->errors()->add('proxy_hostname', 'The proxy hostname must be a subdomain of the platform domain.');
             }
+            if (is_array($data['nameservers'] ?? null) && count($data['nameservers']) % 2 !== 0) {
+                $validator->errors()->add('nameservers', 'Nameservers are offered in pairs; provide an even number (ns1 and ns2, then ns3 and ns4).');
+            }
             foreach ($data['nameservers'] ?? [] as $index => $nameserver) {
                 if (! $insidePlatform($nameserver['hostname'] ?? null)) {
                     $validator->errors()->add("nameservers.$index.hostname", 'Nameserver hostnames must be inside the platform domain.');

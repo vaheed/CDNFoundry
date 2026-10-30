@@ -67,9 +67,10 @@ class ReconcileDnsZone implements ShouldBeUniqueUntilProcessing, ShouldQueue
 
             return;
         }
-        if ($domain->lifecycle_state === DomainLifecycleState::PendingVerification && $domain->hasManagedAncestor()) {
-            // An unverified child must not shadow its parent's authoritative
-            // records. Parent delegation is checked before publishing this zone.
+        if ($domain->lifecycle_state === DomainLifecycleState::PendingVerification && ($domain->hasManagedAncestor() || $domain->isSecondaryClaim())) {
+            // An unverified child must not shadow its parent's authoritative records, and a competing
+            // claim must not overwrite the zone of the name's holder. Parent delegation is checked
+            // without publishing this zone.
             $this->operations()->update(['status' => 'succeeded', 'result' => ['domain_id' => $domain->id, 'bootstrap_deferred' => true], 'finished_at' => now()]);
             VerifyDomainNameservers::dispatch($domain->id)->afterCommit();
 

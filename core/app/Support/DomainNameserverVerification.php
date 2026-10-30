@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Enums\DomainLifecycleState;
+use App\Jobs\DeprovisionDnsZone;
 use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
@@ -55,7 +56,7 @@ class DomainNameserverVerification
                 ], $ipAddress);
             }
 
-            if ($domain->hasManagedAncestor() || $this->zoneIsReady($domain)) {
+            if ($domain->hasManagedAncestor() || $domain->isSecondaryClaim() || $this->zoneIsReady($domain)) {
                 if ($verificationCreated) {
                     VerifyDomainNameservers::dispatch($domain->id)->afterCommit();
                 }
@@ -127,6 +128,9 @@ class DomainNameserverVerification
 
             $wasVerified = $locked->nameservers_verified_at !== null;
             $activated = $locked->lifecycle_state !== DomainLifecycleState::Active;
+            if ($activated) {
+                $this->retireCompetingClaims($locked, $actor, $ipAddress);
+            }
             $changes = [
                 'nameservers_verified_at' => $locked->nameservers_verified_at ?? now(),
                 'nameservers_verified_by' => $wasVerified ? $locked->nameservers_verified_by : ($forced ? $actor?->getKey() : null),
@@ -178,6 +182,34 @@ class DomainNameserverVerification
 
             return $activated;
         });
+    }
+
+    /**
+     * The claim that proves control takes the name. The previous holder and every other pending
+     * claim are retired, and the winner inherits the served record sets only so its first publish
+     * replaces them: nothing of the previous owner's configuration, certificates, or origins moves.
+     */
+    private function retireCompetingClaims(Domain $winner, ?User $actor, ?string $ipAddress): void
+    {
+        $others = Domain::query()->where('name', $winner->name)->whereKeyNot($winner->id)
+            ->where('lifecycle_state', '!=', DomainLifecycleState::Deprovisioning->value)->lockForUpdate()->get();
+        foreach ($others as $other) {
+            $holder = in_array($other->lifecycle_state, [DomainLifecycleState::Active, DomainLifecycleState::Disabled], true);
+            if ($holder) {
+                foreach ($other->dnsDeployments()->where('tombstone', false)->get() as $deployment) {
+                    DnsDeployment::query()->updateOrCreate(['domain_id' => $winner->id, 'dns_cluster_id' => $deployment->dns_cluster_id], [
+                        'active_rrsets' => $deployment->active_rrsets ?? [], 'active_checksum' => null, 'status' => 'pending',
+                        'desired_revision' => $winner->revision, 'deployed_revision' => 0,
+                    ]);
+                }
+            }
+            $other->forceFill(['lifecycle_state' => DomainLifecycleState::Deprovisioning, 'deprovision_after' => now(), 'revision' => $other->revision + 1])->save();
+            Operation::query()->where('type', 'domain.nameservers_verify')->where('input->domain_id', $other->id)->whereIn('status', ['pending', 'running'])
+                ->update(['status' => 'failed', 'error' => 'Another claim proved control of this name.', 'finished_at' => now()]);
+            Operation::query()->create(['type' => 'domain.deprovision', 'status' => 'pending', 'input' => ['domain_id' => $other->id, 'revision' => $other->revision]]);
+            AuditLog::record($actor, $holder ? 'domain.taken_over' : 'domain.claim_superseded', $other, ['winning_domain_id' => $winner->id, 'name' => $winner->name], $ipAddress);
+            DeprovisionDnsZone::dispatch($other->id)->afterCommit();
+        }
     }
 
     public function dispatchActivation(int $domainId, ?int $actorId = null): void
