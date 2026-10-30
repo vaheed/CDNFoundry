@@ -40,14 +40,19 @@ class ProxyRollbackSafetyTest extends TestCase
         $this->assertSame(0, $domain->dnsRecords()->where('name', 'www.rollback.test')->count());
     }
 
-    public function test_rollback_never_deletes_a_dns_only_record_that_now_uses_the_name(): void
+    public function test_rollback_refuses_a_name_taken_by_a_dns_only_address_and_keeps_other_types(): void
     {
         [$user, $domain] = $this->domainWithRevision($this->origin('8.8.8.8'));
         $domain->dnsRecords()->create(['type' => 'TXT', 'name' => 'www.rollback.test', 'content' => 'keep', 'content_hash' => hash('sha256', 'keep'), 'ttl' => 300, 'mode' => 'dns_only']);
+        $address = $domain->dnsRecords()->create(['type' => 'A', 'name' => 'www.rollback.test', 'content' => '1.1.1.1', 'content_hash' => hash('sha256', '1.1.1.1'), 'ttl' => 300, 'mode' => 'dns_only']);
 
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/rollback", ['revision' => 1])->assertConflict();
+        $this->assertSame(2, $domain->dnsRecords()->where('name', 'www.rollback.test')->where('mode', 'dns_only')->count());
 
-        $this->assertSame(1, $domain->dnsRecords()->where('name', 'www.rollback.test')->where('mode', 'dns_only')->count());
+        $address->delete();
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/rollback", ['revision' => 1])->assertAccepted();
+        $this->assertSame(1, $domain->dnsRecords()->where('name', 'www.rollback.test')->where('type', 'TXT')->count());
+        $this->assertSame(1, $domain->dnsRecords()->where('name', 'www.rollback.test')->where('mode', 'proxied')->count());
     }
 
     private function domainWithRevision(array $origin, string $waf = 'off', string $tlsMode = 'managed'): array

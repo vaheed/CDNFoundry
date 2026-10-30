@@ -31,7 +31,8 @@ final class ProxyRevisionRollback
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $wanted = array_column($plan['records'], 'name');
             foreach ($wanted as $name) {
-                abort_if($locked->dnsRecords()->where('name', $name)->where('mode', '!=', 'proxied')->exists(), 409, "A non-proxied DNS record now uses {$name}; remove it before rolling back.");
+                // MX, TXT and other types may share the name; only a DNS-only address or alias record collides.
+                abort_if($locked->dnsRecords()->where('name', $name)->where('mode', '!=', 'proxied')->whereIn('type', ['A', 'AAAA', 'CNAME'])->exists(), 409, "A DNS-only address or alias record now uses {$name}; remove it before rolling back.");
             }
             $locked->dnsRecords()->where('mode', 'proxied')->whereNotIn('name', $wanted)->delete();
             foreach ($plan['records'] as $record) {
