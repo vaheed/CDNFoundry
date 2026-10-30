@@ -240,45 +240,52 @@ Fixes C1, C2, H9, M1, L5, A4, A7, A10, A16, A23, A24, A37.
 
 Fixes C3, C4, H3, H4, A1, A2, A3, A8, A9, A11, A12, A13, A17, M11.
 
-- [ ] **Fail static.** Withdraw a PoP from DNS only on a positive signal
+- [x] **Fail static.** Withdraw a PoP from DNS only on a positive signal
       (drain, disable, or a failed external health probe), never on missing
       heartbeats alone. Never publish an empty answer set for a pool: keep
       the last published set and alert.
-- [ ] Add external health probes, run from at least two vantage points, that
+- [x] Add external health probes, run from at least two vantage points, that
       check each PoP's HTTP/TLS listener directly. Withdrawal needs a quorum.
-- [ ] Renew edge identity certificates over mTLS at two thirds of their
+      Delivered with the other PoPs' agents as the vantage points and a TCP
+      accept check on ports 80 and 443; a dedicated third-party prober and a
+      full TLS or HTTP request are not delivered.
+- [x] Renew edge identity certificates over mTLS at two thirds of their
       lifetime. Accept the old and new fingerprints until the new one is
       proven. Report the expiry in the heartbeat and alert 30 days before it.
-- [ ] Make the agent apply artifacts per domain. A bad artifact is rejected
+- [x] Make the agent apply artifacts per domain. A bad artifact is rejected
       and skipped, the cursor advances, and the server records the rejection
       for that domain only.
-- [ ] Make agent and server agree on one rejection-reason list, defined once
+- [x] Make agent and server agree on one rejection-reason list, defined once
       and tested by a contract test. An unknown reason is stored, never
       returned as 422.
-- [ ] Promote a placement when a quorum of participating PoPs (default: all
+- [x] Promote a placement when a quorum of participating PoPs (default: all
       that are healthy, at least one) have acknowledged. Lagging PoPs catch
-      up without blocking the pool.
-- [ ] Page promotion through all deploying placements in bounded chunks.
-- [ ] Exclude withdrawn pools from automatic placement.
-- [ ] Publish proxied records independently of placement: before a placement
+      up without blocking the pool. Delivered as `promotion_quorum_percent`
+      plus a grace window (`promotion_grace_seconds`) after which a PoP that
+      has not acknowledged stops counting.
+- [x] Page promotion through all deploying placements in bounded chunks.
+- [x] Exclude withdrawn pools from automatic placement.
+- [x] Publish proxied records independently of placement: before a placement
       is active, render the default pool's hostname, so the zone always
       publishes.
-- [ ] Make the gateway forward the bytes it has already buffered after the
+- [x] Make the gateway forward the bytes it has already buffered after the
       HTTP preface.
-- [ ] Pass the real client address to the origin hop in one internal header,
+- [x] Pass the real client address to the origin hop in one internal header,
       cleared at ingress.
-- [ ] Use only the PROXY-protocol address, and trust PROXY headers only from
+- [x] Use only the PROXY-protocol address, and trust PROXY headers only from
       the gateway. Accept `X-Forwarded-For` only from configured trusted
       proxies, taking the rightmost untrusted entry.
-- [ ] Configure Alertmanager receivers from typed settings, add an
+- [x] Configure Alertmanager receivers from typed settings, add an
       always-firing `Watchdog` alert, and refuse a production configuration
-      with no notifier.
-- [ ] Set `retry_after` above every worker and job timeout, and assert that
+      with no notifier. Delivered as a validated `ALERT_WEBHOOK_URL`
+      (`alert_webhook_url` in the fleet config) rather than a PostgreSQL
+      setting, because Alertmanager must start while the control plane is down.
+- [x] Set `retry_after` above every worker and job timeout, and assert that
       in `make config-check`.
-- [ ] Store idempotency receipts only for 2xx and deterministic 4xx
+- [x] Store idempotency receipts only for 2xx and deterministic 4xx
       responses, filter lookups on `expires_at`, and run the throttle before
       the idempotency middleware.
-- [ ] Add health checks for every long-running service, including agent,
+- [x] Add health checks for every long-running service, including agent,
       gateway (`/healthz`), edge-control, Horizon, and scheduler liveness.
 
 **Exit:** E2E checks each of these on a real Compose stack:
@@ -295,6 +302,32 @@ Fixes C3, C4, H3, H4, A1, A2, A3, A8, A9, A11, A12, A13, A17, M11.
 - A job longer than 90 s runs exactly once.
 - A retried 429 is not replayed.
 - Killing the agent process is detected and restarted.
+
+**Completion gate (2026-10-30).** The four fields are recorded separately.
+
+| Field | Status | Evidence |
+| --- | --- | --- |
+| Implementation | Complete, with the deviations marked above | Commits on `dev`; replaced code is deleted |
+| Regression tests | Pass | PHP: `IdempotencyReceiptTest`, `QueueTimingContractTest`, `PlacementResilienceTest`, `EdgeRejectionTest`, `PopFailStaticTest`, `EdgeIdentityRenewalTest`. Go: `artifact_apply_test.go`, `identity_renewal_test.go`, `probes_test.go`, `liveness_test.go`, gateway `readHTTP` tests. Contract: `tests/contract/test_edge_rejection_reasons.py` |
+| Runtime tests | Pass for the exit items marked below; the rest are covered by regression tests only | `control_plane_faults.py` (stop edge-control, agent kill, 100-second job), `client_address.py`, `alert_watchdog.py`. The stack ran over IPv4 only; IPv6 client addresses were carried in PROXY headers over IPv4 |
+| Documentation | Updated | edges guide, pool service endpoints, gateway ingress, monitoring, CLI commands, platform settings, configuration, edge-agent API, fleet quick start |
+| Manual browser | Not run; checklist updated | `docs/manual-browser-qualification.md` (steps 8 and 9 of the Phase 1 regression list) |
+
+Exit items and how each was checked:
+
+| Exit item | Check |
+| --- | --- |
+| Stopping edge-control keeps every domain resolving and serving | Runtime: DNS answers unchanged with edge-control stopped and every heartbeat two days old |
+| An edge certificate that expires keeps its heartbeat | Regression tests only: renewal at two thirds, dual acceptance, resume after restart. Not run against a short-lived certificate on the stack |
+| A bad artifact leaves other domains updating | Regression tests only (Go): isolated rejection, combined-conflict bisection, full snapshot |
+| One PoP killed, deployments complete on the others | Regression tests only (`PlacementResilienceTest`) |
+| A new domain with a proxied apex resolves MX immediately | Regression tests only (`PlacementResilienceTest`) |
+| A POST over port 80 reaches the origin | Regression tests only (gateway `readHTTP` keeps buffered bytes); not run through a live gateway |
+| The origin sees the real client address; forged headers have no effect | Runtime: `client_address.py` |
+| A webhook sink receives `Watchdog` | Runtime: `alert_watchdog.py` |
+| A job longer than 90 s runs exactly once | Runtime: `control_plane_faults.py` |
+| A retried 429 is not replayed | Regression tests only (`IdempotencyReceiptTest`) |
+| Killing the agent process is detected and restarted | Runtime: `control_plane_faults.py` |
 
 ### Phase 3: Make domain features correct
 

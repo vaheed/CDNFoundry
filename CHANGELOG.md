@@ -9,6 +9,13 @@ single source of truth; `make version-check` enforces it.
 
 ### Added
 
+- Phase 2 (control-plane faults): PoPs leave DNS only on a positive signal and
+  pools keep their last published set; PoPs probe each other's listeners; edge
+  identity certificates renew over mTLS; the agent rejects a bad artifact for
+  one domain only; placements promote by quorum; Alertmanager sends to a
+  required webhook with an always-firing `Watchdog`; every long-running
+  service has a health check; origins see the real client address. See the
+  [roadmap](docs/roadmap.md) completion gate.
 - Coding-agent tooling: rewritten project skills with front matter, real file
   paths, commands, tests, and known traps, plus a new `cdnf-codebase-map`
   skill; `.claude/skills` links to `.agents/skills`; `.mcp.json` registers the

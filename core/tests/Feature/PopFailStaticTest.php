@@ -8,6 +8,7 @@ use App\Models\EdgePool;
 use App\Models\EdgePoolEndpoint;
 use App\Models\EdgeProbeResult;
 use App\Models\PlatformDnsSetting;
+use App\Support\EdgeCertificateAuthority;
 use App\Support\PlatformDnsZone;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -171,7 +172,7 @@ class PopFailStaticTest extends TestCase
         $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
         $csr = openssl_csr_new(['commonName' => $edge->id], $key, ['digest_alg' => 'sha256']);
         openssl_csr_export($csr, $csrPem);
-        $signed = \App\Support\EdgeCertificateAuthority::sign($csrPem, $edge->id);
+        $signed = EdgeCertificateAuthority::sign($csrPem, $edge->id);
         $edge->update(['identity_certificate' => $signed['certificate'], 'identity_certificate_serial' => $signed['serial'], 'identity_certificate_expires_at' => $signed['expires_at']]);
 
         return ['X-Edge-Certificate-Verify' => 'SUCCESS', 'X-Edge-Certificate-Serial' => $signed['serial'], 'X-Edge-Certificate-Pem' => rawurlencode($signed['certificate'])];

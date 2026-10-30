@@ -106,6 +106,7 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `EDGE_GATEWAY_REQUIRE_ADDRESS_MAP` | production edge agent | Set `true` only when local policy requires every fetched endpoint to have an explicit translation before activation. Default `false`. |
 | `EDGE_GATEWAY_STATUS_URL` | edge agent | Gateway metrics URL used for heartbeat readiness |
 | `EDGE_GATEWAY_METRICS_ADDRESS` | edge gateway | Restricted metrics listener; production default `0.0.0.0:9105` |
+| `GATEWAY_METRICS_ADDRESS` | edge gateway container | The listener address the container receives from `EDGE_GATEWAY_METRICS_ADDRESS`; the Compose health check calls its `/healthz` |
 | `EDGE_GATEWAY_MAX_CONNECTIONS` | edge gateway | Global accepted-connection bound, `128`–`65536` (default `8192`) |
 | `DNS_API_HOSTNAME` | DNS | DNS API TLS hostname in independent management DNS |
 | `DNS_API_SERVER_CERTIFICATE` | DNS | Absolute server certificate path |

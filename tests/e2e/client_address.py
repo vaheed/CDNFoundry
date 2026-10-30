@@ -18,6 +18,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 PREFIX = "cdnf-client-address-e2e"
 EDGE_NETWORK = os.environ.get("CDNF_EDGE_NETWORK", f"{os.environ.get('COMPOSE_PROJECT_NAME', 'cdnfoundry-dev')}_edge")
 HOST = "client-address.example"
+BEHIND_PROXY = "behind-proxy.example"
 SIGNATURE = b"\r\n\r\n\x00\r\nQUIT\n"
 
 
@@ -36,8 +37,8 @@ def proxy_header(source: str) -> bytes:
     return SIGNATURE + bytes([0x21, 0x11]) + struct.pack("!H", len(packed)) + packed
 
 
-def fetch(address: str, source: str | None, headers: dict[str, str] | None = None) -> dict:
-    request = f"GET / HTTP/1.1\r\nHost: {HOST}\r\nConnection: close\r\n"
+def fetch(address: str, source: str | None, headers: dict[str, str] | None = None, host: str = HOST) -> dict:
+    request = f"GET / HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n"
     for name, value in (headers or {}).items():
         request += f"{name}: {value}\r\n"
     request += "\r\n"
@@ -92,6 +93,10 @@ def main() -> None:
                 "blocked_networks": [], "blocked_addresses": [],
             },
         }}}
+        # A domain behind its own trusted proxies reads X-Forwarded-For from the right.
+        runtime["hosts"][BEHIND_PROXY] = json.loads(json.dumps(runtime["hosts"][HOST])) | {
+            "domain": BEHIND_PROXY, "security": {"trusted_proxy_cidrs": ["198.51.100.0/24"]},
+        }
         (temporary / "shared-default.json").write_text(json.dumps(runtime))
         (temporary / "shared-default.json").chmod(0o644)
         try:
@@ -116,6 +121,13 @@ def main() -> None:
             # A forged X-Forwarded-For or internal header changes nothing.
             forged = fetch(trusting, "198.51.100.8", {"X-Forwarded-For": "203.0.113.9", "Forwarded": "for=203.0.113.9", "X-CDN-Client-Address": "203.0.113.99"})
             assert forged["xff"] == "198.51.100.8" and "203.0.113" not in forged["forwarded"], forged
+
+            # Only a configured trusted proxy may supply X-Forwarded-For: the rightmost
+            # address that is not itself a trusted proxy is the client.
+            chained = fetch(trusting, "198.51.100.7", {"X-Forwarded-For": "203.0.113.200, 192.0.2.55, 198.51.100.9"}, BEHIND_PROXY)
+            assert chained["xff"] == "192.0.2.55", chained
+            garbage = fetch(trusting, "198.51.100.7", {"X-Forwarded-For": "192.0.2.55, not-an-address"}, BEHIND_PROXY)
+            assert garbage["xff"] == "198.51.100.7", garbage
 
             # A PROXY header from a peer outside the trusted network is ignored.
             ignored = fetch(untrusting, "198.51.100.9")

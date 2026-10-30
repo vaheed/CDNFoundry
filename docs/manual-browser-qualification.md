@@ -690,6 +690,8 @@ steps below remain owner-run and must be recorded separately.
 5. Confirm migration/compatibility messaging does not silently enable blocking for a hostname that previously used detection-only behavior.
 6. As a domain owner, open the domain page, then the **Managed WAF exclusions** table. Expected: the table lists any stored exclusions with a delete action and shows no **New** or **Create** button. Delete one stored row and confirm an asynchronous operation is queued and the row disappears.
 7. As a domain owner, open the domain page and read the **DNS deployment** section. Expected: it shows each cluster's status and revisions but no **Deployment errors** entry. Sign in as an administrator, open the same domain, and confirm **Deployment errors** is visible there.
+8. Phase 2: as an administrator open **Governance → Platform settings → Edge runtime**. Expected: **Promotion quorum (percent)** shows 100, **Promotion grace (seconds)** 120, **Probe vantage points** 2, and **Probe result age (seconds)** 180 beside the existing fields. Enter 0 in **Promotion quorum (percent)** and 1 in **Probe vantage points**; each must be rejected with a field error. Restore the defaults and save.
+9. Phase 2: open **Edges** and one enrolled edge. Expected: **Identity expires** shows a date, **Latest deployment rejection** reads **None reported** once the edge has acknowledged a newer artifact, and a pool's endpoint list keeps showing the endpoint as published while its heartbeat is stale (stop that edge's `edge-agent` for two minutes, then check). Start the agent again and confirm the heartbeat recovers.
 
 ### Real shared-cell enforcement
 
