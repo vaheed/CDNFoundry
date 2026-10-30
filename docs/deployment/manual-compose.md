@@ -127,6 +127,12 @@ result for each of:
 - `GRAFANA_POSTGRES_PASSWORD`;
 - each edge host's `EDGE_STATUS_TOKEN`.
 
+`pdns-auth` starts through `docker/pdns/production-start.sh`. The committed
+`pdns.conf` holds development credentials; at start the wrapper writes the real
+`PDNS_DB_PASSWORD` and `PDNS_API_KEY` into a private copy of the configuration
+and refuses to start (exit 78) if either is missing or still the development
+value. Fleet bundles already carry rendered credentials, which the wrapper keeps.
+
 Create the metrics token without printing it:
 
 ```bash

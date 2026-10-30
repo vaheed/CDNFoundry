@@ -317,12 +317,16 @@ services:
   pdns-auth:
     logging: *bounded-logging
     image: powerdns/pdns-auth-51:5.1.4@sha256:bb5b1c133bcca1dd455075321de7d55db4945a8d7f2ba23339e3c7bbe416b205
-    entrypoint: [/usr/local/sbin/pdns_server]
+    entrypoint: [/usr/local/bin/pdns-production-start]
     command: [--disable-syslog, --daemon=no, --guardian=no]
     init: true
     profiles: [dns]
+    environment:
+      PDNS_DB_PASSWORD: ${PDNS_DB_PASSWORD:?PDNS_DB_PASSWORD is required}
+      PDNS_API_KEY: ${PDNS_API_KEY:?PDNS_API_KEY is required}
     volumes:
       - ./docker/pdns/pdns.conf:/etc/powerdns/pdns.conf:ro
+      - ./docker/pdns/production-start.sh:/usr/local/bin/pdns-production-start:ro
       - ./docker/pdns/geoip-zones.yml:/etc/powerdns/geoip-zones.yml:ro
       - mmdb:/mmdb:ro
     depends_on:
