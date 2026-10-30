@@ -68,7 +68,10 @@ return [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
-            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
+            // Must exceed every worker and job timeout (backups run 3700 s),
+            // or a running job is redelivered and executes twice.
+            // QueueTimingContractTest asserts this in make config-check.
+            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 3900),
             'block_for' => null,
             'after_commit' => true,
         ],

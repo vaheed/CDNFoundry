@@ -343,3 +343,10 @@ child process; they are not deployment settings.
 `TestFullCachePurgeAgainstRunningCell`. The Python protocol runner supplies an
 isolated loopback cell endpoint and a temporary synthetic token file. Never point
 this fixture at a staging or production cell. These are not deployment settings.
+
+`REDIS_QUEUE_RETRY_AFTER` defaults to 3900 seconds. It must stay above every
+Horizon worker timeout and every job `$timeout` (the longest is the control
+backup at 3700 seconds), or a job that is still running is delivered a second
+time. `make config-check` runs `QueueTimingContractTest` to enforce this. A job
+whose worker dies without cleanup is redelivered after this interval, and the
+scheduled repair jobs cover the gap.

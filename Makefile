@@ -152,6 +152,8 @@ config-check:
 	$(COMPOSE_PROD_EXAMPLE) config --quiet
 	bash tests/config/generate-production-env.sh
 	./scripts/validate-production-overrides.sh
+	$(COMPOSE_DEV) run --rm --no-deps vendor-init
+	$(COMPOSE_TEST) run --rm --no-deps core php artisan test --filter=QueueTimingContractTest
 
 version-check:
 	python3 scripts/ci/version_check.py
