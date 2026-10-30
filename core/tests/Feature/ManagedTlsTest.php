@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\DomainLifecycleState;
 use App\Enums\UserType;
+use App\Exceptions\AcmeRetryLaterException;
 use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\IssueManagedCertificate;
 use App\Jobs\ReconcileDnsZone;
@@ -77,6 +78,70 @@ PEM,
         $protected = json_decode($this->decodeBase64Url($jws['protected']), true, flags: JSON_THROW_ON_ERROR);
         $this->assertSame(32, strlen($this->decodeBase64Url($protected['jwk']['x'])));
         $this->assertSame(32, strlen($this->decodeBase64Url($protected['jwk']['y'])));
+    }
+
+    public function test_acme_reuses_the_replay_nonce_from_each_response_and_honors_retry_after(): void
+    {
+        config()->set('services.acme.enabled', true);
+        config()->set('services.acme.contact_email', 'admin@example.test');
+        config()->set('services.acme.directory_url', 'https://acme.test/directory');
+        $nonceFetches = 0;
+        $serial = 0;
+        $poll = 0;
+        Http::fake(function (Request $request) use (&$nonceFetches, &$serial, &$poll) {
+            $headers = ['Replay-Nonce' => 'nonce-'.++$serial];
+
+            return match ($request->url()) {
+                'https://acme.test/directory' => Http::response(['newNonce' => 'https://acme.test/nonce', 'newAccount' => 'https://acme.test/account', 'newOrder' => 'https://acme.test/new-order']),
+                'https://acme.test/nonce' => tap(Http::response('', 200, $headers), function () use (&$nonceFetches): void {
+                    $nonceFetches++;
+                }),
+                'https://acme.test/account' => Http::response(['status' => 'valid'], 201, ['Location' => 'https://acme.test/accounts/1', ...$headers]),
+                'https://acme.test/order/1' => ++$poll === 1
+                    ? Http::response(['status' => 'pending'], 200, ['Retry-After' => '45', ...$headers])
+                    : Http::response(['detail' => 'rate limited'], 429, ['Retry-After' => '120', ...$headers]),
+                default => Http::response(['detail' => 'unexpected '.$request->url()], 500),
+            };
+        });
+
+        $client = app(AcmeClient::class);
+        $account = $client->account();
+        $status = $client->orderStatus($account, 'https://acme.test/order/1');
+
+        $this->assertSame(1, $nonceFetches, 'only the first request needs a newNonce round trip');
+        $this->assertSame(45, $status['retry_after']);
+        try {
+            $client->orderStatus($account, 'https://acme.test/order/1');
+            $this->fail('A 429 with Retry-After must surface as a retry-later error.');
+        } catch (AcmeRetryLaterException $exception) {
+            $this->assertSame(120, $exception->retryAfterSeconds);
+        }
+        $this->assertSame(1, $nonceFetches);
+    }
+
+    public function test_the_acme_account_is_registered_once_even_when_requested_repeatedly(): void
+    {
+        config()->set('services.acme.enabled', true);
+        config()->set('services.acme.contact_email', 'admin@example.test');
+        config()->set('services.acme.directory_url', 'https://acme.test/directory');
+        $registrations = 0;
+        Http::fake(function (Request $request) use (&$registrations) {
+            return match ($request->url()) {
+                'https://acme.test/directory' => Http::response(['newNonce' => 'https://acme.test/nonce', 'newAccount' => 'https://acme.test/account', 'newOrder' => 'https://acme.test/new-order']),
+                'https://acme.test/nonce' => Http::response('', 200, ['Replay-Nonce' => 'n']),
+                'https://acme.test/account' => tap(Http::response(['status' => 'valid'], 201, ['Location' => 'https://acme.test/accounts/1']), function () use (&$registrations): void {
+                    $registrations++;
+                }),
+                default => Http::response(['detail' => 'unexpected'], 500),
+            };
+        });
+
+        $first = app(AcmeClient::class)->account();
+        $second = (new AcmeClient)->account();
+
+        $this->assertSame(1, $registrations);
+        $this->assertTrue($first->is($second));
+        $this->assertDatabaseCount('acme_accounts', 1);
     }
 
     public function test_dns_only_and_unverified_domains_do_not_create_orders(): void

@@ -46,6 +46,20 @@ final class CertificateChain
         }
         openssl_pkey_export($key, $keyPem);
 
-        return ['certificate' => $leafPem, 'chain' => $issuerPem.$rootPem, 'private_key' => $keyPem];
+        self::trust($rootPem);
+
+        return ['certificate' => $leafPem, 'chain' => $issuerPem.$rootPem, 'private_key' => $keyPem, 'intermediates' => $issuerPem];
+    }
+
+    /** Add a root to the trust file uploaded chains are verified against in tests. */
+    public static function trust(string $rootPem): void
+    {
+        $path = config('tls.upload_trust_file');
+        if (! is_string($path) || $path === '' || ! str_starts_with($path, sys_get_temp_dir().'/cdnf-trust-')) {
+            $path = sys_get_temp_dir().'/cdnf-trust-'.bin2hex(random_bytes(6)).'.pem';
+            file_put_contents($path, '');
+            config(['tls.upload_trust_file' => $path]);
+        }
+        file_put_contents($path, $rootPem, FILE_APPEND);
     }
 }

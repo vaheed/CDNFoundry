@@ -57,7 +57,11 @@ class TlsApiTest extends TestCase
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/tls/upload", $missing)
             ->assertUnprocessable()->assertJsonValidationErrors('certificate');
 
-        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/tls/upload", [...$bundle, 'chain' => $other['chain']])
+        // A root the customer supplies is never trusted: the leaf must reach a root the platform trusts.
+        $selfTrusted = $this->certificate(['example.test', '*.example.test'], trusted: false);
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/tls/upload", $selfTrusted)
+            ->assertUnprocessable()->assertJsonValidationErrors('chain');
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/tls/upload", [...$selfTrusted, 'chain' => ''])
             ->assertUnprocessable()->assertJsonValidationErrors('chain');
         $this->assertSame(0, TlsCertificate::query()->count());
     }
@@ -72,6 +76,18 @@ class TlsApiTest extends TestCase
         $this->assertSame('managed', $domain->refresh()->tls_mode);
         $this->assertNull($domain->active_tls_certificate_id);
         $this->assertSame('revoked', TlsCertificate::query()->firstOrFail()->status);
+    }
+
+    public function test_custom_upload_accepts_a_chain_without_its_root_and_a_leaf_signed_by_a_trusted_root(): void
+    {
+        [$user, $domain] = $this->proxiedDomain();
+        $bundle = CertificateChain::make('valid');
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/tls/upload", [...$bundle, 'chain' => $bundle['intermediates']])->assertAccepted();
+        $this->assertSame($bundle['intermediates'], TlsCertificate::query()->latest('id')->firstOrFail()->chain_pem);
+
+        $direct = $this->certificate(['example.test', '*.example.test']);
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/tls/upload", [...$direct, 'chain' => null])->assertAccepted();
+        $this->assertSame('', trim(TlsCertificate::query()->latest('id')->firstOrFail()->chain_pem));
     }
 
     public function test_custom_upload_accepts_a_valid_private_ca_chain(): void
@@ -132,7 +148,7 @@ class TlsApiTest extends TestCase
 
         $stored = DB::table('tls_certificates')->where('domain_id', $domain->id)->value('chain_pem');
         $this->assertFalse(str_contains($stored, 'PRIVATE KEY'), 'The public chain must not contain private-key PEM.');
-        $this->assertSame($bundle['chain'], $stored);
+        $this->assertSame($bundle['intermediates'], $stored, 'only the issuing certificates are stored; a supplied root is dropped');
     }
 
     #[DataProvider('invalidChainConstraints')]
@@ -178,12 +194,12 @@ class TlsApiTest extends TestCase
 
         $stored = DB::table('tls_certificates')->where('id', $id)->value('chain_pem');
         $this->assertFalse(str_contains($stored, 'PRIVATE KEY'), 'Repeat upload must replace legacy public-chain material.');
-        $this->assertSame($bundle['chain'], $stored);
+        $this->assertSame($bundle['intermediates'], $stored);
         $this->assertSame($id, $domain->refresh()->active_tls_certificate_id);
         $this->assertSame($revision + 1, $domain->revision);
         $this->assertSame(1, $domain->tlsCertificates()->count());
         $snapshot = EdgeRevision::query()->where('domain_id', $domain->id)->latest('revision')->firstOrFail()->snapshot;
-        $this->assertSame($bundle['chain'], $snapshot['tls']['certificate']['chain_pem']);
+        $this->assertSame($bundle['intermediates'], $snapshot['tls']['certificate']['chain_pem']);
     }
 
     public static function uploadEntrypoints(): array
@@ -285,7 +301,7 @@ class TlsApiTest extends TestCase
         return [$user, $domain];
     }
 
-    private function certificate(array $names): array
+    private function certificate(array $names, bool $trusted = true): array
     {
         $caKey = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_RSA, 'private_key_bits' => 2048]);
         $caRequest = openssl_csr_new(['commonName' => 'CDNFoundry Test Root'], $caKey, ['digest_alg' => 'sha256']);
@@ -299,6 +315,10 @@ class TlsApiTest extends TestCase
         unlink($config);
         openssl_x509_export($leaf, $leafPem);
         openssl_pkey_export($key, $keyPem);
+
+        if ($trusted) {
+            CertificateChain::trust($caPem);
+        }
 
         return ['certificate' => $leafPem, 'chain' => $caPem, 'private_key' => $keyPem];
     }

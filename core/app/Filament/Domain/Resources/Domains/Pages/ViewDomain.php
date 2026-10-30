@@ -136,11 +136,11 @@ class ViewDomain extends ViewRecord
                 }),
             Action::make('uploadCertificate')->label('Upload custom certificate')->icon('heroicon-o-document-arrow-up')->schema([
                 Textarea::make('certificate')->label('Leaf certificate PEM')->rows(8)->maxLength(16384)->required(),
-                Textarea::make('chain')->label('Issuing chain PEM')->rows(8)->maxLength(65536)->required(),
+                Textarea::make('chain')->label('Intermediate certificates PEM')->rows(8)->maxLength(65536),
                 Textarea::make('private_key')->label('Private key PEM')->rows(8)->maxLength(16384)->required(),
             ])->action(function (array $data): void {
                 $expectedRevision = (int) $this->record->revision;
-                $validated = UploadedCertificate::validate($this->record, $data['certificate'], $data['chain'], $data['private_key']);
+                $validated = UploadedCertificate::validate($this->record, $data['certificate'], $data['chain'] ?? '', $data['private_key']);
                 DB::transaction(function () use ($validated, $expectedRevision): void {
                     $domain = $this->record->newQuery()->lockForUpdate()->findOrFail($this->record->id);
                     if ((int) $domain->revision !== $expectedRevision) {

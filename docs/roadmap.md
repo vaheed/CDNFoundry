@@ -373,7 +373,7 @@ A40, A41.
       429, and 500. Return 404 for unauthorized bindings, and hide model
       class names.
 - [x] Audit every mutation, and allow `usage.rebuild` to be retried.
-- [ ] Verify uploaded chains against the system trust store, with the
+- [x] Verify uploaded chains against the system trust store, with the
       uploaded intermediates as untrusted. Honor ACME `Retry-After`, reuse
       `Replay-Nonce`, and lock ACME account creation.
 - [ ] Replace first-claim-wins with re-delegation proof. Each platform

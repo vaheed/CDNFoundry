@@ -64,6 +64,11 @@ Managed issuance requires all of the following:
 
 DNS-only and unverified domains do not create ACME orders.
 
+The ACME client reuses the `Replay-Nonce` returned with each response, waits at
+least the `Retry-After` an ACME server sends when polling an order or
+authorization or answering `429` or `503` (bounded to one hour), and registers
+its account once under a lock even when several workers start together.
+
 The certificate-name compiler creates bounded name sets. The usual set includes
 the apex and wildcard; deep hostnames that a wildcard cannot cover use a
 supplemental order. A valid existing certificate is reused where it covers the
@@ -165,13 +170,15 @@ acknowledgements and verified HTTPS separately.
 
 ## Custom certificates
 
-Upload a leaf certificate, issuing chain, and private key in PEM. Bounds are
-16 KiB for leaf and key and 64 KiB for chain. Validation confirms:
+Upload a leaf certificate, its intermediate certificates, and the private key in
+PEM. The chain field is optional when a trusted root issued the leaf directly.
+Bounds are 16 KiB for leaf and key and 64 KiB for chain. Validation confirms:
 
 - the key matches the leaf;
 - accepted key algorithm and size;
-- an ordered chain of at most ten issuing/root certificates ends at its
-  self-signed root and verifies for TLS server authentication;
+- the leaf verifies for TLS server authentication against the platform trust
+  store, with at most ten uploaded certificates used only as untrusted
+  intermediates;
 - CA constraints, signing key usage, path length, server purpose, name
   constraints and critical extensions permit the leaf;
 - chain keys and non-root signatures satisfy OpenSSL authentication level 2
@@ -196,10 +203,14 @@ returns `409` with code `conflict`; the panel shows a validation error on
 covering its current proxied hostnames. The conflicting upload leaves the
 active certificate and other request's committed revision intact.
 
-The supplied root is the explicit trust anchor for validation, so a valid
-private CA is supported. This does not install that CA into visitors' trust
-stores or prove public-browser trust. Supply the appropriate chain for your
-clients. Validation performs no remote CA or revocation lookup.
+A root the customer supplies is never trusted. A self-signed certificate, or a
+chain whose root the platform does not trust, is rejected with a `chain` error,
+and a root included in the upload is dropped from the stored chain. The platform
+trusts the operating system roots of the control-plane image. An operator who
+runs a private PKI sets `TLS_UPLOAD_TRUST_FILE` to a PEM bundle of the roots to
+trust instead; see [Configuration](../reference/configuration.md). This does
+not install any CA into visitors' trust stores or prove public-browser trust.
+Validation performs no remote CA or revocation lookup.
 The control-plane image includes the pinned OpenSSL command-line verifier.
 It checks public certificate PEM locally with a five-second timeout; private
 keys never enter its input or command arguments. Custom non-container PHP

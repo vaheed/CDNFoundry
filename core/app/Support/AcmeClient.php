@@ -2,9 +2,11 @@
 
 namespace App\Support;
 
+use App\Exceptions\AcmeRetryLaterException;
 use App\Models\AcmeAccount;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -12,6 +14,12 @@ final class AcmeClient
 {
     /** @var array<string, string>|null */
     private ?array $directory = null;
+
+    /** Replay-Nonce values the server handed back with earlier responses, each usable once. */
+    private array $nonces = [];
+
+    /** Seconds from the last response's Retry-After header, bounded; null when absent. */
+    private ?int $lastRetryAfter = null;
 
     public function account(): AcmeAccount
     {
@@ -21,26 +29,29 @@ final class AcmeClient
             throw new RuntimeException('Managed TLS is unavailable until ACME is enabled with a contact email.');
         }
 
-        $account = AcmeAccount::query()->firstOrCreate(['directory_url' => $directoryUrl], [
-            'contact_email' => $email,
-            'private_key_ciphertext' => $this->newPrivateKey(),
-        ]);
-        if ($account->contact_email !== $email) {
-            $account->update(['contact_email' => $email]);
-        }
-        if ($account->account_url === null) {
-            $response = $this->signedRequest($this->directory()['newAccount'], [
-                'termsOfServiceAgreed' => true,
-                'contact' => ['mailto:'.$email],
-            ], $account, true);
-            $location = $response->header('Location');
-            if (! is_string($location) || $location === '') {
-                throw new RuntimeException('The ACME server did not return an account URL.');
+        // Several workers can start together on a new install; only one may register the account.
+        return Cache::lock('acme-account:'.sha1($directoryUrl), 60)->block(30, function () use ($directoryUrl, $email): AcmeAccount {
+            $account = AcmeAccount::query()->firstOrCreate(['directory_url' => $directoryUrl], [
+                'contact_email' => $email,
+                'private_key_ciphertext' => $this->newPrivateKey(),
+            ]);
+            if ($account->contact_email !== $email) {
+                $account->update(['contact_email' => $email]);
             }
-            $account->update(['account_url' => $location]);
-        }
+            if ($account->account_url === null) {
+                $response = $this->signedRequest($this->directory()['newAccount'], [
+                    'termsOfServiceAgreed' => true,
+                    'contact' => ['mailto:'.$email],
+                ], $account, true);
+                $location = $response->header('Location');
+                if (! is_string($location) || $location === '') {
+                    throw new RuntimeException('The ACME server did not return an account URL.');
+                }
+                $account->update(['account_url' => $location]);
+            }
 
-        return $account->refresh();
+            return $account->refresh();
+        });
     }
 
     /** @param list<string> $names */
@@ -98,7 +109,7 @@ final class AcmeClient
     {
         $body = $this->postAsGet($url, $account)->json();
 
-        return ['status' => (string) ($body['status'] ?? 'unknown'), 'error' => $body['error']['detail'] ?? null];
+        return ['status' => (string) ($body['status'] ?? 'unknown'), 'error' => $body['error']['detail'] ?? null, 'retry_after' => $this->lastRetryAfter];
     }
 
     /** @param list<string> $names */
@@ -126,6 +137,7 @@ final class AcmeClient
             'status' => (string) ($body['status'] ?? 'unknown'),
             'certificate_url' => isset($body['certificate']) ? (string) $body['certificate'] : null,
             'error' => $body['error']['detail'] ?? null,
+            'retry_after' => $this->lastRetryAfter,
         ];
     }
 
@@ -159,6 +171,8 @@ final class AcmeClient
             'protected' => $protected64, 'payload' => $payload64, 'signature' => $this->base64Url($this->ecdsaDerToRaw($signature)),
         ], JSON_THROW_ON_ERROR);
         $response = $this->http()->withBody($body, 'application/jose+json')->accept('application/json')->timeout(20)->connectTimeout(5)->post($url);
+        $this->rememberNonce($response);
+        $this->lastRetryAfter = self::retryAfter($response);
         if ($response->successful()) {
             return $response;
         }
@@ -166,6 +180,9 @@ final class AcmeClient
             return $this->signedRequest($url, $payload, $account, $useJwk, false);
         }
         $detail = $response->json('detail') ?: "HTTP {$response->status()}";
+        if (in_array($response->status(), [429, 503], true) && $this->lastRetryAfter !== null) {
+            throw new AcmeRetryLaterException('ACME server asked to retry later: '.mb_substr((string) $detail, 0, 500), $this->lastRetryAfter);
+        }
         throw new RuntimeException('ACME request failed: '.mb_substr((string) $detail, 0, 1000));
     }
 
@@ -185,8 +202,32 @@ final class AcmeClient
         return $this->directory;
     }
 
+    private function rememberNonce(Response $response): void
+    {
+        $nonce = $response->header('Replay-Nonce');
+        if (is_string($nonce) && $nonce !== '') {
+            $this->nonces = [...array_slice($this->nonces, -7), $nonce];
+        }
+    }
+
+    /** Retry-After as bounded seconds, from a delay or an HTTP date. */
+    private static function retryAfter(Response $response): ?int
+    {
+        $value = trim((string) $response->header('Retry-After'));
+        if ($value === '') {
+            return null;
+        }
+        $seconds = ctype_digit($value) ? (int) $value : ((($time = strtotime($value)) !== false) ? $time - time() : null);
+
+        return $seconds === null ? null : max(1, min(3600, $seconds));
+    }
+
     private function nonce(): string
     {
+        // Every ACME response carries a fresh nonce; use it before asking for another.
+        if ($this->nonces !== []) {
+            return array_pop($this->nonces);
+        }
         $response = $this->http()->timeout(10)->connectTimeout(5)->head($this->directory()['newNonce']);
         $nonce = $response->header('Replay-Nonce');
         if (! $response->successful() || ! is_string($nonce) || $nonce === '') {
