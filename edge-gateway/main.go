@@ -436,6 +436,10 @@ func readHTTP(connection net.Conn) (string, []byte, error) {
 			if host == "" {
 				return "", nil, errors.New("missing Host")
 			}
+			// The reader may already hold the start of the body or a pipelined
+			// request. Forward those bytes too, or the connection stalls.
+			buffered, _ := reader.Peek(reader.Buffered())
+			buffer.Write(buffered)
 			return host, buffer.Bytes(), nil
 		}
 		name, value, found := strings.Cut(strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r"), ":")

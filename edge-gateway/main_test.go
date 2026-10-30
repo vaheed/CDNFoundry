@@ -222,3 +222,32 @@ func TestProxyProtocolPreservesIPv4AndIPv6Identity(t *testing.T) {
 		}
 	}
 }
+
+func TestReadHTTPKeepsBytesBufferedAfterTheHeaders(t *testing.T) {
+	server, client := net.Pipe()
+	request := "POST /upload HTTP/1.1\r\nHost: www.example.test\r\nContent-Length: 11\r\n\r\nhello world"
+	go func() { _, _ = client.Write([]byte(request)); _ = client.Close() }()
+	defer server.Close()
+
+	host, prefix, err := readHTTP(server)
+
+	if err != nil || host != "www.example.test" {
+		t.Fatalf("request failed: host=%q err=%v", host, err)
+	}
+	if string(prefix) != request {
+		t.Fatalf("the body that arrived with the headers was dropped: %q", prefix)
+	}
+}
+
+func TestReadHTTPKeepsAPipelinedRequest(t *testing.T) {
+	server, client := net.Pipe()
+	request := "GET /a HTTP/1.1\r\nHost: www.example.test\r\n\r\nGET /b HTTP/1.1\r\nHost: www.example.test\r\n\r\n"
+	go func() { _, _ = client.Write([]byte(request)); _ = client.Close() }()
+	defer server.Close()
+
+	_, prefix, err := readHTTP(server)
+
+	if err != nil || string(prefix) != request {
+		t.Fatalf("pipelined bytes were lost: err=%v prefix=%q", err, prefix)
+	}
+}
