@@ -39,7 +39,7 @@ final class PlatformDnsZone
         }
 
         $proxy = rtrim($settings->proxy_hostname, '.').'.';
-        $defaultSharedPool = EdgePool::query()->where('enabled', true)->where('withdrawn', false)->where('kind', 'shared')->orderBy('id')->first();
+        $defaultSharedPool = EdgePool::defaultShared();
         foreach (EdgePool::query()->where('enabled', true)->where('withdrawn', false)->orderBy('id')->get() as $pool) {
             $configuredEndpoints = EdgePoolEndpoint::query()->with(['edge', 'pool'])->where('edge_pool_id', $pool->id)->orderBy('edge_id')->get();
             $endpoints = $configuredEndpoints->where('withdrawn', false)

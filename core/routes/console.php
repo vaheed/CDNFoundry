@@ -18,6 +18,7 @@ Schedule::command('cdnf:dns:deprovision-due')->everyMinute()->withoutOverlapping
 Schedule::command('cdnf:domains:expire-claims')->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:domains:finalize-deprovisioning')->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:edge:complete-placement-drains')->everyMinute()->withoutOverlapping();
+Schedule::command('cdnf:edge:promote-placements')->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:edge:reconcile-stale-placements')->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:edge:dispatch-origin-checks')->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:edge:prune-revisions')->dailyAt('02:30')->withoutOverlapping();

@@ -87,6 +87,8 @@ does not migrate ClickHouse tables automatically.
 | --- | --- | --- |
 | `heartbeat_fresh_seconds` | 45 | 10–300 |
 | `placement_drain_seconds` | 300 | 30–86,400 |
+| `promotion_quorum_percent` | 100 | 1–100 |
+| `promotion_grace_seconds` | 120 | 30–3,600 |
 | `max_domain_artifact_bytes` | 2,097,152 | 65,536–16,777,216 |
 
 Existing rows may still contain the older telemetry quorum, maximum-age and

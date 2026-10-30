@@ -61,7 +61,7 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             DomainEdgeCell::query()->where('domain_id', $domain->id)->delete();
         } else {
             $requiresWaf = $domain->waf_profile !== 'off';
-            $pools = EdgePool::query()->where('enabled', true)
+            $pools = EdgePool::query()->where('enabled', true)->where('withdrawn', false)
                 ->when($requiresWaf, fn ($query) => $query->where('waf_capable', true))
                 ->orderByRaw("CASE kind WHEN 'reserved' THEN 0 WHEN 'dedicated' THEN 1 WHEN 'quarantine' THEN 2 ELSE 3 END")
                 ->orderBy('id')->get();

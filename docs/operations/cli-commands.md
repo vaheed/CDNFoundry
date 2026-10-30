@@ -84,6 +84,7 @@ docker compose --env-file .env.prod -f compose.prod.yml exec core php artisan cd
 | `cdnf:edge:complete-placement-drains {--limit=100}` | Promotes ready target pools after DNS drain, advances desired revisions, records audit events, and queues edge reconciliation. Limit is clamped to 1–1,000. | Every minute |
 | `cdnf:edge:dispatch-origin-checks {--limit=100}` | Dispatches a jittered, bounded batch of explicitly enabled origin checks. Limit is clamped to 1–500 and at most five checks are selected per domain. | Every minute |
 | `cdnf:edge:prune-revisions {--limit=1000}` | Permanently removes expired derived edge revisions and artifacts while retaining active and rollback-protected state. Limit is clamped to 1–10,000. | Daily at 02:30 |
+| `cdnf:edge:promote-placements {--chunk=100} {--chunks=50}` | Promotes deploying placements whose healthy PoPs have acknowledged (the quorum), paging through every deploying placement in chunks. A PoP that has not acknowledged within the promotion grace window stops counting and catches up on its own. | Every minute |
 | `cdnf:edge:reconcile-stale-placements {--limit=100}` | Requeues interrupted stale placement deployments so they converge. Limit is clamped to 1–1,000. | Every minute |
 
 ```sh
@@ -138,6 +139,7 @@ or internal non-command work, which is intentionally not renamed here.
 | `cdnf:domains:expire-claims` | Every minute | Deprovision at most 500 expired unverified claims; preserve verified ownership. |
 | `cdnf:domains:finalize-deprovisioning` | Every minute | Finalize safe domain retirement |
 | `cdnf:edge:complete-placement-drains` | Every minute | Complete ready placement drains |
+| `cdnf:edge:promote-placements` | Every minute | Promote placements by quorum |
 | `cdnf:edge:reconcile-stale-placements` | Every minute | Retry stale placements |
 | `cdnf:edge:dispatch-origin-checks` | Every minute | Queue due opt-in origin checks |
 | `cdnf:edge:prune-revisions` | Daily at 02:30 | Remove expired derived revision history |

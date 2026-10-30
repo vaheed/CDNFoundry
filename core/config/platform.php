@@ -95,6 +95,8 @@ return [
             'fields' => [
                 'heartbeat_fresh_seconds' => ['type' => 'integer', 'label' => 'Heartbeat freshness (seconds)', 'default' => 45, 'description' => 'An edge is routable only while its most recent authenticated heartbeat is within this window.', 'rules' => ['required', 'integer', 'between:10,300']],
                 'placement_drain_seconds' => ['type' => 'integer', 'label' => 'Placement drain time (seconds)', 'default' => 300, 'description' => 'Minimum overlap after a target placement is active before the previous placement may drain.', 'rules' => ['required', 'integer', 'between:30,86400']],
+                'promotion_quorum_percent' => ['type' => 'integer', 'label' => 'Promotion quorum (percent)', 'default' => 100, 'description' => 'Share of healthy participating PoPs that must acknowledge a placement before it is promoted. At least one always must.', 'rules' => ['required', 'integer', 'between:1,100']],
+                'promotion_grace_seconds' => ['type' => 'integer', 'label' => 'Promotion grace (seconds)', 'default' => 120, 'description' => 'After this long in deploying, a PoP that has not acknowledged is lagging: it stops counting toward the quorum and catches up on its own.', 'rules' => ['required', 'integer', 'between:30,3600']],
                 'max_domain_artifact_bytes' => ['type' => 'integer', 'label' => 'Maximum domain artifact bytes', 'default' => 2097152, 'description' => 'Hard byte limit for one canonical per-domain edge artifact before signing and distribution.', 'rules' => ['required', 'integer', 'between:65536,16777216']],
             ],
         ],

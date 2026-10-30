@@ -107,6 +107,22 @@ Start the role explicitly with
 not inspect enrollment state or edit `.env.prod`. Always keep the agent state
 volume.
 
+## Promotion by quorum
+
+A new placement is promoted when the healthy participating PoPs have
+acknowledged it. `edge_runtime.promotion_quorum_percent` (default 100) is the
+share of healthy participants that must acknowledge, and at least one always
+must. A participant that has not acknowledged within
+`edge_runtime.promotion_grace_seconds` (default 120) is lagging: it stops
+counting, keeps its own cursor, and catches up without blocking the pool.
+`cdnf:edge:promote-placements` walks every deploying placement each minute in
+chunks, so a backlog of stuck placements cannot hide newer ones.
+
+Automatic placement never chooses a withdrawn pool. A proxied name is published
+in the zone even before its placement is active: it follows the default shared
+pool until the placement is promoted, so MX, TXT, and every other record
+resolve immediately after activation.
+
 ## Drain and movement
 
 Draining an edge or cell makes it ineligible for new publication and queues the

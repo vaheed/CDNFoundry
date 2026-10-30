@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Domain;
 use App\Models\DomainEdgePlacement;
+use App\Models\EdgePool;
 use App\Models\PlatformDnsSetting;
 use Illuminate\Support\Collection;
 use RuntimeException;
@@ -24,9 +25,14 @@ final class PowerDnsZone
         $placement = DomainEdgePlacement::query()->with(['activePool', 'targetPool'])->where('domain_id', $domain->id)->first();
         foreach ($domain->dnsRecords()->orderBy('id')->get() as $record) {
             if ($record->mode === 'proxied') {
+                // The zone always publishes. Until a placement is active (or if its
+                // pool is disabled or withdrawn) the record follows the default pool.
                 $pool = $placement?->state === 'draining' ? $placement->targetPool : $placement?->activePool;
-                if ($pool === null || ! $pool->enabled) {
-                    throw new RuntimeException('The proxied domain has no ready published edge placement.');
+                if ($pool === null || ! $pool->enabled || $pool->withdrawn) {
+                    $pool = EdgePool::defaultShared();
+                }
+                if ($pool === null) {
+                    continue;
                 }
                 $routingHostname = EdgeRoutingCompiler::poolHostname($settings, $pool);
                 if ($record->name !== $domain->name) {
