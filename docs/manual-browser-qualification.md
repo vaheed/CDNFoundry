@@ -684,7 +684,7 @@ steps below remain owner-run and must be recorded separately.
 ### Configuration, permissions, and terminology
 
 1. As a domain owner, open **Web application firewall (WAF)**. Confirm it offers exactly **Off**, **Observe**, **Recommended**, and **High sensitivity**, corresponding to the internal `off`, `monitor`, `balanced`, and `strict` profiles, with accurate help text for each.
-2. Confirm owners cannot enter arbitrary thresholds, paranoia levels, rules, or expressions. Unknown profiles and malformed exclusions must produce clear validation errors; the fixed profiles own their reviewed thresholds.
+2. Confirm owners cannot enter arbitrary thresholds, paranoia levels, rules, or expressions. Unknown profiles must produce clear validation errors, and **Managed WAF exclusions** must list stored rows with a delete action but offer no create action; the fixed profiles own their reviewed thresholds.
 3. Save each valid profile and confirm an asynchronous operation is created. Confirm the resulting revision and generation become active without an Nginx reload.
 4. Sign in as a domain user assigned to only one test domain. Confirm the user can view or change only authorized settings and cannot read or change the other hostname's WAF mode.
 5. Confirm migration/compatibility messaging does not silently enable blocking for a hostname that previously used detection-only behavior.

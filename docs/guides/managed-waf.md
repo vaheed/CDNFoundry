@@ -60,16 +60,17 @@ then choose **Recommended**. Use **High sensitivity** only after application
 testing. Saving increments one desired revision and queues the normal signed
 deployment. The target activates before the source drains.
 
-## Add an exclusion
+## Exclusions are unavailable
 
-Use **Managed WAF exclusions** on the domain. Each exclusion has one approved
-dimension (literal path, CRS rule ID, parameter name, or cookie name), an
-optional CRS rule ID in `900000`–`999999`, a reason, the authenticated owner,
-and an expiry no more than 30 days away.
-
-There are at most 50 active exclusions per domain. Paths and names are literal;
-wildcards and expressions are rejected. Create/delete actions are audited and
-deploy one revision. Expired exclusions are omitted from the next artifact.
+Creating a WAF exclusion returns `409` with the code
+`waf_exclusions_unavailable`, and the domain screen has no create action.
+libModSecurity cannot safely remove one dynamically chosen rule for one target,
+and switching a whole request to monitor mode let an attacker add a literal
+parameter name to bypass CRS. Until a per-rule, per-target removal exists, no
+exclusion reaches an edge: exclusions stored before this change stay visible and
+can be deleted, but the artifact always carries an empty list. Handle a false
+positive by choosing the **Observe** profile for the domain, or ask an
+administrator to adjust the platform ruleset.
 
 ## Testing failure and rollback
 
@@ -83,12 +84,6 @@ audit record uses parts `A`, `H`, and `Z` only; request headers, cookies,
 authorization values, bodies, and query strings are excluded. CRS rule logging
 is suppressed and only bounded anomaly/intervention evidence is retained.
 Telemetry remains best effort and never participates in serving.
-
-An exclusion that matches its literal path, parameter, cookie, or rule scope
-places that one request into monitor mode. This is deliberately broader than
-removing a dynamically supplied rule ID because libModSecurity does not accept
-runtime-expanded `ctl:ruleRemoveById` safely. The exception remains bounded,
-owned, audited, and expiring; use the narrowest literal dimension.
 
 ## Failure behavior
 

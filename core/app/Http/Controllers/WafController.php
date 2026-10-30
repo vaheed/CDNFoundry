@@ -46,26 +46,14 @@ class WafController extends Controller
         return response()->json(['data' => $domain->wafExclusions()->with('owner:id,name')->orderByDesc('created_at')->cursorPaginate(100)]);
     }
 
-    public function storeExclusion(Request $request, Domain $domain): JsonResponse
+    public function storeExclusion(Domain $domain): JsonResponse
     {
         Gate::authorize('update', $domain);
-        $data = ManagedWaf::validateExclusion($request->all());
-        $exclusion = DB::transaction(function () use ($data, $domain, $request): WafExclusion {
-            $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
-            Gate::authorize('update', $locked);
-            abort_if($locked->wafExclusions()->where('expires_at', '>', now())->count() >= ManagedWaf::MAXIMUM_EXCLUSIONS, 409, 'The per-domain active WAF-exclusion limit has been reached.');
-            $exclusion = $locked->wafExclusions()->create([...$data, 'owner_id' => $request->user()->id]);
-            $locked->update(['revision' => $locked->revision + 1]);
-            AuditLog::record($request->user(), 'waf.exclusion_created', $exclusion, [
-                'dimension' => $exclusion->dimension, 'rule_id' => $exclusion->rule_id,
-                'expires_at' => $exclusion->expires_at, 'reason' => $exclusion->reason, 'revision' => $locked->revision,
-            ], $request->ip());
 
-            return $exclusion;
-        });
-        $operation = $this->dispatch($request, $domain);
-
-        return response()->json(['data' => ['exclusion' => $exclusion, 'operation_id' => $operation->id]], 202);
+        return response()->json([
+            'message' => 'WAF exclusions are unavailable: the runtime cannot yet remove one rule for one target without weakening the whole request.',
+            'code' => 'waf_exclusions_unavailable', 'details' => (object) [],
+        ], 409);
     }
 
     public function destroyExclusion(Request $request, Domain $domain, WafExclusion $exclusion): JsonResponse

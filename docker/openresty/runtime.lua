@@ -454,30 +454,8 @@ function M.prepare_waf()
     ngx.req.set_header("X-CDNF-Internal-WAF-Mode", mode)
     ngx.req.set_header("X-CDNF-Internal-WAF-Threshold", tostring(threshold))
     ngx.req.set_header("X-CDNF-Internal-WAF-Paranoia", tostring(paranoia))
-    local uri = ngx.var.uri or "/"
-    local args = ngx.req.get_uri_args(100)
-    local cookies = ngx.req.get_headers()["cookie"] or ""
-    local cookie_names = {}
-    for item in cookies:gmatch("[^;]+") do
-        local name = item:match("^%s*([^=%s]+)")
-        if name then cookie_names[name] = true end
-    end
-    local selected = 0
-    for _, exclusion in ipairs(waf.exclusions or {}) do
-        local rule_id = tonumber(exclusion.rule_id)
-        local matched = exclusion.dimension == "rule"
-            or (exclusion.dimension == "path" and exclusion.value == uri)
-            or (exclusion.dimension == "parameter" and args[exclusion.value] ~= nil)
-            or (exclusion.dimension == "cookie" and cookie_names[exclusion.value] == true)
-        if selected == 0 and rule_id and rule_id >= 900000 and rule_id <= 999999
-            and (tonumber(exclusion.expires_at) or 0) > ngx.time() and matched then
-            selected = tonumber(exclusion.id) or 0
-            mode = "monitor"
-            ngx.var.cdn_waf_action = "excluded"
-            ngx.var.cdn_waf_exclusion_id = tostring(selected)
-            ngx.req.set_header("X-CDNF-Internal-WAF-Mode", mode)
-        end
-    end
+    -- Exclusions are not honored: switching a whole request to monitor mode let
+    -- an attacker bypass CRS by adding a literal name. See docs/guides/managed-waf.md.
 end
 
 local function request_body_safety(config)

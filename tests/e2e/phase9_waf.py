@@ -69,7 +69,11 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="cdnf-phase9-waf-") as directory:
         temporary = pathlib.Path(directory)
         temporary.chmod(0o755)
-        exclusion = [{"id": 7, "dimension": "parameter", "value": "skip", "rule_id": 941100, "expires_at": 4102444800}]
+        # A stale runtime file may still carry exclusions; none may weaken CRS.
+        exclusion = [
+            {"id": 7, "dimension": "parameter", "value": "skip", "rule_id": 941100, "expires_at": 4102444800},
+            {"id": 8, "dimension": "rule", "value": "any", "rule_id": 941100, "expires_at": 4102444800},
+        ]
         hosts = {
             "off.waf.test": host("off", False, 0, origin_ip),
             "monitor.waf.test": host("monitor", False, 1048576, origin_ip),
@@ -107,8 +111,9 @@ def main() -> None:
             blocked = request("balanced.waf.test", attack)
             assert "403 Forbidden" in blocked, blocked
             assert "403 Forbidden" in request("strict.waf.test", "/?id=1%20union%20select%20password")
-            excluded = request("balanced.waf.test", "/?skip=1&q=%3Cscript%3E")
-            assert "200 OK" in excluded, excluded
+            for bypass in ("/?skip=1&q=%3Cscript%3E", "/?q=%3Cscript%3E&skip=", "/?other=1&q=%3Cscript%3Ealert(1)%3C/script%3E"):
+                excluded = request("balanced.waf.test", bypass)
+                assert "403 Forbidden" in excluded, (bypass, excluded)
             assert "400 Bad Request" in request("balanced.waf.test", "/", '{"broken":')
             assert "413 Request Entity Too Large" in request("strict.waf.test", "/", "x" * 262145)
 
@@ -122,7 +127,7 @@ def main() -> None:
             assert '"waf_profile":"monitor"' in logs and '"waf_action":"monitor"' in logs
             assert '"waf_profile":"balanced"' in logs and '"waf_action":"inspect"' in logs
             assert "---A--" in logs and "---H--" in logs and "---Z--" in logs
-            assert '"waf_exclusion_id":7' in logs and '"waf_body_limit":"exceeded"' in logs
+            assert '"waf_exclusion_id":0' in logs and '"waf_exclusion_id":7' not in logs and '"waf_body_limit":"exceeded"' in logs
             leaked = [line for line in logs.splitlines() if "alert(1)" in line or '{"broken":' in line]
             assert not leaked, "\n".join(leaked[:5])
         finally:
