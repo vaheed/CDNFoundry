@@ -45,7 +45,12 @@ stopped.
 
 Every cell is limited to 512 MiB, 0.5 CPU, 128 PIDs, 256 MiB cache temporary
 storage, 64 MiB request temporary storage, and 16 MiB logs by the shipped
-topology. The edge agent is separate, read-only, non-root, and limited to 128 MiB and 0.25
+topology. Storage is sized to those limits: request bodies are limited to 8 MiB
+so several can be buffered at once in the 64 MiB memory-backed request storage,
+and large response buffering goes to the cell's cache volume instead of that
+memory-backed storage. The number of OpenResty workers follows the container's
+CPU limit (one worker per started CPU, between one and eight), not the host's
+core count. The edge agent is separate, read-only, non-root, and limited to 128 MiB and 0.25
 CPU. It owns identity, artifact validation, atomic runtime files, acknowledgements,
 and control tasks. It does not proxy customer traffic and has no container-engine
 socket. Drain, undrain, and bounded restart controls use authenticated private

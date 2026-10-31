@@ -27,10 +27,10 @@ class EdgeController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $data = $request->validate(['name' => ['required', 'string', 'max:100', 'unique:edges'], 'country_code' => ['required', Rule::in(GeoVocabulary::countries())], 'continent_code' => ['required', Rule::in(GeoVocabulary::CONTINENTS)], 'management_ipv4' => ['nullable', 'ipv4', 'unique:edges'], 'management_ipv6' => ['nullable', 'ipv6', 'unique:edges'], 'ipv4' => ['prohibited'], 'ipv6' => ['prohibited'], 'cell_slot_count' => ['sometimes', 'integer', 'between:1,32']]);
+        $data = $request->validate(['name' => ['required', 'string', 'max:100', 'unique:edges'], 'country_code' => ['required', Rule::in(GeoVocabulary::countries())], 'continent_code' => ['required', Rule::in(GeoVocabulary::CONTINENTS)], 'management_ipv4' => ['nullable', 'ipv4', 'unique:edges'], 'management_ipv6' => ['nullable', 'ipv6', 'unique:edges'], 'ipv4' => ['prohibited'], 'ipv6' => ['prohibited'], 'cell_slot_count' => ['sometimes', 'integer', Rule::in([Edge::CELL_SLOT_COUNT])]]);
         $token = Str::random(64);
         $edge = DB::transaction(function () use ($data, $token, $request): Edge {
-            $edge = Edge::query()->create(array_merge($data, ['country_code' => strtoupper($data['country_code']), 'continent_code' => strtoupper($data['continent_code']), 'cell_slot_count' => $data['cell_slot_count'] ?? 8, 'bootstrap_token_hash' => hash('sha256', $token)]));
+            $edge = Edge::query()->create(array_merge($data, ['country_code' => strtoupper($data['country_code']), 'continent_code' => strtoupper($data['continent_code']), 'cell_slot_count' => Edge::CELL_SLOT_COUNT, 'bootstrap_token_hash' => hash('sha256', $token)]));
             for ($slot = 1; $slot <= $edge->cell_slot_count; $slot++) {
                 $edge->cells()->create([
                     'slot' => $slot, 'edge_pool_id' => null, 'status' => 'unassigned',

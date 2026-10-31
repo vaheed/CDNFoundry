@@ -19,11 +19,12 @@ when work moves.
 
 ## Installation contract
 
-Create the edge with the intended `cell_slot_count` (1–32) before enrollment.
-The shipped Compose topology implements the default count of eight. An operator
-using a non-default count must render the same consecutive services and update
-the agent assignment/status lists before starting the host; a mismatch is a
-failed installation, not elastic scaling.
+Every edge has exactly eight cell slots, because the shipped Compose topology
+runs exactly eight cells per PoP. The API and the administrator panel accept
+only `cell_slot_count: 8` (or no value), so a PoP can never be recorded with
+slots that no container serves. A different count needs a different Compose
+topology and is not supported; a mismatch is a failed installation, not elastic
+scaling.
 
 | Slot | HTTP | HTTPS | Status | Initial assignment |
 | --- | ---: | ---: | ---: | --- |

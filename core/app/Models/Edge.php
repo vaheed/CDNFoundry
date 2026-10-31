@@ -10,6 +10,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Edge extends Model
 {
+    /** Production Compose runs exactly this many cells per PoP, so the API accepts no other count. */
+    public const CELL_SLOT_COUNT = 8;
+
     use HasUuids;
 
     protected $guarded = [];

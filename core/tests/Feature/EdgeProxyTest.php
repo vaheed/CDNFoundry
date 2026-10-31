@@ -373,6 +373,10 @@ class EdgeProxyTest extends TestCase
         $this->assertSame(7, $slots->whereNull('edge_pool_id')->where('status', 'unassigned')->count());
         $this->assertSame(536870912, $slots->first()->resource_limits['memory_bytes']);
         $this->actingAs($admin)->postJson('/api/admin/edges', ['name' => 'too-many-slots', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.19', 'cell_slot_count' => 33])->assertUnprocessable();
+        foreach ([1, 16] as $unsupported) {
+            $this->actingAs($admin)->postJson('/api/admin/edges', ['name' => "slots-{$unsupported}", 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.19', 'cell_slot_count' => $unsupported])
+                ->assertUnprocessable()->assertJsonValidationErrors('cell_slot_count');
+        }
         $bootstrap = $created->json('data.bootstrap_token');
         $registration = ['edge_id' => $id, 'bootstrap_token' => $bootstrap, 'agent_version' => '1.0.0', 'certificate_request' => $this->certificateRequest($id)];
         $registered = $this->postJson('/edge/v1/register', $registration)->assertCreated();

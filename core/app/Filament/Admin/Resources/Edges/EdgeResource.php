@@ -39,7 +39,7 @@ class EdgeResource extends Resource
     {
         return $schema->components([
             TextInput::make('name')->required()->maxLength(100)->unique(ignoreRecord: true),
-            TextInput::make('cell_slot_count')->label(FilamentHelp::label('Cell slots', 'Bounded OpenResty slots created during edge installation. This cannot be changed after creation.'))->numeric()->integer()->required()->minValue(1)->maxValue(32)->default(8)->disabledOn('edit'),
+            TextInput::make('cell_slot_count')->label(FilamentHelp::label('Cell slots', 'OpenResty slots created during edge installation. Production Compose runs exactly eight cells per PoP, so the count is fixed.'))->numeric()->integer()->required()->minValue(Edge::CELL_SLOT_COUNT)->maxValue(Edge::CELL_SLOT_COUNT)->default(Edge::CELL_SLOT_COUNT)->disabled()->dehydrated(),
             Select::make('country_code')->label('Country')->options(array_combine(GeoVocabulary::countries(), GeoVocabulary::countries()))->searchable()->required(),
             Select::make('continent_code')->label('Continent')->options(array_combine(GeoVocabulary::CONTINENTS, GeoVocabulary::CONTINENTS))->required(),
             TextInput::make('management_ipv4')->label(FilamentHelp::label('Management IPv4', 'Optional operator access address. It is never bound by the gateway or published in customer DNS.'))->ipv4()->nullable()->unique(ignoreRecord: true),

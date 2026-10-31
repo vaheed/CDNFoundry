@@ -108,7 +108,8 @@ so existing clusters, edges and domains are reused rather than duplicated.
    registrar. Use **Verify nameservers** after propagation. Expect a queued
    operation followed by **Active**; a failure must remain visible until fixed.
 4. Open **Infrastructure → Edges**. Create or inspect each prepared edge with
-   **Cell slots = 8**. For creation, securely transfer its one-time enrollment
+   **Cell slots = 8** (the field is shown disabled with the value 8 and cannot be
+   edited). For creation, securely transfer its one-time enrollment
    block to the matching host before acknowledging the modal. Expect the same
    edge UUID, fresh heartbeat and ready gateway after host activation. Never
    capture the token in screenshots. In **Infrastructure → Service pools**,

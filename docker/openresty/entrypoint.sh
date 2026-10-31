@@ -28,7 +28,27 @@ for cidr in $(printf '%s' "${EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS:-}" | tr ',' ' ')
     printf 'set_real_ip_from %s;\n' "$cidr" >> "$trust"
 done
 
+# Size the worker count from the CPU limit the container really has (cgroup v2, then v1),
+# not from the host's cores. One worker per started CPU, at least one, at most eight.
+cpu_limit() {
+    if [ -r /sys/fs/cgroup/cpu.max ]; then
+        read -r quota period < /sys/fs/cgroup/cpu.max || return 0
+        [ "$quota" != max ] && [ "${period:-0}" -gt 0 ] && echo $(( (quota + period - 1) / period ))
+    elif [ -r /sys/fs/cgroup/cpu/cpu.cfs_quota_us ]; then
+        quota=$(cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us)
+        period=$(cat /sys/fs/cgroup/cpu/cpu.cfs_period_us)
+        [ "$quota" -gt 0 ] && [ "$period" -gt 0 ] && echo $(( (quota + period - 1) / period ))
+    fi
+    return 0
+}
+workers=$(cpu_limit)
+[ -n "${workers:-}" ] || workers=$(nproc)
+[ "$workers" -ge 1 ] || workers=1
+[ "$workers" -le 8 ] || workers=8
+printf 'worker_processes %s;\n' "$workers" > /var/lib/nginx/tmp/worker-processes.conf
+
 mkdir -p \
+    /var/cache/nginx/tmp \
     /var/cache/nginx/content/small \
     /var/cache/nginx/content/standard \
     /var/cache/nginx/content/large \
