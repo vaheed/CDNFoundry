@@ -369,33 +369,68 @@ Fixes M2, M4, M5, M6, M7, M8, M10, A18, A20, A21, A22, A25, A32, A34, A43.
       removes the per-host API gateways and `dns-api-N` names, and it allows
       anycast nameserver addresses served by any number of nodes. Node
       convergence (serial per node) is reported in the heartbeat.
-- [ ] Split queue lanes: `dns`, `edge`, `verification`, `tls`, and `purge`,
+- [x] Split queue lanes: `dns`, `edge`, `verification`, `tls`, and `purge`,
       each with its own worker bound.
-- [ ] Make snapshots deterministic: sort every list. Move the global address
+      Delivered with `interactive` and `bulk_maintenance` kept; the global purge
+      reconciliation runs on `purge`, because no per-request purge job exists.
+- [x] Make snapshots deterministic: sort every list. Move the global address
       blocklist out of per-domain snapshots into one PoP-level artifact.
-- [ ] Make the agent incremental: store one file per domain, write only what
+      Delivered: every set in the snapshot is sorted, and the platform origin
+      destination policy is one signed document per PoP (`/edge/v1/origin-policy`)
+      that the agent injects at compile time, so a pool address change recompiles
+      and re-signs no domain.
+- [x] Make the agent incremental: store one file per domain, write only what
       changed, and keep the generation swap atomic.
-- [ ] Sign `kind`, `domain_id`, and `revision` together with the checksum,
+      Delivered: durable state is `state/domains/<id>.json`, generations hold only
+      compiled cell and gateway files, and a cell file with unchanged content is
+      hardlinked from the previous generation. At 10,000 domains one change
+      rewrites one state file and the one cell file that serves the domain
+      (`incremental_activation_test.go`). A cell file still holds every host of its
+      pool, so a changed cell rewrites that whole file.
+- [x] Sign `kind`, `domain_id`, and `revision` together with the checksum,
       sequence, and expiry. Require a strictly greater revision, and support
       signing-key rotation with an overlap window.
-- [ ] Give agent requests per-request timeouts, contexts, and exponential
+      Delivered: kind, domain, revision, checksum, sequence, and expiry are signed
+      together, only a strictly greater revision is accepted (an identical replay is
+      a no-op), and the current key endorses the next one so both are accepted until
+      the new one signs a delivery.
+- [x] Give agent requests per-request timeouts, contexts, and exponential
       backoff with jitter.
-- [ ] Reload cells by generation: Lua checks a small generation file and
+      Delivered: 15 s for control requests, 2 minutes for the snapshot, and
+      cancellation on shutdown.
+- [x] Reload cells by generation: Lua checks a small generation file and
       decodes the state only when it changes.
-- [ ] Add a per-source-address connection limit, idle timeouts in both
+      Delivered as a `.stamp` content identity beside each cell file.
+- [x] Add a per-source-address connection limit, idle timeouts in both
       directions, and half-close handling to the gateway.
-- [ ] Key TLS handshake and connection limits per domain and client prefix,
+      Delivered: 256 connections per address (an IPv6 /64 counts once), 120 s idle,
+      30 s after a half-close.
+- [x] Key TLS handshake and connection limits per domain and client prefix,
       with a separate, higher ceiling for each domain.
-- [ ] Size cell temporary files and body limits to the cell's temporary
+      Delivered: connection limits were already per client and per domain. The
+      gateway, which sees the real client, now limits TLS handshakes per client
+      prefix and hostname, and the cell applies a domain ceiling of 20 times the
+      per-client budget.
+- [x] Size cell temporary files and body limits to the cell's temporary
       storage, and set `worker_processes` from the CPU limit.
-- [ ] Generate the cell services from the PoP's slot count, or fix the slot
+      Delivered as an 8 MiB body limit, response buffering on the cache volume, and
+      workers from the CPU limit.
+- [x] Generate the cell services from the PoP's slot count, or fix the slot
       count to what Compose runs. Allow small PoPs to run fewer cells.
+      Delivered by fixing the count at eight in the API and panel.
 - [ ] Bound DNS rollup cardinality: store the domain and a bounded top-N of
       query names in the long-lived rollups.
-- [ ] Answer over-limit UDP queries with TC instead of dropping them, and add
+- [x] Answer over-limit UDP queries with TC instead of dropping them, and add
       DNSdist limits for TCP connections, TCP queries, and ANY.
-- [ ] Resolve bulk DNS origins outside the domain lock and transaction, or
+      Delivered for UDP rate limits, TCP connection limits, and ANY.
+- [x] Resolve bulk DNS origins outside the domain lock and transaction, or
       lower the bulk limit for proxied records.
+
+**Progress (2026-10-31).** Not a completion gate: the phase is open. Two items
+are not delivered: the hidden-primary DNS design (M4), and bounded DNS rollups
+(A25), which needs the zone tagging that design provides. The other twelve are
+delivered. The exit items for DNS convergence and rollup cardinality cannot pass
+until those two are.
 
 **Exit:**
 
@@ -410,6 +445,8 @@ Fixes M2, M4, M5, M6, M7, M8, M10, A18, A20, A21, A22, A25, A32, A34, A43.
 
 Fixes H8, M12, L6, A26, A27, A28, A29, A30, A31, A33, A35, A36, A42.
 
+      Delivered: lookups run before the lock, and a bulk request may name at most
+      50 distinct origin hostnames.
 - [ ] Publish IPv6 in production for DNS, control, and edges, including
       edge-control. Block saving a nameserver IPv6 address until that address
       answers from an external probe.
