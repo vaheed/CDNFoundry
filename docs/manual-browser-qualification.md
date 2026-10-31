@@ -91,16 +91,19 @@ so existing clusters, edges and domains are reused rather than duplicated.
    refresh: expect **Status unavailable** and a stale-report notice. Restart
    the scheduler and expect the next minute snapshot to restore component
    states. Status: **Not run — owner execution required**.
-2. Open **Infrastructure → DNS clusters**. For each prepared PoP, create its
-   record disabled with **API URL**, **API key**, **Server ID**, and **Zone
+2. Open **Infrastructure → DNS clusters**. Create the one hidden DNS primary
+   disabled with **API URL** (`http://pdns-primary:8081`), **API key**,
+   **Transfer endpoint** (the control host's public IP and port 5300, such as
+   `192.0.2.10:5300`; a hostname must be rejected), **Server ID**, and **Zone
    capacity** from the protected installation configuration, or inspect the
-   existing API-created record. Use **Test connection**, expect healthy verified
-   TLS, then enable. Open **Infrastructure → System DNS identity**, fill the
+   existing API-created record. Use **Test connection**, expect a healthy
+   result, then enable. Try to enable a second cluster and expect it to be
+   refused: zones are written to exactly one primary. Open **Infrastructure → System DNS identity**, fill the
    approved platform domain, proxy hostname, nameservers with IPv4/approved IPv6,
-   SOA and TTL fields, and both **DNS cluster targets**. Select **Validate and
+   SOA and TTL fields, and the **DNS cluster target**. Select **Validate and
    preview**, review **Validated — nothing has been saved yet**, then
    **Save DNS identity and queue update**. Expect an asynchronous operation and
-   both cluster acknowledgements; record IDs, never API keys.
+   the primary's acknowledgement; record IDs, never API keys.
 3. Open **Domains → Create** and enter the owned disposable zone in **Name**,
    unless already created during API smoke. Expect **Pending verification**,
    **Assigned nameservers**, and **Pending claim expires**. After the agent
@@ -318,12 +321,14 @@ workstream does not replace an earlier product checkpoint.
 
 ### System DNS, clusters, and domains
 
-1. Under **Infrastructure → DNS clusters**, create each cluster disabled. Confirm
+1. Under **Infrastructure → DNS clusters**, create the primary disabled. Confirm
    the form groups **Cluster connection**, **Authoritative nameservers**, and
-   **Operator context**, with labels **API URL**, **API key**, **Server ID**, and
-   **Zone capacity**. Run **Test connection**, require verified TLS and a healthy
-   result, then enable it. A bad key, CA, name, or unreachable API must fail
-   without creating a usable deployment target.
+   **Operator context**, with labels **API URL**, **Transfer endpoint**, **API
+   key**, **Server ID**, and **Zone capacity**. Enter a hostname as the transfer
+   endpoint and expect it to be rejected; enter an IPv4 and an IPv6 form
+   (`[2001:db8::10]:5300`) and expect both accepted. Run **Test connection**,
+   require a healthy result, then enable it. A bad key, name, or unreachable API
+   must fail without creating a usable deployment target.
 2. Open **Infrastructure → System DNS identity**. Confirm **Public DNS
    identity**, **Authoritative nameservers**, and **SOA and TTL policy** are
    full-width readable sections. Enter platform domain, proxy hostname, two
