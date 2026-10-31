@@ -117,7 +117,7 @@ class DnsReconciliationTest extends TestCase
         ]);
         $domain->update(['revision' => 2]);
         Http::fake(fn (Request $request) => $request->method() === 'GET'
-            ? Http::response(['rrsets' => $previous]) : Http::response([], 204));
+            ? Http::response(['rrsets' => $previous, 'kind' => 'Master', 'catalog' => PowerDnsClient::CATALOG_ZONE]) : Http::response([], 204));
 
         try {
             (new ReconcileDnsZone($domain->id))->handle(app(PowerDnsClient::class));
@@ -294,7 +294,7 @@ class DnsReconciliationTest extends TestCase
     {
         return [
             'name' => 'dns-eu-1', 'location' => 'eu-test', 'enabled' => true,
-            'api_url' => 'http://pdns.test', 'api_key' => 'private-test-key', 'server_id' => 'localhost',
+            'api_url' => 'http://pdns.test', 'transfer_endpoint' => '192.0.2.10:5300', 'api_key' => 'private-test-key', 'server_id' => 'localhost',
             'nameservers' => [['hostname' => 'ns1.cdnf.test'], ['hostname' => 'ns2.cdnf.test']], 'capacity_zones' => 1000,
         ];
     }

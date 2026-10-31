@@ -45,7 +45,7 @@ class FilamentPanelAccessTest extends TestCase
             DnsCluster::query()->create([
                 'name' => "dashboard-dns-{$index}",
                 'location' => "test-{$index}",
-                'enabled' => true,
+                'enabled' => $index === 1,
                 'api_url' => "http://dashboard-dns-{$index}.test",
                 'api_key' => "dashboard-secret-{$index}",
                 'nameservers' => ["ns1.dashboard-{$index}.test", "ns2.dashboard-{$index}.test"],

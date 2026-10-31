@@ -3,12 +3,19 @@
 namespace App\Support;
 
 use App\Models\DnsCluster;
+use App\Models\DnsZoneChange;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 class PowerDnsClient
 {
+    /** The catalog zone every served zone is a member of. DNS nodes consume it to learn the zone list. */
+    public const CATALOG_ZONE = 'catalog.cdnfoundry.invalid.';
+
+    /** The TSIG key that signs zone transfers; every node holds the same secret. */
+    public const TRANSFER_KEY = 'cdnf-nodes';
+
     public function health(DnsCluster $cluster): void
     {
         $this->request($cluster)->get('/api/v1/servers/'.$cluster->server_id)->throw();
@@ -22,12 +29,21 @@ class PowerDnsClient
         $exists = $request->get("/api/v1/servers/{$cluster->server_id}/zones/$zoneId");
         $created = $exists->status() === 404;
         if ($created) {
+            $this->ensureTransferSetup($cluster);
             $nameservers = collect($cluster->nameservers)->map(fn ($item): string => rtrim(is_array($item) ? $item['hostname'] : $item, '.').'.')->values()->all();
+            // A primary-kind zone that belongs to the catalog: DNS nodes learn of it from the catalog
+            // and pull it, signed with the transfer key.
             $request->post("/api/v1/servers/{$cluster->server_id}/zones", [
-                'name' => $zone.'.', 'kind' => 'Native', 'masters' => [], 'nameservers' => $nameservers,
+                'name' => $zone.'.', 'kind' => 'Master', 'masters' => [], 'nameservers' => $nameservers, 'catalog' => self::CATALOG_ZONE,
             ])->throw();
+            $this->allowTransfer($cluster, $zone.'.');
         } else {
             $exists->throw();
+            if ($exists->json('kind') !== 'Master' || $exists->json('catalog') !== self::CATALOG_ZONE) {
+                $this->ensureTransferSetup($cluster);
+                $request->put("/api/v1/servers/{$cluster->server_id}/zones/$zoneId", ['kind' => 'Master', 'catalog' => self::CATALOG_ZONE])->throw();
+                $this->allowTransfer($cluster, $zone.'.');
+            }
         }
 
         $nextKeys = collect($rrsets)->mapWithKeys(fn (array $rrset): array => [$rrset['name'].'|'.$rrset['type'] => true]);
@@ -64,6 +80,53 @@ class PowerDnsClient
             }
             throw new RuntimeException('PowerDNS read-back did not match the desired RRsets; prior state verified after rollback.');
         }
+        DnsZoneChange::record($zone, self::serialOf($rrsets));
+    }
+
+    /**
+     * The transfer key and the catalog zone must exist on the primary before the first zone is
+     * created. Both calls are idempotent.
+     */
+    public function ensureTransferSetup(DnsCluster $cluster): void
+    {
+        $request = $this->request($cluster);
+        $key = $request->get("/api/v1/servers/{$cluster->server_id}/tsigkeys/".self::TRANSFER_KEY);
+        if ($key->status() === 404) {
+            $request->post("/api/v1/servers/{$cluster->server_id}/tsigkeys", [
+                'name' => self::TRANSFER_KEY, 'algorithm' => 'hmac-sha256', 'key' => $cluster->transfer_tsig_secret,
+            ])->throw();
+        } else {
+            $key->throw();
+        }
+        $catalog = $request->get("/api/v1/servers/{$cluster->server_id}/zones/".rawurlencode(self::CATALOG_ZONE));
+        if ($catalog->status() === 404) {
+            $request->post("/api/v1/servers/{$cluster->server_id}/zones", [
+                'name' => self::CATALOG_ZONE, 'kind' => 'Producer', 'nameservers' => [],
+            ])->throw();
+            $this->allowTransfer($cluster, self::CATALOG_ZONE);
+        } else {
+            $catalog->throw();
+        }
+    }
+
+    /** Only a request signed with the transfer key may transfer the zone. */
+    private function allowTransfer(DnsCluster $cluster, string $zone): void
+    {
+        $this->request($cluster)->post("/api/v1/servers/{$cluster->server_id}/zones/".rawurlencode($zone).'/metadata', [
+            'kind' => 'TSIG-ALLOW-AXFR', 'metadata' => [self::TRANSFER_KEY],
+        ])->throw();
+    }
+
+    /** @param list<array{name:string,type:string,ttl:int,records:list<array{content:string,disabled:bool}>}> $rrsets */
+    private static function serialOf(array $rrsets): int
+    {
+        foreach ($rrsets as $rrset) {
+            if ($rrset['type'] === 'SOA' && isset($rrset['records'][0]['content'])) {
+                return (int) (explode(' ', $rrset['records'][0]['content'])[2] ?? 0);
+            }
+        }
+
+        return 0;
     }
 
     /**
@@ -153,6 +216,7 @@ class PowerDnsClient
         if ($response->status() !== 404) {
             $response->throw();
         }
+        DnsZoneChange::record($zone, 0, deleted: true);
     }
 
     private function request(DnsCluster $cluster): PendingRequest

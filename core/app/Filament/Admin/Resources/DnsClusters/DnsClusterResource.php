@@ -45,6 +45,7 @@ class DnsClusterResource extends Resource
                 ->schema([
                     TextInput::make('name')->label('Name')->required()->maxLength(100)->unique(ignoreRecord: true),
                     TextInput::make('location')->label('Location')->required()->maxLength(100),
+                    TextInput::make('transfer_endpoint')->label('Transfer endpoint')->required()->maxLength(100)->helperText('Where DNS nodes pull zones from: this primary’s public IP address and transfer port, such as 192.0.2.10:5300.')->regex('/^(?:\d{1,3}(?:\.\d{1,3}){3}|\[[0-9a-fA-F:]+\]):\d{1,5}$/'),
                     TextInput::make('api_url')->label('API URL')->url()->required()->maxLength(500),
                     TextInput::make('server_id')->label('Server ID')->required()->default('localhost')->maxLength(100),
                     TextInput::make('api_key')->label('API key')->password()->revealable()->required(fn (string $operation): bool => $operation === 'create')->dehydrated(fn (?string $state): bool => filled($state))->minLength(8),

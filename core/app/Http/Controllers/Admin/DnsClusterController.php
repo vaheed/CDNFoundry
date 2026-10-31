@@ -80,6 +80,7 @@ class DnsClusterController extends Controller
     public function enable(Request $request, DnsCluster $cluster): JsonResponse
     {
         abort_unless($cluster->last_health_status === 'healthy', 409, 'Test the cluster connection successfully before enabling it.');
+        abort_if(DnsCluster::query()->where('enabled', true)->whereKeyNot($cluster->id)->exists(), 409, 'Another DNS primary is enabled. Zones are written to exactly one primary; disable it first.');
         if (! $cluster->enabled) {
             $cluster->update(['enabled' => true]);
             AuditLog::record($request->user(), 'dns.cluster_enabled', $cluster, [], $request->ip());
@@ -99,6 +100,15 @@ class DnsClusterController extends Controller
             'location' => [$cluster ? 'sometimes' : 'required', 'string', 'max:100'],
             'api_url' => [$cluster ? 'sometimes' : 'required', 'url:http,https', 'max:500'],
             'api_key' => [$cluster ? 'sometimes' : 'required', 'string', 'min:8', 'max:500'],
+            // PowerDNS accepts a primary only as an address and port, never a hostname.
+            'transfer_endpoint' => [$cluster ? 'sometimes' : 'required', 'string', 'max:100', function (string $attribute, mixed $value, \Closure $fail): void {
+                $valid = preg_match('/^(?:(\d{1,3}(?:\.\d{1,3}){3})|\[([0-9a-fA-F:]+)\]):(\d{1,5})$/', (string) $value, $m) === 1
+                    && (int) $m[3] >= 1 && (int) $m[3] <= 65535
+                    && filter_var($m[1] !== '' ? $m[1] : $m[2], FILTER_VALIDATE_IP) !== false;
+                if (! $valid) {
+                    $fail('The transfer endpoint must be an IP address and port, such as 192.0.2.10:5300 or [2001:db8::10]:5300.');
+                }
+            }],
             'server_id' => ['sometimes', 'string', 'max:100'],
             'nameservers' => [$cluster ? 'sometimes' : 'required', 'array', 'min:2', 'max:8'],
             'nameservers.*.hostname' => ['required', 'string', 'max:253'],

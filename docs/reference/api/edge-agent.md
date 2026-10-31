@@ -23,6 +23,8 @@ valid client certificate whose serial belongs to the enabled edge.
 | `GET` | `/probes/targets` | List the other PoPs' endpoint addresses to probe on ports 80 and 443 |
 | `POST` | `/probes` | Report up to 128 probe results; results for unknown targets are ignored |
 | `POST` | `/heartbeat` | Report sequence, listener readiness, bounded gateway/cell capacity, origin health, and security |
+| `GET` | `/dns/changes?cursor=` | Fetch up to 200 zones that changed on the DNS primary after the cursor, oldest first. A zone that changes again moves to the end; a deleted zone is reported with `deleted: true` |
+| `GET` | `/dns/transfer` | Fetch how to pull zones: the primary's address and port, the catalog zone, the TSIG key name, and the TSIG secret sealed to this edge's identity key |
 | `GET` | `/origin-policy?checksum=` | Fetch the signed platform origin destination policy (blocked addresses and networks, private allowlist). Returns only `unchanged` while the checksum matches |
 | `GET` | `/config/manifest?cursor=` | Fetch up to 500 newer artifact descriptors |
 | `GET` | `/config/artifacts/{checksum}` | Fetch one signed encoded artifact |

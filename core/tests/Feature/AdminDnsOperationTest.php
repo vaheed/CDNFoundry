@@ -94,7 +94,7 @@ class AdminDnsOperationTest extends TestCase
     {
         return [
             'name' => 'dns-eu-1', 'location' => 'eu-test', 'enabled' => true,
-            'api_url' => 'http://pdns.test', 'api_key' => 'private-test-key', 'server_id' => 'localhost',
+            'api_url' => 'http://pdns.test', 'transfer_endpoint' => '192.0.2.10:5300', 'api_key' => 'private-test-key', 'server_id' => 'localhost',
             'nameservers' => [['hostname' => 'ns1.test'], ['hostname' => 'ns2.test']], 'capacity_zones' => 1000,
         ];
     }

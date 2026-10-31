@@ -8,7 +8,9 @@ use App\Jobs\ReconcileAllEdgeDomains;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\CachePurge;
+use App\Models\DnsCluster;
 use App\Models\DnsRecord;
+use App\Models\DnsZoneChange;
 use App\Models\Domain;
 use App\Models\DomainEdgeCell;
 use App\Models\DomainEdgePlacement;
@@ -27,6 +29,7 @@ use App\Support\EdgeKeyEnvelope;
 use App\Support\EdgeRejectionReasons;
 use App\Support\OriginPolicy;
 use App\Support\PlatformSettings;
+use App\Support\PowerDnsClient;
 use App\Support\RuntimeVersions;
 use App\Support\SecurityConfig;
 use Carbon\CarbonImmutable;
@@ -212,6 +215,12 @@ class EdgeAgentController extends Controller
             'runtime_versions.waf_cell' => ['required_with:runtime_versions', 'string', 'max:255'],
             'active_sequence' => ['required', 'integer', 'min:0'], 'cells' => ['required', 'array', 'max:32'],
             'identity_expires_at' => ['sometimes', 'integer', 'min:0'],
+            'dns' => ['sometimes', 'array', 'max:8'],
+            'dns.cursor' => ['required_with:dns', 'integer', 'min:0'],
+            'dns.catalog_serial' => ['sometimes', 'integer', 'min:0'],
+            'dns.zones' => ['sometimes', 'integer', 'min:0'],
+            'dns.pending' => ['sometimes', 'integer', 'min:0'],
+            'dns.error' => ['sometimes', 'nullable', 'string', 'max:500'],
             'gateway' => ['sometimes', 'array', 'max:12'],
             'gateway.ready' => ['required_with:gateway', 'boolean'],
             'gateway.active_revision' => ['sometimes', 'integer', 'min:0'],
@@ -271,6 +280,8 @@ class EdgeAgentController extends Controller
             'bootstrap_token_hash' => null, 'bootstrap_consumed_at' => null,
             'capacity' => array_merge($edge->capacity ?? [], [
                 'listener_ready' => $listenerReady, 'gateway' => $data['gateway'] ?? null,
+                // Zone-transfer progress of this node's DNS service: the last change it has pulled.
+                ...(isset($data['dns']) ? ['dns' => [...$data['dns'], 'reported_at' => now()->toIso8601String()]] : []),
                 'cells' => $data['cells'], 'noisy_domains' => $data['noisy_domains'] ?? [],
             ]),
             ...(isset($data['runtime_versions']) ? ['runtime_versions' => $data['runtime_versions'], 'runtime_versions_reported_at' => now()] : []),
@@ -367,6 +378,37 @@ class EdgeAgentController extends Controller
             'encoded_payload' => base64_encode($encoded), 'checksum' => $checksum, 'signature' => ArtifactSigner::sign($checksum),
             'expires_at' => $expiresAt,
             'delivery_signature' => ArtifactSigner::signDelivery(ArtifactSigner::ORIGIN_POLICY_SCOPE, $checksum, 0, $expiresAt),
+        ]);
+    }
+
+    /**
+     * How a DNS node pulls zones: where the primary listens, the catalog to follow, and the transfer
+     * key, sealed to this edge's identity key so it is protected beyond the mTLS channel.
+     */
+    public function dnsTransfer(Request $request): JsonResponse
+    {
+        /** @var Edge $edge */
+        $edge = $request->attributes->get('edge');
+        $primary = DnsCluster::query()->where('enabled', true)->whereNotNull('transfer_endpoint')->orderBy('id')->first();
+        abort_unless($primary !== null && filled($edge->identity_certificate), 404, 'No DNS primary accepts transfers.');
+
+        return response()->json(['data' => [
+            'primary' => $primary->transfer_endpoint, 'catalog' => PowerDnsClient::CATALOG_ZONE,
+            'key_name' => PowerDnsClient::TRANSFER_KEY, 'algorithm' => 'hmac-sha256',
+            'secret' => EdgeKeyEnvelope::seal($primary->transfer_tsig_secret, $edge->identity_certificate, $edge->id, 'dns-transfer-key'),
+        ]]);
+    }
+
+    /** The zones that changed on the primary after the node's cursor, oldest first. */
+    public function dnsChanges(Request $request): JsonResponse
+    {
+        $cursor = max(0, (int) $request->query('cursor', 0));
+        $rows = DnsZoneChange::query()->where('id', '>', $cursor)->orderBy('id')->limit(200)->get(['id', 'zone', 'serial', 'deleted']);
+
+        return response()->json([
+            'data' => $rows->map(fn (DnsZoneChange $row): array => ['sequence' => $row->id, 'zone' => $row->zone, 'serial' => $row->serial, 'deleted' => $row->deleted]),
+            'cursor' => $rows->last()?->id ?? $cursor, 'has_more' => $rows->count() === 200,
+            'latest' => (int) DnsZoneChange::query()->max('id'),
         ]);
     }
 
