@@ -22,11 +22,17 @@ runtime/
       state.json
       gateway.json
       active.json
-      <pool>.json
-      cell-01.json ... cell-32.json
+      <pool>.json, <pool>.stamp
+      cell-01.json ... cell-32.json, cell-01.stamp ... cell-32.stamp
   current -> generations/<active-generation>
   previous -> generations/<rollback-generation>
 ```
+
+Every pool and cell file is followed by a `.stamp` file holding the SHA-256 of
+that file, written after it. A cell polls only its few-byte stamp once a second
+and decodes its state, which can be tens of megabytes, only when the stamp
+changes, so an idle cell costs almost no CPU however many domains it serves.
+A cell that finds no stamp loads the file on every tick.
 
 Readers use only paths below `current`. The manifest records schema version,
 generation ID, revision, UTC creation time, the exact expected file list, byte

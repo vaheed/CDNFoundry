@@ -1197,7 +1197,7 @@ func (c *client) activateWithKeys(s state, keys map[string]string) error {
 				if !validPoolName(name) {
 					return errors.New("invalid runtime pool name")
 				}
-				if err := atomicJSON(filepath.Join(candidate, name+".json"), poolRuntime); err != nil {
+				if err := atomicRuntimeJSON(filepath.Join(candidate, name+".json"), poolRuntime); err != nil {
 					return err
 				}
 			}
@@ -1271,7 +1271,7 @@ func (c *client) activateWithKeys(s state, keys map[string]string) error {
 			if !validPoolName(name) {
 				return c.rollbackActive(active, previous, errors.New("invalid runtime pool name"))
 			}
-			if err := atomicJSON(filepath.Join(c.runtimeDir, name+".json"), poolRuntime); err != nil {
+			if err := atomicRuntimeJSON(filepath.Join(c.runtimeDir, name+".json"), poolRuntime); err != nil {
 				return c.rollbackActive(active, previous, err)
 			}
 		}
@@ -1308,7 +1308,7 @@ func (c *client) writeCellRuntimesAt(directory string, sequence uint64, generati
 			runtime["generation_id"] = generationID
 		}
 		pools[cellName] = runtime
-		if err := atomicJSON(filepath.Join(directory, cellName+".json"), runtime); err != nil {
+		if err := atomicRuntimeJSON(filepath.Join(directory, cellName+".json"), runtime); err != nil {
 			return err
 		}
 	}
@@ -2020,6 +2020,33 @@ func loadState(p string) (state, error) {
 	e = json.Unmarshal(b, &s)
 	return s, e
 }
+
+// atomicRuntimeJSON writes a runtime file a cell loads, then a small stamp beside it holding
+// the file's SHA-256. Cells poll only the stamp and decode the state when it changes.
+func atomicRuntimeJSON(p string, v any) error {
+	b, e := json.Marshal(v)
+	if e != nil {
+		return e
+	}
+	if e = writeAtomic(p, b); e != nil {
+		return e
+	}
+	sum := sha256.Sum256(b)
+	return writeAtomic(runtimeStampPath(p), []byte(hex.EncodeToString(sum[:])+"\n"))
+}
+
+func runtimeStampPath(p string) string {
+	return strings.TrimSuffix(p, ".json") + ".stamp"
+}
+
+func writeAtomic(p string, b []byte) error {
+	tmp := p + ".tmp"
+	if e := os.WriteFile(tmp, b, 0600); e != nil {
+		return e
+	}
+	return os.Rename(tmp, p)
+}
+
 func atomicJSON(p string, v any) error {
 	b, e := json.Marshal(v)
 	if e != nil {

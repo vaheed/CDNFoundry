@@ -141,10 +141,31 @@ local function load()
     return true
 end
 
+-- The agent writes a stamp (the SHA-256 of the runtime file) beside every runtime file, after the
+-- file itself. Polling that few-byte stamp costs almost nothing; the state, which can be tens of
+-- megabytes, is decoded only when the stamp changes. Without a stamp the file is loaded every tick.
+local stamp_path = path:gsub("%.json$", ".stamp")
+local loaded_stamp
+
+local function read_stamp()
+    local file = io.open(stamp_path, "rb")
+    if not file then return nil end
+    local stamp = file:read(64)
+    file:close()
+    return stamp
+end
+
 local function refresh(premature)
     if premature then return end
+    local stamp = read_stamp()
+    if stamp ~= nil and stamp == loaded_stamp then return end
     local ok, err = load()
-    if not ok then ngx.log(ngx.WARN, err) end
+    if not ok then
+        ngx.log(ngx.WARN, err)
+        return
+    end
+    loaded_stamp = stamp
+    ngx.log(ngx.NOTICE, "runtime state loaded generation=", state.generation_id, " sequence=", tostring(state.sequence))
 end
 
 function M.start()
