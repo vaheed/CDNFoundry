@@ -11,6 +11,7 @@ __pycache__/
 storage
 .stage/
 .prod/
+.mcp*
 
 stage-configs/
 
