@@ -809,8 +809,8 @@ def execute(args: argparse.Namespace) -> int:
                 if args.node not in state["nodes"]:
                     raise ValidationError(f"Unknown node: {args.node}")
                 if args.secret == "pdns-db-password":
-                    if state["nodes"][args.node]["role"] not in {"dns", "dns-edge"}:
-                        raise ValidationError("pdns-db-password is valid only for DNS-capable nodes")
+                    if state["nodes"][args.node]["role"] != "control":
+                        raise ValidationError("pdns-db-password is valid only for the control node, which runs the DNS primary")
                     if args.phase == "prepare":
                         _confirm(args, f"Prepare a local PowerDNS PostgreSQL password rotation for {args.node}")
                         store.prepare_secret_rotation(args.secret, node=args.node)

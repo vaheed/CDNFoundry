@@ -46,7 +46,7 @@ def reconcile() -> None:
     if not re.fullmatch(r"[0-9a-f]{64}", pending):
         raise RotationError("Pending password is not a Fleet-generated rotation; restore it from protected Fleet state.")
     env_path = Path(".env.prod")
-    config = Path("docker/pdns/pdns.conf")
+    config = Path("docker/pdns/primary.conf")
     current, config_payload = setting(config, "gpgsql-password=", pending)
     _, env_payload = setting(env_path, "PDNS_DB_PASSWORD=", pending)
     if not run("config", "--quiet"):
@@ -92,7 +92,7 @@ def reconcile() -> None:
         for candidate, path in staged:
             os.replace(candidate, path)
             sync_directory(path.parent)
-        if not run("up", "-d", "--no-deps", "--force-recreate", "--wait", "--wait-timeout", "180", "pdns-auth"):
+        if not run("up", "-d", "--no-deps", "--force-recreate", "--wait", "--wait-timeout", "180", "pdns-primary"):
             raise RotationError("Password applied but PowerDNS activation failed; fix service health and rerun this command with the same pending file.")
         print("Local PostgreSQL, PowerDNS configuration, and .env.prod now use the pending password.")
         print("Commit the rotation in protected Fleet state, then rerender. Retain the private before-rotation backup until recovery is verified.")

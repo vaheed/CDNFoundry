@@ -251,6 +251,8 @@ class FleetState:
     def _validate_node_secrets(self, node: dict[str, Any]) -> None:
         required: set[str] = set()
         if node["role"] in {"dns", "dns-edge"}:
+            required |= {"pdns-api-key"}
+        if node["role"] == "control":
             required |= {"pdns-db-password", "pdns-api-key"}
         if node["role"] in {"edge", "dns-edge"}:
             required |= {"edge-status-token"}
@@ -508,6 +510,8 @@ class FleetState:
 
     def _ensure_node_secrets(self, node: dict[str, Any]) -> None:
         if node["role"] in {"dns", "dns-edge"}:
+            self.ensure_secret("pdns-api-key", node=node["name"])
+        if node["role"] == "control":
             self.ensure_secret("pdns-db-password", node=node["name"])
             self.ensure_secret("pdns-api-key", node=node["name"])
         if node["role"] in {"edge", "dns-edge"}:

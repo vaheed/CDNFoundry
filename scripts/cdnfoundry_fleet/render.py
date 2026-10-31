@@ -166,22 +166,26 @@ class Renderer:
                 "retries": 3,
             }
         if node["role"] in {"dns", "dns-edge"}:
-            if "pdns-db" not in services or "pdns-auth" not in services:
-                raise RenderError(f"DNS node {node['name']} does not contain local pdns-db and pdns-auth services")
-            # Explicitly prevent accidental use of the control database.
-            pdns_env = services["pdns-auth"].setdefault("environment", {})
-            # The official PowerDNS image only consumes its documented API-key
-            # environment variable; arbitrary PDNS_<setting> values do not
-            # override a mounted pdns.conf.  Render both credentials into the
-            # node-private configuration instead.
-            pdns_env.pop("PDNS_gpgsql_password", None)
-            pdns_env.pop("PDNS_api_key", None)
-            pdns_env.pop("PDNS_gpgsql_host", None)
-            pdns_env.pop("PDNS_gpgsql_dbname", None)
-            pdns_env.pop("PDNS_gpgsql_user", None)
-            # Supplementary group matches the activated secret file. Keep the
-            # image's non-root service user without exposing credentials to all users.
-            services["pdns-auth"].setdefault("group_add", []).append("82")
+            # A DNS node is a PowerDNS secondary with a local SQLite store; it has no database service.
+            if "pdns-auth" not in services or "pdns-db" in services:
+                raise RenderError(f"DNS node {node['name']} must contain pdns-auth and no PowerDNS database")
+            # The database migration belongs to the control node's primary.
+            services.pop("pdns-migrate", None)
+        if node["role"] == "control":
+            if "pdns-db" not in services or "pdns-primary" not in services:
+                raise RenderError(f"Control node {node['name']} does not contain pdns-db and pdns-primary services")
+        for service in ("pdns-auth", "pdns-primary"):
+            if service in services:
+                pdns_env = services[service].setdefault("environment", {})
+                # The official PowerDNS image only consumes its documented API-key
+                # environment variable; arbitrary PDNS_<setting> values do not
+                # override a mounted configuration. Render the credentials into the
+                # node-private configuration instead.
+                for setting in ("PDNS_gpgsql_password", "PDNS_api_key", "PDNS_gpgsql_host", "PDNS_gpgsql_dbname", "PDNS_gpgsql_user"):
+                    pdns_env.pop(setting, None)
+                # Supplementary group matches the activated secret file. Keep the
+                # image's non-root service user without exposing credentials to all users.
+                services[service].setdefault("group_add", []).append("82")
         if node["role"] == "control" and self._uses_remote_control_db(node):
             # External PostgreSQL is selected with DB_URL or a DB_HOST other than the
             # Compose service name. Remove the embedded database and every dependency
@@ -248,7 +252,6 @@ class Renderer:
             # Production Compose PKI contract (control, edge and DNS roles).
             "EDGE_IDENTITY_CA_CERTIFICATE": "./pki/edge-identity-ca.crt",
             "EDGE_IDENTITY_CA_PRIVATE_KEY": "./pki/edge-identity-ca.key",
-            "PDNS_CA_CERTIFICATE": "./pki/edge-server-ca.crt",
             "EDGE_CONTROL_SERVER_CERTIFICATE": "./pki/node.crt",
             "EDGE_CONTROL_SERVER_PRIVATE_KEY": "./pki/node.key",
             "EDGE_CONTROL_CA_CERTIFICATE": "./pki/edge-server-ca.crt",
@@ -256,9 +259,9 @@ class Renderer:
             "EDGE_RUNTIME_TLS_CERTIFICATE": "/dev/shm/cdnfoundry/edge-runtime.crt",
             "EDGE_RUNTIME_TLS_PRIVATE_KEY": "/dev/shm/cdnfoundry/edge-runtime.key",
             "EDGE_STATE_ENCRYPTION_KEY_FILE": "/dev/shm/cdnfoundry/edge-state-encryption.key",
-            "DNS_API_SERVER_CERTIFICATE": "./pki/node.crt",
-            "DNS_API_SERVER_PRIVATE_KEY": "/dev/shm/cdnfoundry/node.key" if node["role"] == "dns-edge" else "./pki/node.key",
-            "DNS_API_HOSTNAME": node["hostname"],
+            # A PoP that also runs a DNS node lets its agent drive the node's local PowerDNS API.
+            "EDGE_DNS_API_URL": "http://pdns-auth:8081" if node["role"] == "dns-edge" else "",
+            "EDGE_DNS_API_KEY": self._optional_node_secret("pdns-api-key", node) if node["role"] == "dns-edge" else "",
             "CONTROL_PUBLIC_IPV4_ALLOWLIST": self._control_allowlist(state),
             "EDGE_PUBLIC_IPV4_ALLOWLIST": self._edge_allowlist(state),
             "LOG_SOURCE_IPV4_ALLOWLIST": self._all_public_ipv4(state),
@@ -398,6 +401,10 @@ class Renderer:
         # Minimal role environment: only variables referenced by the filtered Compose plus generated configs.
         always = {"CDNF_RELEASE", "HOST_BIND_IPV4", "HOST_BIND_IPV6"}
         if node["role"] in {"dns", "dns-edge"}:
+            always |= {"PDNS_API_KEY"}
+        if node["role"] == "dns-edge":
+            always |= {"EDGE_DNS_API_URL", "EDGE_DNS_API_KEY"}
+        if node["role"] == "control":
             always |= {"PDNS_DB_PASSWORD", "PDNS_API_KEY"}
         if state["features"]["logs"]["mode"] == "centralized":
             always |= {
@@ -443,7 +450,7 @@ class Renderer:
     def _add_ipv6_publications(services: dict[str, Any], bind: str) -> None:
         mappings = {
             "caddy": [(80, "tcp"), (443, "tcp"), (443, "udp"), (8444, "tcp")],
-            "dns-api": [(8444, "tcp")],
+            "pdns-primary": [(5300, "tcp"), (5300, "udp")],
             "telemetry-gateway": [(80, "tcp"), (443, "tcp"), (8444, "tcp")],
             "dnsdist": [(53, "tcp"), (53, "udp")],
             "edge-gateway": [(80, "tcp"), (443, "tcp"), (443, "udp")],
@@ -549,8 +556,9 @@ class Renderer:
             atomic_write(secrets_dir / "metrics-token", self.store.read_secret("metrics-token") + "\n", 0o640)
         if state["features"]["backups"]["mode"] != "disabled":
             atomic_write(secrets_dir / "restic-password", self.store.read_secret("backup-password") + "\n", 0o600)
-        if node["role"] in {"dns", "dns-edge"}:
+        if node["role"] in {"control", "dns", "dns-edge"}:
             self._write_pdns_config(node, destination)
+        if node["role"] == "control":
             pending = self.store.pending_secret_path("pdns-db-password", node=node["name"])
             if pending.exists():
                 atomic_write(
@@ -578,14 +586,15 @@ class Renderer:
             atomic_write(generated / "geo-routing-policy.json", json.dumps(self._geo_policy(state), indent=2) + "\n", 0o600)
 
     def _write_pdns_config(self, node: dict[str, Any], destination: Path) -> None:
-        path = destination / "docker/pdns/pdns.conf"
+        # The control host's primary has a database; a node has only an API key.
+        control = node["role"] == "control"
+        path = destination / ("docker/pdns/primary.conf" if control else "docker/pdns/pdns.conf")
         if not path.exists():
-            raise RenderError("PowerDNS configuration was not copied into the DNS bundle")
+            raise RenderError("PowerDNS configuration was not copied into the bundle")
         content = path.read_text(encoding="utf-8")
-        replacements = {
-            "gpgsql-password": self.store.read_secret("pdns-db-password", node=node["name"]),
-            "api-key": self.store.read_secret("pdns-api-key", node=node["name"]),
-        }
+        replacements = {"api-key": self.store.read_secret("pdns-api-key", node=node["name"])}
+        if control:
+            replacements["gpgsql-password"] = self.store.read_secret("pdns-db-password", node=node["name"])
         lines = content.splitlines()
         for setting, value in replacements.items():
             indexes = [index for index, line in enumerate(lines) if line.startswith(f"{setting}=")]
@@ -783,11 +792,11 @@ This bundle intentionally contains only files and credentials needed by this nod
 
 ## Requirements
 
-Docker Engine, Docker Compose v2, Python 3, accurate system time, CA certificates, and sufficient disk for stateful volumes. Keep the directory mode `0700` and `.env.prod`, private keys, and secret files mode `0600`. Run activation as root. On control nodes, `start.sh` restricts the edge identity CA key to mode `0640`, owner `root`, and numeric group `82` for the PHP worker. On DNS nodes it applies the same ownership and mode to `docker/pdns/pdns.conf`; the generated PowerDNS service receives group `82`. Other users must not read these credentials. Pending password rotations include a Python implementation invoked by `sudo ./reconcile-pdns-password.sh`; preserve its pending file and retry after an interruption before committing Fleet state.
+Docker Engine, Docker Compose v2, Python 3, accurate system time, CA certificates, and sufficient disk for stateful volumes. Keep the directory mode `0700` and `.env.prod`, private keys, and secret files mode `0600`. Run activation as root. On control nodes, `start.sh` restricts the edge identity CA key to mode `0640`, owner `root`, and numeric group `82` for the PHP worker. On the control node and on DNS nodes it applies the same ownership and mode to the PowerDNS configuration (`docker/pdns/primary.conf` or `docker/pdns/pdns.conf`); the generated PowerDNS service receives group `82`. Other users must not read these credentials. Pending password rotations include a Python implementation invoked by `sudo ./reconcile-pdns-password.sh`; preserve its pending file and retry after an interruption before committing Fleet state.
 
 ## Validate and start
 
-If this bundle contains `reconcile-pdns-password.sh`, a PowerDNS database password rotation is pending. Run that script on this DNS host before committing the rotation on the control plane. Normal rerenders do not rotate credentials.
+If this bundle contains `reconcile-pdns-password.sh`, a PowerDNS database password rotation is pending. Run that script on this control host before committing the rotation on the control plane. Normal rerenders do not rotate credentials.
 
 Run on **{node['name']}**:
 
@@ -838,12 +847,12 @@ After successful validation and the retention period, securely remove obsolete t
         role = node["role"]
         if role in {"dns", "dns-edge"}:
             rows.append("| UDP/TCP 53 | Public authoritative DNS through DNSdist |")
-            rows.append("| TCP 8444 | Control-plane source addresses only |")
         if role in {"edge", "dns-edge"}:
             rows.append("| TCP 80/443 | Public customer traffic on configured service addresses |")
         if role == "control":
             rows.append("| TCP 80/443 | Public operator UI/API |")
             rows.append("| TCP 8443 | Edge nodes only |")
+            rows.append("| TCP/UDP 5300 | DNS node addresses only (TSIG-signed zone transfers from the hidden primary) |")
         rows.append("| TCP 9100 | Monitoring host/private monitoring network only |")
         return "\n".join(rows)
 
@@ -856,19 +865,18 @@ docker compose --env-file .env.prod --profile '*' ps
 """
 
     def _node_start_order(self, node: dict[str, Any]) -> str:
-        if node["role"] in {"dns", "dns-edge"}:
+        if node["role"] == "control":
+            dependencies = "redis" if self._uses_remote_control_db(node) else "control-db redis"
             return (
+                f"docker compose --env-file .env.prod up -d --wait {dependencies}\n"
+                "docker compose --env-file .env.prod --profile tools run --rm migrate\n"
                 "docker compose --env-file .env.prod up -d --wait pdns-db\n"
                 "docker compose --env-file .env.prod exec -T pdns-db "
                 "sh /usr/local/bin/ensure-pdns-runtime.sh\n"
                 "docker compose --env-file .env.prod --profile tools run --rm pdns-migrate"
             )
-        if node["role"] == "control":
-            dependencies = "redis" if self._uses_remote_control_db(node) else "control-db redis"
-            return (
-                f"docker compose --env-file .env.prod up -d --wait {dependencies}\n"
-                "docker compose --env-file .env.prod --profile tools run --rm migrate"
-            )
+        if node["role"] in {"dns", "dns-edge"}:
+            return "# A DNS node keeps no database; its SQLite store is created on first start."
         return "# No database migration is required for this role."
 
     def _validate_script(self, node: dict[str, Any], compose: dict[str, Any]) -> str:
@@ -898,11 +906,12 @@ dns_certificate_public="$(openssl x509 -in pki/node.crt -pubkey -noout | openssl
 dns_private_public="$(openssl pkey -in /dev/shm/cdnfoundry/node.key -pubout -outform DER | sha256sum)"
 test "$dns_certificate_public" = "$dns_private_public"
 """
-        if node["role"] in {"dns", "dns-edge"}:
-            pdns_validation = """pdns_mode="$(stat -c '%a' docker/pdns/pdns.conf)"
+        if node["role"] in {"control", "dns", "dns-edge"}:
+            pdns_config = "docker/pdns/primary.conf" if node["role"] == "control" else "docker/pdns/pdns.conf"
+            pdns_validation = f"""pdns_mode="$(stat -c '%a' {pdns_config})"
 case "$pdns_mode" in
     600) ;;
-    640) test "$(stat -c '%u:%g' docker/pdns/pdns.conf)" = "0:82" ;;
+    640) test "$(stat -c '%u:%g' {pdns_config})" = "0:82" ;;
     *) echo "PowerDNS credentials must be transfer-safe mode 600 or activated as root:82 mode 640; rerun start.sh as root." >&2; exit 1 ;;
 esac
 """
@@ -927,7 +936,6 @@ test "$(stat -c '%u:%g' secrets/metrics-token)" = "0:82"
 """
         caddy_configs = {
             "caddy": "/etc/caddy/Caddyfile",
-            "dns-api": "/etc/caddy/Caddyfile",
             "telemetry-gateway": "/etc/caddy/Caddyfile",
         }
         for service, config in caddy_configs.items():
@@ -1026,11 +1034,11 @@ chmod 0640 docker/pdns/pdns.conf
 """
         if node["role"] == "control":
             key_permissions = """if [ "$(id -u)" != "0" ]; then
-    echo "Control activation must run as root so the edge identity CA key can be restricted to the PHP worker group." >&2
+    echo "Control activation must run as root so the edge identity CA key and the PowerDNS credentials can be restricted to their container reader groups." >&2
     exit 1
 fi
-chown 0:82 pki/edge-identity-ca.key
-chmod 0640 pki/edge-identity-ca.key
+chown 0:82 pki/edge-identity-ca.key docker/pdns/primary.conf
+chmod 0640 pki/edge-identity-ca.key docker/pdns/primary.conf
 """
         if self._is_monitoring_host(state, node) or node["role"] == "control":
             key_permissions += """if [ "$(id -u)" != "0" ]; then
@@ -1049,7 +1057,7 @@ set -eu
 for runtime_path in docker generated; do
     if [ -e "$runtime_path" ]; then
         find "$runtime_path" -type d -exec chmod a+rx {{}} +
-        find "$runtime_path" -type f ! -path 'docker/pdns/pdns.conf' -exec chmod a+r {{}} +
+        find "$runtime_path" -type f ! -path 'docker/pdns/pdns.conf' ! -path 'docker/pdns/primary.conf' -exec chmod a+r {{}} +
     fi
 done
 ./validate.sh

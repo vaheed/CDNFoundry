@@ -42,7 +42,8 @@ def source_repo(tmp_path: Path) -> Path:
     ]:
         target = root / path
         target.write_text("# fixture\n", encoding="utf-8")
-    (root / "docker/pdns/pdns.conf").write_text(
+    (root / "docker/pdns/pdns.conf").write_text("api-key=pdns-dev-api-key\n", encoding="utf-8")
+    (root / "docker/pdns/primary.conf").write_text(
         "gpgsql-password=pdns-dev-only\napi-key=pdns-dev-api-key\n", encoding="utf-8"
     )
 
@@ -68,12 +69,10 @@ def source_repo(tmp_path: Path) -> Path:
                     "EDGE_ARTIFACT_SIGNING_KEY": "${EDGE_ARTIFACT_SIGNING_KEY:?required}",
                     "EDGE_IDENTITY_CA_CERTIFICATE": "${EDGE_IDENTITY_CA_CERTIFICATE:?required}",
                     "EDGE_IDENTITY_CA_PRIVATE_KEY": "${EDGE_IDENTITY_CA_PRIVATE_KEY:?required}",
-                    "PDNS_CA_CERTIFICATE": "${PDNS_CA_CERTIFICATE:?required}",
                 },
                 "volumes": [
                     "${EDGE_IDENTITY_CA_CERTIFICATE:?required}:/run/pki/edge-identity-ca.crt:ro",
                     "${EDGE_IDENTITY_CA_PRIVATE_KEY:?required}:/run/pki/edge-identity-ca.key:ro",
-                    "${PDNS_CA_CERTIFICATE:?required}:/run/pki/pdns-ca.crt:ro",
                 ],
                 "depends_on": {"control-db": {"condition": "service_started"}, "redis": {"condition": "service_started"}},
             },
@@ -96,7 +95,7 @@ def source_repo(tmp_path: Path) -> Path:
             },
             "pdns-db": {
                 "image": "postgres:18-alpine",
-                "profiles": ["dns"],
+                "profiles": ["control"],
                 "environment": {
                     "POSTGRES_DB": "pdns",
                     "POSTGRES_USER": "pdns",
@@ -114,16 +113,21 @@ def source_repo(tmp_path: Path) -> Path:
                 "environment": {"MMDB_PROVIDER": "${MMDB_PROVIDER:-dbip-jsdelivr}"},
                 "volumes": ["mmdb:/mmdb"],
             },
+            "pdns-primary": {
+                "image": "pdns:5",
+                "profiles": ["control"],
+                "environment": {
+                    "PDNS_DB_PASSWORD": "${PDNS_DB_PASSWORD:?required}",
+                    "PDNS_API_KEY": "${PDNS_API_KEY:?required}",
+                },
+                "depends_on": {"pdns-db": {"condition": "service_started"}},
+                "volumes": ["./docker/pdns/primary.conf:/etc/pdns.conf:ro"],
+            },
             "pdns-auth": {
                 "image": "pdns:5",
                 "profiles": ["dns"],
-                "environment": {
-                    "PDNS_gpgsql_password": "${PDNS_DB_PASSWORD:?required}",
-                    "PDNS_api_key": "${PDNS_API_KEY:?required}",
-                    "DNS_API_SERVER_CERTIFICATE": "${DNS_API_SERVER_CERTIFICATE:?required}",
-                    "DNS_API_SERVER_PRIVATE_KEY": "${DNS_API_SERVER_PRIVATE_KEY:?required}",
-                },
-                "depends_on": {"pdns-db": {"condition": "service_started"}, "mmdb-updater": {"condition": "service_started"}},
+                "environment": {"PDNS_API_KEY": "${PDNS_API_KEY:?required}"},
+                "depends_on": {"mmdb-updater": {"condition": "service_started"}},
                 "volumes": ["./docker/pdns/pdns.conf:/etc/pdns.conf:ro", "mmdb:/mmdb:ro"],
             },
             "pdns-migrate": {
@@ -249,7 +253,7 @@ def env_values(path: Path) -> dict[str, str]:
     return parse_env(path)
 
 
-def test_dns_hosts_get_unique_stable_local_database_credentials(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
+def test_dns_hosts_get_unique_stable_api_keys_and_no_database_password(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
     add(store, node("dns-ashburn", "dns", "192.0.2.11"))
     add(store, node("dns-frankfurt", "dns", "192.0.2.12"))
     output = tmp_path / "bundles"
@@ -258,27 +262,27 @@ def test_dns_hosts_get_unique_stable_local_database_credentials(store: FleetStat
 
     first = env_values(output / "dns-ashburn/.env.prod")
     second = env_values(output / "dns-frankfurt/.env.prod")
-    assert first["PDNS_DB_PASSWORD"] != second["PDNS_DB_PASSWORD"]
+    assert "PDNS_DB_PASSWORD" not in first, "a DNS node keeps no PowerDNS database"
     assert first["PDNS_API_KEY"] != second["PDNS_API_KEY"]
 
     renderer.render(store.load())
     rerendered = env_values(output / "dns-ashburn/.env.prod")
-    assert rerendered["PDNS_DB_PASSWORD"] == first["PDNS_DB_PASSWORD"]
     assert rerendered["PDNS_API_KEY"] == first["PDNS_API_KEY"]
 
 
-def test_dns_bundle_uses_local_postgres_and_has_no_control_secrets(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
+def test_dns_bundle_is_a_secondary_with_no_database_and_no_control_secrets(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
     add(store, node("dns-singapore", "dns", "192.0.2.20"))
     output = tmp_path / "bundles"
     Renderer(source_repo, store, output).render(store.load())
     compose = yaml.safe_load((output / "dns-singapore/compose.yml").read_text(encoding="utf-8"))
     env = env_values(output / "dns-singapore/.env.prod")
 
-    assert "pdns-db" in compose["services"]
+    assert "pdns-db" not in compose["services"]
+    assert "pdns-primary" not in compose["services"]
     assert "pdns-auth" in compose["services"]
     assert "control-db" not in compose["services"]
     assert not any(key.startswith("PDNS_gpgsql_") for key in compose["services"]["pdns-auth"]["environment"])
-    assert "PDNS_DB_PASSWORD" in env
+    assert "PDNS_DB_PASSWORD" not in env
     assert "CONTROL_DB_PASSWORD" not in env
     assert "APP_KEY" not in env
     assert "GRAFANA_ADMIN_PASSWORD" not in env
@@ -424,7 +428,7 @@ def test_monitoring_files_are_readable_by_non_root_consumers(
     for name in ("control", "node", "dns", "edge", "log"):
         assert stat.S_IMODE((bundle / f"generated/prometheus-{name}-targets.yml").stat().st_mode) == 0o644
     start = (bundle / "start.sh").read_text(encoding="utf-8")
-    assert "! -path 'docker/pdns/pdns.conf' -exec chmod a+r" in start
+    assert "! -path 'docker/pdns/pdns.conf' ! -path 'docker/pdns/primary.conf' -exec chmod a+r" in start
 
 
 def test_control_start_waits_only_on_services_with_active_healthchecks(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
@@ -473,8 +477,7 @@ def test_combined_node_starts_dns_before_edge_registration(store: FleetState, so
     compose = yaml.safe_load((output / "pop-1/compose.yml").read_text(encoding="utf-8"))
     subprocess.run(["sh", "-n", str(output / "pop-1/start.sh")], check=True)
     assert "docker compose --env-file .env.prod --profile dns up -d --wait" in start
-    assert "sh /usr/local/bin/ensure-pdns-runtime.sh" in start
-    assert start.index("ensure-pdns-runtime.sh") < start.index("pdns-migrate")
+    assert "ensure-pdns-runtime.sh" not in start, "a DNS node keeps no PowerDNS database to prepare"
     assert 'if [ "$edge_identity_state" = "configured" ]; then' in start
     assert '"--profile", "edge", "config", "--format", "json"' in start
     assert "env_value" not in start
@@ -485,7 +488,11 @@ def test_combined_node_starts_dns_before_edge_registration(store: FleetState, so
     pdns_config = (output / "pop-1/docker/pdns/pdns.conf").read_text(encoding="utf-8")
     assert "pdns-dev-only" not in pdns_config
     assert "pdns-dev-api-key" not in pdns_config
-    assert store.read_secret("pdns-db-password", node="pop-1") in pdns_config
+    assert store.read_secret("pdns-api-key", node="pop-1") in pdns_config
+    assert not (store.secret_path("pdns-db-password", node="pop-1")).exists()
+    env = env_values(output / "pop-1/.env.prod")
+    assert env["EDGE_DNS_API_URL"] == "http://pdns-auth:8081"
+    assert env["EDGE_DNS_API_KEY"] == store.read_secret("pdns-api-key", node="pop-1")
     assert store.read_secret("pdns-api-key", node="pop-1") in pdns_config
     assert stat.S_IMODE((output / "pop-1/docker/pdns/pdns.conf").stat().st_mode) == 0o600
     assert compose["services"]["edge-agent"]["profiles"] == ["edge"]
@@ -661,14 +668,14 @@ def test_setup_dry_run_uses_in_memory_state(source_repo: Path, tmp_path: Path) -
     assert not (tmp_path / "dry-bundles").exists()
 
 
-def test_explicit_rotation_changes_only_target_dns_node(store: FleetState) -> None:
+def test_explicit_rotation_changes_only_the_target_nodes_api_key(store: FleetState) -> None:
     add(store, node("dns-one", "dns", "192.0.2.101"))
     add(store, node("dns-two", "dns", "192.0.2.102"))
-    one_before = store.read_secret("pdns-db-password", node="dns-one")
-    two_before = store.read_secret("pdns-db-password", node="dns-two")
-    store.rotate_secret("pdns-db-password", node="dns-one")
-    assert store.read_secret("pdns-db-password", node="dns-one") != one_before
-    assert store.read_secret("pdns-db-password", node="dns-two") == two_before
+    one_before = store.read_secret("pdns-api-key", node="dns-one")
+    two_before = store.read_secret("pdns-api-key", node="dns-two")
+    store.rotate_secret("pdns-api-key", node="dns-one")
+    assert store.read_secret("pdns-api-key", node="dns-one") != one_before
+    assert store.read_secret("pdns-api-key", node="dns-two") == two_before
 
 
 def test_invalid_existing_laravel_key_fails_fleet_validation(store: FleetState) -> None:
@@ -765,16 +772,16 @@ def test_every_command_supports_help(command: str) -> None:
 
 
 def test_pdns_rotation_is_prepared_reconciled_and_committed(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
-    add(store, node("dns-rotate", "dns", "192.0.2.120"))
-    current = store.read_secret("pdns-db-password", node="dns-rotate")
-    pending = store.prepare_secret_rotation("pdns-db-password", node="dns-rotate")
+    add(store, node("control-rotate", "control", "192.0.2.120"))
+    current = store.read_secret("pdns-db-password", node="control-rotate")
+    pending = store.prepare_secret_rotation("pdns-db-password", node="control-rotate")
     assert pending.exists()
     assert pending.read_text(encoding="utf-8").strip() != current
-    assert store.read_secret("pdns-db-password", node="dns-rotate") == current
+    assert store.read_secret("pdns-db-password", node="control-rotate") == current
 
     output = tmp_path / "bundles"
-    Renderer(source_repo, store, output).render(store.load(), node_name="dns-rotate")
-    bundle = output / "dns-rotate"
+    Renderer(source_repo, store, output).render(store.load(), node_name="control-rotate")
+    bundle = output / "control-rotate"
     assert (bundle / "reconcile-pdns-password.sh").exists()
     assert stat.S_IMODE((bundle / "reconcile-pdns-password.sh").stat().st_mode) == 0o700
     assert (bundle / "secrets/pdns-db-password.next").read_text(encoding="utf-8") == pending.read_text(encoding="utf-8")
@@ -784,21 +791,21 @@ def test_pdns_rotation_is_prepared_reconciled_and_committed(store: FleetState, s
     assert 'exec python3 ./reconcile-pdns-password.py' in reconcile
     assert 'setting(config, "gpgsql-password=", pending)' in implementation
     assert 'python3 - "$next_password"' not in reconcile
-    assert '"--force-recreate", "--wait", "--wait-timeout", "180", "pdns-auth"' in implementation
+    assert '"--force-recreate", "--wait", "--wait-timeout", "180", "pdns-primary"' in implementation
 
     next_value = pending.read_text(encoding="utf-8").strip()
-    store.commit_secret_rotation("pdns-db-password", node="dns-rotate")
-    assert store.read_secret("pdns-db-password", node="dns-rotate") == next_value
+    store.commit_secret_rotation("pdns-db-password", node="control-rotate")
+    assert store.read_secret("pdns-db-password", node="control-rotate") == next_value
     assert not pending.exists()
 
 
 def test_pdns_rotation_can_be_aborted_without_changing_current_secret(store: FleetState) -> None:
-    add(store, node("dns-abort", "dns", "192.0.2.121"))
-    current = store.read_secret("pdns-db-password", node="dns-abort")
-    pending = store.prepare_secret_rotation("pdns-db-password", node="dns-abort")
-    store.abort_secret_rotation("pdns-db-password", node="dns-abort")
+    add(store, node("control-abort", "control", "192.0.2.121"))
+    current = store.read_secret("pdns-db-password", node="control-abort")
+    pending = store.prepare_secret_rotation("pdns-db-password", node="control-abort")
+    store.abort_secret_rotation("pdns-db-password", node="control-abort")
     assert not pending.exists()
-    assert store.read_secret("pdns-db-password", node="dns-abort") == current
+    assert store.read_secret("pdns-db-password", node="control-abort") == current
 
 
 def test_disabled_monitoring_bundle_does_not_receive_metrics_secret(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
@@ -835,7 +842,7 @@ def test_common_cli_options_work_before_or_after_subcommand() -> None:
     assert after.repo_root == "/tmp/repo-after"
 
 
-def test_cli_end_to_end_dns_nodes_keep_separate_local_credentials(source_repo: Path, tmp_path: Path) -> None:
+def test_cli_end_to_end_dns_nodes_keep_separate_api_keys(source_repo: Path, tmp_path: Path) -> None:
     import subprocess
 
     cli = Path(__file__).resolve().parents[2] / "scripts/cdnfoundry-fleet"
@@ -903,7 +910,8 @@ def test_cli_end_to_end_dns_nodes_keep_separate_local_credentials(source_repo: P
 
     one = env_values(output_dir / "dns-one/.env.prod")
     two = env_values(output_dir / "dns-two/.env.prod")
-    assert one["PDNS_DB_PASSWORD"] != two["PDNS_DB_PASSWORD"]
+    assert one["PDNS_API_KEY"] != two["PDNS_API_KEY"]
+    assert "PDNS_DB_PASSWORD" not in one and "PDNS_DB_PASSWORD" not in two
     assert "CONTROL_DB_PASSWORD" not in one
     assert "CONTROL_DB_PASSWORD" not in two
 
@@ -926,14 +934,12 @@ def test_production_docs_match_generated_bundle_workflow() -> None:
     assert "https://control.ops.example.com/admin" in quick
     assert "password twice without placing it in shell history" in quick
     assert "click the red _Save DNS identity and queue update_ button" in quick
-    assert "The `dns-api` name refers to a container inside a PoP bundle" in quick
-    assert "never receives a separate enrollment file or bundle" in quick
     assert "EDGE_GATEWAY_ADDRESS_MAP" in quick
     assert "EDGE_ID=11111111-2222-3333-4444-555555555555" in quick
     assert "EDGE_BOOTSTRAP_TOKEN=the-one-time-token" in quick
     assert "No second bundle transfer" in quick
     assert "--profile edge up -d" in " ".join(quick.split())
-    assert "own local PostgreSQL" in reference
+    assert "local SQLite store" in reference
     assert "never uses the control-plane" in reference
     assert "docker compose down -v" in quick
 
@@ -997,7 +1003,7 @@ def test_control_monitoring_bundle_uses_project_pki_contract(store: FleetState, 
     env = env_values(bundle / ".env.prod")
     assert env["EDGE_IDENTITY_CA_CERTIFICATE"] == "./pki/edge-identity-ca.crt"
     assert env["EDGE_IDENTITY_CA_PRIVATE_KEY"] == "./pki/edge-identity-ca.key"
-    assert env["PDNS_CA_CERTIFICATE"] == "./pki/edge-server-ca.crt"
+    assert "PDNS_CA_CERTIFICATE" not in env, "the primary's API is plain HTTP on the private control network"
     assert env["EDGE_CONTROL_SERVER_CERTIFICATE"] == "./pki/node.crt"
     assert env["CLICKHOUSE_URL"] == "http://clickhouse:8123"
     assert env["LOKI_ENDPOINT"] == "http://loki:3100"
@@ -1060,7 +1066,7 @@ def test_real_edge_bundle_carries_runtime_security_configuration(store: FleetSta
     assert compose["services"]["cell-01"]["environment"]["EDGE_REQUIRE_MEMORY_TLS"] == "true"
     assert compose["services"]["edge-agent"]["environment"]["EDGE_STATE_ENCRYPTION_KEY_FILE"] == "/run/secrets/edge-state-encryption.key"
     assert not (bundle / "pki/node.key").exists()
-    assert env_values(bundle / ".env.prod")["DNS_API_SERVER_PRIVATE_KEY"] == "/dev/shm/cdnfoundry/node.key"
+    assert "DNS_API_SERVER_PRIVATE_KEY" not in env_values(bundle / ".env.prod")
     assert "MaxQPSIPRule" in (bundle / "docker/dnsdist/dnsdist.conf").read_text(encoding="utf-8")
     assert "security_edge_events" in (REPO_PATCH / "docker/vector/vector.yaml").read_text(encoding="utf-8")
     assert "CDNF_EDGE_RUNTIME_IMAGE" in env_values(bundle / ".env.prod")
@@ -1113,7 +1119,8 @@ def test_production_gateways_are_dual_homed_for_ingress_and_private_backends() -
     from cdnfoundry_fleet.compose import load_yaml
 
     compose = load_yaml(REPO_PATCH / "compose.prod.yml")
-    assert set(compose["services"]["dns-api"]["networks"]) == {"ingress", "dns-private"}
+    assert "dns-api" not in compose["services"], "the per-host DNS API gateway is gone"
+    assert set(compose["services"]["pdns-primary"]["networks"]) == {"ingress", "control", "dns-private"}
     assert set(compose["services"]["dnsdist"]["networks"]) == {"ingress", "dns-private"}
     assert set(compose["services"]["telemetry-gateway"]["networks"]) == {"ingress", "telemetry"}
     assert compose["networks"]["dns-private"]["internal"] is True
@@ -1342,7 +1349,7 @@ def test_edge_registration_command_uses_protected_token_file(source_repo: Path, 
     assert env["EDGE_RUNTIME_TLS_CERTIFICATE"] == "/dev/shm/cdnfoundry/edge-runtime.crt"
     assert env["EDGE_RUNTIME_TLS_PRIVATE_KEY"] == "/dev/shm/cdnfoundry/edge-runtime.key"
     assert env["EDGE_STATE_ENCRYPTION_KEY_FILE"] == "/dev/shm/cdnfoundry/edge-state-encryption.key"
-    assert env["DNS_API_SERVER_PRIVATE_KEY"] == "/dev/shm/cdnfoundry/node.key"
+    assert "DNS_API_SERVER_PRIVATE_KEY" not in env
     assert json.loads(env["EDGE_GATEWAY_ADDRESS_MAP"]) == {"192.0.2.173": "192.0.2.173"}
     validation = (output_dir / "edge-1/validate.sh").read_text(encoding="utf-8")
     assert "stat -f -c '%T'" in validation
