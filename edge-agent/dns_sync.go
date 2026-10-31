@@ -155,7 +155,7 @@ func (c *client) configureDNS() error {
 	if err != nil {
 		return err
 	}
-	catalogBody := map[string]any{"name": transfer.Catalog, "kind": "Consumer", "masters": []string{transfer.Primary}, "master_tsig_key_ids": []string{transfer.KeyName}}
+	catalogBody := map[string]any{"name": transfer.Catalog, "kind": "Consumer", "masters": []string{transfer.Primary}, "slave_tsig_key_ids": []string{transfer.KeyName}}
 	status, _, err = c.dnsAPI("GET", "/zones/"+zoneID(transfer.Catalog), nil)
 	if err != nil {
 		return err
@@ -163,7 +163,7 @@ func (c *client) configureDNS() error {
 	if status == http.StatusNotFound {
 		_, err = c.dnsAPIOK("POST", "/zones", catalogBody)
 	} else {
-		_, err = c.dnsAPIOK("PUT", "/zones/"+zoneID(transfer.Catalog), map[string]any{"masters": []string{transfer.Primary}, "master_tsig_key_ids": []string{transfer.KeyName}})
+		_, err = c.dnsAPIOK("PUT", "/zones/"+zoneID(transfer.Catalog), map[string]any{"masters": []string{transfer.Primary}, "slave_tsig_key_ids": []string{transfer.KeyName}})
 	}
 	if err != nil {
 		return err
@@ -174,7 +174,7 @@ func (c *client) configureDNS() error {
 
 type localZone struct {
 	Serial uint64   `json:"serial"`
-	Keys   []string `json:"master_tsig_key_ids"`
+	Keys   []string `json:"slave_tsig_key_ids"`
 	Kind   string   `json:"kind"`
 }
 
@@ -186,7 +186,7 @@ func (c *client) syncDNS() map[string]any {
 	c.loadDNSState()
 	report := map[string]any{"cursor": c.dns.Cursor}
 	fail := func(err error) map[string]any {
-		report["error"] = err.Error()
+		report["error"] = shortError(err)
 		return report
 	}
 	if err := c.configureDNS(); err != nil {
@@ -212,7 +212,7 @@ func (c *client) syncDNS() map[string]any {
 		for _, change := range changes.Data {
 			applied, err := c.pullZone(change)
 			if err != nil {
-				report["error"] = err.Error()
+				report["error"] = shortError(err)
 			}
 			if !applied {
 				pageUnapplied++
@@ -238,8 +238,20 @@ func (c *client) syncDNS() map[string]any {
 	// A zone that is not here yet appears when the catalog is processed; ask for that when something
 	// is waiting, and otherwise refresh it once a minute so deletions are noticed too.
 	if pending > 0 && len(unapplied) > 0 || time.Since(c.dns.catalogAt) >= dnsCatalogRefresh {
-		if _, err := c.dnsAPIOK("PUT", "/zones/"+zoneID(catalog)+"/axfr-retrieve", nil); err != nil {
-			report["error"] = err.Error()
+		status, _, err := c.dnsAPI("PUT", "/zones/"+zoneID(catalog)+"/axfr-retrieve", nil)
+		switch {
+		case err != nil:
+			report["error"] = shortError(err)
+		case status == http.StatusNotFound:
+			// The node lost its catalog, for example when its store was replaced. Configure it again
+			// on the next pass instead of waiting for the hourly refresh.
+			// Everything it pulled before is gone, so start from the beginning of the feed.
+			c.dns.configured, c.dns.configuredAt = "", time.Time{}
+			c.dns.Cursor = 0
+			c.saveDNSCursor()
+			report["error"] = "the node has no catalog zone; reconfiguring"
+		case status < 200 || status >= 300:
+			report["error"] = fmt.Sprintf("local DNS API catalog refresh returned %d", status)
 		}
 		c.dns.catalogAt = time.Now()
 	}
@@ -284,9 +296,10 @@ func (c *client) pullZone(change dnsChange) (bool, error) {
 	if err := json.Unmarshal(data, &zone); err != nil {
 		return false, err
 	}
-	// Zones created from the catalog carry no TSIG key; without it the primary refuses the transfer.
+	// Zones created from the catalog carry no key to sign their pulls with (PowerDNS calls it the
+	// "slave" key); without it the primary refuses the transfer.
 	if len(zone.Keys) == 0 {
-		if _, err := c.dnsAPIOK("PUT", "/zones/"+id, map[string]any{"master_tsig_key_ids": []string{c.dns.transfer.KeyName}}); err != nil {
+		if _, err := c.dnsAPIOK("PUT", "/zones/"+id, map[string]any{"slave_tsig_key_ids": []string{c.dns.transfer.KeyName}}); err != nil {
 			return false, err
 		}
 	}
@@ -313,4 +326,13 @@ func (c *client) unappliedFor(zone string) bool {
 		return true
 	}
 	return false
+}
+
+// shortError keeps an error within the length the heartbeat accepts.
+func shortError(err error) string {
+	message := err.Error()
+	if len(message) > 400 {
+		return message[:400]
+	}
+	return message
 }

@@ -37,7 +37,8 @@ class DnsPrimaryTransferTest extends TestCase
         Http::assertSent(fn (Request $r): bool => $r->method() === 'POST' && str_ends_with($r->url(), '/zones')
             && $r['name'] === PowerDnsClient::CATALOG_ZONE && $r['kind'] === 'Producer');
         Http::assertSent(fn (Request $r): bool => $r->method() === 'POST' && str_ends_with($r->url(), '/zones')
-            && $r['name'] === 'example.test.' && $r['kind'] === 'Master' && $r['catalog'] === PowerDnsClient::CATALOG_ZONE);
+            && $r['name'] === 'example.test.' && $r['kind'] === 'Master' && $r['catalog'] === PowerDnsClient::CATALOG_ZONE
+                && $r['soa_edit_api'] === 'INCREASE');
         foreach ([PowerDnsClient::CATALOG_ZONE, 'example.test.'] as $zone) {
             Http::assertSent(fn (Request $r): bool => $r->method() === 'POST' && str_ends_with($r->url(), rawurlencode($zone).'/metadata')
                 && $r['kind'] === 'TSIG-ALLOW-AXFR' && $r['metadata'] === [PowerDnsClient::TRANSFER_KEY]);
@@ -53,7 +54,7 @@ class DnsPrimaryTransferTest extends TestCase
 
         $client->activate($cluster, 'example.test', self::RRSETS, []);
         $first = DnsZoneChange::query()->where('zone', 'example.test')->firstOrFail();
-        $this->assertSame(2026110101, $first->serial);
+        $this->assertSame(2026110105, $first->serial, 'the serial PowerDNS holds, not the rendered one');
         $this->assertFalse($first->deleted);
 
         $client->activate($cluster, 'other.test', self::RRSETS, []);
@@ -63,6 +64,27 @@ class DnsPrimaryTransferTest extends TestCase
 
         $client->deleteZone($cluster, 'other.test');
         $this->assertTrue(DnsZoneChange::query()->where('zone', 'other.test')->value('deleted'));
+    }
+
+    public function test_a_transfer_key_with_another_secret_is_replaced_by_the_stored_one(): void
+    {
+        $cluster = $this->cluster();
+        $put = [];
+        Http::fake(function (Request $request) use (&$put) {
+            if ($request->method() === 'GET' && str_contains($request->url(), '/tsigkeys/')) {
+                return Http::response(['name' => PowerDnsClient::TRANSFER_KEY, 'key' => 'a-stale-secret']);
+            }
+            if ($request->method() === 'PUT') {
+                $put[] = $request->data();
+            }
+
+            return str_contains($request->url(), '/zones/') ? Http::response(['kind' => 'Producer']) : Http::response([], 200);
+        });
+
+        app(PowerDnsClient::class)->health($cluster);
+
+        $this->assertCount(1, $put);
+        $this->assertSame($cluster->transfer_tsig_secret, $put[0]['key']);
     }
 
     public function test_a_failed_activation_records_no_change(): void
@@ -118,7 +140,7 @@ class DnsPrimaryTransferTest extends TestCase
                 $zone = substr($path, strrpos($path, '/zones/') + 7);
 
                 return isset($created[$zone])
-                    ? Http::response(['kind' => 'Master', 'catalog' => PowerDnsClient::CATALOG_ZONE, 'rrsets' => self::RRSETS])
+                    ? Http::response(['kind' => 'Master', 'catalog' => PowerDnsClient::CATALOG_ZONE, 'rrsets' => self::RRSETS, 'serial' => 2026110105, 'soa_edit_api' => 'INCREASE'])
                     : Http::response([], 404);
             }
 

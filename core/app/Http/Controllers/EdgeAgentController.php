@@ -396,7 +396,7 @@ class EdgeAgentController extends Controller
         return response()->json(['data' => [
             'primary' => $primary->transfer_endpoint, 'catalog' => PowerDnsClient::CATALOG_ZONE,
             'key_name' => PowerDnsClient::TRANSFER_KEY, 'algorithm' => 'hmac-sha256',
-            'secret' => EdgeKeyEnvelope::seal($primary->transfer_tsig_secret, $edge->identity_certificate, $edge->id, 'dns-transfer-key'),
+            'secret' => EdgeKeyEnvelope::seal($primary->transferSecret(), $edge->identity_certificate, $edge->id, 'dns-transfer-key'),
         ]]);
     }
 

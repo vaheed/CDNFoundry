@@ -1,9 +1,6 @@
 <?php
 
 return [
-    'powerdns' => [
-        'ca_certificate' => env('PDNS_CA_CERTIFICATE'),
-    ],
     'clickhouse' => [
         'url' => env('CLICKHOUSE_URL', 'http://clickhouse:8123'),
         'database' => env('CLICKHOUSE_DATABASE', 'cdnf'),

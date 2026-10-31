@@ -118,7 +118,7 @@ func (n *fakeNode) handler() http.Handler {
 			if r.Method == "POST" {
 				name = body["name"].(string)
 				n.zones[name] = &fakeZone{Kind: body["kind"].(string)}
-				if keys, ok := body["master_tsig_key_ids"].([]any); ok {
+				if keys, ok := body["slave_tsig_key_ids"].([]any); ok {
 					for _, key := range keys {
 						n.zones[name].Keys = append(n.zones[name].Keys, key.(string))
 					}
@@ -133,7 +133,7 @@ func (n *fakeNode) handler() http.Handler {
 				return
 			}
 			if r.Method == "PUT" {
-				if keys, ok := body["master_tsig_key_ids"].([]any); ok {
+				if keys, ok := body["slave_tsig_key_ids"].([]any); ok {
 					zone.Keys = nil
 					for _, key := range keys {
 						zone.Keys = append(zone.Keys, key.(string))
@@ -142,7 +142,7 @@ func (n *fakeNode) handler() http.Handler {
 				_, _ = w.Write([]byte(`{}`))
 				return
 			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"serial": zone.Serial, "master_tsig_key_ids": zone.Keys, "kind": zone.Kind})
+			_ = json.NewEncoder(w).Encode(map[string]any{"serial": zone.Serial, "slave_tsig_key_ids": zone.Keys, "kind": zone.Kind})
 		default:
 			http.NotFound(w, r)
 		}
@@ -291,5 +291,30 @@ func TestAnUnreachableLocalServiceIsReportedNotFatal(t *testing.T) {
 	report := c.syncDNS()
 	if report["error"] == nil || report["cursor"] != uint64(0) {
 		t.Fatalf("the failure must be reported in the heartbeat: %v", report)
+	}
+}
+
+func TestANodeThatLosesItsCatalogIsConfiguredAgain(t *testing.T) {
+	changes := []dnsChange{{Sequence: 1, Zone: "a.test", Serial: 7}}
+	c, node := dnsTestClient(t, &changes)
+	node.primary = map[string]uint64{"a.test.": 7}
+	for i := 0; i < 3; i++ {
+		c.syncDNS()
+	}
+	if c.dns.Cursor != 1 {
+		t.Fatalf("the node must have converged first, cursor %d", c.dns.Cursor)
+	}
+
+	// The node's store is replaced: no key, no catalog, no zones.
+	node.tsig, node.zones = map[string]string{}, map[string]*fakeZone{}
+	c.dns.catalogAt = time.Time{}
+	for i := 0; i < 4; i++ {
+		c.syncDNS()
+	}
+	if node.tsig["cdnf-nodes"] == "" || node.zones["catalog.cdnfoundry.invalid."] == nil {
+		t.Fatalf("a node that lost its catalog must be configured again: %+v %v", node.zones, node.tsig)
+	}
+	if c.dns.Cursor != 1 {
+		t.Fatalf("and must pull its zones again, cursor %d", c.dns.Cursor)
 	}
 }

@@ -117,7 +117,7 @@ class DnsReconciliationTest extends TestCase
         ]);
         $domain->update(['revision' => 2]);
         Http::fake(fn (Request $request) => $request->method() === 'GET'
-            ? Http::response(['rrsets' => $previous, 'kind' => 'Master', 'catalog' => PowerDnsClient::CATALOG_ZONE]) : Http::response([], 204));
+            ? Http::response(['rrsets' => $previous, 'kind' => 'Master', 'catalog' => PowerDnsClient::CATALOG_ZONE, 'soa_edit_api' => 'INCREASE']) : Http::response([], 204));
 
         try {
             (new ReconcileDnsZone($domain->id))->handle(app(PowerDnsClient::class));
@@ -250,16 +250,6 @@ class DnsReconciliationTest extends TestCase
         $this->assertNotNull(DnsDeployment::query()->where('domain_id', $healthy->id)->value('verified_at'));
         $this->assertDatabaseHas('audit_logs', ['action' => 'dns.drift_repair_queued', 'subject_id' => (string) $missing->id]);
         $this->assertDatabaseCount('operations', 3);
-    }
-
-    public function test_powerdns_client_uses_the_configured_private_ca(): void
-    {
-        config()->set('services.powerdns.ca_certificate', '/run/secrets/pdns-api-ca.crt');
-        $cluster = DnsCluster::query()->create($this->clusterData());
-        $method = new \ReflectionMethod(PowerDnsClient::class, 'request');
-        $request = $method->invoke(app(PowerDnsClient::class), $cluster);
-
-        $this->assertSame('/run/secrets/pdns-api-ca.crt', $request->getOptions()['verify']);
     }
 
     public function test_manual_reconcile_is_coalesced_to_one_pending_operation(): void

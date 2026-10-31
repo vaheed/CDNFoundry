@@ -17,6 +17,16 @@ class DnsCluster extends Model
         });
     }
 
+    /** The transfer secret, generated on first use for a cluster created before transfers existed. */
+    public function transferSecret(): string
+    {
+        if (blank($this->transfer_tsig_secret)) {
+            $this->forceFill(['transfer_tsig_secret' => base64_encode(random_bytes(32))])->save();
+        }
+
+        return $this->transfer_tsig_secret;
+    }
+
     public function apiTarget(): string
     {
         $parts = parse_url($this->api_url);

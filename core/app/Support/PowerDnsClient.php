@@ -13,12 +13,21 @@ class PowerDnsClient
     /** The catalog zone every served zone is a member of. DNS nodes consume it to learn the zone list. */
     public const CATALOG_ZONE = 'catalog.cdnfoundry.invalid.';
 
+    /**
+     * Each write the primary stores the rendered serial plus one. The rendered serial is the domain's
+     * revision, which only grows, so every change raises the serial a node compares before it pulls.
+     * PowerDNS's default instead keeps a date-based serial that a same-day change does not raise.
+     */
+    public const SOA_EDIT = 'INCREASE';
+
     /** The TSIG key that signs zone transfers; every node holds the same secret. */
     public const TRANSFER_KEY = 'cdnf-nodes';
 
     public function health(DnsCluster $cluster): void
     {
         $this->request($cluster)->get('/api/v1/servers/'.$cluster->server_id)->throw();
+        // Testing the connection also prepares the primary for transfers, and repairs it if it drifted.
+        $this->ensureTransferSetup($cluster);
     }
 
     /** @param list<array{name:string,type:string,ttl:int,records:list<array{content:string,disabled:bool}>}> $rrsets */
@@ -35,13 +44,14 @@ class PowerDnsClient
             // and pull it, signed with the transfer key.
             $request->post("/api/v1/servers/{$cluster->server_id}/zones", [
                 'name' => $zone.'.', 'kind' => 'Master', 'masters' => [], 'nameservers' => $nameservers, 'catalog' => self::CATALOG_ZONE,
+                'soa_edit_api' => self::SOA_EDIT,
             ])->throw();
             $this->allowTransfer($cluster, $zone.'.');
         } else {
             $exists->throw();
-            if ($exists->json('kind') !== 'Master' || $exists->json('catalog') !== self::CATALOG_ZONE) {
+            if ($exists->json('kind') !== 'Master' || $exists->json('catalog') !== self::CATALOG_ZONE || $exists->json('soa_edit_api') !== self::SOA_EDIT) {
                 $this->ensureTransferSetup($cluster);
-                $request->put("/api/v1/servers/{$cluster->server_id}/zones/$zoneId", ['kind' => 'Master', 'catalog' => self::CATALOG_ZONE])->throw();
+                $request->put("/api/v1/servers/{$cluster->server_id}/zones/$zoneId", ['kind' => 'Master', 'catalog' => self::CATALOG_ZONE, 'soa_edit_api' => self::SOA_EDIT])->throw();
                 $this->allowTransfer($cluster, $zone.'.');
             }
         }
@@ -56,7 +66,8 @@ class PowerDnsClient
             'rrsets' => $deletes->concat($replacements)->values()->all(),
         ])->throw();
 
-        $actual = $request->get("/api/v1/servers/{$cluster->server_id}/zones/$zoneId")->throw()->json('rrsets');
+        $readBack = $request->get("/api/v1/servers/{$cluster->server_id}/zones/$zoneId")->throw();
+        $actual = $readBack->json('rrsets');
         if (! is_array($actual) || ! self::sameRrsets($rrsets, $actual, $deletes->all())) {
             try {
                 if ($created) {
@@ -80,7 +91,9 @@ class PowerDnsClient
             }
             throw new RuntimeException('PowerDNS read-back did not match the desired RRsets; prior state verified after rollback.');
         }
-        DnsZoneChange::record($zone, self::serialOf($rrsets));
+        // PowerDNS may rewrite the SOA serial (SOA-EDIT-API), and a node compares what it serves with
+        // the serial the primary really holds, so record that one.
+        DnsZoneChange::record($zone, (int) ($readBack->json('serial') ?: self::serialOf($rrsets)));
     }
 
     /**
@@ -93,10 +106,17 @@ class PowerDnsClient
         $key = $request->get("/api/v1/servers/{$cluster->server_id}/tsigkeys/".self::TRANSFER_KEY);
         if ($key->status() === 404) {
             $request->post("/api/v1/servers/{$cluster->server_id}/tsigkeys", [
-                'name' => self::TRANSFER_KEY, 'algorithm' => 'hmac-sha256', 'key' => $cluster->transfer_tsig_secret,
+                'name' => self::TRANSFER_KEY, 'algorithm' => 'hmac-sha256', 'key' => $cluster->transferSecret(),
             ])->throw();
         } else {
             $key->throw();
+            // A key that exists with another secret (created before the secret was recorded) would
+            // make every node's transfer fail; the stored secret is the truth.
+            if ($key->json('key') !== $cluster->transferSecret()) {
+                $request->put("/api/v1/servers/{$cluster->server_id}/tsigkeys/".self::TRANSFER_KEY, [
+                    'name' => self::TRANSFER_KEY, 'algorithm' => 'hmac-sha256', 'key' => $cluster->transferSecret(),
+                ])->throw();
+            }
         }
         $catalog = $request->get("/api/v1/servers/{$cluster->server_id}/zones/".rawurlencode(self::CATALOG_ZONE));
         if ($catalog->status() === 404) {
@@ -221,13 +241,9 @@ class PowerDnsClient
 
     private function request(DnsCluster $cluster): PendingRequest
     {
-        $request = Http::baseUrl(rtrim($cluster->api_url, '/'))
+        // The primary's API is reachable only on the private control network.
+        return Http::baseUrl(rtrim($cluster->api_url, '/'))
             ->withHeader('X-API-Key', $cluster->api_key)->acceptJson()->asJson()
             ->connectTimeout(2)->timeout(10)->retry(2, 100, throw: false);
-        $caCertificate = config('services.powerdns.ca_certificate');
-
-        return is_string($caCertificate) && $caCertificate !== ''
-            ? $request->withOptions(['verify' => $caCertificate])
-            : $request;
     }
 }
