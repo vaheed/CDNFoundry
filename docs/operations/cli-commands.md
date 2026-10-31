@@ -75,6 +75,7 @@ docker compose --env-file .env.prod -f compose.prod.yml exec core php artisan cd
 | --- | --- | --- |
 | `cdnf:dns:deprovision-due` | Dispatches at most 1,000 due DNS-zone deprovision jobs in chunks of 100. It does not wait for PowerDNS changes. | Every minute |
 | `cdnf:dns:repair-drift` | Checks up to `--limit` (default 100, at most 1,000) DNS deployments, oldest check first. It compares the zone each DNS target serves with the deployed record sets, and the deployed record sets with the current desired state, and queues one coalesced reconcile for every difference or failed deployment. An unreachable target is not drift. | Every 5 minutes |
+| `cdnf:analytics:publish-zones` | Publishes the served zones (name and domain id of every active or pending-verification domain) to ClickHouse as one snapshot, so DNS telemetry rolls up by zone. It writes only when the list changed, and at least every 12 hours; `--force` writes anyway. It does nothing when `CLICKHOUSE_ZONES_PASSWORD` is unset. | Every minute |
 | `cdnf:domains:expire-claims` | Retires at most 500 unverified claims older than seven days; runtime deletion remains asynchronous. | Every minute |
 | `cdnf:domains:finalize-deprovisioning {--limit=100}` | Dispatches finalization for due retired domains after runtime tombstones are safe. The effective limit is clamped to 1–1,000. | Every minute |
 
@@ -139,6 +140,7 @@ or internal non-command work, which is intentionally not renamed here.
 | --- | --- | --- |
 | `cdnf:dns:deprovision-due` | Every minute | Queue due DNS removals |
 | `cdnf:dns:repair-drift` | Every 5 minutes | Repair DNS zones that differ from desired state |
+| `cdnf:analytics:publish-zones` | Every minute | Keep the served-zone list that DNS rollups use current |
 | `cdnf:domains:expire-claims` | Every minute | Deprovision at most 500 expired unverified claims; preserve verified ownership. |
 | `cdnf:domains:finalize-deprovisioning` | Every minute | Finalize safe domain retirement |
 | `cdnf:edge:complete-placement-drains` | Every minute | Complete ready placement drains |

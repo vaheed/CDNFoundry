@@ -169,6 +169,7 @@ grafana_admin_password=$(random_secret)
 grafana_clickhouse_password=$(random_secret)
 clickhouse_password=$(random_secret)
 clickhouse_reader_password=$(random_secret)
+clickhouse_zones_password=$(random_secret)
 grafana_postgres_password=$(random_secret)
 
 umask 077
@@ -195,6 +196,7 @@ awk -v app_key="$app_key" \
     -v clickhouse_password="$clickhouse_password" \
     -v clickhouse_ingest_password="$clickhouse_ingest_password" \
     -v clickhouse_reader_password="$clickhouse_reader_password" \
+    -v clickhouse_zones_password="$clickhouse_zones_password" \
     -v clickhouse_url="$clickhouse_url" \
     -v grafana_admin_password="$grafana_admin_password" \
     -v grafana_clickhouse_password="$grafana_clickhouse_password" \
@@ -229,7 +231,7 @@ awk -v app_key="$app_key" \
       values["ACME_CONTACT_EMAIL"]=acme_email
       values["PDNS_DB_PASSWORD"]=pdns_db_password; values["PDNS_API_KEY"]=pdns_api_key
       values["DNS_BIND_V4"]=dns_bind_v4; values["CLICKHOUSE_PASSWORD"]=clickhouse_password
-      values["CLICKHOUSE_INGEST_PASSWORD"]=clickhouse_ingest_password; values["CLICKHOUSE_READER_PASSWORD"]=clickhouse_reader_password
+      values["CLICKHOUSE_INGEST_PASSWORD"]=clickhouse_ingest_password; values["CLICKHOUSE_READER_PASSWORD"]=clickhouse_reader_password; values["CLICKHOUSE_ZONES_PASSWORD"]=clickhouse_zones_password
       values["CLICKHOUSE_URL"]=clickhouse_url
       values["GRAFANA_ADMIN_PASSWORD"]=grafana_admin_password
       values["GRAFANA_CLICKHOUSE_PASSWORD"]=grafana_clickhouse_password

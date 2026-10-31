@@ -200,6 +200,9 @@ def qualify_ingestion_and_queries(domain_id: int, user: str, stranger: str, admi
     # DNS analytics only show queries logged after the domain record was created, so
     # the synthetic history needs a domain that already existed.
     artisan(f"App\\Models\\Domain::whereKey({domain_id})->update(['created_at' => now()->subDays(3)]);")
+    # DNS rollups are keyed by served zone, so the new zone must be published and loaded first.
+    compose("exec", "-T", "core", "php", "artisan", "cdnf:analytics:publish-zones", "--force")
+    clickhouse("SYSTEM RELOAD DICTIONARY cdnf.served_zone_dictionary")
     runtime_path = f"/runtime-{RUN_ID}"
 
     def produce_runtime_event() -> None:

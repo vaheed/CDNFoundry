@@ -244,6 +244,7 @@ class Renderer:
             "CLICKHOUSE_PASSWORD": self._secret("clickhouse-password"),
             "CLICKHOUSE_INGEST_PASSWORD": self._secret("clickhouse-ingest-password"),
             "CLICKHOUSE_READER_PASSWORD": self._secret("clickhouse-reader-password"),
+            "CLICKHOUSE_ZONES_PASSWORD": self._secret("clickhouse-zones-password"),
             "CLICKHOUSE_URL": self._clickhouse_url(state, node),
             "GRAFANA_ADMIN_PASSWORD": self._secret("grafana-admin-password"),
             "GRAFANA_CLICKHOUSE_PASSWORD": self._secret("grafana-clickhouse-password"),

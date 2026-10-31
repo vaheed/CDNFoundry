@@ -123,6 +123,7 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `CLICKHOUSE_INGEST_PASSWORD` | telemetry/edge/DNS | Password of `cdnf_ingest`, the insert-only account Vector uses. It can insert into `edge_events` and `dns_events` and nothing else |
 | `CLICKHOUSE_USER` | internal | Account Laravel and Vector log in as. Compose fixes `cdnf_reader` for Laravel and `cdnf_ingest` for Vector |
 | `CLICKHOUSE_READER_PASSWORD` | control query | Password of `cdnf_reader`, the read-only account Laravel uses, with server-side limits on time, rows, and memory |
+| `CLICKHOUSE_ZONES_PASSWORD` | telemetry/control | Password of `cdnf_zones`, the account Laravel publishes the served-zone list with. It can insert into `served_zones` and nothing else; with it unset, no zones are published and DNS rollups use one unattributed bucket |
 | `CLICKHOUSE_URL` | telemetry/control query | Local `http://clickhouse:8123` or verified external endpoint |
 | `CLICKHOUSE_DATABASE` | internal/default | Database queried by Laravel; Compose fixes `cdnf` |
 | `GEOIP_DATABASE` | edge runtime | MMDB file path; Compose fixes `/mmdb/GeoLite2-City.mmdb` |
@@ -185,9 +186,11 @@ whose default is `/mmdb`.
 A new volume gets the accounts and the rollup views from the shipped schema. An
 existing volume needs two steps, both run once as the `cdnf` administrator:
 
-1. Restart ClickHouse with `CLICKHOUSE_INGEST_PASSWORD` and
-   `CLICKHOUSE_READER_PASSWORD` set and `docker/clickhouse/users.d/telemetry.xml`
-   mounted, as in `compose.prod.yml`. This creates `cdnf_ingest` and `cdnf_reader`.
+1. Restart ClickHouse with `CLICKHOUSE_INGEST_PASSWORD`,
+   `CLICKHOUSE_READER_PASSWORD`, and `CLICKHOUSE_ZONES_PASSWORD` set and
+   `docker/clickhouse/users.d/telemetry.xml` mounted, as in `compose.prod.yml`.
+   This creates `cdnf_ingest`, `cdnf_reader`, `cdnf_zones`, and the internal
+   dictionary account.
 2. Run `docker/clickhouse/migrations/2026_10_30_materialized_view_definer.sql`.
    Until then the insert-only account cannot update the hourly and daily rollup
    views, and Vector logs `Not enough privileges` and keeps events in its disk

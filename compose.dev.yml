@@ -33,6 +33,7 @@ x-core-env: &core-env
   CLICKHOUSE_DATABASE: cdnf
   CLICKHOUSE_USER: cdnf_reader
   CLICKHOUSE_PASSWORD: cdnf-reader-dev-only
+  CLICKHOUSE_ZONES_PASSWORD: cdnf-zones-dev-only
   PROMETHEUS_URL: http://prometheus:9090
   METRICS_TOKEN_FILE: /run/dev-metrics/metrics-token
   RESTIC_REPOSITORY: /app/storage/app/restic
@@ -343,6 +344,7 @@ services:
       GRAFANA_CLICKHOUSE_PASSWORD: cdnf-grafana-dev-only
       CLICKHOUSE_INGEST_PASSWORD: cdnf-ingest-dev-only
       CLICKHOUSE_READER_PASSWORD: cdnf-reader-dev-only
+      CLICKHOUSE_ZONES_PASSWORD: cdnf-zones-dev-only
     volumes:
       - clickhouse:/var/lib/clickhouse
       - ./docker/clickhouse/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro

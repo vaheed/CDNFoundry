@@ -101,6 +101,22 @@ TTL and daily aggregates a three-year TTL in the shipped schema. Platform
 retention settings describe the policy and reporting surface; changing them
 does not rewrite the static ClickHouse DDL by itself.
 
+## DNS rollups are keyed by zone, not by name
+
+The long-lived DNS rollups (400 days hourly, three years daily) are keyed by the
+**served zone and its domain**, never by the name that was asked. Laravel
+publishes the list of served zones to ClickHouse every minute when it changes
+(and at least every twelve hours), and ClickHouse matches each query name to the
+longest served zone that is a suffix of it. A random-subdomain flood against a
+zone therefore adds no rows. Queries for names inside no served zone, such as
+`REFUSED` queries for someone else's domain, share one unattributed bucket. A
+zone added in the last minute or two may fall into that bucket until the next
+refresh.
+
+To keep what is being asked visible without keeping every name, each hour and
+zone also stores a bounded sketch of its 20 busiest names (`dns_top_names`).
+Raw events, with the full name and a masked client address, stay for seven days.
+
 ## Usage rollups
 
 The scheduler finalizes the most recently complete hour after the configured

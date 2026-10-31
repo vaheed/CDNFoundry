@@ -6,6 +6,9 @@ return [
         'database' => env('CLICKHOUSE_DATABASE', 'cdnf'),
         'username' => env('CLICKHOUSE_USER', 'cdnf'),
         'password' => env('CLICKHOUSE_PASSWORD', ''),
+        // The account that publishes the served-zone list; it can insert into one table.
+        'zones_username' => 'cdnf_zones',
+        'zones_password' => env('CLICKHOUSE_ZONES_PASSWORD', ''),
         'connect_timeout' => 1.0,
         'timeout' => 4.0,
         'max_execution_time' => 3,

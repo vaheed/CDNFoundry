@@ -48,6 +48,7 @@ GLOBAL_SECRET_NAMES = {
     "clickhouse-password",
     "clickhouse-ingest-password",
     "clickhouse-reader-password",
+    "clickhouse-zones-password",
     "metrics-token",
     "telemetry-token",
     "backup-password",
