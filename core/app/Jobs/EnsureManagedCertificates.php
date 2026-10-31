@@ -22,7 +22,7 @@ class EnsureManagedCertificates implements ShouldBeUnique, ShouldQueue
 
     public function __construct(public int $domainId, public bool $force = false)
     {
-        $this->onQueue('certificate_purge');
+        $this->onQueue('tls');
     }
 
     public function handle(): void

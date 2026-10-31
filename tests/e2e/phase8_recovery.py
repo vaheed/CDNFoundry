@@ -213,7 +213,7 @@ def main() -> None:
             "-e", "CACHE_STORE=redis", "-e", "QUEUE_CONNECTION=redis",
             "core", "php", "artisan", "tinker", f"--execute={expression}", timeout=180,
         )
-        reconstructed_jobs = queue_length("*queues:bulk_maintenance")
+        reconstructed_jobs = queue_length("*queues:bulk_maintenance") + queue_length("*queues:purge")
         if reconstructed_jobs != 5:
             raise AssertionError(f"replacement queue contains {reconstructed_jobs} global jobs, expected 5")
         compose(
@@ -221,12 +221,12 @@ def main() -> None:
             "-e", "DB_DATABASE=cdnf_restore", "-e", "DB_USERNAME=cdnf_restore",
             "-e", "DB_PASSWORD=phase8-restore-only", "-e", f"REDIS_HOST={QUEUE}",
             "-e", "CACHE_STORE=redis", "-e", "QUEUE_CONNECTION=redis",
-            "core", "php", "artisan", "queue:work", "redis", "--queue=bulk_maintenance",
+            "core", "php", "artisan", "queue:work", "redis", "--queue=bulk_maintenance,purge",
             "--stop-when-empty", "--tries=1", "--timeout=180", timeout=600,
         )
-        if queue_length("*queues:bulk_maintenance") != 0:
+        if queue_length("*queues:bulk_maintenance") + queue_length("*queues:purge") != 0:
             raise AssertionError("replacement global reconciliation queue did not drain")
-        reconstructed_runtime_jobs = queue_length("*queues:runtime") + queue_length("*queues:certificate_purge")
+        reconstructed_runtime_jobs = sum(queue_length(f"*queues:{lane}") for lane in ("dns", "edge", "verification", "tls"))
         if reconstructed_runtime_jobs == 0:
             raise AssertionError("global reconciliation reconstructed no bounded runtime work")
         reconciliations_succeeded = int(psql(

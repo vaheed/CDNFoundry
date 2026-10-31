@@ -37,7 +37,7 @@ class IssueManagedCertificate implements ShouldBeUnique, ShouldQueue
 
     public function __construct(public string $orderId)
     {
-        $this->onQueue('certificate_purge');
+        $this->onQueue('tls');
     }
 
     public function uniqueId(): string

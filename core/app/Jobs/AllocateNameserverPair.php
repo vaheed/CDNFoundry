@@ -32,7 +32,7 @@ class AllocateNameserverPair implements ShouldBeUnique, ShouldQueue
 
     public function __construct(public int $domainId)
     {
-        $this->onQueue('runtime');
+        $this->onQueue('verification');
     }
 
     /** @return list<int> */

@@ -66,8 +66,9 @@ ClickHouse is unavailable.
 ## Coalescing and lanes
 
 Repeated work for the same domain or global scope is coalesced. Horizon isolates
-`interactive`, `runtime`, `certificate_purge`, and `bulk_maintenance` queues so
-large imports and global reconciliation do not consume every worker.
+`interactive`, `dns`, `edge`, `verification`, `tls`, `purge`, and
+`bulk_maintenance` queues, each with its own worker bound, so a slow DNS host,
+a nameserver check, or a large import cannot stall edge deployment.
 
 The transaction never waits on an external network. The desired row, monotonic
 revision, audit entry, and operation boundary are committed first. Queue locks

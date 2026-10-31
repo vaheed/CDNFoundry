@@ -25,7 +25,7 @@ class VerifyDomainNameservers implements ShouldBeUnique, ShouldQueue
 
     public function __construct(public int $domainId)
     {
-        $this->onQueue('runtime');
+        $this->onQueue('verification');
     }
 
     public function handle(NameserverResolver $resolver, ?DomainNameserverVerification $verification = null): void

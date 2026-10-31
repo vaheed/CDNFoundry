@@ -33,7 +33,7 @@ class ReconcileDnsZone implements ShouldBeUniqueUntilProcessing, ShouldQueue
 
     public function __construct(public int $domainId)
     {
-        $this->onQueue('runtime');
+        $this->onQueue('dns');
     }
 
     /** @return list<int> */

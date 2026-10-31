@@ -29,7 +29,7 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
 
     public function __construct(public ?string $operationId = null)
     {
-        $this->onQueue('runtime');
+        $this->onQueue('dns');
     }
 
     public function handle(PowerDnsClient $client): void

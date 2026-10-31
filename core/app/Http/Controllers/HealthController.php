@@ -14,7 +14,7 @@ use Throwable;
 
 class HealthController extends Controller
 {
-    private const QUEUES = ['interactive', 'runtime', 'certificate_purge', 'bulk_maintenance'];
+    private const QUEUES = ['interactive', 'dns', 'edge', 'verification', 'tls', 'purge', 'bulk_maintenance'];
 
     public function health(Request $request): JsonResponse|RedirectResponse
     {

@@ -9,6 +9,7 @@ use App\Models\Edge;
 use App\Models\SystemSetting;
 use App\Models\User;
 use App\Support\GrafanaExploreUrl;
+use App\Support\SystemHealth;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Redis;
@@ -63,16 +64,17 @@ class FilamentPanelAccessTest extends TestCase
     public function test_dashboard_queue_lanes_include_ready_reserved_delayed_and_total_work(): void
     {
         $redis = Mockery::mock();
-        $redis->shouldReceive('llen')->times(4)->andReturnUsing(
+        $lanes = count(SystemHealth::QUEUES);
+        $redis->shouldReceive('llen')->times($lanes)->andReturnUsing(
             fn (string $key): int => $key === 'queues:interactive' ? 2 : 0,
         );
-        $redis->shouldReceive('zcard')->times(8)->andReturnUsing(
+        $redis->shouldReceive('zcard')->times($lanes * 2)->andReturnUsing(
             fn (string $key): int => $key === 'queues:interactive:reserved' || $key === 'queues:interactive:delayed' ? 1 : 0,
         );
         $redis->shouldReceive('lindex')->once()->with('queues:interactive', 0)->andReturn(json_encode([
             'pushedAt' => now()->subSeconds(20)->timestamp,
         ], JSON_THROW_ON_ERROR));
-        Redis::shouldReceive('connection')->times(4)->andReturn($redis);
+        Redis::shouldReceive('connection')->times($lanes)->andReturn($redis);
 
         $lanes = (new AdminDashboard)->getQueueStateProperty();
         $interactive = collect($lanes)->firstWhere('key', 'interactive');

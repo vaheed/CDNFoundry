@@ -38,8 +38,11 @@ Platform settings may make a limit stricter within the documented bound.
 | Lane | Production processes | Worker memory | Tries | Timeout |
 | --- | --- | --- | --- | --- |
 | `interactive` | 4 | 128 MiB | 1 | 60 s |
-| `runtime` | 3 | 128 MiB | 3 | 120 s |
-| `certificate_purge` | 2 | 128 MiB | 3 | 120 s |
+| `dns` | 2 | 128 MiB | 3 | 120 s |
+| `edge` | 3 | 128 MiB | 3 | 120 s |
+| `verification` | 2 | 128 MiB | 3 | 120 s |
+| `tls` | 2 | 128 MiB | 3 | 120 s |
+| `purge` | 1 | 128 MiB | 3 | 120 s |
 | `bulk_maintenance` | 1 | 192 MiB | 2 | 300 s |
 
 Health marks a queue degraded above depth 1,000 or oldest age 900 seconds.

@@ -24,7 +24,7 @@ class DispatchOriginTest implements ShouldQueue
 
     public function __construct(public string $operationId)
     {
-        $this->onQueue('runtime');
+        $this->onQueue('edge');
     }
 
     public function handle(): void

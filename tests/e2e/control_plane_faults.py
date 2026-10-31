@@ -78,7 +78,7 @@ Illuminate\\Support\\Facades\\Cache::forget('e2e:long-job');
 dispatch(function () {
     Illuminate\\Support\\Facades\\Cache::increment('e2e:long-job');
     sleep(100);
-})->onQueue('runtime');
+})->onQueue('edge');
 echo "queued\\n";
 """
 

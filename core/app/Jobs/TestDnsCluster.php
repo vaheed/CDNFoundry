@@ -17,7 +17,7 @@ class TestDnsCluster implements ShouldQueue
 
     public function __construct(public string $operationId)
     {
-        $this->onQueue('runtime');
+        $this->onQueue('dns');
     }
 
     public function handle(PowerDnsClient $client): void

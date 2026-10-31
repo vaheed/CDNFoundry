@@ -37,7 +37,18 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
 
     public function __construct(public int $domainId)
     {
-        $this->onQueue('runtime');
+        $this->onQueue('edge');
+    }
+
+    /**
+     * Lists that are sets must not depend on row or settings order, or the
+     * checksum changes without a change in meaning.
+     *
+     * @return list<string>
+     */
+    private static function sortedSet(mixed $values): array
+    {
+        return collect(is_array($values) ? $values : [])->map(fn ($value) => (string) $value)->unique()->sort(SORT_STRING)->values()->all();
     }
 
     public function uniqueId(): string

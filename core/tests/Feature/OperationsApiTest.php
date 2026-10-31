@@ -69,7 +69,7 @@ class OperationsApiTest extends TestCase
         foreach (['queue_workers', 'mmdb', 'edge_listeners', 'edge_cells', 'service_pools', 'edge_configuration', 'edge_placements', 'edge_capacity', 'emergency_modes', 'dns_deployments', 'purges'] as $component) {
             $this->assertContains($response->json("data.components.{$component}.status"), ['healthy', 'degraded', 'unavailable']);
         }
-        $this->assertSame(['interactive', 'runtime', 'certificate_purge', 'bulk_maintenance'], array_keys($response->json('data.queues')));
+        $this->assertSame(['interactive', 'dns', 'edge', 'verification', 'tls', 'purge', 'bulk_maintenance'], array_keys($response->json('data.queues')));
     }
 
     public function test_component_health_detects_runtime_drift_pressure_and_stale_mmdb(): void
@@ -134,7 +134,7 @@ class OperationsApiTest extends TestCase
     {
         $admin = User::factory()->admin()->create();
         DB::table('failed_jobs')->insert([
-            'uuid' => (string) Str::uuid(), 'connection' => 'redis', 'queue' => 'runtime',
+            'uuid' => (string) Str::uuid(), 'connection' => 'redis', 'queue' => 'edge',
             'payload' => json_encode(['displayName' => 'App\\Jobs\\Example', 'data' => ['command' => 'sensitive serialized body']], JSON_THROW_ON_ERROR),
             'exception' => "RuntimeException: safe summary\nstack with internals", 'failed_at' => now(),
         ]);
