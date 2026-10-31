@@ -66,10 +66,7 @@ func (c *client) syncOriginPolicy() (bool, error) {
 	if response.Unchanged && response.Checksum == c.originPolicyChecksum && c.originPolicyChecksum != "" {
 		return false, nil
 	}
-	payload, err := verify(response.Encoded, response.Checksum, response.Signature, c.id.PublicKey)
-	if err == nil {
-		err = verifyDelivery(originPolicyScope, response.Checksum, 0, response.ExpiresAt, response.DeliverySignature, c.id.PublicKey)
-	}
+	payload, err := c.verifySigned(response.Encoded, response.Checksum, response.Signature, originPolicyScope, 0, response.ExpiresAt, response.DeliverySignature)
 	var policy originPolicy
 	if err == nil {
 		err = json.Unmarshal(payload, &policy)

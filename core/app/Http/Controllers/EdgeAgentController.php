@@ -376,7 +376,7 @@ class EdgeAgentController extends Controller
         $cursor = max(0, (int) $request->query('cursor', 0));
         $rows = $edge->artifacts()->where('sequence', '>', $cursor)->orderBy('sequence')->limit(500)->get(['sequence', 'kind', 'domain_id', 'revision', 'checksum', 'signature', 'schema_version', 'minimum_agent_version', 'maximum_agent_version']);
 
-        return response()->json(['data' => $rows, 'cursor' => $rows->last()?->sequence ?? $cursor, 'has_more' => $rows->count() === 500]);
+        return response()->json(['data' => $rows, 'cursor' => $rows->last()?->sequence ?? $cursor, 'has_more' => $rows->count() === 500, 'key_rotation' => ArtifactSigner::rotation()]);
     }
 
     public function artifact(Request $request, string $checksum): JsonResponse

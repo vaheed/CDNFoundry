@@ -101,12 +101,9 @@ func (c *client) prepareArtifact(item manifestItem, cursor uint64) (preparedArti
 		}
 		return preparedArtifact{}, nil, err
 	}
-	payload, err := verify(artifact.Encoded, item.Checksum, item.Signature, c.id.PublicKey)
+	payload, err := c.verifySigned(artifact.Encoded, item.Checksum, item.Signature, deliveryScope(item.Kind, *item.DomainID, item.Revision), item.Sequence, artifact.ExpiresAt, artifact.DeliverySignature)
 	if err == nil && artifact.Data.Sequence != item.Sequence {
 		err = errors.New("artifact sequence mismatch")
-	}
-	if err == nil {
-		err = verifyDelivery(deliveryScope(item.Kind, *item.DomainID, item.Revision), item.Checksum, item.Sequence, artifact.ExpiresAt, artifact.DeliverySignature, c.id.PublicKey)
 	}
 	if err != nil {
 		return reject(reasonSignatureOrChecksum, err.Error())

@@ -284,6 +284,7 @@ export default defineConfig({
             { text: 'Anycast qualification', link: '/operations/simple-anycast-qualification' },
             { text: 'Fleet rollouts', link: '/operations/fleet-rollouts' },
             { text: 'Runtime generations', link: '/operations/runtime-generations' },
+            { text: 'Signing-key rotation', link: '/operations/signing-key-rotation' },
             { text: 'Software supply chain', link: '/operations/software-supply-chain' },
             { text: 'Backup and recovery', link: '/operations/backup-and-recovery' },
             { text: 'Incident runbooks', link: '/operations/runbooks' },

@@ -40,9 +40,29 @@ final class ArtifactSigner
         return json_encode(self::sort($payload), JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     }
 
-    private static function keyPair(): string
+    /**
+     * During a rotation, the next signing key and an endorsement of it signed by the current key.
+     * An agent that trusts the current key learns the next one from this before it is used, which
+     * is the overlap window; null outside a rotation.
+     *
+     * @return array{public_key: string, endorsement: string}|null
+     */
+    public static function rotation(): ?array
     {
-        $configured = (string) config('edge.artifact_signing_key');
+        $next = (string) config('edge.artifact_signing_next_key');
+        if ($next === '') {
+            return null;
+        }
+        $public = sodium_bin2hex(sodium_crypto_sign_publickey(self::keyPair($next)));
+
+        return ['public_key' => $public, 'endorsement' => self::sign(self::ROTATION_PREFIX.$public)];
+    }
+
+    public const ROTATION_PREFIX = 'rotate|';
+
+    private static function keyPair(?string $seed = null): string
+    {
+        $configured = $seed ?? (string) config('edge.artifact_signing_key');
         if ($configured === '') {
             throw new RuntimeException('EDGE_ARTIFACT_SIGNING_KEY or APP_KEY must be configured.');
         }

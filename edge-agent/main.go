@@ -48,6 +48,9 @@ var logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level:
 type identity struct {
 	EdgeID, Certificate, PrivateKey, PublicKey string
 	BootstrapTokenHash                         string `json:",omitempty"`
+	// AcceptedPublicKeys holds signing keys a trusted key endorsed during a rotation and that have
+	// not yet signed a delivery.
+	AcceptedPublicKeys []string `json:",omitempty"`
 }
 type state struct {
 	Sequence uint64                     `json:"sequence"`
@@ -862,10 +865,19 @@ func (c *client) sync() error {
 		}
 	}
 	var response struct {
-		Data []manifestItem `json:"data"`
+		Data        []manifestItem `json:"data"`
+		KeyRotation *struct {
+			PublicKey   string `json:"public_key"`
+			Endorsement string `json:"endorsement"`
+		} `json:"key_rotation"`
 	}
 	if err := c.request("GET", "/edge/v1/config/manifest?cursor="+strconv.FormatUint(current.Sequence, 10), nil, &response, true); err != nil {
 		return err
+	}
+	if response.KeyRotation != nil {
+		if err := c.noteRotation(response.KeyRotation.PublicKey, response.KeyRotation.Endorsement); err != nil {
+			logger.Error("signing key rotation notice rejected", "event", "signing_key_rotation_rejected", "edge_id", c.id.EdgeID, "error", err.Error())
+		}
 	}
 	if len(response.Data) == 0 {
 		return c.heartbeat(current.Sequence)
@@ -1086,14 +1098,8 @@ func (c *client) full() error {
 	json.Unmarshal(raw["sequence"], &response.Sequence)
 	json.Unmarshal(raw["expires_at"], &response.ExpiresAt)
 	json.Unmarshal(raw["delivery_signature"], &response.DeliverySignature)
-	if c.id.PublicKey != response.Public {
-		return errors.New("full snapshot signing key changed")
-	}
-	payload, err := verify(response.Encoded, response.Checksum, response.Signature, c.id.PublicKey)
+	payload, err := c.verifySigned(response.Encoded, response.Checksum, response.Signature, snapshotDeliveryScope, response.Sequence, response.ExpiresAt, response.DeliverySignature)
 	if err != nil {
-		return err
-	}
-	if err := verifyDelivery(snapshotDeliveryScope, response.Checksum, response.Sequence, response.ExpiresAt, response.DeliverySignature, c.id.PublicKey); err != nil {
 		return err
 	}
 	reader, err := gzip.NewReader(bytes.NewReader(payload))

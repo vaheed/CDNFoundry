@@ -234,6 +234,7 @@ class Renderer:
             "GRAFANA_HOSTNAME": f"grafana.{operator_domain}",
             "APP_KEY": self._secret("app-key"),
             "EDGE_ARTIFACT_SIGNING_KEY": self._secret("artifact-signing-key"),
+            "EDGE_ARTIFACT_SIGNING_NEXT_KEY": "",
             "CONTROL_DB_PASSWORD": self._secret("control-db-password"),
             "REDIS_PASSWORD": self._secret("valkey-password"),
             "CLICKHOUSE_PASSWORD": self._secret("clickhouse-password"),

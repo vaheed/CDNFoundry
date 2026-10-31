@@ -25,6 +25,7 @@ Runtime product policy is not an environment variable. Manage it through
 | --- | --- | --- |
 | `APP_KEY` | control | Laravel encryption key; required, retained with backups |
 | `EDGE_ARTIFACT_SIGNING_KEY` | control | Independent high-entropy Ed25519 signing seed |
+| `EDGE_ARTIFACT_SIGNING_NEXT_KEY` | control | Empty except during [signing-key rotation](../operations/signing-key-rotation.md): the next seed, advertised to agents before it is used |
 | `APP_URL` | control | Canonical public control-panel URL |
 | `SESSION_SECURE_COOKIE` | HTTPS control | Secure-cookie flag; production default `true` |
 | `CONTROL_BIND` | control | Host publication for web; default `127.0.0.1:8080` |
