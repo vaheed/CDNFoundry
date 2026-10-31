@@ -789,6 +789,9 @@ services:
       GATEWAY_STATE_DIR: /var/lib/cdnfoundry/gateway-state
       GATEWAY_METRICS_ADDRESS: ${EDGE_GATEWAY_METRICS_ADDRESS}
       GATEWAY_MAX_CONNECTIONS: ${EDGE_GATEWAY_MAX_CONNECTIONS}
+      GATEWAY_MAX_CONNECTIONS_PER_ADDRESS: ${EDGE_GATEWAY_MAX_CONNECTIONS_PER_ADDRESS}
+      GATEWAY_IDLE_TIMEOUT_SECONDS: ${EDGE_GATEWAY_IDLE_TIMEOUT_SECONDS}
+      GATEWAY_HALF_CLOSE_TIMEOUT_SECONDS: ${EDGE_GATEWAY_HALF_CLOSE_TIMEOUT_SECONDS}
     volumes:
       - edge-runtime-memory:/var/lib/cdnfoundry/runtime:ro
       - edge-gateway-state:/var/lib/cdnfoundry/gateway-state

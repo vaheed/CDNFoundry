@@ -68,6 +68,9 @@ type gateway struct {
 	listeners                   map[string]net.Listener
 	listen                      func(network, address string) (net.Listener, error)
 	slots                       chan struct{}
+	perSource                   *sourceLimiter
+	idleTimeout                 time.Duration
+	halfCloseTimeout            time.Duration
 }
 
 func main() {
@@ -81,6 +84,10 @@ func main() {
 		metrics:    env("GATEWAY_METRICS_ADDRESS", "127.0.0.1:9105"),
 		listeners:  map[string]net.Listener{},
 		slots:      make(chan struct{}, boundedIntegerEnv("GATEWAY_MAX_CONNECTIONS", 8192, 128, 65536)),
+		// One source may hold only a fraction of the slots, and a silent connection frees its slot.
+		perSource:        newSourceLimiter(boundedIntegerEnv("GATEWAY_MAX_CONNECTIONS_PER_ADDRESS", 256, 1, 65536)),
+		idleTimeout:      time.Duration(boundedIntegerEnv("GATEWAY_IDLE_TIMEOUT_SECONDS", 120, 5, 3600)) * time.Second,
+		halfCloseTimeout: time.Duration(boundedIntegerEnv("GATEWAY_HALF_CLOSE_TIMEOUT_SECONDS", 30, 1, 600)) * time.Second,
 	}
 	if err := os.MkdirAll(g.stateDir, 0700); err != nil {
 		fatal(err)
@@ -346,10 +353,25 @@ func (g *gateway) accept(address string, listener net.Listener) {
 				continue
 			}
 		}
+		var source string
+		if g.perSource != nil {
+			source = sourceKey(connection.RemoteAddr())
+			if !g.perSource.acquire(source) {
+				g.rejected.Add(1)
+				if g.slots != nil {
+					<-g.slots
+				}
+				_ = connection.Close()
+				continue
+			}
+		}
 		g.active.Add(1)
 		go func() {
 			if g.slots != nil {
 				defer func() { <-g.slots }()
+			}
+			if g.perSource != nil {
+				defer g.perSource.release(source)
 			}
 			defer g.active.Add(-1)
 			defer connection.Close()
@@ -405,13 +427,14 @@ func (g *gateway) handle(listener string, client net.Conn) error {
 	g.accepted.Add(1)
 	_ = client.SetDeadline(time.Time{})
 	_ = upstream.SetDeadline(time.Time{})
-	done := make(chan struct{}, 1)
-	go func() { _, _ = io.Copy(upstream, client); _ = upstream.(*net.TCPConn).CloseWrite(); done <- struct{}{} }()
-	_, _ = io.Copy(client, upstream)
-	if tcp, ok := client.(*net.TCPConn); ok {
-		_ = tcp.CloseWrite()
+	idle, halfClose := g.idleTimeout, g.halfCloseTimeout
+	if idle <= 0 {
+		idle = 2 * time.Minute
 	}
-	<-done
+	if halfClose <= 0 {
+		halfClose = 30 * time.Second
+	}
+	relay(client, upstream, idle, halfClose)
 	return nil
 }
 

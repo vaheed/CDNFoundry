@@ -126,6 +126,16 @@ Production uses host networking so sockets see the destination address. Grant
 only `NET_BIND_SERVICE`; drop all other capabilities. Restrict port `9105` to
 the edge agent and monitoring source. Set `EDGE_GATEWAY_MAX_CONNECTIONS` from
 the qualified host ceiling; invalid or out-of-range values use 8,192.
+
+One source address may hold at most `EDGE_GATEWAY_MAX_CONNECTIONS_PER_ADDRESS`
+connections (256 by default; an IPv6 source counts per /64), so a single client
+cannot take every slot. A refused connection is closed at once and counted as
+rejected. After the preface, each relayed direction is closed when no byte moves
+for `EDGE_GATEWAY_IDLE_TIMEOUT_SECONDS` (120 s), and when one side half-closes
+the other direction survives only while it keeps moving data within
+`EDGE_GATEWAY_HALF_CLOSE_TIMEOUT_SECONDS` (30 s). Clients behind one shared
+address, such as a carrier-grade NAT, share that address's limit; raise it for
+such traffic rather than the global bound.
 The immutable image remains non-root and applies `cap_net_bind_service` only to
 the gateway executable so the Compose capability is effective after `exec`.
 Never replace this boundary with a privileged or root container.

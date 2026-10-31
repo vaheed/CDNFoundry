@@ -109,6 +109,9 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `EDGE_GATEWAY_METRICS_ADDRESS` | edge gateway | Restricted metrics listener; production default `0.0.0.0:9105` |
 | `GATEWAY_METRICS_ADDRESS` | edge gateway container | The listener address the container receives from `EDGE_GATEWAY_METRICS_ADDRESS`; the Compose health check calls its `/healthz` |
 | `EDGE_GATEWAY_MAX_CONNECTIONS` | edge gateway | Global accepted-connection bound, `128`–`65536` (default `8192`) |
+| `EDGE_GATEWAY_MAX_CONNECTIONS_PER_ADDRESS` | edge gateway | Connections one source address may hold (an IPv6 source counts per /64), `1`–`65536` (default `256`) |
+| `EDGE_GATEWAY_IDLE_TIMEOUT_SECONDS` | edge gateway | A relayed connection direction with no byte for this long is closed, `5`–`3600` (default `120`) |
+| `EDGE_GATEWAY_HALF_CLOSE_TIMEOUT_SECONDS` | edge gateway | After one side half-closes, the other direction is closed when it is idle this long, `1`–`600` (default `30`) |
 | `DNS_API_HOSTNAME` | DNS | DNS API TLS hostname in independent management DNS |
 | `DNS_API_SERVER_CERTIFICATE` | DNS | Absolute server certificate path |
 | `DNS_API_SERVER_PRIVATE_KEY` | DNS | Absolute mode-`0600` key path |
