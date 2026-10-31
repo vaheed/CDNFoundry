@@ -2,11 +2,11 @@
 set -eu
 
 usage() {
-    echo "Usage: $0 OUTPUT_DIRECTORY CONTROL_HOSTNAME RUNTIME_HOSTNAME [DNS_API_HOSTNAME ...]" >&2
+    echo "Usage: $0 OUTPUT_DIRECTORY CONTROL_HOSTNAME RUNTIME_HOSTNAME" >&2
     exit 2
 }
 
-[ "$#" -ge 3 ] || usage
+[ "$#" -eq 3 ] || usage
 
 output_directory=$1
 control_hostname=$2
@@ -66,21 +66,11 @@ EOF
 issue_server_certificate edge-control-server "$control_hostname" "$control_san"
 issue_server_certificate edge-runtime "$runtime_hostname" "$runtime_san"
 
-dns_api_index=1
-for dns_api_hostname in "$@"; do
-    issue_server_certificate "dns-api-$dns_api_index" "$dns_api_hostname" "DNS:$dns_api_hostname"
-    dns_api_index=$((dns_api_index + 1))
-done
 rm "$output_directory/edge-server-ca.srl"
 chmod 600 "$output_directory"/*.key
 chmod 644 "$output_directory"/*.crt
 
 set -- "$output_directory/edge-control-server.crt" "$output_directory/edge-runtime.crt"
-certificate_index=1
-while [ "$certificate_index" -lt "$dns_api_index" ]; do
-    set -- "$@" "$output_directory/dns-api-$certificate_index.crt"
-    certificate_index=$((certificate_index + 1))
-done
 openssl verify -CAfile "$output_directory/edge-server-ca.crt" "$@"
 echo "Certificates created in $output_directory (valid for 3650 days)."
 echo "Protect and back up both CA keys; copy only edge-server-ca.crt to edge hosts."

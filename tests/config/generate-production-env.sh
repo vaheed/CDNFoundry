@@ -41,7 +41,7 @@ printf 'dns-edge\n\n\nv1.2.1\n203.0.113.20\n\n\n203.0.113.10\nops@example.com\n\
     | scripts/generate-production-env.sh --output "$test_dir/edge.env" >/dev/null
 
 grep -Fqx 'HOST_BIND_IPV4=0.0.0.0' "$test_dir/edge.env"
-grep -Fqx 'DNS_API_HOSTNAME=dns-api-1.ops.example.com' "$test_dir/edge.env"
+grep -Fqx 'LOG_HOST=pop-1' "$test_dir/edge.env"
 grep -Fqx 'CONTROL_PUBLIC_IPV4_ALLOWLIST=203.0.113.10' "$test_dir/edge.env"
 grep -Fqx 'RESTIC_REPOSITORY=' "$test_dir/edge.env"
 grep -Fqx 'EDGE_GATEWAY_ADDRESS_MAP={}' "$test_dir/edge.env"

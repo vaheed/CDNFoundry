@@ -17,9 +17,6 @@ export HOST_BIND_IPV6=::
 export EDGE_CONTROL_BIND=0.0.0.0:8443
 export DNS_BIND_V4=0.0.0.0
 export EDGE_GATEWAY_ADDRESS_MAP='{"198.51.100.120":"10.20.1.120","198.51.100.121":"10.20.1.121"}'
-export DNS_API_HOSTNAME=dns-api-1.ops.example.com
-export DNS_API_SERVER_CERTIFICATE=/etc/cdnfoundry/pki/dns-api-1.crt
-export DNS_API_SERVER_PRIVATE_KEY=/etc/cdnfoundry/pki/dns-api-1.key
 
 compose() {
     docker compose --env-file .env.prod.example -f compose.prod.yml "$@"

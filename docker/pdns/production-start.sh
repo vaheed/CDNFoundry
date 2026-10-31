@@ -1,8 +1,8 @@
 #!/bin/sh
-# Starts PowerDNS for production. The committed pdns.conf carries development
-# credentials, so this wrapper refuses to start with them: it takes the
-# database password and API key from PDNS_DB_PASSWORD and PDNS_API_KEY, unless
-# the mounted configuration was already rendered with real values (Fleet bundles).
+# Starts PowerDNS for production. The committed configurations carry development credentials, so
+# this wrapper refuses to start with them: it takes the database password and API key from
+# PDNS_DB_PASSWORD and PDNS_API_KEY, unless the mounted configuration was already rendered with
+# real values (Fleet bundles). A node's SQLite store is created on first start.
 set -eu
 umask 077
 source=/etc/powerdns/pdns.conf
@@ -12,6 +12,8 @@ cp "$source" "$runtime/pdns.conf"
 
 render() {
     key=$1 variable=$2 development=$3
+    # A configuration without the setting (a node has no database password) has nothing to render.
+    grep -q "^${key}=" "$runtime/pdns.conf" || return 0
     current=$(sed -n "s/^${key}=//p" "$runtime/pdns.conf" | head -n 1)
     if [ -n "$current" ] && [ "$current" != "$development" ]; then
         return 0
@@ -30,4 +32,9 @@ render() {
 
 render gpgsql-password PDNS_DB_PASSWORD pdns-dev-only
 render api-key PDNS_API_KEY pdns-dev-api-key
+
+database=$(sed -n 's/^gsqlite3-database=//p' "$runtime/pdns.conf" | head -n 1)
+if [ -n "$database" ] && [ ! -e "$database" ]; then
+    sqlite3 "$database" < /usr/local/share/doc/pdns/schema.sqlite3.sql
+fi
 exec /usr/local/sbin/pdns_server --config-dir="$runtime" "$@"

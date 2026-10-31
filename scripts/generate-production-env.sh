@@ -135,9 +135,6 @@ if [[ $role == control ]]; then
     log_host=control-01
     log_collector_id=control-01
     log_source_allowlist="$advertised_ipv4 $edge_allowlist"
-    dns_api_hostname="dns-api-placeholder.$ops_domain"
-    dns_api_cert=/etc/cdnfoundry/pki/dns-api.crt
-    dns_api_key=/etc/cdnfoundry/pki/dns-api.key
 else
     edge_allowlist=$advertised_ipv4
     restic_repository=
@@ -145,16 +142,13 @@ else
     backup_access_key=
     backup_secret_key=
     backup_region=us-east-1
-    ask dns_api_name 'DNS API host label (for example dns-api-1)' dns-api-1
-    dns_api_hostname="$dns_api_name.$ops_domain"
-    dns_api_cert="/etc/cdnfoundry/pki/$dns_api_name.crt"
-    dns_api_key="/etc/cdnfoundry/pki/$dns_api_name.key"
+    ask node_label 'Node label used in logs (for example pop-1)' pop-1
     ask_secret clickhouse_ingest_password 'Shared telemetry ingestion password from the password manager'
     clickhouse_url="https://telemetry.$ops_domain:8444"
     loki_endpoint="https://telemetry.$ops_domain:8444"
     log_role=dns-edge
-    log_host=$dns_api_name
-    log_collector_id=$dns_api_name
+    log_host=$node_label
+    log_collector_id=$node_label
     log_source_allowlist=
 fi
 
@@ -217,9 +211,6 @@ awk -v app_key="$app_key" \
     -v edge_control_url="https://edge-control.$ops_domain:8443" \
     -v edge_control_bind="$host_bind_ipv4:8443" \
     -v edge_status_token="$edge_status_token" \
-    -v dns_api_hostname="$dns_api_hostname" \
-    -v dns_api_cert="$dns_api_cert" \
-    -v dns_api_key="$dns_api_key" \
     -v dns_bind_v4="$host_bind_ipv4" \
     '
     BEGIN {
@@ -256,9 +247,6 @@ awk -v app_key="$app_key" \
       values["CDNF_MMDB_UPDATER_IMAGE"]="ghcr.io/vaheed/cdnfoundry-mmdb-updater:" release
       values["HOST_BIND_IPV6"]=host_bind_ipv6; values["EDGE_CONTROL_URL"]=edge_control_url
       values["EDGE_CONTROL_BIND"]=edge_control_bind; values["EDGE_STATUS_TOKEN"]=edge_status_token
-      values["DNS_API_HOSTNAME"]=dns_api_hostname
-      values["DNS_API_SERVER_CERTIFICATE"]=dns_api_cert
-      values["DNS_API_SERVER_PRIVATE_KEY"]=dns_api_key
     }
     /^[A-Z][A-Z0-9_]*=/ {
       key=$0; sub(/=.*/, "", key)

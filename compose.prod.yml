@@ -37,7 +37,6 @@ x-core-env: &core-env
   EDGE_IDENTITY_CA_CERTIFICATE: /run/secrets/edge-identity-ca.crt
   EDGE_IDENTITY_CA_PRIVATE_KEY: /run/secrets/edge-identity-ca.key
   EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE: ${EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE}
-  PDNS_CA_CERTIFICATE: /run/secrets/pdns-api-ca.crt
   CLICKHOUSE_URL: ${CLICKHOUSE_URL:?CLICKHOUSE_URL is required}
   CLICKHOUSE_DATABASE: cdnf
   CLICKHOUSE_USER: cdnf_reader
@@ -113,7 +112,6 @@ x-core: &core
     - mmdb:/mmdb:ro
     - ${EDGE_IDENTITY_CA_CERTIFICATE:?EDGE_IDENTITY_CA_CERTIFICATE is required}:/run/secrets/edge-identity-ca.crt:ro
     - ${EDGE_IDENTITY_CA_PRIVATE_KEY:?EDGE_IDENTITY_CA_PRIVATE_KEY is required}:/run/secrets/edge-identity-ca.key:ro
-    - ${PDNS_CA_CERTIFICATE:?PDNS_CA_CERTIFICATE is required}:/run/secrets/pdns-api-ca.crt:ro
     - ${METRICS_TOKEN_FILE:?METRICS_TOKEN_FILE is required}:/run/secrets/metrics-token:ro
     - ${RESTIC_PASSWORD_FILE}:/run/secrets/restic-password:ro
 
@@ -140,27 +138,6 @@ services:
     volumes: [./deploy/production/Caddyfile:/etc/caddy/Caddyfile:ro, caddy-data:/data, caddy-config:/config]
     depends_on: { web: { condition: service_healthy } }
     networks: [ingress, telemetry]
-    restart: unless-stopped
-    read_only: true
-    tmpfs: [/tmp]
-    healthcheck: { test: [CMD, wget, -qO-, http://127.0.0.1:2019/healthz], interval: 10s, timeout: 3s, retries: 10 }
-
-  dns-api:
-    logging: *bounded-logging
-    image: caddy:2.11-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
-    profiles: [dns]
-    environment:
-      XDG_CONFIG_HOME: /config
-      XDG_DATA_HOME: /data
-      DNS_API_HOSTNAME: ${DNS_API_HOSTNAME:?DNS_API_HOSTNAME is required}
-      CONTROL_PUBLIC_IPV4_ALLOWLIST: ${CONTROL_PUBLIC_IPV4_ALLOWLIST}
-      CONTROL_PUBLIC_IPV6_ALLOWLIST: ${CONTROL_PUBLIC_IPV6_ALLOWLIST}
-    ports: ["${HOST_BIND_IPV4}:8444:8444/tcp"]
-    volumes: [./deploy/production/Caddyfile.dns-api:/etc/caddy/Caddyfile:ro, "${DNS_API_SERVER_CERTIFICATE:?required}:/run/secrets/dns-api.crt:ro", "${DNS_API_SERVER_PRIVATE_KEY:?required}:/run/secrets/dns-api.key:ro", dns-api-caddy-data:/data, dns-api-caddy-config:/config]
-    depends_on: { pdns-auth: { condition: service_healthy } }
-    # The gateway must be dual-homed: ingress receives the published host
-    # traffic while dns-private is the only path to the PowerDNS API.
-    networks: [ingress, dns-private]
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
@@ -316,7 +293,7 @@ services:
   pdns-db:
     logging: *bounded-logging
     image: postgres:18.6-alpine3.24@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
-    profiles: [dns]
+    profiles: [control]
     environment:
       POSTGRES_DB: pdns
       POSTGRES_USER: pdns
@@ -333,6 +310,39 @@ services:
       timeout: 3s
       retries: 20
 
+  # The hidden primary. Laravel writes zones here through the API on the private control network;
+  # DNS nodes pull them over TSIG-signed transfers on port 5300 and never call in. Publish 5300 only
+  # as far as the node addresses need to reach it.
+  pdns-primary:
+    logging: *bounded-logging
+    image: powerdns/pdns-auth-51:5.1.4@sha256:bb5b1c133bcca1dd455075321de7d55db4945a8d7f2ba23339e3c7bbe416b205
+    entrypoint: [/usr/local/bin/pdns-production-start]
+    command: [--disable-syslog, --daemon=no, --guardian=no]
+    init: true
+    profiles: [control]
+    environment:
+      PDNS_DB_PASSWORD: ${PDNS_DB_PASSWORD:?PDNS_DB_PASSWORD is required}
+      PDNS_API_KEY: ${PDNS_API_KEY:?PDNS_API_KEY is required}
+    ports:
+      - "${HOST_BIND_IPV4}:5300:5300/tcp"
+      - "${HOST_BIND_IPV4}:5300:5300/udp"
+    volumes:
+      - ./docker/pdns/primary.conf:/etc/powerdns/pdns.conf:ro
+      - ./docker/pdns/production-start.sh:/usr/local/bin/pdns-production-start:ro
+    depends_on:
+      pdns-db: { condition: service_healthy }
+    # The API is reachable only through control and dns-private; ingress carries the published
+    # transfer port.
+    networks: [ingress, control, dns-private]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, pdns_control, rping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # A DNS node: a PowerDNS secondary that serves the zones the hidden primary hands it. Its SQLite
+  # store is a cache the primary can rebuild; the PoP agent configures it through the local API.
   pdns-auth:
     logging: *bounded-logging
     image: powerdns/pdns-auth-51:5.1.4@sha256:bb5b1c133bcca1dd455075321de7d55db4945a8d7f2ba23339e3c7bbe416b205
@@ -341,16 +351,16 @@ services:
     init: true
     profiles: [dns]
     environment:
-      PDNS_DB_PASSWORD: ${PDNS_DB_PASSWORD:?PDNS_DB_PASSWORD is required}
       PDNS_API_KEY: ${PDNS_API_KEY:?PDNS_API_KEY is required}
     volumes:
       - ./docker/pdns/pdns.conf:/etc/powerdns/pdns.conf:ro
       - ./docker/pdns/production-start.sh:/usr/local/bin/pdns-production-start:ro
       - ./docker/pdns/geoip-zones.yml:/etc/powerdns/geoip-zones.yml:ro
+      - pdns-node:/var/lib/powerdns
       - mmdb:/mmdb:ro
     depends_on:
-      pdns-db: { condition: service_healthy }
       mmdb-updater: { condition: service_healthy }
+    # The agent reaches the local API on dns-private; DNSdist reaches the DNS port there too.
     networks: [dns-private]
     restart: unless-stopped
     healthcheck:
@@ -751,6 +761,9 @@ services:
       EDGE_CELL_ASSIGNMENTS: '{"cell-01":"shared-default","cell-02":"quarantine-default","cell-03":"","cell-04":"","cell-05":"","cell-06":"","cell-07":"","cell-08":""}'
       EDGE_CELL_STATUS_URLS: http://cell-01:9080/passive-failures,http://cell-02:9080/passive-failures,http://cell-03:9080/passive-failures,http://cell-04:9080/passive-failures,http://cell-05:9080/passive-failures,http://cell-06:9080/passive-failures,http://cell-07:9080/passive-failures,http://cell-08:9080/passive-failures
       EDGE_STATUS_TOKEN: ${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}
+      # Set only on a PoP that also runs a DNS node: the agent drives that node's local PowerDNS API.
+      EDGE_DNS_API_URL: ${EDGE_DNS_API_URL}
+      EDGE_DNS_API_KEY: ${EDGE_DNS_API_KEY}
     volumes:
       - edge-agent-state:/var/lib/cdnfoundry/agent
       - edge-runtime-memory:/var/lib/cdnfoundry/runtime
@@ -759,6 +772,7 @@ services:
     networks:
       edge:
         aliases: [edge-agent]
+      dns-private: {}
     extra_hosts:
       - "host-gateway:host-gateway"
     restart: unless-stopped
@@ -870,14 +884,13 @@ networks:
 volumes:
   caddy-data: {}
   caddy-config: {}
-  dns-api-caddy-data: {}
-  dns-api-caddy-config: {}
   telemetry-caddy-data: {}
   telemetry-caddy-config: {}
   core-storage: {}
   control-db: {}
   redis: {}
   pdns-db: {}
+  pdns-node: {}
   clickhouse: {}
   vector-data: {}
   operational-vector-data: {}
