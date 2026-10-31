@@ -582,6 +582,7 @@ class EdgeProxyTest extends TestCase
         $scheduledOrigin = $domain->dnsRecords()->findOrFail($record)->origin;
         $scheduledOrigin['health_check'] = ['enabled' => true, 'path' => '/', 'interval_seconds' => 60];
         $domain->dnsRecords()->whereKey($record)->update(['origin' => $scheduledOrigin, 'created_at' => now()->subHour()]);
+        DomainEdgeCell::query()->create(['domain_id' => $domain->id, 'edge_id' => $edgeId, 'desired_revision' => 1, 'state' => 'active']);
         $this->artisan('cdnf:edge:dispatch-origin-checks', ['--limit' => 1])->assertSuccessful();
         $this->assertDatabaseHas('operations', ['type' => 'edge.origin_test', 'status' => 'running']);
         $this->assertSame(1, Operation::query()->where('input->scheduled', true)->count());

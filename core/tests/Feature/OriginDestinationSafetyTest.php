@@ -61,12 +61,48 @@ class OriginDestinationSafetyTest extends TestCase
         $this->assertSame(0, Operation::query()->where('type', 'edge.domain_reconcile')->count());
     }
 
+    public function test_only_the_explicit_origin_port_set_is_accepted(): void
+    {
+        Queue::fake();
+        $owner = User::factory()->create();
+        $domain = Domain::query()->create(['name' => 'ports.example', 'display_name' => 'Ports',
+            'lifecycle_state' => 'active', 'nameservers_verified_at' => now(), 'revision' => 1]);
+        $domain->users()->attach($owner);
+        $record = $domain->dnsRecords()->create(['type' => 'A', 'mode' => 'proxied', 'name' => 'www.ports.example',
+            'content' => '8.8.8.8', 'content_hash' => hash('sha256', '8.8.8.8'), 'ttl' => 60, 'origin' => $this->origin('8.8.8.8')]);
+
+        foreach ([22, 25, 3306, 6379, 9200, 65535] as $port) {
+            $this->actingAs($owner)->putJson("/api/domains/{$domain->id}/dns/records/{$record->id}/origin", ['port' => $port] + $this->origin('8.8.8.8'))
+                ->assertUnprocessable()->assertJsonValidationErrors('port');
+        }
+        $this->actingAs($owner)->putJson("/api/domains/{$domain->id}/dns/records/{$record->id}/origin", ['port' => 8443] + $this->origin('8.8.8.8'))->assertAccepted();
+    }
+
+    public function test_the_runtime_and_the_agent_allow_exactly_the_ports_the_control_plane_does(): void
+    {
+        $lua = file_get_contents(base_path('../docker/openresty/runtime.lua'));
+        $go = file_get_contents(base_path('../edge-agent/main.go'));
+        preg_match('/for _, port in ipairs\(\{([^}]*)\}\)/', $lua, $luaMatch);
+        preg_match('/var allowedOriginPorts = map\[int\]bool\{([^}]*)\}/', $go, $goMatch);
+        $fromLua = array_map('intval', array_map('trim', explode(',', $luaMatch[1] ?? '')));
+        $fromGo = array_map(fn (string $entry): int => (int) $entry, array_map('trim', explode(',', $goMatch[1] ?? '')));
+        $expected = \App\Support\OriginData::ALLOWED_PORTS;
+        sort($fromLua);
+        sort($fromGo);
+
+        $this->assertSame($expected, $fromLua);
+        $this->assertSame($expected, $fromGo);
+    }
+
     public static function deniedOrigins(): iterable
     {
         $cases = [
             'expanded mapped loopback' => ['0:0:0:0:0:ffff:7f00:1', []],
             'expanded mapped dotted loopback' => ['0:0:0:0:0:ffff:127.0.0.1', []],
             'expanded mapped metadata' => ['0:0:0:0:0:ffff:a9fe:a9fe', []],
+            '6to4 embedding a public address' => ['2002:808:808::1', []],
+            'Teredo' => ['2001:0:4136:e378:8000:63bf:3fff:fdd2', []],
+            'IPv4-compatible' => ['::808:808', []],
             'expanded mapped public address' => ['0:0:0:0:0:ffff:808:808', []],
             'private IPv4 explicit deny' => ['10.20.1.2', ['private_origin_allowlist' => ['10.0.0.0/8'], 'blocked_origin_networks' => ['10.20.0.0/16']]],
             'private IPv6 explicit deny' => ['fd00:20::1', ['private_origin_allowlist' => ['fc00::/7'], 'blocked_origin_networks' => ['fd00:20::/32']]],

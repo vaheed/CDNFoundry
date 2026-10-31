@@ -218,6 +218,16 @@ class Domain extends Model
         return $this->hasMany(DnsDeployment::class);
     }
 
+    /**
+     * The edges that serve or are being prepared to serve this domain.
+     *
+     * @return list<string>
+     */
+    public function placementEdgeIds(): array
+    {
+        return DB::table('domain_edge_cells')->where('domain_id', $this->getKey())->pluck('edge_id')->unique()->values()->all();
+    }
+
     public function edgePlacement(): HasOne
     {
         return $this->hasOne(DomainEdgePlacement::class);

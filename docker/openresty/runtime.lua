@@ -97,10 +97,16 @@ local hard_origin_networks = compile_networks({
     "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4",
     "::/128", "::1/128", "::ffff:0:0/96", "64:ff9b::/96", "64:ff9b:1::/48",
     "fe80::/10", "fec0::/10", "ff00::/8", "2001:db8::/32",
+    -- Transition ranges embed an IPv4 address that would bypass the IPv4 rules.
+    "::/96", "2002::/16", "2001::/23", "100::/64",
 })
 local private_origin_networks = compile_networks({
     "10.0.0.0/8", "100.64.0.0/10", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7",
 })
+
+-- The only ports an origin may use. Mirrors OriginData::ALLOWED_PORTS in the control plane.
+local allowed_origin_ports = {}
+for _, port in ipairs({80, 443, 2052, 2053, 2082, 2083, 2086, 2087, 2095, 2096, 8000, 8008, 8080, 8081, 8088, 8443, 8444, 8880, 8888, 9000, 9443}) do allowed_origin_ports[port] = true end
 
 local function blocked(ip, networks, blocked_networks, denied)
     local packed = packed_address(ip)
@@ -743,6 +749,11 @@ function M.origin_access()
     ngx.ctx.origin_failure_threshold = tonumber(limits.origin_failure_threshold) or 10
     ngx.ctx.origin_recovery_timeout = tonumber(limits.origin_recovery_timeout) or 30
     dictionary:incr("capacity:origin_connections", 1, 0)
+    if not allowed_origin_ports[tonumber(origin.port)] then
+        ngx.log(ngx.WARN, "origin rejected: port not allowed")
+        ngx.header["X-CDNF-Error"] = "blocked_destination"
+        return ngx.exit(502)
+    end
     local address, err = resolve(origin.host, origin.private_allowlist, origin.blocked_networks, origin.blocked_addresses, origin.response_timeout_ms)
     if not address then
         ngx.log(ngx.WARN, "origin rejected: ", err)
@@ -863,7 +874,8 @@ function M.balance()
     local origin = config and config.origin
     if origin and ngx.var.cdn_origin_role == "backup" then origin = origin.backup end
     local peer = (ngx.var.origin_address or ""):gsub("^%[", ""):gsub("%]$", "")
-    if not origin or blocked(peer, origin.private_allowlist, origin.blocked_networks, origin.blocked_addresses) then
+    if not origin or not allowed_origin_ports[tonumber(ngx.var.origin_port)]
+        or blocked(peer, origin.private_allowlist, origin.blocked_networks, origin.blocked_addresses) then
         error("blocked_destination")
     end
     local tls_name = ngx.var.origin_sni

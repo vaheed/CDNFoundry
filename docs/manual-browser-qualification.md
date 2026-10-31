@@ -1078,3 +1078,15 @@ Owner-run. Use disposable accounts, domains, and tokens, and record no secret.
    `bootstrap_expires_at` in the past on a disposable edge) and start the agent
    with the token: expect enrollment refused with an expiry message. **Rotate
    identity** and confirm the new token enrolls.
+
+### Origin safety
+
+1. On a disposable proxied record open **Origin**. Enter port `6379` and save:
+   expect a validation error on **Port**. Enter `8443` with a public host: expect
+   the save to be accepted.
+2. Enter host `2002:808:808::1` (6to4), then `2001:0:4136:e378:8000:63bf:3fff:fdd2`
+   (Teredo), then `::808:808`: each must be refused as blocked by the
+   destination-safety policy.
+3. Press **Test origin** and, if the form offers an edge selector, choose an edge
+   that is not in the domain's placement: expect the request to be refused.
+   Without a selection the test runs only on placement edges.

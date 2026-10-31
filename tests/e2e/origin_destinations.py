@@ -67,10 +67,10 @@ def main() -> None:
             (target / 'runtime.json').write_text(json.dumps(fixture.state({}, 1)))
             (target / 'canary.conf').write_text('''lua_shared_dict origin_canary 1m;
 server {
-    listen 18080;
-    listen [::]:18080 ipv6only=on;
-    listen 18443 ssl;
-    listen [::]:18443 ssl ipv6only=on;
+    listen 8880;
+    listen [::]:8880 ipv6only=on;
+    listen 9443 ssl;
+    listen [::]:9443 ssl ipv6only=on;
     ssl_certificate /fixtures/tls.crt;
     ssl_certificate_key /fixtures/tls.key;
     access_log /tmp/origin-canary.log combined;
@@ -180,8 +180,10 @@ server {
                 ('carrier-explicit-deny', carrier, 502, {'private_allowlist': [carrier + '/32'], 'blocked_networks': [carrier_subnet]}),
                 ('ipv6', ipv6, 200, {}),
                 ('expanded-ipv6', expanded, 200, {}),
-                ('ipv6-tls', ipv6, 200, {'scheme': 'https', 'port': 18443, 'verify_tls': True}),
-                ('ipv6-tls-wrong-name', ipv6, 502, {'scheme': 'https', 'port': 18443, 'verify_tls': True, 'sni': 'wrong-name.test'}),
+                ('ipv6-tls', ipv6, 200, {'scheme': 'https', 'port': 9443, 'verify_tls': True}),
+                ('ipv6-tls-wrong-name', ipv6, 502, {'scheme': 'https', 'port': 9443, 'verify_tls': True, 'sni': 'wrong-name.test'}),
+                ('port-outside-set', ipv4, 502, {'port': 6379}),
+                ('port-outside-set-tls', ipv6, 502, {'scheme': 'https', 'port': 3306, 'verify_tls': True}),
                 ('ipv4-denied', ipv4, 502, {'blocked_addresses': [ipv4]}),
                 ('ipv6-denied-expanded', ipv6, 502, {'blocked_addresses': [expanded]}),
                 ('ipv6-denied-compressed', expanded, 502, {'blocked_addresses': [ipv6]}),
@@ -194,6 +196,7 @@ server {
                             '::', '::1', '0:0:0:0:0:0:0:1', 'fe80::1', 'fec0::1', 'ff02::1',
                             '::ffff:127.0.0.1', '0:0:0:0:0:ffff:7f00:1', '0:0:0:0:0:ffff:127.0.0.1',
                             '::ffff:' + ipv4, '0064:ff9b:0001::1', '2001:0db8::1',
+                            '2002:808:808::1', '2001:0:4136:e378:8000:63bf:3fff:fdd2', '::808:808', '100::1',
                             '999.0.0.1', '1::2::3', '[::1]', 'fe80::1%eth0']:
                 cases.append((f'unsafe-{len(cases)}', address, 502, {'private_allowlist': ['0.0.0.0/0', '::/0']}))
             for label, forwarded, cidr, expected in [
@@ -238,7 +241,7 @@ server {
             for label, address, _, overrides in cases:
                 config = current['hosts'][label + '.example']
                 config['cache']['enabled'] = False
-                config['origin'].update(host=address, port=18080, host_header='origin-canary.test',
+                config['origin'].update(host=address, port=8880, host_header='origin-canary.test',
                                         sni='origin-canary.test', private_allowlist=[ipv4 + '/32', subnet])
                 config['origin'].update({key: value for key, value in overrides.items() if key not in {'security', 'forwarded'}})
                 if 'security' in overrides:
@@ -278,7 +281,7 @@ server {
                 config['origin']['retry_count'] = retries
                 config['security']['limits']['origin_retry_limit'] = limit
                 if label.startswith('retry-tls-'):
-                    config['origin'].update(host=ipv6, scheme='https', port=18443, verify_tls=True)
+                    config['origin'].update(host=ipv6, scheme='https', port=9443, verify_tls=True)
                 current['hosts'][label + '.example'] = config
             for label in ['lifecycle-success', 'lifecycle-failure']:
                 config = copy.deepcopy(capacity_config)

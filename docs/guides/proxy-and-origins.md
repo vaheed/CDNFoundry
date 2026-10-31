@@ -50,7 +50,7 @@ as an origin.
 | --- | --- |
 | `host` | DNS hostname or IP address, maximum 253 characters |
 | `scheme` | `http` or `https` |
-| `port` | Derived as 80 for HTTP or 443 for HTTPS |
+| `port` | One of the allowed origin ports (below) |
 | `host_header` | Required upstream `Host`, maximum 253 characters |
 | `sni` | Required for verified HTTPS, maximum 253 characters |
 | `verify_tls` | Verify the origin certificate when HTTPS |
@@ -130,6 +130,20 @@ for IPv4 and IPv6. Private destinations are rejected unless they fall inside a
 narrow `origin_safety.private_origin_allowlist`. Additional networks and
 individual addresses can be blocked through platform settings.
 
+IPv6 transition ranges are rejected too, because each embeds an IPv4 address that
+would bypass the IPv4 rules: IPv4-compatible `::/96`, 6to4 `2002::/16`, Teredo
+and the rest of the IETF block `2001::/23`, and the discard prefix `100::/64`.
+The control plane, the edge agent, and OpenResty all apply the same list.
+
+### Allowed origin ports
+
+An origin may use only these ports: 80, 443, 2052, 2053, 2082, 2083, 2086,
+2087, 2095, 2096, 8000, 8008, 8080, 8081, 8088, 8443, 8444, 8880, 8888, 9000,
+and 9443. Saving any other port is refused with a validation error on `port`.
+The edge enforces the same set when it connects and when it probes, so a stale
+or tampered snapshot cannot aim an edge at a database or mail port. A test
+keeps the three copies of the list equal.
+
 The private allowlist never overrides an explicit blocked network or address.
 Address exclusions compare IPv6 values regardless of compressed or expanded
 spelling. IPv4-mapped IPv6 origins are rejected, including expanded spellings;
@@ -159,7 +173,8 @@ Tests require an active domain with verified nameservers and current update
 permission. API and **Test origin** / **Test backup** panel actions use the same
 checks. Pending, disabled, and deprovisioning domains cannot start probes.
 Each operation binds the selected origin configuration and fixes at most 20
-edge recipients. Dispatch and task delivery recheck permission, lifecycle, and
+edge recipients. Recipients must be edges in the domain's placement; naming any
+other edge returns `422`, and an unspecified list means the placement edges only. Dispatch and task delivery recheck permission, lifecycle, and
 configuration; obsolete pending tasks are cancelled. Retries preserve recipients
 and progress. Origin edits clear old health, and late results for a changed
 origin remain operation history without replacing current health.

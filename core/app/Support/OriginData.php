@@ -6,6 +6,7 @@ use App\Models\DnsCluster;
 use App\Models\Edge;
 use App\Models\EdgePoolEndpoint;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 final class OriginData
@@ -56,11 +57,17 @@ final class OriginData
         return $origin;
     }
 
+    /**
+     * The only ports an origin may use. Mirrored by `allowed_origin_ports` in runtime.lua and
+     * `allowedOriginPorts` in the edge agent; a test keeps the three equal.
+     */
+    public const ALLOWED_PORTS = [80, 443, 2052, 2053, 2082, 2083, 2086, 2087, 2095, 2096, 8000, 8008, 8080, 8081, 8088, 8443, 8444, 8880, 8888, 9000, 9443];
+
     private static function validateEndpoint(array $input): array
     {
         $validator = Validator::make($input, [
             'host' => ['required', 'string', 'max:253'],
-            'port' => ['required', 'integer', 'between:1,65535'],
+            'port' => ['required', 'integer', Rule::in(self::ALLOWED_PORTS)],
             'scheme' => ['required', 'in:http,https'],
             'host_header' => ['required', 'string', 'max:253'],
             'sni' => ['nullable', 'string', 'max:253'],

@@ -596,6 +596,10 @@ func runOriginTest(task edgeTask) (result map[string]any) {
 		approved[ip] = true
 	}
 	origin := task.Payload.Origin
+	if !allowedOriginPorts[origin.Port] {
+		result["failure_reason"] = "blocked_destination"
+		return result
+	}
 	connectTimeout := boundedDuration(origin.ConnectTimeoutMS, 100, 10000)
 	responseTimeout := boundedDuration(origin.ResponseTimeoutMS, 500, 60000)
 	ctx, cancel := context.WithTimeout(context.Background(), responseTimeout)
@@ -703,6 +707,10 @@ func first(values ...string) string {
 	return ""
 }
 
+// allowedOriginPorts is the only set of ports an origin may use. It mirrors
+// OriginData::ALLOWED_PORTS in the control plane and allowed_origin_ports in runtime.lua.
+var allowedOriginPorts = map[int]bool{80: true, 443: true, 2052: true, 2053: true, 2082: true, 2083: true, 2086: true, 2087: true, 2095: true, 2096: true, 8000: true, 8008: true, 8080: true, 8081: true, 8088: true, 8443: true, 8444: true, 8880: true, 8888: true, 9000: true, 9443: true}
+
 func blockedIP(address string, allowlist, blockedNetworks []string) bool {
 	parsed, err := netip.ParseAddr(address)
 	if err != nil || parsed.Is4In6() || parsed.Zone() != "" {
@@ -721,6 +729,8 @@ func blockedIP(address string, allowlist, blockedNetworks []string) bool {
 			"0.0.0.0/8", "192.0.0.0/24", "192.0.2.0/24", "192.88.99.0/24", "198.18.0.0/15",
 			"198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4",
 			"64:ff9b::/96", "64:ff9b:1::/48", "2001:db8::/32",
+			// Transition ranges embed an IPv4 address that would bypass the IPv4 rules.
+			"::/96", "2002::/16", "2001::/23", "100::/64",
 		})
 	}
 	for _, cidr := range allowlist {

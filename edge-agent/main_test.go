@@ -840,6 +840,7 @@ func TestOriginTaskUsesApprovedAddressAndCanonicalHost(t *testing.T) {
 	task.Payload.Origin.Scheme = "http"
 	task.Payload.Origin.HostHeader = "origin.example"
 	task.Payload.Origin.Port = portNumber
+	allowOriginPortForTest(t, portNumber)
 	task.Payload.Origin.ConnectTimeoutMS = 1000
 	task.Payload.Origin.ResponseTimeoutMS = 1000
 	result := runOriginTest(task)
