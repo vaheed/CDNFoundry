@@ -72,7 +72,25 @@ Both panels expose the shared profile page. API equivalents are:
 - `PUT /api/me/password`
 
 Password change requires the current password and confirmation, revokes other
-tokens, and writes an audit event.
+tokens, and writes an audit event. Changing the email address also requires
+`current_password`. Every user, including those an administrator creates or
+resets, follows one password policy: at least 12 characters with upper-case and
+lower-case letters and a number. An administrator who sets a user's password
+revokes all of that user's tokens.
+
+Sign-in is limited per account (`login_per_minute` attempts a minute whatever the
+source address) and per address (ten times that). An unknown address and a wrong
+password get the same answer and take the same time.
+
+### Two-step sign-in for administrators
+
+An administrator can enrol an authenticator app under **Account → Profile**
+(scan the QR code, confirm a code, and save the recovery codes, which are shown
+once). Once enrolled, the panel asks for a code after the password, and
+`POST /api/auth/login` answers `401 otp_required` until the request carries
+`otp` (a current code or one unused recovery code). A recovery code works once.
+Enrolling or removing the app revokes the account's API tokens. Domain users
+sign in with a password only.
 
 ## API tokens
 
@@ -86,3 +104,38 @@ Accept: application/json
 ```
 
 Never put a token in a URL, commit, screenshot, or shared log.
+
+### Expiry, abilities, and domain scope
+
+Every token expires: 90 days by default, at most 365 (`expires_in_days`), and 30
+days for a token issued by `POST /api/auth/login`. Create a token with
+`abilities` to limit what it can do:
+
+| Ability | Allows |
+| --- | --- |
+| `*` (default) | Everything the user can do |
+| `read` | `GET` and `HEAD` requests |
+| `dns` | The domain DNS routes (records, import, export, deployment), except origins |
+| `purge` | Cache purge requests and their status |
+
+Add `domain_ids` (up to 50 domains the user can already see) to limit a token to
+those domains. A domain-limited token sees only them in `GET /api/domains`,
+gets `404` for any other domain, and cannot call `/api/admin`, even for an
+administrator. A token that is not full access, or is domain-limited, cannot
+create or list tokens or change the profile or password, so it cannot widen
+itself. A request beyond a token's ability returns `403 token_scope_exceeded`.
+
+```http
+POST /api/me/tokens
+{"name": "purge-bot", "abilities": ["purge"], "expires_in_days": 30, "domain_ids": [12]}
+```
+
+An administrator should issue each integration its own narrow token.
+
+### Bootstrap tokens and proxies
+
+An edge bootstrap token that was never used expires after 24 hours; rotate the
+identity to get a new one. Laravel trusts forwarded headers only from the
+addresses in `TRUSTED_PROXIES` (default: loopback and private ranges, which is
+where the ingress proxy runs). Do not publish PHP-FPM or the web container on
+a public address.

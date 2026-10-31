@@ -1035,3 +1035,46 @@ qualification installation after the Phase 3 migrations.
 Completion gate: implementation and documentation present; automated and real
 runtime qualification recorded separately in the roadmap; this manual job
 remains **Not run** until the owner records actual results.
+
+## Phase 5 — production readiness and security hardening job
+
+Owner-run. Use disposable accounts, domains, and tokens, and record no secret.
+
+### Accounts and API tokens
+
+1. As a domain user open **Account → API tokens**. Confirm the **Create token**
+   form has **Token name**, **Access** (Full access / Read only / DNS records only
+   / Cache purge only), **Expires after (days)** (default 90, accepts 1–365), and
+   **Limit to domains (optional)** listing only the user's domains. Enter 366 days:
+   expect a validation error.
+2. Create a token named `phase5-read` with **Read only** and one domain selected.
+   Copy it from the one-time display. The list shows `read`, `1 domain(s)`, an
+   expiry about 90 days ahead, and the last six characters only.
+3. With that token call `GET /api/domains`: expect only the selected domain.
+   `GET` on another domain of the same user: expect `404`. `PATCH` the selected
+   domain: expect `403` with code `token_scope_exceeded`. `POST /api/me/tokens`:
+   expect `403`. Revoke the token and expect `401`.
+4. Create tokens with **DNS records only** and **Cache purge only**. The DNS token
+   lists records but cannot read `/api/domains/{id}` or purge; the purge token
+   can purge but cannot list DNS records.
+5. Open **Account → Profile**. Edit the **Email** field: the **Current password**
+   field appears and saving without it is refused. Enter the password and expect
+   the change to save. Also check `PATCH /api/me` with a new email and no
+   `current_password`: expect a validation error naming `current_password`.
+6. Enter a password shorter than 12 characters, or without an upper-case letter or
+   a number, in **Profile**, in **Customers → Users → Create**, and in the user's
+   edit page: each must be refused with the same rule.
+7. As administrator reset the password of a user who holds a token. Expect the
+   token to stop working (`401`).
+8. Sign in at `/admin/login` as an administrator and open **Account → Profile**.
+   Under **Two-step sign-in** choose **Set up**, scan the QR code with an
+   authenticator app, confirm a current code, and save the recovery codes. Sign
+   out and sign in again: expect a code prompt after the password. A wrong code is
+   refused; the current code is accepted. Sign out and use one recovery code:
+   accepted once; the same code a second time is refused. As the same account
+   `POST /api/auth/login` without `otp`: expect `401` with `otp_required`.
+   Remove the app, confirm the existing API tokens stopped working.
+9. Create an edge under **Infrastructure → Edges**, wait 24 hours (or set
+   `bootstrap_expires_at` in the past on a disposable edge) and start the agent
+   with the token: expect enrollment refused with an expiry message. **Rotate
+   identity** and confirm the new token enrolls.

@@ -15,6 +15,7 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Validation\Rules\Password;
 
 class UserResource extends Resource
 {
@@ -40,7 +41,7 @@ class UserResource extends Resource
                 ->revealable()
                 ->required(fn (string $operation): bool => $operation === 'create')
                 ->dehydrated(fn (?string $state): bool => filled($state))
-                ->minLength(12),
+                ->rule(Password::defaults()),
         ]);
     }
 

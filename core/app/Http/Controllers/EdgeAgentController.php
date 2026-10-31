@@ -123,6 +123,8 @@ class EdgeAgentController extends Controller
             $tokenMatches = $edge->bootstrap_token_hash !== null
                 && hash_equals($edge->bootstrap_token_hash, hash('sha256', $data['bootstrap_token']));
             abort_unless($tokenMatches, 401, 'The bootstrap token is invalid or already used.');
+            // A used token may still be replayed for ten minutes (below); only an unused one expires.
+            abort_if($edge->bootstrap_consumed_at === null && $edge->bootstrap_expires_at?->isPast(), 401, 'The bootstrap token has expired. Rotate the identity to get a new one.');
             $csrHash = hash('sha256', $data['certificate_request']);
             if ($edge->bootstrap_consumed_at !== null) {
                 $replayable = $edge->bootstrap_consumed_at->gte(now()->subMinutes(10))

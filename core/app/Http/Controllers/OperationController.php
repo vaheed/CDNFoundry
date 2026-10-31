@@ -32,7 +32,7 @@ class OperationController extends Controller
 {
     public function show(Request $request, Operation $operation): JsonResource
     {
-        if (! $request->user()->isAdmin()) {
+        if (! $request->user()->isAdmin() || $request->user()->tokenDomainIds() !== null) {
             // Any member of the operation's domain may read it, including a coalesced
             // operation another member started. Global operations are administrator-only.
             $domain = $operation->domain_id === null ? null : Domain::query()->find($operation->domain_id);

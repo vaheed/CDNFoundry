@@ -20,6 +20,9 @@ class EditUser extends EditRecord
     {
         abort_if($record->is(auth()->user()) && ($data['type'] ?? null) === 'user', 422, 'You cannot remove your own administrator access.');
         $record->update($data);
+        if (filled($data['password'] ?? null)) {
+            $record->tokens()->delete();
+        }
         AuditLog::record(auth()->user(), 'user.updated', $record, ['fields' => array_keys($data)], request()->ip());
 
         return $record;

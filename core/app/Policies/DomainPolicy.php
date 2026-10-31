@@ -9,7 +9,9 @@ class DomainPolicy
 {
     public function view(User $user, Domain $domain): bool
     {
-        return ! $user->isDisabled() && ($user->isAdmin() || $domain->users()->whereKey($user->getKey())->exists());
+        return ! $user->isDisabled()
+            && $user->tokenCoversDomain($domain)
+            && ($user->isAdmin() || $domain->users()->whereKey($user->getKey())->exists());
     }
 
     public function update(User $user, Domain $domain): bool

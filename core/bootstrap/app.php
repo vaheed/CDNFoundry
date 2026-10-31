@@ -3,6 +3,7 @@
 use App\Exceptions\AnalyticsUnavailableException;
 use App\Http\Middleware\AttachRequestContext;
 use App\Http\Middleware\AuthenticateEdge;
+use App\Http\Middleware\EnforceTokenScope;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureHorizonAdmin;
 use App\Http\Middleware\EnsureUserIsAdmin;
@@ -30,13 +31,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->statefulApi();
         // Caddy terminates TLS in front of the control plane. Trust its forwarded
         // scheme and host so generated links (pagination, redirects) keep https.
-        $middleware->trustProxies(at: '*', headers: Request::HEADER_X_FORWARDED_FOR
+        $middleware->trustProxies(at: array_values(array_filter(array_map('trim', explode(',', (string) env('TRUSTED_PROXIES', '127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7'))))), headers: Request::HEADER_X_FORWARDED_FOR
             | Request::HEADER_X_FORWARDED_HOST
             | Request::HEADER_X_FORWARDED_PORT
             | Request::HEADER_X_FORWARDED_PROTO);
         $middleware->redirectGuestsTo(fn (Request $request): ?string => $request->is('api/*') ? null : '/');
         $middleware->alias([
             'account.active' => EnsureAccountIsActive::class,
+            'token.scope' => EnforceTokenScope::class,
             'admin' => EnsureUserIsAdmin::class,
             'idempotent' => IdempotentRequest::class,
             'horizon.admin' => EnsureHorizonAdmin::class,

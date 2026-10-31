@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\UserType;
 use App\Http\Middleware\IdempotentRequest;
+use App\Models\ApiToken;
 use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Models\IdempotencyKey;
@@ -11,7 +12,6 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use Laravel\Sanctum\PersonalAccessToken;
 use Tests\TestCase;
 
 class AccessApiTest extends TestCase
@@ -183,7 +183,7 @@ class AccessApiTest extends TestCase
     public function test_token_metadata_failure_rolls_back_issued_secret(): void
     {
         $user = User::factory()->create();
-        PersonalAccessToken::updating(function (): void {
+        ApiToken::updating(function (): void {
             throw new \RuntimeException('injected token metadata failure');
         });
 
@@ -193,7 +193,7 @@ class AccessApiTest extends TestCase
         } catch (\RuntimeException $exception) {
             $this->assertSame('injected token metadata failure', $exception->getMessage());
         } finally {
-            PersonalAccessToken::flushEventListeners();
+            ApiToken::flushEventListeners();
         }
 
         $this->assertDatabaseCount('personal_access_tokens', 0);
@@ -254,6 +254,12 @@ class AccessApiTest extends TestCase
         $this->actingAs($user)->withHeader('Idempotency-Key', (string) Str::uuid())->patchJson('/api/me', [
             'name' => 'Updated Operator',
             'email' => 'updated@example.test',
+        ])->assertUnprocessable()->assertJsonValidationErrors('current_password');
+
+        $this->actingAs($user)->withHeader('Idempotency-Key', (string) Str::uuid())->patchJson('/api/me', [
+            'name' => 'Updated Operator',
+            'email' => 'updated@example.test',
+            'current_password' => 'CorrectHorseBattery9',
         ])->assertOk()->assertJsonPath('data.name', 'Updated Operator');
 
         $this->actingAs($user)->withHeader('Idempotency-Key', (string) Str::uuid())->putJson('/api/me/password', [

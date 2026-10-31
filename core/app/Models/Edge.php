@@ -15,6 +15,9 @@ class Edge extends Model
 
     use HasUuids;
 
+    /** An unused bootstrap token stops working after this many hours. */
+    public const BOOTSTRAP_TOKEN_HOURS = 24;
+
     protected $guarded = [];
 
     protected $hidden = ['bootstrap_token_hash', 'identity_hash', 'identity_csr_hash', 'identity_certificate', 'pending_identity_certificate', 'pending_identity_csr_hash'];
@@ -59,6 +62,6 @@ class Edge extends Model
 
     protected function casts(): array
     {
-        return ['enabled' => 'boolean', 'drained' => 'boolean', 'capacity' => 'array', 'runtime_versions' => 'array', 'desired_runtime_versions' => 'array', 'runtime_versions_reported_at' => 'immutable_datetime', 'cell_slot_count' => 'integer', 'bootstrap_consumed_at' => 'immutable_datetime', 'identity_revoked_at' => 'immutable_datetime', 'identity_certificate_expires_at' => 'immutable_datetime', 'pending_identity_certificate_expires_at' => 'immutable_datetime', 'reported_identity_expires_at' => 'immutable_datetime', 'registered_at' => 'immutable_datetime', 'last_heartbeat_at' => 'immutable_datetime'];
+        return ['enabled' => 'boolean', 'drained' => 'boolean', 'capacity' => 'array', 'runtime_versions' => 'array', 'desired_runtime_versions' => 'array', 'runtime_versions_reported_at' => 'immutable_datetime', 'cell_slot_count' => 'integer', 'bootstrap_consumed_at' => 'immutable_datetime', 'bootstrap_expires_at' => 'immutable_datetime', 'identity_revoked_at' => 'immutable_datetime', 'identity_certificate_expires_at' => 'immutable_datetime', 'pending_identity_certificate_expires_at' => 'immutable_datetime', 'reported_identity_expires_at' => 'immutable_datetime', 'registered_at' => 'immutable_datetime', 'last_heartbeat_at' => 'immutable_datetime'];
     }
 }

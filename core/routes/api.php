@@ -46,7 +46,7 @@ Route::get('/ready', [HealthController::class, 'ready']);
 Route::get('/nameservers', NameserverController::class);
 Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:login');
 
-Route::middleware(['auth:sanctum', 'account.active', 'throttle:account'])->group(function (): void {
+Route::middleware(['auth:sanctum', 'account.active', 'token.scope', 'throttle:account'])->group(function (): void {
     Route::post('/auth/logout', [AuthController::class, 'logout'])->middleware('idempotent');
     Route::get('/me', [AuthController::class, 'me']);
     Route::patch('/me', [AuthController::class, 'update'])->middleware('idempotent');

@@ -12,6 +12,8 @@
         "laravel/horizon": "^5.47",
         "laravel/sanctum": "^4.3",
         "laravel/tinker": "^3.0",
+        "pragmarx/google2fa": "^9.1",
+        "pragmarx/google2fa-qrcode": "^3.0",
         "predis/predis": "^3.5"
     },
     "require-dev": {

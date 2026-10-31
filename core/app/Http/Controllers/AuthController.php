@@ -9,8 +9,11 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -20,21 +23,37 @@ class AuthController extends Controller
     public function login(LoginRequest $request): JsonResponse
     {
         $user = User::query()->where('email', $request->string('email'))->first();
-        if ($user === null || ! Hash::check($request->string('password'), $user->password)) {
+        // Check a hash even for an unknown address, so the response time does not reveal which accounts exist.
+        $hash = $user?->password ?? self::unknownAccountHash();
+        if (! Hash::check($request->string('password'), $hash) || $user === null) {
             throw ValidationException::withMessages(['email' => ['The provided credentials are incorrect.']]);
         }
         if ($user->isDisabled()) {
             return response()->json(['message' => 'This account is disabled.', 'code' => 'account_disabled', 'details' => (object) []], 403);
         }
+        if ($user->hasTwoStepSignIn()) {
+            $otp = $request->input('otp');
+            if (! is_string($otp) || $otp === '') {
+                return response()->json(['message' => 'Enter the code from your authenticator app.', 'code' => 'otp_required', 'details' => (object) []], 401);
+            }
+            if (! $user->passesTwoStepChallenge($otp)) {
+                throw ValidationException::withMessages(['otp' => ['The provided code is incorrect.']]);
+            }
+        }
 
         $token = DB::transaction(function () use ($request, $user): string {
-            $created = $user->createTokenWithinLimit($request->string('device_name')->value() ?: 'api', 'device_name');
+            $created = $user->createTokenWithinLimit($request->string('device_name')->value() ?: 'api', 'device_name', expiresAt: now()->addDays(30));
             AuditLog::record($user, 'auth.login', $user, [], $request->ip());
 
             return $created->plainTextToken;
         });
 
         return response()->json(['data' => ['user' => UserResource::make($user), 'token' => $token]]);
+    }
+
+    private static function unknownAccountHash(): string
+    {
+        return Cache::remember('auth.unknown_account_hash', 3600, fn (): string => Hash::make(Str::random(40)));
     }
 
     public function logout(Request $request): JsonResponse
@@ -65,7 +84,10 @@ class AuthController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email,'.$request->user()->getKey()],
+            // Changing the sign-in address needs proof of the password, so a stolen session or token cannot take over the account.
+            'current_password' => [Rule::requiredIf(fn (): bool => strtolower((string) $request->input('email')) !== strtolower($request->user()->email)), 'current_password'],
         ]);
+        unset($validated['current_password']);
         $request->user()->update($validated);
         AuditLog::record($request->user(), 'profile.updated', $request->user(), ['fields' => array_keys($validated)], $request->ip());
 

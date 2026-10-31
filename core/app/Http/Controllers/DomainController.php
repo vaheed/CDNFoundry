@@ -27,6 +27,9 @@ class DomainController extends Controller
         if (! $request->user()->isAdmin()) {
             $query->whereHas('users', fn ($users) => $users->whereKey($request->user()->getKey()));
         }
+        if (($scoped = $request->user()->tokenDomainIds()) !== null) {
+            $query->whereKey($scoped);
+        }
 
         return DomainResource::collection($query->cursorPaginate(50));
     }

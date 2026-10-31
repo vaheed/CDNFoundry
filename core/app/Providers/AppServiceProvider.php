@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\ApiToken;
 use App\Support\PlatformSettings;
 use Filament\Support\Facades\FilamentTimezone;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -13,6 +14,8 @@ use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Validation\Rules\Password;
+use Laravel\Sanctum\Sanctum;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -42,6 +45,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Sanctum::usePersonalAccessTokenModel(ApiToken::class);
         FilamentTimezone::set(fn (): string => app(PlatformSettings::class)->displayTimezone());
 
         Queue::before(function (JobProcessing $event): void {
@@ -51,7 +55,17 @@ class AppServiceProvider extends ServiceProvider
         Queue::after($clearJobContext);
         Queue::exceptionOccurred($clearJobContext);
 
-        RateLimiter::for('login', fn (Request $request): Limit => Limit::perMinute(app(PlatformSettings::class)->integer('rate_limits', 'login_per_minute'))->by($request->ip().'|'.strtolower((string) $request->string('email'))));
+        Password::defaults(fn (): Password => Password::min(12)->letters()->mixedCase()->numbers());
+        // Spraying one password over many accounts is bounded per address; guessing one account's password
+        // from many addresses is bounded per account.
+        RateLimiter::for('login', function (Request $request): array {
+            $perMinute = max(1, app(PlatformSettings::class)->integer('rate_limits', 'login_per_minute'));
+
+            return [
+                Limit::perMinute($perMinute)->by('account|'.strtolower((string) $request->string('email'))),
+                Limit::perMinute($perMinute * 10)->by('address|'.$request->ip()),
+            ];
+        });
         RateLimiter::for('account', function (Request $request): Limit {
             $identity = (string) ($request->user()?->getAuthIdentifier() ?? $request->ip());
 

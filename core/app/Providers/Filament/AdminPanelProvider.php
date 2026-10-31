@@ -7,6 +7,7 @@ use App\Filament\Domain\Resources\Domains\DomainResource;
 use App\Filament\Shared\Pages\ApiTokens;
 use App\Filament\Shared\Pages\EditProfile;
 use App\Support\GrafanaExploreUrl;
+use Filament\Auth\MultiFactor\App\AppAuthentication;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -34,6 +35,7 @@ class AdminPanelProvider extends PanelProvider
             ->brandName('CDNFoundry Administration')
             ->favicon(asset('favicon.svg'))
             ->profile(EditProfile::class)
+            ->multiFactorAuthentication([AppAuthentication::make()->recoverable()])
             ->viteTheme('resources/css/filament/shared/theme.css')
             ->readOnlyRelationManagersOnResourceViewPagesByDefault(false)
             ->colors(['primary' => Color::Blue])

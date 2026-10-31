@@ -13,6 +13,6 @@ class LoginRequest extends FormRequest
 
     public function rules(): array
     {
-        return ['email' => ['required', 'email:rfc', 'max:255'], 'password' => ['required', 'string', 'max:1024'], 'device_name' => ['nullable', 'string', 'max:100']];
+        return ['email' => ['required', 'email:rfc', 'max:255'], 'password' => ['required', 'string', 'max:1024'], 'device_name' => ['nullable', 'string', 'max:100'], 'otp' => ['nullable', 'string', 'max:32']];
     }
 }
