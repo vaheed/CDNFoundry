@@ -44,7 +44,6 @@ def main() -> None:
                 'CONTROL_HOSTNAME': 'control.example.test',
                 'TELEMETRY_HOSTNAME': 'telemetry.example.test',
                 'GRAFANA_HOSTNAME': 'grafana.example.test',
-                'DNS_API_HOSTNAME': 'localhost',
                 'ACME_CONTACT_EMAIL': 'qualification@example.test',
                 'EDGE_PUBLIC_IPV4_ALLOWLIST': subnet,
                 'EDGE_PUBLIC_IPV6_ALLOWLIST': '::1/128',
@@ -55,49 +54,15 @@ def main() -> None:
                 'LOG_AUTH_TOKEN': 'isolated-qualification-token',
             }
             environment = [item for key, value in variables.items() for item in ('-e', key+'='+value)]
-            for config in ('Caddyfile', 'Caddyfile.dns-api', 'Caddyfile.telemetry'):
+            for config in ('Caddyfile', 'Caddyfile.telemetry'):
                 adapted = run('docker', 'run', '--rm', '--network', 'none', *environment,
                               '-v', f'{ROOT / "deploy/production"}:/configs:ro', image,
                               'caddy', 'adapt', '--adapter', 'caddyfile', '--config', '/configs/'+config)
                 assert json.loads(adapted.stdout)['apps']['http']['servers'], config
 
-            backend = name+'-backend'
-            containers.append(backend)
-            run('docker', 'run', '-d', '--name', backend, '--network', name,
-                '--network-alias', 'pdns-auth', '--read-only', '--memory', '32m',
-                '-v', f'{target / "www"}:/www:ro', BUSYBOX, 'httpd', '-f', '-p', '8081', '-h', '/www')
-            for allowed in (True, False):
-                server = name+('-allow' if allowed else '-deny')
-                containers.append(server)
-                run('docker', 'run', '-d', '--name', server, '--network', name,
-                    '--read-only', '--memory', '128m', '--tmpfs', '/data:rw,size=16m',
-                    '--tmpfs', '/config:rw,size=16m', '--tmpfs', '/tmp:rw,size=16m',
-                    '-p', '127.0.0.1::8444', *environment,
-                    '-e', 'CONTROL_PUBLIC_IPV4_ALLOWLIST='+(subnet if allowed else '203.0.113.1/32'),
-                    '-v', f'{ROOT / "deploy/production/Caddyfile.dns-api"}:/etc/caddy/Caddyfile:ro',
-                    '-v', f'{target / "tls.crt"}:/run/secrets/dns-api.crt:ro',
-                    '-v', f'{target / "tls.key"}:/run/secrets/dns-api.key:ro', image)
-                port = run('docker', 'port', server, '8444/tcp').stdout.strip().rsplit(':', 1)[1]
-                for _ in range(30):
-                    result = run('curl', '--noproxy', '*', '-sS', '--max-time', '2',
-                                 '--resolve', f'localhost:{port}:127.0.0.1',
-                                 '--cacert', str(target / 'tls.crt'), '-w', '\n%{http_code}',
-                                 f'https://localhost:{port}/', check=False)
-                    if result.returncode == 0:
-                        break
-                    time.sleep(0.2)
-                else:
-                    raise RuntimeError('Caddy TLS listener did not become ready')
-                body, status = result.stdout.rsplit('\n', 1)
-                assert status == ('200' if allowed else '403'), (allowed, status)
-                if allowed:
-                    assert body == 'qualified upstream\n', body
-                assert run('docker', 'exec', server, 'wget', '-qO-',
-                           'http://127.0.0.1:2019/healthz').returncode == 0
             identity = run('docker', 'image', 'inspect', image, '--format', '{{.Id}}').stdout.strip()
             print(json.dumps({'qualification': 'caddy_ingress', 'image': identity,
-                              'production_config_adaptation': 'passed', 'real_tls_proxy': 'passed',
-                              'source_allowlist_denial': 'passed', 'health': 'passed'}))
+                              'production_config_adaptation': 'passed'}))
         finally:
             for container in reversed(containers):
                 run('docker', 'rm', '-f', container, check=False)

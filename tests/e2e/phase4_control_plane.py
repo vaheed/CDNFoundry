@@ -236,12 +236,13 @@ def wait_isolation(token: str, domain_id: int, state: str, drain_scheduled: bool
 
 def ensure_cluster(token: str) -> dict:
     _, response = call("GET", "/api/admin/dns/clusters", token=token)
-    cluster = next((row for row in response["data"] if row["api_url"] == "http://pdns-auth:8081"), None)
+    cluster = next((row for row in response["data"] if row["api_url"] == "http://pdns-primary:8081"), None)
     if cluster is None:
         _, created = call("POST", "/api/admin/dns/clusters", {
             "name": f"phase4-pdns-{RUN}",
             "location": "local-compose",
-            "api_url": "http://pdns-auth:8081",
+            "api_url": "http://pdns-primary:8081",
+                "transfer_endpoint": "172.28.30.10:5300",
             "api_key": "pdns-dev-api-key",
             "server_id": "localhost",
             "nameservers": [{"hostname": "ns1.cdnf.test"}, {"hostname": "ns2.cdnf.test"}],
@@ -274,7 +275,7 @@ def apply_platform_identity(token: str) -> None:
         "soa_expire": 1209600,
         "soa_minimum_ttl": 60,
         "default_ttl": 60,
-        "cluster_targets": ["pdns-auth:8081"],
+        "cluster_targets": ["pdns-primary:8081"],
     }
     _, preview = call("POST", "/api/admin/system/settings/dns/validate", settings, token)
     _, operation = call("PATCH", "/api/admin/system/settings/dns", {

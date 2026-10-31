@@ -66,8 +66,8 @@ def main() -> None:
     domain_id = created["data"]["id"]
     call("POST", f"/api/admin/domains/{domain_id}/force-verify", {}, token)
     call("POST", f"/api/domains/{domain_id}/activate", {}, token)
-    pdns = subprocess.run(["docker", "compose", "-f", COMPOSE, "ps", "-q", "pdns-auth"], cwd=ROOT, text=True, capture_output=True, check=True).stdout.strip()
-    assert pdns, "pdns-auth is not running"
+    pdns = subprocess.run(["docker", "compose", "-f", COMPOSE, "ps", "-q", "pdns-primary"], cwd=ROOT, text=True, capture_output=True, check=True).stdout.strip()
+    assert pdns, "pdns-primary is not running"
     subprocess.run(["docker", "stop", pdns], check=True, capture_output=True)
     try:
         _, record = call("POST", f"/api/domains/{domain_id}/dns/records", {"type": "A", "name": "outage", "content": "192.0.2.77", "ttl": 60, "mode": "dns_only"}, token)

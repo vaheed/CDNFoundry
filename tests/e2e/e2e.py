@@ -212,7 +212,7 @@ def main() -> None:
 
     _, clusters = request("GET", "/api/admin/dns/clusters", token=admin_token)
     cluster = next(
-        (item for item in clusters["data"] if item["api_url"] == "http://pdns-auth:8081"),
+        (item for item in clusters["data"] if item["api_url"] == "http://pdns-primary:8081"),
         None,
     )
     if cluster is None:
@@ -222,7 +222,8 @@ def main() -> None:
             {
                 "name": f"phase1-pdns-{RUN_ID}",
                 "location": "local-compose",
-                "api_url": "http://pdns-auth:8081",
+                "api_url": "http://pdns-primary:8081",
+                "transfer_endpoint": "172.28.30.10:5300",
                 "api_key": "pdns-dev-api-key",
                 "server_id": "localhost",
                 "nameservers": [
@@ -277,7 +278,7 @@ def main() -> None:
         "soa_expire": 1209600,
         "soa_minimum_ttl": 300,
         "default_ttl": 300,
-        "cluster_targets": ["pdns-auth:8081"],
+        "cluster_targets": ["pdns-primary:8081"],
     }
     _, validated = request(
         "POST", "/api/admin/system/settings/dns/validate", dns_payload,

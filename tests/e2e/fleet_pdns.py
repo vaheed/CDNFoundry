@@ -36,7 +36,7 @@ def main() -> None:
     require(os.geteuid() == 0, "Run this isolated file-ownership qualification as root.")
     project = "cdnf-pdns-qualification-" + uuid.uuid4().hex[:12]
     source = yaml.safe_load((ROOT / "compose.prod.yml").read_text())
-    images = {name: source["services"][name]["image"] for name in ("pdns-db", "pdns-auth")}
+    images = {name: source["services"][name]["image"] for name in ("pdns-db", "pdns-primary")}
     for service, reference in images.items():
         if reference.startswith('${CDNF_'):
             component = reference.split('_IMAGE', 1)[0].removeprefix('${CDNF_').lower().replace('_', '-')
@@ -50,11 +50,11 @@ def main() -> None:
         store = FleetState(root / "state")
         with store.locked():
             state = store.init({"operator_domain": "ops.example.com", "platform_domain": "example.net", "release": "qualification"})
-            store.add_node(state, {"name": "dns-qualification", "role": "dns", "region": "test", "location": "local", "public_ipv4": "192.0.2.100"})
+            store.add_node(state, {"name": "dns-qualification", "role": "control", "region": "test", "location": "local", "public_ipv4": "192.0.2.100"})
         store.prepare_secret_rotation("pdns-db-password", node="dns-qualification")
         Renderer(ROOT, store, root / "bundles").render(store.load())
         bundle = root / "bundles/dns-qualification"
-        config = bundle / "docker/pdns/pdns.conf"
+        config = bundle / "docker/pdns/primary.conf"
         require(stat.S_IMODE(config.stat().st_mode) == 0o600, "Generated credentials are not transfer-private.")
         # Run the generated host preflight, stopping at validation: this fixture
         # deliberately starts only the two services needed for secret rotation.
@@ -73,10 +73,10 @@ def main() -> None:
                         "tmpfs": ["/var/lib/postgresql"],
                         "volumes": [str(ROOT / "docker/postgres/pdns-schema.sql")+":/docker-entrypoint-initdb.d/schema.sql:ro"],
                         "healthcheck": {"test": ["CMD", "pg_isready", "-U", "pdns"], "interval": "1s", "timeout": "2s", "retries": 30}},
-            "pdns-auth": {"image": images["pdns-auth"], "group_add": generated["services"]["pdns-auth"].get("group_add", []),
-                          "volumes": ["./docker/pdns/pdns.conf:/etc/powerdns/pdns.conf:ro"],
+            "pdns-primary": {"image": images["pdns-primary"], "group_add": generated["services"]["pdns-primary"].get("group_add", []),
+                          "volumes": ["./docker/pdns/primary.conf:/etc/powerdns/pdns.conf:ro"],
                           "depends_on": {"pdns-db": {"condition": "service_healthy"}},
-                          "healthcheck": source["services"]["pdns-auth"]["healthcheck"]},
+                          "healthcheck": source["services"]["pdns-primary"]["healthcheck"]},
         }}
         (bundle / "compose.yml").write_text(yaml.safe_dump(compose))
         environment = {**os.environ, "COMPOSE_PROJECT_NAME": project, "COMPOSE_FILE": "compose.yml"}
@@ -95,9 +95,9 @@ def main() -> None:
         try:
             dc("up", "-d", "--wait", "--wait-timeout", "90")
             database_container = dc("ps", "-q", "pdns-db").stdout.strip()
-            dc("exec", "-T", "pdns-auth", "sh", "-c", "test -r /etc/powerdns/pdns.conf")
+            dc("exec", "-T", "pdns-primary", "sh", "-c", "test -r /etc/powerdns/pdns.conf")
             command("docker", "run", "--rm", "--user", "65534:65534", "--entrypoint", "sh", "-v", str(config)+":/credential:ro",
-                                images["pdns-auth"], "-c", "test ! -r /credential")
+                                images["pdns-primary"], "-c", "test ! -r /credential")
             current = store.read_secret("pdns-db-password", node="dns-qualification")
             pending = store.pending_secret_path("pdns-db-password", node="dns-qualification").read_text().strip()
 
@@ -128,7 +128,7 @@ def main() -> None:
             require(authenticate(pending) and not authenticate(current), "Rotation did not replace the database password.")
             require(stat.S_IMODE(config.stat().st_mode) == 0o640 and config.stat().st_gid == 82,
                     "Rotation lost restricted container read permissions.")
-            dc("exec", "-T", "pdns-auth", "pdns_control", "rping")
+            dc("exec", "-T", "pdns-primary", "pdns_control", "rping")
             backup = (bundle / ".env.prod.before-pdns-rotation").read_bytes()
             command("sh", "reconcile-pdns-password.sh")
             require(authenticate(pending) and not authenticate(current), "Repeated rotation changed the intended password.")
@@ -144,7 +144,7 @@ def main() -> None:
                     "Retry after database-only activation did not repair consumers.")
             require(dc("ps", "-q", "pdns-db").stdout.strip() == database_container,
                     "Interrupted-rotation recovery recreated the database dependency.")
-            dc("exec", "-T", "pdns-auth", "pdns_control", "rping")
+            dc("exec", "-T", "pdns-primary", "pdns_control", "rping")
             print(json.dumps({"environment": project, "images": images, "secret_permissions": "passed", "legacy_sql_failure": "reproduced", "lock_and_validation": "passed", "rotation_and_retry": "passed", "interrupted_rotation_recovery": "passed", "rotation_seconds": round(time.monotonic()-started, 3)}))
         finally:
             dc("down", "--remove-orphans", check=False)

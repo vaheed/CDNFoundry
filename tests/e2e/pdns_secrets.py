@@ -18,17 +18,25 @@ def run_wrapper(environment: dict[str, str], script: str, config: Path | None = 
 
 
 def main() -> None:
+    primary = ROOT / "docker/pdns/primary.conf"
     start = "/usr/local/bin/pdns-production-start --version >/dev/null 2>&1; echo exit=$?; cat /tmp/pdns/pdns.conf 2>/dev/null"
-    refused = run_wrapper({}, "/usr/local/bin/pdns-production-start --version; echo exit=$?")
+    version = "/usr/local/bin/pdns-production-start --version; echo exit=$?"
+    # The primary has a database password and an API key; both are refused while they are the development values.
+    refused = run_wrapper({}, version, primary)
     assert "exit=78" in refused.stdout and "development value" in refused.stderr, refused
-    development = run_wrapper({"PDNS_DB_PASSWORD": "pdns-dev-only", "PDNS_API_KEY": "pdns-dev-api-key"}, "/usr/local/bin/pdns-production-start --version; echo exit=$?")
+    development = run_wrapper({"PDNS_DB_PASSWORD": "pdns-dev-only", "PDNS_API_KEY": "pdns-dev-api-key"}, version, primary)
     assert "exit=78" in development.stdout, development
-    half = run_wrapper({"PDNS_DB_PASSWORD": "unique-db-secret"}, "/usr/local/bin/pdns-production-start --version; echo exit=$?")
+    half = run_wrapper({"PDNS_DB_PASSWORD": "unique-db-secret"}, version, primary)
     assert "exit=78" in half.stdout and "api-key" in half.stderr, half
-    rendered = run_wrapper({"PDNS_DB_PASSWORD": "unique-db-secret", "PDNS_API_KEY": "unique=api&key/secret"}, start)
+    rendered = run_wrapper({"PDNS_DB_PASSWORD": "unique-db-secret", "PDNS_API_KEY": "unique=api&key/secret"}, start, primary)
     assert "exit=0" in rendered.stdout, rendered
     assert "gpgsql-password=unique-db-secret" in rendered.stdout and "api-key=unique=api&key/secret" in rendered.stdout
     assert "pdns-dev" not in rendered.stdout, "a development secret survived rendering"
+    # A node has no database password, only the API key, and creates its SQLite store on first start.
+    node_refused = run_wrapper({}, version)
+    assert "exit=78" in node_refused.stdout and "api-key" in node_refused.stderr, node_refused
+    node = run_wrapper({"PDNS_API_KEY": "unique=api&key/secret"}, start)
+    assert "exit=0" in node.stdout and "gpgsql" not in node.stdout and "pdns-dev" not in node.stdout, node
     print("pdns_secrets: PASS")
 
 

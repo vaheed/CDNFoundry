@@ -72,11 +72,11 @@ def compose(*arguments: str) -> None:
 
 def runtime_queue_size(job_class: str | None = None) -> int:
     if job_class is None:
-        command = ["LLEN", "laravel-database-queues:runtime"]
+        command = ["LLEN", "laravel-database-queues:dns"]
         result = subprocess.run(["docker", "compose", "-f", COMPOSE, "exec", "-T", "redis", "valkey-cli", *command], cwd=ROOT, check=True, text=True, capture_output=True, timeout=10)
         return int(result.stdout.strip())
 
-    command = ["--raw", "LRANGE", "laravel-database-queues:runtime", "0", "-1"]
+    command = ["--raw", "LRANGE", "laravel-database-queues:dns", "0", "-1"]
     result = subprocess.run(["docker", "compose", "-f", COMPOSE, "exec", "-T", "redis", "valkey-cli", *command], cwd=ROOT, check=True, text=True, capture_output=True, timeout=10)
     return sum(1 for line in result.stdout.splitlines() if line and json.loads(line).get("displayName") == job_class)
 
@@ -94,8 +94,23 @@ def wait_http() -> None:
     raise AssertionError("control plane did not recover")
 
 
+def eventually(query: tuple[str, str], value: str) -> str:
+    """A zone reaches the serving node by a pull, so an answer may trail the write by a few seconds."""
+    deadline = time.monotonic() + 90
+    output = ""
+    while time.monotonic() < deadline:
+        try:
+            output = dig_authority(*query) if query[1] == "NS" else dig(*query)
+            if value in output:
+                return output
+        except subprocess.SubprocessError:
+            pass
+        time.sleep(1)
+    raise AssertionError((query, output))
+
+
 def wait_dns(expected: str = "192.0.2.20") -> None:
-    deadline = time.monotonic() + 30
+    deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
         try:
             if expected in dig(ZONE, "A"):
@@ -137,9 +152,9 @@ def main() -> None:
     _, login = call("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD, "device_name": "phase2-e2e"})
     token = login["data"]["token"]
     _, clusters = call("GET", "/api/admin/dns/clusters", token=token)
-    cluster = next((item for item in clusters["data"] if item["api_url"] == "http://pdns-auth:8081"), None)
+    cluster = next((item for item in clusters["data"] if item["api_url"] == "http://pdns-primary:8081"), None)
     if cluster is None:
-        _, created = call("POST", "/api/admin/dns/clusters", {"name": f"phase2-{RUN}", "location": "e2e", "api_url": "http://pdns-auth:8081", "api_key": "pdns-dev-api-key", "server_id": "localhost", "nameservers": [{"hostname": "ns1.cdnf.test"}, {"hostname": "ns2.cdnf.test"}]}, token)
+        _, created = call("POST", "/api/admin/dns/clusters", {"name": f"phase2-{RUN}", "location": "e2e", "api_url": "http://pdns-primary:8081", "transfer_endpoint": "172.28.30.10:5300", "api_key": "pdns-dev-api-key", "server_id": "localhost", "nameservers": [{"hostname": "ns1.cdnf.test"}, {"hostname": "ns2.cdnf.test"}]}, token)
         cluster = created["data"]
         wait_operation(token, created["operation_id"])
         _, refreshed = call("GET", f"/api/admin/dns/clusters/{cluster['id']}", token=token)
@@ -155,7 +170,7 @@ def main() -> None:
     settings = {
         "platform_domain": "cdnf.test", "proxy_hostname": "proxy.cdnf.test",
         "nameservers": [{"hostname": "ns1.cdnf.test", "ipv4": "8.8.8.8", "ipv6": "2001:4860:4860::8888"}, {"hostname": "ns2.cdnf.test", "ipv4": "1.1.1.1", "ipv6": "2606:4700:4700::1111"}],
-        "soa_primary": "ns1.cdnf.test", "soa_mailbox": "hostmaster.cdnf.test", "soa_refresh": 3600, "soa_retry": 600, "soa_expire": 1209600, "soa_minimum_ttl": 300, "default_ttl": 300, "cluster_targets": ["pdns-auth:8081"],
+        "soa_primary": "ns1.cdnf.test", "soa_mailbox": "hostmaster.cdnf.test", "soa_refresh": 3600, "soa_retry": 600, "soa_expire": 1209600, "soa_minimum_ttl": 300, "default_ttl": 300, "cluster_targets": ["pdns-primary:8081"],
     }
     _, validated_settings = call("POST", "/api/admin/system/settings/dns/validate", settings, token)
     _, identity = call("PATCH", "/api/admin/system/settings/dns", settings | {"confirmation_token": validated_settings["data"]["confirmation_token"]}, token)
@@ -185,15 +200,14 @@ def main() -> None:
         (f"_sip._tcp.{ZONE}", "SRV"): "10 20 5060 sip.example.net.",
     }
     for query, value in expected.items():
-        output = dig_authority(*query) if query[1] == "NS" else dig(*query)
-        assert value in output, (query, output)
+        eventually(query, value)
     _, reverse_created = call("POST", "/api/domains", {"name": REVERSE_ZONE}, token)
     reverse_id = reverse_created["data"]["id"]
     call("POST", f"/api/admin/domains/{reverse_id}/force-verify", {}, token)
     call("POST", f"/api/domains/{reverse_id}/activate", {}, token)
     call("POST", f"/api/domains/{reverse_id}/dns/records", {"type": "PTR", "name": "20", "content": "target.example.net.", "ttl": 60}, token)
     wait_deployment(token, reverse_id)
-    assert "target.example.net." in dig(f"20.{REVERSE_ZONE}", "PTR")
+    eventually((f"20.{REVERSE_ZONE}", "PTR"), "target.example.net.")
     assert "192.0.2.20" in dig(ZONE, "A", tcp=True)
     ipv6_transport = subprocess.run(["dig", "@::1", "-p", "1053", ZONE, "AAAA", "+short"], check=True, text=True, capture_output=True, timeout=10).stdout
     assert "2001:db8::20" in ipv6_transport
@@ -210,13 +224,13 @@ def main() -> None:
     assert queued_updates == 1, f"expected one coalesced runtime job, found {queued_updates}"
     compose("start", "horizon")
     wait_deployment(token, domain_id)
-    assert "192.0.2.120" in dig(ZONE, "A")
+    wait_dns("192.0.2.120")
 
     compose("stop", "core", "web", "horizon", "scheduler", "control-db", "redis")
     assert "192.0.2.120" in dig(ZONE, "A")
     compose("start", "control-db", "redis", "core", "web", "horizon", "scheduler")
     wait_http()
-    compose("restart", "pdns-auth", "dnsdist", "horizon", "core")
+    compose("restart", "pdns-primary", "pdns-auth", "dnsdist", "horizon", "core")
     wait_http()
     wait_dns("192.0.2.120")
     assert "phase2-real-runtime" in dig(f"txt.{ZONE}", "TXT")
@@ -227,6 +241,6 @@ if __name__ == "__main__":
     try:
         main()
     finally:
-        compose("start", "control-db", "redis", "core", "web", "horizon", "scheduler", "pdns-auth", "dnsdist")
+        compose("start", "control-db", "redis", "core", "web", "horizon", "scheduler", "pdns-primary", "pdns-auth", "dnsdist")
         wait_http()
         artisan("foreach(App\\Models\\Domain::query()->whereIn('name',[" + quote(ZONE) + "," + quote(REVERSE_ZONE) + "])->get() as $d){foreach(App\\Models\\DnsCluster::all() as $c){try{app(App\\Support\\PowerDnsClient::class)->deleteZone($c,$d->name);}catch(Throwable $e){}} $d->delete();} App\\Models\\User::query()->where('email'," + quote(EMAIL) + ")->delete();")
