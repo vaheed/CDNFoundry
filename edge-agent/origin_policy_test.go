@@ -111,3 +111,22 @@ func TestHeldPolicySurvivesAControlOutageAndATamperedReply(t *testing.T) {
 		t.Fatal("the first fetch must have stored a checksum")
 	}
 }
+
+func TestGatewayRoutesCarryEachHostsHandshakeBudget(t *testing.T) {
+	pools := map[string]map[string]any{"shared": {"hosts": map[string]any{
+		"strict.test": map[string]any{"security": map[string]any{"limits": map[string]any{"tls_handshakes_per_second": float64(5)}}},
+		"plain.test":  map[string]any{},
+		"absurd.test": map[string]any{"security": map[string]any{"limits": map[string]any{"tls_handshakes_per_second": float64(1e9)}}},
+	}}}
+	gateway, err := compileGateway(1, pools, `[{"address":"192.0.2.1","pool":"shared","http":"127.0.0.1:8081","https":"127.0.0.1:8444"}]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	budgets := map[string]int{}
+	for _, route := range gateway["routes"].([]map[string]any) {
+		budgets[route["hostname"].(string)] = route["tls_handshakes_per_second"].(int)
+	}
+	if budgets["strict.test"] != 5 || budgets["plain.test"] != defaultTLSHandshakeBudget || budgets["absurd.test"] != defaultTLSHandshakeBudget {
+		t.Fatalf("unexpected budgets %v", budgets)
+	}
+}

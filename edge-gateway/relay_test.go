@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
 	"testing"
@@ -160,4 +162,83 @@ func TestOneSourceCannotTakeEverySlot(t *testing.T) {
 	if len(g.slots) != 2 {
 		t.Fatalf("a refused connection must not keep a global slot: %d held", len(g.slots))
 	}
+}
+
+func TestHandshakeLimiterCountsPerClientAndHostInOneSecondWindows(t *testing.T) {
+	limiter := newHandshakeLimiter()
+	now := time.Unix(1000, 0)
+	for i := 0; i < 5; i++ {
+		if !limiter.allow("198.51.100.7|a.test", 5, now) {
+			t.Fatalf("handshake %d is within the budget", i+1)
+		}
+	}
+	if limiter.allow("198.51.100.7|a.test", 5, now) {
+		t.Fatal("the sixth handshake in one second exceeds the budget")
+	}
+	if !limiter.allow("198.51.100.8|a.test", 5, now) || !limiter.allow("198.51.100.7|b.test", 5, now) {
+		t.Fatal("another client or another host has its own budget")
+	}
+	if !limiter.allow("198.51.100.7|a.test", 5, now.Add(time.Second)) {
+		t.Fatal("the budget resets with the next second")
+	}
+}
+
+func TestGatewayRefusesOneClientsTLSFloodButNotAnotherClient(t *testing.T) {
+	upstream, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer upstream.Close()
+	go func() {
+		for {
+			connection, err := upstream.Accept()
+			if err != nil {
+				return
+			}
+			go func() { _, _ = io.Copy(io.Discard, connection); connection.Close() }()
+		}
+	}()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	fixed := time.Unix(5000, 0)
+	g := &gateway{handshakes: newHandshakeLimiter(), clock: func() time.Time { return fixed }}
+	g.table.Store(&routingTable{
+		routes:     map[string]string{"https|127.0.0.1|route.test": upstream.Addr().String()},
+		tlsBudgets: map[string]int{"route.test": 3},
+	})
+	go g.accept("127.0.0.1:443", listener)
+
+	hello := func(source string) {
+		dialer := net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP(source)}, Timeout: 2 * time.Second}
+		connection, err := dialer.Dial("tcp", listener.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer connection.Close()
+		_ = connection.SetDeadline(time.Now().Add(100 * time.Millisecond))
+		_ = tls.Client(connection, &tls.Config{ServerName: "route.test", MinVersion: tls.VersionTLS12}).Handshake()
+	}
+	for i := 0; i < 8; i++ {
+		hello("127.0.0.1")
+	}
+	waitFor(t, func() bool { return g.accepted.Load() == 3 && g.rejected.Load() == 5 }, func() string {
+		return fmt.Sprintf("accepted=%d rejected=%d errors=%d", g.accepted.Load(), g.rejected.Load(), g.errors.Load())
+	})
+	hello("127.0.0.2")
+	waitFor(t, func() bool { return g.accepted.Load() == 4 }, func() string { return fmt.Sprintf("accepted=%d", g.accepted.Load()) })
+}
+
+func waitFor(t *testing.T, condition func() bool, state func() string) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if condition() {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("condition not reached in time: " + state())
 }

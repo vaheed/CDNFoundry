@@ -105,3 +105,35 @@ func copyWithIdle(dst, src net.Conn, limit *atomic.Int64) bool {
 		}
 	}
 }
+
+const defaultTLSHandshakeBudget = 50
+
+// maxHandshakeKeys bounds the memory one second of distinct (client, host) pairs can use. Past it,
+// new pairs are not counted; the connection limits still apply.
+const maxHandshakeKeys = 262144
+
+// handshakeLimiter counts new TLS connections per client prefix and host in one-second windows, so
+// one client cannot spend the budget other clients of the same domain need.
+type handshakeLimiter struct {
+	mu     sync.Mutex
+	second int64
+	counts map[string]int
+}
+
+func newHandshakeLimiter() *handshakeLimiter {
+	return &handshakeLimiter{counts: map[string]int{}}
+}
+
+func (l *handshakeLimiter) allow(key string, budget int, now time.Time) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if second := now.Unix(); second != l.second {
+		l.second = second
+		clear(l.counts)
+	}
+	if _, seen := l.counts[key]; !seen && len(l.counts) >= maxHandshakeKeys {
+		return true
+	}
+	l.counts[key]++
+	return l.counts[key] <= budget
+}

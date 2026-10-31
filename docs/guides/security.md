@@ -57,6 +57,13 @@ header size, timeouts, keepalive, request duration, origin concurrency and
 retries, cache key length, and cache admission. `manual` permits values up to
 the standard ceiling; it cannot exceed platform capacity policy.
 
+TLS handshakes are limited in two places. The edge gateway sees the real client
+address, so it allows each client prefix (one IPv4 address or one IPv6 /64) at
+most the profile's per-second budget of new TLS connections per hostname; one
+client cannot spend the budget other clients of the domain need. The cell
+applies a separate, higher ceiling to the domain as a whole, 20 times that
+budget.
+
 The exact ceilings appear in [Limits](../reference/limits.md).
 
 ## Readiness states

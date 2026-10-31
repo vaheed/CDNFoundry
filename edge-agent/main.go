@@ -1631,6 +1631,7 @@ func compileGateway(sequence uint64, pools map[string]map[string]any, raw string
 				routeSet[key] = true
 				routes = append(routes, map[string]any{
 					"address": address.String(), "hostname": name, "http": target.http, "https": target.https, "cell": target.name,
+					"tls_handshakes_per_second": tlsHandshakeBudget(target.hosts[name]),
 				})
 			}
 		}
@@ -1642,6 +1643,20 @@ func compileGateway(sequence uint64, pools map[string]map[string]any, raw string
 	sort.Strings(listeners)
 	return map[string]any{"schema_version": 1, "revision": sequence, "listeners": listeners, "routes": routes}, nil
 }
+
+// tlsHandshakeBudget is the host's per-client TLS handshake budget per second, from its security
+// limits. The gateway enforces it per client prefix.
+func tlsHandshakeBudget(host any) int {
+	entry, _ := host.(map[string]any)
+	security, _ := entry["security"].(map[string]any)
+	limits, _ := security["limits"].(map[string]any)
+	if value, ok := limits["tls_handshakes_per_second"].(float64); ok && value >= 1 && value <= 1000 {
+		return int(value)
+	}
+	return defaultTLSHandshakeBudget
+}
+
+const defaultTLSHandshakeBudget = 50
 
 func (c *client) heartbeat(sequence uint64) error {
 	cells, failures, security := c.runtimeStatus()

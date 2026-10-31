@@ -41,12 +41,15 @@ type route struct {
 	Hostname string `json:"hostname"`
 	HTTP     string `json:"http"`
 	HTTPS    string `json:"https"`
+	// TLSHandshakesPerSecond is the per-client-prefix budget of new TLS connections for this host.
+	TLSHandshakesPerSecond int `json:"tls_handshakes_per_second"`
 }
 
 type routingTable struct {
 	revision     uint64
 	generationID string
 	routes       map[string]string
+	tlsBudgets   map[string]int
 }
 
 type gateway struct {
@@ -69,6 +72,8 @@ type gateway struct {
 	listen                      func(network, address string) (net.Listener, error)
 	slots                       chan struct{}
 	perSource                   *sourceLimiter
+	handshakes                  *handshakeLimiter
+	clock                       func() time.Time
 	idleTimeout                 time.Duration
 	halfCloseTimeout            time.Duration
 }
@@ -85,6 +90,7 @@ func main() {
 		listeners:  map[string]net.Listener{},
 		slots:      make(chan struct{}, boundedIntegerEnv("GATEWAY_MAX_CONNECTIONS", 8192, 128, 65536)),
 		// One source may hold only a fraction of the slots, and a silent connection frees its slot.
+		handshakes:       newHandshakeLimiter(),
 		perSource:        newSourceLimiter(boundedIntegerEnv("GATEWAY_MAX_CONNECTIONS_PER_ADDRESS", 256, 1, 65536)),
 		idleTimeout:      time.Duration(boundedIntegerEnv("GATEWAY_IDLE_TIMEOUT_SECONDS", 120, 5, 3600)) * time.Second,
 		halfCloseTimeout: time.Duration(boundedIntegerEnv("GATEWAY_HALF_CLOSE_TIMEOUT_SECONDS", 30, 1, 600)) * time.Second,
@@ -242,11 +248,18 @@ func validate(candidate config) (*routingTable, error) {
 		listeners[raw] = true
 	}
 	routes := make(map[string]string, len(candidate.Routes)*2)
+	tlsBudgets := make(map[string]int, len(candidate.Routes))
 	for _, item := range candidate.Routes {
 		ip := net.ParseIP(item.Address)
 		host := canonicalHostname(item.Hostname)
 		if ip == nil || host == "" {
 			return nil, errors.New("invalid gateway route identity")
+		}
+		if item.TLSHandshakesPerSecond < 0 || item.TLSHandshakesPerSecond > 1000 {
+			return nil, errors.New("invalid gateway TLS handshake budget")
+		}
+		if item.TLSHandshakesPerSecond > 0 {
+			tlsBudgets[host] = item.TLSHandshakesPerSecond
 		}
 		for protocol, target := range map[string]string{"http": item.HTTP, "https": item.HTTPS} {
 			if target == "" {
@@ -280,7 +293,7 @@ func validate(candidate config) (*routingTable, error) {
 	if len(candidate.GenerationID) < 22 || len(candidate.GenerationID) > 64 {
 		return nil, errors.New("invalid gateway generation identity")
 	}
-	return &routingTable{revision: candidate.Revision, generationID: candidate.GenerationID, routes: routes}, nil
+	return &routingTable{revision: candidate.Revision, generationID: candidate.GenerationID, routes: routes, tlsBudgets: tlsBudgets}, nil
 }
 
 func (g *gateway) prepareListeners(desired []string) (func(), func(), error) {
@@ -408,6 +421,20 @@ func (g *gateway) handle(listener string, client net.Conn) error {
 	if target == "" {
 		g.rejected.Add(1)
 		return errors.New("unknown gateway route")
+	}
+	if protocol == "https" && g.handshakes != nil {
+		budget := table.tlsBudgets[name]
+		if budget == 0 {
+			budget = defaultTLSHandshakeBudget
+		}
+		now := time.Now
+		if g.clock != nil {
+			now = g.clock
+		}
+		if !g.handshakes.allow(sourceKey(client.RemoteAddr())+"|"+name, budget, now()) {
+			g.rejected.Add(1)
+			return errors.New("TLS handshake budget exceeded")
+		}
 	}
 	upstream, err := net.DialTimeout("tcp", target, 3*time.Second)
 	if err != nil {

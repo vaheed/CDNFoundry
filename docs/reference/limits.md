@@ -55,8 +55,9 @@ Health marks a queue degraded above depth 1,000 or oldest age 900 seconds.
 | Request burst | 200 | 75 | 10 |
 | Connections/client | 64 | 24 | 4 |
 | Connections/domain | 512 | 256 | 48 |
-| TLS handshakes/second | 50 | 20 | 5 |
-| Maximum body bytes | 16,777,216 | 8,388,608 | 1,048,576 |
+| TLS handshakes/second per client | 50 | 20 | 5 |
+| TLS handshakes/second per domain (cell ceiling, 20 × per client) | 1,000 | 400 | 100 |
+| Maximum body bytes | 8,388,608 | 4,194,304 | 1,048,576 |
 | Maximum header bytes | 32,768 | 16,384 | 8,192 |
 | Header timeout seconds | 10 | 7 | 5 |
 | Body timeout seconds | 30 | 15 | 10 |

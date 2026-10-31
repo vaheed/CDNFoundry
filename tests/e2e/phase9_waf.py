@@ -42,7 +42,7 @@ def host(profile: str, blocking: bool, body_limit: int, origin_ip: str, exclusio
         "compression": {"profile_name": "off", "maximum_active_requests": 0},
         "security": {
             "state": "normal", "allowed_methods": ["GET", "HEAD", "POST"], "trusted_proxy_cidrs": [],
-            "limits": {"maximum_header_size": 32768, "maximum_request_body_size": 16777216,
+            "limits": {"maximum_header_size": 32768, "maximum_request_body_size": 8388608,
                        "requests_per_second": 1000, "request_burst": 1000,
                        "connections_per_client": 64, "connections_per_domain": 512},
             "rules": [],

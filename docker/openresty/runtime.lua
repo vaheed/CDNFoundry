@@ -200,6 +200,11 @@ function M.start()
     if not ok then ngx.log(ngx.ERR, "runtime restart timer failed: ", err) end
 end
 
+-- The domain-wide handshake ceiling is this many times the per-client budget. The per-client
+-- budget itself is enforced by the gateway, which sees the real client address; during the TLS
+-- handshake a cell sees only the gateway.
+local handshake_domain_multiplier = 20
+
 function M.select_certificate()
     local ssl = require "ngx.ssl"
     local name = ssl.server_name()
@@ -212,8 +217,9 @@ function M.select_certificate()
     local security = config.security or {}
     local limits = security.limits or {}
     local second = ngx.time()
-    local handshakes = ngx.shared.runtime_limits:incr("security:tls:" .. tostring(config.domain) .. ":" .. second, 1, 0, 2)
-    if handshakes and handshakes > (tonumber(limits.tls_handshakes_per_second) or 50) then
+    local budget = tonumber(limits.tls_handshakes_per_second) or 50
+    local handshakes = ngx.shared.domain_limits:incr("security:tls:domain:" .. tostring(config.domain) .. ":" .. second, 1, 0, 2)
+    if not handshakes or handshakes > budget * handshake_domain_multiplier then
         error("tls_handshake_rate_exceeded")
     end
     if not config.tls or config.tls.mode == "disabled" or not config.tls.certificate_id then error("TLS disabled or certificate unavailable") end
@@ -568,7 +574,7 @@ function M.access()
     if request_header_size() > (tonumber(limits.maximum_header_size) or 32768) then return security_reject(431, "header_too_large") end
     local size = body_size()
     if emergency.disable_request_bodies and size > 0 then return security_reject(413, "edge_emergency_mode") end
-    if size > (tonumber(limits.maximum_request_body_size) or 16777216) then return security_reject(413, "body_too_large") end
+    if size > (tonumber(limits.maximum_request_body_size) or 8388608) then return security_reject(413, "body_too_large") end
     local client = client_address(security)
     local country, continent = geography(client)
     ngx.var.cdn_client_ip = client

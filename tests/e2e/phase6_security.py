@@ -29,7 +29,7 @@ PRESET_LIMITS = {
     "standard": {
         "requests_per_second": 100, "request_burst": 200, "connections_per_client": 64,
         "connections_per_domain": 512, "tls_handshakes_per_second": 50,
-        "maximum_request_body_size": 16777216, "maximum_header_size": 32768,
+        "maximum_request_body_size": 8388608, "maximum_header_size": 32768,
         "client_header_timeout": 10, "client_body_timeout": 30, "keepalive_timeout": 30,
         "maximum_requests_per_connection": 1000, "maximum_request_duration": 60,
         "origin_max_connections": 128, "origin_connect_timeout": 3, "origin_read_timeout": 30,
@@ -40,7 +40,7 @@ PRESET_LIMITS = {
     "protected": {
         "requests_per_second": 50, "request_burst": 75, "connections_per_client": 24,
         "connections_per_domain": 256, "tls_handshakes_per_second": 20,
-        "maximum_request_body_size": 8388608, "maximum_header_size": 16384,
+        "maximum_request_body_size": 4194304, "maximum_header_size": 16384,
         "client_header_timeout": 7, "client_body_timeout": 15, "keepalive_timeout": 15,
         "maximum_requests_per_connection": 250, "maximum_request_duration": 30,
         "origin_max_connections": 64, "origin_connect_timeout": 2, "origin_read_timeout": 15,
