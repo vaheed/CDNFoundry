@@ -6,15 +6,13 @@
 /docs/.vitepress/dist/
 /docs/.vitepress/.temp/
 /storage/qualification/
+/.vscode/
+/.codegraph/
+/.cdnfoundry-fleet/
+/.pytest_cache/
 __pycache__/
 *.py[cod]
 storage
 .stage/
 .prod/
 .mcp*
-
-stage-configs/
-
-
-# Local code-graph index for coding agents (CodeGraph MCP)
-/.codegraph/
