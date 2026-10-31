@@ -10,7 +10,9 @@ use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
 use App\Models\EdgeArtifact;
 use App\Models\EdgePool;
+use App\Models\EdgeRevision;
 use App\Models\PlatformDnsSetting;
+use App\Support\PlatformSettings;
 use App\Support\PowerDnsZone;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -108,6 +110,36 @@ class PlacementResilienceTest extends TestCase
 
         $this->assertSame(40, DomainEdgePlacement::query()->where('target_pool_id', $shared->id)->count());
         $this->assertSame(0, DomainEdgePlacement::query()->where('target_pool_id', '!=', $shared->id)->count());
+    }
+
+    public function test_the_snapshot_orders_every_set_so_row_and_settings_order_cannot_change_the_checksum(): void
+    {
+        app(PlatformSettings::class)->update('origin_safety', [
+            'blocked_origin_addresses' => ['9.9.9.9', '2001:db8::5', '1.1.1.1'],
+            'blocked_origin_networks' => ['192.0.2.0/24', '100.64.0.0/10'],
+            'private_origin_allowlist' => ['10.2.0.0/16', '10.1.0.0/16'],
+        ]);
+        $domain = Domain::query()->create(['name' => 'ordered.example', 'display_name' => 'Ordered', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $origin = ['host' => '8.8.8.8', 'port' => 80, 'scheme' => 'http', 'host_header' => 'origin.example', 'sni' => null, 'verify_tls' => false, 'connect_timeout_ms' => 1000, 'response_timeout_ms' => 5000, 'retry_count' => 1];
+        $domain->dnsRecords()->create(['type' => 'A', 'name' => 'ordered.example', 'content' => '8.8.8.8', 'ttl' => 60, 'mode' => 'proxied', 'content_hash' => 'a', 'origin' => $origin]);
+
+        (new ReconcileEdgeDomain($domain->id))->handle();
+        $first = EdgeRevision::query()->where('domain_id', $domain->id)->firstOrFail();
+        $compiled = $first->snapshot['hostnames'][0]['origin'];
+
+        $this->assertSame(['1.1.1.1', '2001:db8::5', '9.9.9.9'], array_values(array_intersect($compiled['blocked_addresses'], ['9.9.9.9', '2001:db8::5', '1.1.1.1'])));
+        $this->assertSame(['100.64.0.0/10', '192.0.2.0/24'], $compiled['blocked_networks']);
+        $this->assertSame(['10.1.0.0/16', '10.2.0.0/16'], $compiled['private_allowlist']);
+
+        app(PlatformSettings::class)->update('origin_safety', [
+            'blocked_origin_addresses' => ['1.1.1.1', '9.9.9.9', '2001:db8::5'],
+            'blocked_origin_networks' => ['100.64.0.0/10', '192.0.2.0/24'],
+            'private_origin_allowlist' => ['10.1.0.0/16', '10.2.0.0/16'],
+        ]);
+        (new ReconcileEdgeDomain($domain->id))->handle();
+
+        $this->assertSame(1, EdgeRevision::query()->where('domain_id', $domain->id)->count());
+        $this->assertSame($first->checksum, EdgeRevision::query()->where('domain_id', $domain->id)->value('checksum'));
     }
 
     public function test_the_zone_publishes_proxied_names_before_any_placement_is_active(): void
