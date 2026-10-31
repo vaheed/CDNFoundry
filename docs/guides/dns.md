@@ -13,7 +13,9 @@ description: Manage records, zone import and export, clusters, reconciliation, a
 | Mutation | One monotonic domain revision; bulk/import is atomic |
 | Target bounds | 16 clusters and 8 nameserver identities |
 | Failure rule | Invalid candidate never replaces active RRsets |
-| Query ceiling | DNSdist drops traffic over 500 queries/second per source IP or IPv6 /64 and over 50,000 queries/second globally |
+| Query ceiling | DNSdist answers UDP queries over 500 queries/second per source IP or IPv6 /64, and over 50,000 queries/second globally, with a truncated (TC) reply so real resolvers retry over TCP instead of losing the query |
+| TCP limits | 10 connections per client address, 100 queries and 30 seconds per connection, 5-second read and write timeouts |
+| `ANY` queries | Truncated over UDP and answered `NOTIMP` over TCP (RFC 8482), so they cannot amplify |
 
 ```mermaid
 flowchart LR
