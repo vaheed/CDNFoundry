@@ -11,6 +11,23 @@ final class ArtifactSigner
         return sodium_bin2hex(sodium_crypto_sign_detached($checksum, self::secretKey()));
     }
 
+    public const SNAPSHOT_SCOPE = 'snapshot';
+
+    /** What a delivery is for. The agent rebuilds this from the manifest entry it is applying. */
+    public static function artifactScope(string $kind, int $domainId, int $revision): string
+    {
+        return "artifact:{$kind}:{$domainId}:{$revision}";
+    }
+
+    /**
+     * Sign one delivery: its scope (kind, domain, revision, or the snapshot), the payload checksum,
+     * the sequence, and the expiry, so none of them can be changed in transit.
+     */
+    public static function signDelivery(string $scope, string $checksum, int $sequence, int $expiresAt): string
+    {
+        return self::sign("{$scope}|{$checksum}|{$sequence}|{$expiresAt}");
+    }
+
     public static function publicKey(): string
     {
         return sodium_bin2hex(sodium_crypto_sign_publickey(self::keyPair()));

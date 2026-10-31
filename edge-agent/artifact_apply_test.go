@@ -35,6 +35,8 @@ type fakeControl struct {
 	acks      []map[string]any
 	refuse    map[string]int
 	outage    bool
+	// relabel rewrites a manifest row after it is built, as a tampering intermediary would.
+	relabel func(row map[string]any)
 }
 
 func newFakeControl(t *testing.T) *fakeControl {
@@ -66,6 +68,9 @@ func (f *fakeControl) serve() *httptest.Server {
 					"signature": hex.EncodeToString(ed25519.Sign(f.private, []byte(checksum))), "schema_version": 1,
 					"minimum_agent_version": "1.0.0", "maximum_agent_version": "1.99.0",
 				})
+				if f.relabel != nil {
+					f.relabel(rows[len(rows)-1])
+				}
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": rows})
 		case strings.HasPrefix(r.URL.Path, "/edge/v1/config/artifacts/"):
@@ -76,7 +81,7 @@ func (f *fakeControl) serve() *httptest.Server {
 			checksum := strings.TrimPrefix(r.URL.Path, "/edge/v1/config/artifacts/")
 			for _, a := range f.artifacts {
 				if f.checksum(a.payload) == checksum {
-					message := checksum + "|" + strconv.FormatUint(a.sequence, 10) + "|" + strconv.FormatInt(expiresAt, 10)
+					message := deliveryScope(a.kind, a.domainID, a.revision) + "|" + checksum + "|" + strconv.FormatUint(a.sequence, 10) + "|" + strconv.FormatInt(expiresAt, 10)
 					_ = json.NewEncoder(w).Encode(map[string]any{
 						"encoded_payload": base64.StdEncoding.EncodeToString([]byte(a.payload)), "data": map[string]any{"sequence": a.sequence},
 						"expires_at": expiresAt, "delivery_signature": hex.EncodeToString(ed25519.Sign(f.private, []byte(message))),
@@ -321,7 +326,7 @@ func TestFullSnapshotSkipsOneBadDomainAndServesTheRest(t *testing.T) {
 		},
 	})
 	expiresAt := time.Now().Add(5 * time.Minute).Unix()
-	delivery := hex.EncodeToString(ed25519.Sign(private, []byte(checksum+"|6|"+strconv.FormatInt(expiresAt, 10))))
+	delivery := hex.EncodeToString(ed25519.Sign(private, []byte(snapshotDeliveryScope+"|"+checksum+"|6|"+strconv.FormatInt(expiresAt, 10))))
 	var acks []map[string]any
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -349,5 +354,63 @@ func TestFullSnapshotSkipsOneBadDomainAndServesTheRest(t *testing.T) {
 	}
 	if len(acks) != 2 || acks[0]["path"] != "/edge/v1/config/rejected" || acks[0]["sequence"] != float64(6) || acks[1]["sequence"] != float64(6) {
 		t.Fatalf("unexpected acknowledgements: %v", acks)
+	}
+}
+
+func TestRelabelledManifestEntryIsRejectedAndTheDomainKeepsServing(t *testing.T) {
+	control := newFakeControl(t)
+	control.artifacts = []fakeArtifact{{1, 1, "domain", 1, domainPayload(1, "one.test", 1, "www.one.test")}}
+	server := control.serve()
+	defer server.Close()
+	c := syncedClient(t, control, server)
+	if err := c.sync(); err != nil {
+		t.Fatal(err)
+	}
+
+	// A later signed update is relabelled in the manifest as a tombstone, the way a replayed
+	// delivery with an altered manifest would try to remove the domain.
+	control.artifacts = []fakeArtifact{{2, 1, "domain", 2, domainPayload(1, "one.test", 2, "www.one.test")}}
+	control.relabel = func(row map[string]any) { row["kind"] = "tombstone" }
+	control.acks = nil
+	if err := c.sync(); err != nil {
+		t.Fatal(err)
+	}
+
+	if active := activeState(t, c); active.Domains["1"] == nil {
+		t.Fatal("a relabelled manifest entry removed the domain")
+	}
+	if len(control.acks) == 0 || control.acks[0]["path"] != "/edge/v1/config/rejected" || control.acks[0]["reason"] != reasonSignatureOrChecksum {
+		t.Fatalf("expected a signature rejection, got %v", control.acks)
+	}
+}
+
+func TestEqualRevisionIsAReplayAndOnlyAGreaterRevisionIsAccepted(t *testing.T) {
+	control := newFakeControl(t)
+	control.artifacts = []fakeArtifact{{1, 1, "domain", 3, domainPayload(1, "one.test", 3, "www.one.test")}}
+	server := control.serve()
+	defer server.Close()
+	c := syncedClient(t, control, server)
+	if err := c.sync(); err != nil {
+		t.Fatal(err)
+	}
+
+	control.artifacts = []fakeArtifact{{2, 1, "domain", 3, domainPayload(1, "one.test", 3, "other.one.test")}}
+	control.acks = nil
+	if err := c.sync(); err != nil {
+		t.Fatal(err)
+	}
+	if string(activeState(t, c).Domains["1"]) != domainPayload(1, "one.test", 3, "www.one.test") {
+		t.Fatal("an equal revision replaced the active payload")
+	}
+	if len(control.acks) == 0 || control.acks[0]["reason"] != reasonArtifactRevisionReplay {
+		t.Fatalf("expected a replay rejection, got %v", control.acks)
+	}
+
+	control.artifacts = []fakeArtifact{{3, 1, "domain", 4, domainPayload(1, "one.test", 4, "other.one.test")}}
+	if err := c.sync(); err != nil {
+		t.Fatal(err)
+	}
+	if string(activeState(t, c).Domains["1"]) != domainPayload(1, "one.test", 4, "other.one.test") {
+		t.Fatal("a greater revision was not applied")
 	}
 }

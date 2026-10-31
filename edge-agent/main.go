@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	mathrand "math/rand/v2"
 	"net"
 	"net/http"
 	"net/netip"
@@ -84,6 +85,7 @@ type client struct {
 	gatewayAddressMap                  map[string]string
 	gatewayAddressMapRequired          bool
 	http                               *http.Client
+	lifetime                           context.Context
 	id                                 identity
 	generationMismatches               generationMismatchTracker
 	renewalRetryAt                     time.Time
@@ -180,12 +182,14 @@ func main() {
 	logger.Info("edge agent started", "event", "service_started", "edge_id", c.id.EdgeID, "version", version)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
+	c.lifetime = ctx
 	once := env("EDGE_ONCE", "false") == "true"
 	if !once {
 		go c.probeLoop(ctx)
 	}
 	var lastFailure string
 	var lastFailureAt time.Time
+	failures := 0
 	for {
 		// Liveness is the loop itself. An unreachable control plane must not
 		// restart the agent, but a hung loop must.
@@ -193,7 +197,9 @@ func main() {
 		if err := c.renewIdentityIfDue(time.Now()); err != nil {
 			logger.Error("edge identity renewal failed", "event", "edge_identity_renewal_failed", "edge_id", c.id.EdgeID, "error_code", "edge_identity_renewal_failed", "error", err.Error())
 		}
+		failed := false
 		if err := c.sync(); err != nil {
+			failed = true
 			if err.Error() != lastFailure || time.Since(lastFailureAt) >= time.Minute {
 				logger.Error("edge synchronization failed", "event", "edge_sync_failed", "edge_id", c.id.EdgeID, "error_code", "edge_sync_failed", "error", err.Error())
 				lastFailure, lastFailureAt = err.Error(), time.Now()
@@ -203,17 +209,23 @@ func main() {
 			lastFailure = ""
 		}
 		if err := c.processTasks(); err != nil {
+			failed = true
 			logger.Error("edge task polling failed", "event", "edge_task_poll_failed", "edge_id", c.id.EdgeID, "error_code", "edge_task_poll_failed", "error", err.Error())
 		}
 		if once {
 			logger.Info("edge agent stopped", "event", "service_stopped", "edge_id", c.id.EdgeID)
 			return
 		}
+		if failed {
+			failures++
+		} else {
+			failures = 0
+		}
 		select {
 		case <-ctx.Done():
 			logger.Info("edge agent stopped", "event", "service_stopped", "edge_id", c.id.EdgeID)
 			return
-		case <-time.After(5 * time.Second):
+		case <-time.After(nextInterval(failures, mathrand.Float64)):
 		}
 	}
 }
@@ -1068,7 +1080,7 @@ func (c *client) full() error {
 	if err != nil {
 		return err
 	}
-	if err := verifyDelivery(response.Checksum, response.Sequence, response.ExpiresAt, response.DeliverySignature, c.id.PublicKey); err != nil {
+	if err := verifyDelivery(snapshotDeliveryScope, response.Checksum, response.Sequence, response.ExpiresAt, response.DeliverySignature, c.id.PublicKey); err != nil {
 		return err
 	}
 	reader, err := gzip.NewReader(bytes.NewReader(payload))
@@ -1905,14 +1917,18 @@ func (c *client) requestLimit(method, path string, body any, out any, auth bool,
 		}
 		r = bytes.NewReader(b)
 	}
-	req, e := http.NewRequest(method, c.base+path, r)
+	ctx, cancel := c.requestContext(requestTimeout(responseLimit))
+	defer cancel()
+	req, e := http.NewRequestWithContext(ctx, method, c.base+path, r)
 	if e != nil {
 		return e
 	}
 	req.Header.Set("Content-Type", "application/json")
 	// Never forward registration bodies or mTLS identities through redirects.
-	// Copy the client so cell/status transports retain their separate behavior.
+	// Copy the client so cell/status transports retain their separate behavior. The deadline
+	// comes from the request context, sized to what the request may transfer.
 	control := *c.http
+	control.Timeout = 0
 	control.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
 	res, e := control.Do(req)
 	if e != nil {
@@ -1950,7 +1966,18 @@ func verify(encoded, checksum, signature, public string) (json.RawMessage, error
 	}
 	return b, nil
 }
-func verifyDelivery(checksum string, sequence uint64, expiresAt int64, signature, public string) error {
+
+// deliveryScope is the part of a delivery's signed message that says what is being delivered.
+// An artifact's kind, domain and revision are signed with its checksum, so a replayed or
+// rewritten manifest entry cannot relabel a signed payload, and a snapshot signature can never
+// stand in for an artifact signature.
+func deliveryScope(kind string, domainID uint64, revision uint64) string {
+	return "artifact:" + kind + ":" + strconv.FormatUint(domainID, 10) + ":" + strconv.FormatUint(revision, 10)
+}
+
+const snapshotDeliveryScope = "snapshot"
+
+func verifyDelivery(scope, checksum string, sequence uint64, expiresAt int64, signature, public string) error {
 	now := time.Now().Unix()
 	if expiresAt <= now || expiresAt > now+600 {
 		return errors.New("artifact delivery expired or outside clock bound")
@@ -1963,7 +1990,7 @@ func verifyDelivery(checksum string, sequence uint64, expiresAt int64, signature
 	if err != nil || len(sig) != ed25519.SignatureSize {
 		return errors.New("invalid delivery signature")
 	}
-	message := checksum + "|" + strconv.FormatUint(sequence, 10) + "|" + strconv.FormatInt(expiresAt, 10)
+	message := scope + "|" + checksum + "|" + strconv.FormatUint(sequence, 10) + "|" + strconv.FormatInt(expiresAt, 10)
 	if !ed25519.Verify(pk, []byte(message), sig) {
 		return errors.New("delivery signature mismatch")
 	}

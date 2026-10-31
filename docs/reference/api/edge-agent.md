@@ -54,10 +54,21 @@ signature, schema version, and minimum/maximum agent version. Agent version
 5. compiled per-pool runtime structure.
 
 Artifact and full-snapshot downloads also carry a five-minute expiration and
-an Ed25519 signature binding the checksum, sequence and expiration. The agent
-rejects expired or far-future deliveries, sequence mismatches, and incremental
-sequences that do not increase. Deploy the updated control plane before the
-updated agent, since the agent requires these response fields.
+an Ed25519 `delivery_signature` over
+`<scope>|<checksum>|<sequence>|<expires_at>`. The scope of an artifact is
+`artifact:<kind>:<domain_id>:<revision>`, built from the manifest entry the
+agent is applying; the scope of a snapshot is `snapshot`. Because the kind,
+domain and revision are signed, a replayed or rewritten manifest entry cannot
+relabel a signed payload (for example turn an update into a tombstone), and a
+snapshot signature cannot stand in for an artifact signature.
+
+The agent rejects expired or far-future deliveries, sequence mismatches, and
+incremental sequences that do not increase. For one domain it accepts only a
+strictly greater revision; an equal or lower revision is rejected as
+`artifact_revision_replay`. Deploy the updated control plane before the updated
+agent, since the agent requires the scoped signature. Signing-key rotation with
+an overlap window is not yet supported: the agent trusts the key it registered
+with.
 
 Rejected candidates never replace active state.
 

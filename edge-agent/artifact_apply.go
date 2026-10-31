@@ -106,7 +106,7 @@ func (c *client) prepareArtifact(item manifestItem, cursor uint64) (preparedArti
 		err = errors.New("artifact sequence mismatch")
 	}
 	if err == nil {
-		err = verifyDelivery(item.Checksum, item.Sequence, artifact.ExpiresAt, artifact.DeliverySignature, c.id.PublicKey)
+		err = verifyDelivery(deliveryScope(item.Kind, *item.DomainID, item.Revision), item.Checksum, item.Sequence, artifact.ExpiresAt, artifact.DeliverySignature, c.id.PublicKey)
 	}
 	if err != nil {
 		return reject(reasonSignatureOrChecksum, err.Error())
@@ -136,7 +136,8 @@ func (c *client) prepareArtifact(item manifestItem, cursor uint64) (preparedArti
 }
 
 // foldArtifacts applies verified artifacts in order to a copy of base. An
-// artifact that would move a domain backwards is dropped and reported.
+// artifact that does not move a domain strictly forward is dropped and reported:
+// every accepted change carries a greater revision, so an equal one is a replay.
 func foldArtifacts(base state, items []preparedArtifact) (state, []preparedArtifact, []rejection) {
 	next := state{Sequence: base.Sequence, Domains: clone(base.Domains)}
 	var applicable []preparedArtifact
@@ -146,7 +147,7 @@ func foldArtifacts(base state, items []preparedArtifact) (state, []preparedArtif
 			var active struct {
 				Revision uint64 `json:"revision"`
 			}
-			if json.Unmarshal(previous, &active) != nil || item.Revision < active.Revision {
+			if json.Unmarshal(previous, &active) != nil || item.Revision <= active.Revision {
 				rejected = append(rejected, rejection{Sequence: item.Sequence, Reason: reasonArtifactRevisionReplay})
 				continue
 			}

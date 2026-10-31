@@ -410,7 +410,8 @@ class EdgeProxyTest extends TestCase
             ->assertJsonPath('encoded_payload', base64_encode(ArtifactSigner::encode($artifact->payload)));
         $this->assertTrue(sodium_crypto_sign_verify_detached(
             hex2bin($delivered->json('delivery_signature')),
-            $artifact->checksum.'|'.$artifact->sequence.'|'.$delivered->json('expires_at'),
+            // The scope is spelled out here, not built by the signer: the Go agent rebuilds the same string.
+            "artifact:{$artifact->kind}:{$artifact->domain_id}:{$artifact->revision}|{$artifact->checksum}|{$artifact->sequence}|{$delivered->json('expires_at')}",
             hex2bin($registered->json('data.signing_public_key')),
         ));
         $this->withHeaders($identity)->getJson('/edge/v1/config/manifest?cursor=0')->assertOk()
@@ -423,7 +424,7 @@ class EdgeProxyTest extends TestCase
         $this->assertSame($artifact->sequence, $full->json('sequence'));
         $this->assertTrue(sodium_crypto_sign_verify_detached(
             hex2bin($full->json('delivery_signature')),
-            $full->json('checksum').'|'.$full->json('sequence').'|'.$full->json('expires_at'),
+            'snapshot|'.$full->json('checksum').'|'.$full->json('sequence').'|'.$full->json('expires_at'),
             hex2bin($full->json('signing_public_key')),
         ));
         $this->withHeaders($identity)->postJson('/edge/v1/config/applied', ['sequence' => $artifact->sequence + 100])->assertUnprocessable();

@@ -39,14 +39,24 @@ func TestVerifyAndCompatibility(t *testing.T) {
 		t.Fatal("tampered payload accepted")
 	}
 	expiresAt := time.Now().Add(5 * time.Minute).Unix()
-	delivery := hex.EncodeToString(ed25519.Sign(private, []byte(checksum+"|2|"+strconv.FormatInt(expiresAt, 10))))
-	if err := verifyDelivery(checksum, 2, expiresAt, delivery, hex.EncodeToString(public)); err != nil {
+	delivery := hex.EncodeToString(ed25519.Sign(private, []byte(deliveryScope("domain", 7, 2)+"|"+checksum+"|2|"+strconv.FormatInt(expiresAt, 10))))
+	scope := deliveryScope("domain", 7, 2)
+	if err := verifyDelivery(scope, checksum, 2, expiresAt, delivery, hex.EncodeToString(public)); err != nil {
 		t.Fatal(err)
 	}
-	if err := verifyDelivery(checksum, 1, expiresAt, delivery, hex.EncodeToString(public)); err == nil {
+	if err := verifyDelivery(scope, checksum, 1, expiresAt, delivery, hex.EncodeToString(public)); err == nil {
 		t.Fatal("replayed sequence accepted")
 	}
-	if err := verifyDelivery(checksum, 2, time.Now().Add(-time.Second).Unix(), delivery, hex.EncodeToString(public)); err == nil {
+	// Kind, domain id and revision are signed: relabeling a signed payload is rejected.
+	for name, other := range map[string]string{
+		"kind": deliveryScope("tombstone", 7, 2), "domain": deliveryScope("domain", 8, 2),
+		"revision": deliveryScope("domain", 7, 3), "snapshot": snapshotDeliveryScope,
+	} {
+		if err := verifyDelivery(other, checksum, 2, expiresAt, delivery, hex.EncodeToString(public)); err == nil {
+			t.Fatalf("a delivery signed for another %s was accepted", name)
+		}
+	}
+	if err := verifyDelivery(scope, checksum, 2, time.Now().Add(-time.Second).Unix(), delivery, hex.EncodeToString(public)); err == nil {
 		t.Fatal("expired delivery accepted")
 	}
 	if !compatible("1.0.0", "1.99.99") || compatible("1.0.0", "1.0.99") {
@@ -586,8 +596,8 @@ func TestFreshFullSnapshotThenIncrementalArtifact(t *testing.T) {
 	incrementalChecksumHex := hex.EncodeToString(incrementalChecksum[:])
 	incrementalSignature := hex.EncodeToString(ed25519.Sign(private, []byte(incrementalChecksumHex)))
 	expiresAt := time.Now().Add(5 * time.Minute).Unix()
-	fullDeliverySignature := hex.EncodeToString(ed25519.Sign(private, []byte(fullChecksum+"|4|"+strconv.FormatInt(expiresAt, 10))))
-	incrementalDeliverySignature := hex.EncodeToString(ed25519.Sign(private, []byte(incrementalChecksumHex+"|5|"+strconv.FormatInt(expiresAt, 10))))
+	fullDeliverySignature := hex.EncodeToString(ed25519.Sign(private, []byte(snapshotDeliveryScope+"|"+fullChecksum+"|4|"+strconv.FormatInt(expiresAt, 10))))
+	incrementalDeliverySignature := hex.EncodeToString(ed25519.Sign(private, []byte(deliveryScope("domain", 1, 5)+"|"+incrementalChecksumHex+"|5|"+strconv.FormatInt(expiresAt, 10))))
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -635,7 +645,7 @@ func TestFreshEmptyFullSnapshotActivatesBootstrapGeneration(t *testing.T) {
 		"artifacts": []map[string]any{},
 	})
 	expiresAt := time.Now().Add(5 * time.Minute).Unix()
-	deliverySignature := hex.EncodeToString(ed25519.Sign(private, []byte(fullChecksum+"|0|"+strconv.FormatInt(expiresAt, 10))))
+	deliverySignature := hex.EncodeToString(ed25519.Sign(private, []byte(snapshotDeliveryScope+"|"+fullChecksum+"|0|"+strconv.FormatInt(expiresAt, 10))))
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
