@@ -11,7 +11,6 @@ use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
 use App\Models\EdgeArtifact;
 use App\Models\EdgePool;
-use App\Models\EdgePoolEndpoint;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
 use App\Support\ArtifactSigner;
@@ -19,6 +18,7 @@ use App\Support\CachePolicy;
 use App\Support\CompressionPolicy;
 use App\Support\ManagedCertificateNames;
 use App\Support\ManagedWaf;
+use App\Support\OriginPolicy;
 use App\Support\PlatformSettings;
 use App\Support\SecurityConfig;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
@@ -38,17 +38,6 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
     public function __construct(public int $domainId)
     {
         $this->onQueue('edge');
-    }
-
-    /**
-     * Lists that are sets must not depend on row or settings order, or the
-     * checksum changes without a change in meaning.
-     *
-     * @return list<string>
-     */
-    private static function sortedSet(mixed $values): array
-    {
-        return collect(is_array($values) ? $values : [])->map(fn ($value) => (string) $value)->unique()->sort(SORT_STRING)->values()->all();
     }
 
     public function uniqueId(): string
@@ -134,11 +123,6 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             PlanDomainEdgeCells::execute($domain, $placement, $targetPool);
         }
 
-        $blockedAddresses = Edge::query()->pluck('management_ipv4')->merge(Edge::query()->pluck('management_ipv6'))
-            ->merge(EdgePoolEndpoint::query()->pluck('ipv4'))->merge(EdgePoolEndpoint::query()->pluck('ipv6'))
-            ->merge(EdgePool::query()->pluck('anycast_ipv4'))->merge(EdgePool::query()->pluck('anycast_ipv6'))
-            ->filter()->merge(app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_addresses'))
-            ->map(fn ($address) => (string) $address)->unique()->sort(SORT_STRING)->values()->all();
         $proxySettings = is_array($domain->proxy_settings) ? $domain->proxy_settings : self::defaults();
         $proxySettings['enabled'] = $domain->lifecycle_state === DomainLifecycleState::Active
             && ($proxySettings['enabled'] ?? true);
@@ -148,7 +132,7 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
         $certificatePayload = fn ($certificate): array => [
             'id' => $certificate->id, 'certificate_pem' => $certificate->certificate_pem,
             'chain_pem' => $certificate->chain_pem,
-            'expires_at' => $certificate->expires_at->timestamp, 'names' => self::sortedSet($certificate->names),
+            'expires_at' => $certificate->expires_at->timestamp, 'names' => OriginPolicy::sortedSet($certificate->names),
         ];
         $snapshot = [
             'schema_version' => 1, 'domain_id' => $domain->id, 'domain' => $domain->name,
@@ -173,18 +157,8 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
                 'certificates' => $tlsCertificates->sortBy('id')->map($certificatePayload)->values()->all(),
             ],
             'pools' => $poolNames,
-            'hostnames' => $records->map(function ($record) use ($blockedAddresses, $tlsCertificates): array {
+            'hostnames' => $records->map(function ($record) use ($tlsCertificates): array {
                 $origin = $record->origin;
-                $safety = [
-                    'private_allowlist' => self::sortedSet(app(PlatformSettings::class)->get('origin_safety', 'private_origin_allowlist')),
-                    'blocked_networks' => self::sortedSet(app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_networks')),
-                    'blocked_addresses' => $blockedAddresses,
-                ];
-                $origin = [...$origin, ...$safety];
-                if (is_array($origin['backup'] ?? null)) {
-                    $origin['backup'] = [...$origin['backup'], ...$safety];
-                }
-
                 $certificate = $tlsCertificates->first(fn ($candidate): bool => ManagedCertificateNames::coveredBy($record->name, $candidate->names));
 
                 return [

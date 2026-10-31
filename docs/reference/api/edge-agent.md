@@ -23,6 +23,7 @@ valid client certificate whose serial belongs to the enabled edge.
 | `GET` | `/probes/targets` | List the other PoPs' endpoint addresses to probe on ports 80 and 443 |
 | `POST` | `/probes` | Report up to 128 probe results; results for unknown targets are ignored |
 | `POST` | `/heartbeat` | Report sequence, listener readiness, bounded gateway/cell capacity, origin health, and security |
+| `GET` | `/origin-policy?checksum=` | Fetch the signed platform origin destination policy (blocked addresses and networks, private allowlist). Returns only `unchanged` while the checksum matches |
 | `GET` | `/config/manifest?cursor=` | Fetch up to 500 newer artifact descriptors |
 | `GET` | `/config/artifacts/{checksum}` | Fetch one signed encoded artifact |
 | `GET` | `/config/full` | Fetch a bounded signed gzip recovery snapshot |
@@ -69,6 +70,15 @@ strictly greater revision; an equal or lower revision is rejected as
 agent, since the agent requires the scoped signature. Signing-key rotation with
 an overlap window is not yet supported: the agent trusts the key it registered
 with.
+
+The platform origin destination policy is not part of any domain artifact. The
+agent fetches it from `/origin-policy` on every synchronization, verifies its
+checksum, signature, and `origin-policy`-scoped delivery signature, stores it,
+and injects it into every compiled origin and backup. A change in a pool
+address or an origin-safety setting therefore changes only this one document:
+no domain is recompiled or re-signed on the control plane. An agent with no
+verified policy refuses to activate runtime files; one that holds a policy
+keeps it through a control-plane outage or a rejected reply.
 
 Rejected candidates never replace active state.
 

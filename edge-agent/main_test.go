@@ -601,6 +601,8 @@ func TestFreshFullSnapshotThenIncrementalArtifact(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case r.URL.Path == "/edge/v1/origin-policy":
+			serveOriginPolicy(w, r, private, testOriginPolicy)
 		case r.URL.Path == "/edge/v1/config/full":
 			_ = json.NewEncoder(w).Encode(map[string]any{"encoded_snapshot": fullPayload, "checksum": fullChecksum, "signature": fullSignature, "signing_public_key": publicHex, "sequence": 4, "expires_at": expiresAt, "delivery_signature": fullDeliverySignature})
 		case r.URL.Path == "/edge/v1/config/manifest":

@@ -15,6 +15,7 @@ Route::prefix('edge/v1')->middleware('api')->group(function (): void {
         Route::get('/probes/targets', [EdgeAgentController::class, 'probeTargets']);
         Route::post('/probes', [EdgeAgentController::class, 'probeResults']);
         Route::get('/gateway/config', [EdgeAgentController::class, 'gatewayConfig']);
+        Route::get('/origin-policy', [EdgeAgentController::class, 'originPolicy']);
         Route::get('/config/manifest', [EdgeAgentController::class, 'manifest']);
         Route::get('/config/artifacts/{checksum}', [EdgeAgentController::class, 'artifact']);
         Route::get('/certificates/{certificate}/key', [EdgeAgentController::class, 'certificateKey']);

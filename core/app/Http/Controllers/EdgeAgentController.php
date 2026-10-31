@@ -25,6 +25,7 @@ use App\Support\ArtifactSigner;
 use App\Support\EdgeCertificateAuthority;
 use App\Support\EdgeKeyEnvelope;
 use App\Support\EdgeRejectionReasons;
+use App\Support\OriginPolicy;
 use App\Support\PlatformSettings;
 use App\Support\RuntimeVersions;
 use App\Support\SecurityConfig;
@@ -347,6 +348,26 @@ class EdgeAgentController extends Controller
         $this->completeAcknowledgedTombstones();
 
         return response()->json(['data' => ['accepted' => true, 'server_time' => now()->toIso8601String()]]);
+    }
+
+    /**
+     * The platform origin destination policy, one signed document per PoP. The agent sends the
+     * checksum it already holds and receives nothing but `unchanged` while the policy is the same.
+     */
+    public function originPolicy(Request $request): JsonResponse
+    {
+        $encoded = ArtifactSigner::encode(OriginPolicy::compile());
+        $checksum = hash('sha256', $encoded);
+        if (hash_equals($checksum, (string) $request->query('checksum', ''))) {
+            return response()->json(['unchanged' => true, 'checksum' => $checksum]);
+        }
+        $expiresAt = now()->addMinutes(5)->timestamp;
+
+        return response()->json([
+            'encoded_payload' => base64_encode($encoded), 'checksum' => $checksum, 'signature' => ArtifactSigner::sign($checksum),
+            'expires_at' => $expiresAt,
+            'delivery_signature' => ArtifactSigner::signDelivery(ArtifactSigner::ORIGIN_POLICY_SCOPE, $checksum, 0, $expiresAt),
+        ]);
     }
 
     public function manifest(Request $request): JsonResponse

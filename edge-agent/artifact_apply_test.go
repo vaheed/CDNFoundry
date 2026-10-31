@@ -59,6 +59,8 @@ func (f *fakeControl) serve() *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		expiresAt := time.Now().Add(5 * time.Minute).Unix()
 		switch {
+		case r.URL.Path == "/edge/v1/origin-policy":
+			serveOriginPolicy(w, r, f.private, testOriginPolicy)
 		case r.URL.Path == "/edge/v1/config/manifest":
 			var rows []map[string]any
 			for _, a := range f.artifacts {
@@ -414,3 +416,22 @@ func TestEqualRevisionIsAReplayAndOnlyAGreaterRevisionIsAccepted(t *testing.T) {
 		t.Fatal("a greater revision was not applied")
 	}
 }
+
+// serveOriginPolicy answers the policy endpoint with a document signed by the control key.
+func serveOriginPolicy(w http.ResponseWriter, r *http.Request, private ed25519.PrivateKey, policy string) {
+	sum := sha256.Sum256([]byte(policy))
+	checksum := hex.EncodeToString(sum[:])
+	if r.URL.Query().Get("checksum") == checksum {
+		_ = json.NewEncoder(w).Encode(map[string]any{"unchanged": true, "checksum": checksum})
+		return
+	}
+	expiresAt := time.Now().Add(5 * time.Minute).Unix()
+	message := originPolicyScope + "|" + checksum + "|0|" + strconv.FormatInt(expiresAt, 10)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"encoded_payload": base64.StdEncoding.EncodeToString([]byte(policy)), "checksum": checksum,
+		"signature": hex.EncodeToString(ed25519.Sign(private, []byte(checksum))), "expires_at": expiresAt,
+		"delivery_signature": hex.EncodeToString(ed25519.Sign(private, []byte(message))),
+	})
+}
+
+const testOriginPolicy = `{"blocked_addresses":["192.0.2.55"],"blocked_networks":["198.51.100.0/24"],"private_allowlist":["172.16.0.0/12"]}`

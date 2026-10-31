@@ -86,6 +86,9 @@ type client struct {
 	gatewayAddressMapRequired          bool
 	http                               *http.Client
 	lifetime                           context.Context
+	originPolicy                       originPolicy
+	originPolicyChecksum               string
+	originPolicyLoaded                 bool
 	id                                 identity
 	generationMismatches               generationMismatchTracker
 	renewalRetryAt                     time.Time
@@ -838,6 +841,10 @@ func (c *client) sync() error {
 			return err
 		}
 	}
+	policyChanged, err := c.syncOriginPolicy()
+	if err != nil {
+		return err
+	}
 	current, err := loadState(c.activeStatePath())
 	if errors.Is(err, os.ErrNotExist) {
 		return c.full()
@@ -847,6 +854,12 @@ func (c *client) sync() error {
 	}
 	if err := c.ensureDerivedRuntime(current); err != nil {
 		return err
+	}
+	if policyChanged {
+		// Only the agent recompiles; no domain artifact changes when the policy does.
+		if err := c.activate(current); err != nil {
+			return err
+		}
 	}
 	var response struct {
 		Data []manifestItem `json:"data"`
@@ -1186,6 +1199,7 @@ func (c *client) activateWithKeys(s state, keys map[string]string) error {
 			if err != nil {
 				return candidateError{err}
 			}
+			applyOriginPolicy(runtime, c.originPolicy)
 			runtime["generation_id"] = generationID
 			for _, poolRuntime := range pools {
 				poolRuntime["generation_id"] = generationID
@@ -1238,6 +1252,7 @@ func (c *client) activateWithKeys(s state, keys map[string]string) error {
 	if err != nil {
 		return candidateError{err}
 	}
+	applyOriginPolicy(runtime, c.originPolicy)
 	active, previous := filepath.Join(c.dir, "active"), filepath.Join(c.dir, "previous")
 	os.RemoveAll(previous)
 	if _, err := os.Stat(active); err == nil {

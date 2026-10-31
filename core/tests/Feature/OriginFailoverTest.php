@@ -83,7 +83,7 @@ class OriginFailoverTest extends TestCase
         $this->actingAs($other)->putJson("/api/domains/{$domain->id}/dns/records/{$record->id}/origin", $this->origin('1.1.1.1'))->assertNotFound();
     }
 
-    public function test_artifact_applies_the_same_safety_envelope_to_both_origins(): void
+    public function test_artifact_carries_both_origins_without_the_platform_destination_policy(): void
     {
         Queue::fake();
         [$owner, $domain, $record] = $this->proxiedRecord();
@@ -105,9 +105,11 @@ class OriginFailoverTest extends TestCase
         (new ReconcileEdgeDomain($domain->id))->handle();
 
         $compiled = EdgeArtifact::query()->where('edge_id', $edge->id)->latest('sequence')->firstOrFail()->payload['hostnames'][0]['origin'];
-        $this->assertSame($compiled['private_allowlist'], $compiled['backup']['private_allowlist']);
-        $this->assertSame($compiled['blocked_networks'], $compiled['backup']['blocked_networks']);
-        $this->assertSame($compiled['blocked_addresses'], $compiled['backup']['blocked_addresses']);
+        // The platform destination policy is delivered once per PoP, never inside a domain artifact.
+        foreach (['private_allowlist', 'blocked_networks', 'blocked_addresses'] as $key) {
+            $this->assertArrayNotHasKey($key, $compiled);
+            $this->assertArrayNotHasKey($key, $compiled['backup']);
+        }
         $this->assertSame('2001:4860:4860::8888', $compiled['backup']['host']);
     }
 
