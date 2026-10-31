@@ -167,7 +167,7 @@ def qualify_profile_control_plane() -> None:
     stranger_token = stranger_login["data"]["token"]
     path = f"/api/domains/{domain_id}/security"
 
-    expect_api_error(403, "GET", path, token=stranger_token)
+    expect_api_error(404, "GET", path, token=stranger_token)
     _, initial = api("GET", path, token=token)
     assert initial["data"]["profile"] == "standard", initial
     assert initial["data"]["limits"] == PRESET_LIMITS["standard"], initial

@@ -77,7 +77,7 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `ACME_CONTACT_EMAIL` | control | ACME account contact |
 | `ACME_DIRECTORY_URL` | control | Let's Encrypt production directory by default |
 | `ACME_ORDER_BUDGET_PER_HOUR` | control | New-order ceiling; default `20` |
-| `TLS_UPLOAD_TRUST_FILE` | control | Optional PEM bundle of root certificates that replaces the system store when validating uploaded certificate chains. Leave empty to trust the operating system roots; set it for a private PKI. |
+| `TLS_UPLOAD_TRUST_FILE` | control | Optional PEM bundle of root certificates that replaces the system store when validating uploaded certificate chains. Leave empty to trust the operating system roots; set it for a private PKI. It is not in `compose.prod.yml`; add it, and a read-only mount of the bundle, with a compose override. |
 | `ACME_VERIFY_TLS` | optional | Verify ACME directory TLS; default true, false only for local Pebble |
 | `ACME_RENEW_BEFORE_DAYS` | optional | Renewal window; default `30` |
 | `ACME_DNS_TTL` | optional | Challenge TTL; default `30` seconds |

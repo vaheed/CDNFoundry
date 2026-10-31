@@ -19,7 +19,10 @@ PHP_IMAGE = 'php:8.5-fpm-alpine@sha256:9dc81f4086ea5402227a6bcc489b04b4baba12394
 
 
 def run(*args: str, check: bool = True, **kwargs) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(args, cwd=ROOT, check=check, text=True, capture_output=True, **kwargs)
+    result = subprocess.run(args, cwd=ROOT, check=False, text=True, capture_output=True, **kwargs)
+    if check and result.returncode:
+        raise RuntimeError(f'{args[0]} {args[1]} failed ({result.returncode}): {result.stdout[-1500:]}{result.stderr[-1500:]}')
+    return result
 
 
 def main() -> None:
@@ -53,7 +56,7 @@ $app = new Illuminate\\Foundation\\Application('/app');
 $app->detectEnvironment(fn () => 'qualification');
 $app->instance('config', new Illuminate\\Config\\Repository(['edge' => [
     'identity_ca_certificate' => __DIR__.'/ca.crt', 'identity_ca_private_key' => __DIR__.'/ca.key',
-    'identity_ca_private_key_passphrase' => '',
+    'identity_ca_private_key_passphrase' => '', 'identity_validity_days' => 2,
 ]]));
 $result = App\\Support\\EdgeCertificateAuthority::sign(file_get_contents(__DIR__.'/client.csr'), '00000000-0000-4000-8000-000000000001');
 file_put_contents(__DIR__.'/client.crt', $result['certificate']);

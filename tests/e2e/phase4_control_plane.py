@@ -80,6 +80,9 @@ def call(
         raise AssertionError(f"{method} {path} returned {error.code}: {error.read().decode()}") from error
 
 
+PROBE_RESTORE: list[tuple[str, int]] = []
+
+
 def artisan(expression: str) -> None:
     subprocess.run(
         ["docker", "compose", "-f", COMPOSE, "exec", "-T", "core", "php", "artisan", "tinker", f"--execute={expression}"],
@@ -644,6 +647,11 @@ def main() -> None:
     )
     _, login = call("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD, "device_name": "phase4-e2e"})
     token = login["data"]["token"]
+    # The dev fleet's real PoPs probe every endpoint, and the synthetic addresses here are unreachable.
+    # Require more vantage points than exist so these fake PoPs are never withdrawn by probes.
+    _, group = call("GET", "/api/admin/system/settings/edge_runtime", token=token)
+    PROBE_RESTORE.append((token, next(field["value"] for field in group["data"]["fields"] if field["key"] == "probe_min_vantage_points")))
+    call("PATCH", "/api/admin/system/settings", {"group": "edge_runtime", "values": {"probe_min_vantage_points": 20}}, token)
     cluster = ensure_cluster(token)
     apply_platform_identity(token)
     if not cluster["enabled"]:
@@ -702,6 +710,10 @@ def main() -> None:
             if "9.9.9.9" not in drained_answers and "149.112.112.112" in drained_answers:
                 break
             time.sleep(0.5)
+        if not ("9.9.9.9" not in drained_answers and "149.112.112.112" in drained_answers):
+            print(subprocess.run(["docker", "compose", "-f", COMPOSE, "exec", "-T", "core", "php", "artisan", "tinker",
+                                  "--execute=foreach (App\\Models\\EdgePoolEndpoint::query()->where('edge_pool_id', " + str(shared["id"]) + ")->get() as $e) { echo json_encode($e->only(['ipv4','withdrawn','dns_published','dns_reason'])).PHP_EOL; }"],
+                                 cwd=ROOT, check=False, timeout=45, text=True, capture_output=True).stdout, flush=True)
         assert "9.9.9.9" not in drained_answers and "149.112.112.112" in drained_answers, drained_answers
         call("POST", f"/api/admin/edges/{edges[0]['id']}/undrain", {}, token)
         wait_answers(shared_global, "A", {"9.9.9.9", "149.112.112.112"})
@@ -829,6 +841,11 @@ if __name__ == "__main__":
         main()
     finally:
         subprocess.run(["docker", "rm", "-f", EDGE_CONTROL_NAME], cwd=ROOT, check=False, capture_output=True, text=True)
+        for restore_token, original in PROBE_RESTORE:
+            try:
+                call("PATCH", "/api/admin/system/settings", {"group": "edge_runtime", "values": {"probe_min_vantage_points": original}}, restore_token)
+            except Exception as error:  # noqa: BLE001
+                print(f"could not restore probe_min_vantage_points: {error}", flush=True)
         try:
             artisan(
                 "foreach(App\\Models\\Domain::withTrashed()->where('name'," + quote(ZONE) + ")->get() as $d){"

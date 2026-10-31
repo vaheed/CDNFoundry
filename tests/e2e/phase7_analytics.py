@@ -271,7 +271,7 @@ def qualify_ingestion_and_queries(domain_id: int, user: str, stranger: str, admi
     assert leaked == "0", leaked
 
     query = urllib.parse.urlencode({"from": iso(interval_from), "to": iso(interval_to)})
-    expect_error(403, "GET", f"/api/domains/{domain_id}/analytics/summary?{query}", token=stranger)
+    expect_error(404, "GET", f"/api/domains/{domain_id}/analytics/summary?{query}", token=stranger)
     _, summary = api("GET", f"/api/domains/{domain_id}/analytics/summary?{query}", token=user)
     assert int(summary["data"]["requests"]) >= 1 and int(summary["data"]["dns_queries"]) >= 1, summary
     assert summary["meta"]["units"] == {"bandwidth": "bytes", "latency": "milliseconds"}, summary
