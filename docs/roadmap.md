@@ -24,7 +24,8 @@ names the code that causes it.
 - **HA items** come from a 2026-10-31 availability review of `dev` at
   `9042670`. They cover single points of failure that the two audits did not
   list. Phase 6 fixes them. The audit page uses the phase numbers from before
-  Phase 6 was inserted: its Phase 6, 7, and 8 are Phase 7, 8, and 9 here.
+  Phases 6 and 7 were inserted: its Phase 6, 7, and 8 are Phase 8, 9, and 10
+  here.
 
 ## Phase gate
 
@@ -170,12 +171,12 @@ items are about making a second node possible and safe.
 These are not phase work. They are date-bound, or they correct public
 statements about the current release.
 
-- [ ] Re-assess the two Trivy classifications and renew or remove them before
+- [x] Re-assess the two Trivy classifications and renew or remove them before
       2026-11-28 (A45).
-- [ ] Add a status banner to the README that links the open critical and high
+- [x] Add a status banner to the README that links the open critical and high
       findings. It replaces the "production-oriented" framing until Phase 2
       exits.
-- [ ] Owner decision: publish a security notice for 1.2.x about C1 and C2 in
+- [x] Owner decision: publish a security notice for 1.2.x about C1 and C2 in
       `SECURITY.md` and the v1.2.1 release notes, with the interim
       mitigation. The mitigation is to restrict `GET /revisions` to
       administrators, or not to assign domain users to managed-TLS domains.
@@ -191,36 +192,36 @@ start of their phase.
 
 Fixes C1, C2, H9, M1, L5, A4, A7, A10, A16, A23, A24, A37.
 
-- [ ] Remove private keys from snapshots and artifacts. Artifacts carry a
+- [x] Remove private keys from snapshots and artifacts. Artifacts carry a
       certificate id. The agent fetches the key over mTLS from a key endpoint,
       encrypted to that edge's identity key, and the key is never written to
       PostgreSQL except in `tls_certificates`.
-- [ ] Purge the existing key material from history. Since 2.0 is zero-state,
+- [x] Purge the existing key material from history. Since 2.0 is zero-state,
       this means only that the new schema has no column that could hold a key.
-- [ ] Return revisions through an API resource with an explicit field list
+- [x] Return revisions through an API resource with an explicit field list
       (revision, status, checksum, created_at, and a diff summary). Do the
       same for every endpoint that returns raw models.
-- [ ] Add `$hidden` to every encrypted model column as a second safeguard.
-- [ ] Tag DNS telemetry with `domain_id` at the DNS node, from the zone the
+- [x] Add `$hidden` to every encrypted model column as a second safeguard.
+- [x] Tag DNS telemetry with `domain_id` at the DNS node, from the zone the
       authoritative server answered from. Scope analytics and logs by
       `domain_id` and by the time since the current owner's activation.
-- [ ] Authenticate Vector's HTTP sources with a per-node token, and bind them
+- [x] Authenticate Vector's HTTP sources with a per-node token, and bind them
       to the cell network.
-- [ ] Derive the edge `domain_id` at the cell from the active snapshot, never
+- [x] Derive the edge `domain_id` at the cell from the active snapshot, never
       from the event payload.
-- [ ] Split ClickHouse users: insert-only for Vector, with a separate secret
+- [x] Split ClickHouse users: insert-only for Vector, with a separate secret
       per node; read-only with a server-side settings profile for Laravel;
       administrator for migrations only.
-- [ ] Render `pdns.conf` secrets from Compose secrets in every production
+- [x] Render `pdns.conf` secrets from Compose secrets in every production
       path, and refuse to start with the development values.
-- [ ] Make WAF exclusions remove only the excluded rule (or target) for the
+- [x] Make WAF exclusions remove only the excluded rule (or target) for the
       matching request. Keep request-wide monitor mode only for the explicit
       profile mode. Until this ships, reject new exclusions with a stable 409.
-- [ ] On TLS listeners, reject a request whose `Host` is not covered by the
+- [x] On TLS listeners, reject a request whose `Host` is not covered by the
       certificate selected for its SNI.
-- [ ] State exactly what telemetry keeps, or truncate client addresses in the
+- [x] State exactly what telemetry keeps, or truncate client addresses in the
       long-lived rollups.
-- [ ] Rewrite rollback: restore only customer-owned fields, re-validate them
+- [x] Rewrite rollback: restore only customer-owned fields, re-validate them
       with `OriginData`, `CachePolicy`, and `SecurityConfig`, and roll back
       WAF and TLS mode as well, or refuse.
 
@@ -241,45 +242,45 @@ Fixes C1, C2, H9, M1, L5, A4, A7, A10, A16, A23, A24, A37.
 
 Fixes C3, C4, H3, H4, A1, A2, A3, A8, A9, A11, A12, A13, A17, M11.
 
-- [ ] **Fail static.** Withdraw a PoP from DNS only on a positive signal
+- [x] **Fail static.** Withdraw a PoP from DNS only on a positive signal
       (drain, disable, or a failed external health probe), never on missing
       heartbeats alone. Never publish an empty answer set for a pool: keep
       the last published set and alert.
-- [ ] Add external health probes, run from at least two vantage points, that
+- [x] Add external health probes, run from at least two vantage points, that
       check each PoP's HTTP/TLS listener directly. Withdrawal needs a quorum.
-- [ ] Renew edge identity certificates over mTLS at two thirds of their
+- [x] Renew edge identity certificates over mTLS at two thirds of their
       lifetime. Accept the old and new fingerprints until the new one is
       proven. Report the expiry in the heartbeat and alert 30 days before it.
-- [ ] Make the agent apply artifacts per domain. A bad artifact is rejected
+- [x] Make the agent apply artifacts per domain. A bad artifact is rejected
       and skipped, the cursor advances, and the server records the rejection
       for that domain only.
-- [ ] Make agent and server agree on one rejection-reason list, defined once
+- [x] Make agent and server agree on one rejection-reason list, defined once
       and tested by a contract test. An unknown reason is stored, never
       returned as 422.
-- [ ] Promote a placement when a quorum of participating PoPs (default: all
+- [x] Promote a placement when a quorum of participating PoPs (default: all
       that are healthy, at least one) have acknowledged. Lagging PoPs catch
       up without blocking the pool.
-- [ ] Page promotion through all deploying placements in bounded chunks.
-- [ ] Exclude withdrawn pools from automatic placement.
-- [ ] Publish proxied records independently of placement: before a placement
+- [x] Page promotion through all deploying placements in bounded chunks.
+- [x] Exclude withdrawn pools from automatic placement.
+- [x] Publish proxied records independently of placement: before a placement
       is active, render the default pool's hostname, so the zone always
       publishes.
-- [ ] Make the gateway forward the bytes it has already buffered after the
+- [x] Make the gateway forward the bytes it has already buffered after the
       HTTP preface.
-- [ ] Pass the real client address to the origin hop in one internal header,
+- [x] Pass the real client address to the origin hop in one internal header,
       cleared at ingress.
-- [ ] Use only the PROXY-protocol address, and trust PROXY headers only from
+- [x] Use only the PROXY-protocol address, and trust PROXY headers only from
       the gateway. Accept `X-Forwarded-For` only from configured trusted
       proxies, taking the rightmost untrusted entry.
-- [ ] Configure Alertmanager receivers from typed settings, add an
+- [x] Configure Alertmanager receivers from typed settings, add an
       always-firing `Watchdog` alert, and refuse a production configuration
       with no notifier.
-- [ ] Set `retry_after` above every worker and job timeout, and assert that
+- [x] Set `retry_after` above every worker and job timeout, and assert that
       in `make config-check`.
-- [ ] Store idempotency receipts only for 2xx and deterministic 4xx
+- [x] Store idempotency receipts only for 2xx and deterministic 4xx
       responses, filter lookups on `expires_at`, and run the throttle before
       the idempotency middleware.
-- [ ] Add health checks for every long-running service, including agent,
+- [x] Add health checks for every long-running service, including agent,
       gateway (`/healthz`), edge-control, Horizon, and scheduler liveness.
 
 **Exit:** E2E checks each of these on a real Compose stack:
@@ -302,45 +303,45 @@ Fixes C3, C4, H3, H4, A1, A2, A3, A8, A9, A11, A12, A13, A17, M11.
 Fixes H1, H2, H5, H6, H7, M3, M9, M13, M14, A5, A6, A14, A15, A19, A38, A39,
 A40, A41.
 
-- [ ] Restrict automatic placement to `shared` pools. Only explicit
+- [x] Restrict automatic placement to `shared` pools. Only explicit
       administrator actions select `quarantine`, `reserved`, or `dedicated`.
-- [ ] Ship the default `shared` pool WAF-capable, or reject a WAF profile
+- [x] Ship the default `shared` pool WAF-capable, or reject a WAF profile
       change with a clear 409 when no WAF-capable pool exists. Never accept
       work that cannot run.
-- [ ] Define the cache key once (path normalization, query decoding, and
+- [x] Define the cache key once (path normalization, query decoding, and
       ordering), built from the raw request path. Keep `%2F` and `%3F`
       encoded, and reject requests that would normalize differently from the
       origin request. Generate the PHP and Lua implementations' test vectors
       from one shared fixture file, and run it in both test suites.
-- [ ] Make URL purges durable. The agent persists purge generations and
+- [x] Make URL purges durable. The agent persists purge generations and
       replays them on cell start. Keep them in a dedicated shared dictionary
       that cannot be evicted by rate-limit counters, and give each entry a
       TTL equal to the cache's maximum TTL.
-- [ ] Reject requests with more than 128 query arguments, or hash the full
+- [x] Reject requests with more than 128 query arguments, or hash the full
       argument set into the key.
-- [ ] Reject purge URLs that carry credentials or a fragment.
-- [ ] Add DNS retry with backoff, plus a scheduled drift check that compares
+- [x] Reject purge URLs that carry credentials or a fragment.
+- [x] Add DNS retry with backoff, plus a scheduled drift check that compares
       each DNS target's served serial and checksum with desired state and
       repairs differences.
-- [ ] Mark a DNS operation failed only after its last try, hold a per-domain
+- [x] Mark a DNS operation failed only after its last try, hold a per-domain
       lock, and re-check the revision just before activation.
-- [ ] Derive the platform zone serial from a content checksum, so it changes
+- [x] Derive the platform zone serial from a content checksum, so it changes
       exactly when the content changes.
-- [ ] Send the client subnet from DNSdist to PowerDNS (`useClientSubnet` or
+- [x] Send the client subnet from DNSdist to PowerDNS (`useClientSubnet` or
       PROXY protocol), so Geo-DNS sees the client network.
-- [ ] Authorize operation reads through the operation's domain policy, and
+- [x] Authorize operation reads through the operation's domain policy, and
       store the domain id as a typed column with a partial unique index for
       pending operations.
-- [ ] Implement each accepted emergency action, or reject it with a stable
+- [x] Implement each accepted emergency action, or reject it with a stable
       code and remove it from the documentation.
-- [ ] Return an operation id with every 202. Add stable codes for 405, 413,
+- [x] Return an operation id with every 202. Add stable codes for 405, 413,
       429, and 500. Return 404 for unauthorized bindings, and hide model
       class names.
-- [ ] Audit every mutation, and allow `usage.rebuild` to be retried.
-- [ ] Verify uploaded chains against the system trust store, with the
+- [x] Audit every mutation, and allow `usage.rebuild` to be retried.
+- [x] Verify uploaded chains against the system trust store, with the
       uploaded intermediates as untrusted. Honor ACME `Retry-After`, reuse
       `Replay-Nonce`, and lock ACME account creation.
-- [ ] Replace first-claim-wins with re-delegation proof. Each platform
+- [x] Replace first-claim-wins with re-delegation proof. Each platform
       offers a small set of readable nameserver pairs. A new claim gets a
       pair different from the domain's current delegation, verification
       requires the parent delegation to equal that pair, and success moves
@@ -363,12 +364,25 @@ A40, A41.
 
 Fixes M2, M4, M5, M6, M7, M8, M10, A18, A20, A21, A22, A25, A32, A34, A43.
 
-- [ ] Move DNS to a hidden-primary design. Laravel writes to one private
+- [x] Move DNS to a hidden-primary design. Laravel writes to one private
       primary. DNS nodes are PowerDNS secondaries that use a catalog zone and
       TSIG-signed transfers, triggered by the PoP agent, outbound only. This
       removes the per-host API gateways and `dns-api-N` names, and it allows
       anycast nameserver addresses served by any number of nodes. Node
       convergence (serial per node) is reported in the heartbeat.
+      Delivered: `pdns-primary` runs on the control host; only one cluster can
+      be enabled (a database constraint). Every zone is a primary-kind member of
+      the catalog `catalog.cdnfoundry.invalid` with `TSIG-ALLOW-AXFR`, and the
+      primary stores the rendered serial plus one (`SOA-EDIT-API=INCREASE`), so
+      each change raises it. A zone-change feed (`/edge/v1/dns/changes`) tells
+      each node's agent what to pull; the agent installs the TSIG key (sealed to
+      its identity key) and the catalog consumer through the node's local API,
+      signs and pulls each changed zone, and reports `dns.cursor`,
+      `dns.latest`, and `dns.pending` in the heartbeat. Nodes keep a SQLite
+      store and no database. The `dns-api` gateway, its certificates, and
+      `PDNS_CA_CERTIFICATE` are deleted. "Serial per node" is delivered as a
+      cursor into the change feed, which also covers a zone whose content
+      changed while its serial did not.
 - [x] Split queue lanes: `dns`, `edge`, `verification`, `tls`, and `purge`,
       each with its own worker bound.
       Delivered with `interactive` and `bulk_maintenance` kept; the global purge
@@ -385,15 +399,15 @@ Fixes M2, M4, M5, M6, M7, M8, M10, A18, A20, A21, A22, A25, A32, A34, A43.
       compiled cell and gateway files, and a cell file with unchanged content is
       hardlinked from the previous generation. At 10,000 domains one change
       rewrites one state file and the one cell file that serves the domain
-      (`incremental_activation_test.go`). A cell file still holds every host of its
-      pool, so a changed cell rewrites that whole file.
+      (`incremental_activation_test.go`). A cell file still holds every host of
+      its pool, so a changed cell rewrites that whole file.
 - [x] Sign `kind`, `domain_id`, and `revision` together with the checksum,
       sequence, and expiry. Require a strictly greater revision, and support
       signing-key rotation with an overlap window.
-      Delivered: kind, domain, revision, checksum, sequence, and expiry are signed
-      together, only a strictly greater revision is accepted (an identical replay is
-      a no-op), and the current key endorses the next one so both are accepted until
-      the new one signs a delivery.
+      Delivered: all of them are signed together, only a strictly greater
+      revision is accepted (an identical replay is a no-op), and the current key
+      endorses the next one so both are accepted until the new one signs a
+      delivery.
 - [x] Give agent requests per-request timeouts, contexts, and exponential
       backoff with jitter.
       Delivered: 15 s for control requests, 2 minutes for the snapshot, and
@@ -403,8 +417,8 @@ Fixes M2, M4, M5, M6, M7, M8, M10, A18, A20, A21, A22, A25, A32, A34, A43.
       Delivered as a `.stamp` content identity beside each cell file.
 - [x] Add a per-source-address connection limit, idle timeouts in both
       directions, and half-close handling to the gateway.
-      Delivered: 256 connections per address (an IPv6 /64 counts once), 120 s idle,
-      30 s after a half-close.
+      Delivered: 256 connections per address (an IPv6 /64 counts once), 120 s
+      idle, 30 s after a half-close.
 - [x] Key TLS handshake and connection limits per domain and client prefix,
       with a separate, higher ceiling for each domain.
       Delivered: connection limits were already per client and per domain. The
@@ -413,24 +427,26 @@ Fixes M2, M4, M5, M6, M7, M8, M10, A18, A20, A21, A22, A25, A32, A34, A43.
       per-client budget.
 - [x] Size cell temporary files and body limits to the cell's temporary
       storage, and set `worker_processes` from the CPU limit.
-      Delivered as an 8 MiB body limit, response buffering on the cache volume, and
-      workers from the CPU limit.
+      Delivered as an 8 MiB body limit, response buffering on the cache volume,
+      and workers from the CPU limit.
 - [x] Generate the cell services from the PoP's slot count, or fix the slot
       count to what Compose runs. Allow small PoPs to run fewer cells.
-      Delivered by fixing the count at eight in the API and panel.
-- [ ] Bound DNS rollup cardinality: store the domain and a bounded top-N of
+      Delivered by fixing the count at eight in the API and panel. Small PoPs
+      still run eight cells.
+- [x] Bound DNS rollup cardinality: store the domain and a bounded top-N of
       query names in the long-lived rollups.
+      Delivered: the rollups are keyed by the served zone and its domain,
+      resolved by a ClickHouse dictionary that Laravel fills (`cdnf:analytics:
+      publish-zones`, through an insert-only account), and a bounded top-20 name
+      sketch is stored per hour and zone. A zone added in the last minute or two
+      falls into one unattributed bucket until the next refresh.
 - [x] Answer over-limit UDP queries with TC instead of dropping them, and add
       DNSdist limits for TCP connections, TCP queries, and ANY.
       Delivered for UDP rate limits, TCP connection limits, and ANY.
 - [x] Resolve bulk DNS origins outside the domain lock and transaction, or
       lower the bulk limit for proxied records.
-
-**Progress (2026-10-31).** Not a completion gate: the phase is open. Two items
-are not delivered: the hidden-primary DNS design (M4), and bounded DNS rollups
-(A25), which needs the zone tagging that design provides. The other twelve are
-delivered. The exit items for DNS convergence and rollup cardinality cannot pass
-until those two are.
+      Delivered: lookups run before the lock, and a bulk request may name at
+      most 50 distinct origin hostnames.
 
 **Exit:**
 
@@ -441,12 +457,42 @@ until those two are.
 - A tampered manifest is rejected.
 - A random-subdomain flood adds bounded rollup rows.
 
+**Completion gate (2026-11-01).** The four fields are recorded separately.
+
+| Field | Status | Evidence |
+| --- | --- | --- |
+| Implementation | Complete, with the deviations marked above | Commits on `dev`; replaced code is deleted (the `dns-api` gateway, its certificates and scripts, the per-pool and combined runtime files, `state.json` inside generations) |
+| Regression tests | Pass (489 PHP tests) | PHP: `DnsPrimaryTransferTest`, `DnsNodeSyncApiTest`, `OriginPolicyDeliveryTest`, `SigningKeyRotationTest`, `ServedZonePublisherTest`, `PlacementResilienceTest`, `QueueTimingContractTest`. Go agent: `dns_sync_test.go`, `origin_policy_test.go`, `signing_keys_test.go`, `incremental_activation_test.go`, `request_timing_test.go`, `runtime_stamp_test.go`, `artifact_apply_test.go`. Go gateway: `relay_test.go`. Fleet: 84 tests |
+| Runtime tests | Pass for the exit items below | `dns_node_convergence.py`, `dns_rollup_cardinality.py`, `clickhouse_roles.py`, `clickhouse_upgrade.py`, `cell_generation_reload.py`, `tls_domain_handshake_ceiling.py`, `dnsdist_limits.py`, `pdns_secrets.py`, `fleet_pdns.py`, plus live `e2e.py`, `phase2_dns.py`, `dns_outage_recovery.py`, `control_plane_faults.py`, `client_address.py`, `phase4_runtime.py`, `phase7_analytics.py` on the Compose stack. IPv4 only |
+| Documentation | Updated | DNS nodes (new), signing-key rotation (new), runtime generations, analytics, DNS, gateway ingress, cell inventory, limits, configuration, CLI commands, edge-agent API, manual Compose, topology, certificates, fleet, and quick starts |
+| Manual browser | Not run; checklist updated | `docs/manual-browser-qualification.md` (DNS cluster form: **Transfer endpoint**, single primary; **Cell slots** fixed at 8) |
+
+Exit items and how each was checked:
+
+| Exit item | Check |
+| --- | --- |
+| 10,000 domains: bounded idle CPU, one change touches only its files | Regression: `incremental_activation_test.go` (one state file and one cell file rewritten at 10,000 domains). Runtime: `cell_generation_reload.py` (an unchanged stamp causes no reload). Idle CPU was not measured at 10,000 domains on a live cell |
+| A 20-node DNS simulation converges within the documented bound | Runtime: `dns_node_convergence.py` with 20 real PowerDNS secondaries: 200 zones pulled in 48.5 s, an update to 20 zones reached all nodes in 5.2 s, a deletion left every node, and an unsigned transfer was refused. The nodes were driven with the agent's API calls, not by the Go agent itself |
+| One client cannot exhaust gateway slots or a domain's handshake budget | Regression: `relay_test.go` (per-address limit, per-client handshake budget). Runtime: `tls_domain_handshake_ceiling.py` for the cell's domain ceiling. The per-client budget was not run through a live gateway |
+| A tampered manifest is rejected | Regression: `artifact_apply_test.go` (a relabelled entry is rejected and the domain keeps serving; an equal revision with different content is a replay) |
+| A random-subdomain flood adds bounded rollup rows | Runtime: `dns_rollup_cardinality.py` on the real ClickHouse schema: 601,010 events became 5 rollup rows, attributed to the longest served zone |
+
+Known limitations and deviations:
+
+- The live agent was verified against the dev stack's one DNS node. Twenty nodes
+  were exercised with a script that makes the agent's local API calls.
+- A DNS node needs the primary's transfer port (5300) reachable from its address;
+  the primary's address must be an IP literal.
+- Existing zones keep a date-based serial from the old design until the next
+  write raises them; a node that already holds a higher serial must be rebuilt
+  (its store is a cache).
+- `dns_events.zone` keeps the queried name for the seven days of raw events.
+- `phase4_control_plane.py` still fails at the drain step noted in Phase 3.
+
 ### Phase 5: Production readiness and security hardening
 
 Fixes H8, M12, L6, A26, A27, A28, A29, A30, A31, A33, A35, A36, A42.
 
-      Delivered: lookups run before the lock, and a bulk request may name at most
-      50 distinct origin hostnames.
 - [ ] Publish IPv6 in production for DNS, control, and edges, including
       edge-control. Block saving a nameserver IPv6 address until that address
       answers from an external probe.
@@ -665,7 +711,162 @@ failure needs is added.
 - `remove-standby` returns the installation to `ha: none`, with no edge or DNS
   errors.
 
-### Phase 7: Simple setup, fleet over SSH, safe upgrades, local fleet web, and agent-run browser qualification
+### Phase 7: Professional UI on Filament, and agent-run browser qualification
+
+Both panels work, but they read like long reports: every card has a paragraph
+of explanation, the overview is one very long page, and the look is
+Filament's default. This phase gives CDNFoundry a professional, dense,
+consistent operator UI, at the level of modern infrastructure tools such as
+the Bifrost gateway UI, while staying on Filament.
+
+**Filament stays.** The panels stay on Filament 5, with a CDNFoundry theme
+built on the existing shared theme
+(`resources/css/filament/shared/theme.css`). Filament already provides
+slide-over actions, global search with a key binding, collapsible navigation
+groups, SPA navigation, tabs with badges, stat widgets, badge columns, polling,
+and dark mode. Custom views are added only where Filament has no component,
+such as the topology view. No second frontend is added.
+
+#### Design system
+
+- [ ] **Tokens.** One neutral palette with a single accent color, status
+      colors (healthy, degraded, failed, pending, disabled), spacing, radius,
+      and a border-first style with few shadows. Complete light and dark mode.
+- [ ] **Type.** One sans-serif UI font, and a monospace font for every
+      number, ID, timestamp, IP address, hostname, revision, and checksum.
+- [ ] **Density.** Compact table rows and form rows, sized for daily
+      operator work.
+- [ ] **Patterns, written down once and used everywhere:**
+  - Sidebar with collapsible groups, the version at the bottom, and ⌘K / Ctrl+K
+    search across domains, edges, pools, users, and operations.
+  - List page: a KPI strip, a search box, a Filters button, a sortable table
+    with status badges, and cursor pagination.
+  - Detail page: a header with the status badge and the main actions, tabs
+    with counts, a KPI strip, and a "Needs attention" box that shows only
+    what is wrong and links to the fix.
+  - Create, edit, and inspect open in a right-side slide-over panel, so the
+    operator never loses the list.
+  - Settings as rows: a label, a one-line description, and the control on
+    the right, with the default value visible and a reset action.
+  - Every long-running action shows its operation, with live progress, in a
+    bell panel for background work.
+  - Empty states that say what to do next, with one primary action.
+- [ ] **Less text in the UI.** A screen states facts and actions. Each card
+      keeps at most one short line of description. Explanations move to the
+      documentation, linked with a small help icon.
+- [ ] **A UI guide in `docs/development/frontend.md`.** The tokens, the
+      patterns, and one example of each, so every new screen follows them.
+
+#### Screens
+
+- [ ] **Decision spike first.** Rebuild three screens on the design system:
+      the administrator overview, the Domains list with a domain detail page,
+      and one settings page. The owner reviews them against the target
+      before the remaining screens start.
+- [ ] **Administrator overview.** It answers, on one screen without
+      scrolling on a desktop: is everything healthy, what needs attention,
+      and what changed recently. KPI strip (requests, cache hit ratio,
+      errors, healthy PoPs, DNS success), "Needs attention", and recent
+      operations. Detailed charts move to the analytics pages.
+- [ ] **Topology view.** One component that draws control (active and
+      standby), DNS hosts, PoPs, cells, and telemetry, with health colors on
+      nodes and links, search, a legend, and zoom. The admin panel shows it
+      from the API, and the Phase 8 fleet web reuses it.
+- [ ] **Rebuild every admin screen** on the design system: domains, DNS
+      records, proxy and origins, cache and purge, TLS, WAF and security,
+      Geo-DNS, edges, pools and cells, DNS clusters, users and tokens,
+      operations, audit log, analytics, logs, backups, and settings.
+- [ ] **Rebuild every domain-user screen** with the same patterns, showing
+      only that user's domains.
+- [ ] **Live views.** Operations, logs, and edge status refresh by polling
+      with a visible "live" indicator, and stop polling when the tab is
+      hidden.
+- [ ] **Accessibility.** Keyboard navigation for every action, visible focus,
+      and WCAG AA contrast in both themes.
+
+#### Agent-run browser qualification
+
+This phase changes every screen, so it is where automated browser tests are
+needed most.
+
+- [ ] **Amend `AGENTS.md` for agent-run browser qualification and the new
+      UI rules.** One change, together with `RepositoryContractTest`, so the
+      contract and its test never disagree. Until it ships, browser
+      qualification stays manual and owner-run, as `AGENTS.md` requires, so
+      the decision spike is reviewed by the owner. The edits:
+  - **Opening paragraph.** Delete "Until its Phase 7 amends this file, every
+    rule below still applies."
+  - **Product invariants.** Replace "Filament provides both administrator
+    and domain-user panels" with: Filament provides both panels, using the
+    CDNFoundry theme and the patterns in `docs/development/frontend.md`. No
+    screen uses Filament's default theme, and no second frontend is added.
+  - **Tests and change discipline, browser rule.** Replace the paragraph
+    that starts "Browser E2E qualification is manual and user-owned" with:
+    browser qualification is agent-owned and uses Playwright under
+    `tests/browser`. Agents run it only against development, test, and
+    staging stacks with seeded test data and generated test credentials,
+    never against production or with real customer data. A UI change is
+    complete only when its browser tests, visual snapshots, and
+    accessibility checks pass.
+  - **Non-UI end-to-end rule.** Keep Python under `tests/e2e` for APIs,
+    queues, databases, Compose, DNS, TLS, and runtime state. Delete "it must
+    not inspect or automate rendered UI", and say instead that rendered UI is
+    tested in `tests/browser`.
+  - **Completion report.** Replace "the manual browser job status" with "the
+    browser suite results".
+  - **"The roadmap is closed" paragraph.** Reword it to refer only to the
+    archived staged roadmap. Replace "its owner-run manual browser checklist
+    is written with exact step-by-step fields and expected results" with
+    "its browser tests pass". Delete the sentences about keeping
+    `docs/manual-browser-qualification.md` and about inventing future
+    screens. In the completion gate, replace "manual browser status" with
+    "browser suite status".
+  - **Last paragraph.** Delete the sentence "Preserve and extend
+    `docs/manual-browser-qualification.md` …". Keep the database and volume
+    safety rules, and add that the browser suite uses its own disposable
+    database, never the persistent development database.
+  - **Contract test.** In `RepositoryContractTest`, replace the two
+    assertions on the old browser sentences with assertions on the new rule
+    ("uses Playwright under `tests/browser`" and "never against
+    production"), and assert that `docs/manual-browser-qualification.md`
+    does not exist.
+- [ ] **Change every other file that names the manual job, in the same
+      change.** Delete `docs/manual-browser-qualification.md`, and update
+      every reference to it: `CONTRIBUTING.md`, the pull request template,
+      `README.md`, `docs/development/testing.md`,
+      `docs/development/frontend.md`, the docs navigation in `docs/.vitepress/config.mts`, the deployment and
+      operations pages that link it (production quick start, setup after
+      quick start, manual Compose, production qualification, production best
+      practices, and the simple anycast qualification), and the docs checks
+      in `tests/docs/check_links.py` and `tests/docs/check_built_site.py`.
+      Leave the v1.2.1 release notes unchanged, because they describe that
+      release.
+- [ ] **Update the project skills that mention browser work.**
+      `cdnf-filament-ui` follows the design system and runs the browser suite.
+      `cdnf-production-qualification` includes the browser suite in the
+      qualification evidence.
+- [ ] Add a Playwright suite under `tests/browser` that signs in to both
+      panels and covers every screen and workflow, in light and dark mode, at
+      desktop and phone width. Agents run it and report its results, and it
+      joins the phase gate from here on. Interactive elements carry stable
+      test ids.
+- [ ] Add visual regression snapshots for the main screens, so an unintended
+      change of the design is caught in review.
+- [ ] Add an automated accessibility check (axe) to every page in the suite.
+
+**Exit:**
+
+- The owner approves the decision spike.
+- Every admin and domain-user screen uses the design system. A check fails
+  on any screen that still uses Filament's default theme or colors.
+- The overview answers "healthy, needs attention, recent changes" on one
+  desktop screen.
+- The topology view shows a failure injected by E2E (a stopped PoP) within
+  one refresh.
+- The browser suite, visual snapshots, and accessibility checks pass in both
+  themes and at both widths.
+
+### Phase 8: Simple setup, fleet over SSH, safe upgrades, and local fleet web
 
 Fixes M15, L1.
 
@@ -833,11 +1034,14 @@ hand is a combination that no test has run.
       and live progress per node), config changes, rollback, backup now,
       restore, HA, secret rotation, and the action and upgrade history.
       Every page runs the same engine action as the CLI.
-- [ ] **Simple build.** Python like the rest of Fleet, server-rendered pages,
-      and no JavaScript build step. The topology view is the only
-      client-side drawing.
+- [ ] **Simple build, same look.** Python like the rest of Fleet,
+      server-rendered pages, and no JavaScript build step. It uses the Phase 7
+      design tokens (one shared CSS file) and the same patterns: sidebar,
+      KPI strip, tables, slide-over panels, "Needs attention", and light and
+      dark mode. The topology view reuses the Phase 7 topology component, and
+      is the only client-side drawing.
 
-#### Setup, panels, and browser qualification
+#### Setup and panels
 
 - [ ] The installer is `cdnfoundry-fleet setup` (CLI or web). PKI, TSIG keys,
       shared secrets, and bootstrap tokens are generated automatically. It
@@ -849,24 +1053,13 @@ hand is a combination that no test has run.
 - [ ] Amend `AGENTS.md` to state that the local fleet web is part of the Fleet
       tool and not a second dashboard or backend under its "multiple
       dashboards" and "second backend/frontend" rules, and to state the
-      border between Fleet (infrastructure) and Filament (CDN). Do this in
-      the same change as the browser-qualification amendment below.
-- [ ] Make browser qualification agent-run only. Delete
-      `docs/manual-browser-qualification.md` and every reference to it
-      (README, CONTRIBUTING, the pull request template, the docs, the skills,
-      and `tests/docs`). Amend `AGENTS.md` and `RepositoryContractTest` so
-      agents run the browser suite against non-production stacks. In the
-      same change, reword the `AGENTS.md` sentence "The roadmap is closed"
-      to refer only to the archived staged roadmap. Until this item ships,
-      browser qualification stays manual and owner-run, as `AGENTS.md`
-      requires.
-- [ ] Add a Playwright suite under `tests/browser` that signs in to both
-      panels and to the local fleet web, and covers every screen and
-      workflow, at desktop and phone width. Agents run it and report its
-      results, and it joins the phase gate from here on.
-- [ ] Rewrite the quick start around the fleet web and the CLI, with the
+      border between Fleet (infrastructure) and Filament (CDN).
+- [ ] Extend the Phase 7 browser suite to the local fleet web: every page and
+      action, at desktop and phone width.
+- [ ] Write a scripted quick start for the fleet web and the CLI, with the
       same steps in both. A scripted run on fresh virtual machines must reach
-      an active proxied domain with no undocumented step.
+      an active proxied domain with no undocumented step. Phase 9 rewrites the
+      published quick start from this script.
 
 **Exit:**
 
@@ -896,9 +1089,18 @@ hand is a combination that no test has run.
 - The fleet web refuses to bind to anything other than `127.0.0.1`.
 - The browser suite passes.
 
-### Phase 8: Cleanup and documentation
+### Phase 9: Cleanup, documentation, and adoption
 
 Fixes L2, L3, L4, A44, A46.
+
+The goal of 2.0 is that CDNFoundry becomes the first choice for any
+organization that needs its own private CDN: free, open source, and
+self-hosted. That depends on the documentation as much as on the code. Today
+the documentation is long, written as lists of rules, and hard to follow for
+a newcomer. This phase rewrites it, text and presentation, so that anyone
+with a few Linux servers can understand CDNFoundry and run it step by step.
+
+#### Cleanup
 
 - [ ] Delete `docs/legacy/`, the second agent activation path, every
       compatibility branch, and squash migrations into a fresh baseline.
@@ -907,21 +1109,122 @@ Fixes L2, L3, L4, A44, A46.
       documentation check so that a documented key that is not wired fails.
 - [ ] Delete thin helpers such as `MetricComparisonService`, and fix the
       `.PHONY` list.
-- [ ] Rewrite the documentation: one page per concept, the command or screen
-      first, and the explanation after it. Run every shell block marked
-      `test` in CI.
 - [ ] Update the project skills in `.agents/skills/` to match every behavior
-      changed by Phases 1–7.
+      changed by Phases 1–8.
 
-**Exit:** the docs build, link checks, and executable-block tests pass, and no
-legacy file remains.
+#### Writing rules
 
-### Phase 9: Real production qualification
+- [ ] Write the rules once in `docs/contributing/documentation.md`, and apply
+      them to every page:
+  - Task first: what you will do, what you need, the steps, how to check that
+    it worked, and what to do if it did not.
+  - One page per task or concept. Short sentences, one idea each, in plain
+    English that a non-native reader can follow.
+  - The command or the screen comes first, the explanation after it.
+  - Every step has an expected result.
+  - The same task is shown in tabs: **Admin panel**, **API**, and **Fleet
+    CLI** (or **Fleet web**), wherever more than one way exists.
+  - No rule lists copied from `AGENTS.md`. Contract language stays in the
+    contributor docs.
+
+#### Structure
+
+- [ ] Reorganize the site into top-level tabs, each with its own sidebar:
+  - **Get started:** what CDNFoundry is, how it works in one diagram, a
+    quick start, and the first domain.
+  - **Guides:** one page per feature, for operators and domain users.
+  - **Deploy and operate:** production setup, HA, upgrades, backup and
+    restore, monitoring, scaling, and runbooks.
+  - **Reference:** API, configuration, CLI, limits, ports, DNS records, and
+    telemetry schema.
+  - **Architecture:** components, data flows, security model, and design
+    decisions.
+  - **Community:** contributing, support, security reporting, and the
+    roadmap.
+- [ ] A landing page with card grids that send each reader to the right
+      place: evaluate, install, operate, use as a domain owner, or
+      contribute.
+
+#### New and rewritten content
+
+- [ ] **Why CDNFoundry.** Who it is for (ISPs, hosting providers,
+      enterprises, governments, and anyone who must keep traffic and data on
+      their own infrastructure), what it does, what it does not do, and an
+      honest comparison with commercial CDNs and with a hand-built Nginx
+      setup. Every claim must be backed by a feature that exists and passed
+      qualification.
+- [ ] **How it works.** One page with one diagram per flow: a DNS query, an
+      HTTP request through a PoP, a configuration change from the panel to
+      the edges, and telemetry to analytics.
+- [ ] **Quick start.** From zero to a domain served through the CDN on one
+      control node and one PoP, with the fleet web. It is generated from the
+      Phase 8 scripted quick start, so the page and the test cannot differ.
+- [ ] **Production guide.** Step by step for a real deployment: planning
+      (sizing, network, DNS delegation, IPv6), installing, the first domain,
+      adding PoPs and DNS hosts, adding HA, monitoring, and backups. Each step
+      ends with a check.
+- [ ] **Sizing guide.** Recommended host sizes for small, medium, and large
+      fleets, taken from measured qualification results, not guesses.
+- [ ] **Feature guides.** One page per feature: domains, DNS, Geo-DNS,
+      proxy and origins, cache and purge, TLS, WAF, security, compression,
+      analytics, users and tokens.
+- [ ] **Operations.** Upgrades and security updates, HA switchover and
+      failover, backup and restore drills, monitoring and alerts, and one
+      runbook per alert, each with symptoms, checks, and the fix.
+- [ ] **Troubleshooting by symptom:** "the domain does not resolve", "the
+      certificate is not issued", "a PoP is not syncing", "the cache is not
+      hit", and others. Each one gives the checks in order and the fix.
+- [ ] **Generated reference.** The API reference is generated from
+      `openapi.json`, the CLI reference from the Fleet command definitions,
+      and the configuration reference from the code. None is written by hand.
+- [ ] **FAQ and glossary.** CDN and DNS terms explained for operators new to
+      running a CDN.
+- [ ] **README.** A short project page: one paragraph, the main features,
+      the screenshots, the quick start link, and the license.
+
+#### Presentation
+
+- [ ] Restyle the VitePress site with the Phase 7 design tokens, so the docs
+      and the product look like one product, in light and dark mode.
+- [ ] Add documentation components: cards and card grids, numbered steps,
+      tabs (Admin panel / API / Fleet), callouts (note, tip, warning,
+      danger), framed screenshots, and diagrams.
+- [ ] **Generated screenshots.** The Phase 7 browser suite captures the
+      screenshots for the docs from a seeded demo installation, in light and
+      dark mode, at every release. Change `scripts/ci/check_no_screenshots.py`
+      to allow only the generated screenshot directory, so screenshots are
+      never added or edited by hand and are never out of date.
+- [ ] Full-text search, "Edit this page" links, "Was this page helpful"
+      feedback, and an `llms.txt` index for AI assistants.
+- [ ] Versioned documentation: each release has its own docs, and the latest
+      is the default.
+
+#### Documentation tests
+
+- [ ] Run every shell block marked `test` in CI.
+- [ ] A reader test: an agent with no prior knowledge of the project follows
+      the quick start and the production guide on fresh VMs, using only the
+      published pages. Every place where it has to guess is a documentation
+      defect.
+
+**Exit:**
+
+- The docs build, link checks, and executable-block tests pass, and no
+  legacy file remains.
+- Every page follows the writing rules. A review checklist is recorded for
+  each page.
+- The quick start, followed word for word on fresh VMs, reaches a served
+  domain in under 30 minutes.
+- The reader test completes the quick start and the production guide with
+  no undocumented step.
+- Every screenshot is generated, and none is older than the current release.
+
+### Phase 10: Real production qualification
 
 - [ ] On real servers (one active and one standby control node, and at
       least three PoPs in two regions, IPv4 and IPv6), an agent follows the
-      documentation word for word. Every deviation is a documentation defect
-      to fix and retest.
+      Phase 9 documentation word for word. Every deviation is a documentation
+      defect to fix and retest.
 - [ ] Test every feature through the API, the CLI, and the browser suite,
       against real domains.
 - [ ] Re-run every critical and high finding's regression scenario on the
