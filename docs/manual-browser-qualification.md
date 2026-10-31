@@ -1090,3 +1090,10 @@ Owner-run. Use disposable accounts, domains, and tokens, and record no secret.
 3. Press **Test origin** and, if the form offers an edge selector, choose an edge
    that is not in the domain's placement: expect the request to be refused.
    Without a selection the test runs only on placement edges.
+
+### Platform hardening (no new screen)
+
+This batch adds no browser screen. After the stack restarts, sign in to `/admin`
+and `/app`, open a domain page, and press **Deploy**: expect the usual success.
+Open **Infrastructure → Edges** and confirm every edge still reports a fresh
+heartbeat within two minutes. Neither step may show an authentication error.

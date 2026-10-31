@@ -97,6 +97,6 @@ class EdgeIdentityRenewalTest extends TestCase
 
     private function headersFor(string $certificate, string $serial): array
     {
-        return ['X-Edge-Certificate-Verify' => 'SUCCESS', 'X-Edge-Certificate-Serial' => $serial, 'X-Edge-Certificate-Pem' => rawurlencode($certificate)];
+        return ['X-Edge-Proxy-Secret' => config('edge.proxy_secret'), 'X-Edge-Certificate-Verify' => 'SUCCESS', 'X-Edge-Certificate-Serial' => $serial, 'X-Edge-Certificate-Pem' => rawurlencode($certificate)];
     }
 }

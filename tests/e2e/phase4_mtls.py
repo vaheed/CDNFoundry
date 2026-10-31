@@ -36,6 +36,7 @@ header('Content-Type: application/json');
 $certificate = rawurldecode($_SERVER['HTTP_X_EDGE_CERTIFICATE_PEM'] ?? '');
 echo json_encode(['verify' => $_SERVER['HTTP_X_EDGE_CERTIFICATE_VERIFY'] ?? '',
     'serial' => $_SERVER['HTTP_X_EDGE_CERTIFICATE_SERIAL'] ?? '',
+    'secret' => $_SERVER['HTTP_X_EDGE_PROXY_SECRET'] ?? '',
     'fingerprint' => $certificate === '' ? null : openssl_x509_fingerprint($certificate, 'sha256')]);
 ''')
         run('openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '2', '-subj', '/CN=Edge Identity CA',
@@ -45,6 +46,8 @@ echo json_encode(['verify' => $_SERVER['HTTP_X_EDGE_CERTIFICATE_VERIFY'] ?? '',
             '-addext', 'subjectAltName=DNS:edge-control', '-keyout', str(target / 'server.key'), '-out', str(target / 'server.csr'))
         run('openssl', 'x509', '-req', '-in', str(target / 'server.csr'), '-CA', str(target / 'ca.crt'),
             '-CAkey', str(target / 'ca.key'), '-set_serial', '100', '-days', '1', '-copy_extensions', 'copy', '-out', str(target / 'server.crt'))
+        proxy_secret = uuid.uuid4().hex + uuid.uuid4().hex
+        (target / 'edge-proxy-secret.conf').write_text(f'fastcgi_param HTTP_X_EDGE_PROXY_SECRET "{proxy_secret}";\n')
         edge_id = '00000000-0000-4000-8000-000000000001'
         run('openssl', 'req', '-newkey', 'rsa:2048', '-nodes', '-subj', '/CN='+edge_id,
             '-keyout', str(target / 'client.key'), '-out', str(target / 'client.csr'))
@@ -78,7 +81,7 @@ echo json_encode(['serial' => $result['serial'], 'fingerprint' => openssl_x509_f
             key.chmod(0o600)
         run('docker', 'network', 'create', name)
         try:
-            run('docker', 'run', '-d', '--name', name+'-php', '--network', name, '--network-alias', 'core',
+            run('docker', 'run', '-d', '--name', name+'-php', '--network', name, '--network-alias', 'core-fpm',
                 '--memory', '256m', '--mount', f'type=bind,source={target / "public"},target=/app/public,readonly', PHP_IMAGE)
             run('docker', 'run', '-d', '--name', name+'-nginx', '--network', name, '--memory', '128m',
                 '-p', '127.0.0.1::8443', '-p', '127.0.0.1::8080',
@@ -87,7 +90,8 @@ echo json_encode(['serial' => $result['serial'], 'fingerprint' => openssl_x509_f
                 '-v', f'{ROOT / "docker/nginx/default.conf"}:/etc/nginx/conf.d/default.conf:ro',
                 '-v', f'{target / "server.crt"}:/run/secrets/edge-control-server.crt:ro',
                 '-v', f'{target / "server.key"}:/run/secrets/edge-control-server.key:ro',
-                '-v', f'{target / "ca.crt"}:/run/secrets/edge-identity-ca.crt:ro', NGINX)
+                '-v', f'{target / "ca.crt"}:/run/secrets/edge-identity-ca.crt:ro',
+                '-v', f'{target / "edge-proxy-secret.conf"}:/run/secrets/edge-proxy-secret.conf:ro', NGINX)
             run('docker', 'exec', name+'-nginx', 'nginx', '-t')
             ports = {p: run('docker', 'port', name+'-nginx', p+'/tcp').stdout.strip().rsplit(':', 1)[1] for p in ('8080', '8443')}
             port = ports['8443']
@@ -96,13 +100,13 @@ echo json_encode(['serial' => $result['serial'], 'fingerprint' => openssl_x509_f
             assert run(*common, '-o', '/dev/null', '-w', '%{http_code}', f'https://edge-control:{port}/mtls-health').stdout == '401'
             client = (*common, '--cert', str(target / 'client.crt'), '--key', str(target / 'client.key'))
             assert run(*client, f'https://edge-control:{port}/mtls-health').stdout == 'ok\n'
-            spoof = ('-H', 'X-Edge-Certificate-Verify: SUCCESS', '-H', 'X-Edge-Certificate-Serial: spoofed', '-H', 'X-Edge-Certificate-Pem: spoofed')
+            spoof = ('-H', 'X-Edge-Certificate-Verify: SUCCESS', '-H', 'X-Edge-Certificate-Serial: spoofed', '-H', 'X-Edge-Certificate-Pem: spoofed', '-H', 'X-Edge-Proxy-Secret: spoofed')
             actual = json.loads(run(*client, *spoof, f'https://edge-control:{port}/edge/v1/probe').stdout)
-            assert actual == {'verify': 'SUCCESS', **identity}, actual
+            assert actual == {'verify': 'SUCCESS', **identity, 'secret': proxy_secret}, actual
             anonymous = json.loads(run(*common, *spoof, f'https://edge-control:{port}/edge/v1/probe').stdout)
-            assert anonymous['verify'] != 'SUCCESS' and anonymous['fingerprint'] is None, anonymous
+            assert anonymous['verify'] != 'SUCCESS' and anonymous['fingerprint'] is None and anonymous['secret'] == proxy_secret, anonymous
             ordinary = json.loads(run('curl', '--noproxy', '*', '-sS', *spoof, f'http://127.0.0.1:{ports["8080"]}/api/probe').stdout)
-            assert ordinary == {'verify': '', 'serial': '', 'fingerprint': None}, ordinary
+            assert ordinary == {'verify': '', 'serial': '', 'secret': '', 'fingerprint': None}, ordinary
             denied = run('curl', '--noproxy', '*', '-sS', '-o', '/dev/null', '-w', '%{http_code}', *spoof, f'http://127.0.0.1:{ports["8080"]}/edge/v1/probe').stdout
             assert denied == '404', denied
             print(json.dumps({'qualification': 'edge_mtls', 'environment': name, 'nginx_image': NGINX, 'php_image': PHP_IMAGE,

@@ -50,6 +50,7 @@ GLOBAL_SECRET_NAMES = {
     "clickhouse-reader-password",
     "clickhouse-zones-password",
     "metrics-token",
+    "edge-proxy-secret",
     "telemetry-token",
     "backup-password",
     "backup-access-key",

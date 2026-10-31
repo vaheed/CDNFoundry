@@ -616,7 +616,7 @@ class EdgeProxyTest extends TestCase
 
     private function edgeIdentityHeaders(string $serial): array
     {
-        return ['X-Edge-Certificate-Verify' => 'SUCCESS', 'X-Edge-Certificate-Serial' => $serial,
+        return ['X-Edge-Proxy-Secret' => config('edge.proxy_secret'), 'X-Edge-Certificate-Verify' => 'SUCCESS', 'X-Edge-Certificate-Serial' => $serial,
             'X-Edge-Certificate-Pem' => rawurlencode(Edge::query()->where('identity_certificate_serial', $serial)->sole()->identity_certificate)];
     }
 

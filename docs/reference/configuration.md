@@ -45,6 +45,10 @@ Runtime product policy is not an environment variable. Manage it through
 | `REDIS_URL` | external Valkey | Full URL; empty uses host and port |
 | `REDIS_HOST` | control | Default `redis` |
 | `REDIS_PORT` | control | Default `6379` |
+| `EDGE_PROXY_SECRET_FILE` | control | File holding one nginx line, `fastcgi_param HTTP_X_EDGE_PROXY_SECRET "<64 hex>";` (root:`www-data` mode `0640`). edge-control's nginx includes it and PHP reads the secret from it; the fleet installer writes it as `secrets/edge-proxy-secret.conf` |
+| `EDGE_PROXY_SECRET` | optional control | The secret itself instead of the file; prefer `EDGE_PROXY_SECRET_FILE` |
+| `FPM_NETWORK_SUBNET` | control | Subnet of the private network shared by core, `web`, and `edge-control`. PHP-FPM listens only on core's address there |
+| `TRUSTED_PROXIES` | control | Comma-separated addresses or CIDRs whose forwarded headers Laravel trusts; default is loopback and the private ranges |
 | `METRICS_TOKEN_FILE` | control/telemetry | Absolute root:`www-data` mode-`0640` bearer-token file shared with Prometheus group `82` |
 
 The Compose file fixes `APP_ENV=production`, `APP_DEBUG=false`,

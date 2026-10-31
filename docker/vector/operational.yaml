@@ -6,7 +6,9 @@ api:
 sources:
   docker_operational:
     type: docker_logs
-    docker_host: unix:///var/run/docker.sock
+    # A read-only proxy that answers only container listing, logs, and events. The collector holds no
+    # Docker socket, so a compromise of Vector cannot start containers or read their environment.
+    docker_host: tcp://docker-socket-proxy:2375
     exclude_containers: ["*log-collector*"]
     auto_partial_merge: true
     multiline:

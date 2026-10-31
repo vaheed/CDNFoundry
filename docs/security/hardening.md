@@ -38,18 +38,33 @@ can bypass simple host input rules.
 
 ## Containers and images
 
-Pin immutable image tags and verify digests. Production core, edge, agent, and
-gateway services use read-only roots where supported, tmpfs for writable
-ephemera, restart policies, health checks, bounded stop periods, and resource
-limits. Retain named volumes across upgrades.
+Pin immutable image tags and verify digests. Every production service has a
+health check (one-shot tools excepted), `no-new-privileges`, all capabilities
+dropped, and a memory limit. A service that must start as root adds back only the
+few capabilities it needs to prepare its data and drop privileges
+(`CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `SETGID`, `SETUID`, and `NET_BIND_SERVICE`
+for the services that bind port 53, 80, or 443); nothing else is allowed.
+`scripts/ci/check_compose_policy.py` reads the rendered production configuration
+and fails on any service that breaks these rules, mounts the Docker socket, or
+runs privileged. It runs in `make config-check` and in CI. Production services use
+read-only roots where supported, tmpfs for writable ephemera, restart policies,
+bounded stop periods, and resource limits. Retain named volumes across upgrades.
 
-The per-host operational Vector collector is the sole exception that reads the
-local Docker Unix socket. A read-only socket mount is still a privileged
-host-inspection boundary: never expose the socket over TCP, never mount it into
-application containers, restrict host access to deployment administrators, and
-keep the collector's root filesystem read-only with all capabilities dropped.
+The per-host operational Vector collector holds no Docker socket. It reads
+container logs through `docker-socket-proxy`, a separate container on a private
+network that answers only container listing, logs, and events and refuses every
+write. The proxy is the one service that mounts the socket (read-only), so keep
+host access to deployment administrators and never publish its port. The
+collector's root filesystem stays read-only with all capabilities dropped.
 Optional journal mounts are read-only. The collector's allowlisted envelope and
 final redaction transform must remain before its private Loki sink.
+
+PHP-FPM listens only on the address core has on the private `fpm` network
+(`FPM_NETWORK_SUBNET`, shared by core, `web`, and `edge-control`). Horizon, the
+scheduler, the database, and every other container on the control network cannot
+open a connection to it. Edge identity headers are trusted only when they carry
+the secret in `EDGE_PROXY_SECRET_FILE`, which only edge-control's nginx adds, so
+a request that reaches PHP by any other path cannot claim to be an edge.
 
 ## Origin policy
 
@@ -60,8 +75,12 @@ overridden. Keep TLS verification enabled with correct SNI and hostname.
 
 ## Accounts
 
-Use separate named accounts, strong passwords, short-lived API tokens per
-automation device, and prompt revocation. Disable departed users, remove domain
+Use separate named accounts, strong passwords (12 characters with mixed case and
+a number, for every user), short-lived API tokens per automation device, and
+prompt revocation. Give each integration a token limited to the ability it needs
+(`read`, `dns`, or `purge`) and to its domains, and enrol every administrator in
+two-step sign-in (see [users and access](../guides/users-and-access.md)). Tokens
+expire after 90 days by default. Disable departed users, remove domain
 assignments, and review audit logs. Protect `/admin`, Horizon, and the metrics
 token at network boundaries as well as application authorization.
 

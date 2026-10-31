@@ -142,6 +142,19 @@ openssl rand -hex 32 | sudo tee /etc/cdnfoundry/secrets/metrics-token >/dev/null
 sudo chmod 0600 /etc/cdnfoundry/secrets/metrics-token
 ```
 
+Create the edge proxy secret the same way. The file is an nginx include that
+edge-control uses and PHP also reads:
+
+```bash
+umask 077
+printf 'fastcgi_param HTTP_X_EDGE_PROXY_SECRET "%s";\n' "$(openssl rand -hex 32)" \
+  | sudo tee /etc/cdnfoundry/secrets/edge-proxy-secret.conf >/dev/null
+sudo chown 0:82 /etc/cdnfoundry/secrets/edge-proxy-secret.conf
+sudo chmod 0640 /etc/cdnfoundry/secrets/edge-proxy-secret.conf
+```
+
+Set `EDGE_PROXY_SECRET_FILE` to that path in `.env.prod`.
+
 Use the same `APP_KEY`, artifact signing key, database credentials, metrics
 token, and telemetry credentials wherever the same logical installation needs
 them. Use a different edge status token on each edge. When backups are disabled,
@@ -583,8 +596,12 @@ Restart one DNS or edge host at a time and verify it before continuing. Use
    migration; keep the previous serving cell active until the new cell is
    ready, then securely retire the old plaintext volume under the operator's
    storage policy.
-7. Upgrade telemetry last and run the versioned ClickHouse migrations required
-   by the selected release documentation.
+7. Upgrade telemetry last and run `make prod-clickhouse-migrate` (or
+   `docker compose --env-file .env.prod --profile telemetry --profile tools run --rm clickhouse-migrate`).
+   It applies each file in `docker/clickhouse/migrations/` once, in name order,
+   records it with its checksum in `cdnf.schema_migrations`, and refuses to run
+   when an applied file has been edited. The fleet `start.sh` runs it on the
+   telemetry host.
 
 Example control upgrade commands:
 

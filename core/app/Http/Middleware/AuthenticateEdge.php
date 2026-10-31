@@ -12,6 +12,9 @@ class AuthenticateEdge
 {
     public function handle(Request $request, Closure $next): Response
     {
+        // Without the proxy secret the identity headers could come from anything that reaches PHP-FPM.
+        $secret = (string) config('edge.proxy_secret');
+        abort_if($secret === '' || ! hash_equals($secret, (string) $request->header('X-Edge-Proxy-Secret')), 401, 'A valid edge identity is required.');
         $verified = $request->header('X-Edge-Certificate-Verify');
         $serial = strtoupper((string) $request->header('X-Edge-Certificate-Serial'));
         // A renewed certificate is accepted beside the current one until the

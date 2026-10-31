@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Domain;
 use App\Models\Operation;
 use App\Models\User;
+use App\Support\OriginData;
 use App\Support\PlatformSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -86,7 +87,7 @@ class OriginDestinationSafetyTest extends TestCase
         preg_match('/var allowedOriginPorts = map\[int\]bool\{([^}]*)\}/', $go, $goMatch);
         $fromLua = array_map('intval', array_map('trim', explode(',', $luaMatch[1] ?? '')));
         $fromGo = array_map(fn (string $entry): int => (int) $entry, array_map('trim', explode(',', $goMatch[1] ?? '')));
-        $expected = \App\Support\OriginData::ALLOWED_PORTS;
+        $expected = OriginData::ALLOWED_PORTS;
         sort($fromLua);
         sort($fromGo);
 

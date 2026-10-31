@@ -124,7 +124,7 @@ class CacheApiTest extends TestCase
         openssl_csr_export($csr, $csrPem);
         $signed = EdgeCertificateAuthority::sign($csrPem, $edge->id);
         $edge->update(['identity_certificate_serial' => $signed['serial'], 'identity_certificate' => $signed['certificate']]);
-        $headers = ['X-Edge-Certificate-Verify' => 'SUCCESS', 'X-Edge-Certificate-Serial' => $signed['serial'],
+        $headers = ['X-Edge-Proxy-Secret' => config('edge.proxy_secret'), 'X-Edge-Certificate-Verify' => 'SUCCESS', 'X-Edge-Certificate-Serial' => $signed['serial'],
             'X-Edge-Certificate-Pem' => rawurlencode($signed['certificate'])];
 
         $this->withHeaders($headers)->postJson("/edge/v1/tasks/{$task->id}/result", ['status' => 'failed', 'result' => ['status' => 'failed', 'failure_reason' => 'cache_purge_control_failed']])->assertOk();

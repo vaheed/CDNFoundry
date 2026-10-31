@@ -26,5 +26,9 @@ compose --profile control --profile telemetry --profile logs config --quiet
 compose --profile dns --profile edge --profile logs config --quiet
 compose --profile tools config --quiet
 
+# Every service must have a health check, no-new-privileges, dropped capabilities, and a memory limit.
+compose --profile control --profile dns --profile edge --profile telemetry --profile logs --profile tools config --format json \
+    | python3 scripts/ci/check_compose_policy.py
+
 test "$(find deploy/production -maxdepth 1 -name 'compose*.yml' -print -quit)" = ""
 echo "production_compose=passed"

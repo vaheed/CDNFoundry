@@ -250,6 +250,7 @@ class Renderer:
             "GRAFANA_CLICKHOUSE_PASSWORD": self._secret("grafana-clickhouse-password"),
             "GRAFANA_POSTGRES_PASSWORD": self._secret("grafana-postgres-password"),
             "METRICS_TOKEN_FILE": "./secrets/metrics-token",
+            "EDGE_PROXY_SECRET_FILE": "./secrets/edge-proxy-secret.conf",
             # Production Compose PKI contract (control, edge and DNS roles).
             "EDGE_IDENTITY_CA_CERTIFICATE": "./pki/edge-identity-ca.crt",
             "EDGE_IDENTITY_CA_PRIVATE_KEY": "./pki/edge-identity-ca.key",
@@ -276,6 +277,7 @@ class Renderer:
             "LOG_AUTH_TOKEN": self._secret("log-auth-token"),
             "EDGE_STATUS_TOKEN": self._optional_node_secret("edge-status-token", node),
             "EDGE_NETWORK_SUBNET": "172.29.250.0/24",
+            "FPM_NETWORK_SUBNET": "172.31.254.0/29",
             "EDGE_ID": node.get("edge_id") or "",
             "EDGE_BOOTSTRAP_TOKEN": self._optional_node_secret("edge-bootstrap-token", node),
             "PDNS_DB_PASSWORD": self._optional_node_secret("pdns-db-password", node),
@@ -555,6 +557,10 @@ class Renderer:
             # the non-root PHP and Prometheus processes after start.sh restricts the
             # file to the PHP worker group and grants Prometheus that same group.
             atomic_write(secrets_dir / "metrics-token", self.store.read_secret("metrics-token") + "\n", 0o640)
+        if node["role"] == "control":
+            # nginx includes this file as-is; PHP reads the secret from the same file.
+            secret = self.store.read_secret("edge-proxy-secret")
+            atomic_write(secrets_dir / "edge-proxy-secret.conf", f'fastcgi_param HTTP_X_EDGE_PROXY_SECRET "{secret}";\n', 0o640)
         if state["features"]["backups"]["mode"] != "disabled":
             atomic_write(secrets_dir / "restic-password", self.store.read_secret("backup-password") + "\n", 0o600)
         if node["role"] in {"control", "dns", "dns-edge"}:
@@ -982,6 +988,13 @@ openssl verify -CAfile pki/edge-server-ca.crt pki/node.crt
 
     def _start_script(self, state: dict[str, Any], node: dict[str, Any]) -> str:
         migration = self._node_start_order(node)
+        if self._is_monitoring_host(state, node):
+            # The telemetry schema is migrated the same way as the databases: explicitly, once per version.
+            clickhouse_migration = (
+                "docker compose --env-file .env.prod --profile telemetry up -d --wait clickhouse\n"
+                "docker compose --env-file .env.prod --profile telemetry --profile tools run --rm clickhouse-migrate"
+            )
+            migration = clickhouse_migration if migration.startswith("#") else f"{migration}\n{clickhouse_migration}"
         profiles = self._start_profiles(state, node)
         activation = (
             f"""docker compose --env-file .env.prod {profiles} up -d
@@ -1048,6 +1061,10 @@ chmod 0640 pki/edge-identity-ca.key docker/pdns/primary.conf
 fi
 chown 0:82 secrets/metrics-token
 chmod 0640 secrets/metrics-token
+"""
+        if node["role"] == "control":
+            key_permissions += """chown 0:82 secrets/edge-proxy-secret.conf
+chmod 0640 secrets/edge-proxy-secret.conf
 """
         return f"""#!/usr/bin/env sh
 set -eu
