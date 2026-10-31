@@ -39,7 +39,7 @@ Use [Fleet rollouts](fleet-rollouts.md) for the supported canary workflow.
   control reverse proxy.
 - Keep PowerDNS, its native API, PostgreSQL, Valkey, ClickHouse, Prometheus,
   Loki, and native Grafana private.
-- Source-restrict the TLS DNS API gateway to control workers.
+- Restrict the primary's transfer port (5300) to the DNS node addresses; transfers are TSIG-signed either way.
 - Allow edge agents to initiate outbound mTLS; do not require inbound control
   access to every edge.
 - Separate management inventory addresses from customer service addresses.

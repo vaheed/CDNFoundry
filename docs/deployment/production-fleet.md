@@ -11,9 +11,9 @@ For the complete command workflow and interactive setup, see [Production fleet o
 
 - The Python generator runs only on the control-plane machine.
 - A remote host receives one private role-specific bundle and runs Docker Compose locally.
-- Each DNS or combined DNS/edge host has its own local PostgreSQL (`pdns-db`) and its own PowerDNS services.
-- A DNS host never uses the control-plane application's PostgreSQL database.
-- Each DNS host has a separate stable `PDNS_DB_PASSWORD` and `PDNS_API_KEY`.
+- The control host runs the hidden PowerDNS primary (`pdns-primary`) with its own PostgreSQL (`pdns-db`); it never uses the control-plane application's database.
+- Each DNS or combined DNS/edge host runs a PowerDNS secondary (`pdns-auth`) with a local SQLite store and no database service. It pulls its zones from the primary over TSIG-signed transfers; see [DNS nodes](../operations/dns-nodes.md).
+- The control host has a stable `PDNS_DB_PASSWORD` and `PDNS_API_KEY`; each DNS host has its own stable `PDNS_API_KEY`.
 - Optional monitoring, logging, backups, and IPv6 do not create cross-role variable or secret requirements when disabled.
 - Existing DNS and HTTP serving nodes preserve their last valid runtime state during control-plane or regional failures.
 
@@ -25,13 +25,13 @@ flowchart TB
       CONTROL["Control plane"] --> PG[("PostgreSQL")]
       CONTROL --> V[("Valkey")]
       EDGE_CONTROL["edge-control"] --> CONTROL
-      CONTROL -->|"revisions"| DNS_API["Restricted DNS APIs"]
+      CONTROL -->|"zones"| PRIMARY["Hidden PowerDNS primary"]
       TELEMETRY["Telemetry + Grafana"]
     end
     subgraph Runtime["Regional runtime"]
       Agents["Edge agents"] -->|"outbound mTLS"| EDGE_CONTROL
       Agents --> CELLS["Gateway + bounded cells"] --> Origins["Validated origins"]
-      DNS_API --> PDNS["Private PowerDNS"]
+      PRIMARY -->|"signed transfers"| PDNS["PowerDNS secondary"]
       DNSDIST["DNSdist"] --> PDNS
     end
     Resolvers["Resolvers"] --> DNSDIST
@@ -138,7 +138,6 @@ flowchart TB
     end
     subgraph Servers["Server certificates"]
       SCA --> CC["edge-control"]
-      SCA --> DC["DNS APIs"]
       SCA --> EC["Edge runtime"]
       SCA --> MC["Monitoring"]
     end
@@ -196,16 +195,17 @@ Global application secrets are distributed only when the rendered role's Compose
 
 | Node capability | Secrets |
 | --- | --- |
-| DNS | `pdns-db-password`, `pdns-api-key` |
+| Control | `pdns-db-password`, `pdns-api-key` |
+| DNS | `pdns-api-key` |
 | Edge | `edge-status-token` |
 | Monitoring enabled | Shared `metrics-token`; node-exporter is restricted by the private monitoring network and host firewall |
 | Centralized logs enabled | `log-auth-token` |
 
-A DNS node's database password is not shared with any other DNS node or the control plane.
+Only the control host has a PowerDNS database password. A DNS node has an API key and no database.
 
-## Per-node DNS database lifecycle
+## Primary database lifecycle
 
-On each DNS-capable host:
+On the control host:
 
 1. `pdns-db` starts from that host's persistent PostgreSQL volume.
 2. The activation workflow idempotently ensures the pinned base PowerDNS
@@ -213,7 +213,8 @@ On each DNS-capable host:
    This repairs an interrupted first initialization without deleting data.
 3. `pdns-migrate` applies maintained runtime migrations using the same
    node-specific stored credential.
-4. `pdns-auth` connects to hostname `pdns-db`, database `pdns`, user `pdns`, and that same credential.
+4. `pdns-primary` connects to hostname `pdns-db`, database `pdns`, user `pdns`, and that same credential.
+   DNS nodes (`pdns-auth`) keep a local SQLite store that the primary rebuilds, so they need no database lifecycle.
 5. Health checks and future migrations use the same stable value.
 6. A normal render does not generate a new password.
 
@@ -305,7 +306,7 @@ These are planning baselines; measure actual query rate, request rate, cache wor
 | Edge HTTP/TLS | TCP 80/443 | Internet or configured customer networks |
 | Control UI/API | TCP 80/443 | Intended operator/public sources |
 | Edge control runtime | TCP 8443 | Configured edge source addresses only |
-| DNS API | TCP 8444 | Control-plane source addresses only |
+| DNS primary transfers | TCP and UDP 5300 | DNS node addresses only |
 | Node exporter | TCP 9100 | Monitoring host/private monitoring network only |
 | PostgreSQL, Valkey, ClickHouse, Loki internal ports | service-specific | Local Docker network or exact private peers only; never Internet |
 | SSH | TCP 22 or chosen port | Administrative bastions/VPN only |
@@ -333,13 +334,13 @@ Replace documentation IP addresses before production use.
 
 ### PowerDNS cannot authenticate
 
-On the affected **DNS host**, confirm `pdns-db` and `pdns-auth` are in the same bundle and that PowerDNS points to `pdns-db`:
+On the **control host**, confirm `pdns-db` and `pdns-primary` are in the same bundle and that PowerDNS points to `pdns-db`:
 
 ```bash
 cd /opt/cdnfoundry
-docker compose --env-file .env.prod config | grep -A12 -E 'pdns-db:|pdns-auth:'
+docker compose --env-file .env.prod config | grep -A12 -E 'pdns-db:|pdns-primary:'
 docker compose --env-file .env.prod ps
-docker compose --env-file .env.prod logs --since 15m pdns-db pdns-auth
+docker compose --env-file .env.prod logs --since 15m pdns-db pdns-primary
 ```
 
 Do not print the password. Compare only a local hash when necessary. Use `adopt-existing` for a previously deployed value or the staged rotation procedure. Do not delete the database volume.

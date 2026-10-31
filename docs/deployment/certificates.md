@@ -1,6 +1,6 @@
 ---
 title: Internal certificates
-description: Generate, distribute, verify, and rotate CDNFoundry edge-control, runtime, and DNS API certificates.
+description: Generate, distribute, verify, and rotate CDNFoundry edge-control and runtime certificates.
 ---
 
 # Internal certificates
@@ -13,7 +13,7 @@ trust and cannot be repaired from PostgreSQL alone.
 
 Customer TLS is documented in [TLS certificates](../guides/tls.md). This page covers
 private service PKI used by edge enrollment, agent control, bootstrap listeners,
-and DNS API gateways.
+and the edge runtime.
 
 ## Generated material
 
@@ -23,11 +23,10 @@ and DNS API gateways.
 | --- | --- |
 | `edge-identity-ca.crt` | Trust issued edge-agent client identities |
 | `edge-identity-ca.key` | Sign edge-agent CSRs; control host only |
-| `edge-server-ca.crt` | Trust edge-control, runtime, and DNS API servers |
+| `edge-server-ca.crt` | Trust edge-control and runtime servers |
 | `edge-server-ca.key` | Issue private server certificates; offline/protected |
 | `edge-control-server.crt/.key` | Mutual-TLS control listener |
 | `edge-runtime.crt/.key` | Bootstrap/default OpenResty listener |
-| `dns-api-N.crt/.key` | One private PowerDNS API gateway |
 
 The helper creates ECDSA P-256 CAs and server certificates, sets certificate
 files mode `0644` and keys `0600`, verifies the chains, and refuses to overwrite
@@ -70,28 +69,11 @@ which recovery material to restore; it does not replace a surviving CA key.
 - Edge-control needs its server pair and the identity CA certificate.
 - Every edge agent needs only `edge-server-ca.crt`.
 - Each edge runtime needs the runtime server pair.
-- Each DNS API gateway needs its own pair.
-- Control workers that call DNS APIs need `edge-server-ca.crt` as
-  `PDNS_CA_CERTIFICATE`.
 - The server and identity CA private keys belong in the encrypted recovery set.
 
 For the shipped core image, the identity CA key should be readable by the
 PHP-FPM worker without being world-readable; use group ID 82 and mode `0640`.
 The entrypoint fails closed if PHP-FPM cannot read it.
-
-## Add a DNS host
-
-Use the existing server CA without replacing it:
-
-```sh
-scripts/issue-production-dns-api-certificate.sh \
-  /secure/cdnfoundry-pki \
-  dns-api-3 \
-  dns-api-3.ops.example.com
-```
-
-The command validates names, refuses overwrite, generates a random certificate
-serial, verifies the result, and removes the CSR.
 
 ## Rotation
 

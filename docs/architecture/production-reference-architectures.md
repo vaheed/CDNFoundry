@@ -240,7 +240,7 @@ Use [Simple Anycast](../operations/simple-anycast.md) and its
 | Authoritative DNS | Resolvers → DNSdist | Public TCP and UDP 53 |
 | Customer HTTP/HTTPS | Clients → edge gateway | Public mapped service listeners |
 | Edge control | Edge agent → `CONTROL` | Outbound mTLS from edge |
-| PowerDNS API | Control workers → DNS API gateway | Source-restricted TLS; PowerDNS itself private |
+| PowerDNS primary | Control workers → `pdns-primary` | Private control network; DNS nodes pull signed transfers from port 5300 |
 | Telemetry | Edge/DNS Vector → telemetry endpoint | Bounded, authenticated/restricted where deployed |
 | Databases and Valkey | Owning application roles only | Private; never general public ingress |
 | Grafana | Operator → authenticated proxy/tunnel | Native port remains private or loopback |

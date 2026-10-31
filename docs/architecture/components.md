@@ -34,7 +34,7 @@ startup creates writable directories but deliberately does not migrate.
 | `pdns-auth` | Private PowerDNS authoritative service |
 | `pdns-db` | Rebuildable PowerDNS runtime schema |
 | `pdns-migrate` | Explicit PowerDNS runtime migration tool |
-| `dns-api` | Source-restricted TLS proxy for the private PowerDNS API in the `dns` profile |
+| `pdns-primary` | The hidden primary PowerDNS on the control host: Laravel writes zones here; nodes pull them over TSIG-signed transfers on port 5300 |
 
 PowerAdmin exists only in the development-tools profile and is diagnostic.
 Direct edits are drift.

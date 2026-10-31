@@ -17,7 +17,6 @@ encryption keys, signing keys, or backup credentials.
 | --- | --- |
 | `ensure-development-certificates.sh` | Initialize or verify a complete persistent development PKI; refuse partial mixing |
 | `generate-production-certificates.sh` | Create two private CAs plus control/runtime/DNS API server identities |
-| `issue-production-dns-api-certificate.sh` | Add one DNS API identity without overwriting files |
 | `generate-production-env.sh` | Interactively create mode-`0600` control or combined DNS/edge environment |
 | `validate-production-overrides.sh` | Validate every supported role, IPv4/IPv6, and external-data Compose combination |
 

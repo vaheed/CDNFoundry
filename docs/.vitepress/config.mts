@@ -285,6 +285,7 @@ export default defineConfig({
             { text: 'Fleet rollouts', link: '/operations/fleet-rollouts' },
             { text: 'Runtime generations', link: '/operations/runtime-generations' },
             { text: 'Signing-key rotation', link: '/operations/signing-key-rotation' },
+            { text: 'DNS nodes and the hidden primary', link: '/operations/dns-nodes' },
             { text: 'Software supply chain', link: '/operations/software-supply-chain' },
             { text: 'Backup and recovery', link: '/operations/backup-and-recovery' },
             { text: 'Incident runbooks', link: '/operations/runbooks' },

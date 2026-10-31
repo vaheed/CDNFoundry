@@ -31,7 +31,7 @@ remain operator responsibilities.
 
 ::: danger Management DNS is an external dependency
 Use an independently hosted operator DNS zone for `control`, `edge-control`,
-`telemetry`, `grafana`, and `dns-api-N` management hostnames. Never serve this
+`telemetry`, and `grafana` management hostnames. Never serve this
 zone from CDNFoundry PowerDNS. Use a separate platform DNS zone for CDNFoundry
 nameservers, proxy hostnames, and pool records; those records are desired state
 that CDNFoundry derives into its private PowerDNS databases.
@@ -47,7 +47,6 @@ firewall. Create public records for:
 - `control.<operator-zone>` → `CONTROL`;
 - `edge-control.<operator-zone>` → `CONTROL`;
 - `telemetry.<operator-zone>` → control/telemetry host;
-- one `dns-api-N.<operator-zone>` → each DNS host.
 
 Create nameserver host/glue records for `ns1.<platform-zone>` and
 `ns2.<platform-zone>` at the parent. Add IPv6 only where the host and firewall
@@ -98,9 +97,7 @@ On an offline or protected administration host:
 scripts/generate-production-certificates.sh \
   /secure/cdnfoundry-pki \
   edge-control.ops.example.com \
-  edge-runtime.ops.example.com \
-  dns-api-1.ops.example.com \
-  dns-api-2.ops.example.com
+  edge-runtime.ops.example.com
 ```
 
 Distribute only the files described in [Certificates](certificates.md).
@@ -165,14 +162,17 @@ docker compose --env-file .env.prod \
 ```
 
 The MMDB updater must activate a valid database before PowerDNS becomes ready.
-DNSdist starts after PowerDNS health. The DNS API gateway exposes only a
-source-restricted TLS endpoint; never publish PowerDNS port 8081 directly.
+DNSdist starts after PowerDNS health. A DNS node has no inbound management
+endpoint: its agent configures the local PowerDNS and pulls zones from the hidden
+primary (see [DNS nodes](../operations/dns-nodes.md)). Never publish PowerDNS
+port 8081 on any host; publish the primary's transfer port 5300 only to the node
+addresses.
 
 ### 9. Configure platform state
 
 In the administrator panel:
 
-1. register each DNS API cluster disabled, test it, then enable it;
+1. register the DNS primary disabled (API URL, key, and transfer endpoint), test it, then enable it;
 2. configure and apply system DNS identity, then wait for every cluster to
    acknowledge the platform revision;
 3. create shared and quarantine pools if they are not present;
@@ -209,8 +209,8 @@ topology, operation IDs, certificate fingerprints, checks, and deviations.
 
 - `control` runs Laravel, web ingress, Horizon, Scheduler, edge-control, and its
   default local PostgreSQL and Valkey dependencies.
-- `dns` runs DNSdist, private PowerDNS, its local PostgreSQL runtime database,
-  and the restricted DNS API gateway.
+- `dns` runs DNSdist and a PowerDNS secondary with a local SQLite store. The
+  `control` profile runs the hidden primary and its PostgreSQL database.
 - `edge` runs the agent, destination/Host/SNI gateway, bounded cells, and edge
   traffic Vector.
 - `telemetry` runs ClickHouse, Prometheus, Alertmanager, Grafana, Loki, and

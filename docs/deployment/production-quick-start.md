@@ -12,7 +12,7 @@ flowchart LR
   subgraph Management["Management"]
     Control["Control plane"] --> State[("PostgreSQL")]
     EdgeControl["edge-control"] --> Control
-    Control -->|"async revisions"| DNSAPI["Restricted DNS APIs"]
+    Control -->|"async revisions"| DNSAPI["Hidden DNS primary"]
   end
 
   subgraph POPs["Regional POPs"]
@@ -30,7 +30,7 @@ flowchart LR
 
 ::: danger Keep management DNS independent
 `ops.example.com` and `example.net` are intentionally separate zones. Host
-`control`, `edge-control`, `telemetry`, `grafana`, and every `dns-api-N` record
+`control`, `edge-control`, `telemetry`, and `grafana` records
 for the operator zone with an independent external DNS provider. Never host or
 delegate the operator zone in CDNFoundry's own PowerDNS: that database is
 derived runtime state, so using it for management names creates a bootstrap
@@ -94,7 +94,7 @@ install -m 0600 deploy/production/examples/starter-fleet.json ./fleet.json
 
 Edit `fleet.json` and replace every example value:
 
-- `operator_domain`: independently hosted management DNS suffix for control, DNS API, edge-control, node, and telemetry names;
+- `operator_domain`: independently hosted management DNS suffix for control, edge-control, node, and telemetry names;
 - `platform_domain`: customer-facing CDN platform suffix;
 - `release`: the exact checked-out tag or 40-character commit SHA;
 - each required `CDNF_*_IMAGE` node `extra_env` value: the matching verified
@@ -343,17 +343,15 @@ docker compose --env-file .env.prod ps
 
 At this stage a combined `dns-edge` bundle has no edge UUID or bootstrap token.
 Its generated `start.sh` therefore activates the `dns` profile only: it starts
-the node-local PowerDNS database, idempotently ensures its base schema,
-synchronizes the local database role to the bundle's node-specific password,
-applies the separate PowerDNS migration, and starts PowerDNS, DNSdist, and the
-restricted DNS API. It deliberately does not start the edge profile yet. This
-activation can repair an interrupted first database initialization without
-deleting the persistent volume.
+the PowerDNS secondary, which creates its SQLite store on first start, and
+DNSdist. (The control host's start applied the separate PowerDNS migration and
+started the hidden primary.) It deliberately does not start the edge profile yet.
+The node holds no zones until the primary is registered and the agent is running.
 
-Before adding either DNS cluster in the control panel, confirm that DNSdist
-answers locally over both transports and that the control host can reach the
-restricted DNS API with the generated certificate and API key. Allow public UDP
-and TCP 53; keep TCP 8444 restricted to the control-plane source addresses.
+Before registering the DNS primary in the control panel, confirm that DNSdist
+answers locally over both transports. Allow public UDP and TCP 53 on each PoP. On
+the control host, allow TCP and UDP 5300 only from the PoP addresses: that is
+where the PoPs pull zones from the hidden primary.
 
 ```bash
 # Replace this with the PoP's actual bind_ipv4; a response before zone
@@ -361,23 +359,20 @@ and TCP 53; keep TCP 8444 restricted to the control-plane source addresses.
 read -r -p 'PoP bind IPv4: ' CDNF_DNS_BIND
 dig @"$CDNF_DNS_BIND" example.net SOA +norecurse +time=3 +tries=1
 dig +tcp @"$CDNF_DNS_BIND" example.net SOA +norecurse +time=3 +tries=1
-openssl s_client -connect pop-1.ops.example.com:8444 \
-  -servername pop-1.ops.example.com \
-  -CAfile pki/edge-server-ca.crt </dev/null
 ```
 
 Do not delegate a customer zone yet. An empty PowerDNS runtime can be healthy;
-the control plane publishes desired state only after the clusters are registered
+the control plane publishes desired state only after the primary is registered
 in the next step.
 
 ## 7. Configure DNS desired state
 
-Sign in to the administrator panel, configure platform nameservers and DNS clusters using the two PoP hostnames, and verify registrar glue for their public addresses. DNSdist is the only public authoritative endpoint; PowerDNS and its database remain private.
+Sign in to the administrator panel, configure the DNS primary and platform nameservers, and verify registrar glue for their public addresses. DNSdist is the only public authoritative endpoint; PowerDNS and its database remain private.
 
 Use this exact order:
 
-1. In **Infrastructure → DNS clusters**, create each PoP disabled with its generated `https://pop-N.ops.example.com:8444` endpoint and node-local API key. Test it, then enable it. Do not apply platform identity until both targets are healthy.
-2. In **Infrastructure → System DNS identity**, configure `example.net`, `ns1.example.net`, `ns2.example.net`, and their A/optional AAAA glue. Click **Validate and preview**. A **Review and save DNS identity** modal opens with the normalized public identity, glue addresses, DNS cluster targets, and timers. **Validation has not saved anything yet: review the modal, then click the red _Save DNS identity and queue update_ button to save the desired state.** Wait for both platform deployments to acknowledge the revision before continuing.
+1. In **Infrastructure → DNS clusters**, create the one DNS primary disabled: API URL `http://pdns-primary:8081`, the control host's `PDNS_API_KEY`, and a transfer endpoint of the control host's public IP with port `5300` (for example `192.0.2.10:5300`). Test it, then enable it. Do not apply platform identity until it is healthy. The PoPs then pull every zone from it; see [DNS nodes](../operations/dns-nodes.md).
+2. In **Infrastructure → System DNS identity**, configure `example.net`, `ns1.example.net`, `ns2.example.net`, and their A/optional AAAA glue. Click **Validate and preview**. A **Review and save DNS identity** modal opens with the normalized public identity, glue addresses, DNS cluster targets, and timers. **Validation has not saved anything yet: review the modal, then click the red _Save DNS identity and queue update_ button to save the desired state.** Wait for the platform deployment to acknowledge the revision, and for each PoP's DNS node to report it has pulled it, before continuing.
 3. In **Domains → Create domain**, add a test customer zone. Creation
    automatically queues its initial SOA/NS deployment and then nameserver
    verification. Wait for both cluster acknowledgements, then verify the SOA
@@ -407,9 +402,6 @@ test fails, do not enable it and do not delegate the customer zone.
 
 The PoP bundles were already transferred and started for DNS in step 6. Do not
 rerender or transfer them again merely to enroll the edge role.
-
-The `dns-api` name refers to a container inside a PoP bundle. It is not another
-machine and never receives a separate enrollment file or bundle.
 
 ### 8.1 Create the edge records
 
@@ -547,7 +539,7 @@ protected request file or an API client that reads secrets without echoing them.
 
 | Order | Request | Fields and completion check |
 | --- | --- | --- |
-| DNS clusters, once per PoP | `POST /admin/dns/clusters` | `name`, `location`, `api_url` (`https://pop-N.ops.example.com:8444`), protected `api_key`, `server_id: "localhost"`, `nameservers: [{"hostname":"ns1.example.net"},{"hostname":"ns2.example.net"}]`, `capacity_zones: 10000`; created disabled, test queued; poll top-level `operation_id` |
+| DNS primary, once | `POST /admin/dns/clusters` | `name`, `location`, `api_url` (`http://pdns-primary:8081`), `transfer_endpoint` (`192.0.2.10:5300`), protected `api_key`, `server_id: "localhost"`, `nameservers: [{"hostname":"ns1.example.net"},{"hostname":"ns2.example.net"}]`, `capacity_zones: 10000`; created disabled, test queued; poll top-level `operation_id` |
 | Test/retry and enable | `POST /admin/dns/clusters/{id}/test`, then `POST /admin/dns/clusters/{id}/enable` | Empty objects; wait for test success before enable; wait for its reconcile operation |
 | Preview platform identity | `POST /admin/system/settings/dns/validate` | Payload below; receive `data.confirmation_token`; validation alone saves nothing |
 | Save platform identity | `PATCH /admin/system/settings/dns` | Same payload plus `confirmation_token`; poll operation `data.id`; require both DNS deployments |
@@ -578,7 +570,7 @@ Example identity payload (replace every example domain and address):
   "soa_expire": 1209600,
   "soa_minimum_ttl": 300,
   "default_ttl": 300,
-  "cluster_targets": ["pop-1.ops.example.com:8444", "pop-2.ops.example.com:8444"]
+  "cluster_targets": ["pdns-primary:8081"]
 }
 ```
 
@@ -726,7 +718,7 @@ dig SOA example.net @ns2.example.net
 curl --fail --resolve www.customer.test:443:EDGE_IP https://www.customer.test/
 ```
 
-Run `docker compose --env-file .env.prod ps` on every node. Long-running services must be healthy; completed migration helpers may be exited. Ports 8443/8444, metrics, PostgreSQL, Valkey, PowerDNS API, ClickHouse, and Loki are restricted interfaces, not general public endpoints.
+Run `docker compose --env-file .env.prod ps` on every node. Long-running services must be healthy; completed migration helpers may be exited. Ports 8443/8444 and 5300, metrics, PostgreSQL, Valkey, PowerDNS API, ClickHouse, and Loki are restricted interfaces, not general public endpoints.
 
 Confirm:
 

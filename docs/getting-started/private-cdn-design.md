@@ -216,8 +216,9 @@ flowchart LR
       NS2["DNSdist + PowerDNS"]
       Edge2["OpenResty + agent"]
     end
-    Workers -->|"restricted DNS API"| NS1
-    Workers -->|"restricted DNS API"| NS2
+    Workers -->|"private API"| Primary["Hidden PowerDNS primary"]
+    Primary -->|"signed transfers"| NS1
+    Primary -->|"signed transfers"| NS2
     Edge1 -->|"edge agent: outbound mTLS"| EdgeControl
     Edge2 -->|"edge agent: outbound mTLS"| EdgeControl
     EdgeControl --> Workers

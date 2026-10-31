@@ -38,7 +38,7 @@ data endpoints.
 | Edge gateway | mapped local service IPv4/IPv6 TCP `80`, `443` | Public/NAT ingress maps one-to-one to local listeners; TLS passes through |
 | Gateway metrics | TCP `9105` | Restrict to edge agent and monitoring |
 | Cell gateway contract | TCP `8081`, `8444` | Private gateway-to-cell network; PROXY protocol version 2 required |
-| DNS API Caddy | `${HOST_BIND_IPV4}:8444` | Dual-homed on `ingress` and `dns-private`; exact-source allowlist and TLS protect external access |
+| DNS primary transfers | `${HOST_BIND_IPV4}:5300` (TCP and UDP) | Control host only; transfers are refused unless TSIG-signed. Restrict it to the node addresses |
 | Telemetry Caddy | `${HOST_BIND_IPV4}:8444` | Dual-homed on `ingress` and `telemetry`; exact-source allowlist and TLS; routes Loki push and ClickHouse ingestion privately |
 | Grafana | `127.0.0.1:3000` | Operator UI; publish only through an authenticated HTTPS reverse proxy |
 | Loki (development only) | `127.0.0.1:3100` | Direct diagnostics; production has no host publication |

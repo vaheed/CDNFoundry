@@ -15,21 +15,22 @@ UDP/TCP answers before changing registrar delegation. CDNFoundry cannot roll
 back an incorrect parent-zone or registrar change.
 :::
 
-## Register authoritative clusters first
+## Register the DNS primary first
 
-In **Infrastructure → DNS clusters**, create each private PowerDNS API target
+In **Infrastructure → DNS clusters**, create the one hidden PowerDNS primary
 with:
 
 - a descriptive unique name and location;
-- the source-restricted HTTPS API URL;
+- the primary's private API URL (`http://pdns-primary:8081`);
+- its transfer endpoint, the address and port DNS nodes pull zones from;
 - its API key;
 - server ID, normally `localhost`;
-- the nameserver identities served by that target.
+- the nameserver identities your DNS nodes serve.
 
 A new cluster is disabled until its asynchronous connection test succeeds.
-Enable it only after the last health result is successful. The DNS runtime and
-restricted API must already be deployed; a control-plane row does not start
-PowerDNS or DNSdist.
+Enable it only after the last health result is successful. Only one primary can
+be enabled. The primary and the DNS nodes must already be deployed; a
+control-plane row does not start PowerDNS or DNSdist.
 
 ## Prepare and deploy platform identity
 

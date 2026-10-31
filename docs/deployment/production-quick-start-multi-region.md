@@ -11,7 +11,7 @@ flowchart TB
   subgraph Management["Management region"]
     CONTROL["Control plane"] --> PG[("PostgreSQL")]
     EDGEAPI["edge-control"] --> CONTROL
-    CONTROL -->|"revisions"| DNSAPIS["Restricted DNS APIs"]
+    CONTROL -->|"revisions"| DNSAPIS["Hidden DNS primary"]
     TELEMETRY["Telemetry + Grafana"]
   end
   subgraph Regions["Regional POPs"]
@@ -28,7 +28,7 @@ flowchart TB
 
 ::: danger Keep management DNS outside CDNFoundry
 Publish `control.<operator-zone>`, `edge-control.<operator-zone>`,
-`telemetry.<operator-zone>`, and every `dns-api-N.<operator-zone>` through an
+and `telemetry.<operator-zone>` through an
 independent external DNS provider. Do not put the operator zone in CDNFoundry
 PowerDNS. CDNFoundry PowerDNS contains derived platform/customer runtime state
 and must not be required to find the services that repair or manage it.

@@ -31,8 +31,8 @@ Runtime product policy is not an environment variable. Manage it through
 | `CONTROL_BIND` | control | Host publication for web; default `127.0.0.1:8080` |
 | `CONTROL_HOSTNAME` | control | Public browser/API hostname in independent management DNS |
 | `TELEMETRY_HOSTNAME` | control/telemetry | Public telemetry-ingest hostname in independent management DNS |
-| `CONTROL_PUBLIC_IPV4_ALLOWLIST` | DNS API gateway | Exact control/worker sources allowed to call PowerDNS |
-| `CONTROL_PUBLIC_IPV6_ALLOWLIST` | DNS API gateway | Optional IPv6 control/worker sources allowed to call PowerDNS |
+| `CONTROL_PUBLIC_IPV4_ALLOWLIST` | gateways | Exact control/worker sources allowed through the control and telemetry gateways |
+| `CONTROL_PUBLIC_IPV6_ALLOWLIST` | gateways | Optional IPv6 control/worker sources for the same gateways |
 | `EDGE_PUBLIC_IPV6_ALLOWLIST` | telemetry gateway | Optional IPv6 edge sources allowed to submit telemetry |
 | `LOG_SOURCE_IPV6_ALLOWLIST` | telemetry gateway | Optional IPv6 node sources allowed to submit operational logs |
 | `EDGE_PUBLIC_IPV4_ALLOWLIST` | telemetry gateway | Exact edge/Vector ingestion sources |
@@ -97,10 +97,9 @@ object storage; other Restic backends need their own credential/mount wiring.
 
 | Variable | Required | Meaning and default |
 | --- | --- | --- |
-| `PDNS_DB_PASSWORD` | DNS | PowerDNS PostgreSQL password |
-| `PDNS_API_KEY` | DNS | Private PowerDNS API credential |
+| `PDNS_DB_PASSWORD` | control | PowerDNS PostgreSQL password for the primary |
+| `PDNS_API_KEY` | control, DNS | PowerDNS API credential: the primary's on the control host, the local node's on each DNS node |
 | `DNS_BIND_V4` | DNS | DNSdist IPv4 publication; default `0.0.0.0` |
-| `PDNS_CA_CERTIFICATE` | control worker | Trust anchor for HTTPS PowerDNS API gateways |
 | `EDGE_GATEWAY_BINDINGS` | edge agent | Optional rollout override. When absent, the agent fetches the bounded, revisioned edge/pool endpoint candidate over mTLS; when set, this static JSON remains authoritative. |
 | `EDGE_CELL_TARGETS` | edge agent | Optional development-only JSON map from stable cell names to private container HTTP/HTTPS endpoints; production host-network cells use control-plane loopback targets |
 | `EDGE_GATEWAY_ADDRESSES` | edge agent | Optional development-only JSON array of at most two gateway listener IPs; never set in production |
@@ -113,9 +112,8 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `EDGE_GATEWAY_MAX_CONNECTIONS_PER_ADDRESS` | edge gateway | Connections one source address may hold (an IPv6 source counts per /64), `1`–`65536` (default `256`) |
 | `EDGE_GATEWAY_IDLE_TIMEOUT_SECONDS` | edge gateway | A relayed connection direction with no byte for this long is closed, `5`–`3600` (default `120`) |
 | `EDGE_GATEWAY_HALF_CLOSE_TIMEOUT_SECONDS` | edge gateway | After one side half-closes, the other direction is closed when it is idle this long, `1`–`600` (default `30`) |
-| `DNS_API_HOSTNAME` | DNS | DNS API TLS hostname in independent management DNS |
-| `DNS_API_SERVER_CERTIFICATE` | DNS | Absolute server certificate path |
-| `DNS_API_SERVER_PRIVATE_KEY` | DNS | Absolute mode-`0600` key path |
+| `EDGE_DNS_API_URL` | edge agent | Local PowerDNS API of a DNS node on this host, such as `http://pdns-auth:8081`; empty on a PoP with no DNS node |
+| `EDGE_DNS_API_KEY` | edge agent | The local node's `PDNS_API_KEY`; empty with no DNS node |
 
 ## Telemetry and GeoIP
 

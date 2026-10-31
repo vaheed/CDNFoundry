@@ -262,14 +262,14 @@ Runs a dedicated telemetry stack when monitoring mode is `dedicated`. It does no
 The generator follows the production repository’s two-CA model:
 
 - `edge-identity-ca`: used by the control plane for edge identity issuance and verification.
-- `edge-server-ca`: signs edge-control, edge runtime, and DNS API TLS certificates.
+- `edge-server-ca`: signs edge-control and edge runtime TLS certificates.
 
 CA private keys stay in the protected fleet state directory. Every node bundle receives the edge server CA certificate and its own public certificate. Control and DNS-only bundles receive their node private key; edge and combined DNS/edge bundles require that key from external secret storage on host tmpfs. Only the control bundle receives the edge identity CA private key because the control service requires it. The transferred control key begins root-only; the generated control `start.sh` must run as root and changes only this key to owner `root`, numeric group `82`, mode `0640`, allowing the immutable image's PHP-FPM worker to read it without making it public.
 
 DNS activation also requires root: `start.sh` restricts the credential-bearing
 `docker/pdns/pdns.conf` to `root:82`, mode `0640`, and the generated PowerDNS
 service receives that supplementary reader group. Keep the bundle directory
-mode `0700`. Use the [staged password rotation procedure](production-fleet.md#per-node-dns-database-lifecycle)
+mode `0700`. Use the [staged password rotation procedure](production-fleet.md#primary-database-lifecycle)
 for existing databases; rerendering alone does not rotate a stored credential.
 
 Important generated environment paths include:
@@ -277,15 +277,12 @@ Important generated environment paths include:
 ```text
 EDGE_IDENTITY_CA_CERTIFICATE=./pki/edge-identity-ca.crt
 EDGE_IDENTITY_CA_PRIVATE_KEY=./pki/edge-identity-ca.key
-PDNS_CA_CERTIFICATE=./pki/edge-server-ca.crt
 EDGE_CONTROL_SERVER_CERTIFICATE=./pki/node.crt
 EDGE_CONTROL_SERVER_PRIVATE_KEY=./pki/node.key
 EDGE_CONTROL_CA_CERTIFICATE=./pki/edge-server-ca.crt
 EDGE_RUNTIME_TLS_CERTIFICATE=/dev/shm/cdnfoundry/edge-runtime.crt
 EDGE_RUNTIME_TLS_PRIVATE_KEY=/dev/shm/cdnfoundry/edge-runtime.key
 EDGE_STATE_ENCRYPTION_KEY_FILE=/dev/shm/cdnfoundry/edge-state-encryption.key
-DNS_API_SERVER_CERTIFICATE=./pki/node.crt
-DNS_API_SERVER_PRIVATE_KEY=/dev/shm/cdnfoundry/node.key
 ```
 
 Before starting an edge bundle, provision a dedicated bootstrap listener key

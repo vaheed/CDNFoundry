@@ -28,8 +28,8 @@ Use at least three Linux hosts in separate failure domains:
 
 | Host | Compose profiles | Public listeners |
 | --- | --- | --- |
-| `control-1` | `control`, optionally `telemetry` and `logs` | TCP 80/443, UDP 443, TCP 8443; TCP 8444 when telemetry is colocated |
-| `pop-1` | `dns`, `edge`, optionally `logs` | UDP/TCP 53, TCP 80/443 on mapped service addresses, TCP 8444 from control only |
+| `control-1` | `control`, optionally `telemetry` and `logs` | TCP 80/443, UDP 443, TCP 8443, TCP/UDP 5300 from DNS nodes only (hidden primary); TCP 8444 when telemetry is colocated |
+| `pop-1` | `dns`, `edge`, optionally `logs` | UDP/TCP 53, TCP 80/443 on mapped service addresses |
 | `pop-2` | `dns`, `edge`, optionally `logs` | Same as `pop-1` |
 
 Do not deploy a single public DNS node. The control database and Valkey are
@@ -40,7 +40,7 @@ edge snapshots, and telemetry are derived or rebuildable.
 Use two unrelated DNS zones:
 
 - an operator zone, such as `ops.example.com`, for control, Grafana, telemetry,
-  edge-control, and DNS API names;
+  and edge-control names;
 - a platform/customer zone, such as `example.net`, for nameservers, delegated
   customer zones, and proxied hostnames.
 
@@ -55,10 +55,10 @@ Before touching a host, record:
 - hostnames, public and private IPv4/IPv6 addresses, NAT mappings, and failure
   domains;
 - `control.ops.example.com`, `edge-control.ops.example.com`, `telemetry.ops.example.com`,
-  `grafana.ops.example.com`, and one `dns-api-N.ops.example.com` per DNS host;
+  and `grafana.ops.example.com`;
 - `ns1.example.net` and `ns2.example.net` plus registrar glue addresses;
 - the advertised-to-local address map for each edge;
-- firewall sources for edge control, DNS API, telemetry ingestion, operational
+- firewall sources for edge control, DNS zone transfers (port 5300), telemetry ingestion, operational
   logs, gateway metrics, and administration;
 - backup repository, retention, restoration owner, and recovery location for
   application keys and private PKI.
@@ -127,11 +127,12 @@ result for each of:
 - `GRAFANA_POSTGRES_PASSWORD`;
 - each edge host's `EDGE_STATUS_TOKEN`.
 
-`pdns-auth` starts through `docker/pdns/production-start.sh`. The committed
-`pdns.conf` holds development credentials; at start the wrapper writes the real
-`PDNS_DB_PASSWORD` and `PDNS_API_KEY` into a private copy of the configuration
-and refuses to start (exit 78) if either is missing or still the development
-value. Fleet bundles already carry rendered credentials, which the wrapper keeps.
+`pdns-primary` (control host) and `pdns-auth` (each DNS host) start through
+`docker/pdns/production-start.sh`. The committed configurations hold development
+credentials; at start the wrapper writes the real `PDNS_API_KEY` (and, for the
+primary, `PDNS_DB_PASSWORD`) into a private copy of the configuration and refuses
+to start (exit 78) if one is missing or still the development value. A DNS host
+creates its SQLite store on first start. Fleet bundles already carry rendered credentials, which the wrapper keeps.
 
 Create the metrics token without printing it:
 
@@ -201,14 +202,12 @@ Repeat that three-command sequence with these output names and SANs:
 | Files | Required SAN |
 | --- | --- |
 | `edge-runtime.crt/.key` | a bootstrap hostname owned by the edge deployment |
-| `dns-api-1.crt/.key` | `dns-api-1.ops.example.com` |
-| `dns-api-2.crt/.key` | `dns-api-2.ops.example.com` |
 
 Remove CSRs after verifying every certificate:
 
 ```bash
 openssl verify -CAfile edge-server-ca.crt \
-  edge-control-server.crt edge-runtime.crt dns-api-1.crt dns-api-2.crt
+  edge-control-server.crt edge-runtime.crt
 openssl x509 -in edge-control-server.crt -noout -subject -issuer -dates \
   -ext subjectAltName
 ```
@@ -218,7 +217,7 @@ Distribute material as follows:
 | Host | Files |
 | --- | --- |
 | control | identity CA certificate and key, server CA certificate, edge-control certificate and key |
-| each edge | server CA certificate, edge-runtime certificate and key, that host's DNS API certificate and key |
+| each edge | server CA certificate, edge-runtime certificate and key |
 | offline recovery custody | both CA keys, both CA certificates, all server keys/certificates |
 
 Never put `edge-server-ca.key` or `edge-identity-ca.key` on an edge. On control,
@@ -283,7 +282,6 @@ EDGE_CONTROL_SERVER_CERTIFICATE=/etc/cdnfoundry/pki/edge-control-server.crt
 EDGE_CONTROL_SERVER_PRIVATE_KEY=/etc/cdnfoundry/pki/edge-control-server.key
 EDGE_IDENTITY_CA_CERTIFICATE=/etc/cdnfoundry/pki/edge-identity-ca.crt
 EDGE_IDENTITY_CA_PRIVATE_KEY=/etc/cdnfoundry/pki/edge-identity-ca.key
-PDNS_CA_CERTIFICATE=/etc/cdnfoundry/pki/edge-server-ca.crt
 ```
 
 Set `EDGE_PUBLIC_*_ALLOWLIST` to the exact edge egress addresses allowed to
@@ -292,14 +290,13 @@ to push logs. Empty allowlists deny those remote paths.
 
 ### DNS and edge host
 
-Give each host its own DNS API identity and registration fields:
+Give each host its address settings, and its agent the local DNS node's API:
 
 ```dotenv
 DNS_BIND_V4=0.0.0.0
 HOST_BIND_IPV4=0.0.0.0
-DNS_API_HOSTNAME=dns-api-1.ops.example.com
-DNS_API_SERVER_CERTIFICATE=/etc/cdnfoundry/pki/dns-api-1.crt
-DNS_API_SERVER_PRIVATE_KEY=/dev/shm/cdnfoundry/dns-api-1.key
+EDGE_DNS_API_URL=http://pdns-auth:8081
+EDGE_DNS_API_KEY=<this host's PDNS_API_KEY>
 EDGE_CONTROL_CA_CERTIFICATE=/etc/cdnfoundry/pki/edge-server-ca.crt
 EDGE_RUNTIME_TLS_CERTIFICATE=/etc/cdnfoundry/pki/edge-runtime.crt
 EDGE_RUNTIME_TLS_PRIVATE_KEY=/dev/shm/cdnfoundry/edge-runtime.key
@@ -418,32 +415,30 @@ directory and applies only to a new `pdns-db` volume. The explicit
 `pdns-migrate` service applies maintained runtime migrations and is safe to run
 again. Never delete the volume to force initialization.
 
-Before configuring clusters, confirm DNSdist answers on UDP and TCP and the DNS
-API certificate matches its hostname:
+Before configuring the primary, confirm DNSdist answers on UDP and TCP:
 
 ```bash
 dig @127.0.0.1 version.bind TXT CH +short
 dig +tcp @127.0.0.1 version.bind TXT CH +short
-openssl s_client -connect dns-api-1.ops.example.com:8444 \
-  -servername dns-api-1.ops.example.com \
-  -CAfile /etc/cdnfoundry/pki/edge-server-ca.crt </dev/null
 ```
 
-An allowlisted control source should reach the API; every other source should
-receive `403`. PowerDNS port 8081 and its PostgreSQL port must remain private.
+PowerDNS port 8081 and the primary's PostgreSQL port must remain private on every
+host. The only PowerDNS port that leaves the control host is the transfer port 5300,
+which accepts only TSIG-signed requests; restrict it to the DNS node addresses.
 
 ## 9. Configure desired state before edge enrollment
 
 Sign in at `https://control.ops.example.com/admin` and use this order:
 
-1. Create both DNS clusters disabled. Use
-   `https://dns-api-N.ops.example.com:8444`, that host's `PDNS_API_KEY`, and the
-   server CA trust configured on control. Test each cluster, then enable it.
+1. Create the one DNS primary disabled. Use `http://pdns-primary:8081`, the
+   control host's `PDNS_API_KEY`, and the control host's public address with port
+   5300 as the transfer endpoint. Test it, then enable it. See
+   [DNS nodes](../operations/dns-nodes.md).
 2. Configure the platform domain, `ns1`/`ns2`, glue A records, optional AAAA
    records, SOA defaults, and DNSSEC policy in **Control plane → System
-   settings**. Apply only after both clusters are healthy, then wait for both
-   platform deployments to acknowledge the revision.
-3. Create a test domain and a DNS-only A/AAAA record. Wait until both clusters
+   settings**. Apply only after the primary is healthy, then wait for the platform
+   deployment to acknowledge the revision.
+3. Create a test domain and a DNS-only A/AAAA record. Wait until the primary and every DNS node
    acknowledge the revision. Verify both authoritative servers over UDP and TCP,
    then create registrar glue and change delegation.
 4. Create `pop-1` and `pop-2` in **Edge network → Edges**. Record each edge UUID
@@ -627,7 +622,7 @@ be rebuilt from desired state, but preserving them reduces recovery time.
 | Compose rejects interpolation | Required values in `.env.prod`, JSON quoting, absolute paths | Correct the environment; rerun `config --quiet` |
 | `mmdb-updater` is unhealthy | Provider reachability, target filename, checksum, volume | Preserve the last valid MMDB; fix download settings |
 | Migration cannot connect | Dependency health, password, Docker network, disk | Leave old services/state intact; repair dependency and rerun the idempotent migration |
-| DNS API returns `403` | Actual control source IP and allowlist | Correct the narrow allowlist; do not expose PowerDNS directly |
+| A DNS node serves no zones | Agent `dns` heartbeat field, `docker compose logs pdns-auth edge-agent`, reachability of the primary's port 5300 | Fix the firewall or the transfer endpoint; the node fills itself once it can pull |
 | Edge enrollment fails | URL SAN, server CA, UUID/token, clock, port 8443 | Fix trust/reachability; rotate a consumed token instead of reusing it |
 | Empty edge repeats `generation revision must be positive` | Edge-agent release predates empty-bootstrap support | Deploy a release containing the empty-bootstrap fix; do not create a placeholder domain |
 | New gateway exits because candidate and `last-valid.json` are absent | Gateway release predates clean-start waiting support | Deploy the clean-start fix; the gateway must remain not-ready until the agent publishes its first candidate |

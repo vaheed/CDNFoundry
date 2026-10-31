@@ -39,7 +39,7 @@ flowchart LR
 
 | Namespace or address | Owner and purpose | CDNFoundry PowerDNS? |
 | --- | --- | --- |
-| `control.<operator-zone>`, `edge-control.<operator-zone>`, `telemetry.<operator-zone>`, `grafana.<operator-zone>`, `dns-api-N.<operator-zone>` | Independent external DNS provider; management and recovery reachability | Never |
+| `control.<operator-zone>`, `edge-control.<operator-zone>`, `telemetry.<operator-zone>`, `grafana.<operator-zone>` | Independent external DNS provider; management and recovery reachability | Never |
 | `ns1.<platform-zone>`, `ns2.<platform-zone>` and glue | Parent/registrar delegation to public DNSdist addresses | Served by DNSdist from derived PowerDNS state after bootstrap |
 | Enrolled customer zones | PostgreSQL desired state reconciled into private PowerDNS databases | Yes |
 | Edge pool service addresses | Public HTTP/HTTPS addresses selected through platform/customer DNS | Stored as platform desired state, not management addresses |
@@ -48,7 +48,7 @@ flowchart LR
 ::: danger Avoid a DNS bootstrap loop
 Management records must remain resolvable while CDNFoundry DNS is empty,
 degraded, or being restored. Hosting them in the platform's own PowerDNS can
-leave the DNS API and control plane unreachable precisely when operators need
+leave the control plane unreachable precisely when operators need
 them for repair.
 :::
 
