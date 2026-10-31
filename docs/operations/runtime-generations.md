@@ -19,20 +19,35 @@ runtime/
   generations/
     <revision>-<random-id>/
       manifest.json
-      state.json
+      summary.json
       gateway.json
-      active.json
-      <pool>.json, <pool>.stamp
       cell-01.json ... cell-32.json, cell-01.stamp ... cell-32.stamp
   current -> generations/<active-generation>
   previous -> generations/<rollback-generation>
+agent state (EDGE_STATE_DIR)/
+  state/
+    meta.json                 the applied sequence
+    domains/<domain-id>.json  one verified artifact payload per domain
 ```
 
-Every pool and cell file is followed by a `.stamp` file holding the SHA-256 of
-that file, written after it. A cell polls only its few-byte stamp once a second
-and decodes its state, which can be tens of megabytes, only when the stamp
-changes, so an idle cell costs almost no CPU however many domains it serves.
-A cell that finds no stamp loads the file on every tick.
+A generation holds only compiled runtime: one file per cell, the gateway map, and
+a small summary. The desired state the agent keeps for restart and recovery is
+not inside it. It is one file per domain, so a change to one domain rewrites that
+domain's file and the runtime file of the one cell that serves it. Every other
+domain file is untouched, and every other cell file is carried over from the
+previous generation as a hardlink, not rewritten.
+
+Each cell file is followed by a `.stamp` file. The stamp is the cell's content
+identity, a SHA-256 of what the cell serves, and the file carries it as its
+`generation_id`, with the sequence at which the content last changed. A cell
+polls only its few-byte stamp once a second and decodes its state, which can be
+tens of megabytes, only when the stamp changes. An idle cell, and a cell whose
+content did not change, costs almost no CPU however many domains it serves. A
+cell that finds no stamp loads the file on every tick.
+
+The agent writes the encrypted recovery snapshot at most once a minute. After a
+restore it catches up from its stored sequence, so a restore can only be older
+than the last change by the time since the last snapshot.
 
 Readers use only paths below `current`. The manifest records schema version,
 generation ID, revision, UTC creation time, the exact expected file list, byte
@@ -55,8 +70,9 @@ generation invalid. Published generation directories are never edited.
    in-memory configuration on any read or validation error, and report the
    loaded generation and revision.
 6. The agent acknowledges success only after durable publication and pointer
-   replacement. Heartbeat readiness remains false if the gateway or a cell
-   reports a different generation.
+   replacement. Heartbeat readiness remains false if the gateway reports a different
+   generation, or a cell reports an identity other than the stamp of its file in
+   the current generation.
 
 Duplicate publication of the active revision is idempotent. A lower revision
 is rejected. Publication keeps five recent generations plus the active and

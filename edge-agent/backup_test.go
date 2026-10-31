@@ -36,17 +36,24 @@ func TestEncryptedRecoveryRestoresLastValidGeneration(t *testing.T) {
 	if err := os.RemoveAll(c.runtimeDir); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.RemoveAll(c.stateDir()); err != nil {
+		t.Fatal(err)
+	}
 	restarted := &client{dir: dir, runtimeDir: c.runtimeDir, backupKey: key, id: c.id}
 	if err := restarted.restoreBackup(); err != nil {
 		t.Fatal(err)
 	}
-	recovered, err := loadState(restarted.activeStatePath())
+	recovered, err := restarted.loadStoredState()
 	if err != nil || recovered.Sequence != 4 || restarted.gatewayBindings != "[]" {
 		t.Fatalf("previous valid runtime was not restored: %v", err)
 	}
 	if err := os.RemoveAll(c.runtimeDir); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.RemoveAll(c.stateDir()); err != nil {
+		t.Fatal(err)
+	}
+	restarted = &client{dir: dir, runtimeDir: c.runtimeDir, backupKey: key, id: c.id}
 	corrupt := append([]byte(nil), sealed...)
 	corrupt[len(corrupt)-1] ^= 1
 	if err := os.WriteFile(c.backupPath(), corrupt, 0600); err != nil {

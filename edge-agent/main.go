@@ -92,6 +92,8 @@ type client struct {
 	originPolicy                       originPolicy
 	originPolicyChecksum               string
 	originPolicyLoaded                 bool
+	storedDigests                      map[string]string
+	lastBackup                         time.Time
 	id                                 identity
 	generationMismatches               generationMismatchTracker
 	renewalRetryAt                     time.Time
@@ -848,7 +850,7 @@ func (c *client) sync() error {
 	if err != nil {
 		return err
 	}
-	current, err := loadState(c.activeStatePath())
+	current, err := c.loadStoredState()
 	if errors.Is(err, os.ErrNotExist) {
 		return c.full()
 	}
@@ -915,13 +917,6 @@ func (c *client) sync() error {
 	logger.Info("runtime candidate activated", "event", "runtime_candidate_activated", "edge_id", c.id.EdgeID, "revision_id", applied.Sequence, "rejected_artifacts", len(rejections))
 	_ = c.flushAcks()
 	return c.heartbeat(applied.Sequence)
-}
-
-func (c *client) activeStatePath() string {
-	if c.runtimeDir != "" {
-		return filepath.Join(c.runtimeDir, "current", "state.json")
-	}
-	return filepath.Join(c.dir, "active", "state.json")
 }
 
 func (c *client) refreshGatewayBindings() error {
@@ -1198,30 +1193,24 @@ func (c *client) activateWithKeys(s state, keys map[string]string) error {
 	if c.runtimeDir != "" {
 		logger.Info("runtime generation activation started", "event", "runtime_generation_activation_started", "edge_id", c.id.EdgeID, "revision_id", s.Sequence)
 		manifest, err := replaceGeneration(c.runtimeDir, c.gatewayActiveRevision(s.Sequence), func(candidate, generationID string) error {
-			if err := atomicJSON(filepath.Join(candidate, "state.json"), s); err != nil {
-				return err
-			}
 			runtime, pools, err := compileRuntime(s, keys)
 			if err != nil {
 				return candidateError{err}
 			}
 			applyOriginPolicy(runtime, c.originPolicy)
-			runtime["generation_id"] = generationID
-			for _, poolRuntime := range pools {
-				poolRuntime["generation_id"] = generationID
-			}
-			if err := atomicJSON(filepath.Join(candidate, "active.json"), runtime); err != nil {
-				return err
-			}
-			for name, poolRuntime := range pools {
+			for name := range pools {
 				if !validPoolName(name) {
 					return errors.New("invalid runtime pool name")
 				}
-				if err := atomicRuntimeJSON(filepath.Join(candidate, name+".json"), poolRuntime); err != nil {
-					return err
-				}
 			}
-			if err := c.writeCellRuntimesAt(candidate, s.Sequence, generationID, pools); err != nil {
+			// A generation always holds at least this small summary, so an empty PoP still has a
+			// verifiable, publishable generation.
+			if err := atomicJSON(filepath.Join(candidate, "summary.json"), map[string]any{
+				"schema_version": 1, "generation_id": generationID, "sequence": s.Sequence, "domain_count": len(s.Domains),
+			}); err != nil {
+				return err
+			}
+			if err := c.writeCellRuntimesAt(candidate, s.Sequence, pools); err != nil {
 				return err
 			}
 			if c.gatewayBindings != "" {
@@ -1239,84 +1228,30 @@ func (c *client) activateWithKeys(s state, keys map[string]string) error {
 		if err != nil {
 			return err
 		}
-		if err := c.saveBackup(s); err != nil {
+		// The compiled runtime is published; now the durable state follows it. A crash in between
+		// leaves the state behind the runtime, and the agent catches up from its older sequence.
+		if _, err := c.persistState(s); err != nil {
 			return err
+		}
+		if c.lastBackup.IsZero() || time.Since(c.lastBackup) >= backupInterval {
+			if err := c.saveBackup(s); err != nil {
+				return err
+			}
+			c.lastBackup = time.Now()
 		}
 		c.derivedEnsured = true
 		logger.Info("runtime generation activation succeeded", "event", "runtime_generation_activation_succeeded", "edge_id", c.id.EdgeID, "generation_id", manifest.GenerationID, "revision_id", manifest.Revision)
 		return nil
 	}
-	candidate := filepath.Join(c.dir, "candidate")
-	os.RemoveAll(candidate)
-	if err := os.MkdirAll(candidate, 0700); err != nil {
-		return err
-	}
-	if err := atomicJSON(filepath.Join(candidate, "state.json"), s); err != nil {
-		return err
-	}
-	runtime, pools, err := compileRuntime(s, keys)
-	if err != nil {
+	// Without a runtime directory there is nothing to publish; the state is still validated and kept.
+	if _, _, err := compileRuntime(s, keys); err != nil {
 		return candidateError{err}
 	}
-	applyOriginPolicy(runtime, c.originPolicy)
-	active, previous := filepath.Join(c.dir, "active"), filepath.Join(c.dir, "previous")
-	os.RemoveAll(previous)
-	if _, err := os.Stat(active); err == nil {
-		if err := os.Rename(active, previous); err != nil {
-			return err
-		}
-	}
-	if err := os.Rename(candidate, active); err != nil {
-		if _, e := os.Stat(previous); e == nil {
-			_ = os.Rename(previous, active)
-		}
-		return err
-	}
-	if c.runtimeDir != "" {
-		if err := os.MkdirAll(c.runtimeDir, 0755); err != nil {
-			return c.rollbackActive(active, previous, err)
-		}
-		if err := atomicJSON(filepath.Join(c.runtimeDir, "active.json"), runtime); err != nil {
-			return c.rollbackActive(active, previous, err)
-		}
-		existing, _ := filepath.Glob(filepath.Join(c.runtimeDir, "*.json"))
-		for _, file := range existing {
-			name := strings.TrimSuffix(filepath.Base(file), ".json")
-			if name != "active" {
-				if _, present := pools[name]; !present {
-					pools[name] = map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": map[string]any{}}
-				}
-			}
-		}
-		for name, poolRuntime := range pools {
-			if !validPoolName(name) {
-				return c.rollbackActive(active, previous, errors.New("invalid runtime pool name"))
-			}
-			if err := atomicRuntimeJSON(filepath.Join(c.runtimeDir, name+".json"), poolRuntime); err != nil {
-				return c.rollbackActive(active, previous, err)
-			}
-		}
-		if err := c.writeCellRuntimes(s.Sequence, pools); err != nil {
-			return c.rollbackActive(active, previous, err)
-		}
-		if c.gatewayBindings != "" {
-			gateway, err := compileGateway(c.gatewayActiveRevision(s.Sequence), pools, c.gatewayBindings)
-			if err != nil {
-				return c.rollbackActive(active, previous, err)
-			}
-			if err := atomicJSON(filepath.Join(c.runtimeDir, "gateway.json"), gateway); err != nil {
-				return c.rollbackActive(active, previous, err)
-			}
-		}
-	}
-	return nil
+	_, err := c.persistState(s)
+	return err
 }
 
-func (c *client) writeCellRuntimes(sequence uint64, pools map[string]map[string]any) error {
-	return c.writeCellRuntimesAt(c.runtimeDir, sequence, "", pools)
-}
-
-func (c *client) writeCellRuntimesAt(directory string, sequence uint64, generationID string, pools map[string]map[string]any) error {
+func (c *client) writeCellRuntimesAt(directory string, sequence uint64, pools map[string]map[string]any) error {
 	for cellName, poolName := range c.resolvedCellAssignments(pools) {
 		runtime := pools[cellName]
 		if runtime == nil {
@@ -1325,15 +1260,54 @@ func (c *client) writeCellRuntimesAt(directory string, sequence uint64, generati
 		if runtime == nil {
 			runtime = map[string]any{"schema_version": 1, "sequence": sequence, "hosts": map[string]any{}, "certificates": map[string]any{}}
 		}
-		if generationID != "" {
-			runtime["generation_id"] = generationID
-		}
 		pools[cellName] = runtime
-		if err := atomicRuntimeJSON(filepath.Join(directory, cellName+".json"), runtime); err != nil {
+		if err := c.writeCellRuntime(directory, cellName, sequence, runtime); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// writeCellRuntime writes one cell's runtime file and its stamp. The stamp is the cell's content
+// identity: a digest of the runtime with its sequence and identity blanked, so it changes only when
+// what the cell serves changes. The file carries that identity as its generation_id, and the
+// sequence at which the content last changed. When the previous generation holds the same content,
+// its file is hardlinked instead of written again, so a change confined to one pool's domains
+// rewrites only the cells that serve that pool, and the other cells do not even reload.
+func (c *client) writeCellRuntime(directory, cellName string, sequence uint64, runtime map[string]any) error {
+	delete(runtime, "generation_id")
+	runtime["sequence"] = uint64(0)
+	base, err := json.Marshal(runtime)
+	if err != nil {
+		return err
+	}
+	identity := digest(base)
+	file := filepath.Join(directory, cellName+".json")
+	if c.runtimeDir != "" && directory != c.runtimeDir {
+		previous := filepath.Join(c.runtimeDir, "current", cellName+".json")
+		if stamp, err := os.ReadFile(runtimeStampPath(previous)); err == nil && strings.TrimSpace(string(stamp)) == identity {
+			if os.Link(previous, file) == nil && os.Link(runtimeStampPath(previous), runtimeStampPath(file)) == nil {
+				var carried struct {
+					Sequence uint64 `json:"sequence"`
+				}
+				if body, err := os.ReadFile(file); err == nil && json.Unmarshal(body, &carried) == nil {
+					runtime["sequence"], runtime["generation_id"] = carried.Sequence, identity
+				}
+				return nil
+			}
+			_ = os.Remove(file)
+			_ = os.Remove(runtimeStampPath(file))
+		}
+	}
+	runtime["generation_id"], runtime["sequence"] = identity, sequence
+	body, err := json.Marshal(runtime)
+	if err != nil {
+		return err
+	}
+	if err := writeAtomic(file, body); err != nil {
+		return err
+	}
+	return writeAtomic(runtimeStampPath(file), []byte(identity+"\n"))
 }
 
 func (c *client) resolvedCellAssignments(pools map[string]map[string]any) map[string]string {
@@ -1371,14 +1345,6 @@ func validCellName(name string) bool {
 	}
 	slot, err := strconv.Atoi(name[5:])
 	return err == nil && slot >= 1 && slot <= 32 && fmt.Sprintf("cell-%02d", slot) == name
-}
-
-func (c *client) rollbackActive(active, previous string, cause error) error {
-	os.RemoveAll(active)
-	if _, err := os.Stat(previous); err == nil {
-		_ = os.Rename(previous, active)
-	}
-	return cause
 }
 
 func compileRuntime(s state, keys map[string]string) (map[string]any, map[string]map[string]any, error) {
@@ -1664,6 +1630,21 @@ func tlsHandshakeBudget(host any) int {
 
 const defaultTLSHandshakeBudget = 50
 
+// expectedCellIdentity is the identity a cell should have loaded: the stamp of its file in the
+// current generation, or the generation's own identity when the cell has no file there.
+func (c *client) expectedCellIdentity(cell map[string]any, generation string) string {
+	name, _ := cell["name"].(string)
+	if c.runtimeDir == "" || !validCellName(name) {
+		return generation
+	}
+	if stamp, err := os.ReadFile(runtimeStampPath(filepath.Join(c.runtimeDir, "current", name+".json"))); err == nil {
+		if identity := strings.TrimSpace(string(stamp)); identity != "" {
+			return identity
+		}
+	}
+	return generation
+}
+
 func (c *client) heartbeat(sequence uint64) error {
 	cells, failures, security := c.runtimeStatus()
 	listenerReady := false
@@ -1677,9 +1658,12 @@ func (c *client) heartbeat(sequence uint64) error {
 	for _, cell := range cells {
 		capacity, _ := cell["capacity"].(map[string]any)
 		generation, _ := capacity["active_generation"].(string)
-		if cell["status"] == "ready" && (expectedGeneration == "" || generation == expectedGeneration) {
+		// A cell's identity is its content digest, which stays the same across generations that do not
+		// change what it serves, so each cell is compared with its own expected identity.
+		expected := c.expectedCellIdentity(cell, expectedGeneration)
+		if cell["status"] == "ready" && (expected == "" || generation == expected) {
 			listenerReady = true
-		} else if expectedGeneration != "" && generation != expectedGeneration {
+		} else if expected != "" && generation != expected {
 			if generation == "" {
 				generation = "unknown"
 			}
@@ -2046,29 +2030,6 @@ func semver(v string) int {
 		}
 	}
 	return n
-}
-func loadState(p string) (state, error) {
-	var s state
-	b, e := os.ReadFile(p)
-	if e != nil {
-		return s, e
-	}
-	e = json.Unmarshal(b, &s)
-	return s, e
-}
-
-// atomicRuntimeJSON writes a runtime file a cell loads, then a small stamp beside it holding
-// the file's SHA-256. Cells poll only the stamp and decode the state when it changes.
-func atomicRuntimeJSON(p string, v any) error {
-	b, e := json.Marshal(v)
-	if e != nil {
-		return e
-	}
-	if e = writeAtomic(p, b); e != nil {
-		return e
-	}
-	sum := sha256.Sum256(b)
-	return writeAtomic(runtimeStampPath(p), []byte(hex.EncodeToString(sum[:])+"\n"))
 }
 
 func runtimeStampPath(p string) string {

@@ -1,0 +1,1 @@
+{"schema_version":1,"domain_id":1,"domain":"example.test","revision":1,"pools":["shared-default"],"settings":{"enabled":true},"cache":{"enabled":true,"epoch":2},"hostnames":[{"hostname":"www.example.test","origin":{"host":"origin.example"}}]}

@@ -12,9 +12,15 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 )
 
 const backupMagic = "CDNFEDGE1"
+
+// backupInterval bounds how often the encrypted recovery snapshot is rewritten; between backups the
+// agent catches up from its cursor after a restore.
+const backupInterval = time.Minute
+
 const maxBackupBytes = 72 << 20
 const tmpfsMagic = 0x01021994
 
@@ -188,9 +194,7 @@ func (c *client) restoreBackup() error {
 	if c.runtimeDir == "" || len(c.backupKey) == 0 {
 		return nil
 	}
-	if _, err := os.Stat(c.activeStatePath()); err == nil {
-		return nil
-	} else if !errors.Is(err, os.ErrNotExist) {
+	if stored, err := c.hasStoredState(); err != nil || stored {
 		return err
 	}
 	file, err := os.Open(c.backupPath())

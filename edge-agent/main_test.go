@@ -209,7 +209,7 @@ func TestAcknowledgementBufferRetriesAfterRecovery(t *testing.T) {
 
 func TestActivationPreservesPreviousAndRestartState(t *testing.T) {
 	dir := t.TempDir()
-	c := &client{dir: dir, runtimeDir: filepath.Join(dir, "runtime")}
+	c := &client{dir: dir, runtimeDir: filepath.Join(dir, "runtime"), cellAssignments: map[string]string{"cell-01": "shared-default"}}
 	first := state{Sequence: 4, Domains: map[string]json.RawMessage{"1": runtimeDomain(4)}}
 	second := state{Sequence: 5, Domains: map[string]json.RawMessage{"1": runtimeDomain(5)}}
 	if err := c.activate(first); err != nil {
@@ -218,31 +218,41 @@ func TestActivationPreservesPreviousAndRestartState(t *testing.T) {
 	if err := c.activate(second); err != nil {
 		t.Fatal(err)
 	}
-	active, err := loadState(filepath.Join(dir, "runtime", "current", "state.json"))
-	if err != nil || active.Sequence != 5 {
+	// A restarted agent reads the durable state back, not the in-memory copy.
+	restarted := &client{dir: dir, runtimeDir: c.runtimeDir}
+	active, err := restarted.loadStoredState()
+	if err != nil || active.Sequence != 5 || !bytes.Contains(active.Domains["1"], []byte(`"revision":5`)) {
 		t.Fatalf("active state not restart-safe: %v", err)
 	}
-	previous, err := loadState(filepath.Join(dir, "runtime", "previous", "state.json"))
-	if err != nil || previous.Sequence != 4 {
-		t.Fatalf("previous state not preserved: %v", err)
+	var previousCell struct {
+		Sequence uint64 `json:"sequence"`
+	}
+	previousBytes, err := os.ReadFile(filepath.Join(dir, "runtime", "previous", "cell-01.json"))
+	if err != nil || json.Unmarshal(previousBytes, &previousCell) != nil || previousCell.Sequence != 4 {
+		t.Fatalf("previous runtime generation not preserved: %v %s", err, previousBytes)
 	}
 	if err := c.activate(state{Sequence: 6}); err == nil {
 		t.Fatal("invalid candidate activated")
 	}
-	active, _ = loadState(filepath.Join(dir, "runtime", "current", "state.json"))
+	active, _ = c.loadStoredState()
 	if active.Sequence != 5 {
 		t.Fatal("invalid candidate replaced active state")
 	}
-	var poolRuntime struct {
+	var cellRuntime struct {
 		Hosts map[string]any `json:"hosts"`
 	}
-	poolBytes, err := os.ReadFile(filepath.Join(dir, "runtime", "current", "shared-default.json"))
-	if err != nil || json.Unmarshal(poolBytes, &poolRuntime) != nil || poolRuntime.Hosts["www.example.test"] == nil {
-		t.Fatal("placement-aware pool runtime was not published")
+	cellBytes, err := os.ReadFile(filepath.Join(dir, "runtime", "current", "cell-01.json"))
+	if err != nil || json.Unmarshal(cellBytes, &cellRuntime) != nil || cellRuntime.Hosts["www.example.test"] == nil {
+		t.Fatal("placement-aware cell runtime was not published")
 	}
-	poolInfo, err := os.Stat(filepath.Join(dir, "runtime", "current", "shared-default.json"))
-	if err != nil || poolInfo.Mode().Perm() != 0600 {
+	cellInfo, err := os.Stat(filepath.Join(dir, "runtime", "current", "cell-01.json"))
+	if err != nil || cellInfo.Mode().Perm() != 0600 {
 		t.Fatalf("runtime snapshot containing TLS keys must be mode 0600: %v", err)
+	}
+	for _, redundant := range []string{"active.json", "state.json", "shared-default.json"} {
+		if _, err := os.Stat(filepath.Join(dir, "runtime", "current", redundant)); err == nil {
+			t.Fatalf("%s duplicates data and must not be published in a generation", redundant)
+		}
 	}
 }
 
@@ -399,7 +409,7 @@ func TestRuntimeTargetsOnlySelectedCellsWithinOnePool(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := &client{runtimeDir: t.TempDir(), cellAssignments: map[string]string{"cell-01": "shared-default", "cell-02": "shared-default", "cell-03": "shared-default"}}
-	if err := c.writeCellRuntimes(9, runtimes); err != nil {
+	if err := c.writeCellRuntimesAt(c.runtimeDir, 9, runtimes); err != nil {
 		t.Fatal(err)
 	}
 	for _, cell := range []string{"cell-01", "cell-02", "cell-03"} {
@@ -623,14 +633,14 @@ func TestFreshFullSnapshotThenIncrementalArtifact(t *testing.T) {
 	if err := c.full(); err != nil {
 		t.Fatal(err)
 	}
-	active, err := loadState(filepath.Join(dir, "runtime", "current", "state.json"))
+	active, err := c.loadStoredState()
 	if err != nil || active.Sequence != 4 || len(active.Domains) != 1 {
 		t.Fatalf("fresh full snapshot was not activated: %#v, %v", active, err)
 	}
 	if err := c.sync(); err != nil {
 		t.Fatal(err)
 	}
-	active, err = loadState(filepath.Join(dir, "runtime", "current", "state.json"))
+	active, err = c.loadStoredState()
 	if err != nil || active.Sequence != 5 || !bytes.Contains(active.Domains["1"], []byte(`"revision":5`)) {
 		t.Fatalf("incremental artifact was not activated: %#v, %v", active, err)
 	}
@@ -670,7 +680,7 @@ func TestFreshEmptyFullSnapshotActivatesBootstrapGeneration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	active, err := loadState(filepath.Join(runtimeDir, "current", "state.json"))
+	active, err := c.loadStoredState()
 	if err != nil || active.Sequence != 0 || len(active.Domains) != 0 {
 		t.Fatalf("empty bootstrap snapshot was not activated: %#v, %v", active, err)
 	}
@@ -689,8 +699,9 @@ func TestFreshEmptyFullSnapshotActivatesBootstrapGeneration(t *testing.T) {
 	if sequence, ok := cellRuntime["sequence"].(float64); !ok || sequence != 0 {
 		t.Fatalf("empty cell runtime has the wrong bootstrap sequence: %#v", cellRuntime)
 	}
-	if cellRuntime["generation_id"] != manifest.GenerationID {
-		t.Fatalf("empty cell runtime is outside the bootstrap generation: %#v", cellRuntime)
+	stamp, err := os.ReadFile(filepath.Join(runtimeDir, "current", "cell-01.stamp"))
+	if err != nil || strings.TrimSpace(string(stamp)) != cellRuntime["generation_id"] || len(strings.TrimSpace(string(stamp))) != 64 {
+		t.Fatalf("empty cell runtime identity is not its content stamp: %#v %q %v", cellRuntime, stamp, err)
 	}
 }
 
@@ -739,8 +750,9 @@ func TestFirstGatewayEndpointRebuildsAnEmptyBootstrapGeneration(t *testing.T) {
 	if err != nil || json.Unmarshal(cellBody, &cellRuntime) != nil {
 		t.Fatalf("first endpoint cell runtime is invalid: %v", err)
 	}
-	if cellRuntime["generation_id"] != active.GenerationID {
-		t.Fatalf("first endpoint cell runtime is outside the active generation: %#v", cellRuntime)
+	stamp, err := os.ReadFile(filepath.Join(runtimeDir, "current", "cell-01.stamp"))
+	if err != nil || strings.TrimSpace(string(stamp)) != cellRuntime["generation_id"] {
+		t.Fatalf("first endpoint cell runtime identity is not its content stamp: %#v %v", cellRuntime, err)
 	}
 }
 
@@ -796,7 +808,7 @@ func TestFirstArtifactReplacesAnEqualGatewayGenerationRevision(t *testing.T) {
 	if err != nil || active.Revision != 1 || active.GenerationID == gatewayOnly.GenerationID {
 		t.Fatalf("equal source revisions did not publish the domain generation: %#v, %v", active, err)
 	}
-	stateOnDisk, err := loadState(filepath.Join(runtimeDir, "current", "state.json"))
+	stateOnDisk, err := c.loadStoredState()
 	if err != nil || stateOnDisk.Sequence != 1 || len(stateOnDisk.Domains) != 1 {
 		t.Fatalf("first domain artifact was not activated: %#v, %v", stateOnDisk, err)
 	}
@@ -1106,7 +1118,7 @@ func TestWriteCellRuntimesKeepsStableSlotsAndEmptyUnassignedState(t *testing.T) 
 	pools := map[string]map[string]any{
 		"shared-default": {"schema_version": 1, "sequence": uint64(9), "hosts": map[string]any{"www.example.test": map[string]any{}}},
 	}
-	if err := c.writeCellRuntimes(9, pools); err != nil {
+	if err := c.writeCellRuntimesAt(c.runtimeDir, 9, pools); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"cell-01", "cell-02"} {

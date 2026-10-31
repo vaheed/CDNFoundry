@@ -31,7 +31,7 @@ def runtime(volume: str = STATE_VOLUME) -> tuple[dict, dict]:
     script = (
         "import json;"
         "print(json.dumps(json.load(open('/state/gateway.json'))));"
-        "print(json.dumps(json.load(open('/state/active.json'))))"
+        "print(json.dumps(json.load(open('/state/cell-01.json'))))"
     )
     result = subprocess.run(
         ["docker", "run", "--rm", "-v", f"{volume}:/state:ro", "python:3.13-alpine", "python", "-c", script],

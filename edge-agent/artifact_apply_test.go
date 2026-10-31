@@ -123,7 +123,7 @@ func syncedClient(t *testing.T, control *fakeControl, server *httptest.Server) *
 }
 
 func activeState(t *testing.T, c *client) state {
-	active, err := loadState(filepath.Join(c.runtimeDir, "current", "state.json"))
+	active, err := c.loadStoredState()
 	if err != nil {
 		t.Fatal(err)
 	}

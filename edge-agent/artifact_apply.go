@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -134,7 +135,9 @@ func (c *client) prepareArtifact(item manifestItem, cursor uint64) (preparedArti
 
 // foldArtifacts applies verified artifacts in order to a copy of base. An
 // artifact that does not move a domain strictly forward is dropped and reported:
-// every accepted change carries a greater revision, so an equal one is a replay.
+// every accepted change carries a greater revision, so an equal one with different content is a
+// replay. An equal one with identical content was already applied, for example before a crash, and
+// is accepted without change.
 func foldArtifacts(base state, items []preparedArtifact) (state, []preparedArtifact, []rejection) {
 	next := state{Sequence: base.Sequence, Domains: clone(base.Domains)}
 	var applicable []preparedArtifact
@@ -144,7 +147,7 @@ func foldArtifacts(base state, items []preparedArtifact) (state, []preparedArtif
 			var active struct {
 				Revision uint64 `json:"revision"`
 			}
-			if json.Unmarshal(previous, &active) != nil || item.Revision <= active.Revision {
+			if json.Unmarshal(previous, &active) != nil || item.Revision < active.Revision || (item.Revision == active.Revision && !bytes.Equal(previous, item.Payload)) {
 				rejected = append(rejected, rejection{Sequence: item.Sequence, Reason: reasonArtifactRevisionReplay})
 				continue
 			}
