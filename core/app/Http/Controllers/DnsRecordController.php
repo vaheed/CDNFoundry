@@ -15,6 +15,7 @@ use App\Models\EdgeArtifact;
 use App\Models\Operation;
 use App\Support\DnsRecordData;
 use App\Support\DnsZoneValidator;
+use App\Support\OriginData;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -28,6 +29,9 @@ class DnsRecordController extends Controller
     private const BULK_LIMIT = 5000;
 
     private const RECORDS_PER_DOMAIN_LIMIT = 10000;
+
+    /** Each unresolved origin hostname can take up to 5 s, so one request may name only a few. */
+    private const BULK_ORIGIN_HOSTNAME_LIMIT = 50;
 
     public function index(Domain $domain): AnonymousResourceCollection
     {
@@ -121,7 +125,30 @@ class DnsRecordController extends Controller
             'actions.*.record' => ['required_unless:actions.*.action,delete', 'array'],
         ]);
 
-        $result = DB::transaction(function () use ($request, $domain, $validated): array {
+        // Origin hostnames resolve before the domain lock and the transaction; inside them the
+        // same lookups are answered from memory.
+        $hostnames = collect($validated['actions'])
+            ->flatMap(fn (array $action): array => [data_get($action, 'record.origin.host'), data_get($action, 'record.origin.backup.host')])
+            ->filter(fn ($host): bool => is_string($host) && $host !== '' && ! filter_var(trim($host, '[]'), FILTER_VALIDATE_IP))
+            ->map(fn (string $host): string => strtolower(trim($host, '[]')))->unique()->values();
+        if ($hostnames->count() > self::BULK_ORIGIN_HOSTNAME_LIMIT) {
+            throw ValidationException::withMessages(['actions' => 'A bulk request may name at most '.self::BULK_ORIGIN_HOSTNAME_LIMIT.' distinct origin hostnames; use IP addresses or split the request.']);
+        }
+        OriginData::prepareResolutions($hostnames->all());
+
+        try {
+            $result = $this->applyBulk($request, $domain, $validated);
+        } finally {
+            OriginData::releaseResolutions();
+        }
+        $this->queueReconciliation($domain, $request);
+
+        return response()->json(['data' => $result]);
+    }
+
+    private function applyBulk(Request $request, Domain $domain, array $validated): array
+    {
+        return DB::transaction(function () use ($request, $domain, $validated): array {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $existing = $locked->dnsRecords()->lockForUpdate()->get()->keyBy('id');
             $final = $existing->map(function (DnsRecord $record): array {
@@ -182,9 +209,6 @@ class DnsRecordController extends Controller
 
             return ['revision' => $locked->revision, 'changed' => count($validated['actions'])];
         });
-        $this->queueReconciliation($domain, $request);
-
-        return response()->json(['data' => $result]);
     }
 
     private function assertValidFinalZone(Domain $domain, Collection $additions, ?Collection $excludedIds = null): void

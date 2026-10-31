@@ -111,9 +111,47 @@ final class OriginData
         ];
     }
 
+    /** @var array<string, list<string>|ValidationException>|null */
+    private static ?array $resolutions = null;
+
+    /**
+     * Resolve and validate origin hostnames before the caller takes a database lock, and answer the
+     * same lookups from memory until releaseResolutions(). Failures are remembered too, so a bad
+     * hostname costs one lookup instead of one per use. Literal addresses need no lookup.
+     *
+     * @param  list<string>  $hosts
+     */
+    public static function prepareResolutions(array $hosts): void
+    {
+        self::$resolutions ??= [];
+        foreach ($hosts as $host) {
+            $host = strtolower(trim($host, '[]'));
+            if (isset(self::$resolutions[$host]) || filter_var($host, FILTER_VALIDATE_IP)) {
+                continue;
+            }
+            try {
+                self::$resolutions[$host] = self::resolveAndValidate($host);
+            } catch (ValidationException $exception) {
+                self::$resolutions[$host] = $exception;
+            }
+        }
+    }
+
+    public static function releaseResolutions(): void
+    {
+        self::$resolutions = null;
+    }
+
     /** @return list<string> */
     public static function resolveAndValidate(string $host): array
     {
+        $prepared = self::$resolutions[strtolower(trim($host, '[]'))] ?? null;
+        if ($prepared instanceof ValidationException) {
+            throw $prepared;
+        }
+        if (is_array($prepared)) {
+            return $prepared;
+        }
         $addresses = filter_var($host, FILTER_VALIDATE_IP) ? [$host] : self::resolve($host);
         if ($addresses === []) {
             throw ValidationException::withMessages(['host' => 'The origin hostname did not resolve.']);
