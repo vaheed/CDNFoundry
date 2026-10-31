@@ -144,6 +144,19 @@ func hkdfSHA256(secret []byte, info string) []byte {
 }
 
 func openKeyEnvelope(identityKeyPEM, edgeID, certificateID string, envelope keyEnvelope) (string, error) {
+	plain, err := openEnvelope(identityKeyPEM, edgeID, certificateID, envelope)
+	if err != nil {
+		return "", err
+	}
+	if !strings.Contains(plain, "PRIVATE KEY") {
+		return "", errors.New("key envelope did not contain a private key")
+	}
+	return plain, nil
+}
+
+// openEnvelope opens a secret the control plane sealed to this edge's identity key and bound to
+// the edge and to the id of what it protects.
+func openEnvelope(identityKeyPEM, edgeID, certificateID string, envelope keyEnvelope) (string, error) {
 	if envelope.Algorithm != keyEnvelopeAlgorithm || envelope.CertificateID != certificateID {
 		return "", errors.New("unexpected key envelope")
 	}
@@ -195,9 +208,6 @@ func openKeyEnvelope(identityKeyPEM, edgeID, certificateID string, envelope keyE
 	plain, err := aead.Open(nil, nonce, ciphertext, []byte(context))
 	if err != nil {
 		return "", errors.New("key envelope authentication failed")
-	}
-	if !strings.Contains(string(plain), "PRIVATE KEY") {
-		return "", errors.New("key envelope did not contain a private key")
 	}
 	return string(plain), nil
 }

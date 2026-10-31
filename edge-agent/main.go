@@ -93,6 +93,10 @@ type client struct {
 	originPolicyChecksum               string
 	originPolicyLoaded                 bool
 	storedDigests                      map[string]string
+	dns                                dnsState
+	dnsAPIURL, dnsAPIKey               string
+	dnsHTTP                            *http.Client
+	dnsReport                          map[string]any
 	lastBackup                         time.Time
 	id                                 identity
 	generationMismatches               generationMismatchTracker
@@ -119,6 +123,7 @@ func main() {
 		gatewayBindings:  env("EDGE_GATEWAY_BINDINGS", ""),
 		gatewayStatusURL: env("EDGE_GATEWAY_STATUS_URL", ""),
 		statusURLs:       splitNonempty(env("EDGE_CELL_STATUS_URLS", "")), http: &http.Client{Timeout: 15 * time.Second},
+		dnsAPIURL: env("EDGE_DNS_API_URL", ""), dnsAPIKey: env("EDGE_DNS_API_KEY", ""), dnsHTTP: &http.Client{Timeout: 10 * time.Second},
 	}
 	c.gatewayBindingsConfigured = c.gatewayBindings != ""
 	if err := json.Unmarshal([]byte(env("EDGE_CELL_ASSIGNMENTS", "{}")), &c.cellAssignments); err != nil || len(c.cellAssignments) > 32 {
@@ -206,6 +211,8 @@ func main() {
 			logger.Error("edge identity renewal failed", "event", "edge_identity_renewal_failed", "edge_id", c.id.EdgeID, "error_code", "edge_identity_renewal_failed", "error", err.Error())
 		}
 		failed := false
+		// The DNS node is brought up to date first, so this synchronization's heartbeat reports it.
+		c.dnsReport = c.syncDNS()
 		if err := c.sync(); err != nil {
 			failed = true
 			if err.Error() != lastFailure || time.Since(lastFailureAt) >= time.Minute {
@@ -1683,6 +1690,9 @@ func (c *client) heartbeat(sequence uint64) error {
 	}
 	if versions := runtimeVersions(); len(versions) == 4 {
 		payload["runtime_versions"] = versions
+	}
+	if c.dnsReport != nil {
+		payload["dns"] = c.dnsReport
 	}
 	if _, notAfter, err := c.identityValidity(); err == nil {
 		payload["identity_expires_at"] = notAfter.Unix()

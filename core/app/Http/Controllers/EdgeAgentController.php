@@ -218,6 +218,7 @@ class EdgeAgentController extends Controller
             'dns' => ['sometimes', 'array', 'max:8'],
             'dns.cursor' => ['required_with:dns', 'integer', 'min:0'],
             'dns.catalog_serial' => ['sometimes', 'integer', 'min:0'],
+            'dns.latest' => ['sometimes', 'integer', 'min:0'],
             'dns.zones' => ['sometimes', 'integer', 'min:0'],
             'dns.pending' => ['sometimes', 'integer', 'min:0'],
             'dns.error' => ['sometimes', 'nullable', 'string', 'max:500'],
