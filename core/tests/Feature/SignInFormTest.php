@@ -2,8 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Filament\Shared\Pages\Login;
 use App\Models\User;
+use Filament\Auth\Pages\Login;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -13,16 +13,6 @@ use Tests\TestCase;
 class SignInFormTest extends TestCase
 {
     use RefreshDatabase;
-
-    public function test_both_sign_in_pages_read_the_fields_just_before_submit(): void
-    {
-        // An autofilled or pasted password fires no input event; without this the server sees an empty password.
-        foreach (['/admin/login', '/app/login'] as $path) {
-            $html = $this->get($path)->assertOk()->getContent();
-            $this->assertSame(2, substr_count($html, "addEventListener('submit'"), $path);
-            $this->assertStringContainsString('wire:model="data.password"', $html);
-        }
-    }
 
     public function test_a_correct_password_signs_in_and_a_wrong_one_is_a_credentials_error_not_a_required_error(): void
     {

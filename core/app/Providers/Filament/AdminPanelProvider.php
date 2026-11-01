@@ -6,7 +6,6 @@ use App\Filament\Admin\Pages\AdminDashboard;
 use App\Filament\Domain\Resources\Domains\DomainResource;
 use App\Filament\Shared\Pages\ApiTokens;
 use App\Filament\Shared\Pages\EditProfile;
-use App\Filament\Shared\Pages\Login;
 use App\Support\GrafanaExploreUrl;
 use Filament\Auth\MultiFactor\App\AppAuthentication;
 use Filament\Http\Middleware\Authenticate;
@@ -32,7 +31,7 @@ class AdminPanelProvider extends PanelProvider
         return $panel
             ->id('admin')
             ->path('admin')
-            ->login(Login::class)
+            ->login()
             ->brandName('CDNFoundry Administration')
             ->favicon(asset('favicon.svg'))
             ->profile(EditProfile::class)

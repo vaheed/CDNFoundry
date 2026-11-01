@@ -27,6 +27,11 @@ CONF
         printf '[www]\nlisten = %s:9000\n' "${FPM_LISTEN_ADDRESS}" > /tmp/php-fpm-listen.conf
         set -- php-fpm -F -y /tmp/php-fpm.conf
     fi
+    # A development tree mounts the source, so the published Filament assets can be older than the installed
+    # package. A missing script (the password field's, for one) breaks the sign-in form with a wrong error.
+    if [ "${APP_ENV:-}" = "local" ] && [ -f artisan ]; then
+        php artisan filament:assets --no-interaction >/dev/null 2>&1 || echo "Filament assets could not be published." >&2
+    fi
     if [ -n "${EDGE_IDENTITY_CA_PRIVATE_KEY:-}" ] && ! su-exec www-data test -r "${EDGE_IDENTITY_CA_PRIVATE_KEY}"; then
         echo "The edge identity CA private key is not readable by the PHP-FPM worker; expected a restricted worker-readable secret." >&2
         exit 1

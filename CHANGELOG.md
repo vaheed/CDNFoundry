@@ -35,9 +35,10 @@ single source of truth; `make version-check` enforces it.
 
 ### Fixed
 
-- Signing in at `/admin/login` or `/app/login` with an autofilled or pasted password
-  no longer fails with "The password field is required": the form now reads both
-  fields just before it submits.
+- Signing in at `/admin/login` or `/app/login` no longer fails with "The password field
+  is required" on a development stack whose published Filament assets were older than the
+  installed package: the password field's script returned `404`, which broke the form. The
+  development entrypoint now republishes the assets when it starts.
 - A new control node's first start no longer fails when its databases report healthy
   before they accept TCP connections (the migration and PowerDNS runtime step wait).
 - Fleet control bundles now contain the `pdns-migrate` tool their `start.sh`

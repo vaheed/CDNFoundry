@@ -887,7 +887,7 @@ Known limitations and deviations:
 - Secret fingerprints are compared by `add-standby` and `control check`, not continuously.
 - The lab has no network partition between two running nodes, no real DNS secondary, no customer domains, and no data-plane traffic.
 - The first-start database race, the `pdns-migrate` omission, and an off-by-one in the rollup restore were found by these runs and are fixed.
-- A sign-in problem reported on `localhost:8080` (an autofilled password reported as missing) was fixed in the same phase; it was reproduced only at the server (which behaves correctly) and is covered by a test of the form, not by a browser.
+- A sign-in problem reported on `localhost:8080` ("The password field is required" with a password entered) was traced to a stale published Filament asset (`password-reveal.js` returned `404`). The development entrypoint now republishes assets; the fix was checked with `curl` against the running stack, not in a browser.
 
 ### Phase 7: Professional UI on Filament, and agent-run browser qualification
 

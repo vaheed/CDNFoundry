@@ -1121,14 +1121,15 @@ two-node pair. Run the pair part only on an installation that has a standby
 (`cdnfoundry-fleet control add-standby` completed). Use disposable accounts and
 record no secret.
 
-### Sign-in with a password manager
+### Sign-in
 
-1. Open `/admin/login` and `/app/login`. Let the browser or a password manager
-   fill **Email** and **Password** (or paste both), without typing in either field,
-   and press **Sign in**. Expect the dashboard (or the code prompt for an
-   administrator with two-step sign-in), never **The password field is required**.
-2. Fill a wrong password the same way: expect **These credentials do not match our
-   records.** on **Email**, and no message on **Password**.
+1. Open `/admin/login` and `/app/login` with the browser's developer tools open on
+   the **Network** tab. Expect every script and stylesheet to load with status `200`
+   (in particular `password-reveal.js`).
+2. Sign in with a correct email and password: expect the dashboard (or the code prompt
+   for an administrator with two-step sign-in). A wrong password must show **These
+   credentials do not match our records.** on **Email**, never **The password field is
+   required**.
 
 ### Single node (`ha: none`)
 
