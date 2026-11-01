@@ -72,3 +72,13 @@ claude mcp add laravel-boost -- docker compose -f compose.dev.yml exec -T core p
 Boost's documentation search sends queries to Laravel's hosted documentation
 service. Its database tools reach the development PostgreSQL, so use them
 only against development data.
+
+## Frontend work and antislop
+
+The [anti-slop](https://github.com/miqdadbadjuber/anti-slop) rules are vendored as one file, `.agents/skills/antislop/SKILL.md` (pinned in its header, MIT). Agents load it with `cdnf-ui-design` before any frontend, UI copy, or screenshot work, in every stage, and report the Delivery Gate result. It filters generic AI output; the CDNFoundry design system stays the direction.
+
+## Commits
+
+Agents commit in several small, logical commits, never one commit for a whole
+phase or increment, as `AGENTS.md` requires. Each commit holds one concern,
+builds on its own, and carries its tests.

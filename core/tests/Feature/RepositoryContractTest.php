@@ -27,8 +27,13 @@ class RepositoryContractTest extends TestCase
             $this->assertStringContainsStringIgnoringCase($rule, $contract);
         }
 
-        $this->assertStringContainsString('must not launch Chromium, Playwright, Selenium, Cypress', $contract);
-        $this->assertStringContainsString('Browser E2E qualification is manual and user-owned', $contract);
+        $this->assertStringContainsString('uses Playwright under `tests/browser`', $contract);
+        $this->assertStringContainsString('never against production', $contract);
+        $this->assertFileDoesNotExist(base_path('../docs/manual-browser-qualification.md'));
+        $this->assertStringContainsString('never one commit for a whole phase or increment', $contract);
+        $this->assertStringContainsString('vendored antislop skill', $contract);
+        $this->assertFileExists(base_path('../.agents/skills/antislop/SKILL.md'));
+        $this->assertSame(['SKILL.md'], array_values(array_diff(scandir(base_path('../.agents/skills/antislop')), ['.', '..'])));
         $this->assertStringContainsString('uses Python under `tests/e2e`', $contract);
         $this->assertFileExists(base_path('../tests/e2e/e2e.py'));
         $this->assertFileDoesNotExist(base_path('../tests/e2e/phase1.mjs'));

@@ -22,8 +22,7 @@ when locations are split across failure domains.
 5. Give domain users only their assigned domains. Test a domain-user account
    against an assigned and an unassigned domain before inviting customers.
 
-Browser actions and exact expected results are recorded in the
-[manual browser qualification](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md). API clients
+Browser behavior is qualified by the Playwright suite in `tests/browser`. API clients
 use the same policies as browser sessions. Store API tokens securely; token
 secrets are shown only when issued.
 

@@ -79,10 +79,10 @@ They may contain local topology identifiers. Review and sanitize before sharing.
 
 ## Owner evidence
 
-Coding agents do not automate browsers, operate public routing, or infer that a
-local container topology proves public traffic. Complete the exact
-[manual qualification](https://github.com/vaheed/CDNFoundry/blob/main/docs/manual-browser-qualification.md),
-then provide one structured, sanitized JSON evidence file for each owner-operated
+Coding agents run the browser suite against development, test, and staging
+stacks only. They do not operate public routing or infer that a local container
+topology proves public traffic. Run the browser suite (`tests/browser`) and
+include its results, then provide one structured, sanitized JSON evidence file for each owner-operated
 check. A nonempty file alone is rejected:
 
 ```sh

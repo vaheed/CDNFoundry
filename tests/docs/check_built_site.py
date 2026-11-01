@@ -21,7 +21,7 @@ PUBLIC_SITE_URL = os.environ.get(
     "DOCS_SITE_URL", "https://vaheed.github.io/CDNFoundry"
 ).rstrip("/")
 SOURCE_DOCS = ROOT / "docs"
-UNPUBLISHED_DOCUMENTS = {"manual-browser-qualification.md"}
+UNPUBLISHED_DOCUMENTS: set[str] = set()
 
 
 class PageParser(HTMLParser):

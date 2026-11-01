@@ -32,7 +32,7 @@ single-host install with no operations work, or volumetric DDoS scrubbing.
 
 Automated suites and non-UI real-runtime qualification run in CI on every change;
 images are built once, scanned, signed and published with SBOM and provenance.
-Manual browser qualification is **not run** and is owner-run. Customer traffic on
+The browser suite (`tests/browser`) covers both panels. Customer traffic on
 physical edges, public IPv6, Anycast routing and load limits for your hardware
 must be qualified by you with the
 [production qualification](docs/operations/production-qualification.md) before

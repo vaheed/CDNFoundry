@@ -20,9 +20,9 @@ List exact commands and results. Do not mark an unexecuted test as passed.
 - [ ] Formatting/static checks
 - [ ] Compose/artifact/docs validation
 - [ ] Documentation updated
-- [ ] Manual browser checklist updated when UI changed
+- [ ] Browser tests, snapshots, and accessibility checks pass when UI changed
 
-Manual browser status:
+Browser suite results:
 
 ## Safety
 

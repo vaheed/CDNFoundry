@@ -23,7 +23,7 @@ The release or commit, the fleet (control host, PoPs, regions, address families)
 3. Inject the failure scenarios from the roadmap's critical and high findings: control outage, bad artifact, PoP loss, DNS host loss, purge after restart, and IPv6-only resolution.
 4. Check backup and restore: `cdnf:backups:create`, restore preflight, and recovery with the encryption and signing keys.
 5. Record every result, including failures and skipped checks, with its command and output.
-6. Browser qualification is owner-run under the current AGENTS.md. Hand it over as not run.
+6. Run the browser suite (`tests/browser`, Playwright) against the development, test, or staging stack and include its results in the evidence. Never run it against production.
 
 ## Validation commands
 - `make dev-e2e`, `make dev-scale-e2e`, `python3 tests/e2e/production_qualification.py --help`.

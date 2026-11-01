@@ -42,7 +42,6 @@ REQUIRED_PAGES = {
     "development/index.md",
     "contributing/index.md",
     "roadmap.md",
-    "manual-browser-qualification.md",
 }
 LINK = re.compile(
     r"(?<!!)\[[^\]]*\]\((?:<([^>]+)>|([^\s)]+))(?:\s+['\"][^'\"]*['\"])?\)"

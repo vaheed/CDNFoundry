@@ -19,8 +19,7 @@ PowerDNS restart recovery. It removes only its own containers and network.
 
 Run `python3 tests/e2e/gateway_ingress.py` for the non-browser gateway runtime
 qualification. It requires the development edge profile and the locally built
-`cdnfoundry/edge-gateway:qualification` image. Coding agents must not run the separate
-manual browser checklist. The same job creates a disposable three-backend
+`cdnfoundry/edge-gateway:qualification` image. The same job creates a disposable three-backend
 shared-pool topology and verifies that three Host routes reach three distinct
 cells while an unrelated hostname is rejected. Its isolated gateway cases force
 the normal privileged-port threshold and verify the non-root file capability,
@@ -380,7 +379,7 @@ GitHub runner without changing any persistent database or named volume. Run
 `python3 tests/e2e/postgres_upgrade.py` and
 `python3 tests/e2e/clickhouse_upgrade.py` as a normal Docker-enabled user to cover
 that cleanup boundary. Browser qualification is not applicable to these CI-only
-changes; the owner-run checklist remains unchanged.
+changes.
 
 Missing pinned DNS, database and Caddy fixture images are pulled before runtime
 setup, with four attempts, a 120-second per-attempt deadline and bounded backoff.

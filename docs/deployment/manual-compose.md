@@ -664,6 +664,5 @@ The installation is complete only when all of these are recorded separately:
 - **Automated/runtime qualification:** health, migrations, UDP/TCP DNS, edge
   traffic, cache, TLS, failure behaviour, telemetry isolation, restart, and
   recovery evidence pass on the real topology.
-- **Manual browser qualification:** the owner completes the current checklist
-  in the repository file `docs/manual-browser-qualification.md`. This guide
-  does not run browser automation.
+- **Browser qualification:** the Playwright suite in `tests/browser` passes on
+  a development, test, or staging stack. This guide does not run it.

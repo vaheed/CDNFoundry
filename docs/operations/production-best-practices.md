@@ -264,7 +264,7 @@ Production acceptance requires all four independently:
 1. implementation for the exact revision is present;
 2. operator and user documentation is current;
 3. automated and real-runtime qualification passes;
-4. the owner completes the manual browser and external-network checklist.
+4. the browser suite passes and the owner completes the external-network checklist.
 
 Use [Production qualification](production-qualification.md) for evidence,
 [Incident runbooks](runbooks.md) for failures, and

@@ -32,7 +32,7 @@ failure never changes DNS, edge runtime, TLS, cache, or security state.
 7. Cover context validation, comparison calculations, cache isolation,
    authorization, outage/no-data/stale rendering, polling, and drill-down URLs
    with isolated tests. Browser layout, keyboard, dark-mode, and responsive
-   qualification remain owner-run.
+   qualification are covered by the browser suite in `tests/browser`.
 
 ## Data and failure boundaries
 

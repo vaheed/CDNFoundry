@@ -51,9 +51,7 @@ real provider Anycast route from this environment.
 
 ## Remaining owner release gate
 
-Run the **Edge pools, cells, gateway, and routing** regression in
-[Manual browser qualification](https://github.com/vaheed/CDNFoundry/blob/main/docs/manual-browser-qualification.md#edge-pools-cells-gateway-and-routing)
-with two provider-approved POPs and at least three independent external vantage points.
+Run the Edge pools, cells, gateway, and routing regression with two provider-approved POPs and at least three independent external vantage points.
 Record provider ticket/change IDs, route origin/path and collectors, actual
 HTTP/HTTPS POP selection, route withdrawal/restoration convergence, load,
 uplink saturation, screenshots, revisions, and failures. Browser automation

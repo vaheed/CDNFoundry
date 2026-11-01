@@ -61,8 +61,7 @@ export default defineConfig({
     }
   },
   srcExclude: [
-    'legacy/**',
-    'manual-browser-qualification.md'
+    'legacy/**'
   ],
   head: [
     ['meta', { name: 'theme-color', content: '#0f5f7a' }],

@@ -513,7 +513,7 @@ Give the owner their email, password through a protected channel, and
 `https://control.ops.example.com/app/login`. Never send the administrator
 password as the customer's credentials. Sign in separately as that user and
 confirm the assigned domain is visible and administrator navigation is absent.
-The API equivalents are in the table below. Browser checks are owner-run.
+The API equivalents are in the table below.
 
 ### API setup sequence
 
@@ -640,8 +640,8 @@ ID and remove it even if its traffic check fails. Use only your probe IP, never 
 broad deny range or a shared client address needed by others.
 
 Wait for managed DNS-01 issuance and the acknowledged edge deployment before
-claiming client HTTPS works. Follow the implemented [Phase 1 manual checks](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md#phase-1--empty-staging-smoke)
-for origin, TLS, cache purge, security and telemetry, and execute the runtime
+claiming client HTTPS works. Check
+origin, TLS, cache purge, security and telemetry, and execute the runtime
 checks in step 9. API/UI success alone is not traffic evidence.
 
 ### Host DNS and gateway readiness troubleshooting
