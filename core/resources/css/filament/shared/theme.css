@@ -1,28 +1,31 @@
 @import '../../../../vendor/filament/filament/resources/css/theme.css';
+@import '@fontsource-variable/inter/index.css';
 
 @source '../../../../app/Filament/**/*';
 @source '../../../../resources/views/filament/**/*';
 @source '../../../../resources/views/components/**/*';
 
 /*
- * CDNFoundry design system. System font stacks: no font files ship, so nothing loads from outside a private network.
+ * CDNFoundry design system. Inter is bundled with the build (no font CDN, so it works on a private network); digits are
+ * tabular so columns of numbers align. Monospace is kept for code-like values only (fingerprints, addresses, commands).
  * Tokens only: every screen takes colors, type, radius, and spacing from here.
  * Neutral zinc palette, one blue accent, five status colors, borders instead of shadows, 8 px radius.
  * Documented in docs/development/frontend.md.
  */
 :root {
-    --font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --mono-font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --font-family: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono-font-family: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+    --cdn-code-font: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 
-    --cdn-background: 244 244 245;
+    --cdn-background: 245 245 244;
     --cdn-surface: 255 255 255;
-    --cdn-surface-muted: 250 250 250;
+    --cdn-surface-muted: 250 250 249;
     --cdn-surface-elevated: 255 255 255;
-    --cdn-border: 228 228 231;
-    --cdn-border-strong: 161 161 170;
-    --cdn-text: 24 24 27;
-    --cdn-text-secondary: 63 63 70;
-    --cdn-text-muted: 113 113 122;
+    --cdn-border: 231 229 228;
+    --cdn-border-strong: 168 162 158;
+    --cdn-text: 28 25 23;
+    --cdn-text-secondary: 68 64 60;
+    --cdn-text-muted: 107 101 96;
     --cdn-accent: 37 99 235;
     --cdn-accent-soft: 239 246 255;
 
@@ -46,8 +49,8 @@
     --cdn-chart-grid: 228 228 231;
     --cdn-focus: var(--cdn-accent);
 
-    --cdn-card-radius: 0.5rem;
-    --cdn-control-radius: 0.5rem;
+    --cdn-card-radius: 0.625rem;
+    --cdn-control-radius: 0.375rem;
     --cdn-shadow: none;
     --cdn-space-1: 0.25rem;
     --cdn-space-2: 0.5rem;
@@ -57,15 +60,15 @@
 }
 
 .dark {
-    --cdn-background: 9 9 11;
-    --cdn-surface: 24 24 27;
-    --cdn-surface-muted: 39 39 42;
-    --cdn-surface-elevated: 39 39 42;
-    --cdn-border: 63 63 70;
-    --cdn-border-strong: 113 113 122;
-    --cdn-text: 250 250 250;
-    --cdn-text-secondary: 212 212 216;
-    --cdn-text-muted: 161 161 170;
+    --cdn-background: 12 10 9;
+    --cdn-surface: 28 25 23;
+    --cdn-surface-muted: 41 37 36;
+    --cdn-surface-elevated: 41 37 36;
+    --cdn-border: 68 64 60;
+    --cdn-border-strong: 120 113 108;
+    --cdn-text: 250 250 249;
+    --cdn-text-secondary: 214 211 209;
+    --cdn-text-muted: 168 162 158;
     --cdn-accent: 96 165 250;
     --cdn-accent-soft: 23 37 84;
 
@@ -83,9 +86,20 @@
     --cdn-chart-grid: 63 63 70;
 }
 
-.cdn-mono {
-    font-family: var(--mono-font-family);
+body,
+.fi-body {
+    font-feature-settings: "cv11", "ss01", "tnum";
     font-variant-numeric: tabular-nums;
+}
+
+.cdn-mono {
+    font-family: var(--font-family);
+    font-variant-numeric: tabular-nums;
+}
+
+.cdn-code {
+    font-family: var(--cdn-code-font);
+    font-size: 0.78rem;
 }
 
 /* Shell: grey app background, the sidebar on it, and the page in one bordered panel. */
@@ -253,7 +267,7 @@ a.cdn-stat-card:hover {
 .cdn-stat-value {
     margin-top: 0.25rem;
     color: rgb(var(--cdn-text));
-    font-family: var(--mono-font-family);
+    font-family: var(--font-family);
     font-size: 1.5rem;
     font-weight: 600;
     letter-spacing: -0.02em;
@@ -271,7 +285,7 @@ a.cdn-stat-card:hover {
 }
 
 .fi-wi-stats-overview-stat-value {
-    font-family: var(--mono-font-family);
+    font-family: var(--font-family);
     font-size: 1.25rem;
     font-weight: 600;
     letter-spacing: -0.01em;
@@ -347,7 +361,7 @@ a.cdn-stat-card:hover {
 
 .cdn-setting-default {
     color: rgb(var(--cdn-text-muted));
-    font-family: var(--mono-font-family);
+    font-family: var(--font-family);
     font-size: 0.6875rem;
 }
 
@@ -1177,4 +1191,434 @@ a.cdn-stat-card:hover {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
     }
+}
+
+/* Detail page rows: label on the left, value on the right, so a long record scans in two columns. */
+.cdn-detail-grid {
+    display: grid;
+    gap: var(--cdn-space-4);
+    align-items: start;
+}
+
+.cdn-panel {
+    min-width: 0;
+    border: 1px solid rgb(var(--cdn-border));
+    border-radius: var(--cdn-card-radius);
+    background: rgb(var(--cdn-surface));
+}
+
+.cdn-panel-title {
+    border-bottom: 1px solid rgb(var(--cdn-border));
+    background: rgb(var(--cdn-surface-muted));
+    padding: var(--cdn-space-2) var(--cdn-space-4);
+    color: rgb(var(--cdn-text));
+    font-size: 0.8125rem;
+    font-weight: 600;
+    border-radius: var(--cdn-card-radius) var(--cdn-card-radius) 0 0;
+}
+
+.cdn-dl-row {
+    display: grid;
+    gap: 0.125rem var(--cdn-space-4);
+    border-top: 1px solid rgb(var(--cdn-border));
+    padding: var(--cdn-space-2) var(--cdn-space-4);
+    font-size: 0.8125rem;
+}
+
+.cdn-dl-row:first-child {
+    border-top: 0;
+}
+
+.cdn-dl-row dt {
+    color: rgb(var(--cdn-text-secondary));
+}
+
+.cdn-dl-row dd {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: rgb(var(--cdn-text));
+}
+
+@media (min-width: 40rem) {
+    .cdn-dl-row {
+        grid-template-columns: 13rem minmax(0, 1fr);
+    }
+}
+
+.cdn-dl-row time,
+.cdn-rail-list time {
+    white-space: nowrap;
+}
+
+.cdn-dl-empty {
+    color: rgb(var(--cdn-text-muted));
+}
+
+.cdn-dl-list {
+    display: grid;
+    gap: 0.125rem;
+}
+
+.cdn-dl-copy {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--cdn-space-2);
+}
+
+.cdn-dl-help {
+    display: block;
+    margin-top: 0.125rem;
+    color: rgb(var(--cdn-text-muted));
+    font-size: 0.75rem;
+}
+
+[x-cloak] {
+    display: none !important;
+}
+
+/* Right rail on detail pages: summary rows, then quick actions with a control on the right. */
+.cdn-rail {
+    display: grid;
+    gap: var(--cdn-space-6);
+    align-content: start;
+}
+
+.cdn-rail-title {
+    margin-bottom: var(--cdn-space-2);
+    color: rgb(var(--cdn-text));
+    font-size: 0.9375rem;
+    font-weight: 600;
+}
+
+.cdn-rail-list > div,
+.cdn-rail-actions > li {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--cdn-space-3);
+    border-top: 1px solid rgb(var(--cdn-border));
+    padding-block: var(--cdn-space-3);
+    font-size: 0.8125rem;
+}
+
+.cdn-rail-list dt {
+    color: rgb(var(--cdn-text-secondary));
+}
+
+.cdn-rail-list dd {
+    min-width: 0;
+    text-align: end;
+    overflow-wrap: anywhere;
+}
+
+/* Names in tables read as links, as in the domain list. */
+.cdn-link-cell .fi-ta-text-item {
+    color: rgb(var(--cdn-text));
+    font-weight: 500;
+}
+
+
+/* List toolbar: the search box takes the full row. */
+.fi-ta-header-ctn .fi-ta-search-field,
+.fi-ta-search-field {
+    flex: 1 1 100%;
+}
+
+/* Page header: divider under it, so the table below reads as its own region. */
+.fi-header {
+    border-bottom: 1px solid rgb(var(--cdn-border));
+    padding-bottom: var(--cdn-space-4);
+}
+
+/*
+ * Component pass: every Filament screen inherits the same look, so screens not rebuilt yet are not left on defaults.
+ * Identity: warm stone neutrals, one teal accent, filled-tint selection (no side stripes), 6 px controls, 10 px panels.
+ */
+.fi-sidebar-item-btn {
+    border-radius: var(--cdn-control-radius);
+    color: rgb(var(--cdn-text-secondary));
+}
+
+.fi-sidebar-item-btn:hover {
+    background-color: rgb(var(--cdn-border) / 0.5);
+}
+
+.fi-sidebar-item.fi-active > .fi-sidebar-item-btn {
+    background-color: rgb(var(--cdn-border) / 0.7);
+    color: rgb(var(--cdn-text));
+    font-weight: 600;
+}
+
+.fi-sidebar-item.fi-active .fi-sidebar-item-icon {
+    color: rgb(var(--cdn-text));
+}
+
+.fi-input-wrp,
+.fi-fo-select .fi-input-wrp,
+.fi-btn {
+    border-radius: var(--cdn-control-radius);
+}
+
+.fi-input-wrp {
+    box-shadow: none;
+    border: 1px solid rgb(var(--cdn-border-strong) / 0.55);
+    --tw-ring-shadow: 0 0 #0000;
+    --tw-ring-color: transparent;
+}
+
+.fi-input-wrp:focus-within {
+    border-color: rgb(var(--cdn-accent));
+    outline: 2px solid rgb(var(--cdn-accent) / 0.25);
+}
+
+.fi-btn {
+    font-weight: 500;
+    box-shadow: none;
+}
+
+.fi-modal-window {
+    border: 1px solid rgb(var(--cdn-border));
+    border-radius: var(--cdn-card-radius);
+    box-shadow: none;
+}
+
+.fi-modal-heading {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+/* Tabs: underline, not pills. */
+.fi-tabs {
+    gap: var(--cdn-space-4);
+    border-bottom: 1px solid rgb(var(--cdn-border));
+    background: transparent;
+    box-shadow: none;
+    --tw-ring-shadow: 0 0 #0000;
+    border-radius: 0;
+    padding: 0;
+}
+
+.fi-tabs-item {
+    border-radius: 0;
+    background: transparent;
+    padding: var(--cdn-space-2) 0;
+    color: rgb(var(--cdn-text-secondary));
+}
+
+.fi-tabs-item.fi-active {
+    box-shadow: inset 0 -2px 0 rgb(var(--cdn-text));
+    color: rgb(var(--cdn-text));
+    font-weight: 600;
+}
+
+.fi-tabs-item:hover {
+    background: transparent;
+    color: rgb(var(--cdn-text));
+}
+
+/* Tables: quiet header, calm rows, no zebra. */
+.fi-ta-header-cell {
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.fi-ta-cell {
+    border-top: 1px solid rgb(var(--cdn-border));
+}
+
+.fi-badge {
+    border-radius: 9999px;
+    font-weight: 500;
+}
+
+/* KPI figures: large, tabular, quiet label above. */
+.cdn-stat-value,
+.fi-wi-stats-overview-stat-value {
+    font-weight: 600;
+    font-feature-settings: "tnum", "cv11";
+    letter-spacing: -0.015em;
+}
+
+.fi-wi-stats-overview-stat-value {
+    font-size: 1.5rem;
+}
+
+.fi-header-heading {
+    font-size: 1.375rem;
+    letter-spacing: -0.015em;
+}
+
+/* Long names truncate with an ellipsis (full name in the tooltip) so one row never widens the table. */
+.cdn-link-cell {
+    max-width: 22rem;
+}
+
+.cdn-link-cell .fi-ta-text-item {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fi-btn.fi-color-gray {
+    border: 1px solid rgb(var(--cdn-border-strong) / 0.55);
+    background-color: rgb(var(--cdn-surface));
+}
+
+.fi-wi-stats-overview-stat-value {
+    white-space: nowrap;
+}
+
+/* Tabs sit directly on the page; the panels inside carry their own borders. */
+.fi-sc-tabs {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    --tw-ring-shadow: 0 0 #0000;
+}
+
+.fi-sc-tabs > .fi-tabs {
+    margin-bottom: var(--cdn-space-4);
+}
+
+.fi-sc-tabs .fi-sc-tabs-tab {
+    padding: 0;
+}
+
+/* 3. KPI strip: one bordered strip, cells split by hairlines. */
+.cdn-kpis {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: hidden;
+    border: 1px solid rgb(var(--cdn-border));
+    border-radius: var(--cdn-card-radius);
+    background: rgb(var(--cdn-surface));
+}
+
+@media (min-width: 64rem) {
+    .cdn-kpis {
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(0, 1fr);
+        grid-template-columns: none;
+    }
+}
+
+.cdn-kpi {
+    display: block;
+    min-width: 0;
+    border-inline-start: 1px solid rgb(var(--cdn-border));
+    border-top: 1px solid rgb(var(--cdn-border));
+    padding: var(--cdn-space-3) var(--cdn-space-4);
+    margin: -1px 0 0 -1px;
+}
+
+.cdn-kpi dt {
+    color: rgb(var(--cdn-text-secondary));
+    font-size: 0.75rem;
+}
+
+.cdn-kpi dd {
+    margin-top: 0.125rem;
+    color: rgb(var(--cdn-text));
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+}
+
+.cdn-kpi-note {
+    color: rgb(var(--cdn-text-muted));
+    font-size: 0.75rem;
+}
+
+a.cdn-kpi:hover {
+    background: rgb(var(--cdn-surface-muted));
+}
+
+.cdn-kpi[data-tone="danger"] dd { color: rgb(var(--cdn-failed)); }
+.cdn-kpi[data-tone="warning"] dd { color: rgb(var(--cdn-degraded)); }
+.cdn-kpi[data-tone="success"] dd { color: rgb(var(--cdn-healthy)); }
+
+/* 5. Controls on the right of a row never wrap their label. */
+.cdn-rail-actions .fi-btn,
+.cdn-rail-list .fi-btn {
+    flex: none;
+    white-space: nowrap;
+}
+
+.cdn-dl-row dd {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--cdn-space-2);
+}
+
+.cdn-dl-value {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.cdn-copy {
+    display: inline-flex;
+    flex: none;
+    color: rgb(var(--cdn-text-muted));
+}
+
+.cdn-copy:hover {
+    color: rgb(var(--cdn-text));
+}
+
+/* 7. Compact sidebar: small rows, tight groups, so the whole menu fits without scrolling. */
+.fi-sidebar-nav {
+    padding-block: var(--cdn-space-2);
+    row-gap: 0;
+}
+
+.fi-sidebar-nav-groups {
+    row-gap: 0.125rem;
+}
+
+.fi-sidebar-group-btn {
+    padding-block: 0.25rem;
+}
+
+.fi-sidebar-group-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+}
+
+.fi-sidebar-group-items {
+    row-gap: 0;
+}
+
+.fi-sidebar-item-btn {
+    gap: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+}
+
+.fi-sidebar-item-btn .fi-icon,
+.fi-sidebar-item-icon {
+    width: 1rem;
+    height: 1rem;
+}
+
+/* A value made of several short facts shows each as its own chip instead of one run-on line. */
+.cdn-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.cdn-chip {
+    border: 1px solid rgb(var(--cdn-border));
+    border-radius: var(--cdn-control-radius);
+    background: rgb(var(--cdn-surface-muted));
+    padding: 0.0625rem 0.5rem;
+    color: rgb(var(--cdn-text-secondary));
+    font-size: 0.75rem;
+    white-space: nowrap;
 }

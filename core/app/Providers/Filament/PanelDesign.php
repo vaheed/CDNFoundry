@@ -14,7 +14,7 @@ class PanelDesign
     {
         return $panel
             ->viteTheme('resources/css/filament/shared/theme.css')
-            ->colors(['primary' => Color::Blue, 'gray' => Color::Zinc])
+            ->colors(['primary' => Color::Blue, 'gray' => Color::Stone])
             ->sidebarCollapsibleOnDesktop()
             ->globalSearchKeyBindings(['command+k', 'ctrl+k'])
             ->globalSearchDebounce('300ms')
