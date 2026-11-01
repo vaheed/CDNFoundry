@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\ApiToken;
 use App\Support\PlatformSettings;
 use Filament\Support\Facades\FilamentTimezone;
+use Filament\Tables\Columns\TextColumn;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Queue\Events\JobExceptionOccurred;
@@ -46,6 +47,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Sanctum::usePersonalAccessTokenModel(ApiToken::class);
+        // An empty cell in a clickable row would be a link with no name, so every empty value shows a dash.
+        TextColumn::configureUsing(fn (TextColumn $column) => $column->placeholder('—'));
         FilamentTimezone::set(fn (): string => app(PlatformSettings::class)->displayTimezone());
 
         Queue::before(function (JobProcessing $event): void {
