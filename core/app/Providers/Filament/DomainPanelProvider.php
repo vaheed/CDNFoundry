@@ -5,6 +5,7 @@ namespace App\Providers\Filament;
 use App\Filament\Domain\Pages\DomainDashboard;
 use App\Filament\Shared\Pages\ApiTokens;
 use App\Filament\Shared\Pages\EditProfile;
+use App\Filament\Shared\Pages\Login;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -28,7 +29,7 @@ class DomainPanelProvider extends PanelProvider
             ->default()
             ->id('app')
             ->path('app')
-            ->login()
+            ->login(Login::class)
             ->brandName('CDNFoundry')
             ->favicon(asset('favicon.svg'))
             ->profile(EditProfile::class)
