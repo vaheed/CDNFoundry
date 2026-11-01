@@ -3,6 +3,7 @@
 use App\Exceptions\AnalyticsUnavailableException;
 use App\Http\Middleware\AttachRequestContext;
 use App\Http\Middleware\AuthenticateEdge;
+use App\Http\Middleware\ControlEpoch;
 use App\Http\Middleware\EnforceTokenScope;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureHorizonAdmin;
@@ -43,6 +44,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'idempotent' => IdempotentRequest::class,
             'horizon.admin' => EnsureHorizonAdmin::class,
             'edge.auth' => AuthenticateEdge::class,
+            'control.epoch' => ControlEpoch::class,
         ]);
         $middleware->validateCsrfTokens(except: ['edge/v1/*']);
     })

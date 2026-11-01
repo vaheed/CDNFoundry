@@ -14,4 +14,11 @@ return [
     'identity_ca_private_key_passphrase' => env('EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE', ''),
     // Edge identity certificates are renewed over mTLS at two thirds of this lifetime.
     'identity_validity_days' => max(2, min(3650, (int) env('EDGE_IDENTITY_VALIDITY_DAYS', 365))),
+
+    // High availability (optional). Empty on a single node. NODE_NAME names this node in
+    // `control_plane_state.active_node`; PEER_ADDRESSES are the other node's IP addresses, asked for
+    // `/control-state` under the normal control hostname to learn whether a higher epoch exists.
+    'control_node_name' => env('CONTROL_NODE_NAME', ''),
+    'control_peer_addresses' => array_values(array_filter(array_map('trim', explode(',', (string) env('CONTROL_PEER_ADDRESSES', ''))))),
+    'control_replication_lag_alert_seconds' => 10,
 ];

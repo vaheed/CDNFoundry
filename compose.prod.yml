@@ -61,6 +61,9 @@ x-core-env: &core-env
   LOG_STACK: stderr
   LOG_STDERR_FORMATTER: App\Logging\OperationalJsonFormatter
   GRAFANA_EXPLORE_URL: ${GRAFANA_EXPLORE_URL}
+  # Optional two-node control plane. Empty on a single node.
+  CONTROL_NODE_NAME: ${CONTROL_NODE_NAME}
+  CONTROL_PEER_ADDRESSES: ${CONTROL_PEER_ADDRESSES}
 
 x-edge-cell: &edge-cell
   logging: *bounded-logging
@@ -261,7 +264,8 @@ services:
     logging: *bounded-logging
     <<: *core
     profiles: [control]
-    command: [php, artisan, horizon]
+    # The start guard refuses a standby, a replica, and a node that a higher epoch replaced.
+    command: [sh, -c, "php artisan cdnf:control:guard && exec php artisan horizon"]
     stop_grace_period: 120s
     healthcheck:
       test: [CMD-SHELL, "php artisan horizon:status | grep -q running"]
@@ -274,7 +278,7 @@ services:
     logging: *bounded-logging
     <<: *core
     profiles: [control]
-    command: [php, artisan, schedule:work]
+    command: [sh, -c, "php artisan cdnf:control:guard && exec php artisan schedule:work"]
     stop_grace_period: 30s
     healthcheck:
       test: [CMD, php, artisan, cdnf:scheduler:check]
@@ -678,6 +682,7 @@ services:
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro
+      - ./docker/prometheus/control-ha-alerts.yml:/etc/prometheus/control-ha-alerts.yml:ro
       - ${PROMETHEUS_CONTROL_TARGETS_FILE}:/etc/prometheus/control-targets.yml:ro
       - ${PROMETHEUS_NODE_TARGETS_FILE}:/etc/prometheus/node-targets.yml:ro
       - ${PROMETHEUS_DNS_TARGETS_FILE}:/etc/prometheus/dns-targets.yml:ro

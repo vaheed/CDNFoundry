@@ -10,10 +10,12 @@ use App\Models\EdgePoolEndpoint;
 use App\Models\FleetRollout;
 use App\Models\Operation;
 use App\Models\TlsCertificate;
+use App\Support\ControlPlane;
 use App\Support\PlatformSettings;
 use App\Support\SystemHealth;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Throwable;
 
 class MetricsController extends Controller
 {
@@ -36,6 +38,21 @@ class MetricsController extends Controller
             if ($state['oldest_job_age_seconds'] !== null || $state['depth'] === 0) {
                 $lines[] = sprintf('cdnfoundry_queue_oldest_job_age_seconds{queue="%s"} %d', $queue, $state['oldest_job_age_seconds'] ?? 0);
             }
+        }
+        try {
+            $ha = ControlPlane::status();
+            foreach (['none', 'ready', 'degraded'] as $state) {
+                $lines[] = sprintf('cdnfoundry_control_ha_state{state="%s"} %d', $state, $ha['ha'] === $state ? 1 : 0);
+            }
+            $lines[] = 'cdnfoundry_control_epoch '.$ha['epoch'];
+            $lines[] = 'cdnfoundry_control_edges_missing_addresses '.$ha['edges_missing_addresses'];
+            if ($ha['ha'] !== 'none') {
+                $lines[] = 'cdnfoundry_control_replication_lag_seconds '.($ha['replication_lag_seconds'] ?? -1);
+                $lines[] = 'cdnfoundry_control_valkey_replica_linked '.(in_array('valkey_replication_broken', $ha['reasons'], true) ? 0 : 1);
+                $lines[] = 'cdnfoundry_control_fingerprint_mismatch '.(in_array('secret_fingerprint_mismatch', $ha['reasons'], true) ? 1 : 0);
+                $lines[] = 'cdnfoundry_control_standby_unreachable '.(in_array('standby_unreachable', $ha['reasons'], true) ? 1 : 0);
+            }
+        } catch (Throwable) {
         }
         $lines[] = 'cdnfoundry_operations_failed '.Operation::query()->where('status', 'failed')->count();
         $lines[] = 'cdnfoundry_dns_deployments_drifted '.DnsDeployment::query()->whereIn('status', ['pending', 'failed'])->count();

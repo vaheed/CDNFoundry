@@ -211,6 +211,7 @@ class AdminDashboard extends Dashboard
             $label = str($key)->replace('_', ' ')->headline();
             $formatted = match (true) {
                 is_bool($value) => $value ? 'yes' : 'no',
+                is_array($value) => $value === [] ? 'none' : implode(', ', array_map('strval', $value)),
                 $value === null => 'not available',
                 is_float($value) => number_format($value, 2),
                 is_int($value) => number_format($value),
@@ -241,6 +242,7 @@ class AdminDashboard extends Dashboard
             'runtime_tasks', 'purges' => 'Review failed edge tasks or purges and retry after correcting the bounded failure reason.',
             'usage' => 'Check the scheduler, usage finalizer, bulk-maintenance queue, and ClickHouse availability.',
             'operations' => 'Open Operations, inspect failed rows, and retry only after correcting their stable failure reason.',
+            'control_ha' => 'A single control node is supported (ha: none). With a standby, open the control-plane high availability runbook and run `cdnfoundry-fleet control check`.',
             'backups' => 'Run and verify a current backup, including keys and externally stored TLS material.',
             default => 'Inspect the component details and the corresponding operations runbook.',
         };

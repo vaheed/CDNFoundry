@@ -2,6 +2,7 @@
 
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\IdempotencyKey;
+use App\Support\ControlPlane;
 use App\Support\ResticBackupRepository;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -39,3 +40,12 @@ Schedule::command('cdnf:backups:maintain prune')->dailyAt('04:10')->withoutOverl
 Schedule::command('cdnf:backups:maintain check')->weeklyOn(0, '05:00')->withoutOverlapping()
     ->when(fn (): bool => app(ResticBackupRepository::class)->configured());
 Schedule::call(fn () => Cache::put('operations:scheduler_heartbeat', now()->toIso8601String(), now()->addMinutes(10)))->name('operations.scheduler-heartbeat')->everyMinute()->withoutOverlapping();
+
+Schedule::command('cdnf:control:observe')->everyMinute()->withoutOverlapping();
+
+// A node that is not the writable active control node runs no scheduled work: a returning old active
+// node or a standby with its scheduler started must not repeat backups, renders, or TLS maintenance.
+foreach (Schedule::events() as $event) {
+    $event->when(fn (): bool => ControlPlane::mayRun())->onOneServer();
+}
+Schedule::command('cdnf:control:enforce')->everyMinute()->withoutOverlapping();

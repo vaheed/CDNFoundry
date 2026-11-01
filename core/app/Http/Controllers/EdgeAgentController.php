@@ -25,6 +25,7 @@ use App\Models\Operation;
 use App\Models\SecurityEvent;
 use App\Models\TlsCertificate;
 use App\Support\ArtifactSigner;
+use App\Support\ControlPlane;
 use App\Support\EdgeCertificateAuthority;
 use App\Support\EdgeKeyEnvelope;
 use App\Support\EdgeRejectionReasons;
@@ -218,6 +219,7 @@ class EdgeAgentController extends Controller
             'runtime_versions.waf_cell' => ['required_with:runtime_versions', 'string', 'max:255'],
             'active_sequence' => ['required', 'integer', 'min:0'], 'cells' => ['required', 'array', 'max:32'],
             'identity_expires_at' => ['sometimes', 'integer', 'min:0'],
+            'control_addresses_checksum' => ['sometimes', 'string', 'size:64'],
             'dns' => ['sometimes', 'array', 'max:8'],
             'dns.cursor' => ['required_with:dns', 'integer', 'min:0'],
             'dns.catalog_serial' => ['sometimes', 'integer', 'min:0'],
@@ -287,6 +289,7 @@ class EdgeAgentController extends Controller
                 // Zone-transfer progress of this node's DNS service: the last change it has pulled.
                 ...(isset($data['dns']) ? ['dns' => [...$data['dns'], 'reported_at' => now()->toIso8601String()]] : []),
                 'cells' => $data['cells'], 'noisy_domains' => $data['noisy_domains'] ?? [],
+                'control_addresses_checksum' => $data['control_addresses_checksum'] ?? null,
             ]),
             ...(isset($data['runtime_versions']) ? ['runtime_versions' => $data['runtime_versions'], 'runtime_versions_reported_at' => now()] : []),
         ]);
@@ -386,6 +389,26 @@ class EdgeAgentController extends Controller
     }
 
     /**
+     * The ordered control addresses, signed like the origin policy. Adding or removing a standby
+     * reaches every PoP through this document, with no change on the PoP.
+     */
+    public function controlAddresses(Request $request): JsonResponse
+    {
+        $encoded = ArtifactSigner::encode(ControlPlane::addressDocument());
+        $checksum = hash('sha256', $encoded);
+        if (hash_equals($checksum, (string) $request->query('checksum', ''))) {
+            return response()->json(['unchanged' => true, 'checksum' => $checksum]);
+        }
+        $expiresAt = now()->addMinutes(5)->timestamp;
+
+        return response()->json([
+            'encoded_payload' => base64_encode($encoded), 'checksum' => $checksum, 'signature' => ArtifactSigner::sign($checksum),
+            'expires_at' => $expiresAt,
+            'delivery_signature' => ArtifactSigner::signDelivery(ArtifactSigner::CONTROL_ADDRESSES_SCOPE, $checksum, 0, $expiresAt),
+        ]);
+    }
+
+    /**
      * How a DNS node pulls zones: where the primary listens, the catalog to follow, and the transfer
      * key, sealed to this edge's identity key so it is protected beyond the mTLS channel.
      */
@@ -397,10 +420,26 @@ class EdgeAgentController extends Controller
         abort_unless($primary !== null && filled($edge->identity_certificate), 404, 'No DNS primary accepts transfers.');
 
         return response()->json(['data' => [
-            'primary' => $primary->transfer_endpoint, 'catalog' => PowerDnsClient::CATALOG_ZONE,
+            'primary' => $primary->transfer_endpoint, 'primaries' => $this->transferPrimaries($primary->transfer_endpoint),
+            'catalog' => PowerDnsClient::CATALOG_ZONE,
             'key_name' => PowerDnsClient::TRANSFER_KEY, 'algorithm' => 'hmac-sha256',
             'secret' => EdgeKeyEnvelope::seal($primary->transferSecret(), $edge->identity_certificate, $edge->id, 'dns-transfer-key'),
         ]]);
+    }
+
+    /**
+     * Every address a node may pull zones from. With a standby, both control nodes run the same
+     * hidden primary data under the same TSIG key, so a node follows whichever one is active.
+     *
+     * @return list<string>
+     */
+    private function transferPrimaries(string $endpoint): array
+    {
+        $port = substr($endpoint, (int) strrpos($endpoint, ':') + 1);
+        $nodes = collect(ControlPlane::addresses())->map(fn (string $address): string => str_contains($address, ':') ? "[{$address}]:{$port}" : "{$address}:{$port}");
+        $listed = $nodes->contains($endpoint) ? $nodes : $nodes->prepend($endpoint);
+
+        return $listed->unique()->values()->all();
     }
 
     /** The zones that changed on the primary after the node's cursor, oldest first. */

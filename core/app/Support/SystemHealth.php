@@ -39,7 +39,7 @@ final class SystemHealth
         'cache' => ['label' => 'Cache and origin', 'description' => 'Purge and runtime task delivery', 'checks' => ['purges' => 'Cache purges', 'runtime_tasks' => 'Runtime tasks']],
         'security' => ['label' => 'Security', 'description' => 'Emergency controls and IP intelligence', 'checks' => ['emergency_modes' => 'Emergency modes', 'mmdb' => 'GeoIP data']],
         'telemetry' => ['label' => 'Telemetry', 'description' => 'Collection and usage processing', 'checks' => ['vector' => 'Event collection', 'clickhouse' => 'Analytics storage', 'usage' => 'Usage rollups']],
-        'control' => ['label' => 'Control plane', 'description' => 'Database, jobs, scheduling, and recovery', 'checks' => ['control_database' => 'Database', 'queue_backend' => 'Queue backend', 'queue_workers' => 'Workers', 'scheduler' => 'Scheduler', 'host_clock' => 'Clock', 'operations' => 'Operations', 'fleet_rollouts' => 'Fleet rollouts', 'backups' => 'Backups']],
+        'control' => ['label' => 'Control plane', 'description' => 'Database, jobs, scheduling, and recovery', 'checks' => ['control_database' => 'Database', 'control_ha' => 'Standby node', 'queue_backend' => 'Queue backend', 'queue_workers' => 'Workers', 'scheduler' => 'Scheduler', 'host_clock' => 'Clock', 'operations' => 'Operations', 'fleet_rollouts' => 'Fleet rollouts', 'backups' => 'Backups']],
     ];
 
     public function publicSnapshot(array $components, array $queues): array
@@ -104,6 +104,7 @@ final class SystemHealth
         $components['clickhouse'] = $this->probe(fn () => Http::connectTimeout(1)->timeout(2)->get(config('services.clickhouse.url').'/ping')->throw());
         $components['vector'] = $this->probe(fn () => Http::connectTimeout(1)->timeout(2)->get(config('services.vector.metrics_url'))->throw());
         $components['host_clock'] = $this->clock();
+        $components['control_ha'] = $this->controlHighAvailability();
         $components['mmdb'] = $this->mmdb();
 
         $heartbeatSeconds = app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds');
@@ -229,6 +230,21 @@ final class SystemHealth
         } catch (Throwable $exception) {
             return $this->state('unavailable', ['latency_ms' => round((hrtime(true) - $started) / 1_000_000, 2), 'error_code' => class_basename($exception)]);
         }
+    }
+
+    /** A single node is a supported setup: `ha: none` is a warning shown in the details, not a failure. */
+    private function controlHighAvailability(): array
+    {
+        try {
+            $status = ControlPlane::status();
+        } catch (Throwable $exception) {
+            return $this->state('unavailable', ['error_code' => class_basename($exception)]);
+        }
+
+        return $this->state($status['ha'] === 'degraded' ? 'degraded' : 'healthy', [
+            'ha' => $status['ha'], 'warning' => $status['ha'] === 'none', 'reasons' => $status['reasons'], 'epoch' => $status['epoch'],
+            'replication_lag_seconds' => $status['replication_lag_seconds'], 'edges_missing_addresses' => $status['edges_missing_addresses'],
+        ]);
     }
 
     private function clock(): array

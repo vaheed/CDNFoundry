@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ControlPlaneState;
+use App\Support\ControlPlane;
 use App\Support\SystemHealth;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -23,6 +25,18 @@ class HealthController extends Controller
         }
 
         return response()->json(['status' => 'ok']);
+    }
+
+    public function controlState(): JsonResponse
+    {
+        try {
+            $state = ControlPlaneState::current();
+            $body = ['epoch' => $state->epoch, 'role' => ControlPlane::fencedReason() === null ? 'active' : 'standby'];
+        } catch (Throwable) {
+            $body = ['epoch' => null, 'role' => 'unknown'];
+        }
+
+        return response()->json($body)->header('Cache-Control', 'no-store');
     }
 
     public function page(): Response

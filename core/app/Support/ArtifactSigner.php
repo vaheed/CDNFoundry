@@ -15,6 +15,8 @@ final class ArtifactSigner
 
     public const ORIGIN_POLICY_SCOPE = 'origin-policy';
 
+    public const CONTROL_ADDRESSES_SCOPE = 'control-addresses';
+
     /** What a delivery is for. The agent rebuilds this from the manifest entry it is applying. */
     public static function artifactScope(string $kind, int $domainId, int $revision): string
     {
