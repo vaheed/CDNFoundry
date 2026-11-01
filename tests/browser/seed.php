@@ -86,6 +86,11 @@ foreach ($records as $record) {
 }
 $showcase->dnsRecords()->whereIn('name', ['@', 'www'])->whereIn('type', ['A', 'AAAA'])->update(['mode' => 'proxied']);
 
+$showcase->dnsRecords()->create(DnsRecordData::validate([
+    'type' => 'A', 'name' => 'geo-routed', 'ttl' => 60, 'mode' => 'geo_dns',
+    'geo' => ['default' => ['203.0.113.10'], 'countries' => ['IR' => ['203.0.113.30'], 'GB' => ['203.0.113.40']], 'continents' => ['EU' => ['203.0.113.20']]],
+], $showcase->name));
+
 DomainEdgePlacement::query()->create(['domain_id' => $showcase->id, 'active_pool_id' => $shared->id, 'desired_revision' => 100, 'state' => 'active']);
 foreach (array_slice($edges, 0, 3) as $i => [$edge, $cell]) {
     DomainEdgeCell::query()->create(['domain_id' => $showcase->id, 'edge_id' => $edge->id, 'replica' => 1, 'active_cell_id' => $cell->id, 'desired_revision' => 100, 'state' => 'active']);

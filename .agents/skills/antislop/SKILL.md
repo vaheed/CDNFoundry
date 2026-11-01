@@ -44,6 +44,49 @@ Project resolution of the upstream open questions. These override the matching u
 
 
 
+## Owner design rules (CDNFoundry review feedback)
+
+These come from the owner's reviews of real screens. They are mandatory for every screen, in every stage, and they outrank the upstream parts below when they conflict. Each one was a defect the owner found by looking at a real page.
+
+### How to work
+
+1. **Ask "is this really needed?" before adding anything.** Every label, value, column, icon, tooltip, button, border, and line of text must earn its place. If it repeats something visible, restates the obvious, or exists only because the component offers it, remove it.
+2. **Design for this product, in your own way.** A reference (Cloudflare, Bifrost, EasyUI) shows what pro quality feels like; never copy its layout, branding, or effects. Apply the same bar to the whole project, not to one example screen.
+3. **Test with rich, awkward data, not a clean demo.** Use the browser seed (`tests/browser/seed.php`): many rows, very long names, IPv6, punycode, failures, long errors, ten revisions, many records. Most defects only appear with real data.
+4. **Look at the screenshots before reporting a screen done**, in light and dark mode, at desktop and phone width. A passing test is not a design review.
+5. **Fix the pattern, not the one screen.** When the owner points at one defect, search every screen for the same mistake and fix all of them.
+
+### Content and density
+
+6. **Show each fact once.** A domain name is the page title; it is not repeated in the breadcrumb, a "Canonical" row, a "Display label" row, or the records table. Show names relative to their zone (`@`, `www`).
+7. **No wasted space.** One line that exists only for a copy button is waste. The whole menu and page fit the screen: compact rows, tight groups, no big items.
+8. **Never join facts into one run-on line** (`Enabled · HTTP/1.1 · redirect off`). Use chips, rows, or a small table.
+9. **Never show raw codes** (`geo_dns`, `pending_verification`, `Ttl`). Use human labels (`Geo DNS`, `Pending verification`, `TTL`).
+10. **Long values** truncate with an ellipsis, and the full value appears on hover only when something was cut. Nothing is clipped, nothing widens the table, and row actions are never cut off.
+11. **No tooltip when the value is already fully visible**, and no permanent underline on names in lists. Hover and focus states are a tint, not decoration.
+12. **A "..." menu holds two or more actions.** A single action is shown directly. Never hide one item behind a menu (it is a mis-click).
+13. **Copy is icon-only**, sits on the same line at the right edge of the value, and exists only for values people really copy (nameservers, fingerprints, tokens). No word "Copy", no extra line.
+14. **Controls never wrap their label** (`Turn on` stays on one line). Give the control room or shorten the label.
+
+### Shape and color
+
+15. **KPIs are one strip**, one bordered container with hairline dividers, never five separate boxes. Values never wrap or clip.
+16. **Tabs sit on the page**, spaced from the edge, underlined with the text color. No text stuck to a border.
+17. **Selection is neutral.** Selected tab, sidebar item, and row use ink and a light tint, not a brand color. Blue is for primary actions and links only. A color that looks like it came from another site is wrong (the teal was rejected).
+18. **Numbers use the same sans font**, with tabular digits, so columns align. Monospace is only for code-like values (fingerprints, commands). Font: Inter, bundled.
+19. **Both themes must look designed**, not inverted. Check contrast and borders in dark mode.
+
+### Forms and sheets
+
+20. **Edit and create sheets are single column and grouped** (Record, Routing, Origin, Backup), with only the fields that apply visible. Repeated items use compact table rows, not nested cards. Optional groups start collapsed. Labels are short and correct.
+21. **Tables** have few columns, aligned numbers on the right, status as icon plus word, and optional columns hidden by default. A long explanation never sits in a cell.
+
+### Process rules the owner set
+
+22. Commit in several small logical commits, never one per phase (AGENTS.md).
+23. This skill is one file. Do not add folders, references, or scripts next to it.
+24. Do not wait for the owner when the work is clear; finish the phase and report plainly what was and was not verified.
+
 <!-- ===== upstream part: antislop ===== -->
 
 # antislop

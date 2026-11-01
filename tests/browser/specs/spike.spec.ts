@@ -89,3 +89,30 @@ test.describe('platform settings', () => {
         await expect(save).toBeEnabled();
     });
 });
+
+test('editing a DNS record opens a grouped single-column sheet', async ({ page }) => {
+    await signIn(page, 'admin', 'admin@browser.test', adminPassword);
+    await page.goto('/admin/domains/1');
+    await settle(page);
+    await page.getByPlaceholder('Search').last().fill('geo-routed');
+    await settle(page);
+    const row = page.locator('tr', { hasText: 'geo-routed' });
+    await row.getByRole('button', { name: /edit/i }).click();
+    await expect(page.getByRole('heading', { name: /edit/i, level: 2 })).toBeVisible();
+    await expect(page.getByText('Geo-DNS routing')).toBeVisible();
+    await settle(page);
+    await expectAccessible(page);
+    await expect(page).toHaveScreenshot('dns-record-edit.png');
+});
+
+test('topology shows nodes, a live indicator, and search dims the rest', async ({ page }) => {
+    await signIn(page, 'admin', 'admin@browser.test', adminPassword);
+    await page.goto('/admin/topology');
+    await settle(page);
+    await expect(page.getByTestId('topology-live')).toHaveText('Polling active');
+    await expect(page.getByTestId('topology-node').first()).toBeVisible();
+    await page.getByTestId('topology-search').fill('with-a-very-long');
+    await expect(page.locator('[data-testid=topology-node].is-dimmed').first()).toBeAttached();
+    await expectAccessible(page);
+    await expect(page).toHaveScreenshot('topology.png');
+});
