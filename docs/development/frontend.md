@@ -84,6 +84,11 @@ All screens use the tokens in `resources/css/filament/shared/theme.css`. Never w
 - **Overview:** one status line with a "Polling active" indicator, a KPI strip of at most five values, "Needs attention" (at most four rows, then a link), and the five most recent operations. Detailed charts live on the telemetry page.
 - **Live views:** poll every ten seconds or more; Livewire stops polling while the tab is hidden.
 - **Copy:** at most one description line per card; explanations go to the documentation. Run the `antislop` skill (`.agents/skills/antislop/SKILL.md`) on every screen and on UI copy.
+- **Topology:** one component draws control, DNS, PoPs, cells, and telemetry with health colors, search, a legend, and zoom. See [Topology view](../operations/topology-view.md). The local fleet web reuses the same payload.
+- **KPI strip:** one bordered strip with hairline dividers (`<x-ui.kpi-strip>`), at most five values, never separate boxes.
+- **Rows:** a record's facts are label-and-value rows (`<x-ui.detail-section>`); a value made of several facts shows chips, a long list collapses with "Show N more", and copy is an icon on the same line.
+- **Menus:** a "…" menu holds two or more actions; a single action is shown directly.
+- **Owner design rules:** the review rules every screen must meet are in `.agents/skills/antislop/SKILL.md` under "Owner design rules". Agents load that file before any UI work.
 - **Test ids:** every interactive element that a test touches has `data-testid="<entity>-<element>-<qualifier>"`.
 
 ## Browser suite
@@ -95,7 +100,7 @@ tests/browser/run.sh                       # run
 tests/browser/run.sh --update-snapshots    # after an intended design change; say what changed and why
 ```
 
-`run.sh` builds assets, starts `browser-app` from `compose.browser.yml` (a disposable SQLite database on tmpfs, generated credentials, no PostgreSQL and no named volumes), runs the suite, and removes the container. It refuses any base URL other than localhost. Never point it at production. Only the screens rebuilt so far are covered.
+`run.sh` builds assets, starts `browser-app` from `compose.browser.yml` (a disposable SQLite database on tmpfs, generated credentials, no PostgreSQL and no named volumes), runs the suite, and removes the container. It refuses any base URL other than localhost. Never point it at production. The seed (`tests/browser/seed.php`) is deliberately awkward: 40 domains, very long names, IPv6, punycode, long errors, ten revisions, and failures, because most layout defects only show with real data. `spike.spec.ts` covers the rebuilt workflows with snapshots, and `every-screen.spec.ts` loads every screen of both panels and runs axe on each. Set `CDNF_BROWSER_REVIEW=1` to also write review screenshots to `tests/browser/review/`.
 
 ## Qualification
 
