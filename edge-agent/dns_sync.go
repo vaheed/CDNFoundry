@@ -33,6 +33,7 @@ const (
 
 type dnsTransfer struct {
 	Primary   string      `json:"primary"`
+	Primaries []string    `json:"primaries"`
 	Catalog   string      `json:"catalog"`
 	KeyName   string      `json:"key_name"`
 	Algorithm string      `json:"algorithm"`
@@ -134,7 +135,11 @@ func (c *client) configureDNS() error {
 	if transfer.Primary == "" || transfer.Catalog == "" || transfer.KeyName == "" {
 		return errors.New("incomplete DNS transfer settings")
 	}
-	sum := sha256.Sum256([]byte(transfer.Primary + "|" + transfer.Catalog + "|" + transfer.KeyName + "|" + secret))
+	masters := transfer.Primaries
+	if len(masters) == 0 || len(masters) > 2 {
+		masters = []string{transfer.Primary}
+	}
+	sum := sha256.Sum256([]byte(strings.Join(masters, ",") + "|" + transfer.Catalog + "|" + transfer.KeyName + "|" + secret))
 	signature := hex.EncodeToString(sum[:])
 	c.dns.configuredAt = time.Now()
 	if signature == c.dns.configured {
@@ -155,7 +160,7 @@ func (c *client) configureDNS() error {
 	if err != nil {
 		return err
 	}
-	catalogBody := map[string]any{"name": transfer.Catalog, "kind": "Consumer", "masters": []string{transfer.Primary}, "slave_tsig_key_ids": []string{transfer.KeyName}}
+	catalogBody := map[string]any{"name": transfer.Catalog, "kind": "Consumer", "masters": masters, "slave_tsig_key_ids": []string{transfer.KeyName}}
 	status, _, err = c.dnsAPI("GET", "/zones/"+zoneID(transfer.Catalog), nil)
 	if err != nil {
 		return err
@@ -163,7 +168,7 @@ func (c *client) configureDNS() error {
 	if status == http.StatusNotFound {
 		_, err = c.dnsAPIOK("POST", "/zones", catalogBody)
 	} else {
-		_, err = c.dnsAPIOK("PUT", "/zones/"+zoneID(transfer.Catalog), map[string]any{"masters": []string{transfer.Primary}, "slave_tsig_key_ids": []string{transfer.KeyName}})
+		_, err = c.dnsAPIOK("PUT", "/zones/"+zoneID(transfer.Catalog), map[string]any{"masters": masters, "slave_tsig_key_ids": []string{transfer.KeyName}})
 	}
 	if err != nil {
 		return err

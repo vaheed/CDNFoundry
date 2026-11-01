@@ -419,6 +419,11 @@ func TestEqualRevisionIsAReplayAndOnlyAGreaterRevisionIsAccepted(t *testing.T) {
 
 // serveOriginPolicy answers the policy endpoint with a document signed by the control key.
 func serveOriginPolicy(w http.ResponseWriter, r *http.Request, private ed25519.PrivateKey, policy string) {
+	serveSignedDocument(w, r, private, originPolicyScope, policy)
+}
+
+// serveSignedDocument answers like the control plane's signed single-document endpoints.
+func serveSignedDocument(w http.ResponseWriter, r *http.Request, private ed25519.PrivateKey, scope, policy string) {
 	sum := sha256.Sum256([]byte(policy))
 	checksum := hex.EncodeToString(sum[:])
 	if r.URL.Query().Get("checksum") == checksum {
@@ -426,7 +431,7 @@ func serveOriginPolicy(w http.ResponseWriter, r *http.Request, private ed25519.P
 		return
 	}
 	expiresAt := time.Now().Add(5 * time.Minute).Unix()
-	message := originPolicyScope + "|" + checksum + "|0|" + strconv.FormatInt(expiresAt, 10)
+	message := scope + "|" + checksum + "|0|" + strconv.FormatInt(expiresAt, 10)
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"encoded_payload": base64.StdEncoding.EncodeToString([]byte(policy)), "checksum": checksum,
 		"signature": hex.EncodeToString(ed25519.Sign(private, []byte(checksum))), "expires_at": expiresAt,

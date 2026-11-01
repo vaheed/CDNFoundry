@@ -101,6 +101,10 @@ type client struct {
 	id                                 identity
 	generationMismatches               generationMismatchTracker
 	renewalRetryAt                     time.Time
+	controlRoute                       controlState
+	controlLoaded                      bool
+	controlDialed                      string
+	seedAddresses                      []string
 }
 type manifest struct {
 	Sequence                              uint64  `json:"sequence"`
@@ -126,6 +130,13 @@ func main() {
 		dnsAPIURL: env("EDGE_DNS_API_URL", ""), dnsAPIKey: env("EDGE_DNS_API_KEY", ""), dnsHTTP: &http.Client{Timeout: 10 * time.Second},
 	}
 	c.gatewayBindingsConfigured = c.gatewayBindings != ""
+	if seed := splitNonempty(env("EDGE_CONTROL_ADDRESSES", "")); len(seed) > 0 {
+		addresses, err := parseControlAddresses(seed)
+		if err != nil {
+			fatal(errors.New("EDGE_CONTROL_ADDRESSES: " + err.Error()))
+		}
+		c.seedAddresses = addresses
+	}
 	if err := json.Unmarshal([]byte(env("EDGE_CELL_ASSIGNMENTS", "{}")), &c.cellAssignments); err != nil || len(c.cellAssignments) > 32 {
 		fatal(errors.New("EDGE_CELL_ASSIGNMENTS must be an object with at most 32 slots"))
 	}
@@ -852,6 +863,7 @@ func (c *client) configureMutualTLS() error {
 		transport.TLSClientConfig = transport.TLSClientConfig.Clone()
 	}
 	transport.TLSClientConfig.Certificates = []tls.Certificate{certificate}
+	transport.DialContext = dialControl(&net.Dialer{Timeout: controlDialTimeout, KeepAlive: 30 * time.Second})
 	if previous, ok := c.http.Transport.(*http.Transport); ok {
 		// Connections opened with the previous certificate must not outlive it.
 		previous.CloseIdleConnections()
@@ -867,6 +879,7 @@ func (c *client) sync() error {
 			return err
 		}
 	}
+	c.syncControlAddresses()
 	policyChanged, err := c.syncOriginPolicy()
 	if err != nil {
 		return err
@@ -1705,6 +1718,9 @@ func (c *client) heartbeat(sequence uint64) error {
 	if versions := runtimeVersions(); len(versions) == 4 {
 		payload["runtime_versions"] = versions
 	}
+	if c.controlRoute.Checksum != "" {
+		payload["control_addresses_checksum"] = c.controlRoute.Checksum
+	}
 	if c.dnsReport != nil {
 		payload["dns"] = c.dnsReport
 	}
@@ -1953,32 +1969,69 @@ func (c *client) requestLimit(method, path string, body any, out any, auth bool,
 	if err != nil || base.Scheme != "https" || base.Hostname() == "" || base.User != nil || base.RawQuery != "" || base.ForceQuery || base.Fragment != "" || base.Path != "" {
 		return errors.New("EDGE_CONTROL_URL must be an HTTPS origin without credentials, path, query, or fragment")
 	}
-	var r io.Reader
+	var encodedBody []byte
 	if body != nil {
-		b, err := json.Marshal(body)
-		if err != nil {
+		if encodedBody, err = json.Marshal(body); err != nil {
 			return err
 		}
-		r = bytes.NewReader(b)
 	}
-	ctx, cancel := c.requestContext(requestTimeout(responseLimit))
-	defer cancel()
-	req, e := http.NewRequestWithContext(ctx, method, c.base+path, r)
-	if e != nil {
-		return e
-	}
-	req.Header.Set("Content-Type", "application/json")
 	// Never forward registration bodies or mTLS identities through redirects.
 	// Copy the client so cell/status transports retain their separate behavior. The deadline
 	// comes from the request context, sized to what the request may transfer.
 	control := *c.http
 	control.Timeout = 0
 	control.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+	var failure error
+	for _, address := range c.controlCandidates() {
+		if address != c.controlDialed {
+			// A pooled connection to another node must not carry this attempt.
+			if transport, ok := c.http.Transport.(*http.Transport); ok {
+				transport.CloseIdleConnections()
+			}
+			c.controlDialed = address
+		}
+		err := c.attemptControlRequest(&control, method, path, encodedBody, out, responseLimit, address)
+		if err == nil {
+			c.noteControlAddressWorked(address)
+			return nil
+		}
+		var status *httpStatusError
+		if errors.As(err, &status) && status.Code < 500 {
+			// A definite answer from a live active node, such as a refusal, is not an address problem.
+			c.noteControlAddressWorked(address)
+			return err
+		}
+		failure = err
+		if address != "" {
+			logger.Warn("control address failed; trying the next", "event", "control_address_failed", "edge_id", c.id.EdgeID, "address", address, "error", err.Error())
+		}
+	}
+	return failure
+}
+
+func (c *client) attemptControlRequest(control *http.Client, method, path string, encodedBody []byte, out any, responseLimit int64, address string) error {
+	var r io.Reader
+	if encodedBody != nil {
+		r = bytes.NewReader(encodedBody)
+	}
+	ctx, cancel := c.requestContext(requestTimeout(responseLimit))
+	defer cancel()
+	if address != "" {
+		ctx = context.WithValue(ctx, dialOverrideKey{}, address)
+	}
+	req, e := http.NewRequestWithContext(ctx, method, c.base+path, r)
+	if e != nil {
+		return e
+	}
+	req.Header.Set("Content-Type", "application/json")
 	res, e := control.Do(req)
 	if e != nil {
 		return e
 	}
 	defer res.Body.Close()
+	if err := c.controlResponseVerdict(res); err != nil {
+		return &httpStatusError{Status: res.Status, Code: max(res.StatusCode, 503), Body: err.Error()}
+	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
 		return &httpStatusError{Status: res.Status, Code: res.StatusCode, Body: string(b)}
