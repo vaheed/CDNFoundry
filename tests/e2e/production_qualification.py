@@ -61,7 +61,13 @@ CHECKS = (
     Check("parent-delegation", "Real BIND signed parent referrals, stale delegation, bogus DNSSEC and child-zone rejection",
           ("python3", "tests/e2e/parent_delegation.py"), "agent"),
     Check("fleet", "Fleet configuration, PKI, bundle generation and failure regressions",
-          ("python3", "-m", "pytest", "-q", "tests/fleet/test_fleet.py"), "agent"),
+          ("python3", "-m", "pytest", "-q", "tests/fleet"), "agent"),
+    Check("control-ha", "Two-node control plane: add-standby, kill, promote, split-brain refusal, rejoin, switchover, removal",
+          ("python3", "tests/e2e/control_ha.py"), "agent"),
+    Check("control-ha-alert", "Real Prometheus and Alertmanager on a standby: the lost active node reaches the webhook",
+          ("python3", "tests/e2e/control_ha_alert.py"), "agent"),
+    Check("rollup-backup", "Usage rollups through real ClickHouse and Restic: backup, outage, incomplete snapshot, restore, refusal",
+          ("python3", "tests/e2e/rollup_backup.py"), "agent"),
     Check("qualification-tools", "Negative supply-chain and qualification-evidence fixtures",
           ("make", "qualification-tools-check"), "agent"),
     Check("production-observability", "Generated production bundle, authenticated metrics, discovery, and Grafana datasources",
@@ -118,6 +124,8 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--output", type=pathlib.Path, default=DEFAULT_REPORT)
     value.add_argument("--only", action="append", default=[],
                        help="run only this agent check identifier; repeatable")
+    value.add_argument("--ha", choices=("none", "ready"), default=os.environ.get("CDNF_QUALIFY_HA", "none"),
+                       help="control-plane high availability of the tested topology; `none` is a warning, never a failure")
     value.add_argument("--source-identity", action="store_true", help="print the source identity for attributable evidence")
     value.add_argument("--list", action="store_true", help="list checks without running them")
     value.add_argument("--continue-on-failure", action="store_true")
@@ -293,6 +301,8 @@ def main() -> int:
             "cpu_count": os.cpu_count(),
         },
         "release_decision": decision,
+        "ha": arguments.ha,
+        "warnings": ["ha: none - a single control node is supported; losing it stops the API, panels, and deployments until restore"] if arguments.ha == "none" else [],
         "results": [asdict(result) for result in results],
     }
     if not report["source_unchanged_during_run"]:
