@@ -80,7 +80,11 @@ class DnsClusterResource extends Resource
             TextColumn::make('name')->searchable()->sortable(),
             TextColumn::make('location')->sortable(),
             IconColumn::make('enabled')->boolean(),
-            TextColumn::make('last_health_status')->badge()->placeholder('Not tested'),
+            TextColumn::make('last_health_status')->label('Health')->badge()->placeholder('Not tested')->color(fn (?string $state): string => match ($state) {
+                'healthy' => 'success',
+                'unhealthy' => 'danger',
+                default => 'gray',
+            }),
             TextColumn::make('last_health_at')->since(),
             TextColumn::make('last_reconciled_revision')->sortable(),
         ])->recordActions([EditAction::make()])->defaultSort('id');

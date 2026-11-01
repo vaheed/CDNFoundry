@@ -53,7 +53,7 @@ class UserResource extends Resource
             ->columns([
                 TextColumn::make('name')->searchable()->sortable(),
                 TextColumn::make('email')->searchable()->sortable(),
-                TextColumn::make('type')->badge(),
+                TextColumn::make('type')->badge()->color('gray'),
                 TextColumn::make('disabled_at')->label('State')->formatStateUsing(fn ($state): string => $state ? 'Disabled' : 'Active')->badge(),
                 TextColumn::make('created_at')->dateTime()->sortable(),
             ])

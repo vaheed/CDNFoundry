@@ -15,6 +15,8 @@ use App\Models\PlatformDnsSetting;
 use App\Support\EdgeRoutingCompiler;
 use App\Support\FilamentHelp;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
+use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -77,26 +79,48 @@ class EdgePoolResource extends Resource
         $settings = PlatformDnsSetting::query()->find(1);
 
         return $table->columns([
-            TextColumn::make('name')->searchable()->sortable(),
-            TextColumn::make('kind')->badge(),
-            TextColumn::make('cache_profile')->label('Cache')->badge(),
-            TextColumn::make('compression_profile')->label('Compression')->badge(),
-            IconColumn::make('waf_capable')->label('Managed WAF')->boolean(),
-            TextColumn::make('routing_mode')->label('Routing')->badge(),
-            TextColumn::make('routing_status')->label('Route state')->state(fn (EdgePool $record): string => $record->routingStatus())->badge(),
+            TextColumn::make('name')->searchable()->sortable()->extraCellAttributes(['class' => 'cdn-link-cell']),
+            TextColumn::make('status')->label('Status')
+                ->state(fn (EdgePool $record): string => match (true) {
+                    $record->withdrawn => 'Withdrawn',
+                    ! $record->enabled => 'Disabled',
+                    default => 'Enabled',
+                })
+                ->icon(fn (string $state): string => match ($state) {
+                    'Enabled' => 'heroicon-m-check',
+                    'Withdrawn' => 'heroicon-m-x-mark',
+                    default => 'heroicon-m-minus',
+                })
+                ->iconColor(fn (string $state): string => match ($state) {
+                    'Enabled' => 'success',
+                    'Withdrawn' => 'danger',
+                    default => 'gray',
+                }),
+            TextColumn::make('kind')->badge()->color('gray')->formatStateUsing(fn (string $state): string => str($state)->replace('_', ' ')->headline()->toString()),
+            TextColumn::make('routing_mode')->label('Routing')->formatStateUsing(fn (string $state): string => str($state)->replace('_', ' ')->headline()->toString()),
+            TextColumn::make('routing_status')->label('Route state')->state(fn (EdgePool $record): string => $record->routingStatus())->badge()
+                ->formatStateUsing(fn (string $state): string => str($state)->replace('_', ' ')->headline()->toString())
+                ->color(fn (string $state): string => match (true) {
+                    str_contains($state, 'unavailable') || str_contains($state, 'withdrawn') => 'danger',
+                    in_array($state, ['ready', 'available', 'healthy', 'active'], true) => 'success',
+                    default => 'warning',
+                }),
+            TextColumn::make('cells_count')->counts('cells')->label('Edge cells')->alignEnd(),
+            TextColumn::make('updated_at')->since()->sortable(),
+            TextColumn::make('cache_profile')->label('Cache')->formatStateUsing(fn (string $state): string => str($state)->headline()->toString())->toggleable(isToggledHiddenByDefault: true),
+            TextColumn::make('compression_profile')->label('Compression')->formatStateUsing(fn (string $state): string => str($state)->headline()->toString())->toggleable(isToggledHiddenByDefault: true),
+            TextColumn::make('waf_capable')->label('Managed WAF')->formatStateUsing(fn ($state): string => $state ? 'Capable' : 'Not capable')->toggleable(isToggledHiddenByDefault: true),
             TextColumn::make('service_pair')->label('Service pair')->state(fn (EdgePool $record): ?string => $record->isSimpleAnycast()
-                ? collect([$record->anycast_ipv4, $record->anycast_ipv6])->filter()->join(' / ') : null)->placeholder('Per-edge Geo-Unicast')->wrap(),
-            IconColumn::make('enabled')->boolean(),
-            IconColumn::make('withdrawn')->label('Emergency withdrawal')->boolean(),
+                ? collect([$record->anycast_ipv4, $record->anycast_ipv6])->filter()->join(' / ') : null)->placeholder('Per-edge Geo-Unicast')->toggleable(isToggledHiddenByDefault: true),
             TextColumn::make('routing_target')->label('DNS routing target')
                 ->state(fn (EdgePool $record): ?string => $settings === null ? null : EdgeRoutingCompiler::poolHostname($settings, $record))
-                ->copyable()->placeholder('Configure System DNS identity')->wrap(),
-            TextColumn::make('revision')->sortable(),
-            TextColumn::make('cells_count')->counts('cells')->label('Edge cells'),
-            TextColumn::make('minimum_ready_cells')->label('Min ready'),
-            TextColumn::make('replicas_per_edge')->label('Replicas/edge'),
-            TextColumn::make('updated_at')->since()->sortable(),
+                ->placeholder('Configure System DNS identity')->toggleable(isToggledHiddenByDefault: true),
+            TextColumn::make('revision')->sortable()->alignEnd()->toggleable(isToggledHiddenByDefault: true),
+            TextColumn::make('minimum_ready_cells')->label('Min ready')->alignEnd()->toggleable(isToggledHiddenByDefault: true),
+            TextColumn::make('replicas_per_edge')->label('Replicas/edge')->alignEnd()->toggleable(isToggledHiddenByDefault: true),
         ])->recordActions([
+            EditAction::make()->iconButton(),
+            ActionGroup::make([
             Action::make('enable')->visible(fn (EdgePool $record): bool => ! $record->enabled)->action(function (EdgePool $record): void {
                 $endpoints = $record->endpoints()->with('edge')->get();
                 $incomplete = $endpoints->isEmpty() || $endpoints->contains(fn ($endpoint): bool => (! $record->isSimpleAnycast() && ! filled($endpoint->ipv4) && ! filled($endpoint->ipv6))
@@ -165,6 +189,7 @@ class EdgePoolResource extends Resource
                     $operation = DispatchEmergencyMode::deactivateTarget('pool', (string) $record->id, auth()->user());
                     AuditLog::record(auth()->user(), 'security.pool_maintenance_ended', $record, ['operation_id' => $operation->id], request()->ip());
                 }),
+            ])->label('More')->icon('heroicon-m-ellipsis-horizontal'),
         ])->defaultSort('name');
     }
 
