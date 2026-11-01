@@ -17,6 +17,7 @@ use App\Http\Controllers\Admin\PlatformDnsSettingsController;
 use App\Http\Controllers\Admin\ReconciliationController;
 use App\Http\Controllers\Admin\SecurityOperationsController;
 use App\Http\Controllers\Admin\SystemOperationsController;
+use App\Http\Controllers\Admin\TopologyController;
 use App\Http\Controllers\Admin\SystemSettingsController;
 use App\Http\Controllers\Admin\UsageController as AdminUsageController;
 use App\Http\Controllers\Admin\UserController;
@@ -173,6 +174,7 @@ Route::middleware(['auth:sanctum', 'account.active', 'token.scope', 'throttle:ac
         Route::get('/system/status', [HealthController::class, 'status']);
         Route::get('/system/health', [SystemOperationsController::class, 'health']);
         Route::get('/system/components', [SystemOperationsController::class, 'components']);
+        Route::get('/system/topology', [TopologyController::class, 'show']);
         Route::get('/jobs/failed', [FailedJobController::class, 'index']);
         Route::post('/jobs/failed/{job}/retry', [FailedJobController::class, 'retry'])->middleware('idempotent');
         Route::delete('/jobs/failed/{job}', [FailedJobController::class, 'destroy'])->middleware('idempotent');

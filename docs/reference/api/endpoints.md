@@ -214,6 +214,7 @@ for authentication, pagination, response, and retry behaviour.
 | `GET` | `/admin/system/settings` | Required | No | `get.admin.system.settings` |
 | `PATCH` | `/admin/system/settings` | Required | Supported | `patch.admin.system.settings` |
 | `GET` | `/admin/system/status` | Required | No | `get.admin.system.status` |
+| `GET` | `/admin/system/topology` | Required | No | `get.admin.system.topology` |
 | `GET` | `/admin/usage/export` | Required | No | `get.admin.usage.export` |
 | `POST` | `/admin/usage/rebuild` | Required | Supported | `post.admin.usage.rebuild` |
 | `GET` | `/admin/usage` | Required | No | `get.admin.usage` |

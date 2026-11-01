@@ -4484,6 +4484,30 @@
                 }
             }
         },
+        "/admin/system/topology": {
+            "get": {
+                "operationId": "get.admin.system.topology",
+                "tags": [
+                    "Administrator"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    }
+                }
+            }
+        },
         "/admin/usage": {
             "get": {
                 "operationId": "get.admin.usage",
