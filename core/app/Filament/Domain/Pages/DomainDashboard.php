@@ -13,11 +13,6 @@ class DomainDashboard extends Dashboard
 {
     protected string $view = 'filament.domain.pages.dashboard';
 
-    public function getSubheading(): ?string
-    {
-        return 'Authoritative DNS and edge delivery for your assigned domains.';
-    }
-
     public function getSummaryProperty(): array
     {
         $state = $this->domains()->selectRaw("COUNT(*) AS total, SUM(CASE WHEN lifecycle_state = 'active' THEN 1 ELSE 0 END) AS active, SUM(CASE WHEN nameservers_verified_at IS NULL THEN 1 ELSE 0 END) AS pending_delegation")->firstOrFail();

@@ -243,7 +243,6 @@ class DnsRecordsRelationManager extends RelationManager
                 ->iconColor(fn (string $state): string => $state === 'proxied' ? 'warning' : 'gray'),
             TextColumn::make('origin_health.status')->label('Origin')
                 ->state(fn (DnsRecord $record): ?string => $record->mode === 'proxied' ? ($record->origin_health['status'] ?? 'Not tested') : null)
-                ->placeholder('')
                 ->badge()->color(fn (?string $state): string => match ($state) {
                     'healthy' => 'success',
                     'unhealthy' => 'danger',
