@@ -9,6 +9,17 @@ single source of truth; `make version-check` enforces it.
 
 ### Added
 
+- Phase 6 (optional control-plane high availability): an optional warm standby
+  control node with `cdnfoundry-fleet control add-standby`, `switchover`,
+  `demote`, `promote`, `rejoin`, `remove-standby`, `status`, and `check`; a
+  monotonic `control_epoch` that fences a returning old node (start guard,
+  scheduler gate, `503 standby` from edge-control); edge agents that dial an
+  ordered list of control addresses from signed configuration and ignore a
+  lower epoch; DNS nodes that follow both control nodes as primaries; HA
+  alerts, a **Standby node** health check, and `ha: none` as a warning in the
+  qualification report; ClickHouse usage rollups in the control backup. A
+  single node stays supported. There is no floating address and no automatic
+  failover. See [Control-plane high availability](docs/operations/control-plane-high-availability.md).
 - Phase 2 (control-plane faults): PoPs leave DNS only on a positive signal and
   pools keep their last published set; PoPs probe each other's listeners; edge
   identity certificates renew over mTLS; the agent rejects a bad artifact for
@@ -21,6 +32,16 @@ single source of truth; `make version-check` enforces it.
   skill; `.claude/skills` links to `.agents/skills`; `.mcp.json` registers the
   local CodeGraph MCP server (pinned 1.6.2, telemetry off). See
   `docs/development/coding-agents.md`.
+
+### Fixed
+
+- Signing in at `/admin/login` or `/app/login` with an autofilled or pasted password
+  no longer fails with "The password field is required": the form now reads both
+  fields just before it submits.
+- A new control node's first start no longer fails when its databases report healthy
+  before they accept TCP connections (the migration and PowerDNS runtime step wait).
+- Fleet control bundles now contain the `pdns-migrate` tool their `start.sh`
+  runs; a generated control node could not previously finish its first start.
 
 ### Changed
 

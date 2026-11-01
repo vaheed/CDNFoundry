@@ -664,18 +664,17 @@ other part of the platform must keep working without manual edits. The rule
 is: **every node and allowlist knows both control addresses from the moment
 the standby is added, and never learns about a node only during an outage.**
 
-- [ ] **Stable names.** Edges, DNS hosts, and users always connect to
-      `control.<operator-zone>` and `edge-control.<operator-zone>`, never to
-      a node address. The operator chooses one of two modes:
-  - **Floating address (preferred where available).** A keepalived VRRP
-    address on a shared L2 segment, or a cloud provider's floating IP. The
-    `promote` command moves it. The address never changes, so clients see no
-    difference.
-  - **Two fixed addresses.** The names point to the active node with a TTL of
-    60 seconds, and `promote` prints the record change (or applies it
-    through a configured DNS provider). Clients that need to be fast do not
-    wait for DNS, as the next item explains.
-- [ ] **The edge agent knows both addresses (HA3).** The agent gets an
+- [x] **Stable names, two fixed addresses.** Edges, DNS hosts, and users always
+      connect to `control.<operator-zone>` and `edge-control.<operator-zone>`,
+      never to a node address. The names point to the active node with a TTL of
+      60 seconds, and `promote` prints the record change. Clients that need to
+      be fast do not wait for DNS, as the next item explains. There is no
+      floating or virtual address (no VRRP): the owner decided to support only
+      two fixed addresses.
+      Delivered: `control promote` prints the two record changes (`A`, or
+      `AAAA` when the pair is IPv6) with a TTL of 60. The choice of family is
+      made once, by `add-standby --control-address-family`.
+- [x] **The edge agent knows both addresses (HA3).** The agent gets an
       ordered list of control addresses (`EDGE_CONTROL_ADDRESSES`). It keeps
       the `edge-control` hostname for TLS and SNI, and dials each address in
       turn. It moves to the next address on a connect error, a TLS error, a
@@ -683,14 +682,28 @@ the standby is added, and never learns about a node only during an outage.**
       address that last worked. Control sends this list inside the signed
       edge configuration. Adding or removing a standby therefore reaches
       every PoP through normal sync, with no reinstall.
-- [ ] **Both nodes are trusted everywhere.** Render both node addresses into
+      Delivered: a signed `GET /edge/v1/control-addresses` document, checked
+      with the artifact-signing key like the origin policy. The agent keeps the
+      last address that worked and the highest accepted epoch on disk
+      (`control-addresses.json`). `EDGE_CONTROL_ADDRESSES` is an optional seed
+      that the signed list replaces. A definite answer from a live active
+      node, such as a `422`, does not move the agent.
+- [x] **Both nodes are trusted everywhere.** Render both node addresses into
       every place that filters by source address: the PowerDNS secondaries'
       primaries list and NOTIFY sources (with the same TSIG key), DNS API
       source restrictions, the Vector, ClickHouse, and Loki source allowlists,
       Prometheus scrape targets, and host firewall rules on DNS and edge
       hosts. Edge-to-control traffic is outbound only, so edges need no inbound
       rule for the new node.
-- [ ] **The same identity on both nodes.** Both nodes hold the same `APP_KEY`,
+      Delivered for what the fleet renders: the Caddy and telemetry gateway
+      allowlists (both control addresses), the DNS secondaries' primaries list
+      (the transfer response carries both, under one TSIG key; PowerDNS accepts
+      NOTIFY from either), and the node-exporter scrape targets. Deviations:
+      the `cdnfoundry-control` metrics job scrapes only the local node, because
+      scraping the peer by address needs a per-target TLS server name; the peer
+      is watched through its node exporter instead. Host firewalls are the
+      operator's: the page lists the ports to open between the two nodes.
+- [x] **The same identity on both nodes.** Both nodes hold the same `APP_KEY`,
       artifact-signing key, edge identity CA, session key, ACME account key,
       TSIG keys, and ingress and `edge-control` server certificates. Edge
       certificates therefore stay valid after a promotion. The Fleet renderer
@@ -699,7 +712,20 @@ the standby is added, and never learns about a node only during an outage.**
       fingerprints to match. Issue ingress certificates with ACME DNS-01, or
       use operator-supplied certificates, so the standby holds a valid
       certificate before it ever serves (HA6).
-- [ ] **No split brain after the old node returns.** `promote` increments a
+      Delivered: `ha/status.sh` and `cdnf:control:fingerprints` report keyed
+      fingerprints of the edge identity CA certificate and key, the edge server
+      CA, the edge proxy secret, the Valkey and replication passwords, the
+      ingress certificate, `APP_KEY`, and the signing key; `ha: ready` needs
+      them equal, which the real two-node test proves by tampering with the
+      signing key. The ACME account key and TSIG keys live in PostgreSQL and
+      replicate. Deviations: the files are bundle files with restricted modes
+      (the existing fleet model), not tmpfs; the `edge-control` leaf certificate
+      differs per node but comes from the same edge server CA with the shared
+      name, so agents trust both; the ingress certificate is operator-supplied
+      (DNS-01 is left to the operator's own tooling, since the stock Caddy image
+      has no DNS provider module). Fingerprints are compared when `add-standby`
+      or `control check` runs, not continuously.
+- [x] **No split brain after the old node returns.** `promote` increments a
       `control_epoch` stored in PostgreSQL. A node starts `web`, `horizon`,
       `scheduler`, and `edge-control` only when its PostgreSQL is not in
       recovery and its epoch is the highest it can see. Every `edge-control`
@@ -708,9 +734,19 @@ the standby is added, and never learns about a node only during an outage.**
       node therefore cannot take writes or steer edges, and it can rejoin
       only as the new standby (HA2).
 
+      Delivered: `control_plane_state.epoch`; `cdnf:control:guard` (writable
+      primary, recorded active node, no peer reporting a higher epoch) as the
+      start command of `horizon` and `scheduler`; `cdnf:control:enforce` every
+      minute; every scheduled task gated by the same check; `503 standby` and
+      the epoch header on every `edge-control` response; agents that ignore a
+      lower epoch. Limit: a node that returns while its peer is unreachable and
+      was never demoted cannot learn it was replaced; edges still ignore it,
+      and the documentation tells the operator to keep it isolated until
+      `rejoin`.
+
 #### Commands
 
-- [ ] **`cdnfoundry-fleet control add-standby <host>`.** It runs on a working
+- [x] **`cdnfoundry-fleet control add-standby <host>`.** It runs on a working
       installation, in this order, and stops at the first failure:
   1. Render both addresses into every allowlist, firewall, and DNS secondary
      configuration, and roll them out.
@@ -721,20 +757,23 @@ the standby is added, and never learns about a node only during an outage.**
      Start the Valkey replica.
   5. Report `ha: ready` only after replication lag is under its bound, the
      fingerprints match, and every PoP and DNS host has the new address.
-- [ ] **`cdnfoundry-fleet control promote`.** It refuses to run while the old
+      Delivered over SSH with the node's own `ha/*.sh` scripts. The new node
+      needs a private replication address (refused otherwise), an
+      operator-supplied ingress certificate, and a name; the command resumes
+      after a failure. The edge and DNS bundles are unchanged by it (tested).
+- [x] **`cdnfoundry-fleet control promote`.** It refuses to run while the old
       active node is still reachable and serving, unless the operator first
       runs `demote` on it, or confirms that it is powered off. It then
       promotes PostgreSQL, makes the Valkey replica the primary, increments
-      the epoch, starts the stopped services, moves the floating address or
-      prints the DNS change, and checks that edges are syncing.
-- [ ] **`cdnfoundry-fleet control demote` and `rejoin`.** `demote` stops the
+      the epoch, starts the stopped services, prints the DNS change, and checks that edges are syncing.
+- [x] **`cdnfoundry-fleet control demote` and `rejoin`.** `demote` stops the
       application services on a node and makes its PostgreSQL read-only, for
       planned maintenance. `rejoin` rebuilds the old active node as the new
       standby (`pg_rewind`, or a new base backup when `pg_rewind` cannot be
       used).
-- [ ] **`cdnfoundry-fleet control remove-standby`.** It removes the standby,
+- [x] **`cdnfoundry-fleet control remove-standby`.** It removes the standby,
       then removes its address from the edges and every allowlist.
-- [ ] **Planned switchover.** `demote` on the active node, then `promote` on
+- [x] **Planned switchover.** `demote` on the active node, then `promote` on
       the standby. No committed write is lost, because `promote` waits for
       the replica to replay all of the old primary's WAL.
 
@@ -754,18 +793,41 @@ failure needs is added.
 | ClickHouse and Vector | Single instance, not HA | Telemetry failure must never stop serving, and Vector buffers are bounded. Back up the usage and rollup tables so hourly usage survives the loss of the host. Raw logs are allowed to be lost. |
 | Backups | Taken on the active node | Keep the existing off-host restic repository. A promotion moves the backup job with the scheduler. |
 
-- [ ] Alert on: the standby being unreachable, replication lag over 10
+- [x] Alert on: the standby being unreachable, replication lag over 10
       seconds, Valkey replication broken, fingerprint mismatch, and any PoP
       missing the current control address list.
-- [ ] Back up the ClickHouse usage and rollup tables, and add them to the
+      Delivered: `control-ha-alerts.yml` (six alerts, unit-tested with `promtool`)
+      and, on the standby, a watcher Prometheus and Alertmanager with
+      `watcher.yml`; the real alert path is proven by `control_ha_alert.py`.
+- [x] Back up the ClickHouse usage and rollup tables, and add them to the
       restore check.
-- [ ] Rewrite `topology.md`, `scaling.md`, the production reference
+      Delivered: `cdnf-backup-create` exports `edge_hourly`, `dns_hourly`,
+      `edge_daily`, and `dns_daily` to a separate Restic snapshot (tag
+      `cdnfoundry-rollups`) before the control dump; a completion line makes a cut
+      stream recognizable; `cdnf-backup-restore-rollups` restores only complete
+      snapshots into empty tables; restore preflight reports
+      `usage_rollups: present|absent`; the prune covers both tags. The
+      `dns_top_names` sketch is not backed up. `rollup_backup.py` runs the round
+      trip against real ClickHouse and Restic.
+- [x] Rewrite `topology.md`, `scaling.md`, the production reference
       architectures, and the backup and recovery page. Add runbooks for:
       adding HA, planned switchover, promoting after the active node is lost,
       rejoining the old node, and removing HA.
-- [ ] Add a two-node test stack: a Compose file that runs the active and
+      Delivered: the new page [Control-plane high availability](operations/control-plane-high-availability.md)
+      holds all five runbooks; the four existing pages, `monitoring.md`,
+      `runbooks.md`, `production-qualification.md`, `cli-commands.md`, and
+      `configuration.md` are updated.
+- [x] Add a two-node test stack: a Compose file that runs the active and
       standby nodes as separate projects on separate networks, so the E2E
       can kill, partition, and restore them.
+      Delivered differently: no new Compose file. `tests/e2e/control_ha.py`
+      renders two real production control bundles with the fleet generator and
+      runs them as two Compose projects on this host (addresses on the loopback
+      interface, pinned subnets, a real edge agent), driving them with the real
+      `cdnfoundry-fleet control` commands. A new file would have tested a copy
+      of the topology instead of the one that ships. `ha_node_shell.py` stands in
+      for SSH. Not covered: a network partition (the test kills the active node
+      and returns it; it does not cut the link between two running nodes).
 
 **Exit:** E2E on the two-node test stack, over IPv4 and IPv6:
 
@@ -790,13 +852,49 @@ failure needs is added.
 - `remove-standby` returns the installation to `ha: none`, with no edge or DNS
   errors.
 
+**Completion gate (2026-11-01). Phase 6 is complete, with the limitations below.** The four fields are
+recorded separately.
+
+| Field | Status | Evidence |
+| --- | --- | --- |
+| Implementation | Complete | Ten commits on `dev`: epoch and fencing, signed control addresses, the agent's ordered dialing, `cdnfoundry-fleet control`, HA alerts, rollup backup, E2E tests, documentation. The owner decided to support two fixed addresses only; no floating address was built |
+| Regression tests | Pass (536 PHP tests; Go agent suite; 106 Fleet tests) | `ControlPlaneHighAvailabilityTest` (fencing, signed list, status, promotion, dashboard row), `SignInFormTest`, `tests/fleet/test_control_ha.py` (order of steps, bundles, refusals, IPv6), `control_addresses_test.go` (failover, lower epoch, IPv6 dial), `promtool test rules` |
+| Runtime tests | Pass over IPv4 and IPv6 | `control_ha.py --family 4` and `--family 6`, each uninterrupted on two real production control bundles with a real edge agent. `control_ha_alert.py` (real Prometheus and Alertmanager: `ControlNodeUnreachable` reached the webhook 144 s after the loss). `rollup_backup.py` (real ClickHouse and Restic) |
+| Documentation | Updated | New page *Control-plane high availability* with the five runbooks; topology, scaling, reference architectures, backup and recovery, monitoring, runbooks, qualification, CLI, configuration, fleet operator guide |
+| Manual browser | Not run; checklist written | `docs/manual-browser-qualification.md`, "Phase 6" job (includes the sign-in check) |
+
+Exit items and how each was checked:
+
+| Exit item | Check |
+| --- | --- |
+| Single node passes qualification and shows `ha: none` as a warning | The report carries `ha` and a warning, never a failure; `control_ha.py` asserts `ha: none` on the single node; dashboard test |
+| `add-standby` on a running installation with active domains reaches `ha: ready`, with no change on any edge host | `control_ha.py` (about 290 s); the Fleet test proves edge and DNS bundles are byte-identical and never contacted. The lab has one edge and no customer domains |
+| Every PoP holds both addresses; every DNS secondary accepts both primaries | The agent state file holds both addresses; the transfer response lists both. A real DNS secondary was not run in the lab |
+| Killing the active node: serving continues; after `promote`, edges resume within 5 minutes through the second address | Promoted and synced in 102 to 151 s with no DNS change. DNS and HTTP data-plane serving were not exercised in this lab, only the Phase 2 fail-static design |
+| A write committed more than 10 seconds before the kill is present | Asserted after the kill (`ha_before_loss`) |
+| `promote` refuses while the old active node is serving | Asserted, and also when the node answers with an unreadable role or not at all |
+| The old node returns: no application services, edges ignore it, `rejoin` makes it a standby | Asserted: the guard reports `superseded_by_higher_epoch`, `horizon` and `scheduler` stay stopped, the old database receives no heartbeat, then `rejoin` reaches `ha: ready`. The rewind path ran after a planned switchover; the base-backup path ran after the kill |
+| Planned switchover loses no committed write | 500 rows written before `switchover` are present on the former standby |
+| A mismatched signing key cannot reach `ha: ready` | `control check` reports `application_secret_fingerprint_mismatch` and the active node turns `degraded` |
+| Killing the active node delivers an alert from the standby's Alertmanager | `control_ha_alert.py`, with the real watcher configuration and rules; the lab above has no Alertmanager |
+| `remove-standby` returns to `ha: none` with no edge or DNS errors | Asserted; the agent ends holding one address |
+
+Known limitations and deviations:
+
+- Two nodes only, asynchronous replication, no automatic failover, no floating address.
+- A node that returns while its peer is unreachable and was never demoted cannot learn it was replaced.
+- Replication needs a private network; traffic on it is not encrypted beyond the database and Valkey passwords.
+- Secret fingerprints are compared by `add-standby` and `control check`, not continuously.
+- The lab has no network partition between two running nodes, no real DNS secondary, no customer domains, and no data-plane traffic.
+- The first-start database race, the `pdns-migrate` omission, and an off-by-one in the rollup restore were found by these runs and are fixed.
+- A sign-in problem reported on `localhost:8080` (an autofilled password reported as missing) was fixed in the same phase; it was reproduced only at the server (which behaves correctly) and is covered by a test of the form, not by a browser.
+
 ### Phase 7: Professional UI on Filament, and agent-run browser qualification
 
 Both panels work, but they read like long reports: every card has a paragraph
 of explanation, the overview is one very long page, and the look is
 Filament's default. This phase gives CDNFoundry a professional, dense,
-consistent operator UI, at the level of modern infrastructure tools such as
-the Bifrost gateway UI, while staying on Filament.
+consistent operator UI, at the level of modern infrastructure tools, while staying on Filament.
 
 **Filament stays.** The panels stay on Filament 5, with a CDNFoundry theme
 built on the existing shared theme
