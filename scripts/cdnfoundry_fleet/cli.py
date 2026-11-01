@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from . import control_cli
 from .common import FleetError, StateError, ValidationError, load_json, utc_now
 from .render import Renderer
 from .state import (
@@ -207,6 +208,8 @@ def parser() -> argparse.ArgumentParser:
     rotate.add_argument("--node")
     rotate.add_argument("--secret", required=True)
     rotate.add_argument("--phase", choices=("prepare", "commit", "abort"), default="prepare")
+
+    control_cli.add_parser(sub, command_common)
 
     return root
 
@@ -634,6 +637,10 @@ def execute(args: argparse.Namespace) -> int:
 
     if args.command == "doctor":
         return _doctor(args, store)
+    if args.command == "control":
+        with store.locked(exclusive=getattr(args, "control_action", "") not in {"status"}):
+            print(json.dumps(control_cli.execute(args, store, output_dir), indent=2))
+        return EXIT_OK
 
     with store.locked(exclusive=args.command not in {"list-nodes", "show-start-order", "status"}):
         if args.command == "setup":

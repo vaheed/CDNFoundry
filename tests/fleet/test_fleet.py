@@ -730,6 +730,7 @@ def test_cli_parser_exposes_all_commands_and_help() -> None:
         "show-start-order",
         "adopt-existing",
         "rotate-secret",
+        "control",
     }
     subparsers = next(action for action in cli._actions if isinstance(action, argparse._SubParsersAction))
     assert set(subparsers.choices) == commands

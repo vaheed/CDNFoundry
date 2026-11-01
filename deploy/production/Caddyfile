@@ -4,6 +4,10 @@
 }
 
 {$CONTROL_HOSTNAME} {
+	# A two-node control plane serves an operator-supplied certificate (the standby cannot obtain one while
+	# idle). Without the HA bundle this directory does not exist and Caddy issues its own.
+	import /etc/caddy/tls.d/*.caddy
+
 	encode zstd gzip
 	reverse_proxy web:8080 {
 		# Replace caller-supplied forwarding chains at the public trust boundary.

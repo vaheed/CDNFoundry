@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from . import ha
 from .certs import PKI
 from .common import RenderError, atomic_write, quote_env, sync_tree, sync_directory, exchange_directories
 from .compose import (
@@ -80,17 +81,20 @@ class Renderer:
         base = load_yaml(self.repo_root / "compose.prod.yml")
         monitoring_enabled = state["features"]["monitoring"]["mode"] != "disabled"
         monitoring_host = self._is_monitoring_host(state, node)
+        watcher = ha.is_watcher(state, node)
         logs_enabled = state["features"]["logs"]["mode"] == "centralized"
         filtered = select_services(
             base,
             role=node["role"],
             monitoring_enabled=monitoring_enabled,
             logs_enabled=logs_enabled,
-            monitoring_host=monitoring_host,
+            monitoring_host=monitoring_host or watcher,
         )
+        if watcher:
+            ha.restrict_to_watcher(filtered["services"])
         self._apply_generated_overrides(state, node, filtered)
         prune_top_level(filtered)
-        env = self._environment(state, node, required_env(filtered), monitoring_host=monitoring_host)
+        env = self._environment(state, node, required_env(filtered), monitoring_host=monitoring_host or watcher)
 
         destination = self.output_dir / node["name"]
         if self.dry_run:
@@ -106,7 +110,7 @@ class Renderer:
             self.pki.copy_node_material(certificate_node, tmp / "pki", include_private_key=node["role"] not in {"edge", "dns-edge"})
             atomic_write(tmp / "compose.yml", dump_yaml(filtered), 0o600)
             atomic_write(tmp / ".env.prod", self._format_env(env), 0o600)
-            self._write_generated_configs(state, node, tmp, monitoring_host)
+            self._write_generated_configs(state, node, tmp, monitoring_host or watcher)
             atomic_write(tmp / "README.md", self._node_readme(state, node, filtered), 0o600)
             atomic_write(tmp / "validate.sh", self._validate_script(node, filtered), 0o700)
             atomic_write(tmp / "start.sh", self._start_script(state, node), 0o700)
@@ -122,7 +126,8 @@ class Renderer:
     def _is_monitoring_host(self, state: dict[str, Any], node: dict[str, Any]) -> bool:
         feature = state["features"]["monitoring"]
         if feature["mode"] == "colocated":
-            return node["role"] == "control"
+            owner = ha.telemetry_owner(state)
+            return node["role"] == "control" and (owner is None or owner == node["name"])
         if feature["mode"] == "dedicated":
             return feature.get("host") == node["name"]
         return False
@@ -186,6 +191,7 @@ class Renderer:
                 # Supplementary group matches the activated secret file. Keep the
                 # image's non-root service user without exposing credentials to all users.
                 services[service].setdefault("group_add", []).append("82")
+        ha.apply_compose(state, node, services)
         if node["role"] == "control" and self._uses_remote_control_db(node):
             # External PostgreSQL is selected with DB_URL or a DB_HOST other than the
             # Compose service name. Remove the embedded database and every dependency
@@ -399,6 +405,7 @@ class Renderer:
                 if key not in explicit_env:
                     values[key] = value
                     derived_env.add(key)
+        values.update(ha.environment(state, node))
         missing = sorted(key for key in needed if key not in values)
         if missing:
             raise RenderError(
@@ -411,7 +418,7 @@ class Renderer:
         if node["role"] == "dns-edge":
             always |= {"EDGE_DNS_API_URL", "EDGE_DNS_API_KEY"}
         if node["role"] == "control":
-            always |= {"PDNS_DB_PASSWORD", "PDNS_API_KEY"}
+            always |= {"PDNS_DB_PASSWORD", "PDNS_API_KEY"} | ha.always_variables(state, node)
         if state["features"]["logs"]["mode"] == "centralized":
             always |= {
                 "LOG_ROLE", "LOG_HOST", "LOG_COLLECTOR_ID", "LOKI_ENDPOINT",
@@ -494,6 +501,9 @@ class Renderer:
         if cfg["mode"] == "disabled":
             return None
         if cfg["mode"] == "colocated":
+            owner = ha.telemetry_owner(state)
+            if owner is not None:
+                return state["nodes"][owner]
             return next((node for node in state["nodes"].values() if node["role"] == "control"), None)
         name = cfg.get("host")
         return state["nodes"].get(name) if name else None
@@ -522,7 +532,7 @@ class Renderer:
 
     def _copy_runtime_files(self, compose: dict[str, Any], destination: Path) -> None:
         for relative in sorted(bind_mount_sources(compose)):
-            if relative.parts and relative.parts[0] in {'generated', 'pki', 'secrets'}:
+            if relative.parts and relative.parts[0] in {'generated', 'pki', 'secrets', 'ha'}:
                 continue
             source = (self.repo_root / relative).resolve()
             try:
@@ -563,7 +573,8 @@ class Renderer:
             # file to the PHP worker group and grants Prometheus that same group.
             atomic_write(secrets_dir / "metrics-token", self.store.read_secret("metrics-token") + "\n", 0o640)
         if node["role"] == "control":
-            atomic_write(secrets_dir / "valkey.conf", f"requirepass {self.store.read_secret('valkey-password')}\n", 0o640)
+            atomic_write(secrets_dir / "valkey.conf", ha.valkey_config(state, node, self.store.read_secret("valkey-password")), 0o640)
+            ha.write_files(self.store, self.repo_root, state, node, destination)
             # nginx includes this file as-is; PHP reads the secret from the same file.
             secret = self.store.read_secret("edge-proxy-secret")
             atomic_write(secrets_dir / "edge-proxy-secret.conf", f'fastcgi_param HTTP_X_EDGE_PROXY_SECRET "{secret}";\n', 0o640)
@@ -646,21 +657,20 @@ exec python3 ./reconcile-pdns-password.py
         return yaml.safe_dump(groups, sort_keys=False)
 
     def _prometheus_control_targets(self, state: dict[str, Any], monitoring_node: dict[str, Any]) -> str:
-        control = next(
-            (node for node in state["nodes"].values() if node["enabled"] and node["role"] == "control"),
-            None,
-        )
-        if control is None:
-            return "[]\n"
-        if control["name"] == monitoring_node["name"]:
-            target = "web:8080"
-            labels = {"node": control["name"], "role": "control", "__scheme__": "http"}
-        else:
-            target = f"control.{state['global']['operator_domain']}:443"
-            labels = {"node": control["name"], "role": "control", "__scheme__": "https"}
+        """Every control node is a scrape target, so each node of a pair is watched by the other."""
         import yaml
 
-        return yaml.safe_dump([{"targets": [target], "labels": labels}], sort_keys=False)
+        groups = []
+        for control in ha.control_nodes(state):
+            if control["name"] == monitoring_node["name"]:
+                target = "web:8080"
+                labels = {"node": control["name"], "role": "control", "__scheme__": "http"}
+            else:
+                # Each node answers on its own address under the shared control hostname.
+                target = f"{control['public_ipv4']}:443"
+                labels = {"node": control["name"], "role": "control", "__scheme__": "https"}
+            groups.append({"targets": [target], "labels": labels})
+        return yaml.safe_dump(groups, sort_keys=False) if groups else "[]\n"
 
     def _prometheus_service_targets(
         self, state: dict[str, Any], service: str, monitoring_node: dict[str, Any]
@@ -880,8 +890,17 @@ docker compose --env-file .env.prod --profile '*' ps
     def _node_start_order(self, node: dict[str, Any]) -> str:
         if node["role"] == "control":
             dependencies = "redis" if self._uses_remote_control_db(node) else "control-db redis"
+            # On a new volume the image first runs a temporary server that listens on its socket only, so the
+            # container can report healthy before the real server accepts the connections the migration makes.
+            ready = (
+                ""
+                if self._uses_remote_control_db(node)
+                else "docker compose --env-file .env.prod exec -T control-db sh -c "
+                "'i=0; until pg_isready -q -h 127.0.0.1 -U cdnf -d cdnf; do i=$((i+1)); [ \"$i\" -lt 60 ] || exit 1; sleep 2; done'\n"
+            )
             return (
                 f"docker compose --env-file .env.prod up -d --wait {dependencies}\n"
+                f"{ready}"
                 "docker compose --env-file .env.prod --profile tools run --rm migrate\n"
                 "docker compose --env-file .env.prod up -d --wait pdns-db\n"
                 "docker compose --env-file .env.prod exec -T pdns-db "
@@ -986,13 +1005,16 @@ openssl verify -CAfile pki/edge-server-ca.crt pki/node.crt
             profiles.append("control")
         if node["role"] in {"dns", "dns-edge"}:
             profiles.append("dns")
-        if self._is_monitoring_host(state, node):
+        if self._is_monitoring_host(state, node) or ha.is_watcher(state, node):
             profiles.append("telemetry")
         if state["features"]["logs"]["mode"] == "centralized":
             profiles.append("logs")
         return " ".join(f"--profile {profile}" for profile in profiles)
 
     def _start_script(self, state: dict[str, Any], node: dict[str, Any]) -> str:
+        standby_script = ha.start_script(state, node)
+        if standby_script is not None:
+            return standby_script
         migration = self._node_start_order(node)
         if self._is_monitoring_host(state, node):
             # The telemetry schema is migrated the same way as the databases: explicitly, once per version.
@@ -1069,6 +1091,7 @@ chown 0:82 secrets/metrics-token
 chmod 0640 secrets/metrics-token
 """
         if node["role"] == "control":
+            key_permissions += ha.permissions_snippet(state, node)
             key_permissions += """chown 0:1000 secrets/valkey.conf
 chmod 0640 secrets/valkey.conf
 chown 0:82 secrets/edge-proxy-secret.conf

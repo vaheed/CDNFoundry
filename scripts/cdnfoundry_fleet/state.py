@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
+from . import ha
 from .common import (
     StateError,
     ValidationError,
@@ -57,6 +58,9 @@ GLOBAL_SECRET_NAMES = {
     "backup-secret-key",
     "log-auth-token",
 }
+
+# Created only when a standby control node is added; a single-node fleet does not hold them.
+OPTIONAL_GLOBAL_SECRET_NAMES = {"control-replication-password"}
 
 NODE_SECRET_NAMES = {
     "pdns-db-password",
@@ -236,6 +240,7 @@ class FleetState:
             if require_secrets:
                 self._validate_node_secrets(node)
 
+        ha.validate(state)
         if monitoring.get("mode") == "dedicated":
             host = monitoring.get("host")
             if host not in names or state["nodes"][host]["role"] != "monitoring":
@@ -249,6 +254,8 @@ class FleetState:
                     raise ValidationError(f"Missing global secret: {secret}")
                 ensure_mode(path, 0o600)
             validate_laravel_app_key(self.read_secret("app-key"))
+            if ha.enabled(state) and not self.secret_path("control-replication-password").exists():
+                raise ValidationError("Missing global secret: control-replication-password")
 
     def _validate_node_secrets(self, node: dict[str, Any]) -> None:
         required: set[str] = set()
@@ -270,12 +277,14 @@ class FleetState:
         except Exception:
             return "disabled"
 
-    def add_node(self, state: dict[str, Any], node: dict[str, Any]) -> dict[str, Any]:
+    def add_node(self, state: dict[str, Any], node: dict[str, Any], *, top_level: dict[str, Any] | None = None) -> dict[str, Any]:
+        """`top_level` sets other state sections in the same validated write, such as the `ha` section a standby needs."""
         name = validate_node_name(node["name"])
         if name in state["nodes"]:
             raise ValidationError(f"Node already exists: {name}")
         clean = self._normalize_node(state, node)
         candidate = copy.deepcopy(state)
+        candidate.update(copy.deepcopy(top_level or {}))
         candidate["nodes"][name] = clean
         self.validate(candidate, require_secrets=False)
         if not self.dry_run:
@@ -398,7 +407,7 @@ class FleetState:
         if node:
             if name not in NODE_SECRET_NAMES:
                 raise ValidationError(f"Unsupported node secret: {name}")
-        elif name not in GLOBAL_SECRET_NAMES:
+        elif name not in GLOBAL_SECRET_NAMES | OPTIONAL_GLOBAL_SECRET_NAMES:
             raise ValidationError(f"Unsupported global secret: {name}")
         path = self.secret_path(name, node=node)
         if path.exists():
@@ -427,7 +436,7 @@ class FleetState:
             if name not in NODE_SECRET_NAMES:
                 raise ValidationError(f"Unsupported node secret: {name}")
             validate_node_name(node)
-        elif name not in GLOBAL_SECRET_NAMES:
+        elif name not in GLOBAL_SECRET_NAMES | OPTIONAL_GLOBAL_SECRET_NAMES:
             raise ValidationError(f"Unsupported global secret: {name}")
         clean = value.rstrip("\r\n")
         if not clean:
