@@ -1,12 +1,13 @@
 <x-filament-widgets::widget>
-    <x-filament::section heading="Active conditions" description="Read-only conditions detected from current health and desired-state evidence." icon="heroicon-o-exclamation-triangle">
-        <div wire:poll.10s>
-            @if (!($state['available'] ?? false))
-                <x-ui.widget-state :state="$state['state'] ?? 'unavailable'" :description="$state['error'] ?? 'Health evidence could not be loaded.'" />
-            @else
-                <div class="cdn-condition-list">
-                    @forelse ($state['conditions'] as $condition)
-                        <a class="cdn-condition-row" href="{{ $conditionUrl($condition['key']) }}">
+    <div wire:poll.10s>
+        @if (!($state['available'] ?? false))
+            <x-ui.widget-state :state="$state['state'] ?? 'unavailable'" :description="$state['error'] ?? 'Health evidence could not be loaded.'" />
+        @elseif (count($state['conditions']) > 0)
+            <section class="cdn-attention" data-testid="overview-attention" aria-labelledby="needs-attention-heading">
+                <h2 id="needs-attention-heading" class="cdn-attention-title">Needs attention <x-ui.status-pill tone="warning">{{ count($state['conditions']) }}</x-ui.status-pill></h2>
+                <div class="cdn-condition-list p-2">
+                    @foreach (array_slice($state['conditions'], 0, 4) as $condition)
+                        <a class="cdn-condition-row" href="{{ $conditionUrl($condition['key']) }}" data-testid="overview-attention-item">
                             <div class="min-w-0">
                                 <div class="flex flex-wrap items-center gap-2">
                                     <x-ui.status-pill :tone="match($condition['severity']) { 'critical' => 'danger', 'high' => 'warning', default => 'info' }">{{ str($condition['severity'])->headline() }}</x-ui.status-pill>
@@ -16,11 +17,12 @@
                             </div>
                             <x-filament::icon icon="heroicon-m-chevron-right" class="size-4 shrink-0 text-gray-400" aria-hidden="true" />
                         </a>
-                    @empty
-                        <x-ui.empty-state title="No active conditions" description="Every evaluated component is currently healthy." />
-                    @endforelse
+                    @endforeach
+                    @if (count($state['conditions']) > 4)
+                        <a class="cdn-widget-link block px-3 py-2" href="{{ $conditionUrl('operations') }}" data-testid="overview-attention-more">Show all {{ count($state['conditions']) }}</a>
+                    @endif
                 </div>
-            @endif
-        </div>
-    </x-filament::section>
+            </section>
+        @endif
+    </div>
 </x-filament-widgets::widget>

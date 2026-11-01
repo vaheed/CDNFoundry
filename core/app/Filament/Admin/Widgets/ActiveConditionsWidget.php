@@ -15,9 +15,9 @@ class ActiveConditionsWidget extends Widget
 
     protected static bool $isLazy = false;
 
-    protected static ?int $sort = 5;
+    protected static ?int $sort = 3;
 
-    protected int|string|array $columnSpan = ['default' => 12, 'xl' => 5];
+    protected int|string|array $columnSpan = 'full';
 
     protected string $view = 'filament.admin.widgets.active-conditions';
 

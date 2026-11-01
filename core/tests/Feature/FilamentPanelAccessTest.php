@@ -54,8 +54,9 @@ class FilamentPanelAccessTest extends TestCase
         }
 
         $this->actingAs($admin)->get('/admin')->assertOk()
-            ->assertSee('Operations overview')->assertSee('Investigation context')
-            ->assertSee('Active conditions')->assertSee('Service is degraded');
+            ->assertSee('Overview')
+            ->assertSee('Needs attention')->assertSee('Service is degraded')
+            ->assertDontSee('Investigation context');
         $this->actingAs($admin)->get('/app')->assertForbidden();
         $this->actingAs($user)->get('/app')->assertOk()->assertSee('Assigned domains')->assertSee('Start serving a domain');
         $this->actingAs($user)->get('/admin')->assertForbidden();

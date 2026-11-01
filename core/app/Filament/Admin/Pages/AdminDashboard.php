@@ -7,16 +7,9 @@ use App\Filament\Admin\Resources\Edges\EdgeResource;
 use App\Filament\Admin\Resources\Operations\OperationResource;
 use App\Filament\Admin\Resources\Users\UserResource;
 use App\Filament\Admin\Widgets\ActiveConditionsWidget;
-use App\Filament\Admin\Widgets\CacheEfficiencyWidget;
-use App\Filament\Admin\Widgets\DataFreshnessWidget;
-use App\Filament\Admin\Widgets\DnsHealthWidget;
-use App\Filament\Admin\Widgets\EdgeHealthTable;
-use App\Filament\Admin\Widgets\ErrorLatencyChart;
 use App\Filament\Admin\Widgets\OperationsTimelineWidget;
 use App\Filament\Admin\Widgets\OpsKpiOverview;
-use App\Filament\Admin\Widgets\QueueHealthWidget;
 use App\Filament\Admin\Widgets\ServiceStatusBanner;
-use App\Filament\Admin\Widgets\TrafficOverviewChart;
 use App\Filament\Domain\Resources\Domains\DomainResource;
 use App\Models\AuditLog;
 use App\Models\DnsCluster;
@@ -41,9 +34,9 @@ class AdminDashboard extends Dashboard
 {
     use HasFiltersForm;
 
-    protected static ?string $title = 'Operations overview';
+    protected static ?string $title = 'Overview';
 
-    protected static ?string $navigationLabel = 'Operations overview';
+    protected static ?string $navigationLabel = 'Overview';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Observe';
 
@@ -51,7 +44,7 @@ class AdminDashboard extends Dashboard
 
     public function getSubheading(): ?string
     {
-        return 'Service condition, customer impact, telemetry, infrastructure, and the changes that preceded an issue.';
+        return null;
     }
 
     public function persistsFiltersInSession(): bool
@@ -62,9 +55,7 @@ class AdminDashboard extends Dashboard
     public function filtersForm(Schema $schema): Schema
     {
         return $schema->components([
-            Section::make('Investigation context')
-                ->description('Filters are stored in the URL so this investigation can be bookmarked or shared with another administrator.')
-                ->icon('heroicon-o-funnel')
+            Section::make()
                 ->compact()
                 ->columnSpanFull()
                 ->columns(['default' => 1, 'md' => 2, 'xl' => 4])
@@ -92,15 +83,8 @@ class AdminDashboard extends Dashboard
         return [
             ServiceStatusBanner::class,
             OpsKpiOverview::class,
-            TrafficOverviewChart::class,
-            ErrorLatencyChart::class,
             ActiveConditionsWidget::class,
-            EdgeHealthTable::class,
-            CacheEfficiencyWidget::class,
-            DnsHealthWidget::class,
-            QueueHealthWidget::class,
             OperationsTimelineWidget::class,
-            DataFreshnessWidget::class,
         ];
     }
 

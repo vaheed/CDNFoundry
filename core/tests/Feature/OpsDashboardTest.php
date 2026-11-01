@@ -135,7 +135,7 @@ class OpsDashboardTest extends TestCase
 
         $page = new AdminDashboard;
         $this->assertSame(Width::Full, $page->getMaxContentWidth());
-        $this->assertCount(11, $page->getWidgets());
+        $this->assertCount(4, $page->getWidgets());
         $this->assertSame(['default' => 1, 'xl' => 12], $page->getColumns());
         $this->assertSame('full', $page->getFiltersForm()->getComponents()[0]->getColumnSpan('default'));
         $range = $page->getFiltersForm()->getComponents()[0]->getChildSchema()->getComponents()[0];
@@ -259,12 +259,12 @@ class OpsDashboardTest extends TestCase
 
         Livewire::actingAs($admin)->test(OpsKpiOverview::class)
             ->assertSee('No matching aggregate data')
-            ->assertSee('Healthy edges')
-            ->assertSee('Fresh enabled edge heartbeats');
+            ->assertSee('Healthy PoPs')
+            ->assertSee('Fresh heartbeats');
 
         Livewire::actingAs($admin)->test(ServiceStatusBanner::class)
-            ->assertSee('Health checked')
-            ->assertSee('Traffic aggregate');
+            ->assertSee('checked')
+            ->assertSee('Polling active');
     }
 
     public function test_dns_health_keeps_cluster_diagnostics_visible_without_aggregate_rows(): void
