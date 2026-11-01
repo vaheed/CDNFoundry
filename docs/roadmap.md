@@ -583,6 +583,35 @@ Fixes H8, M12, L6, A26, A27, A28, A29, A30, A31, A33, A35, A36, A42.
 - The off-host restore job passes.
 - The SSRF fixture blocks every transition range.
 
+**Completion gate (2026-11-01). Phase 5 is NOT complete.** The four fields are
+recorded separately.
+
+| Field | Status | Evidence |
+| --- | --- | --- |
+| Implementation | Incomplete | Committed on `dev`, except the Larastan part of the supply-chain item (unticked above). No `phpstan.neon` or baseline is committed, because the Larastan download stalls here |
+| Regression tests | Pass (516 PHP tests) | `TokenScopeTest`, `AccountHardeningTest`, `EdgeProxySecretTest`, `BackupMaintenanceTest`, `SystemIdentityApiTest` (IPv6 probes), origin port and range tests. Go agent: `origin_destination_test.go`, `dns_probe_test.go`, `durable_state_test.go`. Fleet: 87 tests |
+| Runtime tests | Partial | Pass: `e2e.py`, `phase4_runtime.py`, `dns_outage_recovery.py`, `origin_destinations.py`, `object_store.py`, `backup_retention.py`. Fail: `phase7_analytics.py` (dev `vector` and `log-collector` crash-loop on Vector 0.58 without `VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION`), `phase8_recovery.py` (final migration-count assertion: the dev database has 6 rows with no migration file). Unconfirmed: `phase2_dns.py` (its 90 s `docker compose restart` limit is exceeded on this host). IPv4 only |
+| Documentation | Updated | Users and access, hardening, configuration, manual Compose, production fleet, backup and recovery, CLI commands, supply chain, proxy and origins |
+| Manual browser | Not run; checklist written | `docs/manual-browser-qualification.md`, "Phase 5" job |
+
+Exit items and how each was checked:
+
+| Exit item | Check |
+| --- | --- |
+| E2E passes over IPv6 only | **Not run** |
+| A scoped token cannot exceed its scope | Regression: `TokenScopeTest` |
+| The Compose policy check proves health check, hardening and memory limit | `scripts/ci/check_compose_policy.py`, run by `validate-production-overrides.sh` |
+| The off-host restore job passes | Backup, retention and restore ran against SeaweedFS locally. `restore-drill.yml` never ran on GitHub, and `phase8_recovery.py` fails as above |
+| The SSRF fixture blocks every transition range | Runtime: `origin_destinations.py`; regression: PHP and Go tests |
+
+Known limitations and deviations:
+
+- Larastan is a dev dependency in `composer.lock` but has no baseline and no CI step.
+- The GitHub workflows (provenance, govulncheck, restore drill) have never run.
+- PowerDNS accepts the GeoIP reload command; a database swap changing a Geo-DNS answer was not traced.
+- The manual `compose.prod.yml` publishes IPv4 only; IPv6 publication is a Fleet feature.
+- The dev Vector fix is awaiting an owner decision; until then the analytics runtime tests cannot pass.
+
 ### Phase 6: Optional control-plane high availability
 
 Fixes HA1, HA2, HA3, HA4, HA5, HA6, HA7.
