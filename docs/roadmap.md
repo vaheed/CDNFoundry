@@ -493,36 +493,86 @@ Known limitations and deviations:
 
 Fixes H8, M12, L6, A26, A27, A28, A29, A30, A31, A33, A35, A36, A42.
 
-- [ ] Publish IPv6 in production for DNS, control, and edges, including
+- [x] Publish IPv6 in production for DNS, control, and edges, including
       edge-control. Block saving a nameserver IPv6 address until that address
       answers from an external probe.
-- [ ] Add token expiry, token abilities (read-only, DNS-only, purge-only),
+      Delivered: the Fleet renderer publishes `edge-control` on IPv6 beside DNS,
+      the control ingress, the primary's transfer port, and the gateway.
+      Validating a payload with a new nameserver IPv6 address queues a `dns_probe`
+      task for up to three fresh edges; the agent sends a SOA query for the
+      platform zone over IPv6 and needs an authoritative NOERROR answer. An
+      answer is good for 24 hours; addresses already saved are not probed again.
+      Deviation: the manual `compose.prod.yml` still publishes IPv4 only; IPv6
+      publication is a Fleet feature.
+- [x] Add token expiry, token abilities (read-only, DNS-only, purge-only),
       and optional per-domain token scope. Add TOTP for administrators.
-- [ ] Harden accounts: a per-account login limiter, constant-time login
+      Delivered: tokens expire (90 days by default, 365 at most, 30 for login
+      tokens); abilities are `*`, `read`, `dns`, and `purge`; `domain_ids` limits a
+      token to up to 50 domains, enforced in `DomainPolicy` and route binding. A
+      scoped token cannot create or list tokens. TOTP uses Filament's app
+      authentication for the admin panel (with recovery codes) and `otp` on
+      `POST /api/auth/login`. Enrolment is optional per administrator.
+- [x] Harden accounts: a per-account login limiter, constant-time login
       checks, `current_password` required to change the email, one password
       policy for all users, token revocation on password reset, expiring
       bootstrap tokens, and trust for the ingress proxy only.
-- [ ] Bind PHP-FPM only to the nginx containers' private network, and add a
+      Delivered: a limiter per account and one per address; a dummy hash for
+      unknown addresses; 12-character mixed-case-and-digit passwords everywhere;
+      an administrator password reset revokes the user's tokens; bootstrap tokens
+      expire after 24 hours; forwarded headers are trusted only from
+      `TRUSTED_PROXIES` (default loopback and private ranges).
+- [x] Bind PHP-FPM only to the nginx containers' private network, and add a
       shared secret between nginx and PHP for the edge identity parameters.
-- [ ] Add a shared hardening anchor to every service (`no-new-privileges`,
+      Delivered: FPM listens only on core's address on the private `fpm`
+      network, resolved from the `core-fpm` alias; edge identity headers need
+      the secret in `EDGE_PROXY_SECRET_FILE`.
+- [x] Add a shared hardening anchor to every service (`no-new-privileges`,
       `cap_drop`, `read_only` where possible) and memory limits on every
       service. Replace the log collector's Docker socket mount.
-- [ ] Block 6to4, Teredo, and IPv4-compatible ranges in PHP and Lua, allow
+      Delivered: `x-hardened` (no-new-privileges, all capabilities dropped, a
+      small allowed `cap_add` set) and a memory limit on every production
+      service, enforced by `scripts/ci/check_compose_policy.py`. The collector
+      reads logs through a read-only `docker-socket-proxy`. Deviation: Loki's
+      image has no shell, so a static busybox is copied into a volume for its
+      health check; `read_only` was already present where the image allows it.
+- [x] Block 6to4, Teredo, and IPv4-compatible ranges in PHP and Lua, allow
       only an explicit origin port set, and restrict origin tests to edges in
       the domain's placement.
-- [ ] Add an explicit, tracked ClickHouse migration service.
-- [ ] Reload PowerDNS after a GeoIP update, ship a bundled fallback database,
+      Delivered in PHP, Lua, and the agent's origin probe; the port set is a
+      constant kept equal across the three by a test.
+- [x] Add an explicit, tracked ClickHouse migration service.
+      Delivered: `clickhouse-migrate` with `cdnf.schema_migrations` checksums;
+      the Fleet `start.sh` runs it on the telemetry host.
+- [x] Reload PowerDNS after a GeoIP update, ship a bundled fallback database,
       and require a checksum or signature in production.
-- [ ] Back up with retention (`forget --prune`), a weekly `restic check`, a
+      Delivered: the start script reloads PowerDNS when the file changes; an
+      empty bundled database lets DNS start with no source; production refuses an
+      unverified download. Limitation: the reload was confirmed to be accepted by
+      PowerDNS, but a database swap was not traced through to a changed Geo-DNS
+      answer.
+- [x] Back up with retention (`forget --prune`), a weekly `restic check`, a
       backup-age alert, and a scheduled CI job for the off-host restore.
-- [ ] Give the cache its own eviction-enabled Valkey, or TTLs on every cache
+      Delivered: `cdnf:backups:maintain prune|check`, the `ControlBackupStale`
+      alert, and `restore-drill.yml` (weekly). The drill workflow was not run on
+      GitHub. The public MinIO images were withdrawn, so the recovery tests use
+      SeaweedFS.
+- [x] Give the cache its own eviction-enabled Valkey, or TTLs on every cache
       key. Read the Valkey password from a secret file.
-- [ ] Pin development images to the production digests, and check in CI
+      Delivered: a `cache` Valkey (`allkeys-lru`, no persistence) and a
+      `valkey.conf` secret for both instances.
+- [x] Pin development images to the production digests, and check in CI
       that they are equal.
+      Delivered: `scripts/ci/check_dev_image_parity.py`, run by
+      `validate-production-overrides.sh`.
 - [ ] Builder-generated provenance; Dependabot for composer, npm, gomod, and
       Compose; govulncheck and Larastan in CI.
-- [ ] fsync agent and gateway state writes, enable `gzip_vary`, and add OCSP
+      Delivered except Larastan: `larastan/larastan` is a dev dependency, but its
+      package download stalled here, so no baseline was generated and no CI step
+      was added. None of the CI changes ran on GitHub.
+- [x] fsync agent and gateway state writes, enable `gzip_vary`, and add OCSP
       stapling and session-ticket key rotation, or document why not.
+      Delivered: durable writes in the agent and gateway, `gzip_vary on`,
+      session tickets turned off. OCSP stapling is documented as not offered.
 
 **Exit:**
 

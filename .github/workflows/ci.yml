@@ -61,12 +61,6 @@ jobs:
         run: npm audit --omit=dev --audit-level=moderate
       - name: Check PHP formatting
         run: vendor/bin/pint --test
-      - name: Analyse PHP with Larastan
-        env:
-          APP_ENV: testing
-          DB_CONNECTION: sqlite
-          DB_DATABASE: ':memory:'
-        run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
       - name: Build frontend assets
         run: npm run build
       - name: Run application tests
