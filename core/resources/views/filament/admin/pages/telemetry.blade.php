@@ -14,7 +14,7 @@
     @endphp
 
     <div class="cdn-dashboard">
-        <x-filament::section heading="Investigation context" description="Choose the time and scope for every item below. Filters are preserved in the URL; raw previews use up to the latest 24 hours." icon="heroicon-o-funnel">
+        <x-filament::section heading="Filters" icon="heroicon-o-funnel">
             <form method="get" class="cdn-investigation-form">
                 <label><span class="cdn-field-label">Time range</span><select name="range" class="cdn-filter-select"><option value="1h" @selected($this->range === '1h')>1 hour</option><option value="6h" @selected($this->range === '6h')>6 hours</option><option value="24h" @selected($this->range === '24h')>24 hours</option><option value="7d" @selected($this->range === '7d')>7 days</option></select></label>
                 <label><span class="cdn-field-label">Domain</span><select name="domain" class="cdn-filter-select"><option value="">All domains</option>@foreach ($filterOptions['domains'] as $domainId => $domainName)<option value="{{ $domainId }}" @selected((string) $domainId === (string) $this->domain)>{{ $domainName }}</option>@endforeach</select></label>
@@ -32,7 +32,7 @@
             </div>
         </x-filament::section>
 
-        <x-filament::section heading="Telemetry status" :description="strtoupper($state['filters']['range']) . ' complete-hour analytics · ' . $display->displayTimezone() . ' · bytes · milliseconds · no sampling. Data through ' . $display->formatTimestamp($state['meta']['finalized_until'] ?? null) . ' is finalized.'" icon="heroicon-o-signal">
+        <x-filament::section heading="Telemetry status" :description="strtoupper($state['filters']['range']) . ' complete-hour analytics · ' . $display->displayTimezone() . ' · finalized through ' . $display->formatTimestamp($state['meta']['finalized_until'] ?? null, 'Y-m-d H:i T')" icon="heroicon-o-signal">
             <div class="flex flex-wrap gap-3">
                 <x-ui.status-pill :tone="$state['available'] ? 'success' : 'danger'">ClickHouse {{ $state['available'] ? 'available' : 'unavailable' }}</x-ui.status-pill>
                 <x-ui.status-pill :tone="$state['buffer']['available'] ? 'success' : 'warning'">Vector metrics {{ $state['buffer']['available'] ? 'available' : 'unavailable' }}</x-ui.status-pill>
@@ -45,7 +45,7 @@
                 <p class="cdn-row-meta mt-3">Normal: the latest {{ $state['meta']['finalization_delay_minutes'] ?? 15 }} minutes remain provisional so this page can include current traffic. This is not a delivery warning; finalized usage is listed separately below.</p>
             @endif
             @if (!$state['available'])
-                <x-ui.empty-state class="mt-4" title="Analytics unavailable" description="Traffic serving is independent and remains active. Finalized PostgreSQL usage is still shown below." />
+                <x-ui.empty-state class="mt-4" title="Analytics unavailable" description="Traffic serving is independent and remains active." />
             @endif
         </x-filament::section>
 
@@ -69,7 +69,7 @@
             </div>
 
             <div class="cdn-dashboard-columns">
-                <x-filament::section heading="Global traffic" description="Hourly request and transfer totals for the last 24 hours." icon="heroicon-o-chart-bar">
+                <x-filament::section heading="Global traffic" icon="heroicon-o-chart-bar">
                     <x-ui.data-table caption="Global hourly traffic">
                         <x-slot:header><tr><th>Hour ({{ $display->displayTimezone() }})</th><th class="text-right">Requests</th><th class="text-right">Transfer</th></tr></x-slot:header>
                                 @forelse ($state['traffic']['items'] as $row)
@@ -90,7 +90,7 @@
                     @endif
                 </x-filament::section>
 
-                <x-filament::section heading="Global DNS" description="Authoritative queries grouped by type and response code." icon="heroicon-o-globe-alt">
+                <x-filament::section heading="Global DNS" icon="heroicon-o-globe-alt">
                     <x-ui.data-table caption="Global DNS responses">
                         <x-slot:header><tr><th>Type</th><th>Response</th><th class="text-right">Queries</th></tr></x-slot:header>
                                 @forelse ($state['dns'] as $row)
@@ -183,7 +183,7 @@
         @endif
 
         <div class="cdn-dashboard-columns">
-            <x-filament::section heading="Vector buffer and delivery" description="Current collector backlog and counters since the collector last started." icon="heroicon-o-circle-stack">
+            <x-filament::section heading="Vector buffer and delivery" icon="heroicon-o-circle-stack">
                 <div class="cdn-queue-list">
                     @forelse ($state['buffer']['metrics'] as $metric => $value)
                         @php
@@ -204,7 +204,7 @@
                             <span class="cdn-status-pill" data-tone="{{ $problem ? 'danger' : 'success' }}">{{ $metricValue }}</span>
                         </div>
                     @empty
-                        <x-ui.empty-state title="Vector metrics unavailable" description="Serving remains independent; inspect the collector when metrics should be present." />
+                        <x-ui.empty-state title="Vector metrics unavailable" description="Serving is unaffected." />
                     @endforelse
                 </div>
                 @if (($state['buffer']['metrics']['vector_component_discarded_events_total'] ?? 0) > 0 || ($state['buffer']['metrics']['vector_component_errors_total'] ?? 0) > 0)
@@ -215,7 +215,7 @@
                 @endif
             </x-filament::section>
 
-            <x-filament::section heading="Finalized usage" description="Stable PostgreSQL rollups for external reconciliation. Latest 5 finalized intervals." icon="heroicon-o-document-chart-bar">
+            <x-filament::section heading="Finalized usage" icon="heroicon-o-document-chart-bar">
                 <div class="mb-4">
                     <x-filament::button tag="a" icon="heroicon-o-arrow-down-tray" :href="route('admin.telemetry.usage.csv')">Global usage CSV</x-filament::button>
                 </div>

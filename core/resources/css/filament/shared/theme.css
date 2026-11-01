@@ -1606,3 +1606,13 @@ a.cdn-kpi-body:hover {
 .text-gray-400 {
     color: rgb(var(--cdn-text-muted));
 }
+
+/* Tighter cells so a table of seven or eight columns fits its card without a sideways scroll. */
+.fi-ta-header-cell {
+    padding-inline: 0.75rem;
+}
+
+.fi-ta-text,
+.fi-ta-icon {
+    padding-inline: 0.5rem;
+}

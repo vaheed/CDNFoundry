@@ -24,13 +24,13 @@ class AuditLogResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('id')->numeric()->sortable(),
+                TextColumn::make('created_at')->label('Time')->since()->sortable()->tooltip(fn ($record): string => $record->created_at->toDateTimeString().' UTC'),
                 TextColumn::make('actor.email')->label('Actor')->searchable(),
                 TextColumn::make('action')->searchable(),
-                TextColumn::make('subject_type')->label('Subject')->formatStateUsing(fn (?string $state): string => class_basename($state ?? '')),
-                TextColumn::make('subject_id')->limit(20),
-                TextColumn::make('ip_address'),
-                TextColumn::make('created_at')->dateTime()->sortable(),
+                TextColumn::make('subject_type')->label('Subject')
+                    ->formatStateUsing(fn (?string $state, $record): string => trim(class_basename($state ?? '').' #'.$record->subject_id)),
+                TextColumn::make('ip_address')->label('IP address')->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('id')->label('ID')->numeric()->sortable()->alignEnd()->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('id', 'desc');
     }
