@@ -20,6 +20,7 @@ use App\Support\FilamentHelp;
 use App\Support\GeoDnsConfig;
 use App\Support\GeoIpClassifier;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
@@ -199,51 +200,68 @@ class DnsRecordsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table->columns([
-            TextColumn::make('type')->badge()->sortable(),
+            TextColumn::make('type')->badge()->color('gray')->sortable(),
             TextColumn::make('name')->searchable()->sortable(),
-            TextColumn::make('content')->limit(64),
-            TextColumn::make('ttl')->sortable(),
-            TextColumn::make('mode')->badge(),
-            TextColumn::make('desired_route')->label('Desired DNS route')
+            TextColumn::make('content')->limit(48)->searchable(),
+            TextColumn::make('ttl')->label('TTL')->sortable()->alignEnd(),
+            TextColumn::make('mode')->label('Proxy status')
+                ->formatStateUsing(fn (string $state): string => match ($state) {
+                    'proxied' => 'Proxied',
+                    'geo_dns' => 'Geo DNS',
+                    default => 'DNS only',
+                })
+                ->icon(fn (string $state): string => $state === 'proxied' ? 'heroicon-m-bolt' : 'heroicon-m-minus')
+                ->iconColor(fn (string $state): string => $state === 'proxied' ? 'warning' : 'gray'),
+            TextColumn::make('origin_health.status')->label('Origin')
+                ->state(fn (DnsRecord $record): ?string => $record->mode === 'proxied' ? ($record->origin_health['status'] ?? 'Not tested') : null)
+                ->placeholder('')
+                ->badge()->color(fn (?string $state): string => match ($state) {
+                    'healthy' => 'success',
+                    'unhealthy' => 'danger',
+                    default => 'gray',
+                }),
+            TextColumn::make('desired_route')->label('DNS route')
                 ->state(fn (DnsRecord $record): ?string => $this->desiredRoute($record))
-                ->placeholder('Direct DNS answer')->wrap(),
-            TextColumn::make('origin_health.status')->label('Origin')->placeholder('Not tested')->badge(),
+                ->placeholder('Direct DNS answer')->wrap()
+                ->toggleable(isToggledHiddenByDefault: true),
         ])->headerActions([
-            CreateAction::make()->createAnother(false)->using(function (array $data): DnsRecord {
+            CreateAction::make()->label('Add record')->createAnother(false)->using(function (array $data): DnsRecord {
                 return $this->createRecord($data);
             }),
         ])->recordActions([
-            Action::make('testOrigin')->label('Test origin')->icon('heroicon-o-signal')
-                ->visible(fn (DnsRecord $record): bool => $record->mode === 'proxied')
-                ->disabled(fn (): bool => ! $this->originTestingAvailable())
-                ->tooltip('Requires an active, verified domain.')
-                ->action(function (DnsRecord $record): void {
-                    $operation = $record->requestOriginTest(auth()->user());
-                    Notification::make()->info()->title('Origin test queued')->body("Operation {$operation->id} will run on qualified edges.")->send();
-                }),
-            Action::make('testBackupOrigin')->label('Test backup')->icon('heroicon-o-signal')
-                ->visible(fn (DnsRecord $record): bool => $record->mode === 'proxied' && is_array($record->origin['backup'] ?? null))
-                ->disabled(fn (): bool => ! $this->originTestingAvailable())
-                ->tooltip('Requires an active, verified domain.')
-                ->action(function (DnsRecord $record): void {
-                    $operation = $record->requestOriginTest(auth()->user(), 'backup');
-                    Notification::make()->info()->title('Backup origin test queued')->body("Operation {$operation->id} will run on qualified edges.")->send();
-                }),
-            Action::make('previewGeo')->label('Preview')->visible(fn (DnsRecord $record): bool => $record->mode === 'geo_dns')
-                ->schema([TextInput::make('ip')->ip()->required()])
-                ->action(function (DnsRecord $record, array $data): void {
-                    $geo = app(GeoIpClassifier::class)->classify($data['ip']);
-                    $targets = GeoDnsConfig::select($record->geo_config, $geo['country'], $geo['continent']);
-                    Notification::make()->info()->title('Geo-DNS preview')
-                        ->body(sprintf('%s / %s → %s. Runtime uses trusted ECS, otherwise the recursive resolver.', $geo['country'] ?? 'unknown', $geo['continent'] ?? 'unknown', implode(', ', $targets)))->send();
-                }),
             EditAction::make()->mutateRecordDataUsing(fn (array $data, DnsRecord $record): array => $this->hydrateOriginForm($this->hydrateGeoForm($data, $record), $record))
                 ->visible(fn (DnsRecord $record): bool => $record->type !== 'NS' || auth()->user()?->isAdmin() === true)->using(function (DnsRecord $record, array $data): DnsRecord {
                     return $this->updateRecord($record, $data);
                 }),
-            DeleteAction::make()->visible(fn (DnsRecord $record): bool => $record->type !== 'NS' || auth()->user()?->isAdmin() === true)->using(function (DnsRecord $record): bool {
-                return $this->deleteRecord($record);
-            }),
+            ActionGroup::make([
+                Action::make('testOrigin')->label('Test origin')->icon('heroicon-o-signal')
+                    ->visible(fn (DnsRecord $record): bool => $record->mode === 'proxied')
+                    ->disabled(fn (): bool => ! $this->originTestingAvailable())
+                    ->tooltip('Requires an active, verified domain.')
+                    ->action(function (DnsRecord $record): void {
+                        $operation = $record->requestOriginTest(auth()->user());
+                        Notification::make()->info()->title('Origin test queued')->body("Operation {$operation->id} will run on qualified edges.")->send();
+                    }),
+                Action::make('testBackupOrigin')->label('Test backup')->icon('heroicon-o-signal')
+                    ->visible(fn (DnsRecord $record): bool => $record->mode === 'proxied' && is_array($record->origin['backup'] ?? null))
+                    ->disabled(fn (): bool => ! $this->originTestingAvailable())
+                    ->tooltip('Requires an active, verified domain.')
+                    ->action(function (DnsRecord $record): void {
+                        $operation = $record->requestOriginTest(auth()->user(), 'backup');
+                        Notification::make()->info()->title('Backup origin test queued')->body("Operation {$operation->id} will run on qualified edges.")->send();
+                    }),
+                Action::make('previewGeo')->label('Preview')->visible(fn (DnsRecord $record): bool => $record->mode === 'geo_dns')
+                    ->schema([TextInput::make('ip')->ip()->required()])
+                    ->action(function (DnsRecord $record, array $data): void {
+                        $geo = app(GeoIpClassifier::class)->classify($data['ip']);
+                        $targets = GeoDnsConfig::select($record->geo_config, $geo['country'], $geo['continent']);
+                        Notification::make()->info()->title('Geo-DNS preview')
+                            ->body(sprintf('%s / %s → %s. Runtime uses trusted ECS, otherwise the recursive resolver.', $geo['country'] ?? 'unknown', $geo['continent'] ?? 'unknown', implode(', ', $targets)))->send();
+                    }),
+                DeleteAction::make()->visible(fn (DnsRecord $record): bool => $record->type !== 'NS' || auth()->user()?->isAdmin() === true)->using(function (DnsRecord $record): bool {
+                    return $this->deleteRecord($record);
+                }),
+            ])->icon('heroicon-m-ellipsis-horizontal')->label('More'),
         ])->toolbarActions([
             BulkActionGroup::make([
                 BulkAction::make('delete')->label('Delete selected')->color('danger')->requiresConfirmation()->deselectRecordsAfterCompletion()
