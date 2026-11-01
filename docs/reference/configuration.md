@@ -139,7 +139,9 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `MMDB_TARGET_FILE` | updater | Default `GeoLite2-City.mmdb` |
 | `MMDB_DOWNLOAD_INTERVAL_SECONDS` | updater | Default `86400`, clamped to at least 300 |
 | `MMDB_DOWNLOAD_RETRIES` | updater | Default `5` |
-| `MMDB_EXPECTED_SHA256` | updater | Optional lowercase candidate checksum |
+| `MMDB_EXPECTED_SHA256` | updater | Lowercase SHA-256 the download must match |
+| `MMDB_CHECKSUM_URL` | updater | HTTPS URL of a published SHA-256 (first field of the first line) the download must match |
+| `MMDB_REQUIRE_VERIFICATION` | updater | Production sets `true`: a download is activated only when one of the two checksums vouches for it. Otherwise the previous database, or the bundled empty fallback on a first start, stays in use |
 | `MMDB_DOWNLOAD_URL` | custom updater | HTTPS artifact URL |
 | `MMDB_DOWNLOAD_HEADER` | custom updater | Optional authorization header; treat as secret |
 

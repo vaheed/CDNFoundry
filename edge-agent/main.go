@@ -283,6 +283,8 @@ type edgeTask struct {
 		Allowlist          []string          `json:"private_allowlist"`
 		BlockedNetworks    []string          `json:"blocked_networks"`
 		Domain             string            `json:"domain"`
+		ProbeAddress       string            `json:"address"`
+		ProbeZone          string            `json:"zone"`
 		PurgeType          string            `json:"type"`
 		CacheEpoch         uint64            `json:"cache_epoch"`
 		PurgeID            uint64            `json:"purge_id"`
@@ -342,6 +344,8 @@ func (c *client) processTasks() error {
 			result, status = c.runCachePurge(task)
 		} else if task.Type == "emergency_mode" {
 			result, status = c.runEmergencyMode(task)
+		} else if task.Type == "dns_probe" {
+			result, status = runDNSProbe(task)
 		}
 		if err := c.request("POST", "/edge/v1/tasks/"+task.ID+"/result", map[string]any{"status": status, "result": result}, &map[string]any{}, true); err != nil {
 			return err
@@ -2056,12 +2060,23 @@ func runtimeStampPath(p string) string {
 	return strings.TrimSuffix(p, ".json") + ".stamp"
 }
 
-func writeAtomic(p string, b []byte) error {
+// replaceFile swaps a file for new content that has reached the disk: the content is synced before
+// the rename and the directory after it, so a power loss leaves the old file or the new one, never a
+// renamed empty file.
+func replaceFile(p string, b []byte, mode os.FileMode) error {
 	tmp := p + ".tmp"
-	if e := os.WriteFile(tmp, b, 0600); e != nil {
+	_ = os.Remove(tmp)
+	if e := durableWrite(tmp, b, mode); e != nil {
 		return e
 	}
-	return os.Rename(tmp, p)
+	if e := os.Rename(tmp, p); e != nil {
+		return e
+	}
+	return syncDirectory(filepath.Dir(p))
+}
+
+func writeAtomic(p string, b []byte) error {
+	return replaceFile(p, b, 0600)
 }
 
 func atomicJSON(p string, v any) error {
@@ -2069,11 +2084,7 @@ func atomicJSON(p string, v any) error {
 	if e != nil {
 		return e
 	}
-	tmp := p + ".tmp"
-	if e = os.WriteFile(tmp, b, 0600); e != nil {
-		return e
-	}
-	return os.Rename(tmp, p)
+	return replaceFile(p, b, 0600)
 }
 func clone(in map[string]json.RawMessage) map[string]json.RawMessage {
 	out := map[string]json.RawMessage{}

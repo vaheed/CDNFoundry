@@ -69,6 +69,23 @@ count, output-manifest SHA-256, verification time, operation, and audit event.
 Deleting a backup is also asynchronous and calls `restic forget`; a running
 backup is preserved.
 
+## Retention, integrity, and age
+
+The repository does not grow without limit. Every day at 04:10 the scheduler runs
+`cdnf:backups:maintain prune`, which keeps 14 daily, 8 weekly, and 6 monthly
+snapshots (`BACKUP_KEEP_DAILY`, `BACKUP_KEEP_WEEKLY`, `BACKUP_KEEP_MONTHLY`) with
+`restic forget --prune`, grouped by tag because each backup runs in a container with
+its own hostname. Every Sunday at 05:00 `cdnf:backups:maintain check` runs
+`restic check`. Both are operations; a failed check marks the **Backups** health
+component degraded until a later check succeeds. The `ControlBackupStale` alert
+fires when the newest verified backup is older than `operations.backup_stale_hours`
+or the last integrity check failed.
+
+The weekly GitHub workflow `restore-drill.yml` backs up to a disposable
+S3-compatible store and restores into a clean PostgreSQL, so a broken backup path
+fails there before an incident exposes it. It does not replace a restore rehearsal on
+your own infrastructure with your own repository.
+
 ### S3-compatible repository setup
 
 The production generator directly supports the S3 backend. A repository value

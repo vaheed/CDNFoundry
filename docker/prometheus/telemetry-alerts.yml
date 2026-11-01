@@ -39,6 +39,14 @@ groups:
         labels: { severity: warning }
         annotations:
           summary: A CDNFoundry dependency or reconciliation component is degraded
+      - alert: ControlBackupStale
+        # The backups component turns degraded when no verified backup is newer than operations.backup_stale_hours,
+        # and when the weekly repository integrity check fails.
+        expr: cdnfoundry_component_health{component="backups"} == 0
+        for: 30m
+        labels: { severity: critical }
+        annotations:
+          summary: No recent verified control backup, or the backup repository failed its integrity check
       - alert: CDNFoundryQueueBacklog
         expr: cdnfoundry_queue_depth > 1000 or cdnfoundry_queue_oldest_job_age_seconds > 900
         for: 5m

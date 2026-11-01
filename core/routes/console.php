@@ -34,4 +34,8 @@ Schedule::command('cdnf:usage:finalize')->hourlyAt(20)->withoutOverlapping();
 Schedule::command('cdnf:audit:prune')->dailyAt('03:10')->withoutOverlapping();
 Schedule::command('cdnf:backups:create')->dailyAt('01:30')->withoutOverlapping()
     ->when(fn (): bool => app(ResticBackupRepository::class)->configured());
+Schedule::command('cdnf:backups:maintain prune')->dailyAt('04:10')->withoutOverlapping()
+    ->when(fn (): bool => app(ResticBackupRepository::class)->configured());
+Schedule::command('cdnf:backups:maintain check')->weeklyOn(0, '05:00')->withoutOverlapping()
+    ->when(fn (): bool => app(ResticBackupRepository::class)->configured());
 Schedule::call(fn () => Cache::put('operations:scheduler_heartbeat', now()->toIso8601String(), now()->addMinutes(10)))->name('operations.scheduler-heartbeat')->everyMinute()->withoutOverlapping();

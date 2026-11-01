@@ -96,3 +96,32 @@ set is available.
 Select the security profile based on traffic risk, not throughput aspiration.
 Monitor 80% capacity signals, queue age, cache/temp storage, Vector buffers, and
 Loki host disk, and clock. Use upstream DDoS controls for uplink saturation.
+
+## GeoIP database
+
+The updater downloads the database to a temporary file, checks it, and only then
+renames it into place. In production (`MMDB_REQUIRE_VERIFICATION=true`) a download
+must match `MMDB_EXPECTED_SHA256` or the checksum published at `MMDB_CHECKSUM_URL`;
+otherwise it is refused and the previous database stays. Neither of the default
+public providers publishes a checksum, so production needs a mirror you control, a
+pinned hash, or a provider that does. On a first start with no usable download the
+updater installs an empty database bundled in its image so DNS still starts: Geo-DNS
+records then return their default answers, `FALLBACK_IN_USE` appears in the volume,
+and the next verified download replaces it. PowerDNS maps the file into memory, so
+its start script reloads PowerDNS within a minute of the file changing.
+
+## Valkey
+
+Queues, sessions, and locks use one Valkey that is persistent and never evicts. The
+application cache uses a second one (`cache`) with no persistence and
+least-recently-used eviction, so a full cache cannot stop job dispatch. Both read
+their password from `VALKEY_CONFIG_FILE`, a mounted configuration file, so it is not on
+a command line.
+
+## TLS sessions
+
+Edge TLS uses the shared session cache but no session tickets: a ticket key lives
+for the life of an nginx process and is not rotated, so its later compromise would
+open recorded sessions. OCSP stapling is not offered: the public CA used for managed
+certificates stopped serving OCSP in 2025, certificates are chosen per handshake from
+many, and an uploaded certificate's responder cannot be relied on from every edge.

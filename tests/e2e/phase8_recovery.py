@@ -7,13 +7,15 @@ import json
 import os
 import pathlib
 import secrets
+import shutil
 import subprocess
 import time
+
+import object_store
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 COMPOSE = os.environ.get("CDNF_COMPOSE_FILE", "compose.dev.yml")
 NETWORK = os.environ.get("CDNF_CONTROL_NETWORK", "cdnfoundry-dev_control")
-MINIO_IMAGE = os.environ.get("CDNF_MINIO_IMAGE", "quay.io/minio/minio:RELEASE.2025-07-23T15-54-02Z")
 POSTGRES_IMAGE = os.environ.get("CDNF_POSTGRES_IMAGE", "postgres:18.4-alpine")
 QUEUE_IMAGE = os.environ.get("CDNF_QUEUE_IMAGE", "valkey/valkey:9.1.0-alpine")
 RUN = f"{int(time.time())}-{secrets.token_hex(4)}"
@@ -97,29 +99,12 @@ def state_counts_restore() -> dict[str, int]:
 
 def main() -> None:
     image = core_image()
-    repository = f"s3:http://{MINIO}:9000/{BUCKET}"
+    repository = f"s3:http://{MINIO}:{object_store.PORT}/{BUCKET}"
     started_at = time.time()
     snapshot = ""
 
-    run(
-        "docker", "run", "-d", "--rm", "--name", MINIO, "--network", NETWORK,
-        "--tmpfs", "/data:rw,nosuid,nodev,size=2g",
-        "-e", f"MINIO_ROOT_USER={S3_USER}", "-e", f"MINIO_ROOT_PASSWORD={S3_PASSWORD}",
-        MINIO_IMAGE, "server", "/data",
-    )
+    object_directory = object_store.start(MINIO, NETWORK, S3_USER, S3_PASSWORD)
     try:
-        deadline = time.monotonic() + 60
-        while time.monotonic() < deadline:
-            alias = run(
-                "docker", "exec", MINIO, "mc", "alias", "set", "local",
-                "http://127.0.0.1:9000", S3_USER, S3_PASSWORD, check=False,
-            )
-            if alias.returncode == 0 and run("docker", "exec", MINIO, "mc", "ready", "local", check=False).returncode == 0:
-                break
-            time.sleep(1)
-        else:
-            raise RuntimeError("ephemeral S3-compatible object host did not become ready")
-        run("docker", "exec", MINIO, "mc", "mb", f"local/{BUCKET}")
 
         source_psql(
             "INSERT INTO users (name,email,password,type,disabled_at,created_at,updated_at) "
@@ -253,7 +238,7 @@ def main() -> None:
 
         print(json.dumps({
             "phase8_recovery": "passed",
-            "object_host_image": MINIO_IMAGE,
+            "object_host_image": object_store.IMAGE,
             "snapshot": snapshot,
             "rpo_seconds": round(backup_completed_at - cutoff_at, 3),
             "rto_seconds": round(restore_completed_at - restore_started_at, 3),
@@ -270,6 +255,7 @@ def main() -> None:
         run("docker", "stop", RESTORE, check=False)
         run("docker", "stop", QUEUE, check=False)
         run("docker", "stop", MINIO, check=False)
+        shutil.rmtree(object_directory, ignore_errors=True)
         source_psql(f"DELETE FROM users WHERE email='{MARKER}'")
 
 

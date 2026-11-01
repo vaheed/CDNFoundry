@@ -22,3 +22,24 @@ updates:
       - /docker/loki
     patterns: ['*']
     multi-ecosystem-group: weekly-dependencies
+  - package-ecosystem: composer
+    directory: /core
+    patterns: ['*']
+    multi-ecosystem-group: weekly-dependencies
+  - package-ecosystem: npm
+    directories:
+      - /core
+      - /docs
+    patterns: ['*']
+    multi-ecosystem-group: weekly-dependencies
+  - package-ecosystem: gomod
+    directories:
+      - /edge-agent
+      - /edge-gateway
+    patterns: ['*']
+    multi-ecosystem-group: weekly-dependencies
+  # Image references in the Compose files, which Dependabot reads as its own ecosystem.
+  - package-ecosystem: docker-compose
+    directory: /
+    patterns: ['*']
+    multi-ecosystem-group: weekly-dependencies

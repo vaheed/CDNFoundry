@@ -169,7 +169,9 @@ final class SystemHealth
         $components['operations'] = $this->state(Operation::query()->unresolvedFailures()->exists() ? 'degraded' : 'healthy', ['failed' => Operation::query()->unresolvedFailures()->count()]);
         $lastBackup = Backup::query()->where('status', 'succeeded')->whereNotNull('verified_at')->max('verified_at');
         $backupStale = $lastBackup === null || now()->diffInHours($lastBackup) > app(PlatformSettings::class)->integer('operations', 'backup_stale_hours');
-        $components['backups'] = $this->state($backupStale ? 'degraded' : 'healthy', ['last_verified_at' => $lastBackup]);
+        // The newest weekly integrity check decides too: a repository that fails `restic check` cannot be trusted to restore.
+        $lastCheck = Operation::query()->where('type', 'backup.check')->whereIn('status', ['succeeded', 'failed'])->latest('finished_at')->value('status');
+        $components['backups'] = $this->state($backupStale || $lastCheck === 'failed' ? 'degraded' : 'healthy', ['last_verified_at' => $lastBackup, 'last_integrity_check' => $lastCheck]);
 
         return $components;
     }

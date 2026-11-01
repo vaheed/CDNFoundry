@@ -37,4 +37,21 @@ database=$(sed -n 's/^gsqlite3-database=//p' "$runtime/pdns.conf" | head -n 1)
 if [ -n "$database" ] && [ ! -e "$database" ]; then
     sqlite3 "$database" < /usr/local/share/doc/pdns/schema.sqlite3.sql
 fi
+# PowerDNS maps the GeoIP file into memory, and the updater replaces it by renaming a new file over it,
+# so the running process would keep the old one. Reload when the file's identity changes.
+mmdb=/mmdb/GeoLite2-City.mmdb
+if [ -e "$mmdb" ]; then
+    (
+        last=$(ls -li "$mmdb" 2>/dev/null || true)
+        while sleep 60; do
+            current=$(ls -li "$mmdb" 2>/dev/null || true)
+            if [ -n "$current" ] && [ "$current" != "$last" ]; then
+                if pdns_control --config-dir="$runtime" reload >/dev/null 2>&1; then
+                    echo "Reloaded GeoIP database"
+                    last=$current
+                fi
+            fi
+        done
+    ) &
+fi
 exec /usr/local/sbin/pdns_server --config-dir="$runtime" "$@"

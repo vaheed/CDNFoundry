@@ -20,6 +20,7 @@ use App\Models\EdgePoolEndpoint;
 use App\Models\EdgeProbeResult;
 use App\Models\EdgeTask;
 use App\Models\FleetRolloutEdge;
+use App\Models\NameserverAddressProbe;
 use App\Models\Operation;
 use App\Models\SecurityEvent;
 use App\Models\TlsCertificate;
@@ -622,6 +623,9 @@ class EdgeAgentController extends Controller
             'available_at' => $retryPurge ? now()->addSeconds(min(300, 5 * (2 ** ($attempts - 1)))) : null,
             'finished_at' => $retryPurge ? null : now(),
         ]);
+        if ($row->type === 'dns_probe') {
+            NameserverAddressProbe::recordResult($row->refresh());
+        }
         if (str_starts_with($row->type, 'cell_') && isset($row->payload['cell_id'])) {
             $cell = $edge->cells()->whereKey($row->payload['cell_id'])->first();
             if ($cell !== null && $data['status'] === 'succeeded') {

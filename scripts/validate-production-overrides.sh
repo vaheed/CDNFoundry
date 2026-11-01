@@ -30,5 +30,6 @@ compose --profile tools config --quiet
 compose --profile control --profile dns --profile edge --profile telemetry --profile logs --profile tools config --format json \
     | python3 scripts/ci/check_compose_policy.py
 
+python3 scripts/ci/check_dev_image_parity.py
 test "$(find deploy/production -maxdepth 1 -name 'compose*.yml' -print -quit)" = ""
 echo "production_compose=passed"

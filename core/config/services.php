@@ -26,6 +26,8 @@ return [
         'repository' => env('RESTIC_REPOSITORY', ''), 'password_file' => env('RESTIC_PASSWORD_FILE', ''),
         'access_key' => env('BACKUP_ACCESS_KEY_ID', ''), 'secret_key' => env('BACKUP_SECRET_ACCESS_KEY', ''),
         'region' => env('BACKUP_DEFAULT_REGION', 'us-east-1'),
+        // Snapshots kept by the daily prune: one per day, week, and month for this many of each.
+        'keep_daily' => max(1, (int) env('BACKUP_KEEP_DAILY', 14)), 'keep_weekly' => max(0, (int) env('BACKUP_KEEP_WEEKLY', 8)), 'keep_monthly' => max(0, (int) env('BACKUP_KEEP_MONTHLY', 6)),
     ],
     'prometheus' => ['url' => env('PROMETHEUS_URL', 'http://prometheus:9090')],
     'grafana' => ['explore_url' => env('GRAFANA_EXPLORE_URL')],

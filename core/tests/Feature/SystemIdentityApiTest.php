@@ -8,6 +8,8 @@ use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\DnsCluster;
 use App\Models\Edge;
 use App\Models\EdgePool;
+use App\Models\EdgeTask;
+use App\Models\NameserverAddressProbe;
 use App\Models\Operation;
 use App\Models\PlatformDnsDeployment;
 use App\Models\PlatformDnsSetting;
@@ -29,6 +31,7 @@ class SystemIdentityApiTest extends TestCase
 
     public function test_admin_validates_and_applies_typed_dns_identity_through_an_operation(): void
     {
+        $this->answeringIpv6('2001:4860:4860::8888', '2606:4700:4700::1111');
         Queue::fake();
         $admin = User::factory()->admin()->create();
         $payload = $this->validPayload();
@@ -63,6 +66,7 @@ class SystemIdentityApiTest extends TestCase
 
     public function test_admin_can_confirm_dns_identity_after_filament_rehydrates_integer_fields(): void
     {
+        $this->answeringIpv6('2001:4860:4860::8888', '2606:4700:4700::1111');
         Queue::fake();
         $admin = User::factory()->admin()->create();
         DnsCluster::query()->create([
@@ -234,6 +238,7 @@ class SystemIdentityApiTest extends TestCase
 
     public function test_dns_identity_update_requires_confirmation_bound_to_the_exact_preview(): void
     {
+        $this->answeringIpv6('2001:4860:4860::8888', '2606:4700:4700::1111');
         $admin = User::factory()->admin()->create();
         $payload = $this->validPayload();
         $token = $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)
@@ -323,6 +328,66 @@ class SystemIdentityApiTest extends TestCase
 
             return Http::response([], $request->method() === 'POST' ? 201 : 204);
         });
+    }
+
+    public function test_a_new_ipv6_nameserver_address_is_saved_only_after_an_edge_sees_it_answer(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        $edge = Edge::query()->create(['name' => 'prober', 'country_code' => 'DE', 'continent_code' => 'EU', 'management_ipv4' => '203.0.113.60', 'enabled' => true, 'registered_at' => now(), 'last_heartbeat_at' => now()]);
+        $payload = $this->validPayload();
+
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)->assertUnprocessable()
+            ->assertJsonValidationErrors(['nameservers.0.ipv6', 'nameservers.1.ipv6']);
+        $tasks = EdgeTask::query()->where('type', 'dns_probe')->get();
+        $this->assertCount(2, $tasks);
+        $this->assertSame(['address' => '2001:4860:4860::8888', 'zone' => 'cdnf.test', 'probe_id' => $tasks[0]->payload['probe_id']], $tasks[0]->payload);
+
+        // Asking again while the probe is open does not pile up more tasks.
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)->assertUnprocessable();
+        $this->assertSame(2, EdgeTask::query()->where('type', 'dns_probe')->count());
+
+        foreach ($tasks as $task) {
+            $task->update(['status' => 'succeeded', 'edge_id' => $edge->id]);
+            NameserverAddressProbe::recordResult($task);
+        }
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)->assertOk()->assertJsonPath('data.valid', true);
+    }
+
+    public function test_an_ipv6_address_nothing_answers_on_stays_blocked_and_an_old_answer_expires(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        $payload = $this->validPayload();
+        $response = $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)->assertUnprocessable();
+        $this->assertStringContainsString('no registered edge', $response->json('errors')['nameservers.0.ipv6'][0]);
+        $this->assertSame('failed', NameserverAddressProbe::query()->where('address', '2001:4860:4860::8888')->value('status'));
+
+        $this->answeringIpv6('2001:4860:4860::8888', '2606:4700:4700::1111');
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)->assertOk();
+        $this->travel(NameserverAddressProbe::ANSWER_VALID_HOURS + 1)->hours();
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)->assertUnprocessable();
+    }
+
+    public function test_addresses_already_saved_are_not_probed_again_and_ipv4_only_needs_no_probe(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        PlatformDnsSetting::query()->create(['id' => 1, ...$this->validPayload(), 'revision' => 1]);
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $this->validPayload())->assertOk();
+        $this->assertSame(0, NameserverAddressProbe::query()->count());
+
+        $payload = $this->validPayload();
+        $payload['nameservers'] = collect($payload['nameservers'])->map(fn (array $nameserver): array => [...$nameserver, 'ipv6' => null])->all();
+        $payload['customer_nameserver_pairs'] = [$payload['nameservers']];
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)->assertOk();
+    }
+
+    private function answeringIpv6(string ...$addresses): void
+    {
+        foreach ($addresses as $address) {
+            NameserverAddressProbe::query()->updateOrCreate(['address' => NameserverAddressProbe::canonical($address)], ['zone' => 'cdnf.test', 'status' => 'answering', 'requested_at' => now(), 'answered_at' => now()]);
+        }
     }
 
     private function validPayload(): array

@@ -111,11 +111,7 @@ func (c *client) certificateKeys(s state) (map[string]string, error) {
 		if err := os.MkdirAll(c.keyDirectory(), 0700); err != nil {
 			return nil, err
 		}
-		temporary := path + ".tmp"
-		if err := os.WriteFile(temporary, []byte(key), 0600); err != nil {
-			return nil, err
-		}
-		if err := os.Rename(temporary, path); err != nil {
+		if err := replaceFile(path, []byte(key), 0600); err != nil {
 			return nil, err
 		}
 		keys[id] = key

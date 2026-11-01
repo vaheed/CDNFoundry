@@ -296,6 +296,8 @@ class Renderer:
             "DB_SSLMODE": "prefer",
             "REDIS_URL": "",
             "REDIS_HOST": "redis",
+            "REDIS_CACHE_HOST": "cache",
+            "VALKEY_CONFIG_FILE": "./secrets/valkey.conf",
             "REDIS_PORT": "6379",
             "ACME_DIRECTORY_URL": "https://acme-v02.api.letsencrypt.org/directory",
             "ACME_ORDER_BUDGET_PER_HOUR": "20",
@@ -317,6 +319,7 @@ class Renderer:
             "MMDB_DOWNLOAD_INTERVAL_SECONDS": "86400",
             "MMDB_DOWNLOAD_RETRIES": "5",
             "MMDB_EXPECTED_SHA256": "",
+            "MMDB_CHECKSUM_URL": "",
             "MMDB_DOWNLOAD_URL": "",
             "MMDB_DOWNLOAD_HEADER": "",
             "LOG_BUFFER_BYTES": "2147483648",
@@ -457,6 +460,8 @@ class Renderer:
             "telemetry-gateway": [(80, "tcp"), (443, "tcp"), (8444, "tcp")],
             "dnsdist": [(53, "tcp"), (53, "udp")],
             "edge-gateway": [(80, "tcp"), (443, "tcp"), (443, "udp")],
+            # Agents enroll and sync over mTLS; a PoP that has only IPv6 must still reach the control plane.
+            "edge-control": [(8443, "tcp")],
         }
         for service_name, ports in mappings.items():
             if service_name in services:
@@ -558,6 +563,7 @@ class Renderer:
             # file to the PHP worker group and grants Prometheus that same group.
             atomic_write(secrets_dir / "metrics-token", self.store.read_secret("metrics-token") + "\n", 0o640)
         if node["role"] == "control":
+            atomic_write(secrets_dir / "valkey.conf", f"requirepass {self.store.read_secret('valkey-password')}\n", 0o640)
             # nginx includes this file as-is; PHP reads the secret from the same file.
             secret = self.store.read_secret("edge-proxy-secret")
             atomic_write(secrets_dir / "edge-proxy-secret.conf", f'fastcgi_param HTTP_X_EDGE_PROXY_SECRET "{secret}";\n', 0o640)
@@ -1063,7 +1069,9 @@ chown 0:82 secrets/metrics-token
 chmod 0640 secrets/metrics-token
 """
         if node["role"] == "control":
-            key_permissions += """chown 0:82 secrets/edge-proxy-secret.conf
+            key_permissions += """chown 0:1000 secrets/valkey.conf
+chmod 0640 secrets/valkey.conf
+chown 0:82 secrets/edge-proxy-secret.conf
 chmod 0640 secrets/edge-proxy-secret.conf
 """
         return f"""#!/usr/bin/env sh

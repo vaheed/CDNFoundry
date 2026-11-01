@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Models\NameserverAddressProbe;
+use App\Models\PlatformDnsSetting;
 use App\Support\NetworkAddress;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Validator;
@@ -110,6 +112,7 @@ class PlatformDnsSettingsRequest extends FormRequest
                     }
                 }
             }
+            self::requireAnsweringIpv6($validator, $data, $platform);
             if (isset($data['soa_primary']) && ! $insidePlatform($data['soa_primary'])) {
                 $validator->errors()->add('soa_primary', 'The SOA primary must be inside the platform domain.');
             }
@@ -130,6 +133,38 @@ class PlatformDnsSettingsRequest extends FormRequest
                 }
             }
         });
+    }
+
+    /**
+     * Glue that nothing answers on makes resolvers wait for a timeout before trying another address, so a
+     * new IPv6 nameserver address is saved only after an edge outside the control plane saw it answer.
+     * Asking is a side effect of the check: save again once the probe has answered. Addresses already saved
+     * are not asked again; they were accepted before.
+     */
+    private static function requireAnsweringIpv6(LaravelValidator $validator, array $data, string $platform): void
+    {
+        $current = PlatformDnsSetting::query()->find(1);
+        $saved = collect([...($current?->nameservers ?? []), ...collect($current?->customer_nameserver_pairs ?? [])->flatten(1)->all()])
+            ->pluck('ipv6')->filter()->map(fn (string $address): string => NameserverAddressProbe::canonical($address))->all();
+        $addresses = [];
+        foreach ($data['nameservers'] ?? [] as $index => $nameserver) {
+            $addresses["nameservers.$index.ipv6"] = $nameserver['ipv6'] ?? null;
+        }
+        foreach ($data['customer_nameserver_pairs'] ?? [] as $pairIndex => $pair) {
+            foreach (is_array($pair) ? $pair : [] as $index => $nameserver) {
+                $addresses["customer_nameserver_pairs.$pairIndex.$index.ipv6"] = $nameserver['ipv6'] ?? null;
+            }
+        }
+        foreach ($addresses as $field => $address) {
+            if (! is_string($address) || $validator->errors()->has($field) || in_array(NameserverAddressProbe::canonical($address), $saved, true)
+                || NameserverAddressProbe::isAnswering($address)) {
+                continue;
+            }
+            $asked = $platform !== '' && NameserverAddressProbe::request($address, $platform);
+            $validator->errors()->add($field, $asked
+                ? 'This IPv6 address has not been seen answering DNS from outside the control plane. A probe was requested; save again once it answers.'
+                : 'This IPv6 address cannot be verified because no registered edge is available to probe it.');
+        }
     }
 
     private static function normalize(array $input): array

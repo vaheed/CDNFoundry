@@ -1097,3 +1097,17 @@ This batch adds no browser screen. After the stack restarts, sign in to `/admin`
 and `/app`, open a domain page, and press **Deploy**: expect the usual success.
 Open **Infrastructure → Edges** and confirm every edge still reports a fresh
 heartbeat within two minutes. Neither step may show an authentication error.
+
+### IPv6 nameserver addresses
+
+1. Open **System → DNS identity** on a stack with at least one registered, heartbeat-fresh
+   edge and a served platform zone. In one nameserver row enter an IPv6 address that
+   no DNS server answers on and press **Validate** (or **Preview**). Expect a validation
+   message on that **IPv6** field saying the address has not been seen answering and a
+   probe was requested. Nothing is saved.
+2. Wait about a minute, press **Validate** again. Expect the same message for an
+   unanswering address, and success for an address where the DNS service really listens
+   on IPv6 and serves the platform zone.
+3. Remove every edge's heartbeat (stop the agents) and validate a new IPv6 address:
+   expect the message that no registered edge is available.
+4. Save an IPv4-only identity: expect success with no IPv6 message.

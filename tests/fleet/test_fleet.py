@@ -1688,3 +1688,24 @@ def test_explicit_null_clears_optional_addresses_without_resetting_omitted_field
     assert not any(str(port).startswith('[') for service in compose['services'].values() for port in service.get('ports', []))
     policy = json.loads((output / 'control-clear/generated/geo-routing-policy.json').read_text())
     assert policy['edges'][0]['ipv6'] is None
+
+
+def test_ipv6_is_published_for_control_dns_and_edge_services(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
+    """Resolvers and PoPs that prefer IPv6 must reach DNS, the control ingress, edge-control, and the gateway."""
+    with store.locked():
+        with store.transaction() as candidate:
+            candidate['global']['ipv6'] = True
+    add(store, {**node('control-v6', 'control', '192.0.2.220'), 'public_ipv6': '2001:db8::220', 'bind_ipv6': '::'})
+    add(store, {**node('edge-v6', 'edge', '192.0.2.221'), 'public_ipv6': '2001:db8::221', 'bind_ipv6': '::'})
+    add(store, {**node('dns-v6', 'dns', '192.0.2.222'), 'public_ipv6': '2001:db8::222', 'bind_ipv6': '::'})
+    state = store.load()
+    output = tmp_path / 'bundles'
+    Renderer(source_repo, store, output).render(state)
+
+    def published(node_name: str, service: str) -> list[str]:
+        compose = yaml.safe_load((output / node_name / 'compose.yml').read_text())
+        return [str(port) for port in compose['services'][service].get('ports', []) if str(port).startswith('[')]
+
+    assert any(port.endswith(':8443/tcp') for port in published('control-v6', 'edge-control'))
+    assert any(':5300:' in port for port in published('control-v6', 'pdns-primary'))
+    assert any(':53:' in port for port in published('dns-v6', 'dnsdist'))

@@ -30,6 +30,7 @@ x-core-env: &core-env
 
   REDIS_URL: ${REDIS_URL}
   REDIS_HOST: ${REDIS_HOST}
+  REDIS_CACHE_HOST: ${REDIS_CACHE_HOST}
   REDIS_PORT: ${REDIS_PORT}
   REDIS_CLIENT: predis
   REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
@@ -108,6 +109,7 @@ x-core: &core
   depends_on:
     control-db: { condition: service_healthy }
     redis: { condition: service_healthy }
+    cache: { condition: service_healthy }
     mmdb-updater: { condition: service_healthy }
   networks: [control, telemetry, egress]
   restart: unless-stopped
@@ -319,12 +321,32 @@ services:
     mem_limit: 1280m
     image: valkey/valkey:9.1.2-alpine3.24@sha256:a0dbf4c1d5708782907c10e2c72deff317518518b5288a58416981d9db95d30b
     profiles: [control]
-    command: [valkey-server, --appendonly, "yes", --requirepass, "${REDIS_PASSWORD}", --maxmemory, 1gb, --maxmemory-policy, noeviction]
-    volumes: [redis:/data]
+    # Queues, sessions, and locks: persistent, and never evicted. The password comes from a mounted
+    # configuration file, so it is not on the command line or in `docker inspect`.
+    command: [valkey-server, /run/secrets/valkey.conf, --appendonly, "yes", --maxmemory, 1gb, --maxmemory-policy, noeviction]
+    volumes: [redis:/data, "${VALKEY_CONFIG_FILE:?VALKEY_CONFIG_FILE is required}:/run/secrets/valkey.conf:ro"]
     networks: [control]
     restart: unless-stopped
     healthcheck:
-      test: [CMD-SHELL, "valkey-cli -a '${REDIS_PASSWORD}' ping | grep PONG"]
+      test: [CMD-SHELL, "REDISCLI_AUTH=$$(sed -n 's/^requirepass //p' /run/secrets/valkey.conf) valkey-cli ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  cache:
+    logging: *bounded-logging
+    <<: *hardened
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    mem_limit: 768m
+    image: valkey/valkey:9.1.2-alpine3.24@sha256:a0dbf4c1d5708782907c10e2c72deff317518518b5288a58416981d9db95d30b
+    profiles: [control]
+    # Application cache only: rebuildable, not persisted, and evicted least-recently-used when full.
+    command: [valkey-server, /run/secrets/valkey.conf, --save, "", --appendonly, "no", --maxmemory, 512mb, --maxmemory-policy, allkeys-lru]
+    volumes: ["${VALKEY_CONFIG_FILE:?VALKEY_CONFIG_FILE is required}:/run/secrets/valkey.conf:ro"]
+    networks: [control]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD-SHELL, "REDISCLI_AUTH=$$(sed -n 's/^requirepass //p' /run/secrets/valkey.conf) valkey-cli ping | grep PONG"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -1008,6 +1030,8 @@ services:
       MMDB_DOWNLOAD_INTERVAL_SECONDS: ${MMDB_DOWNLOAD_INTERVAL_SECONDS}
       MMDB_DOWNLOAD_RETRIES: ${MMDB_DOWNLOAD_RETRIES}
       MMDB_EXPECTED_SHA256: ${MMDB_EXPECTED_SHA256}
+      MMDB_CHECKSUM_URL: ${MMDB_CHECKSUM_URL}
+      MMDB_REQUIRE_VERIFICATION: "true"
       MMDB_DOWNLOAD_URL: ${MMDB_DOWNLOAD_URL}
       MMDB_DOWNLOAD_HEADER: ${MMDB_DOWNLOAD_HEADER}
     volumes: [mmdb:/mmdb]

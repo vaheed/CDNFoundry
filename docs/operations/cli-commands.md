@@ -62,6 +62,7 @@ docker compose -f compose.dev.yml run --rm core php artisan cdnf:api:openapi --c
 | Command and syntax | Purpose and effects | Scheduled |
 | --- | --- | --- |
 | `cdnf:backups:create {--wait}` | Creates backup and operation records, then queues an encrypted PostgreSQL Restic backup. `--wait` executes the job in the foreground and waits for repository acknowledgement. Fails if the repository is not configured. | Daily at 01:30 when configured |
+| `cdnf:backups:maintain {task}` | `prune` forgets snapshots beyond the retention window (14 daily, 8 weekly, 6 monthly by default) and reclaims their space; `check` runs `restic check` on the repository. Each queues an operation. Fails if the repository is not configured. | `prune` daily at 04:10, `check` Sundays at 05:00, when configured |
 | `cdnf:backups:restore {operation}` | Restores the backup approved by a successful restore-preflight operation. This is destructive, requires the explicit restore maintenance boundary, runs migrations, queues reconciliation, and leaves maintenance mode active if recovery fails. | No |
 
 ```sh
@@ -155,6 +156,8 @@ or internal non-command work, which is intentionally not renamed here.
 | `cdnf:usage:finalize` | Hourly at minute 20 | Queue the finalized usage hour |
 | `cdnf:audit:prune` | Daily at 03:10 | Delete one expired audit batch |
 | `cdnf:backups:create` | Daily at 01:30 when configured | Queue the control-plane backup |
+| `cdnf:backups:maintain prune` | Daily at 04:10 when configured | Apply backup retention |
+| `cdnf:backups:maintain check` | Sundays at 05:00 when configured | Verify the backup repository |
 
 Laravel's `horizon:snapshot` runs every five minutes and `model:prune` runs
 hourly. They remain unchanged because they are not CDNFoundry-owned commands.

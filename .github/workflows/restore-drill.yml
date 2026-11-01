@@ -1,0 +1,37 @@
+name: Off-host restore drill
+
+# A backup is proven only by restoring it. Every week this takes an encrypted Restic backup to a
+# disposable S3 store and restores it into a clean PostgreSQL, so a broken backup path fails here
+# and not during an incident.
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: restore-drill
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    name: Back up and restore into a clean database
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Prepare disposable runner space for source image builds
+        run: bash scripts/prepare-image-runner.sh
+      - name: Start the migratable control plane
+        run: make dev-control-up
+      - name: Apply migrations explicitly
+        run: make dev-migrate
+      - name: Back up to disposable S3 storage and restore into a clean PostgreSQL
+        run: make dev-phase8-recovery-e2e
+      - name: Check Restic retention and integrity commands against the same repository
+        run: python3 tests/e2e/backup_retention.py
+      - name: Capture service state
+        if: always()
+        run: docker compose -f compose.dev.yml ps

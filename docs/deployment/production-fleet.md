@@ -286,7 +286,9 @@ Backups must be encrypted, tested by restore, stored outside the host, and prote
 
 ## IPv4 and dual stack
 
-Initialize with `--dual-stack`, then provide each node's `--public-ipv6` and, where needed, `--bind-ipv6`. Firewalls, authoritative glue, health probes, monitoring, and routing policy must be configured separately for IPv4 and IPv6. An edge may be healthy for A and unhealthy for AAAA without being removed from both families.
+Initialize with `--dual-stack`, then provide each node's `--public-ipv6` and, where needed, `--bind-ipv6`. With `bind_ipv6` set, the rendered bundle publishes IPv6 next to IPv4 for DNS (`dnsdist`, the primary's transfer port), the control ingress (`caddy`), `edge-control` (port 8443, so a PoP with only IPv6 can still enrol and sync), the telemetry gateway, and the edge gateway. The Docker daemon must have IPv6 enabled on the host.
+
+An IPv6 nameserver address cannot be saved under **System → DNS identity** (or `PUT /api/admin/system/settings/dns`) until it answers: validating a payload with a new IPv6 address asks up to three registered edges to send a SOA query for the platform zone to that address over IPv6 and expects an authoritative answer. Validation fails with a message on the address until a probe has answered, and an answer is good for 24 hours. Addresses already saved are not probed again. On a new installation, save IPv4 first; the zone must be served before any address can answer for it. Firewalls, authoritative glue, health probes, monitoring, and routing policy must be configured separately for IPv4 and IPv6. An edge may be healthy for A and unhealthy for AAAA without being removed from both families.
 
 ## Hardware sizing
 

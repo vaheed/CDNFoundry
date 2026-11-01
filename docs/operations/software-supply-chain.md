@@ -13,7 +13,9 @@ requests cannot publish or sign. Environment protection is an operator setting
 and must be verified in the repository; the workflow file alone cannot prove it.
 
 Each release image is pushed by commit tag, resolved to its registry digest,
-scanned, signed keylessly, and given SPDX JSON and SLSA provenance attestations.
+scanned, signed keylessly, and given an SPDX JSON attestation and a SLSA provenance
+attestation. GitHub's attestation action generates the provenance from the workflow
+run; the workflow does not assemble it by hand.
 Mutable channel tags are convenience aliases only. Deploy the `image` digest
 from `release-manifest.json`.
 

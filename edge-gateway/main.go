@@ -683,12 +683,34 @@ func (g *gateway) close() {
 	}
 }
 
+// atomicWrite replaces a file with content that has reached the disk: it syncs the content before
+// the rename and the directory after it, so a power loss leaves the old state or the new, never an
+// empty file.
 func atomicWrite(path string, data []byte) error {
 	temp := path + ".tmp"
-	if err := os.WriteFile(temp, data, 0600); err != nil {
+	_ = os.Remove(temp)
+	file, err := os.OpenFile(temp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
 		return err
 	}
-	return os.Rename(temp, path)
+	if _, err = file.Write(data); err == nil {
+		err = file.Sync()
+	}
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	if err := os.Rename(temp, path); err != nil {
+		return err
+	}
+	directory, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	return directory.Sync()
 }
 
 func boolNumber(value bool) uint64 {
