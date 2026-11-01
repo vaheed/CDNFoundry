@@ -31,6 +31,8 @@ class EdgeResource extends Resource
 {
     protected static ?string $model = Edge::class;
 
+    protected static ?string $recordTitleAttribute = 'name';
+
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-globe-americas';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Infrastructure';

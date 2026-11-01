@@ -15,7 +15,6 @@ use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Navigation\NavigationItem;
 use Filament\Panel;
 use Filament\PanelProvider;
-use Filament\Support\Colors\Color;
 use Filament\Widgets\AccountWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -28,7 +27,7 @@ class AdminPanelProvider extends PanelProvider
 {
     public function panel(Panel $panel): Panel
     {
-        return $panel
+        return PanelDesign::apply($panel)
             ->id('admin')
             ->path('admin')
             ->login()
@@ -36,10 +35,7 @@ class AdminPanelProvider extends PanelProvider
             ->favicon(asset('favicon.svg'))
             ->profile(EditProfile::class)
             ->multiFactorAuthentication([AppAuthentication::make()->recoverable()])
-            ->viteTheme('resources/css/filament/shared/theme.css')
             ->readOnlyRelationManagersOnResourceViewPagesByDefault(false)
-            ->colors(['primary' => Color::Blue])
-            ->sidebarCollapsibleOnDesktop()
             ->databaseNotifications()
             ->navigationGroups(['Observe', 'Operate', 'Infrastructure', 'Customers', 'Governance', 'Account'])
             ->navigationItems([

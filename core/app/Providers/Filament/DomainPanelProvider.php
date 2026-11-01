@@ -11,7 +11,6 @@ use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Panel;
 use Filament\PanelProvider;
-use Filament\Support\Colors\Color;
 use Filament\Widgets\AccountWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -24,7 +23,7 @@ class DomainPanelProvider extends PanelProvider
 {
     public function panel(Panel $panel): Panel
     {
-        return $panel
+        return PanelDesign::apply($panel)
             ->default()
             ->id('app')
             ->path('app')
@@ -32,10 +31,7 @@ class DomainPanelProvider extends PanelProvider
             ->brandName('CDNFoundry')
             ->favicon(asset('favicon.svg'))
             ->profile(EditProfile::class)
-            ->viteTheme('resources/css/filament/shared/theme.css')
             ->readOnlyRelationManagersOnResourceViewPagesByDefault(false)
-            ->colors(['primary' => Color::Blue])
-            ->sidebarCollapsibleOnDesktop()
             ->navigationGroups(['Domains', 'Observe', 'Account'])
             ->discoverResources(in: app_path('Filament/Domain/Resources'), for: 'App\\Filament\\Domain\\Resources')
             ->discoverPages(in: app_path('Filament/Domain/Pages'), for: 'App\\Filament\\Domain\\Pages')
