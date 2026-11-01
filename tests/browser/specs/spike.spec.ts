@@ -40,6 +40,7 @@ test.describe('domains', () => {
         await expect(page.getByRole('tab', { name: 'Overview' })).toBeVisible();
         await expect(page.getByRole('tab', { name: 'TLS' })).toBeVisible();
         await expect(page.getByTestId('domain-attention')).toBeVisible();
+        await expect(page.getByTestId('domain-rail')).toBeVisible();
         await expectAccessible(page);
         await expect(page).toHaveScreenshot('domain-detail.png', { fullPage: true });
     });
@@ -62,6 +63,15 @@ test.describe('domains', () => {
         await expect(page.getByRole('heading', { name: 'Add domain', level: 2 })).toBeVisible();
         await expect(page.getByRole('textbox', { name: 'Domain' })).toBeFocused();
     });
+});
+
+test('quick action opens its form in a side sheet', async ({ page }) => {
+    await signIn(page, 'admin', 'admin@browser.test', adminPassword);
+    await page.goto('/admin/domains');
+    await page.getByText('alpha-browser.example').first().click();
+    await settle(page);
+    await page.getByTestId('domain-quick-purge-cache').click();
+    await expect(page.getByRole('heading', { name: 'Purge cache', level: 2 })).toBeVisible();
 });
 
 test.describe('platform settings', () => {

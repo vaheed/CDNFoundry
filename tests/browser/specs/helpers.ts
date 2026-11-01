@@ -24,6 +24,7 @@ export async function signIn(page: Page, panel: 'admin' | 'app', email: string, 
 /** Applies the project's color scheme through Filament's theme store so dark mode is deterministic. */
 export async function settle(page: Page): Promise<void> {
     await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(600);
 }
 
 export async function expectAccessible(page: Page): Promise<void> {
