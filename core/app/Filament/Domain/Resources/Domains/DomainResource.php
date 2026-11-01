@@ -23,7 +23,10 @@ use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\FontFamily;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -31,6 +34,8 @@ use Illuminate\Database\Eloquent\Builder;
 class DomainResource extends Resource
 {
     protected static ?string $model = Domain::class;
+
+    protected static ?string $recordTitleAttribute = 'name';
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-globe-alt';
 
@@ -52,135 +57,162 @@ class DomainResource extends Resource
     public static function table(Table $table): Table
     {
         return $table->columns([
-            TextColumn::make('name')->searchable()->sortable(),
-            TextColumn::make('lifecycle_state')->label('Lifecycle')->badge(),
-            TextColumn::make('nameservers_verified_at')->label('Nameservers')->formatStateUsing(fn ($state): string => $state ? 'Verified' : 'Pending')->badge(),
-            TextColumn::make('revision')->sortable(),
-            TextColumn::make('updated_at')->label('Last change')->since()->sortable(),
-        ])->recordUrl(fn (Domain $record): string => static::getUrl('view', ['record' => $record]))->defaultSort('id');
+            TextColumn::make('name')->searchable()->sortable()->fontFamily(FontFamily::Mono),
+            TextColumn::make('lifecycle_state')->label('Lifecycle')->badge()
+                ->formatStateUsing(fn ($state): string => str($state instanceof \BackedEnum ? $state->value : (string) $state)->replace('_', ' ')->headline()->toString())
+                ->color(fn ($state): string => match ($state instanceof \BackedEnum ? $state->value : (string) $state) {
+                    'active' => 'success',
+                    'disabled' => 'gray',
+                    'failed' => 'danger',
+                    default => 'warning',
+                }),
+            TextColumn::make('nameservers')->label('Nameservers')->badge()
+                ->state(fn (Domain $record): string => $record->nameservers_verified_at ? 'Verified' : 'Pending')
+                ->color(fn (string $state): string => $state === 'Verified' ? 'success' : 'warning'),
+            TextColumn::make('revision')->sortable()->alignEnd()->fontFamily(FontFamily::Mono)->prefix('#'),
+            TextColumn::make('updated_at')->label('Last change')->since()->sortable()->fontFamily(FontFamily::Mono)
+                ->tooltip(fn (Domain $record): string => $record->updated_at->toDateTimeString()),
+        ])->recordUrl(fn (Domain $record): string => static::getUrl('view', ['record' => $record]))
+            ->defaultSort('id')
+            ->searchPlaceholder('Search domains')
+            ->emptyStateIcon('heroicon-o-globe-alt')
+            ->emptyStateHeading('No domains yet')
+            ->emptyStateDescription('Add a domain to start serving authoritative DNS.');
     }
 
     public static function infolist(Schema $schema): Schema
     {
         return $schema->columns(1)->components([
-            Section::make(FilamentHelp::label('Domain status', 'Identity, lifecycle, and authoritative delegation state.'))
-                ->icon('heroicon-o-globe-alt')
-                ->schema([
-                    TextEntry::make('name')->label('Canonical domain')->copyable(),
-                    TextEntry::make('display_name')->label('Display label')->placeholder('Same as canonical domain'),
-                    TextEntry::make('lifecycle_state')->label('Lifecycle')->badge(),
-                    TextEntry::make('revision')->label('Desired revision'),
-                    TextEntry::make('revision_changed_at')->label('Desired revision changed')->dateTime()->placeholder('Unknown'),
-                    TextEntry::make('assigned_nameservers')->label('Assigned nameservers')->state(fn (Domain $record): array => $record->assignedNameservers())->listWithLineBreaks()->copyable()->placeholder('Assigned after the platform reads your current delegation')
-                        ->helperText('Set exactly these two nameservers at your registrar. Until the parent delegation matches, the current owner of this name keeps it.'),
-                    TextEntry::make('claim_status')->label('Claim status')->state(fn (Domain $record): string => $record->claimStatus())->badge(),
-                    TextEntry::make('claim_expires_at')->label('Pending claim expires')->dateTime()->placeholder('Previously verified domain'),
-                    TextEntry::make('nameservers_verified_at')->label('Nameservers verified')->dateTime()->placeholder('Pending'),
-                    TextEntry::make('nameserver_verification_status')->label('Latest verification')
-                        ->state(fn (Domain $record): ?string => $record->nameservers_verified_by !== null
-                            ? 'force_verified'
-                            : self::latestNameserverVerification($record)?->status)
-                        ->badge()->placeholder('Not requested'),
-                    TextEntry::make('nameserver_verification_error')->label('Verification error')
-                        ->state(fn (Domain $record): ?string => $record->nameservers_verified_by !== null
-                            ? null
-                            : self::latestNameserverVerification($record)?->error)
-                        ->placeholder('None')->columnSpanFull(),
-                ])->columns(['default' => 1, 'md' => 2, 'xl' => 3]),
-            Section::make(FilamentHelp::label('Edge delivery', 'A service pool is the bounded set of equivalent OpenResty cells and public addresses serving this domain. Normal domains use the shared pool; quarantine and dedicated pools provide deliberate isolation.'))
-                ->icon('heroicon-o-cloud')
-                ->schema([
-                    TextEntry::make('proxy_hostnames')->label('Proxied hostnames')
-                        ->state(fn (Domain $record): int => $record->dnsRecords()->where('mode', 'proxied')->count()),
-                    TextEntry::make('active_edge_revision')->label('Active edge revision')->placeholder('Not deployed'),
-                    TextEntry::make('active_edge_revision_created_at')->label('Active revision created')
-                        ->state(fn (Domain $record) => EdgeRevision::query()->where('domain_id', $record->id)->where('revision', $record->active_edge_revision)->value('created_at'))
-                        ->dateTime()->placeholder('Not deployed'),
-                    TextEntry::make('edgePlacement.state')->label('Placement state')->badge()->placeholder('Not placed'),
-                    TextEntry::make('edgePlacement.activePool.name')->label('Active service pool')->placeholder('None'),
-                    TextEntry::make('edgePlacement.targetPool.name')->label('Target service pool')->placeholder('None'),
-                    TextEntry::make('active_cell_assignments')->label('Active cells by edge')
-                        ->state(fn (Domain $record): array => self::cellAssignments($record, 'activeCell'))
-                        ->listWithLineBreaks()->placeholder('None')->columnSpanFull(),
-                    TextEntry::make('target_cell_assignments')->label('Target cells by edge')
-                        ->state(fn (Domain $record): array => self::cellAssignments($record, 'targetCell'))
-                        ->listWithLineBreaks()->placeholder('None')->columnSpanFull(),
-                    TextEntry::make('service_pool_dns_target')->label('Service-pool DNS target')
-                        ->state(function (Domain $record): ?string {
-                            $placement = $record->edgePlacement()->with(['activePool', 'targetPool'])->first();
-                            $pool = $placement?->state === 'draining' ? $placement->targetPool : $placement?->activePool;
-                            $settings = PlatformDnsSetting::query()->find(1);
+            Tabs::make('domain')->persistTabInQueryString()->columnSpanFull()->tabs([
+                Tab::make('Overview')->schema([
+                    Section::make(FilamentHelp::label('Domain status', 'Identity, lifecycle, and authoritative delegation state.'))
+                        ->icon('heroicon-o-globe-alt')
+                        ->schema([
+                            TextEntry::make('name')->label('Canonical domain')->copyable(),
+                            TextEntry::make('display_name')->label('Display label')->placeholder('Same as canonical domain'),
+                            TextEntry::make('lifecycle_state')->label('Lifecycle')->badge(),
+                            TextEntry::make('revision')->label('Desired revision'),
+                            TextEntry::make('revision_changed_at')->label('Desired revision changed')->dateTime()->placeholder('Unknown'),
+                            TextEntry::make('assigned_nameservers')->label('Assigned nameservers')->state(fn (Domain $record): array => $record->assignedNameservers())->listWithLineBreaks()->copyable()->placeholder('Assigned after the platform reads your current delegation')
+                                ->helperText('Set exactly these two nameservers at your registrar. Until the parent delegation matches, the current owner of this name keeps it.'),
+                            TextEntry::make('claim_status')->label('Claim status')->state(fn (Domain $record): string => $record->claimStatus())->badge(),
+                            TextEntry::make('claim_expires_at')->label('Pending claim expires')->dateTime()->placeholder('Previously verified domain'),
+                            TextEntry::make('nameservers_verified_at')->label('Nameservers verified')->dateTime()->placeholder('Pending'),
+                            TextEntry::make('nameserver_verification_status')->label('Latest verification')
+                                ->state(fn (Domain $record): ?string => $record->nameservers_verified_by !== null
+                                    ? 'force_verified'
+                                    : self::latestNameserverVerification($record)?->status)
+                                ->badge()->placeholder('Not requested'),
+                            TextEntry::make('nameserver_verification_error')->label('Verification error')
+                                ->state(fn (Domain $record): ?string => $record->nameservers_verified_by !== null
+                                    ? null
+                                    : self::latestNameserverVerification($record)?->error)
+                                ->placeholder('None')->columnSpanFull(),
+                        ])->columns(['default' => 1, 'md' => 2, 'xl' => 3]),
+                    Section::make(FilamentHelp::label('Edge delivery', 'A service pool is the bounded set of equivalent OpenResty cells and public addresses serving this domain. Normal domains use the shared pool; quarantine and dedicated pools provide deliberate isolation.'))
+                        ->icon('heroicon-o-cloud')
+                        ->schema([
+                            TextEntry::make('proxy_hostnames')->label('Proxied hostnames')
+                                ->state(fn (Domain $record): int => $record->dnsRecords()->where('mode', 'proxied')->count()),
+                            TextEntry::make('active_edge_revision')->label('Active edge revision')->placeholder('Not deployed'),
+                            TextEntry::make('active_edge_revision_created_at')->label('Active revision created')
+                                ->state(fn (Domain $record) => EdgeRevision::query()->where('domain_id', $record->id)->where('revision', $record->active_edge_revision)->value('created_at'))
+                                ->dateTime()->placeholder('Not deployed'),
+                            TextEntry::make('edgePlacement.state')->label('Placement state')->badge()->placeholder('Not placed'),
+                            TextEntry::make('edgePlacement.activePool.name')->label('Active service pool')->placeholder('None'),
+                            TextEntry::make('edgePlacement.targetPool.name')->label('Target service pool')->placeholder('None'),
+                            TextEntry::make('active_cell_assignments')->label('Active cells by edge')
+                                ->state(fn (Domain $record): array => self::cellAssignments($record, 'activeCell'))
+                                ->listWithLineBreaks()->placeholder('None')->columnSpanFull(),
+                            TextEntry::make('target_cell_assignments')->label('Target cells by edge')
+                                ->state(fn (Domain $record): array => self::cellAssignments($record, 'targetCell'))
+                                ->listWithLineBreaks()->placeholder('None')->columnSpanFull(),
+                            TextEntry::make('service_pool_dns_target')->label('Service-pool DNS target')
+                                ->state(function (Domain $record): ?string {
+                                    $placement = $record->edgePlacement()->with(['activePool', 'targetPool'])->first();
+                                    $pool = $placement?->state === 'draining' ? $placement->targetPool : $placement?->activePool;
+                                    $settings = PlatformDnsSetting::query()->find(1);
 
-                            return $pool !== null && $settings !== null ? EdgeRoutingCompiler::poolHostname($settings, $pool) : null;
-                        })->copyable()->placeholder('Waiting for placement'),
-                    TextEntry::make('validated_edge_revisions')->label('Validated revisions')
-                        ->state(fn (Domain $record): array => EdgeRevision::query()->where('domain_id', $record->id)->where('status', 'validated')->latest('revision')->limit(10)->get()
-                            ->map(fn (EdgeRevision $revision): string => "#{$revision->revision} · {$revision->created_at->copy()->setTimezone(app(PlatformSettings::class)->displayTimezone())->format('Y-m-d H:i:s P e')}")->all())
-                        ->listWithLineBreaks()->placeholder('None'),
-                    TextEntry::make('proxy_settings_summary')->label('Proxy defaults')
-                        ->state(fn (Domain $record): string => self::proxySettingsSummary($record->proxy_settings))
-                        ->columnSpanFull(),
-                    TextEntry::make('edgePlacement.last_error')->label('Last deployment failure')->placeholder('None')->columnSpanFull(),
-                ])->columns(['default' => 1, 'md' => 2, 'xl' => 3]),
-            Section::make(FilamentHelp::label('Authoritative DNS deployment', 'Per-cluster deployment acknowledgements and failures.'))
-                ->icon('heroicon-o-server-stack')
-                ->schema([
-                    TextEntry::make('dnsDeployments.status')->label('Deployment states')->badge()->placeholder('Not deployed'),
-                    TextEntry::make('dns_deployment_revisions')->label('Cluster revisions')
-                        ->state(fn (Domain $record): array => $record->dnsDeployments()->with('cluster')->orderBy('dns_cluster_id')->get()
-                            ->map(fn ($deployment): string => sprintf(
-                                '%s: desired #%d · active #%d%s',
-                                $deployment->cluster->name,
-                                $deployment->desired_revision,
-                                $deployment->deployed_revision,
-                                $deployment->deployed_at === null ? '' : ' · '.$deployment->deployed_at->copy()->setTimezone(app(PlatformSettings::class)->displayTimezone())->format('Y-m-d H:i:s P e'),
-                            ))->all())
-                        ->listWithLineBreaks()->placeholder('Not deployed'),
-                    TextEntry::make('dnsDeployments.last_error')->label('Deployment errors')->placeholder('None')->visible(fn (): bool => auth()->user()?->isAdmin() === true),
-                ])->columns(['default' => 1, 'md' => 3])->collapsible(),
-            Section::make(FilamentHelp::label('Cache', 'Desired cache policy, epoch-based invalidation, and temporary development bypass.'))
-                ->icon('heroicon-o-circle-stack')
-                ->schema([
-                    TextEntry::make('cache_policy')->label('Policy')->state(fn (Domain $record): string => self::cacheSettingsSummary($record)),
-                    TextEntry::make('cache_epoch')->label('Full-purge epoch'),
-                    TextEntry::make('cache_development_mode_until')->label('Development mode until')->dateTime()->placeholder('Off'),
-                ])->columns(['default' => 1, 'md' => 3]),
-            Section::make(FilamentHelp::label('TLS', 'Serving mode and the currently selected validated certificate. Private keys are never displayed.'))
-                ->icon('heroicon-o-lock-closed')
-                ->schema([
-                    TextEntry::make('tls_mode')->label('Mode')->badge(),
-                    TextEntry::make('activeTlsCertificate.status')->label('Certificate status')->badge()->placeholder('Pending managed issuance'),
-                    TextEntry::make('activeTlsCertificate.names')->label('Covered names')->listWithLineBreaks()->placeholder('None'),
-                    TextEntry::make('activeTlsCertificate.expires_at')->label('Expires')->dateTime()->placeholder('None'),
-                    TextEntry::make('activeTlsCertificate.fingerprint_sha256')->label('SHA-256 fingerprint')->copyable()->placeholder('None')->columnSpanFull(),
-                    TextEntry::make('activeTlsCertificate.last_error')->label('Last failure')->placeholder('None')->columnSpanFull(),
-                    TextEntry::make('latestTlsOrder.status')->label('Latest managed order')->badge()->placeholder('Not queued'),
-                    TextEntry::make('latestTlsOrder.names')->label('Requested names')->listWithLineBreaks()->placeholder('None'),
-                    TextEntry::make('latestTlsOrder.last_error')->label('ACME failure')->placeholder('None')->columnSpanFull(),
-                ])->columns(['default' => 1, 'md' => 2, 'xl' => 3]),
-            Section::make(FilamentHelp::label('Security and DDoS readiness', 'Local edge enforcement with bounded platform ceilings. This is readiness and isolation, not volumetric upstream scrubbing.'))
-                ->icon('heroicon-o-shield-check')
-                ->schema([
-                    TextEntry::make('security_profile')->label('Configured profile')->state(fn (Domain $record): string => ($record->security_settings ?? SecurityConfig::defaults())['profile'])->badge(),
-                    TextEntry::make('security_state')->label('Operational state')->badge(),
-                    TextEntry::make('security_state_changed_at')->label('State changed')->dateTime()->placeholder('Never'),
-                    TextEntry::make('waf_profile')->label(FilamentHelp::label('Web application firewall', 'Attack-signature inspection. Off does not inspect, Observe reports without blocking, Recommended blocks common attacks, and High sensitivity blocks more aggressively.'))->badge()
-                        ->formatStateUsing(fn (string $state): string => match ($state) {
-                            'off' => 'Off',
-                            'monitor' => 'Observe',
-                            'balanced' => 'Recommended',
-                            'strict' => 'High sensitivity',
-                            default => $state,
-                        }),
-                    TextEntry::make('security_rules_count')->label('Rules')->state(fn (Domain $record): int => $record->securityRules()->count()),
-                    TextEntry::make('security_limits_summary')->label('Effective request/origin limits')->state(function (Domain $record): string {
-                        $compiled = SecurityConfig::compile($record);
-                        $limits = $compiled['limits'];
+                                    return $pool !== null && $settings !== null ? EdgeRoutingCompiler::poolHostname($settings, $pool) : null;
+                                })->copyable()->placeholder('Waiting for placement'),
+                            TextEntry::make('validated_edge_revisions')->label('Validated revisions')
+                                ->state(fn (Domain $record): array => EdgeRevision::query()->where('domain_id', $record->id)->where('status', 'validated')->latest('revision')->limit(10)->get()
+                                    ->map(fn (EdgeRevision $revision): string => "#{$revision->revision} · {$revision->created_at->copy()->setTimezone(app(PlatformSettings::class)->displayTimezone())->format('Y-m-d H:i:s P e')}")->all())
+                                ->listWithLineBreaks()->placeholder('None'),
+                            TextEntry::make('proxy_settings_summary')->label('Proxy defaults')
+                                ->state(fn (Domain $record): string => self::proxySettingsSummary($record->proxy_settings))
+                                ->columnSpanFull(),
+                            TextEntry::make('edgePlacement.last_error')->label('Last deployment failure')->placeholder('None')->columnSpanFull(),
+                        ])->columns(['default' => 1, 'md' => 2, 'xl' => 3]),
+                ]),
+                Tab::make('DNS')->schema([
+                    Section::make(FilamentHelp::label('Authoritative DNS deployment', 'Per-cluster deployment acknowledgements and failures.'))
+                        ->icon('heroicon-o-server-stack')
+                        ->schema([
+                            TextEntry::make('dnsDeployments.status')->label('Deployment states')->badge()->placeholder('Not deployed'),
+                            TextEntry::make('dns_deployment_revisions')->label('Cluster revisions')
+                                ->state(fn (Domain $record): array => $record->dnsDeployments()->with('cluster')->orderBy('dns_cluster_id')->get()
+                                    ->map(fn ($deployment): string => sprintf(
+                                        '%s: desired #%d · active #%d%s',
+                                        $deployment->cluster->name,
+                                        $deployment->desired_revision,
+                                        $deployment->deployed_revision,
+                                        $deployment->deployed_at === null ? '' : ' · '.$deployment->deployed_at->copy()->setTimezone(app(PlatformSettings::class)->displayTimezone())->format('Y-m-d H:i:s P e'),
+                                    ))->all())
+                                ->listWithLineBreaks()->placeholder('Not deployed'),
+                            TextEntry::make('dnsDeployments.last_error')->label('Deployment errors')->placeholder('None')->visible(fn (): bool => auth()->user()?->isAdmin() === true),
+                        ])->columns(['default' => 1, 'md' => 3])->collapsible(),
+                ]),
+                Tab::make('Cache')->schema([
+                    Section::make(FilamentHelp::label('Cache', 'Desired cache policy, epoch-based invalidation, and temporary development bypass.'))
+                        ->icon('heroicon-o-circle-stack')
+                        ->schema([
+                            TextEntry::make('cache_policy')->label('Policy')->state(fn (Domain $record): string => self::cacheSettingsSummary($record)),
+                            TextEntry::make('cache_epoch')->label('Full-purge epoch'),
+                            TextEntry::make('cache_development_mode_until')->label('Development mode until')->dateTime()->placeholder('Off'),
+                        ])->columns(['default' => 1, 'md' => 3]),
+                ]),
+                Tab::make('TLS')->schema([
+                    Section::make(FilamentHelp::label('TLS', 'Serving mode and the currently selected validated certificate. Private keys are never displayed.'))
+                        ->icon('heroicon-o-lock-closed')
+                        ->schema([
+                            TextEntry::make('tls_mode')->label('Mode')->badge(),
+                            TextEntry::make('activeTlsCertificate.status')->label('Certificate status')->badge()->placeholder('Pending managed issuance'),
+                            TextEntry::make('activeTlsCertificate.names')->label('Covered names')->listWithLineBreaks()->placeholder('None'),
+                            TextEntry::make('activeTlsCertificate.expires_at')->label('Expires')->dateTime()->placeholder('None'),
+                            TextEntry::make('activeTlsCertificate.fingerprint_sha256')->label('SHA-256 fingerprint')->copyable()->placeholder('None')->columnSpanFull(),
+                            TextEntry::make('activeTlsCertificate.last_error')->label('Last failure')->placeholder('None')->columnSpanFull(),
+                            TextEntry::make('latestTlsOrder.status')->label('Latest managed order')->badge()->placeholder('Not queued'),
+                            TextEntry::make('latestTlsOrder.names')->label('Requested names')->listWithLineBreaks()->placeholder('None'),
+                            TextEntry::make('latestTlsOrder.last_error')->label('ACME failure')->placeholder('None')->columnSpanFull(),
+                        ])->columns(['default' => 1, 'md' => 2, 'xl' => 3]),
+                ]),
+                Tab::make('Security')->schema([
+                    Section::make(FilamentHelp::label('Security and DDoS readiness', 'Local edge enforcement with bounded platform ceilings. This is readiness and isolation, not volumetric upstream scrubbing.'))
+                        ->icon('heroicon-o-shield-check')
+                        ->schema([
+                            TextEntry::make('security_profile')->label('Configured profile')->state(fn (Domain $record): string => ($record->security_settings ?? SecurityConfig::defaults())['profile'])->badge(),
+                            TextEntry::make('security_state')->label('Operational state')->badge(),
+                            TextEntry::make('security_state_changed_at')->label('State changed')->dateTime()->placeholder('Never'),
+                            TextEntry::make('waf_profile')->label(FilamentHelp::label('Web application firewall', 'Attack-signature inspection. Off does not inspect, Observe reports without blocking, Recommended blocks common attacks, and High sensitivity blocks more aggressively.'))->badge()
+                                ->formatStateUsing(fn (string $state): string => match ($state) {
+                                    'off' => 'Off',
+                                    'monitor' => 'Observe',
+                                    'balanced' => 'Recommended',
+                                    'strict' => 'High sensitivity',
+                                    default => $state,
+                                }),
+                            TextEntry::make('security_rules_count')->label('Rules')->state(fn (Domain $record): int => $record->securityRules()->count()),
+                            TextEntry::make('security_limits_summary')->label('Effective request/origin limits')->state(function (Domain $record): string {
+                                $compiled = SecurityConfig::compile($record);
+                                $limits = $compiled['limits'];
 
-                        return "{$limits['requests_per_second']} req/s · {$limits['connections_per_client']} client connections · {$limits['connections_per_domain']} domain connections · {$limits['origin_max_connections']} origin connections · {$limits['maximum_request_body_size']} body bytes";
-                    })->columnSpanFull(),
-                    TextEntry::make('recent_security_events')->label('Recent reason codes')->state(fn (Domain $record): array => $record->securityEvents()->latest('occurred_at')->limit(10)->get()->map(fn ($event): string => "{$event->reason_code} · {$event->occurred_at->copy()->setTimezone(app(PlatformSettings::class)->displayTimezone())->format('Y-m-d H:i:s P e')}")->all())->listWithLineBreaks()->placeholder('None')->columnSpanFull(),
-                ])->columns(['default' => 1, 'md' => 2, 'xl' => 4]),
+                                return "{$limits['requests_per_second']} req/s · {$limits['connections_per_client']} client connections · {$limits['connections_per_domain']} domain connections · {$limits['origin_max_connections']} origin connections · {$limits['maximum_request_body_size']} body bytes";
+                            })->columnSpanFull(),
+                            TextEntry::make('recent_security_events')->label('Recent reason codes')->state(fn (Domain $record): array => $record->securityEvents()->latest('occurred_at')->limit(10)->get()->map(fn ($event): string => "{$event->reason_code} · {$event->occurred_at->copy()->setTimezone(app(PlatformSettings::class)->displayTimezone())->format('Y-m-d H:i:s P e')}")->all())->listWithLineBreaks()->placeholder('None')->columnSpanFull(),
+                        ])->columns(['default' => 1, 'md' => 2, 'xl' => 4]),
+                ]),
+            ]),
         ]);
     }
 

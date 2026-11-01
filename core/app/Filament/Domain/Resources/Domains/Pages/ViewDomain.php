@@ -5,6 +5,8 @@ namespace App\Filament\Domain\Resources\Domains\Pages;
 use App\Actions\DispatchCachePurge;
 use App\Enums\DomainLifecycleState;
 use App\Filament\Domain\Resources\Domains\DomainResource;
+use App\Filament\Domain\Resources\Domains\Widgets\DomainKpiStrip;
+use App\Filament\Domain\Resources\Domains\Widgets\DomainNeedsAttention;
 use App\Http\Controllers\DnsDeploymentController;
 use App\Http\Controllers\WafController;
 use App\Jobs\EnsureManagedCertificates;
@@ -77,7 +79,17 @@ class ViewDomain extends ViewRecord
     {
         return $this->record->display_name && $this->record->display_name !== $this->record->name
             ? $this->record->name
-            : 'Domain configuration and delivery status';
+            : null;
+    }
+
+    protected function getHeaderWidgets(): array
+    {
+        return [DomainKpiStrip::class, DomainNeedsAttention::class];
+    }
+
+    public function getHeaderWidgetsColumns(): int|array
+    {
+        return 1;
     }
 
     protected function getHeaderActions(): array
@@ -506,9 +518,11 @@ class ViewDomain extends ViewRecord
                 );
             }),
         ];
+        $sheets = ['importZone', 'proxyDefaults', 'moveEdgePool', 'cacheSettings', 'developmentMode', 'purgeCache', 'tlsMode', 'uploadCertificate', 'securitySettings', 'wafProfile'];
         $group = fn (array $names): array => collect($actions)
             ->keyBy(fn (Action $action): string => $action->getName())
             ->only($names)
+            ->map(fn (Action $action): Action => in_array($action->getName(), $sheets, true) ? $action->slideOver() : $action)
             ->values()
             ->all();
 

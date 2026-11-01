@@ -7,10 +7,16 @@ use Filament\Actions\DeleteAction;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class WafExclusionsRelationManager extends RelationManager
 {
     protected static string $relationship = 'wafExclusions';
+
+    public static function getBadge(Model $ownerRecord, string $pageClass): ?string
+    {
+        return number_format($ownerRecord->wafExclusions()->count());
+    }
 
     protected static ?string $title = 'Managed WAF exclusions';
 

@@ -23,12 +23,18 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class SecurityRulesRelationManager extends RelationManager
 {
     protected static string $relationship = 'securityRules';
+
+    public static function getBadge(Model $ownerRecord, string $pageClass): ?string
+    {
+        return number_format($ownerRecord->securityRules()->count());
+    }
 
     protected static ?string $title = 'Security allow/block rules';
 

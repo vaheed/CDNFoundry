@@ -37,6 +37,7 @@ use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -44,6 +45,11 @@ use Illuminate\Validation\ValidationException;
 class DnsRecordsRelationManager extends RelationManager
 {
     protected static string $relationship = 'dnsRecords';
+
+    public static function getBadge(Model $ownerRecord, string $pageClass): ?string
+    {
+        return number_format($ownerRecord->dnsRecords()->count());
+    }
 
     protected static ?string $title = 'DNS records';
 

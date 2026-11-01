@@ -11,11 +11,17 @@ use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Validation\ValidationException;
 
 class UsersRelationManager extends RelationManager
 {
     protected static string $relationship = 'users';
+
+    public static function getBadge(Model $ownerRecord, string $pageClass): ?string
+    {
+        return number_format($ownerRecord->users()->count());
+    }
 
     public static function canViewForRecord($ownerRecord, string $pageClass): bool
     {
