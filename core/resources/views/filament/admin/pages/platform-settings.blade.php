@@ -1,6 +1,15 @@
 <x-filament-panels::page>
-    <form wire:submit="save" class="space-y-6">
+    <form wire:submit="save" class="space-y-6" data-testid="settings-form"
+          x-data="{ changed: false }"
+          x-on:input="changed = true"
+          x-on:change="changed = true"
+          x-on:click="if ($event.target.closest('[data-testid^=setting-reset]')) changed = true"
+          x-on:submit="$nextTick(() => changed = false)">
         {{ $this->form }}
-        <x-ui.form-actions submit="save" label="Validate and save platform settings" loading-label="Validating and saving…" />
+        <div class="flex justify-end">
+            <x-filament::button type="submit" x-bind:disabled="! changed" data-testid="settings-save-button">
+                Save changes
+            </x-filament::button>
+        </div>
     </form>
 </x-filament-panels::page>
