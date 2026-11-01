@@ -11,6 +11,16 @@ files, remove zones manually, or erase named volumes during diagnosis. Capture
 evidence and repair desired state or the failed external boundary.
 :::
 
+## Control node lost
+
+DNS and HTTP keep serving from the last valid state; nothing in the data plane needs
+action. Without a standby, restore from backup. With a standby, follow
+[Control-plane high availability](./control-plane-high-availability.md):
+confirm the node is down, run `cdnfoundry-fleet control promote --old-active-is-powered-off`,
+apply the two record changes it prints, and keep the old node isolated until
+`control rejoin`. A `promote` refusal means the old node still answers as active:
+run `control demote` on it, or confirm that it is powered off.
+
 ## Stale edge map or endpoint mismatch
 
 1. Open **Edge network → Edges**, record the edge, desired endpoint revision,

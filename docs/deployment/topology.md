@@ -25,9 +25,16 @@ ClickHouse, Prometheus, Alertmanager, Grafana, Loki, exporters, and centralized
 operational logs without placing them in the serving path.
 
 `EDGE_1` and `EDGE_2` provide distinct authoritative nameserver and edge
-addresses. This layout is not automatic high availability: PostgreSQL, Valkey,
-ClickHouse, backup storage, external firewalls, routing, and failure procedures
-remain operator responsibilities.
+addresses. One control node is a supported production setup: DNS and HTTP keep
+serving from the last valid state while it is down, and recovery is a restore from
+backup. ClickHouse, backup storage, external firewalls, routing, and failure
+procedures remain operator responsibilities.
+
+To keep the control plane itself available, add a warm standby control node at any
+time with `cdnfoundry-fleet control add-standby`, and remove it again with
+`control remove-standby`. See
+[Control-plane high availability](../operations/control-plane-high-availability.md).
+It is two nodes with a one-command promotion, not automatic failover.
 
 ::: danger Management DNS is an external dependency
 Use an independently hosted operator DNS zone for `control`, `edge-control`,

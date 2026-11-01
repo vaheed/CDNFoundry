@@ -74,7 +74,11 @@ The system reports:
 - purge and runtime-task failures;
 - usage finalization;
 - failed operations;
-- most recent verified backup.
+- most recent verified backup;
+- control-plane high availability (**Standby node**): `ha: none` on a single node is
+  shown as a warning with a healthy state; `ha: degraded` lists its reasons
+  (`standby_unreachable`, `replication_lag`, `valkey_replication_broken`,
+  `secret_fingerprint_mismatch`, `edges_missing_control_addresses`).
 
 States are `healthy`, `degraded`, or `unavailable`. Only loss of the control
 database or queue backend makes overall state `unavailable`; other failures
@@ -130,6 +134,19 @@ webhook at a service that pages you when `Watchdog` stops arriving.
 | `EdgeHeartbeatStale` | a registered edge has sent no heartbeat for 3 minutes; DNS still publishes it |
 | `PoolServingLastPublishedSet` | every endpoint of a pool looks unhealthy, so DNS keeps the last set |
 | `EdgeIdentityCertificateExpiring` | an edge identity certificate expires within 30 days, meaning renewal is failing |
+| `ControlNodeUnreachable` | one control node cannot be scraped by the other for 2 minutes (standby's own Alertmanager fires when the active node is lost) |
+| `ControlStandbyNotStreaming` | no streaming replica seen by the active node for 5 minutes |
+| `ControlReplicationLagHigh` | replication lag over 10 seconds for 2 minutes |
+| `ControlValkeyReplicationBroken` | the Valkey replica is not linked for 5 minutes |
+| `ControlSecretFingerprintMismatch` | the control nodes do not hold the same secrets for 5 minutes |
+| `EdgeMissingControlAddresses` | a PoP has not reported the current control address list for 15 minutes |
+
+The last six alerts exist only when a [standby control node](./control-plane-high-availability.md)
+is configured; on a single node they have no series and never fire. The control
+endpoint also exports `cdnfoundry_control_ha_state{state}`, `cdnfoundry_control_epoch`,
+`cdnfoundry_control_replication_lag_seconds`, `cdnfoundry_control_standby_unreachable`,
+`cdnfoundry_control_valkey_replica_linked`, `cdnfoundry_control_fingerprint_mismatch`,
+and `cdnfoundry_control_edges_missing_addresses`.
 
 Control containers have health checks: `edge-control` (`/healthz`), `horizon`
 (`horizon:status`), and `scheduler` (`cdnf:scheduler:check`, which needs a

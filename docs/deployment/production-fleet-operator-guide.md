@@ -216,6 +216,7 @@ The setup command is idempotent for named nodes in the config: existing nodes ar
 | Show deployment sequence | `show-start-order` |
 | Import existing credentials | `adopt-existing` |
 | Rotate a supported secret | `rotate-secret` |
+| Add, switch, promote, rejoin, or remove a standby control node | `control add-standby`, `switchover`, `demote`, `promote`, `rejoin`, `remove-standby`; `control status`, `control check` |
 
 Every command has command-specific help:
 

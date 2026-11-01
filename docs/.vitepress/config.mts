@@ -287,6 +287,7 @@ export default defineConfig({
             { text: 'Signing-key rotation', link: '/operations/signing-key-rotation' },
             { text: 'DNS nodes and the hidden primary', link: '/operations/dns-nodes' },
             { text: 'Software supply chain', link: '/operations/software-supply-chain' },
+            { text: 'Control-plane high availability', link: '/operations/control-plane-high-availability' },
             { text: 'Backup and recovery', link: '/operations/backup-and-recovery' },
             { text: 'Incident runbooks', link: '/operations/runbooks' },
             { text: 'Scaling', link: '/operations/scaling' },

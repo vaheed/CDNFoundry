@@ -16,6 +16,16 @@ real-runtime, external-traffic, installer, load, and browser checkpoint as
 passed. A skipped applicable check blocks release. A failed check fails release.
 The runner never converts an absent external environment into a pass.
 
+## Control-plane high availability
+
+The report records `ha` (`none` or `ready`) and, for `none`, a warning that a single
+control node is supported but its loss stops the API, panels, and deployments until
+a restore. `ha: none` never fails or blocks a release. Pass `--ha ready` (or set
+`CDNF_QUALIFY_HA=ready`) for a topology that runs a standby. The `control-ha` check
+runs `tests/e2e/control_ha.py` against a real two-node stack: it adds a standby to a
+running installation, kills the active node, promotes, proves the refusal while the
+old node serves, rejoins it, switches over, and removes the standby.
+
 ## Required environment
 
 Use a disposable production-like environment with:

@@ -60,8 +60,12 @@ serving.
 
 Set `DB_URL` and `REDIS_URL` in the generated control bundle to owner-operated
 replicated services with verified
-TLS, exact-source firewalls, backup, failover, and capacity plans. The repository
-does not configure database replication or automatic failover.
+TLS, exact-source firewalls, backup, failover, and capacity plans. A control bundle
+with external data services has no embedded database to replicate, so
+`control add-standby` supports only the embedded PostgreSQL and Valkey. For those,
+the optional [warm standby control node](./control-plane-high-availability.md)
+configures streaming replication and a one-command promotion. It does not configure
+automatic failover.
 
 All control replicas must share application encryption, artifact-signing,
 session, database, queue, and edge identity material.

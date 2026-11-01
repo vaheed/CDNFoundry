@@ -38,6 +38,10 @@ Runtime product policy is not an environment variable. Manage it through
 | `EDGE_PUBLIC_IPV4_ALLOWLIST` | telemetry gateway | Exact edge/Vector ingestion sources |
 | `CONTROL_DB_PASSWORD` | local control DB | PostgreSQL password for database `cdnf` |
 | `REDIS_PASSWORD` | local Valkey | Required Valkey password |
+| `VALKEY_CONFIG_FILE` | local Valkey | Configuration file holding `requirepass`, mounted at `/run/secrets/valkey.conf`; the fleet generator writes it (and adds `masterauth` and `replicaof` on a standby) |
+| `REDIS_CACHE_HOST` | control | Host of the separate eviction-enabled cache Valkey; default `cache` |
+| `REDIS_CACHE_PORT` | control | Port of the cache Valkey; default `6379` |
+| `REDIS_CACHE_URL` | control | Full URL of an external cache Valkey; empty uses the host and port |
 | `DB_URL` | external DB | Full PostgreSQL URL; empty uses individual DB fields |
 | `DB_HOST` | control | Default `control-db` |
 | `DB_PORT` | control | Default `5432` |
@@ -72,6 +76,9 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `BACKUP_ACCESS_KEY_ID` | configured S3 backup | Bucket/prefix-scoped access key |
 | `BACKUP_SECRET_ACCESS_KEY` | configured S3 backup | Bucket/prefix-scoped secret |
 | `BACKUP_DEFAULT_REGION` | S3 repository | Default `us-east-1` |
+| `BACKUP_KEEP_DAILY` | configured backup | Daily snapshots kept by the prune; default 14 |
+| `BACKUP_KEEP_WEEKLY` | configured backup | Weekly snapshots kept by the prune; default 8 |
+| `BACKUP_KEEP_MONTHLY` | configured backup | Monthly snapshots kept by the prune; default 6 |
 | `BACKUP_RESTORE_ALLOWED` | restore executor | Must be true in explicit maintenance context; default false |
 
 ## Managed TLS
@@ -234,6 +241,10 @@ the supported host collector.
 | Variable | Required | Meaning and default |
 | --- | --- | --- |
 | `EDGE_CONTROL_URL` | edge agent | Public mutual-TLS control URL |
+| `EDGE_CONTROL_ADDRESSES` | edge agent | Optional comma-separated seed of at most two control IP addresses, dialed in order under the `EDGE_CONTROL_URL` hostname. Control's signed address list replaces it. Empty uses the hostname's DNS answer |
+| `CONTROL_NODE_NAME` | control, two-node only | This node's name as recorded in `control_plane_state.active_node`; empty on a single node |
+| `CONTROL_PEER_ADDRESSES` | control, two-node only | The other control node's public addresses, asked for `/control-state` under the control hostname before this node starts; empty on a single node |
+| `CONTROL_REPLICATION_BIND` | control, two-node only | This node's private address that publishes PostgreSQL (5432, 5433) and Valkey (6379) replication |
 | `EDGE_CONTROL_BIND` | control | Listener publication, default `0.0.0.0:8443` |
 | `EDGE_CONTROL_SERVER_CERTIFICATE` | control | Edge-control server certificate path |
 | `EDGE_CONTROL_SERVER_PRIVATE_KEY` | control | Edge-control private key path |

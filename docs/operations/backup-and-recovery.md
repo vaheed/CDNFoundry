@@ -66,8 +66,39 @@ The job streams `pg_dump --format=custom --no-owner --no-privileges` directly
 into Restic as `control.pgdump`. It records the immutable snapshot ID, byte
 count, output-manifest SHA-256, verification time, operation, and audit event.
 
+Before the control dump, the same job exports the hourly and daily usage rollups
+(`edge_hourly`, `dns_hourly`, `edge_daily`, `dns_daily`) from ClickHouse as
+`rollups.jsonl` under the tag `cdnfoundry-rollups`, so usage survives the loss of
+the telemetry host. Raw events are not backed up: they expire after seven days and
+the platform serves without them. A rollup export failure is logged and never stops
+the control backup. Restore preflight reports whether a rollup snapshot exists
+(`usage_rollups: present` or `absent`).
+
+Restore the rollups into empty tables with an account that may insert (the ingest
+account):
+
+```sh
+docker compose --env-file .env.prod -f compose.prod.yml exec \
+  -e CLICKHOUSE_RESTORE_USER=cdnf_ingest -e CLICKHOUSE_RESTORE_PASSWORD \
+  core cdnf-backup-restore-rollups latest
+```
+
+The export ends with a completion line, and the restore uses only snapshots that
+have it: `latest` skips an incomplete snapshot (a stream cut short) and takes the
+newest complete one, and an explicit snapshot ID that is incomplete is refused. When
+ClickHouse does not answer, no rollup snapshot is made at all and the control backup
+still succeeds. The restore refuses to load over a table that already holds rows,
+because the tables sum duplicate keys and loading again would double the totals. The
+`dns_top_names` sketch is not backed up. Pruning and the weekly integrity check cover
+both tags. `tests/e2e/rollup_backup.py` proves the round trip, the outage, the
+incomplete snapshot, and the refusal against real ClickHouse and Restic.
+
 Deleting a backup is also asynchronous and calls `restic forget`; a running
 backup is preserved.
+
+With a [standby control node](./control-plane-high-availability.md), the backup runs
+on the active node and moves with the scheduler on promotion. Keep the same
+off-host repository: a standby is a faster way back, not a replacement for a backup.
 
 ## Retention, integrity, and age
 

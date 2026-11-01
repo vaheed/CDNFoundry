@@ -1111,3 +1111,65 @@ heartbeat within two minutes. Neither step may show an authentication error.
 3. Remove every edge's heartbeat (stop the agents) and validate a new IPv6 address:
    expect the message that no registered edge is available.
 4. Save an IPv4-only identity: expect success with no IPv6 message.
+
+## Phase 6 — control-plane high availability job
+
+Status: **Not run — owner execution required.** Phase 6 adds no new screen. It
+adds one health row to the administrator dashboard and changes what the existing
+health row set reports, so this job checks that row on a single node and on a
+two-node pair. Run the pair part only on an installation that has a standby
+(`cdnfoundry-fleet control add-standby` completed). Use disposable accounts and
+record no secret.
+
+### Sign-in with a password manager
+
+1. Open `/admin/login` and `/app/login`. Let the browser or a password manager
+   fill **Email** and **Password** (or paste both), without typing in either field,
+   and press **Sign in**. Expect the dashboard (or the code prompt for an
+   administrator with two-step sign-in), never **The password field is required**.
+2. Fill a wrong password the same way: expect **These credentials do not match our
+   records.** on **Email**, and no message on **Password**.
+
+### Single node (`ha: none`)
+
+1. Sign in at `/admin` as an administrator and open **Dashboard**. In the
+   operational health list find the row **Control Ha** (it sits next to
+   **Control Database**).
+2. Expect the status badge **Healthy**. Expect the summary to read exactly
+   `Ha: none · Warning: yes · Reasons: none · Epoch: 1 · Replication Lag Seconds: not available · Edges Missing Addresses: 0`
+   (the epoch is a number; the edge count is the number of enabled edges that
+   have not reported the address list, so it is `0` only on an installation
+   without edges or whose edges have reported).
+3. Expect the **How to fix** text to begin `A single control node is supported (ha: none).`
+4. Confirm the overall dashboard state is not degraded only because of this row.
+5. Open `/health` (the public status page). Confirm the **Control plane** group
+   lists **Standby node** with the state **Operational**.
+
+### Two-node pair (`ha: ready`)
+
+1. Repeat steps 1 and 2 above on the **active** node. Expect **Healthy** and a
+   summary that starts `Ha: ready · Warning: no · Reasons: none · Epoch: N` (N is a
+   number), with `Replication Lag Seconds` at 10 or less and `Edges Missing Addresses: 0`.
+2. On the **standby** node no `web` or `edge-control` container runs, so
+   `https://<standby address>/admin` does not load. This is expected. Confirm the
+   active node's page above is the one to use.
+3. Stop the standby's PostgreSQL replica (`docker compose stop control-db` on the
+   standby). Within three minutes reload the dashboard on the active node: expect
+   **Control Ha** to be **Degraded** with `Reasons: standby_unreachable, replication_lag`
+   (and `valkey_replication_broken` if Valkey was also stopped), and the `/health`
+   row **Standby node** to be **Degraded**. Start the replica again and expect
+   **Healthy** within three minutes.
+4. Run `cdnfoundry-fleet control promote` while the active node is still serving
+   and expect the command to refuse with `is still the active node and is serving`.
+5. After a real promotion, sign in on the **new** active node and expect
+   **Control Ha** to show `Ha: none` (no standby until the former active node is
+   rebuilt with `cdnfoundry-fleet control rejoin`), then `Ha: ready` after the rejoin.
+
+### Phase 6 completion gate
+
+| Field | Status |
+| --- | --- |
+| Implementation | Recorded in the roadmap completion gate |
+| Documentation | Recorded in the roadmap completion gate |
+| Automated and runtime qualification | Recorded in the roadmap completion gate |
+| Manual browser | **Not run**; the owner records the steps above |

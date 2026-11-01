@@ -26,6 +26,7 @@ symbol and caller queries over reading whole files.
 | Settings | `Support/PlatformSettings.php`, `Admin/SystemSettingsController.php`, `Filament/Admin/Pages/PlatformSettings.php` | `SystemSettingsTest` |
 | Operations and audit | `Models/Operation.php` (`coalesceDomain`), `AuditLog.php`, `Http/Middleware/IdempotentRequest.php` | `OperationsApiTest` |
 | UI | `app/Filament/Admin/**` (admin panel `/admin`), `app/Filament/Domain/**` (domain panel `/app`), `app/Filament/Shared/Pages` | `FilamentPanelAccessTest`, `FilamentWorkflowTest` |
+| Control-plane HA | `Support/ControlPlane.php` (epoch, fence, status), `Console/Commands/Control*.php`, `Http/Middleware/ControlEpoch.php`, `EdgeAgentController::controlAddresses` | `ControlPlaneHighAvailabilityTest` |
 | Queues | `config/horizon.php` (lanes: interactive, runtime, certificate_purge, bulk_maintenance) | — |
 
 ## Runtime
@@ -42,6 +43,6 @@ symbol and caller queries over reading whole files.
 ## Deployment and tooling
 
 - Compose: `compose.dev.yml` (full dev stack), `compose.test.yml` (isolated SQLite test override), `compose.prod.yml` (profiles: control, dns, edge, telemetry, logs, tools).
-- Fleet installer: `scripts/cdnfoundry-fleet` → `scripts/cdnfoundry_fleet/*.py`; tests in `tests/fleet`.
+- Fleet installer: `scripts/cdnfoundry-fleet` → `scripts/cdnfoundry_fleet/*.py`; tests in `tests/fleet`. Two-node control plane: `ha.py` (state, bundle pieces), `control_cli.py` (the `control` commands), node scripts in `deploy/production/ha/`, real two-node test `tests/e2e/control_ha.py`.
 - Make targets: `make dev-test`, `make dev-e2e`, `make config-check`, `make openapi-check`, `make docs-check`, `make contract-check`.
 - Docs site: `docs/` (VitePress). Product contract: `AGENTS.md`. Roadmap: `docs/roadmap.md`.

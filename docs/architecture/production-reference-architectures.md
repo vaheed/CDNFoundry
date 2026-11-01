@@ -138,6 +138,15 @@ CDNFoundry supplies role profiles, generated node bundles, and external endpoint
 PostgreSQL, Valkey, or ClickHouse clustering product. The operator owns those
 systems' quorum, fencing, failover, consistency, and restore qualification.
 
+For the control plane itself, Architecture A or B can add a **warm standby control
+node** (`cdnfoundry-fleet control add-standby`) in a second failure domain. It is a
+streaming copy of both PostgreSQL databases and a Valkey replica that you promote
+with one command. It is not a cluster and not automatic failover. Edge, DNS, and
+HTTP serving are unchanged: they already keep serving from the last valid state
+without any control node. See
+[Control-plane high availability](../operations/control-plane-high-availability.md)
+for the requirements, the failure behavior, and the runbooks.
+
 ## Architecture C: multi-POP private CDN
 
 Add qualified edge capacity by location while keeping domain state and runtime

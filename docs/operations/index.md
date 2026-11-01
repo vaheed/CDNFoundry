@@ -49,6 +49,7 @@ derived conditions, refresh strategy, cache isolation, and unsupported metrics.
 - Use [Bounded cell inventory](cell-inventory.md) and
   [Multi-cell pools](multi-cell-pools.md) for stable slot assignment, capacity,
   movement, and recovery.
+- Use [Control-plane high availability](control-plane-high-availability.md) to add an optional warm standby control node.
 - Use [Backup and recovery](backup-and-recovery.md) before an incident.
 - Use [Incident runbooks](runbooks.md) for bounded recovery steps.
 - Use [Scaling](scaling.md) to add capacity without adding per-domain processes.

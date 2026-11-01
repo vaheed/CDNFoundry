@@ -70,6 +70,21 @@ docker compose --env-file .env.prod -f compose.prod.yml exec core php artisan cd
 docker compose --env-file .env.prod -f compose.prod.yml exec core php artisan cdnf:backups:restore 6f9619ff-8b86-d011-b42d-00c04fc964ff
 ```
 
+## Control plane high availability
+
+These commands serve the optional two-node control plane. The operator normally
+runs them through `cdnfoundry-fleet control ...` (see
+[Control-plane high availability](./control-plane-high-availability.md)), not by hand.
+
+| Command and syntax | Purpose and effects | Scheduled |
+| --- | --- | --- |
+| `cdnf:control:guard` | Exits non-zero unless this node may run application services: PostgreSQL is the writable primary, this node is the recorded active node, and no reachable peer reports a higher epoch. The `horizon` and `scheduler` containers run it before starting. | At container start |
+| `cdnf:control:enforce` | Asks Horizon to terminate when this node has been replaced, so the restart fails the start guard. | Every minute |
+| `cdnf:control:observe` | On the active node, records whether the standby is streaming PostgreSQL, its replay lag, and whether the Valkey replica is linked. Skips on a single node. | Every minute |
+| `cdnf:control:status` | Prints `ha` (`none`, `ready`, or `degraded`), the reasons, the epoch, the address list, and the fencing state as JSON. | No |
+| `cdnf:control:fingerprints` | Prints a keyed fingerprint of each shared control secret as JSON. Never prints a value. | No |
+| `cdnf:control:manage {action}` | Changes high availability state in one transaction. `addresses --addresses=A,B` sets the ordered control addresses every edge dials; `record --name --role --address [--fingerprints --lag]` records a node report; `promote --name` increments the epoch and records the node as active; `remove-standby` drops the standby and its address. | No |
+
 ## DNS and domains
 
 | Command and syntax | Purpose and effects | Scheduled |
@@ -134,7 +149,7 @@ docker compose -f compose.dev.yml run --rm core php artisan cdnf:platform:settin
 
 ## Scheduler
 
-All command schedules use overlap prevention. The scheduler also runs framework
+All command schedules use overlap prevention. Every scheduled task also runs only on the writable active control node (`onOneServer` plus the fence check), so a standby or a returning old node repeats nothing. The scheduler also runs framework
 or internal non-command work, which is intentionally not renamed here.
 
 | Scheduled command | Frequency | Purpose |
@@ -158,6 +173,8 @@ or internal non-command work, which is intentionally not renamed here.
 | `cdnf:backups:create` | Daily at 01:30 when configured | Queue the control-plane backup |
 | `cdnf:backups:maintain prune` | Daily at 04:10 when configured | Apply backup retention |
 | `cdnf:backups:maintain check` | Sundays at 05:00 when configured | Verify the backup repository |
+| `cdnf:control:enforce` | Every minute | Stop Horizon on a node that a promotion replaced |
+| `cdnf:control:observe` | Every minute | Record standby replication lag and Valkey link |
 
 Laravel's `horizon:snapshot` runs every five minutes and `model:prune` runs
 hourly. They remain unchanged because they are not CDNFoundry-owned commands.
