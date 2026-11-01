@@ -105,13 +105,17 @@ class BackupApiTest extends TestCase
         $snapshot = str_repeat('e', 64);
         $backup = Backup::query()->create(['status' => 'succeeded', 'snapshot_id' => $snapshot, 'verified_at' => now()]);
         $operation = Operation::query()->create(['type' => 'backup.restore', 'status' => 'pending', 'input' => ['backup_id' => $backup->id]]);
-        $repository = $this->mock(ResticBackupRepository::class, fn (MockInterface $mock) => $mock->shouldReceive('snapshotExists')->once()->with($snapshot)->andReturnTrue());
+        $repository = $this->mock(ResticBackupRepository::class, function (MockInterface $mock) use ($snapshot): void {
+            $mock->shouldReceive('snapshotExists')->once()->with($snapshot)->andReturnTrue();
+            $mock->shouldReceive('rollupSnapshotExists')->once()->andReturnTrue();
+        });
 
         (new PreflightBackupRestore($backup->id, $operation->id))->handle($repository);
 
         $operation->refresh();
         $this->assertSame('running', $operation->status);
         $this->assertSame('passed', $operation->result['preflight']);
+        $this->assertSame('present', $operation->result['usage_rollups']);
         $this->assertNull($operation->finished_at);
     }
 }

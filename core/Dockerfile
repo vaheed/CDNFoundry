@@ -51,7 +51,8 @@ RUN composer dump-autoload --no-dev --classmap-authoritative \
 COPY docker/php/entrypoint.sh /usr/local/bin/cdnf-entrypoint
 COPY docker/backup/create.sh /usr/local/bin/cdnf-backup-create
 COPY docker/backup/restore.sh /usr/local/bin/cdnf-backup-restore
-RUN chmod +x /usr/local/bin/cdnf-entrypoint /usr/local/bin/cdnf-backup-create /usr/local/bin/cdnf-backup-restore
+COPY docker/backup/restore-rollups.sh /usr/local/bin/cdnf-backup-restore-rollups
+RUN chmod +x /usr/local/bin/cdnf-entrypoint /usr/local/bin/cdnf-backup-create /usr/local/bin/cdnf-backup-restore /usr/local/bin/cdnf-backup-restore-rollups
 
 ENTRYPOINT ["cdnf-entrypoint"]
 CMD ["php-fpm", "-F"]
