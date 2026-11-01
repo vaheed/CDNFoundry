@@ -1,5 +1,6 @@
 rule_files:
   - telemetry-alerts.yml
+  - control-ha-alerts.yml
 evaluation_interval: 1m
 tests:
   - interval: 1m
@@ -33,3 +34,51 @@ tests:
         exp_alerts:
           - exp_labels: { severity: critical, instance: dns-host, server: pdns-auth }
             exp_annotations: { summary: DNSdist has marked an authoritative backend unavailable }
+  - interval: 1m
+    input_series:
+      - series: 'up{job="node",role="control",node="control-1",instance="active"}'
+        values: '0 0 0 0'
+      - series: 'up{job="node",role="control",node="control-2",instance="standby"}'
+        values: '1 1 1 1'
+      - series: 'cdnfoundry_control_replication_lag_seconds'
+        values: '12 12 12 12'
+      - series: 'cdnfoundry_control_valkey_replica_linked'
+        values: '0 0 0 0 0 0 0'
+      - series: 'cdnfoundry_control_fingerprint_mismatch'
+        values: '1 1 1 1 1 1 1'
+      - series: 'cdnfoundry_control_standby_unreachable'
+        values: '1 1 1 1 1 1 1'
+      - series: 'cdnfoundry_control_edges_missing_addresses'
+        values: '2+0x20'
+    alert_rule_test:
+      # The standby's own Alertmanager is told when the active node stops answering.
+      - eval_time: 3m
+        alertname: ControlNodeUnreachable
+        exp_alerts:
+          - exp_labels: { severity: critical, job: node, role: control, node: control-1, instance: active }
+            exp_annotations: { summary: A control node is unreachable from the node that watches it }
+      - eval_time: 3m
+        alertname: ControlReplicationLagHigh
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations: { summary: Control database replication lag exceeds ten seconds }
+      - eval_time: 6m
+        alertname: ControlValkeyReplicationBroken
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations: { summary: The Valkey replica is not linked to the active node }
+      - eval_time: 6m
+        alertname: ControlSecretFingerprintMismatch
+        exp_alerts:
+          - exp_labels: { severity: critical }
+            exp_annotations: { summary: The control nodes do not hold the same shared secrets }
+      - eval_time: 6m
+        alertname: ControlStandbyNotStreaming
+        exp_alerts:
+          - exp_labels: { severity: critical }
+            exp_annotations: { summary: The standby control node is not streaming PostgreSQL from the active node }
+      - eval_time: 16m
+        alertname: EdgeMissingControlAddresses
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations: { summary: At least one PoP has not reported the current control address list }

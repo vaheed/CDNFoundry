@@ -1,0 +1,41 @@
+groups:
+  - name: control-high-availability
+    rules:
+      # Each control node scrapes the other node's exporter, so the standby alerts when the active node is
+      # lost and the active node alerts when the standby is. Only a single node has no `role="control"` peer.
+      - alert: ControlNodeUnreachable
+        expr: up{job="node", role="control"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: A control node is unreachable from the node that watches it
+      - alert: ControlStandbyNotStreaming
+        expr: cdnfoundry_control_standby_unreachable == 1
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: The standby control node is not streaming PostgreSQL from the active node
+      - alert: ControlReplicationLagHigh
+        expr: cdnfoundry_control_replication_lag_seconds > 10
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: Control database replication lag exceeds ten seconds
+      - alert: ControlValkeyReplicationBroken
+        expr: cdnfoundry_control_valkey_replica_linked == 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: The Valkey replica is not linked to the active node
+      - alert: ControlSecretFingerprintMismatch
+        expr: cdnfoundry_control_fingerprint_mismatch == 1
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: The control nodes do not hold the same shared secrets
+      - alert: EdgeMissingControlAddresses
+        expr: cdnfoundry_control_edges_missing_addresses > 0
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: At least one PoP has not reported the current control address list

@@ -566,6 +566,7 @@ services:
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro
+      - ./docker/prometheus/control-ha-alerts.yml:/etc/prometheus/control-ha-alerts.yml:ro
       - ./docker/prometheus/alerts.test.yml:/etc/prometheus/alerts.test.yml:ro
       - ./docker/prometheus/control-targets.dev.yml:/etc/prometheus/control-targets.yml:ro
       - ./docker/prometheus/node-targets.dev.yml:/etc/prometheus/node-targets.yml:ro
