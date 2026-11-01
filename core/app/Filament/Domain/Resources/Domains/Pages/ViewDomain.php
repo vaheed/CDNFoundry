@@ -82,6 +82,11 @@ class ViewDomain extends ViewRecord
             : null;
     }
 
+    public function getBreadcrumbs(): array
+    {
+        return [];
+    }
+
     protected function getHeaderWidgets(): array
     {
         return [DomainKpiStrip::class, DomainNeedsAttention::class];
@@ -535,6 +540,7 @@ class ViewDomain extends ViewRecord
             ActionGroup::make($group(['proxyDefaults', 'rollbackProxy', 'moveEdgePool']))
                 ->label('Delivery')
                 ->icon('heroicon-o-cloud')
+                ->color('gray')
                 ->button(),
             ActionGroup::make($group(['cacheSettings', 'developmentMode', 'disableDevelopmentMode', 'purgeCache']))
                 ->label('Cache')
@@ -549,7 +555,7 @@ class ViewDomain extends ViewRecord
             ActionGroup::make($group(['securitySettings', 'wafProfile', 'startMaintenance', 'endMaintenance', 'protectSecurity', 'quarantineSecurity', 'returnSecurityToNormal']))
                 ->label('Security')
                 ->icon('heroicon-o-shield-check')
-                ->color('warning')
+                ->color('gray')
                 ->button(),
         ];
     }
