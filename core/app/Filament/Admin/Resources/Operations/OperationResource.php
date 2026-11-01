@@ -57,11 +57,16 @@ class OperationResource extends Resource
                     ->copyableState(fn (Operation $record): string => $record->id)
                     ->copyMessage('Full operation ID copied')
                     ->searchable()->limit(12)->tooltip(fn (Operation $record): string => $record->id),
-                TextColumn::make('type')->formatStateUsing(fn (string $state): string => self::TYPES[$state] ?? $state)->description(fn (Operation $record): string => $record->type)->searchable()->sortable()->wrap(),
-                TextColumn::make('status')->badge()->sortable(),
-                TextColumn::make('actor.email')->label('Requested by')->placeholder('System')->searchable()->sortable()->toggleable(),
-                TextColumn::make('attempts')->numeric()->sortable(),
-                TextColumn::make('error')->searchable()->limit(80)->tooltip(fn (Operation $record): ?string => $record->error)->wrap()->placeholder('—'),
+                TextColumn::make('type')->formatStateUsing(fn (string $state): string => self::TYPES[$state] ?? $state)->searchable()->sortable(),
+                TextColumn::make('status')->badge()->sortable()->color(fn (string $state): string => match ($state) {
+                    'succeeded' => 'success',
+                    'failed' => 'danger',
+                    'running' => 'info',
+                    default => 'gray',
+                }),
+                TextColumn::make('actor.email')->label('Requested by')->placeholder('System')->searchable()->sortable()->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('attempts')->numeric()->sortable()->alignEnd()->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('error')->searchable()->limit(40)->tooltip(fn (Operation $record): ?string => strlen((string) $record->error) > 40 ? $record->error : null),
                 TextColumn::make('created_at')->label('Requested')->dateTime()->since()->sortable(),
                 TextColumn::make('started_at')->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('finished_at')->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),

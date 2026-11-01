@@ -20,7 +20,7 @@ class ListEdges extends ListRecords
             Action::make('reconcileAllDomains')
                 ->label('Reconcile all domains')
                 ->icon('heroicon-o-arrow-path')
-                ->color('warning')
+                ->color('gray')
                 ->requiresConfirmation()
                 ->action(function (): void {
                     $response = app(EdgeOperationsController::class)->reconcile(request());

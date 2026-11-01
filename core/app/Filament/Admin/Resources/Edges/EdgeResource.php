@@ -15,6 +15,7 @@ use App\Support\FilamentHelp;
 use App\Support\GeoVocabulary;
 use App\Support\RuntimeVersions;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Select;
@@ -104,36 +105,52 @@ class EdgeResource extends Resource
     public static function table(Table $table): Table
     {
         return $table->columns([
-            TextColumn::make('name')->searchable()->sortable(),
+            TextColumn::make('name')->searchable()->sortable()->extraCellAttributes(['class' => 'cdn-link-cell']),
+            TextColumn::make('status')->label('Status')
+                ->state(fn (Edge $record): string => match (true) {
+                    ! $record->enabled => 'Disabled',
+                    $record->drained => 'Drained',
+                    default => 'Serving',
+                })
+                ->icon(fn (string $state): string => match ($state) {
+                    'Serving' => 'heroicon-m-check',
+                    'Drained' => 'heroicon-m-clock',
+                    default => 'heroicon-m-minus',
+                })
+                ->iconColor(fn (string $state): string => match ($state) {
+                    'Serving' => 'success',
+                    'Drained' => 'warning',
+                    default => 'gray',
+                }),
             TextColumn::make('country_code')->label('Location')->formatStateUsing(fn (string $state, Edge $record): string => $state.' / '.$record->continent_code),
-            TextColumn::make('management_ipv4')->label('Management IPv4')->placeholder('None'),
-            TextColumn::make('management_ipv6')->label('Management IPv6')->placeholder('None'),
-            IconColumn::make('enabled')->boolean(),
-            IconColumn::make('drained')->boolean(),
+            TextColumn::make('management_ipv4')->label('Management IPv4'),
+            TextColumn::make('management_ipv6')->label('Management IPv6')->toggleable(isToggledHiddenByDefault: true),
             TextColumn::make('last_heartbeat_at')->label('Heartbeat')->since()->placeholder('Never')->sortable(),
-            TextColumn::make('agent_version')->label('Agent')->placeholder('Not registered'),
-            TextColumn::make('runtime_versions_reported_at')->label('Version report')->since()->placeholder('Not reported'),
+            TextColumn::make('agent_version')->label('Agent'),
+            TextColumn::make('cells_count')->counts('cells')->label('Cells')->alignEnd(),
             TextColumn::make('desired_runtime_versions')->label('Version drift')->badge()
                 ->state(fn (Edge $record): string => $record->desired_runtime_versions !== null && $record->desired_runtime_versions !== $record->runtime_versions ? 'Drifted' : 'Aligned')
-                ->color(fn (Edge $record): string => $record->desired_runtime_versions !== null && $record->desired_runtime_versions !== $record->runtime_versions ? 'warning' : 'success'),
-            TextColumn::make('active_sequence')->label('Active revision')->sortable(),
-            TextColumn::make('cells_count')->counts('cells')->label('Cells'),
-            TextColumn::make('capacity.last_rejection.reason')->label('Deployment failure')->placeholder('None'),
+                ->color(fn (string $state): string => $state === 'Drifted' ? 'warning' : 'success'),
+            TextColumn::make('capacity.last_rejection.reason')->label('Deployment failure')->limit(40),
+            TextColumn::make('runtime_versions_reported_at')->label('Version report')->since()->toggleable(isToggledHiddenByDefault: true),
+            TextColumn::make('active_sequence')->label('Active revision')->sortable()->alignEnd()->toggleable(isToggledHiddenByDefault: true),
         ])->recordActions([
-            ViewAction::make(),
-            Action::make('enable')->visible(fn (Edge $record): bool => ! $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => true], 'edge.enable')),
-            Action::make('disable')->color('danger')->requiresConfirmation()->visible(fn (Edge $record): bool => $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => false], 'edge.disable')),
-            Action::make('drain')->color('warning')->requiresConfirmation()->visible(fn (Edge $record): bool => ! $record->drained)->action(fn (Edge $record) => self::changeState($record, ['drained' => true], 'edge.drain')),
-            Action::make('undrain')->visible(fn (Edge $record): bool => $record->drained)->action(fn (Edge $record) => self::changeState($record, ['drained' => false], 'edge.undrain')),
-            Action::make('rotateIdentity')
-                ->label('Rotate identity')
-                ->icon('heroicon-o-arrow-path')
-                ->color('danger')
-                ->url(fn (Edge $record): string => self::getUrl('view', [
-                    'record' => $record,
-                    'action' => 'rotateIdentity',
-                ])),
-            EditAction::make(),
+            ViewAction::make()->iconButton(),
+            EditAction::make()->iconButton(),
+            ActionGroup::make([
+                Action::make('enable')->visible(fn (Edge $record): bool => ! $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => true], 'edge.enable')),
+                Action::make('disable')->color('danger')->requiresConfirmation()->visible(fn (Edge $record): bool => $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => false], 'edge.disable')),
+                Action::make('drain')->color('warning')->requiresConfirmation()->visible(fn (Edge $record): bool => ! $record->drained)->action(fn (Edge $record) => self::changeState($record, ['drained' => true], 'edge.drain')),
+                Action::make('undrain')->visible(fn (Edge $record): bool => $record->drained)->action(fn (Edge $record) => self::changeState($record, ['drained' => false], 'edge.undrain')),
+                Action::make('rotateIdentity')
+                    ->label('Rotate identity')
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('danger')
+                    ->url(fn (Edge $record): string => self::getUrl('view', [
+                        'record' => $record,
+                        'action' => 'rotateIdentity',
+                    ])),
+            ])->label('More')->icon('heroicon-m-ellipsis-horizontal'),
         ])->defaultSort('name');
     }
 
