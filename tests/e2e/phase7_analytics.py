@@ -43,6 +43,15 @@ def compose(*args: str, check: bool = True, timeout: int = 60) -> subprocess.Com
     return run("docker", "compose", "-f", COMPOSE, *args, check=check, timeout=timeout)
 
 
+def vector_curl(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    """The Vector image ships no HTTP client, so probe it from a curl container in its network namespace."""
+    container = compose("ps", "-q", "vector").stdout.strip()
+    return run(
+        "docker", "run", "--rm", "--network", f"container:{container}", "curlimages/curl:8.16.0",
+        "--noproxy", "*", "-fsS", "--max-time", "10", *args, check=check, timeout=60,
+    )
+
+
 def php_string(value: str) -> str:
     return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
@@ -102,9 +111,7 @@ def restart_vector(reconnect_sources: bool = False) -> None:
     compose("restart", "vector", timeout=90)
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
-        result = compose(
-            "exec", "-T", "vector", "wget", "-qO-", "http://127.0.0.1:9598/metrics", check=False,
-        )
+        result = vector_curl("http://127.0.0.1:9598/metrics", check=False)
         if result.returncode == 0 and "vector_buffer_max_size_bytes" in result.stdout:
             if reconnect_sources:
                 compose("restart", "dnsdist", "edge-a", timeout=90)
@@ -130,10 +137,10 @@ def restart_vector(reconnect_sources: bool = False) -> None:
 
 
 def vector_event(port: int, event: dict[str, object]) -> None:
-    compose(
-        "exec", "-T", "vector", "wget", "-qO-", "--header", "Content-Type: application/json",
-        "--header", "Authorization: Basic " + base64.b64encode(b"cdnf:" + os.environ.get("CDNF_DEV_EDGE_STATUS_TOKEN", "cdnf-dev-edge-status-only").encode()).decode(),
-        "--post-data", json.dumps(event, separators=(",", ":")), f"http://127.0.0.1:{port}/",
+    vector_curl(
+        "-H", "Content-Type: application/json",
+        "-H", "Authorization: Basic " + base64.b64encode(b"cdnf:" + os.environ.get("CDNF_DEV_EDGE_STATUS_TOKEN", "cdnf-dev-edge-status-only").encode()).decode(),
+        "--data", json.dumps(event, separators=(",", ":")), f"http://127.0.0.1:{port}/",
     )
 
 
@@ -346,7 +353,7 @@ def qualify_outage(domain_id: int, user: str) -> None:
         assert "status:" in dns.stdout, dns.stdout
         during = cell_request("/")
         assert "HTTP/1.1" in during.stderr, during
-        metrics = compose("exec", "-T", "vector", "wget", "-qO-", "http://127.0.0.1:9598/metrics").stdout
+        metrics = vector_curl("http://127.0.0.1:9598/metrics").stdout
         assert "vector_buffer" in metrics and "vector_component" in metrics, metrics[:1000]
     finally:
         if clickhouse_stopped:

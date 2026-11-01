@@ -61,6 +61,8 @@ jobs:
         run: npm audit --omit=dev --audit-level=moderate
       - name: Check PHP formatting
         run: vendor/bin/pint --test
+      - name: Run static analysis against the committed baseline
+        run: vendor/bin/phpstan analyse --memory-limit=2G --no-progress
       - name: Build frontend assets
         run: npm run build
       - name: Run application tests

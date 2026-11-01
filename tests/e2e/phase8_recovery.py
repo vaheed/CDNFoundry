@@ -161,10 +161,12 @@ def main() -> None:
             "-e", "DB_PASSWORD=phase8-restore-only", "core", "php", "artisan", "migrate", "--force",
             timeout=600,
         )
-        migration_count = int(psql(RESTORE, "cdnf_restore", "cdnf_restore", "SELECT count(*) FROM migrations"))
-        expected_migrations = len(list((ROOT / "core/database/migrations").glob("*.php")))
-        if migration_count != expected_migrations:
-            raise AssertionError(f"replacement schema has {migration_count} migrations, expected {expected_migrations}")
+        recorded = set(psql(RESTORE, "cdnf_restore", "cdnf_restore", "SELECT migration FROM migrations").split())
+        expected = {path.stem for path in (ROOT / "core/database/migrations").glob("*.php")}
+        # A long-lived database can hold rows for migration files since removed; only a missing file is a failure.
+        if not expected <= recorded:
+            raise AssertionError(f"replacement schema lacks migrations: {sorted(expected - recorded)}")
+        migration_count = len(recorded)
         restored_counts["migrations"] = migration_count
 
         # Queue contents are deliberately absent on a replacement host. Prove

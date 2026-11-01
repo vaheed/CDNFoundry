@@ -444,6 +444,7 @@ services:
     mem_limit: 512m
     image: timberio/vector:0.58.0-debian@sha256:1c1ea358c617ea0b23003d5af87f7a678b30f8f7096437e680380c47fc13d2d9
     environment:
+      VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION: "true"
       CLICKHOUSE_ENDPOINT: http://clickhouse:8123
       CLICKHOUSE_USER: cdnf_ingest
       CLICKHOUSE_PASSWORD: cdnf-ingest-dev-only
@@ -525,6 +526,7 @@ services:
     container_name: cdnfoundry-log-collector
     command: [--config, /etc/vector/operational.yaml]
     environment:
+      VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION: "true"
       LOG_ENVIRONMENT: development
       LOG_ROLE: development
       LOG_HOST: ${LOG_HOST:-development}

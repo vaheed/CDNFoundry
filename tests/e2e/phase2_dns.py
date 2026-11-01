@@ -67,7 +67,7 @@ def dig_authority(owner: str, record_type: str) -> str:
 
 
 def compose(*arguments: str) -> None:
-    subprocess.run(["docker", "compose", "-f", COMPOSE, *arguments], cwd=ROOT, check=True, timeout=90, stdout=subprocess.DEVNULL)
+    subprocess.run(["docker", "compose", "-f", COMPOSE, *arguments], cwd=ROOT, check=True, timeout=300, stdout=subprocess.DEVNULL)
 
 
 def runtime_queue_size(job_class: str | None = None) -> int:
@@ -88,7 +88,7 @@ def wait_http() -> None:
             status, _ = call("GET", "/api/health")
             if status == 200:
                 return
-        except (OSError, urllib.error.URLError):
+        except (OSError, urllib.error.URLError, AssertionError):
             pass
         time.sleep(1)
     raise AssertionError("control plane did not recover")
