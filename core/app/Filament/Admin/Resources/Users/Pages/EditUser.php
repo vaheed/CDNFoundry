@@ -31,7 +31,7 @@ class EditUser extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('toggleAccess')
+            Action::make('toggleAccess')->icon('phosphor-user-switch')
                 ->label(fn (): string => $this->record->isDisabled() ? 'Enable access' : 'Disable access')
                 ->color(fn (): string => $this->record->isDisabled() ? 'success' : 'warning')
                 ->disabled(fn (): bool => $this->record->is(auth()->user()))

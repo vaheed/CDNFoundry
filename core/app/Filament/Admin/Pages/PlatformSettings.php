@@ -17,7 +17,7 @@ use Filament\Schemas\Schema;
 
 class PlatformSettings extends Page
 {
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-adjustments-horizontal';
+    protected static string|\BackedEnum|null $navigationIcon = 'phosphor-sliders-horizontal';
 
     protected static ?string $navigationLabel = 'Platform settings';
 
@@ -47,10 +47,19 @@ class PlatformSettings extends Page
         $sections = collect($settings->definitions())->map(function (array $definition, string $group): Section {
             $fields = collect($definition['fields'])->map(fn (array $field, string $key) => $this->field("{$group}.{$key}", $field))->all();
 
-            return Section::make($definition['label'])->description($definition['description'])->schema($fields)->columns(1)->compact();
+            return Section::make($definition['label'])->description($definition['description'])->schema($fields)->columns(1)->compact()
+                ->extraAttributes(['id' => 'settings-'.str_replace('_', '-', $group), 'data-settings-section' => $group]);
         })->values()->all();
 
         return $schema->statePath('data')->components($sections);
+    }
+
+    /** @return list<array{id: string, label: string, count: int}> */
+    public function getCategoriesProperty(): array
+    {
+        return collect(app(SettingsRegistry::class)->definitions())
+            ->map(fn (array $definition, string $group): array => ['id' => 'settings-'.str_replace('_', '-', $group), 'label' => $definition['label'], 'count' => count($definition['fields'])])
+            ->values()->all();
     }
 
     public function save(SettingsRegistry $settings): void

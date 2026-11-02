@@ -24,7 +24,6 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
-use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -34,7 +33,7 @@ class EdgePoolResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'name';
 
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-squares-2x2';
+    protected static string|\BackedEnum|null $navigationIcon = 'phosphor-squares-four';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Infrastructure';
 
@@ -86,12 +85,8 @@ class EdgePoolResource extends Resource
                     ! $record->enabled => 'Disabled',
                     default => 'Enabled',
                 })
-                ->icon(fn (string $state): string => match ($state) {
-                    'Enabled' => 'heroicon-m-check',
-                    'Withdrawn' => 'heroicon-m-x-mark',
-                    default => 'heroicon-m-minus',
-                })
-                ->iconColor(fn (string $state): string => match ($state) {
+                ->badge()
+                ->color(fn (string $state): string => match ($state) {
                     'Enabled' => 'success',
                     'Withdrawn' => 'danger',
                     default => 'gray',
@@ -121,7 +116,7 @@ class EdgePoolResource extends Resource
         ])->recordActions([
             EditAction::make()->iconButton(),
             ActionGroup::make([
-            Action::make('enable')->visible(fn (EdgePool $record): bool => ! $record->enabled)->action(function (EdgePool $record): void {
+            Action::make('enable')->icon('phosphor-check-circle')->visible(fn (EdgePool $record): bool => ! $record->enabled)->action(function (EdgePool $record): void {
                 $endpoints = $record->endpoints()->with('edge')->get();
                 $incomplete = $endpoints->isEmpty() || $endpoints->contains(fn ($endpoint): bool => (! $record->isSimpleAnycast() && ! filled($endpoint->ipv4) && ! filled($endpoint->ipv6))
                     || $endpoint->edge->cells()->where('edge_pool_id', $record->id)->count() < $record->minimum_ready_cells);
@@ -134,7 +129,7 @@ class EdgePoolResource extends Resource
                 AuditLog::record(auth()->user(), 'edge.pool_enabled', $record, ['revision' => $record->revision], request()->ip());
                 ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
             }),
-            Action::make('disable')->color('danger')->requiresConfirmation()->visible(fn (EdgePool $record): bool => $record->enabled)->action(function (EdgePool $record): void {
+            Action::make('disable')->icon('phosphor-prohibit')->color('danger')->requiresConfirmation()->visible(fn (EdgePool $record): bool => $record->enabled)->action(function (EdgePool $record): void {
                 if (DomainEdgePlacement::query()->where('active_pool_id', $record->id)->orWhere('target_pool_id', $record->id)->exists()) {
                     Notification::make()->danger()->title('Move all active and target placements before disabling this pool')->send();
 
@@ -144,7 +139,7 @@ class EdgePoolResource extends Resource
                 AuditLog::record(auth()->user(), 'edge.pool_disabled', $record, ['revision' => $record->revision], request()->ip());
                 ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
             }),
-            Action::make('delete')->label('Delete')->icon('heroicon-o-trash')->color('danger')->requiresConfirmation()
+            Action::make('delete')->label('Delete')->icon('phosphor-trash')->color('danger')->requiresConfirmation()
                 ->visible(fn (EdgePool $record): bool => ! $record->enabled)
                 ->action(function (EdgePool $record): void {
                     $blockedBy = match (true) {
@@ -163,17 +158,17 @@ class EdgePoolResource extends Resource
                     $record->delete();
                     Notification::make()->success()->title('Service pool deleted')->send();
                 }),
-            Action::make('withdraw')->color('danger')->requiresConfirmation()->visible(fn (EdgePool $record): bool => ! $record->withdrawn)->action(function (EdgePool $record): void {
+            Action::make('withdraw')->icon('phosphor-arrow-u-up-left')->color('danger')->requiresConfirmation()->visible(fn (EdgePool $record): bool => ! $record->withdrawn)->action(function (EdgePool $record): void {
                 $record->update(['withdrawn' => true, 'revision' => $record->revision + 1]);
                 AuditLog::record(auth()->user(), 'edge.pool_withdrawn', $record, ['revision' => $record->revision], request()->ip());
                 ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
             }),
-            Action::make('restore')->color('success')->visible(fn (EdgePool $record): bool => $record->withdrawn)->action(function (EdgePool $record): void {
+            Action::make('restore')->icon('phosphor-arrow-counter-clockwise')->color('success')->visible(fn (EdgePool $record): bool => $record->withdrawn)->action(function (EdgePool $record): void {
                 $record->update(['withdrawn' => false, 'revision' => $record->revision + 1]);
                 AuditLog::record(auth()->user(), 'edge.pool_restored', $record, ['revision' => $record->revision], request()->ip());
                 ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
             }),
-            Action::make('maintenance')->label('Maintenance')->color('warning')->requiresConfirmation()
+            Action::make('maintenance')->icon('phosphor-wrench')->label('Maintenance')->color('warning')->requiresConfirmation()
                 ->visible(fn (EdgePool $record): bool => $record->enabled && ! $record->withdrawn
                     && ! EmergencyMode::query()->where('target_type', 'pool')->where('target_id', (string) $record->id)->where('active', true)->exists())
                 ->schema([
@@ -183,13 +178,13 @@ class EdgePoolResource extends Resource
                     AuditLog::record(auth()->user(), 'security.pool_maintenance_started', $record, ['mode_id' => $mode->id, 'expires_at' => $mode->expires_at], request()->ip());
                     Notification::make()->warning()->title('Pool maintenance queued')->body("Operation {$operation->id} will return HTTP 503 from this pool's cells until the control is cleared or expires.")->send();
                 }),
-            Action::make('endMaintenance')->label('End maintenance')->color('success')->requiresConfirmation()
+            Action::make('endMaintenance')->icon('phosphor-check-circle')->label('End maintenance')->color('success')->requiresConfirmation()
                 ->visible(fn (EdgePool $record): bool => EmergencyMode::query()->where('target_type', 'pool')->where('target_id', (string) $record->id)->where('active', true)->exists())
                 ->action(function (EdgePool $record): void {
                     $operation = DispatchEmergencyMode::deactivateTarget('pool', (string) $record->id, auth()->user());
                     AuditLog::record(auth()->user(), 'security.pool_maintenance_ended', $record, ['operation_id' => $operation->id], request()->ip());
                 }),
-            ])->label('More')->icon('heroicon-m-ellipsis-horizontal'),
+            ])->label('More')->icon('phosphor-dots-three'),
         ])->defaultSort('name');
     }
 

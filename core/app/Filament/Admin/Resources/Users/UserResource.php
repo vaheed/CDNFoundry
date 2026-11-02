@@ -23,7 +23,7 @@ class UserResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'email';
 
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-users';
+    protected static string|\BackedEnum|null $navigationIcon = 'phosphor-users';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Customers';
 
@@ -53,7 +53,7 @@ class UserResource extends Resource
             ->columns([
                 TextColumn::make('name')->searchable()->sortable(),
                 TextColumn::make('email')->searchable()->sortable(),
-                TextColumn::make('type')->badge()->color('gray'),
+                TextColumn::make('type')->badge()->color('gray')->formatStateUsing(fn ($state): string => ucfirst(str_replace('_', ' ', $state instanceof \BackedEnum ? $state->value : (string) $state))),
                 TextColumn::make('disabled_at')->label('State')->formatStateUsing(fn ($state): string => $state ? 'Disabled' : 'Active')->badge(),
                 TextColumn::make('created_at')->dateTime()->sortable(),
             ])

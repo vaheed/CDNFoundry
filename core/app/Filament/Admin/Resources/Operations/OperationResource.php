@@ -36,7 +36,7 @@ class OperationResource extends Resource
 
     protected static ?string $model = Operation::class;
 
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-arrow-path';
+    protected static string|\BackedEnum|null $navigationIcon = 'phosphor-arrows-clockwise';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Operate';
 
@@ -58,7 +58,7 @@ class OperationResource extends Resource
                     ->copyMessage('Full operation ID copied')
                     ->searchable()->limit(12)->tooltip(fn (Operation $record): string => $record->id),
                 TextColumn::make('type')->formatStateUsing(fn (string $state): string => self::TYPES[$state] ?? $state)->searchable()->sortable(),
-                TextColumn::make('status')->badge()->sortable()->color(fn (string $state): string => match ($state) {
+                TextColumn::make('status')->badge()->sortable()->formatStateUsing(fn ($state): string => ucfirst(str_replace('_', ' ', $state instanceof \BackedEnum ? $state->value : (string) $state)))->color(fn (string $state): string => match ($state) {
                     'succeeded' => 'success',
                     'failed' => 'danger',
                     'running' => 'info',
@@ -72,7 +72,7 @@ class OperationResource extends Resource
                 TextColumn::make('finished_at')->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('duration')->state(function (Operation $record): string {
                     if ($record->started_at === null) {
-                        return '—';
+                        return 'Not started';
                     }
 
                     return $record->started_at->diffForHumans($record->finished_at ?? now(), true);
@@ -89,7 +89,7 @@ class OperationResource extends Resource
                 SelectFilter::make('actor')->relationship('actor', 'email')->searchable()->preload(),
             ])
             ->recordActions([
-                Action::make('retry')
+                Action::make('retry')->icon('phosphor-arrow-clockwise')
                     ->visible(fn (Operation $record): bool => $record->status === 'failed')
                     ->requiresConfirmation()
                     ->action(function (Operation $record): void {

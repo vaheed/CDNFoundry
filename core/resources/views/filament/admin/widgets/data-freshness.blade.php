@@ -1,5 +1,5 @@
 <x-filament-widgets::widget>
-    <x-filament::section heading="Data freshness" description="Source timestamps, not only browser request time. Hourly buckets identify aggregate resolution." icon="heroicon-o-signal">
+    <x-filament::section heading="Data freshness" description="Source timestamps, not only browser request time. Hourly buckets identify aggregate resolution." icon="phosphor-pulse">
         <div wire:poll.15s>
             <div class="mb-4 flex flex-wrap items-center gap-2">
                 <x-ui.status-pill :tone="match($state['state'] ?? 'unavailable') { 'fresh' => 'success', 'delayed' => 'warning', 'stale' => 'stale', default => 'unknown' }">{{ str($state['state'] ?? 'unavailable')->replace('_', ' ')->headline() }}</x-ui.status-pill>

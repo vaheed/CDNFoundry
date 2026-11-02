@@ -16,9 +16,11 @@ use Laravel\Sanctum\PersonalAccessToken;
 
 class ApiTokens extends Page
 {
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-key';
+    protected static string|\BackedEnum|null $navigationIcon = 'phosphor-key';
 
     protected static ?string $navigationLabel = 'API tokens';
+
+    protected static ?string $title = 'API tokens';
 
     protected static ?string $slug = 'tokens';
 

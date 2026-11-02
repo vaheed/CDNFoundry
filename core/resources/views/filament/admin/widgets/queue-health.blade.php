@@ -1,5 +1,5 @@
 <x-filament-widgets::widget>
-    <x-filament::section heading="Queue and worker health" description="Current bounded lane depth and oldest ready job. Throughput and retry counters are not exposed by the current normalized source." icon="heroicon-o-queue-list">
+    <x-filament::section heading="Queue and worker health" description="Current bounded lane depth and oldest ready job. Throughput and retry counters are not exposed by the current normalized source." icon="phosphor-queue">
         <div wire:poll.10s>
             @if (!($state['available'] ?? false))
                 <x-ui.widget-state :state="$state['state'] ?? 'unavailable'" :description="$state['error'] ?? 'Queue evidence could not be loaded.'" />

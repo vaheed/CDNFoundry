@@ -14,14 +14,14 @@
     @endphp
 
     <div class="cdn-dashboard">
-        <x-filament::section heading="Filters" icon="heroicon-o-funnel">
+        <x-filament::section heading="Filters" icon="phosphor-funnel">
             <form method="get" class="cdn-investigation-form">
                 <label><span class="cdn-field-label">Time range</span><select name="range" class="cdn-filter-select"><option value="1h" @selected($this->range === '1h')>1 hour</option><option value="6h" @selected($this->range === '6h')>6 hours</option><option value="24h" @selected($this->range === '24h')>24 hours</option><option value="7d" @selected($this->range === '7d')>7 days</option></select></label>
                 <label><span class="cdn-field-label">Domain</span><select name="domain" class="cdn-filter-select"><option value="">All domains</option>@foreach ($filterOptions['domains'] as $domainId => $domainName)<option value="{{ $domainId }}" @selected((string) $domainId === (string) $this->domain)>{{ $domainName }}</option>@endforeach</select></label>
                 <label><span class="cdn-field-label">Edge</span><select name="edge" class="cdn-filter-select"><option value="">All edges</option>@foreach ($filterOptions['edges'] as $edgeId => $edgeName)<option value="{{ $edgeId }}" @selected((string) $edgeId === (string) $this->edge)>{{ $edgeName }}</option>@endforeach</select></label>
                 <label><span class="cdn-field-label">Analytics focus</span><select name="view" class="cdn-filter-select"><option value="">All telemetry</option><option value="traffic" @selected($this->investigationView === 'traffic')>Traffic and egress</option><option value="cache" @selected($this->investigationView === 'cache')>Cache</option><option value="origin" @selected($this->investigationView === 'origin')>Origin health</option><option value="dns" @selected($this->investigationView === 'dns')>DNS</option></select></label>
                 <label><span class="cdn-field-label">HTTP status</span><select name="status_family" class="cdn-filter-select"><option value="">All statuses</option><option value="4xx" @selected($this->statusFamily === '4xx')>4xx client errors</option><option value="5xx" @selected($this->statusFamily === '5xx')>5xx server errors</option></select></label>
-                <x-filament::button type="submit" icon="heroicon-o-funnel">Apply filters</x-filament::button>
+                <x-filament::button type="submit" icon="phosphor-funnel">Apply filters</x-filament::button>
             </form>
             <div class="mt-3 flex flex-wrap gap-2">
                 <x-ui.status-pill tone="info">{{ $state['filters']['domain']?->name ?? 'All domains' }}</x-ui.status-pill>
@@ -32,7 +32,7 @@
             </div>
         </x-filament::section>
 
-        <x-filament::section heading="Telemetry status" :description="strtoupper($state['filters']['range']) . ' complete-hour analytics · ' . $display->displayTimezone() . ' · finalized through ' . $display->formatTimestamp($state['meta']['finalized_until'] ?? null, 'Y-m-d H:i T')" icon="heroicon-o-signal">
+        <x-filament::section heading="Telemetry status" :description="strtoupper($state['filters']['range']) . ' complete-hour analytics · ' . $display->displayTimezone() . ' · finalized through ' . $display->formatTimestamp($state['meta']['finalized_until'] ?? null, 'Y-m-d H:i T')" icon="phosphor-pulse">
             <div class="flex flex-wrap gap-3">
                 <x-ui.status-pill :tone="$state['available'] ? 'success' : 'danger'">ClickHouse {{ $state['available'] ? 'available' : 'unavailable' }}</x-ui.status-pill>
                 <x-ui.status-pill :tone="$state['buffer']['available'] ? 'success' : 'warning'">Vector metrics {{ $state['buffer']['available'] ? 'available' : 'unavailable' }}</x-ui.status-pill>
@@ -69,7 +69,7 @@
             </div>
 
             <div class="cdn-dashboard-columns">
-                <x-filament::section heading="Global traffic" icon="heroicon-o-chart-bar">
+                <x-filament::section heading="Global traffic" icon="phosphor-chart-bar">
                     <x-ui.data-table caption="Global hourly traffic">
                         <x-slot:header><tr><th>Hour ({{ $display->displayTimezone() }})</th><th class="text-right">Requests</th><th class="text-right">Transfer</th></tr></x-slot:header>
                                 @forelse ($state['traffic']['items'] as $row)
@@ -81,16 +81,16 @@
                     @if ($state['traffic']['has_more'] || $state['traffic']['expanded'])
                         <div class="mt-3 flex justify-end gap-2">
                             @if ($state['traffic']['has_more'])
-                                <x-filament::button size="sm" color="gray" icon="heroicon-o-chevron-down" wire:click="showMoreTraffic">Show more</x-filament::button>
+                                <x-filament::button size="sm" color="gray" icon="phosphor-caret-down" wire:click="showMoreTraffic">Show more</x-filament::button>
                             @endif
                             @if ($state['traffic']['expanded'])
-                                <x-filament::button size="sm" color="gray" icon="heroicon-o-chevron-up" wire:click="showFewerTraffic">Show fewer</x-filament::button>
+                                <x-filament::button size="sm" color="gray" icon="phosphor-caret-up" wire:click="showFewerTraffic">Show fewer</x-filament::button>
                             @endif
                         </div>
                     @endif
                 </x-filament::section>
 
-                <x-filament::section heading="Global DNS" icon="heroicon-o-globe-alt">
+                <x-filament::section heading="Global DNS" icon="phosphor-globe">
                     <x-ui.data-table caption="Global DNS responses">
                         <x-slot:header><tr><th>Type</th><th>Response</th><th class="text-right">Queries</th></tr></x-slot:header>
                                 @forelse ($state['dns'] as $row)
@@ -102,7 +102,7 @@
                 </x-filament::section>
             </div>
 
-            <x-filament::section heading="Compression savings" :description="'Delivery by encoding from the latest ' . $state['meta']['raw_window_hours'] . ' hours. Identity means the response was sent without compression; Fallback explains why compression was skipped.'" icon="heroicon-o-arrows-pointing-in">
+            <x-filament::section heading="Compression savings" :description="'Delivery by encoding from the latest ' . $state['meta']['raw_window_hours'] . ' hours. Identity means the response was sent without compression; Fallback explains why compression was skipped.'" icon="phosphor-arrows-in">
                 <x-ui.data-table class="[&_.cdn-data-table]:min-w-[48rem]">
                     <x-slot:header><tr><th class="text-left">Encoding / profile</th><th class="text-left">Fallback</th><th class="text-right">Requests</th><th class="text-right">Delivered</th><th class="text-right">Saved</th><th class="text-right">Savings</th></tr></x-slot:header>
                     @forelse ($state['compression']['items'] as $row)
@@ -139,16 +139,16 @@
                 @if ($state['compression']['has_more'] || $state['compression']['expanded'])
                     <div class="mt-3 flex justify-end gap-2">
                         @if ($state['compression']['has_more'])
-                            <x-filament::button size="sm" color="gray" icon="heroicon-o-chevron-down" wire:click="showMoreCompression">Show more</x-filament::button>
+                            <x-filament::button size="sm" color="gray" icon="phosphor-caret-down" wire:click="showMoreCompression">Show more</x-filament::button>
                         @endif
                         @if ($state['compression']['expanded'])
-                            <x-filament::button size="sm" color="gray" icon="heroicon-o-chevron-up" wire:click="showFewerCompression">Show fewer</x-filament::button>
+                            <x-filament::button size="sm" color="gray" icon="phosphor-caret-up" wire:click="showFewerCompression">Show fewer</x-filament::button>
                         @endif
                     </div>
                 @endif
             </x-filament::section>
 
-            <x-filament::section heading="Recent logs" :description="'Masked, bounded previews from the latest ' . $state['meta']['raw_window_hours'] . ' hours within this investigation. Five rows per stream until expanded.'" icon="heroicon-o-document-magnifying-glass">
+            <x-filament::section heading="Recent logs" :description="'Masked, bounded previews from the latest ' . $state['meta']['raw_window_hours'] . ' hours within this investigation. Five rows per stream until expanded.'" icon="phosphor-file-magnifying-glass">
                 <div class="grid gap-5 xl:grid-cols-3">
                     @foreach ($state['logs'] as $stream => $logState)
                         <div class="min-w-0">
@@ -158,7 +158,7 @@
                                     <div class="cdn-activity-row">
                                         <div class="min-w-0">
                                             <div class="cdn-row-title">{{ $row['hostname'] ?? $row['edge_id'] ?? ('Domain #' . ($row['domain_id'] ?? 'unknown')) }}</div>
-                                            <div class="cdn-row-meta">{{ $display->formatTimestamp($row['occurred_at'] ?? null) }} · {{ $row['method'] ?? $row['event_type'] ?? 'event' }} {{ $row['path'] ?? '' }} · {{ $row['security_reason'] ?? $row['origin_error'] ?? $row['tls_error'] ?? ('HTTP ' . ($row['status'] ?? '—')) }}</div>
+                                            <div class="cdn-row-meta">{{ $display->formatTimestamp($row['occurred_at'] ?? null) }} · {{ $row['method'] ?? $row['event_type'] ?? 'event' }} {{ $row['path'] ?? '' }} · {{ $row['security_reason'] ?? $row['origin_error'] ?? $row['tls_error'] ?? ('HTTP ' . ($row['status'] ?? 'unknown')) }}</div>
                                         </div>
                                         @if (isset($row['status']))<span class="cdn-status-pill" data-tone="{{ (int) $row['status'] >= 500 ? 'danger' : 'warning' }}">{{ $row['status'] }}</span>@endif
                                     </div>
@@ -169,10 +169,10 @@
                             @if ($logState['has_more'] || $logState['expanded'])
                                 <div class="mt-3 flex justify-center gap-2">
                                     @if ($logState['has_more'])
-                                        <x-filament::button size="sm" color="gray" icon="heroicon-o-chevron-down" wire:click="showMoreLogs('{{ $stream }}')">Show more</x-filament::button>
+                                        <x-filament::button size="sm" color="gray" icon="phosphor-caret-down" wire:click="showMoreLogs('{{ $stream }}')">Show more</x-filament::button>
                                     @endif
                                     @if ($logState['expanded'])
-                                        <x-filament::button size="sm" color="gray" icon="heroicon-o-chevron-up" wire:click="showFewerLogs('{{ $stream }}')">Show fewer</x-filament::button>
+                                        <x-filament::button size="sm" color="gray" icon="phosphor-caret-up" wire:click="showFewerLogs('{{ $stream }}')">Show fewer</x-filament::button>
                                     @endif
                                 </div>
                             @endif
@@ -183,7 +183,7 @@
         @endif
 
         <div class="cdn-dashboard-columns">
-            <x-filament::section heading="Vector buffer and delivery" icon="heroicon-o-circle-stack">
+            <x-filament::section heading="Vector buffer and delivery" icon="phosphor-database">
                 <div class="cdn-queue-list">
                     @forelse ($state['buffer']['metrics'] as $metric => $value)
                         @php
@@ -215,9 +215,9 @@
                 @endif
             </x-filament::section>
 
-            <x-filament::section heading="Finalized usage" icon="heroicon-o-document-chart-bar">
+            <x-filament::section heading="Finalized usage" icon="phosphor-receipt">
                 <div class="mb-4">
-                    <x-filament::button tag="a" icon="heroicon-o-arrow-down-tray" :href="route('admin.telemetry.usage.csv')">Global usage CSV</x-filament::button>
+                    <x-filament::button tag="a" icon="phosphor-download-simple" :href="route('admin.telemetry.usage.csv')">Global usage CSV</x-filament::button>
                 </div>
                 <x-ui.data-table caption="Finalized global usage intervals">
                     <x-slot:header><tr><th>Domain / interval</th><th class="text-right">Requests</th><th class="text-right">Transfer</th><th class="text-right">DNS</th><th>State</th></tr></x-slot:header>

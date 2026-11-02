@@ -6,7 +6,7 @@
         <div class="cdn-enrollment-sidebar">
             <div class="cdn-enrollment-host">
                 <span class="cdn-enrollment-host-icon" aria-hidden="true">
-                    <x-filament::icon icon="heroicon-o-server-stack" />
+                    <x-filament::icon icon="phosphor-hard-drives" />
                 </span>
                 <div>
                     <div class="cdn-enrollment-kicker">Where to use these values</div>

@@ -56,7 +56,7 @@ class EdgeHealthTable extends TableWidget
                 TernaryFilter::make('drained'),
             ])
             ->headerActions([
-                Action::make('allEdges')->label('All edges')->icon('heroicon-o-arrow-top-right-on-square')->url(EdgeResource::getUrl(panel: 'admin')),
+                Action::make('allEdges')->label('All edges')->icon('phosphor-arrow-square-out')->url(EdgeResource::getUrl(panel: 'admin')),
             ])
             ->defaultSort('name')
             ->paginationPageOptions([10, 25, 50]);

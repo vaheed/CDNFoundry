@@ -18,7 +18,7 @@ class ListDnsClusters extends ListRecords
         return [
             Action::make('reconcileAllZones')
                 ->label('Reconcile all zones')
-                ->icon('heroicon-o-arrow-path')
+                ->icon('phosphor-arrows-clockwise')
                 ->color('gray')
                 ->requiresConfirmation()
                 ->action(function (): void {

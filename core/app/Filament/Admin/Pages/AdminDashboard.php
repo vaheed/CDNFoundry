@@ -160,9 +160,9 @@ class AdminDashboard extends Dashboard
     public function getQuickLinksProperty(): array
     {
         return [
-            ['label' => 'Platform settings', 'icon' => 'heroicon-o-adjustments-horizontal', 'url' => PlatformSettings::getUrl()],
-            ['label' => 'System DNS identity', 'icon' => 'heroicon-o-globe-alt', 'url' => SystemDnsIdentity::getUrl()],
-            ['label' => 'Operations', 'icon' => 'heroicon-o-arrow-path', 'url' => OperationResource::getUrl()],
+            ['label' => 'Platform settings', 'icon' => 'phosphor-sliders-horizontal', 'url' => PlatformSettings::getUrl()],
+            ['label' => 'System DNS identity', 'icon' => 'phosphor-globe', 'url' => SystemDnsIdentity::getUrl()],
+            ['label' => 'Operations', 'icon' => 'phosphor-arrows-clockwise', 'url' => OperationResource::getUrl()],
         ];
     }
 
