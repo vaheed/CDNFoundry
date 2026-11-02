@@ -48,7 +48,7 @@ class PlatformSettings extends Page
             $fields = collect($definition['fields'])->map(fn (array $field, string $key) => $this->field("{$group}.{$key}", $field))->all();
 
             return Section::make($definition['label'])->description($definition['description'])->schema($fields)->columns(1)->compact()
-                ->extraAttributes(['id' => 'settings-'.str_replace('_', '-', $group), 'data-settings-section' => $group]);
+                ->extraAttributes(['data-settings-section' => 'settings-'.str_replace('_', '-', $group)]);
         })->values()->all();
 
         return $schema->statePath('data')->components($sections);

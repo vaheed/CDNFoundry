@@ -2,6 +2,11 @@
     <div class="cdn-settings" x-data="{
             query: '',
             matches: {},
+            init() {
+                if (location.hash.startsWith('#settings-')) {
+                    this.$nextTick(() => document.querySelector(`[data-settings-section='${location.hash.slice(1)}']`)?.scrollIntoView({ block: 'start' }));
+                }
+            },
             filter() {
                 const q = this.query.trim().toLowerCase();
                 const matches = {};
@@ -14,7 +19,7 @@
                         shown += hit ? 1 : 0;
                     });
                     section.hidden = shown === 0;
-                    matches[section.id] = shown;
+                    matches[section.dataset.settingsSection] = shown;
                 });
                 this.matches = matches;
             },
@@ -26,7 +31,8 @@
             <ul>
                 @foreach ($this->categories as $category)
                     <li x-show="query === '' || (matches['{{ $category['id'] }}'] ?? 0) > 0">
-                        <a href="#{{ $category['id'] }}" class="cdn-settings-nav-link" data-testid="settings-category-{{ $category['id'] }}">
+                        <a href="#{{ $category['id'] }}" class="cdn-settings-nav-link" data-testid="settings-category-{{ $category['id'] }}"
+                           x-on:click.prevent="document.querySelector('[data-settings-section={{ $category['id'] }}]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); history.replaceState(null, '', '#{{ $category['id'] }}')">
                             <span>{{ $category['label'] }}</span>
                             <span class="cdn-settings-nav-count" x-text="query === '' ? {{ $category['count'] }} : (matches['{{ $category['id'] }}'] ?? 0)">{{ $category['count'] }}</span>
                         </a>
