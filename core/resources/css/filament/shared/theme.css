@@ -16,18 +16,18 @@
     --mono-font-family: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
     --cdn-code-font: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 
-    --cdn-canvas: oklch(98.75% 0 0);
-    --cdn-elevated: oklch(98% 0 0);
-    --cdn-recessed: oklch(96% 0 0);
-    --cdn-base: oklch(100% 0 0);
-    --cdn-control: oklch(100% 0 0);
-    --cdn-overlay: oklch(100% 0 0);
-    --cdn-tint: oklch(97% 0 0);
-    --cdn-fill: oklch(92.2% 0 0);
-    --cdn-fill-hover: oklch(96.5% 0 0);
+    --cdn-canvas: oklch(95.6% 0.003 286);
+    --cdn-elevated: oklch(96.6% 0.003 286);
+    --cdn-recessed: oklch(94.5% 0.003 286);
+    --cdn-base: oklch(98.4% 0.002 286);
+    --cdn-control: oklch(99% 0.002 286);
+    --cdn-overlay: oklch(99% 0.002 286);
+    --cdn-tint: oklch(94.8% 0.003 286);
+    --cdn-fill: oklch(91.5% 0.003 286);
+    --cdn-fill-hover: oklch(94% 0.003 286);
     --cdn-interact: oklch(87% 0 0);
-    --cdn-line: oklch(14.5% 0 0 / 0.1);
-    --cdn-hairline: oklch(93.5% 0 0);
+    --cdn-line: oklch(14.5% 0 0 / 0.12);
+    --cdn-hairline: oklch(91.8% 0.003 286);
     --cdn-focus: oklch(15% 0 0);
     --cdn-shadow-edge: oklch(0% 0 0 / 0.12);
     --cdn-shadow-drop: oklch(0% 0 0 / 0.08);
@@ -68,7 +68,7 @@
     --cdn-chart-2: oklch(54.9% 0.096 184.565);
     --cdn-chart-3: oklch(81.5% 0.197 76);
     --cdn-chart-4: oklch(55.8% 0.288 302.321);
-    --cdn-chart-grid: oklch(93.5% 0 0);
+    --cdn-chart-grid: oklch(91.8% 0.003 286);
 
     --cdn-radius-sm: 0.25rem;
     --cdn-radius-md: 0.375rem;
@@ -199,6 +199,7 @@ body,
 .fi-main-ctn,
 .fi-sidebar,
 .fi-sidebar-header,
+.fi-topbar,
 .fi-topbar > nav {
     background-color: var(--cdn-canvas);
     box-shadow: none;

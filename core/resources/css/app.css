@@ -12,13 +12,13 @@
 :root {
     color-scheme: light dark;
     --font-family: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-    --cdn-canvas: oklch(98.75% 0 0);
-    --cdn-elevated: oklch(98% 0 0);
-    --cdn-base: oklch(100% 0 0);
-    --cdn-tint: oklch(97% 0 0);
-    --cdn-fill: oklch(92.2% 0 0);
-    --cdn-line: oklch(14.5% 0 0 / 0.1);
-    --cdn-hairline: oklch(93.5% 0 0);
+    --cdn-canvas: oklch(95.6% 0.003 286);
+    --cdn-elevated: oklch(96.6% 0.003 286);
+    --cdn-base: oklch(98.4% 0.002 286);
+    --cdn-tint: oklch(94.8% 0.003 286);
+    --cdn-fill: oklch(91.5% 0.003 286);
+    --cdn-line: oklch(14.5% 0 0 / 0.12);
+    --cdn-hairline: oklch(91.8% 0.003 286);
     --cdn-text-strong: oklch(14.5% 0 0);
     --cdn-text-default: oklch(21% 0.006 285.885);
     --cdn-text-subtle: oklch(49% 0 0);

@@ -15,8 +15,8 @@ class PanelDesign
 
     /** Neutral greys whose darkest shades are a soft charcoal, so dark mode is never pure black. */
     public const GRAY = [
-        50 => 'oklch(0.985 0 0)',
-        100 => 'oklch(0.97 0 0)',
+        50 => 'oklch(0.966 0.003 286)',
+        100 => 'oklch(0.948 0.003 286)',
         200 => 'oklch(0.922 0 0)',
         300 => 'oklch(0.87 0 0)',
         400 => 'oklch(0.708 0 0)',
