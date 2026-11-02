@@ -7,6 +7,8 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 RASTER = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 # The product screenshots are intentionally kept; any new raster image must be added here deliberately.
+# Visual regression baselines for the browser suite, required by AGENTS.md for every UI change.
+SNAPSHOT_DIR = "tests/browser/specs/__snapshots__/"
 ALLOWLIST = {
     "docs/public/images/screencapture-admin.png",
     "docs/public/images/screencapture-edges.png",
@@ -16,7 +18,10 @@ ALLOWLIST = {
 
 def main() -> int:
     tracked = subprocess.check_output(["git", "ls-files"], cwd=ROOT, text=True).splitlines()
-    offenders = [p for p in tracked if p.lower().endswith(RASTER) and p not in ALLOWLIST]
+    offenders = [
+        p for p in tracked
+        if p.lower().endswith(RASTER) and p not in ALLOWLIST and not p.startswith(SNAPSHOT_DIR)
+    ]
     for path in offenders:
         print(f"tracked raster image: {path}")
     return 1 if offenders else 0
