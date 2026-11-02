@@ -94,7 +94,7 @@ test('editing a DNS record opens a grouped single-column sheet', async ({ page }
     await signIn(page, 'admin', 'admin@browser.test', adminPassword);
     await page.goto('/admin/domains/1');
     await settle(page);
-    await page.getByPlaceholder('Search').last().fill('geo-routed');
+    await page.locator('.fi-ta input[type=search]').first().fill('geo-routed');
     await settle(page);
     const row = page.locator('tr', { hasText: 'geo-routed' });
     await row.getByRole('button', { name: /edit/i }).click();

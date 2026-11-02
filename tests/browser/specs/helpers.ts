@@ -24,7 +24,16 @@ export async function signIn(page: Page, panel: 'admin' | 'app', email: string, 
 /** Applies the project's color scheme through Filament's theme store so dark mode is deterministic. */
 export async function settle(page: Page): Promise<void> {
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(600);
+    // Lazy panels (relation tables, widgets) load when scrolled into view.
+    await page.evaluate(async () => {
+        for (let y = 0; y < document.body.scrollHeight; y += 600) {
+            window.scrollTo(0, y);
+            await new Promise((resolve) => setTimeout(resolve, 80));
+        }
+        window.scrollTo(0, 0);
+    });
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(400);
 }
 
 export async function expectAccessible(page: Page): Promise<void> {
