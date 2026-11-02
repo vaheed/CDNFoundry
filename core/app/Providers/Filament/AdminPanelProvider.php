@@ -41,7 +41,7 @@ class AdminPanelProvider extends PanelProvider
             ->navigationItems([
                 NavigationItem::make('Live Logs')
                     ->group('Observe')
-                    ->icon('heroicon-o-document-magnifying-glass')
+                    ->icon('phosphor-file-magnifying-glass')
                     ->sort(100)
                     ->url(fn (): ?string => app(GrafanaExploreUrl::class)->configuredOperationalLogs(), shouldOpenInNewTab: true)
                     ->visible(fn (): bool => filled(app(GrafanaExploreUrl::class)->configuredOperationalLogs())),
