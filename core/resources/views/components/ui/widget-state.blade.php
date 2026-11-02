@@ -6,11 +6,11 @@
 
 @php
     $icon = match ($state) {
-        'no_data' => 'heroicon-o-inbox',
-        'stale', 'delayed' => 'heroicon-o-clock',
-        'partial' => 'heroicon-o-information-circle',
-        'invalid' => 'heroicon-o-funnel',
-        default => 'heroicon-o-exclamation-triangle',
+        'no_data' => 'phosphor-tray',
+        'stale', 'delayed' => 'phosphor-clock',
+        'partial' => 'phosphor-info',
+        'invalid' => 'phosphor-funnel',
+        default => 'phosphor-warning',
     };
     $label = $title ?? match ($state) {
         'no_data' => 'No matching data',

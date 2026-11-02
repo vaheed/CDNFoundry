@@ -19,13 +19,14 @@
                 <dt>{{ $row['label'] }}</dt>
                 <dd>
                     <div class="cdn-dl-value">
+                    @if ($row['badge'])
+                        <x-ui.status-pill :tone="$tone((string) $row['badge'])" appearance="dot" class="cdn-dl-badge">{{ ucfirst(str_replace('_', ' ', (string) $row['badge'])) }}</x-ui.status-pill>
+                    @endif
                     @if ($empty && ! $row['badge'])
                         <span class="cdn-dl-empty">{{ $row['empty'] ?? 'None' }}</span>
-                    @elseif ($row['badge'])
-                        <x-ui.status-pill :tone="$tone((string) $row['badge'])">{{ str($row['badge'])->replace('_', ' ')->headline() }}</x-ui.status-pill>
-                        <span class="cdn-mono">{{ $value }}</span>
+                    @elseif ($empty)
                     @elseif ($row['kind'] === 'badge')
-                        <x-ui.status-pill :tone="$tone((string) $value)">{{ str($value)->replace('_', ' ')->headline() }}</x-ui.status-pill>
+                        <x-ui.status-pill :tone="$tone((string) $value)" appearance="dot">{{ ucfirst(str_replace('_', ' ', (string) $value)) }}</x-ui.status-pill>
                     @elseif ($row['kind'] === 'time')
                         <time class="cdn-mono" datetime="{{ $value }}" title="{{ \Carbon\CarbonImmutable::parse($value)->diffForHumans() }}">{{ app(\App\Support\PlatformSettings::class)->formatTimestamp($value, 'Y-m-d H:i:s T') }}</time>
                     @elseif ($row['kind'] === 'chips')
@@ -54,8 +55,8 @@
                     @if ($row['copy'] && ! $empty)
                         <button type="button" class="cdn-copy" aria-label="Copy {{ $row['label'] }}" title="Copy"
                                 x-data="{ done: false }" x-on:click="navigator.clipboard.writeText(@js(is_array($value) ? implode("\n", $value) : (string) $value)); done = true; setTimeout(() => done = false, 1500)">
-                            <x-filament::icon x-show="! done" icon="heroicon-o-clipboard-document" class="size-4" />
-                            <x-filament::icon x-show="done" x-cloak icon="heroicon-o-check" class="size-4" />
+                            <x-filament::icon x-show="! done" icon="phosphor-copy" class="size-4" />
+                            <x-filament::icon x-show="done" x-cloak icon="phosphor-check" class="size-4" />
                         </button>
                     @endif
                 </dd>
