@@ -17,33 +17,36 @@ use App\Support\SecurityConfig;
  */
 class DomainDetailSections
 {
-    /** @return array<int, array{title: string, rows: array<int, array<string, mixed>>}> */
-    public static function for(Domain $domain, string $tab): array
+    /**
+     * Overview columns of compact cards. Rows that have nothing to say and no explicit empty text are left out.
+     *
+     * @return array{left: array<int, array{title: string, rows: array<int, array<string, mixed>>}>, right: array<int, array{title: string, rows: array<int, array<string, mixed>>}>}
+     */
+    public static function overview(Domain $domain): array
     {
-        return match ($tab) {
-            'overview' => [self::identity($domain), self::delivery($domain)],
-            'dns' => [self::dns($domain)],
-            'cache' => [self::cache($domain)],
-            'tls' => [self::tls($domain)],
-            'security' => [self::security($domain)],
-        };
+        $visible = fn (array $section): array => [...$section, 'rows' => array_values(array_filter(
+            $section['rows'],
+            fn (array $row): bool => ! ($row['value'] === null || $row['value'] === '' || $row['value'] === []) || $row['badge'] !== null || $row['empty'] !== null,
+        ))];
+
+        return [
+            'left' => array_map($visible, [self::delegation($domain), self::dns($domain), self::delivery($domain)]),
+            'right' => array_map($visible, [self::tls($domain), self::cache($domain), self::security($domain)]),
+        ];
     }
 
-    private static function identity(Domain $domain): array
+    private static function delegation(Domain $domain): array
     {
         $verification = $domain->nameservers_verified_by !== null ? null : self::latestNameserverVerification($domain);
 
-        return ['title' => 'Domain', 'rows' => [
-            ...($domain->display_name && $domain->display_name !== $domain->name ? [self::row('Display label', $domain->display_name, 'text')] : []),
-            self::row('Lifecycle', $domain->lifecycle_state->value, 'badge'),
-            self::row('Desired revision', '#'.$domain->revision, 'mono'),
-            self::row('Desired revision changed', $domain->revision_changed_at, 'time'),
-            self::row('Assigned nameservers', $domain->assignedNameservers() ?: null, 'list', copy: true, empty: 'Assigned after the platform reads your current delegation'),
-            self::row('Claim status', $domain->claimStatus(), 'badge'),
-            self::row('Pending claim expires', $domain->claim_expires_at, 'time', empty: 'Previously verified domain'),
-            self::row('Nameservers verified', $domain->nameservers_verified_at, 'time', empty: 'Pending'),
-            self::row('Latest verification', $domain->nameservers_verified_by !== null ? 'force_verified' : $verification?->status, 'badge', empty: 'Not requested'),
-            self::row('Verification error', $domain->nameservers_verified_by !== null ? null : $verification?->error, 'text'),
+        return ['title' => 'Delegation', 'rows' => [
+            self::row('Label', $domain->display_name && $domain->display_name !== $domain->name ? $domain->display_name : null, 'text'),
+            self::row('Nameservers', $domain->assignedNameservers() ?: null, 'list', copy: true, empty: 'Assigned after the platform reads your delegation'),
+            self::row('Verified', $domain->nameservers_verified_at, 'time', empty: 'Not verified'),
+            self::row('Claim', $domain->claimStatus(), 'badge'),
+            self::row('Claim expires', $domain->nameservers_verified_at === null ? $domain->claim_expires_at : null, 'time'),
+            self::row('Last check', $domain->nameservers_verified_by !== null ? 'force_verified' : $verification?->status, 'badge'),
+            self::row('Check error', $domain->nameservers_verified_by !== null ? null : $verification?->error, 'text'),
         ]];
     }
 
@@ -56,19 +59,16 @@ class DomainDetailSections
         $revisions = EdgeRevision::query()->where('domain_id', $domain->id)->where('status', 'validated')->latest('revision')->limit(10)->get()
             ->map(fn (EdgeRevision $revision): string => "#{$revision->revision}   ".$timezone->formatTimestamp($revision->created_at, 'Y-m-d H:i:s T'))->all();
 
-        return ['title' => 'Edge delivery', 'rows' => [
-            self::row('Proxied hostnames', (string) $domain->dnsRecords()->where('mode', 'proxied')->count(), 'mono'),
-            self::row('Active edge revision', $domain->active_edge_revision === null ? null : '#'.$domain->active_edge_revision, 'mono', empty: 'Not deployed'),
-            self::row('Active revision created', EdgeRevision::query()->where('domain_id', $domain->id)->where('revision', $domain->active_edge_revision)->value('created_at'), 'time', empty: 'Not deployed'),
-            self::row('Placement state', $placement?->state, 'badge', empty: 'Not placed'),
-            self::row('Active service pool', $placement?->activePool?->name, 'mono'),
-            self::row('Target service pool', $placement?->targetPool?->name, 'mono'),
-            self::row('Active cells by edge', self::cellAssignments($domain, 'activeCell') ?: null, 'list'),
-            self::row('Target cells by edge', self::cellAssignments($domain, 'targetCell') ?: null, 'list'),
-            self::row('Service-pool DNS target', $pool !== null && $settings !== null ? EdgeRoutingCompiler::poolHostname($settings, $pool) : null, 'mono', copy: true, empty: 'Waiting for placement'),
-            self::row('Validated revisions', $revisions ?: null, 'list', collapse: 3),
-            self::row('Proxy defaults', self::proxySettings($domain->proxy_settings), 'chips'),
-            self::row('Last deployment failure', $placement?->last_error, 'text'),
+        return ['title' => 'Delivery', 'rows' => [
+            self::row('Placement', $placement?->state, 'badge', empty: 'Not placed'),
+            self::row('Pool', $placement?->activePool?->name, 'mono'),
+            self::row('Moving to', $placement?->targetPool?->name, 'mono'),
+            self::row('Cells', self::cellAssignments($domain, 'activeCell') ?: null, 'list', collapse: 3),
+            self::row('Target cells', self::cellAssignments($domain, 'targetCell') ?: null, 'list', collapse: 3),
+            self::row('DNS target', $pool !== null && $settings !== null ? EdgeRoutingCompiler::poolHostname($settings, $pool) : null, 'mono', copy: true, empty: 'Waiting for placement'),
+            self::row('Revisions', $revisions ?: null, 'list', collapse: 2),
+            self::row('Proxy', self::proxySettings($domain->proxy_settings), 'chips'),
+            self::row('Last failure', $placement?->last_error, 'text'),
         ]];
     }
 
@@ -82,14 +82,14 @@ class DomainDetailSections
                 'desired #%d, active #%d%s',
                 $deployment->desired_revision,
                 $deployment->deployed_revision,
-                $deployment->deployed_at === null ? '' : ', '.$timezone->formatTimestamp($deployment->deployed_at),
+                $deployment->deployed_at === null ? '' : ', '.$timezone->formatTimestamp($deployment->deployed_at, 'Y-m-d H:i:s T'),
             ), 'mono', badge: $deployment->status);
             if (auth()->user()?->isAdmin() === true && filled($deployment->last_error)) {
                 $rows[] = self::row($deployment->cluster->name.' error', $deployment->last_error, 'text');
             }
         }
 
-        return ['title' => 'Authoritative DNS deployment', 'rows' => $rows ?: [self::row('Deployments', null, 'text', empty: 'Not deployed')]];
+        return ['title' => 'DNS deployment', 'rows' => $rows ?: [self::row('Clusters', null, 'text', empty: 'Not deployed')]];
     }
 
     private static function cache(Domain $domain): array
@@ -104,8 +104,8 @@ class DomainDetailSections
                 number_format(((int) $settings['maximum_object_bytes']) / 1048576, 1).' MiB max',
                 $settings['respect_origin_headers'] ? 'Origin headers respected' : 'Configured TTL enforced',
             ], 'chips'),
-            self::row('Full-purge epoch', (string) $domain->cache_epoch, 'mono'),
-            self::row('Development mode until', $domain->cache_development_mode_until, 'time', empty: 'Off'),
+            self::row('Purge epoch', (string) $domain->cache_epoch, 'mono'),
+            self::row('Development mode until', $domain->cache_development_mode_until?->isFuture() ? $domain->cache_development_mode_until : null, 'time'),
         ]];
     }
 
@@ -116,13 +116,13 @@ class DomainDetailSections
 
         return ['title' => 'TLS', 'rows' => [
             self::row('Mode', $domain->tls_mode, 'badge'),
-            self::row('Certificate status', $certificate?->status, 'badge', empty: 'Pending managed issuance'),
-            self::row('Covered names', $certificate?->names ?: null, 'list', collapse: 4),
+            self::row('Certificate', $certificate?->status, 'badge', empty: 'Pending managed issuance'),
+            self::row('Names', $certificate?->names ?: null, 'list', collapse: 3),
             self::row('Expires', $certificate?->expires_at, 'time'),
-            self::row('SHA-256 fingerprint', $certificate?->fingerprint_sha256, 'code', copy: true),
-            self::row('Last failure', $certificate?->last_error, 'text'),
-            self::row('Latest managed order', $order?->status, 'badge', empty: 'Not queued'),
-            self::row('Requested names', $order?->names ?: null, 'list', collapse: 4),
+            self::row('SHA-256', $certificate?->fingerprint_sha256, 'code', copy: true),
+            self::row('Failure', $certificate?->last_error, 'text'),
+            self::row('Managed order', $order?->status, 'badge'),
+            self::row('Order names', $order?->names ?: null, 'list', collapse: 3),
             self::row('ACME failure', $order?->last_error, 'text'),
         ]];
     }
@@ -134,26 +134,24 @@ class DomainDetailSections
         $events = $domain->securityEvents()->latest('occurred_at')->limit(10)->get()
             ->map(fn ($event): string => "{$event->reason_code}   ".$timezone->formatTimestamp($event->occurred_at, 'Y-m-d H:i:s T'))->all();
 
-        return ['title' => 'Security and DDoS readiness', 'rows' => [
-            self::row('Configured profile', ($domain->security_settings ?? SecurityConfig::defaults())['profile'], 'badge'),
-            self::row('Operational state', $domain->security_state, 'badge'),
-            self::row('State changed', $domain->security_state_changed_at, 'time', empty: 'Never'),
-            self::row('Web application firewall', match ($domain->waf_profile) {
+        return ['title' => 'Security', 'rows' => [
+            self::row('Profile', ($domain->security_settings ?? SecurityConfig::defaults())['profile'], 'badge'),
+            self::row('State', $domain->security_state, 'badge'),
+            self::row('WAF', match ($domain->waf_profile) {
                 'off' => 'Off',
                 'monitor' => 'Observe',
                 'balanced' => 'Recommended',
                 'strict' => 'High sensitivity',
                 default => $domain->waf_profile,
-            }, 'badge', help: 'Off does not inspect, Observe reports without blocking, Recommended blocks common attacks, and High sensitivity blocks more aggressively.'),
-            self::row('Rules', (string) $domain->securityRules()->count(), 'mono'),
-            self::row('Effective request/origin limits', [
+            }, 'badge'),
+            self::row('Limits', [
                 "{$limits['requests_per_second']} req/s",
                 "{$limits['connections_per_client']} client connections",
                 "{$limits['connections_per_domain']} domain connections",
                 "{$limits['origin_max_connections']} origin connections",
                 "{$limits['maximum_request_body_size']} body bytes",
             ], 'chips'),
-            self::row('Recent reason codes', $events ?: null, 'list', collapse: 3),
+            self::row('Recent events', $events ?: null, 'list', collapse: 3),
         ]];
     }
 

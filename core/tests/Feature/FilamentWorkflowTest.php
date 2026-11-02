@@ -622,7 +622,7 @@ class FilamentWorkflowTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(ViewDomain::class, ['record' => $domain->id])
-            ->assertSee('Active cells by edge')->assertSee('Target cells by edge')
+            ->assertSee('Target cells')
             ->assertSee('cells-ui-edge · replica 1 · cell-01 · deploying')
             ->assertSee('cells-ui-edge · replica 1 · cell-02 · deploying');
     }

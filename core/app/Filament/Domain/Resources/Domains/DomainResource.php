@@ -13,9 +13,6 @@ use App\Models\Domain;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
-use Filament\Schemas\Components\Grid;
-use Filament\Schemas\Components\Tabs;
-use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\FontFamily;
@@ -72,21 +69,9 @@ class DomainResource extends Resource
 
     public static function infolist(Schema $schema): Schema
     {
-        $tab = fn (string $key, string $label) => Tab::make($label)->schema([
-            View::make('filament.domain.detail-tab')->viewData(['tab' => $key]),
-        ]);
-
         return $schema->columns(1)->components([
-            Grid::make(['default' => 1, 'xl' => 3])->columnSpanFull()->schema([
-                Tabs::make('domain')->persistTabInQueryString()->columnSpan(['xl' => 2])->tabs([
-                    $tab('overview', 'Overview'),
-                    $tab('dns', 'DNS'),
-                    $tab('cache', 'Cache'),
-                    $tab('tls', 'TLS'),
-                    $tab('security', 'Security'),
-                ]),
-                View::make('filament.domain.detail-rail')->columnSpan(['xl' => 1]),
-            ]),
+            View::make('filament.domain.quick-actions'),
+            View::make('filament.domain.overview'),
         ]);
     }
 

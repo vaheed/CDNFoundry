@@ -43,9 +43,12 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\HtmlString;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -73,6 +76,24 @@ class ViewDomain extends ViewRecord
     public function getTitle(): string
     {
         return $this->record->display_name ?: $this->record->name;
+    }
+
+    public function hasCombinedRelationManagerTabsWithContent(): bool
+    {
+        return true;
+    }
+
+    public function getContentTabLabel(): ?string
+    {
+        return 'Overview';
+    }
+
+    public function getHeading(): string|Htmlable
+    {
+        $state = $this->record->lifecycle_state->value;
+        $tone = $state === 'active' ? 'success' : 'warning';
+
+        return new HtmlString(e($this->getTitle()).' '.Blade::render('<x-ui.status-pill tone="'.$tone.'" data-testid="domain-status">{{ $label }}</x-ui.status-pill>', ['label' => str($state)->replace('_', ' ')->headline()->toString()]));
     }
 
     public function getSubheading(): ?string
