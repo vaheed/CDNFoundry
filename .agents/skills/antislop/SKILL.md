@@ -51,7 +51,7 @@ These come from the owner's reviews of real screens. They are mandatory for ever
 ### How to work
 
 1. **Ask "is this really needed?" before adding anything.** Every label, value, column, icon, tooltip, button, border, and line of text must earn its place. If it repeats something visible, restates the obvious, or exists only because the component offers it, remove it.
-2. **Design for this product, in your own way.** A reference (Cloudflare, Bifrost, EasyUI) shows what pro quality feels like; never copy its layout, branding, or effects. Apply the same bar to the whole project, not to one example screen.
+2. **Design for this product, in your own way.** The design system is Kumo, ported into Filament: use its tokens, type scale, and component shapes, never Cloudflare's branding (orange, logo, product names) or a screen copied from its dashboard. Other references only show what pro quality feels like. Apply the same bar to the whole project, not to one example screen.
 3. **Test with rich, awkward data, not a clean demo.** Use the browser seed (`tests/browser/seed.php`): many rows, very long names, IPv6, punycode, failures, long errors, ten revisions, many records. Most defects only appear with real data.
 4. **Look at the screenshots before reporting a screen done**, in light and dark mode, at desktop and phone width. A passing test is not a design review.
 5. **Fix the pattern, not the one screen.** When the owner points at one defect, search every screen for the same mistake and fix all of them.
@@ -72,8 +72,8 @@ These come from the owner's reviews of real screens. They are mandatory for ever
 
 15. **KPIs are one strip**, one bordered container with hairline dividers, never five separate boxes. Values never wrap or clip.
 16. **Tabs sit on the page**, spaced from the edge, underlined with the text color. No text stuck to a border.
-17. **Selection is neutral.** Selected tab, sidebar item, and row use ink and a light tint, not a brand color. Blue is for primary actions and links only. A color that looks like it came from another site is wrong (the teal was rejected).
-18. **Numbers use the same sans font**, with tabular digits, so columns align. Monospace is only for code-like values (fingerprints, commands). Font: Inter, bundled.
+17. **Selection is neutral.** Selected tab, sidebar item, and row use ink and a light tint (`--cdn-text-strong` on `--cdn-tint`), not a brand color. Blue (`--cdn-brand`) is for primary actions, checked controls, focus rings, and links only. A color that looks like it came from another site is wrong (the teal was rejected).
+18. **Numbers use the same sans font**, with tabular digits, so columns align. Monospace is only for code-like values (fingerprints, commands). Font: Inter, bundled. Icons: Phosphor, regular weight.
 19. **Both themes must look designed**, not inverted. Check contrast and borders in dark mode.
 
 ### Forms and sheets

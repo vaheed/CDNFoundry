@@ -26,6 +26,7 @@ symbol and caller queries over reading whole files.
 | Settings | `Support/PlatformSettings.php`, `Admin/SystemSettingsController.php`, `Filament/Admin/Pages/PlatformSettings.php` | `SystemSettingsTest` |
 | Operations and audit | `Models/Operation.php` (`coalesceDomain`), `AuditLog.php`, `Http/Middleware/IdempotentRequest.php` | `OperationsApiTest` |
 | UI | `app/Filament/Admin/**` (admin panel `/admin`), `app/Filament/Domain/**` (domain panel `/app`), `app/Filament/Shared/Pages` | `FilamentPanelAccessTest`, `FilamentWorkflowTest` |
+| UI design system (Kumo, ported) | `resources/css/filament/shared/theme.css` (tokens and component skins), `app/Providers/Filament/PanelDesign.php` (palettes, shell), `app/Providers/Filament/PhosphorIcons.php` (Filament icons), `resources/views/components/ui/*` (shared Blade components); browser suite in `tests/browser` | `DesignSystemConsistencyTest`, `tests/browser/run.sh` |
 | Control-plane HA | `Support/ControlPlane.php` (epoch, fence, status), `Console/Commands/Control*.php`, `Http/Middleware/ControlEpoch.php`, `EdgeAgentController::controlAddresses` | `ControlPlaneHighAvailabilityTest` |
 | Queues | `config/horizon.php` (lanes: interactive, runtime, certificate_purge, bulk_maintenance) | — |
 
