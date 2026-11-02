@@ -1616,3 +1616,7 @@ a.cdn-kpi-body:hover {
 .fi-ta-icon {
     padding-inline: 0.5rem;
 }
+
+.fi-tabs-item .fi-tabs-item-label {
+    color: inherit;
+}

@@ -21,7 +21,7 @@
             <p class="cdn-setting-description">Showing the first {{ \App\Support\TopologyGraph::MAX_EDGES }} PoPs.</p>
         @endif
 
-        <div class="cdn-topo-canvas">
+        <div class="cdn-topo-canvas" tabindex="0" role="region" aria-label="Topology drawing, scrollable">
             <svg role="img" aria-label="Fleet topology" viewBox="0 0 {{ $graph['width'] }} {{ $graph['height'] }}"
                  x-bind:style="`width: ${ {{ $graph['width'] }} * scale}px; height: ${ {{ $graph['height'] }} * scale}px`">
                 @foreach ($graph['links'] as $link)
