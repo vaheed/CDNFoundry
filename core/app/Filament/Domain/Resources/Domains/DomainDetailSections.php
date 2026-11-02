@@ -78,12 +78,13 @@ class DomainDetailSections
         $deployments = $domain->dnsDeployments()->with('cluster')->orderBy('dns_cluster_id')->get();
         $rows = [];
         foreach ($deployments as $deployment) {
-            $rows[] = self::row($deployment->cluster->name, sprintf(
-                'desired #%d, active #%d%s',
-                $deployment->desired_revision,
-                $deployment->deployed_revision,
-                $deployment->deployed_at === null ? '' : ', '.$timezone->formatTimestamp($deployment->deployed_at, 'Y-m-d H:i:s T'),
-            ), 'mono', badge: $deployment->status);
+            $rows[] = self::row(
+                $deployment->cluster->name,
+                ['Desired #'.$deployment->desired_revision, 'Active #'.$deployment->deployed_revision],
+                'chips',
+                help: $deployment->deployed_at === null ? null : 'Deployed '.$timezone->formatTimestamp($deployment->deployed_at, 'Y-m-d H:i:s T'),
+                badge: $deployment->status,
+            );
             if (auth()->user()?->isAdmin() === true && filled($deployment->last_error)) {
                 $rows[] = self::row($deployment->cluster->name.' error', $deployment->last_error, 'text');
             }
@@ -175,7 +176,7 @@ class DomainDetailSections
     {
         return $domain->edgeCells()->with(['edge:id,name', $relation.':id,name'])->orderBy('edge_id')->orderBy('replica')->get()
             ->filter(fn ($placement): bool => $placement->{$relation} !== null)
-            ->map(fn ($placement): string => sprintf('%s · replica %d · %s · %s', $placement->edge->name, $placement->replica, $placement->{$relation}->name, $placement->state))->all();
+            ->map(fn ($placement): string => sprintf('%s replica %d: %s (%s)', $placement->edge->name, $placement->replica, $placement->{$relation}->name, str_replace('_', ' ', (string) $placement->state)))->all();
     }
 
     /** @return array<int, string> */

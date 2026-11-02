@@ -35,10 +35,10 @@ final class SecurityConfig
     public static function profileOptions(): array
     {
         return [
-            'standard' => 'Normal traffic — recommended limits',
-            'protected' => 'Elevated risk — tighter rate and connection limits',
-            'quarantine' => 'Isolation — strictest rate and connection limits',
-            self::MANUAL_PROFILE => 'Advanced — custom limits',
+            'standard' => 'Normal traffic: recommended limits',
+            'protected' => 'Elevated risk: tighter rate and connection limits',
+            'quarantine' => 'Isolation: strictest rate and connection limits',
+            self::MANUAL_PROFILE => 'Advanced: custom limits',
         ];
     }
 

@@ -34,6 +34,7 @@ use App\Support\UploadedCertificate;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\KeyValue;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
@@ -43,6 +44,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Filament\Support\Enums\Width;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Blade;
@@ -121,7 +123,7 @@ class ViewDomain extends ViewRecord
     protected function getHeaderActions(): array
     {
         $actions = [
-            Action::make('reconcileDns')->label('Reconcile authoritative DNS')->icon('heroicon-o-arrow-path')
+            Action::make('reconcileDns')->label('Reconcile authoritative DNS')->icon('phosphor-arrows-clockwise')
                 ->visible(fn (): bool => $this->record->lifecycle_state === DomainLifecycleState::Active)
                 ->action(function (): void {
                     $response = app(DnsDeploymentController::class)->reconcile(request(), $this->record);
@@ -129,7 +131,7 @@ class ViewDomain extends ViewRecord
                     Notification::make()->info()->title('DNS reconciliation queued')
                         ->body("Operation {$operation['id']} will preserve the previous valid zone until activation succeeds.")->send();
                 }),
-            Action::make('tlsMode')->label('TLS mode')->icon('heroicon-o-lock-closed')->schema([
+            Action::make('tlsMode')->label('TLS mode')->icon('phosphor-lock')->schema([
                 Select::make('mode')->options(['managed' => 'Managed', 'custom' => 'Custom', 'disabled' => 'Disabled'])->required(),
             ])->fillForm(fn (): array => ['mode' => $this->record->tls_mode])
                 ->action(function (array $data): void {
@@ -152,7 +154,7 @@ class ViewDomain extends ViewRecord
                         EnsureManagedCertificates::dispatch($this->record->id)->afterCommit();
                     }
                 }),
-            Action::make('renewManagedCertificate')->label('Renew managed certificate')->icon('heroicon-o-arrow-path')
+            Action::make('renewManagedCertificate')->label('Renew managed certificate')->icon('phosphor-arrows-clockwise')
                 ->visible(fn (): bool => $this->record->tls_mode === 'managed' && $this->record->dnsRecords()->where('mode', 'proxied')->exists())
                 ->action(function (): void {
                     $operation = Operation::query()->create([
@@ -162,7 +164,7 @@ class ViewDomain extends ViewRecord
                     EnsureManagedCertificates::dispatch($this->record->id)->afterCommit();
                     Notification::make()->info()->title('Managed renewal queued')->body("Operation {$operation->id} will reuse valid coverage or queue a bounded ACME order.")->send();
                 }),
-            Action::make('reissueManagedCertificate')->label('Reissue managed certificate')->color('warning')->requiresConfirmation()
+            Action::make('reissueManagedCertificate')->icon('phosphor-arrows-clockwise')->label('Reissue managed certificate')->color('warning')->requiresConfirmation()
                 ->visible(fn (): bool => $this->record->tls_mode === 'managed' && $this->record->dnsRecords()->where('mode', 'proxied')->exists())
                 ->action(function (): void {
                     $operation = Operation::query()->create([
@@ -172,7 +174,7 @@ class ViewDomain extends ViewRecord
                     EnsureManagedCertificates::dispatch($this->record->id, true)->afterCommit();
                     Notification::make()->warning()->title('Managed reissue queued')->body("Operation {$operation->id} will create a new order within the global CA budget.")->send();
                 }),
-            Action::make('uploadCertificate')->label('Upload custom certificate')->icon('heroicon-o-document-arrow-up')->schema([
+            Action::make('uploadCertificate')->label('Upload custom certificate')->icon('phosphor-file-arrow-up')->schema([
                 Textarea::make('certificate')->label('Leaf certificate PEM')->rows(8)->maxLength(16384)->required(),
                 Textarea::make('chain')->label('Intermediate certificates PEM')->rows(8)->maxLength(65536),
                 Textarea::make('private_key')->label('Private key PEM')->rows(8)->maxLength(16384)->required(),
@@ -208,7 +210,7 @@ class ViewDomain extends ViewRecord
                 ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
                 Notification::make()->success()->title('Custom certificate accepted')->body('The encrypted key and validated chain are queued for edge delivery.')->send();
             }),
-            Action::make('deleteCustomCertificate')->label('Remove custom certificate')->color('danger')->requiresConfirmation()
+            Action::make('deleteCustomCertificate')->icon('phosphor-trash')->label('Remove custom certificate')->color('danger')->requiresConfirmation()
                 ->visible(fn (): bool => $this->record->tlsCertificates()->where('kind', 'custom')->where('status', 'active')->exists())
                 ->action(function (): void {
                     DB::transaction(function (): void {
@@ -222,7 +224,7 @@ class ViewDomain extends ViewRecord
                     ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
                     EnsureManagedCertificates::dispatch($this->record->id)->afterCommit();
                 }),
-            Action::make('cacheSettings')->label('Cache settings')->icon('heroicon-o-circle-stack')->schema([
+            Action::make('cacheSettings')->label('Cache settings')->icon('phosphor-database')->schema([
                 Toggle::make('enabled')->label('Cache enabled')->required(),
                 TextInput::make('edge_ttl_seconds')->label('Edge TTL (seconds)')->numeric()->minValue(0)->maxValue(31536000)->required(),
                 TextInput::make('browser_ttl_seconds')->label('Browser TTL (seconds)')->numeric()->minValue(0)->maxValue(31536000)->required(),
@@ -264,7 +266,7 @@ class ViewDomain extends ViewRecord
                     ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
                     Notification::make()->success()->title('Cache settings saved')->body('The latest domain revision is queued for edge delivery.')->send();
                 }),
-            Action::make('developmentMode')->label('Enable development mode')->icon('heroicon-o-code-bracket')->schema([
+            Action::make('developmentMode')->label('Enable development mode')->icon('phosphor-code')->schema([
                 TextInput::make('duration_minutes')->label('Duration (minutes)')->numeric()->default(30)->minValue(1)->maxValue(1440)->required(),
             ])->visible(fn (): bool => ! $this->record->cache_development_mode_until?->isFuture())
                 ->action(function (array $data): void {
@@ -277,7 +279,7 @@ class ViewDomain extends ViewRecord
                     ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
                     Notification::make()->warning()->title('Development mode enabled')->body('The cache bypass has an automatic visible expiry.')->send();
                 }),
-            Action::make('disableDevelopmentMode')->label('Disable development mode')->color('warning')->requiresConfirmation()
+            Action::make('disableDevelopmentMode')->icon('phosphor-code')->label('Disable development mode')->color('warning')->requiresConfirmation()
                 ->visible(fn (): bool => $this->record->cache_development_mode_until?->isFuture() === true)
                 ->action(function (): void {
                     DB::transaction(function (): void {
@@ -288,8 +290,10 @@ class ViewDomain extends ViewRecord
                     Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
                     ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
                 }),
-            Action::make('purgeCache')->label('Purge cache')->icon('heroicon-o-trash')->color('warning')->schema([
-                Select::make('type')->options(['all' => 'Everything', 'urls' => 'Exact URLs'])->default('all')->required()->live(),
+            Action::make('purgeCache')->label('Purge cache')->icon('phosphor-trash')->color('warning')->modalSubmitActionLabel('Purge cache')->schema([
+                Radio::make('type')->hiddenLabel()->options(['all' => 'Everything', 'urls' => 'Exact URLs'])
+                    ->descriptions(['all' => 'Every cached object for this domain.', 'urls' => 'Up to 100 URLs, one per line.'])
+                    ->default('all')->required()->live(),
                 Textarea::make('urls')->label('URLs (one per line)')->rows(8)->maxLength(131072)->visible(fn ($get): bool => $get('type') === 'urls')->required(fn ($get): bool => $get('type') === 'urls'),
             ])->action(function (array $data): void {
                 $urls = $data['type'] === 'urls' ? preg_split('/\R/', trim((string) $data['urls']), flags: PREG_SPLIT_NO_EMPTY) : [];
@@ -297,7 +301,7 @@ class ViewDomain extends ViewRecord
                 $purge = DispatchCachePurge::execute($this->record, $data['type'], $urls, auth()->user(), request()->ip());
                 Notification::make()->info()->title('Cache purge queued')->body("Purge {$purge->id} is visible in per-edge delivery state.")->send();
             }),
-            Action::make('proxyDefaults')->label('Proxy defaults')->icon('heroicon-o-adjustments-horizontal')->schema([
+            Action::make('proxyDefaults')->label('Proxy defaults')->icon('phosphor-sliders-horizontal')->schema([
                 Toggle::make('enabled')->default(true)->required(),
                 Toggle::make('redirect_https')->label('Redirect HTTP to HTTPS')->default(false)->required(),
                 Select::make('http_versions')->label('Allowed HTTP versions')->multiple()->options(['1.1' => 'HTTP/1.1', '2' => 'HTTP/2'])->required()->maxItems(2),
@@ -329,7 +333,7 @@ class ViewDomain extends ViewRecord
                     ->color($proxiedCount > 0 && $readyEdgeExists ? 'success' : 'warning')
                     ->send();
             }),
-            Action::make('securitySettings')->label('Security profile and limits')->icon('heroicon-o-shield-check')->schema([
+            Action::make('securitySettings')->label('Security profile and limits')->icon('phosphor-shield-check')->schema([
                 Select::make('profile')
                     ->label(fn (Get $get): string|\Illuminate\Support\HtmlString => FilamentHelp::label('Profile', SecurityConfig::profileDescription((string) $get('profile'))))
                     ->options(SecurityConfig::profileOptions())->required()->live()
@@ -365,15 +369,15 @@ class ViewDomain extends ViewRecord
                     ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
                     Notification::make()->success()->title('Security profile saved')->body('The bounded policy is queued in the normal signed edge revision.')->send();
                 }),
-            Action::make('wafProfile')->label('Web application firewall (WAF)')->icon('heroicon-o-shield-exclamation')
+            Action::make('wafProfile')->label('Web application firewall (WAF)')->icon('phosphor-shield-warning')
                 ->modalHeading('Choose web application firewall protection')
                 ->modalDescription('WAF inspects web requests for common application attacks. It is separate from rate limits and emergency incident protection.')
                 ->schema([
                     Select::make('profile')->label('Protection level')->options([
-                        'off' => 'Off — no attack inspection',
-                        'monitor' => 'Observe — report attacks but allow requests',
-                        'balanced' => 'Recommended — block common attacks',
-                        'strict' => 'High sensitivity — stronger blocking, more false-positive risk',
+                        'off' => 'Off: no attack inspection',
+                        'monitor' => 'Observe: report attacks but allow requests',
+                        'balanced' => 'Recommended: block common attacks',
+                        'strict' => 'High sensitivity: stronger blocking, more false positives',
                     ])->helperText('Start with Observe. After checking security events, choose Recommended. Use High sensitivity only after application testing.')->required(),
                 ])->fillForm(fn (): array => ['profile' => $this->record->waf_profile])
                 ->action(function (array $data): void {
@@ -391,25 +395,25 @@ class ViewDomain extends ViewRecord
                         'strict' => 'High-sensitivity protection will block more aggressively; watch for false positives.',
                     })->send();
                 }),
-            Action::make('startMaintenance')->label('Start maintenance')->color('warning')->requiresConfirmation()->schema([
+            Action::make('startMaintenance')->icon('phosphor-wrench')->label('Start maintenance')->color('warning')->requiresConfirmation()->schema([
                 TextInput::make('body')->label('503 response message')->default('Service temporarily unavailable')->maxLength(4096)->required(),
             ])->visible(fn (): bool => ! is_array($this->record->proxy_settings['maintenance'] ?? null))
                 ->action(fn (array $data) => $this->changeMaintenance((string) $data['body'])),
-            Action::make('endMaintenance')->label('End maintenance')->color('success')->requiresConfirmation()
+            Action::make('endMaintenance')->icon('phosphor-check-circle')->label('End maintenance')->color('success')->requiresConfirmation()
                 ->visible(fn (): bool => is_array($this->record->proxy_settings['maintenance'] ?? null))
                 ->action(fn () => $this->changeMaintenance(null)),
-            Action::make('protectSecurity')->label('Enable Under Attack mode')->color('warning')->requiresConfirmation()
+            Action::make('protectSecurity')->icon('phosphor-shield-warning')->label('Enable Under Attack mode')->color('warning')->requiresConfirmation()
                 ->modalHeading('Enable Under Attack mode?')
                 ->modalDescription('Use this temporary mode during an active attack. It tightens rate and connection limits, but does not change the domain WAF profile or move the domain.')
                 ->visible(fn (): bool => auth()->user()?->isAdmin() === true && ! in_array($this->record->security_state, ['restricted', 'quarantined'], true))
                 ->action(fn () => $this->changeSecurityState('restricted', null)),
-            Action::make('quarantineSecurity')->label('Quarantine domain')->color('danger')->requiresConfirmation()
+            Action::make('quarantineSecurity')->icon('phosphor-prohibit')->label('Quarantine domain')->color('danger')->requiresConfirmation()
                 ->visible(fn (): bool => auth()->user()?->isAdmin() === true && $this->record->security_state !== 'quarantined' && $this->record->dnsRecords()->where('mode', 'proxied')->exists())
                 ->action(fn () => $this->changeSecurityState('quarantined', EdgePool::query()->where('enabled', true)->where('withdrawn', false)->where('kind', 'quarantine')->orderBy('id')->firstOrFail())),
-            Action::make('returnSecurityToNormal')->label('Return to normal')->color('success')->requiresConfirmation()
+            Action::make('returnSecurityToNormal')->icon('phosphor-shield-check')->label('Return to normal')->color('success')->requiresConfirmation()
                 ->visible(fn (): bool => auth()->user()?->isAdmin() === true && in_array($this->record->security_state, ['restricted', 'quarantined'], true))
                 ->action(fn () => $this->changeSecurityState('recovering', EdgePool::query()->where('enabled', true)->where('withdrawn', false)->where('kind', 'shared')->orderBy('id')->firstOrFail())),
-            Action::make('rollbackProxy')->label('Rollback proxy revision')->color('warning')->requiresConfirmation()->schema([
+            Action::make('rollbackProxy')->icon('phosphor-arrow-counter-clockwise')->label('Rollback proxy revision')->color('warning')->requiresConfirmation()->schema([
                 Select::make('revision')->options(fn (): array => EdgeRevision::query()->where('domain_id', $this->record->id)->where('status', 'validated')->where('revision', '<', $this->record->revision)->latest('revision')->limit(50)->get()
                     ->mapWithKeys(fn (EdgeRevision $revision): array => [$revision->revision => "#{$revision->revision} · {$revision->created_at->copy()->setTimezone(app(PlatformSettings::class)->displayTimezone())->format('Y-m-d H:i:s P e')}"])->all())->required(),
             ])->visible(fn (): bool => EdgeRevision::query()->where('domain_id', $this->record->id)->where('status', 'validated')->where('revision', '<', $this->record->revision)->exists())
@@ -419,7 +423,7 @@ class ViewDomain extends ViewRecord
                     Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
                     ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
                 }),
-            Action::make('moveEdgePool')->label('Move service pool')->icon('heroicon-o-arrows-right-left')->schema([
+            Action::make('moveEdgePool')->label('Move service pool')->icon('phosphor-arrows-left-right')->schema([
                 Select::make('pool_id')->label('Target pool')->options(function (): array {
                     $placement = DomainEdgePlacement::query()->where('domain_id', $this->record->id)->first();
 
@@ -450,14 +454,14 @@ class ViewDomain extends ViewRecord
                     Notification::make()->success()->title('Service pool move queued')
                         ->body("Operation {$operation->id} is moving {$domain->name} to {$pool->name} at revision {$domain->revision}. The source remains active until target readiness is acknowledged.")->send();
                 }),
-            Action::make('verifyNameservers')->label('Verify nameservers')->icon('heroicon-o-shield-check')
+            Action::make('verifyNameservers')->label('Verify nameservers')->icon('phosphor-shield-check')
                 ->visible(fn (): bool => $this->record->nameservers_verified_at === null && $this->record->lifecycle_state !== DomainLifecycleState::Deprovisioning)
                 ->action(function (): void {
                     $operation = app(DomainNameserverVerification::class)->queue($this->record, auth()->user(), request()->ip());
                     Notification::make()->info()->title('Nameserver verification queued')
                         ->body("Operation {$operation->id} checks the public NS delegation. Refresh this page after the worker completes.")->send();
                 }),
-            Action::make('forceVerifyNameservers')->label('Force verify (local test)')->icon('heroicon-o-wrench-screwdriver')
+            Action::make('forceVerifyNameservers')->label('Force verify (local test)')->icon('phosphor-wrench')
                 ->color('warning')->requiresConfirmation()
                 ->modalHeading('Bypass public nameserver verification?')
                 ->modalDescription('Use only for local browser qualification. This does not prove that public delegation is correct.')
@@ -474,7 +478,7 @@ class ViewDomain extends ViewRecord
                     Notification::make()->warning()->title('Nameservers force verified')
                         ->body('Local-test bypass recorded and the domain activated. Public delegation was not checked.')->send();
                 }),
-            Action::make('activate')->color('success')->requiresConfirmation()
+            Action::make('activate')->icon('phosphor-check-circle')->color('success')->requiresConfirmation()
                 ->visible(fn (): bool => $this->record->nameservers_verified_at !== null && $this->record->lifecycle_state !== DomainLifecycleState::Active && $this->record->lifecycle_state !== DomainLifecycleState::Deprovisioning)
                 ->action(function (): void {
                     abort_unless(
@@ -499,7 +503,7 @@ class ViewDomain extends ViewRecord
                         EnsureManagedCertificates::dispatch($this->record->id)->afterCommit();
                     }
                 }),
-            Action::make('disable')->color('danger')->requiresConfirmation()
+            Action::make('disable')->icon('phosphor-prohibit')->color('danger')->requiresConfirmation()
                 ->visible(fn (): bool => in_array($this->record->lifecycle_state, [DomainLifecycleState::PendingVerification, DomainLifecycleState::Active], true))
                 ->action(function (): void {
                     DB::transaction(function (): void {
@@ -516,7 +520,7 @@ class ViewDomain extends ViewRecord
                         ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
                     }
                 }),
-            Action::make('importZone')->label('Import zone')->schema([
+            Action::make('importZone')->icon('phosphor-upload-simple')->label('Import zone')->schema([
                 Textarea::make('zone')->required()->maxLength(BindZone::MAX_BYTES)->rows(12),
                 Toggle::make('replace_existing')->label('Replace existing records')->default(false),
             ])->action(function (array $data): void {
@@ -532,7 +536,7 @@ class ViewDomain extends ViewRecord
                     ReconcileDnsZone::dispatch($this->record->id)->afterCommit();
                 }
             }),
-            Action::make('exportZone')->label('Export zone')->action(function (): StreamedResponse {
+            Action::make('exportZone')->icon('phosphor-download-simple')->label('Export zone')->action(function (): StreamedResponse {
                 $zone = BindZone::export($this->record);
 
                 return response()->streamDownload(
@@ -544,38 +548,44 @@ class ViewDomain extends ViewRecord
                 );
             }),
         ];
-        $sheets = ['importZone', 'proxyDefaults', 'moveEdgePool', 'cacheSettings', 'developmentMode', 'purgeCache', 'tlsMode', 'uploadCertificate', 'securitySettings', 'wafProfile'];
+        // Long forms open as a right-side sheet; a form of one or two fields opens as a small centered dialog.
+        $sheets = ['importZone', 'proxyDefaults', 'cacheSettings', 'uploadCertificate', 'securitySettings', 'wafProfile'];
+        $dialogs = ['moveEdgePool', 'developmentMode', 'purgeCache', 'tlsMode'];
         $group = fn (array $names): array => collect($actions)
             ->keyBy(fn (Action $action): string => $action->getName())
             ->only($names)
-            ->map(fn (Action $action): Action => in_array($action->getName(), $sheets, true) ? $action->slideOver() : $action)
+            ->map(fn (Action $action): Action => match (true) {
+                in_array($action->getName(), $sheets, true) => $action->slideOver()->modalWidth(Width::TwoExtraLarge),
+                in_array($action->getName(), $dialogs, true) => $action->modalWidth(Width::Medium),
+                default => $action,
+            })
             ->values()
             ->all();
 
         return [
             ActionGroup::make($group(['verifyNameservers', 'forceVerifyNameservers', 'reconcileDns', 'activate', 'disable', 'importZone', 'exportZone']))
                 ->label('Domain actions')
-                ->icon('heroicon-o-globe-alt')
+                ->icon('phosphor-globe')
                 ->color('gray')
                 ->button(),
             ActionGroup::make($group(['proxyDefaults', 'rollbackProxy', 'moveEdgePool']))
                 ->label('Delivery')
-                ->icon('heroicon-o-cloud')
+                ->icon('phosphor-cloud')
                 ->color('gray')
                 ->button(),
             ActionGroup::make($group(['cacheSettings', 'developmentMode', 'disableDevelopmentMode', 'purgeCache']))
                 ->label('Cache')
-                ->icon('heroicon-o-circle-stack')
+                ->icon('phosphor-database')
                 ->color('gray')
                 ->button(),
             ActionGroup::make($group(['tlsMode', 'renewManagedCertificate', 'reissueManagedCertificate', 'uploadCertificate', 'deleteCustomCertificate']))
                 ->label('TLS')
-                ->icon('heroicon-o-lock-closed')
+                ->icon('phosphor-lock')
                 ->color('gray')
                 ->button(),
             ActionGroup::make($group(['securitySettings', 'wafProfile', 'startMaintenance', 'endMaintenance', 'protectSecurity', 'quarantineSecurity', 'returnSecurityToNormal']))
                 ->label('Security')
-                ->icon('heroicon-o-shield-check')
+                ->icon('phosphor-shield-check')
                 ->color('gray')
                 ->button(),
         ];

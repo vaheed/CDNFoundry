@@ -23,7 +23,7 @@ class WafExclusionsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table->columns([
-            TextColumn::make('dimension')->badge(), TextColumn::make('value')->limit(50),
+            TextColumn::make('dimension')->badge()->formatStateUsing(fn ($state): string => ucfirst(str_replace('_', ' ', $state instanceof \BackedEnum ? $state->value : (string) $state))), TextColumn::make('value')->limit(50),
             TextColumn::make('rule_id')->placeholder('All applicable rules'),
             TextColumn::make('reason')->limit(60), TextColumn::make('owner.name')->label('Owner'),
             TextColumn::make('expires_at')->dateTime()->sortable(),

@@ -8,6 +8,7 @@ use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\HtmlString;
 
 class ListEdges extends ListRecords
@@ -19,7 +20,7 @@ class ListEdges extends ListRecords
         return [
             Action::make('reconcileAllDomains')
                 ->label('Reconcile all domains')
-                ->icon('heroicon-o-arrow-path')
+                ->icon('phosphor-arrows-clockwise')
                 ->color('gray')
                 ->requiresConfirmation()
                 ->action(function (): void {
@@ -32,7 +33,7 @@ class ListEdges extends ListRecords
         ];
     }
 
-    public function getSubheading(): string|\Illuminate\Contracts\Support\Htmlable|null
+    public function getSubheading(): string|Htmlable|null
     {
         return new HtmlString('<span class="cdn-live" data-testid="live-indicator">Polling active</span>');
     }

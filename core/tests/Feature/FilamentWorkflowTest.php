@@ -438,9 +438,10 @@ class FilamentWorkflowTest extends TestCase
 
         $component()->assertSee('Awaiting agent enrollment')
             ->assertSee($pool->name)
-            ->assertSee('64.0 MiB / 512.0 MiB memory')
-            ->assertSee('10.0 MiB / 256.0 MiB cache')
-            ->assertSee('1.00 MiB / 64.0 MiB temporary');
+            ->assertSee('64.0 MiB of 512.0 MiB')
+            ->toggleAllTableColumns()
+            ->assertSee('10.0 MiB of 256.0 MiB')
+            ->assertSee('1.00 MiB of 64.0 MiB');
         $this->assertDatabaseHas('edge_cells', [
             'id' => $cell->id,
         ]);
@@ -623,8 +624,8 @@ class FilamentWorkflowTest extends TestCase
 
         Livewire::test(ViewDomain::class, ['record' => $domain->id])
             ->assertSee('Target cells')
-            ->assertSee('cells-ui-edge · replica 1 · cell-01 · deploying')
-            ->assertSee('cells-ui-edge · replica 1 · cell-02 · deploying');
+            ->assertSee('cells-ui-edge replica 1: cell-01 (deploying)')
+            ->assertSee('cells-ui-edge replica 1: cell-02 (deploying)');
     }
 
     public function test_administrator_can_assign_a_free_cell_from_the_edge_screen(): void

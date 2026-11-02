@@ -24,7 +24,6 @@ use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
-use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -34,7 +33,7 @@ class EdgeResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'name';
 
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-globe-americas';
+    protected static string|\BackedEnum|null $navigationIcon = 'phosphor-globe-hemisphere-west';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Infrastructure';
 
@@ -112,12 +111,8 @@ class EdgeResource extends Resource
                     $record->drained => 'Drained',
                     default => 'Serving',
                 })
-                ->icon(fn (string $state): string => match ($state) {
-                    'Serving' => 'heroicon-m-check',
-                    'Drained' => 'heroicon-m-clock',
-                    default => 'heroicon-m-minus',
-                })
-                ->iconColor(fn (string $state): string => match ($state) {
+                ->badge()
+                ->color(fn (string $state): string => match ($state) {
                     'Serving' => 'success',
                     'Drained' => 'warning',
                     default => 'gray',
@@ -138,19 +133,19 @@ class EdgeResource extends Resource
             ViewAction::make()->iconButton(),
             EditAction::make()->iconButton(),
             ActionGroup::make([
-                Action::make('enable')->visible(fn (Edge $record): bool => ! $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => true], 'edge.enable')),
-                Action::make('disable')->color('danger')->requiresConfirmation()->visible(fn (Edge $record): bool => $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => false], 'edge.disable')),
-                Action::make('drain')->color('warning')->requiresConfirmation()->visible(fn (Edge $record): bool => ! $record->drained)->action(fn (Edge $record) => self::changeState($record, ['drained' => true], 'edge.drain')),
-                Action::make('undrain')->visible(fn (Edge $record): bool => $record->drained)->action(fn (Edge $record) => self::changeState($record, ['drained' => false], 'edge.undrain')),
+                Action::make('enable')->icon('phosphor-check-circle')->visible(fn (Edge $record): bool => ! $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => true], 'edge.enable')),
+                Action::make('disable')->icon('phosphor-prohibit')->color('danger')->requiresConfirmation()->visible(fn (Edge $record): bool => $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => false], 'edge.disable')),
+                Action::make('drain')->icon('phosphor-pause-circle')->color('warning')->requiresConfirmation()->visible(fn (Edge $record): bool => ! $record->drained)->action(fn (Edge $record) => self::changeState($record, ['drained' => true], 'edge.drain')),
+                Action::make('undrain')->icon('phosphor-play-circle')->visible(fn (Edge $record): bool => $record->drained)->action(fn (Edge $record) => self::changeState($record, ['drained' => false], 'edge.undrain')),
                 Action::make('rotateIdentity')
                     ->label('Rotate identity')
-                    ->icon('heroicon-o-arrow-path')
+                    ->icon('phosphor-arrows-clockwise')
                     ->color('danger')
                     ->url(fn (Edge $record): string => self::getUrl('view', [
                         'record' => $record,
                         'action' => 'rotateIdentity',
                     ])),
-            ])->label('More')->icon('heroicon-m-ellipsis-horizontal'),
+            ])->label('More')->icon('phosphor-dots-three'),
         ])->defaultSort('name');
     }
 

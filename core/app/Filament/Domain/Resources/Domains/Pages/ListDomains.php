@@ -22,7 +22,7 @@ class ListDomains extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('createDomain')->label('Add domain')->icon('heroicon-o-plus')->slideOver()->modalWidth(Width::TwoExtraLarge)
+            Action::make('createDomain')->label('Add domain')->icon('phosphor-plus')->slideOver()->modalWidth(Width::TwoExtraLarge)
                 ->modalHeading('Add domain')->modalDescription('Enter the domain to serve. No origin is required for DNS-only use.')
                 ->modalSubmitActionLabel('Add domain')
                 ->extraAttributes(['data-testid' => 'domain-create-button'])

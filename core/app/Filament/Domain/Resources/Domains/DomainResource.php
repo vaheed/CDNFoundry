@@ -26,7 +26,7 @@ class DomainResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'name';
 
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-globe-alt';
+    protected static string|\BackedEnum|null $navigationIcon = 'phosphor-globe';
 
     protected static ?int $navigationSort = 20;
 
@@ -48,13 +48,13 @@ class DomainResource extends Resource
         return $table->columns([
             TextColumn::make('name')->searchable()->sortable()->extraCellAttributes(['class' => 'cdn-link-cell']),
             TextColumn::make('lifecycle_state')->label('Status')
-                ->formatStateUsing(fn ($state): string => str($state instanceof \BackedEnum ? $state->value : (string) $state)->replace('_', ' ')->headline()->toString())
-                ->icon(fn ($state): string => ($state instanceof \BackedEnum ? $state->value : (string) $state) === 'active' ? 'heroicon-m-check' : 'heroicon-m-clock')
-                ->iconColor(fn ($state): string => ($state instanceof \BackedEnum ? $state->value : (string) $state) === 'active' ? 'success' : 'warning'),
+                ->formatStateUsing(fn ($state): string => ucfirst(str_replace('_', ' ', $state instanceof \BackedEnum ? $state->value : (string) $state)))
+                ->badge()
+                ->color(fn ($state): string => ($state instanceof \BackedEnum ? $state->value : (string) $state) === 'active' ? 'success' : 'warning'),
             TextColumn::make('nameservers')->label('Nameservers')
                 ->state(fn (Domain $record): string => $record->nameservers_verified_at ? 'Verified' : 'Pending')
-                ->icon(fn (string $state): string => $state === 'Verified' ? 'heroicon-m-check' : 'heroicon-m-clock')
-                ->iconColor(fn (string $state): string => $state === 'Verified' ? 'success' : 'warning'),
+                ->badge()
+                ->color(fn (string $state): string => $state === 'Verified' ? 'success' : 'warning'),
             TextColumn::make('dns_records_count')->label('Records')->counts('dnsRecords')->alignEnd()->fontFamily(FontFamily::Mono),
             TextColumn::make('revision')->sortable()->alignEnd()->fontFamily(FontFamily::Mono)->prefix('#'),
             TextColumn::make('updated_at')->label('Last change')->since()->sortable()->fontFamily(FontFamily::Mono)
@@ -62,7 +62,7 @@ class DomainResource extends Resource
         ])->recordUrl(fn (Domain $record): string => static::getUrl('view', ['record' => $record]))
             ->defaultSort('id')
             ->searchPlaceholder('Search domains')
-            ->emptyStateIcon('heroicon-o-globe-alt')
+            ->emptyStateIcon('phosphor-globe')
             ->emptyStateHeading('No domains yet')
             ->emptyStateDescription('Add a domain to start serving authoritative DNS.');
     }
