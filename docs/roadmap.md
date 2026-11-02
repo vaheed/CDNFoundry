@@ -934,6 +934,18 @@ such as the topology view. No second frontend is added.
 - [x] **A UI guide in `docs/development/frontend.md`.** The tokens, the
       patterns, and one example of each, so every new screen follows them.
 
+#### Kumo design system
+
+On 2026-11-02 the owner set the Kumo design language (`kumo`, MIT) as the design system. Kumo is React, so it is ported into Filament, never installed: its token values, type scale, ring edges, and component shapes become CSS in the shared theme, and Filament's components and the `x-ui.*` Blade components take that look. Owner decisions: the antislop owner design rules win where Kumo's React defaults differ (compact rows, no zebra striping, neutral selection); icons switch to Phosphor, as Kumo uses; the accent is Kumo's brand blue, used for primary actions and links only. Cloudflare's orange, logo, and product names are not used. This is presentation only: no policy, query, validation, action, job, route, or test id changes.
+
+- [x] **Foundation.** Kumo surface, line, text, brand, status, and chart tokens in light and dark mode; neutral Filament palettes; Kumo type scale on Inter; 8 px radius and ring edges; Phosphor icons for every screen and for Filament's own icons (`PhosphorIcons`). `DesignSystemConsistencyTest` fails on raw colors, Heroicons, unknown icon names, and non-neutral greys.
+- [x] **App shell.** Kumo Sidebar proportions, canvas background with the page in one base panel, command-palette search, popover menus, login and MFA card.
+- [x] **Component skins.** Buttons, inputs, toggles, badges (tint, and dot in tables), tables, pagination, sections as Layer Cards, tabs, dropdowns, tooltips, dialogs and sheets, banners, meters, and empty states; the shared Blade components on those skins.
+- [x] **Owner review fixes (2026-11-03).** Colored status badges in sentence case; neutral counts and menus with icons; equal table row heights; compact dialogs for short forms and single-column sheets for long ones; example placeholders and helper lines on forms (security rules, DNS records, Geo-DNS, origins, API tokens); named country and continent selects; platform settings with categories and search; one top tab row on the domain and edge pages; a slimmer cells table; a lighter dark theme; the landing and service health pages on the same tokens; documentation link to the documentation site.
+- [x] **One hidden DNS primary.** The platform zone goes to the enabled, healthy DNS primary; `cluster_targets` is no longer accepted by `PUT /api/admin/system/settings/dns` (it returns a validation error), and the UI shows the hidden primary read-only. The `platform_dns_settings.cluster_targets` column is optional now (expand); a Phase 9 contract migration drops it.
+- [x] **Agent-run crawl.** `tests/browser/specs/crawl.spec.ts` visits every sidebar link and the first record of every list in both panels, opens every header action, menu item, row action, and tab, and fails on any HTTP 5xx or script error.
+- [ ] **Decision spike on Kumo.** Overview, Domains list, domain detail, and platform settings, reviewed by the owner before the remaining screen groups (domain detail surfaces, infrastructure, observe, customers and account, the domain panel) are redesigned one by one.
+
 #### Screens
 
 - [ ] **Decision spike first.** Rebuild three screens on the design system:
@@ -1058,6 +1070,16 @@ needed most.
 | Runtime tests | Pass for the topology view | `tests/e2e/topology_failure.py` on the development stack: stopping `edge-agent-a` turned `edge-browser-a` failed within the stale window and restarting it recovered. Run against IPv4 only |
 | Documentation | Updated | Frontend guide (design system, patterns, browser suite), topology page, testing guide, contract and contributor files, skills |
 | Browser suite | Pass: 126 passed, 0 failed, 54 skipped (52 opt-in review screenshots and 2 desktop-only shortcut tests) | `tests/browser/run.sh` on a disposable SQLite stack, light and dark, desktop and phone, with a deliberately awkward seed; visual snapshots written fresh in this run; axe on every screen |
+
+**Kumo redesign update (2026-11-03).** The Kumo foundation, shell, component skins, and the owner's review fixes are built and committed; the decision spike still needs the owner's approval before the remaining screen groups are redesigned one by one.
+
+| Field | Status | Evidence |
+| --- | --- | --- |
+| Implementation | Partial | Kumo tokens and skins on every Filament component; spike screens, domain and edge screens, settings, tokens, and the public pages redesigned; hidden DNS primary replaces cluster targets. Telemetry and analytics run-on lines remain |
+| Regression tests | Pass | 543 PHP tests, including `DesignSystemConsistencyTest` and the cluster-target rejection test |
+| Runtime tests | Not run for this update | No runtime behavior changed except the platform zone target; the E2E payloads were updated but not run |
+| Documentation | Updated | Frontend guide, UI skills, quick start, roadmap |
+| Browser suite | Pass: 177 passed, 0 failed, 11 skipped (full run); 125 passed, 0 failed after the last two fixes | `crawl.spec.ts` (every link and action), `spike.spec.ts`, `every-screen.spec.ts` with axe, light and dark, desktop and phone |
 
 Exit items:
 
@@ -1315,6 +1337,7 @@ with a few Linux servers can understand CDNFoundry and run it step by step.
 
 - [ ] Delete `docs/legacy/`, the second agent activation path, every
       compatibility branch, and squash migrations into a fresh baseline.
+- [ ] Drop the unused `platform_dns_settings.cluster_targets` column (contract step of the 2026-11-03 hidden-primary change).
 - [ ] Rename phase-numbered tests after the feature they test.
 - [ ] Wire or delete every documented environment variable. Extend the
       documentation check so that a documented key that is not wired fails.

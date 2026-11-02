@@ -64,27 +64,54 @@ not optional help.
 
 ## Design system
 
-All screens use the tokens in `resources/css/filament/shared/theme.css`. Never write a hex value, a Filament default color, or an inline style in a screen.
+The panels use the Kumo design language (the design system behind `kumo`, MIT), ported into Filament. Kumo itself is a React library and is not installed. Its token values, type scale, ring edges, and component shapes are written as CSS in `resources/css/filament/shared/theme.css` and applied to Filament's own classes and to the Blade components in `resources/views/components/ui`. Cloudflare's orange and logo are not used. Never write a hex value, a raw color function, a Filament default color, or an inline color in a screen; `DesignSystemConsistencyTest` fails on all of them.
 
 | Token group | Rule |
 | --- | --- |
-| Palette | Zinc neutrals (`--cdn-background`, `--cdn-surface`, `--cdn-border`, `--cdn-text*`) and one blue accent (`--cdn-accent`). |
-| Status | `--cdn-healthy`, `--cdn-degraded`, `--cdn-failed`, `--cdn-pending`, `--cdn-disabled`, each with a `-soft` background. Every badge carries a word, never color alone. |
-| Shape | 8 px radius, borders instead of shadows, compact rows. |
-| Type | System UI font for text; the monospace stack (`.cdn-mono`, `FontFamily::Mono`) for every number, ID, timestamp, address, hostname, revision, and checksum. No font files ship. |
-| Modes | Light and dark are complete; both are checked by the browser suite. |
+| Surfaces | `--cdn-canvas` (app background), `--cdn-base` (cards, tables, the page panel), `--cdn-elevated` (card and table headers), `--cdn-recessed` (code, empty data), `--cdn-overlay` (menus, dialogs), `--cdn-control` (inputs). Neutrals have no hue. |
+| Lines and fills | `--cdn-line` for edges (drawn as a 1 px ring), `--cdn-hairline` for dividers inside a card, `--cdn-tint` for hover and selection, `--cdn-fill` for neutral badges and meter tracks. |
+| Text | `--cdn-text-strong` (titles, selected items), `--cdn-text-default`, `--cdn-text-subtle` (labels, meta), `--cdn-text-placeholder`, `--cdn-link`. |
+| Accent | `--cdn-brand` (Kumo blue) for primary buttons, checked controls, and focus rings only. Selection stays neutral. |
+| Status | `--cdn-success`, `--cdn-warning`, `--cdn-danger`, `--cdn-info`, `--cdn-neutral`, each with a `-text` and a `-tint` variant. Light subtle and warning text are darker than Kumo's so they meet AA on every surface. Every badge carries a word, never color alone. |
+| Shape | 8 px radius (`--cdn-radius-lg`) for cards, buttons, inputs, and dialogs; 6 px for small buttons; badges fully rounded. Edges are rings, and only buttons, inputs, and simple cards add `--cdn-shadow-xs`. |
+| Type | Inter, bundled, with tabular digits. Kumo scale: 12, 13, 14, and 16 px. Body, controls, and table data are 14 px. Headings are semibold and sentence case, with no letter-spacing change and never bold. Code values use `.cdn-code` at 0.9em. |
+| Icons | Phosphor, regular weight (`phosphor-<name>`, from `codeat3/blade-phosphor-icons`), 16 px next to 14 px text. Filament's own icons are mapped in `App\Providers\Filament\PhosphorIcons`. Heroicons are not used. |
+| Modes | Light and dark are complete, using Filament's `.dark` class; both are checked by the browser suite. |
+
+### Components
+
+| Kumo component | In CDNFoundry |
+| --- | --- |
+| Sidebar | Filament sidebar, 16.25 rem wide, 34 px items, neutral active tint, sticky footer (`<x-ui.sidebar-footer>`). |
+| Command Palette | Filament global search (Ctrl+K or Cmd+K). |
+| Page Header, Breadcrumbs | Filament page header with the status badge and actions. |
+| Button | `primary` is the brand fill, `gray` is the secondary ring button, `danger` is destructive, icon buttons are ghost. |
+| Badge | Tint badges in headers and rows (`<x-ui.status-pill tone="…">`). Dot badges (`appearance="dot"`) for statuses in lists; Filament table badges without an icon render as dot badges automatically. |
+| Table, Pagination | Filament tables: compact elevated header, hover tint, no zebra striping. |
+| Layer Card | Filament sections, `<x-ui.detail-section>`, `.cdn-panel`: elevated header strip, base body. Never nest one inside another. |
+| Banner | "Needs attention" rows (`.cdn-condition-row` with `data-tone`). |
+| Meter | The `meter` value of a `<x-ui.kpi-strip>` item (0 to 1). |
+| Empty | `<x-ui.empty-state icon="…">` and Filament empty states. |
+| Dialog | Filament modals and right-side sheets, with lines under the header and over a sticky footer. |
+| Tabs | Underline tabs in ink, with counts as neutral badges. |
+| Clipboard Text, Sensitive Input | The copy icon in `<x-ui.detail-section>` rows and the one-time secret dialog (`.cdn-secret-value`). |
+| Charts | Filament Chart.js widgets with the `--cdn-chart-*` colors. |
 
 ### Patterns
 
-- **Shell:** grey app background, sidebar on it, the page in one bordered white panel. Global search opens with Ctrl+K or Cmd+K. Groups collapse. The sidebar footer shows the documentation link and the version. Both panels share this through `App\Providers\Filament\PanelDesign`.
+- **Shell:** the canvas background, the sidebar on it, and the page in one base panel with a line ring. Global search opens with Ctrl+K or Cmd+K. Groups collapse. The sidebar footer shows the documentation link and the version. Both panels share this through `App\Providers\Filament\PanelDesign`.
 - **List page:** title, one description line, primary action top right, a search box, a table with status badges, and the empty state with one action. Example: `DomainResource::table()`.
 - **Detail page:** the title with a status badge and the action menus, a KPI strip, a "Needs attention" box that lists only problems and disappears when there are none, one row of quick-action buttons, and one tab row. The first tab, Overview, is two columns of compact cards (one column on phone) that leave out rows with nothing to say; the other tabs are the related tables with counts. Example: `ViewDomain`, `DomainDetailSections::overview()`, `DomainKpiStrip`, `DomainNeedsAttention`.
-- **Create, edit, and inspect:** open in a right-side sheet (`->slideOver()`, 42 rem wide). Example: the Add domain action in `ListDomains`.
-- **Settings:** one row per setting with the label and a one-line description on the left and the control on the right, the default value visible, a Reset link, and "Save changes" disabled until something changes. Example: `PlatformSettings`.
+- **Create, edit, and inspect:** a form longer than a few fields opens in a right-side sheet (`->slideOver()->modalWidth(Width::TwoExtraLarge)`), single column, grouped. A form of one or two fields (purge cache, development mode) opens as a small centered dialog (`->modalWidth(Width::Medium)`). The confirm button names the action ("Purge cache", never "Submit"). Example: `ViewDomain::getHeaderActions()`, the DNS record sheet.
+- **Form help:** every field whose format is not obvious has an example placeholder (`203.0.113.0/24`, `mail.example.net.`) and, when needed, one helper line saying what it expects; both follow the selected type. Countries and continents are searchable selects with names (`GeoVocabulary::countryOptions()`), never a bare code box. List fields say "Type a value and press Enter", never "New tag".
+- **Tabs:** a page with related tables shows one tab row at the top: Overview first, then each table with its count (`hasCombinedRelationManagerTabsWithContent()`). Example: `ViewDomain`, `ViewEdge`.
+- **Tables:** every row has the same height; empty cells and action cells do not make a row taller. Each column holds one fact on one line; secondary facts move to columns that are off by default.
+- **Statuses:** green, amber, red, blue, or grey badges with a dot and a word, in sentence case ("Pending verification"). Counts and entered values are neutral chips without a dot. Menus list every item in ink with an icon; only destructive items are red.
+- **Settings:** one row per setting with the label on the left, the control on the right, its one-line description under the control, and a hairline between rows, the default value visible, a Reset link, and "Save changes" disabled until something changes. Example: `PlatformSettings`.
 - **Overview:** one status line with a "Polling active" indicator, a KPI strip of at most five values, "Needs attention" (at most four rows, then a link), and the five most recent operations. Detailed charts live on the telemetry page.
 - **Live views:** poll every ten seconds or more; Livewire stops polling while the tab is hidden.
 - **Copy:** at most one description line per card; explanations go to the documentation. Run the `antislop` skill (`.agents/skills/antislop/SKILL.md`) on every screen and on UI copy.
-- **KPI strip:** one bordered strip with hairline dividers (`<x-ui.kpi-strip>`), at most five values, never separate boxes.
+- **KPI strip:** one card with hairline dividers (`<x-ui.kpi-strip>`), at most five values, never separate boxes. A ratio adds a meter.
 - **Rows:** a record's facts are label-and-value rows (`<x-ui.detail-section>`); a value made of several facts shows chips, a long list collapses with "Show N more", and copy is an icon on the same line.
 - **Menus:** a "…" menu holds two or more actions; a single action is shown directly.
 - **Owner design rules:** the review rules every screen must meet are in `.agents/skills/antislop/SKILL.md` under "Owner design rules". Agents load that file before any UI work.
