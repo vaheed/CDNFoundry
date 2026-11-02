@@ -23,4 +23,7 @@ The license declared on an image describes that image's first-party content.
 - PowerDNS Authoritative Server, GPL-2.0-only (built from upstream sources)
 - DNSdist, GPL-2.0-only (built from upstream sources)
 
+The control panel theme ports design token values from the Kumo design system (kumo, MIT) into its own
+stylesheet, and renders icons from Phosphor Icons (MIT) through codeat3/blade-phosphor-icons (MIT).
+
 Consult each upstream project for its complete license text and notices.
