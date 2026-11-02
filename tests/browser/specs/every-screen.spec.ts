@@ -6,7 +6,7 @@ const adminScreens = [
     '/admin', '/admin/telemetry', '/admin/operations', '/admin/audit-logs', '/admin/users', '/admin/domains',
     '/admin/edges', '/admin/edge-pools', '/admin/dns-clusters', '/admin/system-dns-identity', '/admin/platform-settings',
     '/admin/profile', '/admin/tokens', '/admin/users/create', '/admin/edges/create', '/admin/edge-pools/create',
-    '/admin/dns-clusters/create', '/admin/topology',
+    '/admin/dns-clusters/create',
 ];
 const appScreens = ['/app', '/app/domains', '/app/analytics', '/app/profile', '/app/tokens'];
 

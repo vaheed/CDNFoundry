@@ -1493,108 +1493,12 @@ a.cdn-kpi-body:hover {
     white-space: nowrap;
 }
 
-/* Topology: nodes take the shared status colors; links take the worse status of their ends. */
-.cdn-topo-bar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--cdn-space-3) var(--cdn-space-4);
-    margin-bottom: var(--cdn-space-3);
-}
-
-.cdn-topo-search {
-    width: 16rem;
-    border: 1px solid rgb(var(--cdn-border-strong) / 0.55);
-    border-radius: var(--cdn-control-radius);
-    background: rgb(var(--cdn-surface));
-    padding: 0.25rem 0.625rem;
-    color: rgb(var(--cdn-text));
-    font-size: 0.8125rem;
-}
-
-.cdn-topo-legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--cdn-space-3);
-    margin-inline-end: auto;
-    color: rgb(var(--cdn-text-secondary));
-    font-size: 0.75rem;
-}
-
-.cdn-topo-legend li {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-}
-
-.cdn-topo-dot {
-    width: 0.5rem;
-    height: 0.5rem;
-    border-radius: 9999px;
-    background: rgb(var(--cdn-disabled));
-}
-
-.cdn-topo-zoom {
-    display: inline-flex;
-    gap: 0.25rem;
-}
-
-.cdn-topo-canvas {
-    overflow: auto;
-    border: 1px solid rgb(var(--cdn-border));
-    border-radius: var(--cdn-card-radius);
-    background: rgb(var(--cdn-surface));
-    padding: var(--cdn-space-4);
-}
-
-.cdn-topo-node rect {
-    fill: rgb(var(--cdn-surface));
-    stroke: rgb(var(--cdn-border-strong));
-}
-
-.cdn-topo-node.is-dimmed {
-    opacity: 0.25;
-}
-
-.cdn-topo-label {
-    fill: rgb(var(--cdn-text));
-    font-size: 12px;
-    font-weight: 600;
-}
-
-.cdn-topo-detail {
-    fill: rgb(var(--cdn-text-muted));
-    font-size: 10.5px;
-}
-
-.cdn-topo-link {
-    stroke: rgb(var(--cdn-border-strong));
-    stroke-width: 1.25;
-}
-
+/* Status colors shared by every element that carries data-status. */
 [data-status="healthy"] { --cdn-topo: var(--cdn-healthy); }
 [data-status="degraded"] { --cdn-topo: var(--cdn-degraded); }
 [data-status="failed"] { --cdn-topo: var(--cdn-failed); }
 [data-status="pending"] { --cdn-topo: var(--cdn-pending); }
 [data-status="disabled"], [data-status="unknown"] { --cdn-topo: var(--cdn-disabled); }
-
-.cdn-topo-dot[data-status],
-.cdn-topo-status {
-    fill: rgb(var(--cdn-topo));
-    background: rgb(var(--cdn-topo));
-}
-
-.cdn-topo-node[data-status="failed"] rect,
-.cdn-topo-node[data-status="degraded"] rect {
-    stroke: rgb(var(--cdn-topo));
-    stroke-width: 1.5;
-}
-
-.cdn-topo-link[data-status="failed"],
-.cdn-topo-link[data-status="degraded"] {
-    stroke: rgb(var(--cdn-topo));
-    stroke-dasharray: 5 4;
-}
 
 .cdn-eyebrow {
     color: rgb(var(--cdn-text-muted));

@@ -2,14 +2,11 @@
 
 namespace Tests\Feature;
 
-use App\Filament\Admin\Pages\Topology;
 use App\Models\DnsCluster;
 use App\Models\Edge;
 use App\Models\User;
 use App\Support\TopologyGraph;
-use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Livewire\Livewire;
 use Tests\TestCase;
 
 class TopologyTest extends TestCase
@@ -42,14 +39,5 @@ class TopologyTest extends TestCase
         $this->assertSame('healthy', $nodes['dns:1']['status']);
         $link = collect($graph['links'])->first(fn (array $link): bool => $link['to'] === "edge:{$stale->id}");
         $this->assertSame('failed', $link['status']);
-    }
-
-    public function test_the_page_renders_every_node_with_a_live_indicator(): void
-    {
-        Edge::query()->create(['name' => 'pop-visible', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.3']);
-        Filament::setCurrentPanel(Filament::getPanel('admin'));
-        $this->actingAs(User::factory()->admin()->create());
-
-        Livewire::test(Topology::class)->assertSee('pop-visible')->assertSee('Polling active')->assertSeeHtml('wire:poll.10s');
     }
 }

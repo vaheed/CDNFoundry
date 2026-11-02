@@ -275,7 +275,6 @@ export default defineConfig({
             { text: 'Grafana command centers', link: '/operations/grafana' },
             { text: 'Operational logging', link: '/operations/operational-logging' },
             { text: 'Laravel operations dashboard', link: '/operations/laravel-operations-dashboard' },
-            { text: 'Topology view', link: '/operations/topology-view' },
             { text: 'Edge gateway ingress', link: '/operations/gateway-ingress' },
             { text: 'Bounded cell inventory', link: '/operations/cell-inventory' },
             { text: 'Multi-cell pools', link: '/operations/multi-cell-pools' },

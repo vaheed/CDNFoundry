@@ -84,7 +84,6 @@ All screens use the tokens in `resources/css/filament/shared/theme.css`. Never w
 - **Overview:** one status line with a "Polling active" indicator, a KPI strip of at most five values, "Needs attention" (at most four rows, then a link), and the five most recent operations. Detailed charts live on the telemetry page.
 - **Live views:** poll every ten seconds or more; Livewire stops polling while the tab is hidden.
 - **Copy:** at most one description line per card; explanations go to the documentation. Run the `antislop` skill (`.agents/skills/antislop/SKILL.md`) on every screen and on UI copy.
-- **Topology:** one component draws control, DNS, PoPs, cells, and telemetry with health colors, search, a legend, and zoom. See [Topology view](../operations/topology-view.md). The local fleet web reuses the same payload.
 - **KPI strip:** one bordered strip with hairline dividers (`<x-ui.kpi-strip>`), at most five values, never separate boxes.
 - **Rows:** a record's facts are label-and-value rows (`<x-ui.detail-section>`); a value made of several facts shows chips, a long list collapses with "Show N more", and copy is an icon on the same line.
 - **Menus:** a "…" menu holds two or more actions; a single action is shown directly.

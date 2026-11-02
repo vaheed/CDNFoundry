@@ -104,15 +104,3 @@ test('editing a DNS record opens a grouped single-column sheet', async ({ page }
     await expectAccessible(page);
     await expect(page).toHaveScreenshot('dns-record-edit.png');
 });
-
-test('topology shows nodes, a live indicator, and search dims the rest', async ({ page }) => {
-    await signIn(page, 'admin', 'admin@browser.test', adminPassword);
-    await page.goto('/admin/topology');
-    await settle(page);
-    await expect(page.getByTestId('topology-live')).toHaveText('Polling active');
-    await expect(page.getByTestId('topology-node').first()).toBeVisible();
-    await page.getByTestId('topology-search').fill('with-a-very-long');
-    await expect(page.locator('[data-testid=topology-node].is-dimmed').first()).toBeAttached();
-    await expectAccessible(page);
-    await expect(page).toHaveScreenshot('topology.png');
-});

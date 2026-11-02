@@ -947,10 +947,10 @@ such as the topology view. No second frontend is added.
       errors, healthy PoPs, DNS success), "Needs attention", and recent
       operations. Detailed charts move to the analytics pages.
       *Status 2026-11-02: Built: status line, KPI strip, Needs attention, five recent operations. Not yet verified to fit one desktop screen in a healthy state, because the browser stack has every service down and always shows conditions.*
-- [x] **Topology view.** One component that draws control (active and
-      standby), DNS hosts, PoPs, cells, and telemetry, with health colors on
-      nodes and links, search, a legend, and zoom. The admin panel shows it
-      from the API, and the Phase 8 fleet web reuses it.
+- [x] **Topology data.** `GET /api/admin/system/topology` returns the nodes and
+      links of control, DNS hosts, PoPs, cells, and telemetry with health
+      status; the Phase 8 fleet web reuses it. *Status 2026-11-02: the owner
+      removed the admin panel Topology page; the API stays.*
 - [ ] **Rebuild every admin screen** on the design system: domains, DNS
       records, proxy and origins, cache and purge, TLS, WAF and security,
       Geo-DNS, edges, pools and cells, DNS clusters, users and tokens,
