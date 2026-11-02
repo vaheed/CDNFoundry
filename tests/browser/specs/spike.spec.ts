@@ -38,9 +38,10 @@ test.describe('domains', () => {
         await page.getByText('alpha-browser.example').first().click();
         await settle(page);
         await expect(page.getByRole('tab', { name: 'Overview' })).toBeVisible();
-        await expect(page.getByRole('tab', { name: 'TLS' })).toBeVisible();
+        await expect(page.getByRole('tab', { name: /DNS records/ })).toBeVisible();
         await expect(page.getByTestId('domain-attention')).toBeVisible();
-        await expect(page.getByTestId('domain-rail')).toBeVisible();
+        await expect(page.getByTestId('domain-overview')).toBeVisible();
+        await expect(page.getByTestId('domain-quick-actions')).toBeVisible();
         await expectAccessible(page);
         await expect(page).toHaveScreenshot('domain-detail.png', { fullPage: true });
     });
@@ -93,6 +94,8 @@ test.describe('platform settings', () => {
 test('editing a DNS record opens a grouped single-column sheet', async ({ page }) => {
     await signIn(page, 'admin', 'admin@browser.test', adminPassword);
     await page.goto('/admin/domains/1');
+    await settle(page);
+    await page.getByRole('tab', { name: /DNS records/ }).click();
     await settle(page);
     await page.locator('.fi-ta input[type=search]').first().fill('geo-routed');
     await settle(page);
