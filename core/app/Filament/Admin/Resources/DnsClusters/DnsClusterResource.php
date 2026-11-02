@@ -16,7 +16,6 @@ use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
-use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -24,15 +23,15 @@ class DnsClusterResource extends Resource
 {
     protected static ?string $model = DnsCluster::class;
 
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-server-stack';
+    protected static string|\BackedEnum|null $navigationIcon = 'phosphor-hard-drives';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Infrastructure';
 
-    protected static ?string $navigationLabel = 'DNS clusters';
+    protected static ?string $navigationLabel = 'DNS primary';
 
-    protected static ?string $modelLabel = 'DNS cluster';
+    protected static ?string $modelLabel = 'DNS primary';
 
-    protected static ?string $pluralModelLabel = 'DNS clusters';
+    protected static ?string $pluralModelLabel = 'DNS primaries';
 
     protected static ?int $navigationSort = 30;
 
@@ -79,8 +78,10 @@ class DnsClusterResource extends Resource
         return $table->columns([
             TextColumn::make('name')->searchable()->sortable(),
             TextColumn::make('location')->sortable(),
-            IconColumn::make('enabled')->boolean(),
-            TextColumn::make('last_health_status')->label('Health')->badge()->placeholder('Not tested')->color(fn (?string $state): string => match ($state) {
+            TextColumn::make('enabled')->label('State')->badge()
+                ->formatStateUsing(fn (bool $state): string => $state ? 'Enabled' : 'Disabled')
+                ->color(fn (bool $state): string => $state ? 'success' : 'gray'),
+            TextColumn::make('last_health_status')->label('Health')->badge()->formatStateUsing(fn ($state): string => ucfirst(str_replace('_', ' ', $state instanceof \BackedEnum ? $state->value : (string) $state)))->placeholder('Not tested')->color(fn (?string $state): string => match ($state) {
                 'healthy' => 'success',
                 'unhealthy' => 'danger',
                 default => 'gray',

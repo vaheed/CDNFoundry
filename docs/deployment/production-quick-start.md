@@ -372,7 +372,7 @@ Sign in to the administrator panel, configure the DNS primary and platform names
 Use this exact order:
 
 1. In **Infrastructure → DNS clusters**, create the one DNS primary disabled: API URL `http://pdns-primary:8081`, the control host's `PDNS_API_KEY`, and a transfer endpoint of the control host's public IP with port `5300` (for example `192.0.2.10:5300`). Test it, then enable it. Do not apply platform identity until it is healthy. The PoPs then pull every zone from it; see [DNS nodes](../operations/dns-nodes.md).
-2. In **Infrastructure → System DNS identity**, configure `example.net`, `ns1.example.net`, `ns2.example.net`, and their A/optional AAAA glue. Click **Validate and preview**. A **Review and save DNS identity** modal opens with the normalized public identity, glue addresses, DNS cluster targets, and timers. **Validation has not saved anything yet: review the modal, then click the red _Save DNS identity and queue update_ button to save the desired state.** Wait for the platform deployment to acknowledge the revision, and for each PoP's DNS node to report it has pulled it, before continuing.
+2. In **Infrastructure → System DNS identity**, configure `example.net`, `ns1.example.net`, `ns2.example.net`, and their A/optional AAAA glue. Click **Validate and preview**. A **Review and save DNS identity** modal opens with the normalized public identity, glue addresses, the hidden DNS primary it is written to, and timers. **Validation has not saved anything yet: review the modal, then click the red _Save DNS identity and queue update_ button to save the desired state.** Wait for the platform deployment to acknowledge the revision, and for each PoP's DNS node to report it has pulled it, before continuing.
 3. In **Domains → Create domain**, add a test customer zone. Creation
    automatically queues its initial SOA/NS deployment and then nameserver
    verification. Wait for both cluster acknowledgements, then verify the SOA
@@ -569,8 +569,7 @@ Example identity payload (replace every example domain and address):
   "soa_retry": 600,
   "soa_expire": 1209600,
   "soa_minimum_ttl": 300,
-  "default_ttl": 300,
-  "cluster_targets": ["pdns-primary:8081"]
+  "default_ttl": 300
 }
 ```
 

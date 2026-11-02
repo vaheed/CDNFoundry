@@ -332,7 +332,7 @@ class EdgeProxyTest extends TestCase
             ],
             'soa_primary' => 'ns1.cdnf.test', 'soa_mailbox' => 'hostmaster.cdnf.test',
             'soa_refresh' => 3600, 'soa_retry' => 600, 'soa_expire' => 1209600,
-            'soa_minimum_ttl' => 300, 'default_ttl' => 300, 'cluster_targets' => ['pdns.test'],
+            'soa_minimum_ttl' => 300, 'default_ttl' => 300,
         ]);
         $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
         DomainEdgePlacement::query()->updateOrCreate(['domain_id' => $domain->id], [

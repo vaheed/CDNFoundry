@@ -164,8 +164,7 @@ class PlacementResilienceTest extends TestCase
         PlatformDnsSetting::query()->updateOrCreate(['id' => 1], [
             'platform_domain' => 'platform.test', 'proxy_hostname' => 'edge.platform.test', 'soa_primary' => 'ns1.platform.test',
             'soa_mailbox' => 'hostmaster.platform.test', 'default_ttl' => 60, 'soa_refresh' => 3600, 'soa_retry' => 600,
-            'soa_expire' => 86400, 'soa_minimum_ttl' => 60, 'nameservers' => [['hostname' => 'ns1.platform.test', 'ipv4' => '203.0.113.1', 'ipv6' => null]],
-            'cluster_targets' => [], 'revision' => 1,
+            'soa_expire' => 86400, 'soa_minimum_ttl' => 60, 'nameservers' => [['hostname' => 'ns1.platform.test', 'ipv4' => '203.0.113.1', 'ipv6' => null]], 'revision' => 1,
         ]);
     }
 

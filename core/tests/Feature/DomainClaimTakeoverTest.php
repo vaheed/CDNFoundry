@@ -303,7 +303,7 @@ class DomainClaimTakeoverTest extends TestCase
             'platform_domain' => 'cdnf.test', 'proxy_hostname' => 'proxy.cdnf.test',
             'nameservers' => [['hostname' => 'ns1.cdnf.test', 'ipv4' => '8.8.8.1'], ['hostname' => 'ns2.cdnf.test', 'ipv4' => '8.8.8.2']],
             'soa_primary' => 'ns1.cdnf.test', 'soa_mailbox' => 'hostmaster.cdnf.test', 'soa_refresh' => 3600, 'soa_retry' => 600,
-            'soa_expire' => 604800, 'soa_minimum_ttl' => 300, 'default_ttl' => 300, 'cluster_targets' => ['pdns.test'],
+            'soa_expire' => 604800, 'soa_minimum_ttl' => 300, 'default_ttl' => 300,
         ];
         $pair = fn (string $a, string $addressA, string $b, string $addressB): array => [[['hostname' => $a, 'ipv4' => $addressA], ['hostname' => $b, 'ipv4' => $addressB]]];
 
@@ -342,7 +342,7 @@ class DomainClaimTakeoverTest extends TestCase
             'id' => 1, 'platform_domain' => 'cdnf.test', 'proxy_hostname' => 'proxy.cdnf.test',
             'nameservers' => collect(range(1, $pairs * 2))->map(fn (int $number): array => ['hostname' => "ns{$number}.cdnf.test", 'ipv4' => '8.8.8.'.$number])->all(),
             'soa_primary' => 'ns1.cdnf.test', 'soa_mailbox' => 'hostmaster.cdnf.test', 'soa_refresh' => 3600, 'soa_retry' => 600,
-            'soa_expire' => 604800, 'soa_minimum_ttl' => 300, 'default_ttl' => 300, 'cluster_targets' => ['pdns.test'],
+            'soa_expire' => 604800, 'soa_minimum_ttl' => 300, 'default_ttl' => 300,
         ]);
     }
 

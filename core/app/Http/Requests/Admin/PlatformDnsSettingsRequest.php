@@ -34,8 +34,8 @@ class PlatformDnsSettingsRequest extends FormRequest
             'soa_expire' => ['required', 'integer', 'between:86400,2419200'],
             'soa_minimum_ttl' => ['required', 'integer', 'between:30,86400'],
             'default_ttl' => ['required', 'integer', 'between:30,86400'],
-            'cluster_targets' => ['required', 'array', 'min:1', 'max:16'],
-            'cluster_targets.*' => ['required', 'string', 'max:253'],
+            // The platform zone goes to the hidden DNS primary; per-cluster targets were removed in 2.0.
+            'cluster_targets' => ['prohibited'],
         ];
     }
 
@@ -120,18 +120,6 @@ class PlatformDnsSettingsRequest extends FormRequest
                 && (int) $data['soa_expire'] <= (int) $data['soa_refresh'] + (int) $data['soa_retry']) {
                 $validator->errors()->add('soa_expire', 'The SOA expiry must be greater than refresh plus retry.');
             }
-            $targets = [];
-            foreach ($data['cluster_targets'] ?? [] as $index => $target) {
-                $target = strtolower(trim((string) $target));
-                if (isset($targets[$target])) {
-                    $validator->errors()->add("cluster_targets.$index", 'DNS cluster targets must be distinct.');
-                }
-                $targets[$target] = true;
-                if (preg_match('/^(?:[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?|\[[0-9a-f:]+\])(?::([1-9][0-9]{0,4}))?$/i', $target, $matches) !== 1
-                    || (isset($matches[1]) && (int) $matches[1] > 65535)) {
-                    $validator->errors()->add("cluster_targets.$index", 'DNS cluster targets must be bounded host or host:port values.');
-                }
-            }
         });
     }
 
@@ -199,11 +187,6 @@ class PlatformDnsSettingsRequest extends FormRequest
                 $input['customer_nameserver_pairs'][$pairIndex][$index]['ipv6'] = filled($nameserver['ipv6'] ?? null) ? $nameserver['ipv6'] : null;
             }
             $input['customer_nameserver_pairs'][$pairIndex] = array_values((array) $pair);
-        }
-        foreach ($input['cluster_targets'] ?? [] as $index => $target) {
-            if (is_string($target)) {
-                $input['cluster_targets'][$index] = strtolower(trim($target));
-            }
         }
 
         return $input;

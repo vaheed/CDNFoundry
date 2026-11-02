@@ -91,7 +91,7 @@ class SystemIdentityApiTest extends TestCase
             ->assertActionMounted('confirmDnsIdentity')
             ->assertMountedActionModalSee([
                 'Review and save DNS identity',
-                'Validated — nothing has been saved yet',
+                'Validated. Nothing has been saved yet',
                 'cdnf.test',
                 'proxy.cdnf.test',
                 'ns1.cdnf.test',
@@ -169,11 +169,21 @@ class SystemIdentityApiTest extends TestCase
         $this->assertSame($changed->soa_serial, PlatformDnsZone::advanceSerial($changed->refresh())->soa_serial);
     }
 
-    public function test_platform_identity_fails_when_no_healthy_cluster_matches_the_configured_targets(): void
+    public function test_dns_identity_rejects_cluster_targets_because_zones_go_to_the_hidden_primary(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', [...$this->validPayload(), 'cluster_targets' => ['pdns-auth:8081']])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('cluster_targets');
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $this->validPayload())->assertJsonMissingValidationErrors('cluster_targets');
+    }
+
+    public function test_platform_identity_fails_when_no_dns_primary_is_enabled_and_healthy(): void
     {
         $admin = User::factory()->admin()->create();
         DnsCluster::query()->create([
-            'name' => 'dns-local', 'location' => 'test', 'enabled' => true, 'last_health_status' => 'healthy',
+            'name' => 'dns-local', 'location' => 'test', 'enabled' => true, 'last_health_status' => 'unhealthy',
             'api_url' => 'https://dns-api.example.test:8444', 'api_key' => 'private-test-key', 'server_id' => 'localhost',
             'nameservers' => [['hostname' => 'ns1.cdnf.test'], ['hostname' => 'ns2.cdnf.test']],
         ]);
@@ -182,14 +192,14 @@ class SystemIdentityApiTest extends TestCase
             'input' => ['settings_id' => 1, 'revision' => 1],
         ]);
         PlatformDnsSetting::query()->create([
-            'id' => 1, ...$this->validPayload(), 'cluster_targets' => ['tehran'], 'revision' => 1,
+            'id' => 1, ...$this->validPayload(), 'revision' => 1,
         ]);
 
         try {
             (new ApplyPlatformDnsSettings($operation->id))->handle(app(PowerDnsClient::class));
-            $this->fail('Expected reconciliation without a matching cluster to fail.');
+            $this->fail('Expected reconciliation without a healthy DNS primary to fail.');
         } catch (RuntimeException $exception) {
-            $this->assertStringContainsString('No enabled, healthy DNS cluster matches', $exception->getMessage());
+            $this->assertStringContainsString('No enabled, healthy DNS primary is registered', $exception->getMessage());
         }
 
         $this->assertSame('failed', $operation->refresh()->status);
@@ -374,7 +384,7 @@ class SystemIdentityApiTest extends TestCase
         Queue::fake();
         $admin = User::factory()->admin()->create();
         PlatformDnsSetting::query()->create(['id' => 1, ...$this->validPayload(), 'revision' => 1]);
-        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $this->validPayload())->assertOk();
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $this->validPayload())->assertJsonMissingValidationErrors('cluster_targets');
         $this->assertSame(0, NameserverAddressProbe::query()->count());
 
         $payload = $this->validPayload();
@@ -406,7 +416,6 @@ class SystemIdentityApiTest extends TestCase
             'soa_expire' => 1209600,
             'soa_minimum_ttl' => 300,
             'default_ttl' => 300,
-            'cluster_targets' => ['pdns-auth:8081'],
         ];
     }
 }

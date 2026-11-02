@@ -22,6 +22,6 @@ class PlatformDnsSetting extends Model
 
     protected function casts(): array
     {
-        return ['nameservers' => 'array', 'customer_nameserver_pairs' => 'array', 'cluster_targets' => 'array', 'revision' => 'integer'];
+        return ['nameservers' => 'array', 'customer_nameserver_pairs' => 'array', 'revision' => 'integer'];
     }
 }

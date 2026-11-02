@@ -116,7 +116,7 @@ def main() -> None:
     _, current = call("GET", "/api/admin/system/settings/dns", token=admin, expect=200)
     settings = {key: value for key, value in current["data"].items() if key in (
         "platform_domain", "proxy_hostname", "nameservers", "soa_primary", "soa_mailbox", "soa_refresh", "soa_retry", "soa_expire",
-        "soa_minimum_ttl", "default_ttl", "cluster_targets")}
+        "soa_minimum_ttl", "default_ttl")}
     zone = settings["platform_domain"]
     settings["customer_nameserver_pairs"] = [
         [{"hostname": f"ns1.{zone}", "ipv4": settings["nameservers"][0]["ipv4"], "ipv6": settings["nameservers"][0].get("ipv6")},

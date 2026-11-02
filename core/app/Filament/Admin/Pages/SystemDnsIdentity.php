@@ -27,7 +27,7 @@ use Illuminate\Support\Facades\DB;
 
 class SystemDnsIdentity extends Page
 {
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-globe-alt';
+    protected static string|\BackedEnum|null $navigationIcon = 'phosphor-globe';
 
     protected static ?string $navigationLabel = 'System DNS identity';
 
@@ -45,11 +45,10 @@ class SystemDnsIdentity extends Page
 
     public function mount(): void
     {
-        $stored = PlatformDnsSetting::query()->find(1)?->toArray();
+        $stored = collect(PlatformDnsSetting::query()->find(1)?->toArray())->except('cluster_targets')->all() ?: null;
         $stored = $stored === null ? null : $this->withPairRows($stored);
         $this->form->fill($stored ?? [
             'nameservers' => [[], []],
-            'cluster_targets' => [],
             'soa_refresh' => 3600,
             'soa_retry' => 600,
             'soa_expire' => 1209600,
@@ -110,14 +109,12 @@ class SystemDnsIdentity extends Page
                             TextInput::make('second_ipv4')->label('Second IPv4')->required()->ipv4(),
                             TextInput::make('second_ipv6')->label('Second IPv6')->ipv6(),
                         ])->columns(['default' => 1, 'md' => 3]),
-                    Select::make('cluster_targets')
-                        ->label('DNS cluster targets')
-                        ->helperText('Select the registered clusters that should receive the platform SOA, NS, glue, and proxy records.')
-                        ->multiple()->required()->searchable()->preload()
-                        ->options(fn (): array => DnsCluster::query()->orderBy('name')->get()
-                            ->mapWithKeys(fn (DnsCluster $cluster): array => [
-                                $cluster->apiTarget() => "{$cluster->name} — {$cluster->location} — {$cluster->apiTarget()}",
-                            ])->all()),
+                    TextEntry::make('hidden_primary')
+                        ->label('Hidden primary')
+                        ->state(fn (): array => $this->hiddenPrimaries())
+                        ->badge()->color('gray')
+                        ->placeholder('No enabled DNS primary. Register one under DNS primary first.')
+                        ->helperText('The platform SOA, NS, glue, and proxy records are written here. DNS nodes pull the zone from it.'),
                 ]),
             Section::make('SOA and TTL policy')
                 ->description('Zone authority identity and bounded default timers, in seconds.')
@@ -145,18 +142,18 @@ class SystemDnsIdentity extends Page
 
     public function confirmDnsIdentityAction(): Action
     {
-        return Action::make('confirmDnsIdentity')
+        return Action::make('confirmDnsIdentity')->icon('phosphor-check-circle')
             ->modalHeading('Review and save DNS identity')
             ->modalDescription('Validation succeeded. Review the normalized desired state before saving and queueing deployment.')
             ->schema([
-                Section::make('Validated — nothing has been saved yet')
+                Section::make('Validated. Nothing has been saved yet')
                     ->description('The red button writes revisioned desired state and queues an asynchronous DNS deployment.')
-                    ->icon('heroicon-o-check-circle')
+                    ->icon('phosphor-check-circle')
                     ->iconColor('success')
                     ->compact(),
                 Section::make('Public identity')
                     ->description("These names become the platform's authoritative DNS and shared proxy identity.")
-                    ->icon('heroicon-o-globe-alt')
+                    ->icon('phosphor-globe')
                     ->schema([
                         TextEntry::make('platform_domain')
                             ->label('Platform domain')
@@ -176,7 +173,7 @@ class SystemDnsIdentity extends Page
                     ->columns(['default' => 1, 'md' => 2]),
                 Section::make('Authoritative nameservers')
                     ->description('Confirm every public hostname and glue address before deployment.')
-                    ->icon('heroicon-o-server-stack')
+                    ->icon('phosphor-hard-drives')
                     ->schema([
                         RepeatableEntry::make('nameservers')
                             ->hiddenLabel()
@@ -192,20 +189,20 @@ class SystemDnsIdentity extends Page
                                 TextEntry::make('ipv6')->placeholder('Not configured'),
                             ]),
                     ]),
-                Section::make('Deployment targets')
-                    ->description('Only these registered DNS clusters receive the desired state.')
-                    ->icon('heroicon-o-cloud-arrow-up')
+                Section::make('Hidden primary')
+                    ->description('The desired state is written here; DNS nodes pull it.')
+                    ->icon('phosphor-cloud-arrow-up')
                     ->schema([
-                        TextEntry::make('cluster_targets')
+                        TextEntry::make('hidden_primary')
                             ->hiddenLabel()
-                            ->state(fn (): array => $this->preview['cluster_targets'] ?? [])
+                            ->state(fn (): array => $this->hiddenPrimaries())
                             ->badge()
-                            ->color('info')
-                            ->placeholder('No cluster targets selected'),
+                            ->color('gray')
+                            ->placeholder('No enabled DNS primary'),
                     ]),
                 Section::make('SOA and TTL timers')
                     ->description('All values are normalized seconds.')
-                    ->icon('heroicon-o-clock')
+                    ->icon('phosphor-clock')
                     ->schema([
                         TextEntry::make('soa_refresh')
                             ->label('Refresh')
@@ -231,7 +228,7 @@ class SystemDnsIdentity extends Page
                     ->columns(['default' => 2, 'lg' => 5]),
                 Section::make('Before you save')
                     ->description('Changing this identity can affect delegation, authoritative answers, and proxy routing. Return to editing if any value is unexpected.')
-                    ->icon('heroicon-o-exclamation-triangle')
+                    ->icon('phosphor-warning')
                     ->iconColor('danger')
                     ->compact(),
             ])
@@ -296,5 +293,12 @@ class SystemDnsIdentity extends Page
         ])->all();
 
         return $settings;
+    }
+
+    /** @return list<string> the enabled DNS primary (normally one hidden PowerDNS), as "name (target)" */
+    private function hiddenPrimaries(): array
+    {
+        return DnsCluster::query()->where('enabled', true)->orderBy('name')->get()
+            ->map(fn (DnsCluster $cluster): string => "{$cluster->name} ({$cluster->apiTarget()})")->all();
     }
 }

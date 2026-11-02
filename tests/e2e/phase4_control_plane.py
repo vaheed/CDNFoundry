@@ -275,7 +275,6 @@ def apply_platform_identity(token: str) -> None:
         "soa_expire": 1209600,
         "soa_minimum_ttl": 60,
         "default_ttl": 60,
-        "cluster_targets": ["pdns-primary:8081"],
     }
     _, preview = call("POST", "/api/admin/system/settings/dns/validate", settings, token)
     _, operation = call("PATCH", "/api/admin/system/settings/dns", {

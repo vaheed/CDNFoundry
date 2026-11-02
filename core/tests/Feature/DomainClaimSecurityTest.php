@@ -174,7 +174,7 @@ class DomainClaimSecurityTest extends TestCase
             'nameservers' => [['hostname' => 'ns1.cdnf.test'], ['hostname' => 'ns2.cdnf.test']],
             'soa_primary' => 'ns1.cdnf.test', 'soa_mailbox' => 'hostmaster.cdnf.test',
             'soa_refresh' => 3600, 'soa_retry' => 600, 'soa_expire' => 604800,
-            'soa_minimum_ttl' => 300, 'default_ttl' => 300, 'cluster_targets' => [],
+            'soa_minimum_ttl' => 300, 'default_ttl' => 300,
         ]);
         DnsCluster::query()->create([
             'name' => 'dns-test', 'location' => 'test', 'enabled' => true, 'last_health_status' => 'healthy',
@@ -251,7 +251,7 @@ class DomainClaimSecurityTest extends TestCase
             'nameservers' => collect(range(1, $pairs * 2))->map(fn (int $number): array => ['hostname' => "ns{$number}.cdnf.test", 'ipv4' => '8.8.8.'.$number])->all(),
             'soa_primary' => 'ns1.cdnf.test', 'soa_mailbox' => 'hostmaster.cdnf.test',
             'soa_refresh' => 3600, 'soa_retry' => 600, 'soa_expire' => 604800,
-            'soa_minimum_ttl' => 300, 'default_ttl' => 300, 'cluster_targets' => [],
+            'soa_minimum_ttl' => 300, 'default_ttl' => 300,
         ]);
     }
 

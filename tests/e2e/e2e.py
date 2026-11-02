@@ -278,7 +278,6 @@ def main() -> None:
         "soa_expire": 1209600,
         "soa_minimum_ttl": 300,
         "default_ttl": 300,
-        "cluster_targets": ["pdns-primary:8081"],
     }
     _, validated = request(
         "POST", "/api/admin/system/settings/dns/validate", dns_payload,

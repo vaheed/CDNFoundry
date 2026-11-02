@@ -52,9 +52,8 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
         $failures = [];
         $targets = 0;
 
-        $configuredTargets = collect($settings->cluster_targets)->map(fn (string $target): string => strtolower($target))->flip();
-        $clusters = DnsCluster::query()->where('enabled', true)->where('last_health_status', 'healthy')->orderBy('id')->get()
-            ->filter(fn (DnsCluster $cluster): bool => $configuredTargets->has($cluster->apiTarget()));
+        // The platform zone is written to the hidden primary, the enabled and healthy DNS primary; DNS nodes pull from it.
+        $clusters = DnsCluster::query()->where('enabled', true)->where('last_health_status', 'healthy')->orderBy('id')->get();
         foreach ($clusters as $cluster) {
             $targets++;
             $deployment = PlatformDnsDeployment::query()->firstOrCreate(['dns_cluster_id' => $cluster->id]);
@@ -94,7 +93,7 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
         }
 
         if ($targets === 0) {
-            $failures[] = 'No enabled, healthy DNS cluster matches the configured platform DNS targets.';
+            $failures[] = 'No enabled, healthy DNS primary is registered.';
         }
 
         if ($failures !== []) {

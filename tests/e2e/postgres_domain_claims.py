@@ -311,7 +311,7 @@ if ($mode === 'init') {
         'id' => 1, 'platform_domain' => 'cdnf.test', 'proxy_hostname' => 'proxy.cdnf.test',
         'nameservers' => collect(range(1, 6))->map(fn (int $number): array => ['hostname' => "ns{$number}.cdnf.test", 'ipv4' => '8.8.8.'.$number])->all(),
         'soa_primary' => 'ns1.cdnf.test', 'soa_mailbox' => 'hostmaster.cdnf.test', 'soa_refresh' => 3600, 'soa_retry' => 600,
-        'soa_expire' => 604800, 'soa_minimum_ttl' => 300, 'default_ttl' => 300, 'cluster_targets' => ['pdns.test'],
+        'soa_expire' => 604800, 'soa_minimum_ttl' => 300, 'default_ttl' => 300,
     ]);
     echo "pool=3\n";
 } elseif ($mode === 'allocate') {
