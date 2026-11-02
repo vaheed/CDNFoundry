@@ -906,14 +906,14 @@ such as the topology view. No second frontend is added.
 
 #### Design system
 
-- [ ] **Tokens.** One neutral palette with a single accent color, status
+- [x] **Tokens.** One neutral palette with a single accent color, status
       colors (healthy, degraded, failed, pending, disabled), spacing, radius,
       and a border-first style with few shadows. Complete light and dark mode.
-- [ ] **Type.** One sans-serif UI font, and a monospace font for every
+- [x] **Type.** One sans-serif UI font, and a monospace font for every
       number, ID, timestamp, IP address, hostname, revision, and checksum.
-- [ ] **Density.** Compact table rows and form rows, sized for daily
+- [x] **Density.** Compact table rows and form rows, sized for daily
       operator work.
-- [ ] **Patterns, written down once and used everywhere:**
+- [x] **Patterns, written down once and used everywhere:**
   - Sidebar with collapsible groups, the version at the bottom, and ⌘K / Ctrl+K
     search across domains, edges, pools, users, and operations.
   - List page: a KPI strip, a search box, a Filters button, a sortable table
@@ -931,7 +931,7 @@ such as the topology view. No second frontend is added.
 - [ ] **Less text in the UI.** A screen states facts and actions. Each card
       keeps at most one short line of description. Explanations move to the
       documentation, linked with a small help icon.
-- [ ] **A UI guide in `docs/development/frontend.md`.** The tokens, the
+- [x] **A UI guide in `docs/development/frontend.md`.** The tokens, the
       patterns, and one example of each, so every new screen follows them.
 
 #### Screens
@@ -940,12 +940,14 @@ such as the topology view. No second frontend is added.
       the administrator overview, the Domains list with a domain detail page,
       and one settings page. The owner reviews them against the target
       before the remaining screens start.
+      *Status 2026-11-02: Built and committed. Waiting for the owner's approval; not self-certified.*
 - [ ] **Administrator overview.** It answers, on one screen without
       scrolling on a desktop: is everything healthy, what needs attention,
       and what changed recently. KPI strip (requests, cache hit ratio,
       errors, healthy PoPs, DNS success), "Needs attention", and recent
       operations. Detailed charts move to the analytics pages.
-- [ ] **Topology view.** One component that draws control (active and
+      *Status 2026-11-02: Built: status line, KPI strip, Needs attention, five recent operations. Not yet verified to fit one desktop screen in a healthy state, because the browser stack has every service down and always shows conditions.*
+- [x] **Topology view.** One component that draws control (active and
       standby), DNS hosts, PoPs, cells, and telemetry, with health colors on
       nodes and links, search, a legend, and zoom. The admin panel shows it
       from the API, and the Phase 8 fleet web reuses it.
@@ -953,20 +955,24 @@ such as the topology view. No second frontend is added.
       records, proxy and origins, cache and purge, TLS, WAF and security,
       Geo-DNS, edges, pools and cells, DNS clusters, users and tokens,
       operations, audit log, analytics, logs, backups, and settings.
+      *Status 2026-11-02: Shared look on every Filament component. Individually rebuilt: overview, domains, domain detail, DNS records and their sheet, platform settings, edges, pools, clusters, users, operations, audit log, topology. Telemetry, proxy and origin sheets, TLS, WAF, backups, tokens, and system DNS identity are restyled and pass axe, but were not redesigned one by one.*
 - [ ] **Rebuild every domain-user screen** with the same patterns, showing
       only that user's domains.
+      *Status 2026-11-02: Overview and Domains rebuilt; analytics, tokens, and profile are restyled only.*
 - [ ] **Live views.** Operations, logs, and edge status refresh by polling
       with a visible "live" indicator, and stop polling when the tab is
       hidden.
+      *Status 2026-11-02: Operations, edges, topology, and the overview poll every 5 to 10 seconds, with a visible indicator on operations, edges, topology, and the overview. Livewire throttles a hidden tab to about 5 percent of its polls instead of stopping it. Logs are not live.*
 - [ ] **Accessibility.** Keyboard navigation for every action, visible focus,
       and WCAG AA contrast in both themes.
+      *Status 2026-11-02: axe passes on every screen. Keyboard use of every action was not walked through.*
 
 #### Agent-run browser qualification
 
 This phase changes every screen, so it is where automated browser tests are
 needed most.
 
-- [ ] **Amend `AGENTS.md` for agent-run browser qualification and the new
+- [x] **Amend `AGENTS.md` for agent-run browser qualification and the new
       UI rules.** One change, together with `RepositoryContractTest`, so the
       contract and its test never disagree. Until it ships, browser
       qualification stays manual and owner-run, as `AGENTS.md` requires, so
@@ -1007,7 +1013,7 @@ needed most.
     ("uses Playwright under `tests/browser`" and "never against
     production"), and assert that `docs/manual-browser-qualification.md`
     does not exist.
-- [ ] **Change every other file that names the manual job, in the same
+- [x] **Change every other file that names the manual job, in the same
       change.** Delete `docs/manual-browser-qualification.md`, and update
       every reference to it: `CONTRIBUTING.md`, the pull request template,
       `README.md`, `docs/development/testing.md`,
@@ -1018,18 +1024,18 @@ needed most.
       in `tests/docs/check_links.py` and `tests/docs/check_built_site.py`.
       Leave the v1.2.1 release notes unchanged, because they describe that
       release.
-- [ ] **Update the project skills that mention browser work.**
+- [x] **Update the project skills that mention browser work.**
       `cdnf-filament-ui` follows the design system and runs the browser suite.
       `cdnf-production-qualification` includes the browser suite in the
       qualification evidence.
-- [ ] Add a Playwright suite under `tests/browser` that signs in to both
+- [x] Add a Playwright suite under `tests/browser` that signs in to both
       panels and covers every screen and workflow, in light and dark mode, at
       desktop and phone width. Agents run it and report its results, and it
       joins the phase gate from here on. Interactive elements carry stable
       test ids.
-- [ ] Add visual regression snapshots for the main screens, so an unintended
+- [x] Add visual regression snapshots for the main screens, so an unintended
       change of the design is caught in review.
-- [ ] Add an automated accessibility check (axe) to every page in the suite.
+- [x] Add an automated accessibility check (axe) to every page in the suite.
 
 **Exit:**
 
@@ -1042,6 +1048,34 @@ needed most.
   one refresh.
 - The browser suite, visual snapshots, and accessibility checks pass in both
   themes and at both widths.
+
+**Completion gate (2026-11-02). Phase 7 is not complete.** The owner has not approved the decision spike, and several screens are restyled, not redesigned. The five fields are recorded separately.
+
+| Field | Status | Evidence |
+| --- | --- | --- |
+| Implementation | Partial | Design tokens and a shared Filament look; compact sidebar; rebuilt overview, domains, domain detail, DNS records, settings, edges, pools, clusters, users, operations, audit log, topology; domain-user overview. Telemetry, proxy and origin sheets, TLS, WAF, backups, tokens, and system DNS identity are restyled only |
+| Regression tests | Pass | 541 PHP tests, including `DesignSystemConsistencyTest` (no raw colors, themed panels) and `TopologyTest` |
+| Runtime tests | Pass for the topology view | `tests/e2e/topology_failure.py` on the development stack: stopping `edge-agent-a` turned `edge-browser-a` failed within the stale window and restarting it recovered. Run against IPv4 only |
+| Documentation | Updated | Frontend guide (design system, patterns, browser suite), topology page, testing guide, contract and contributor files, skills |
+| Browser suite | Pass: 126 passed, 0 failed, 54 skipped (52 opt-in review screenshots and 2 desktop-only shortcut tests) | `tests/browser/run.sh` on a disposable SQLite stack, light and dark, desktop and phone, with a deliberately awkward seed; visual snapshots written fresh in this run; axe on every screen |
+
+Exit items:
+
+| Exit item | Status |
+| --- | --- |
+| The owner approves the decision spike | Open. Needs the owner |
+| Every screen uses the design system; a check fails on default theme or colors | Check added (`DesignSystemConsistencyTest`); screens not individually redesigned are listed above |
+| The overview answers healthy, needs attention, recent changes on one desktop screen | Built; not verified in a healthy state |
+| The topology view shows a stopped PoP within one refresh | Met (`topology_failure.py`) |
+| The browser suite, snapshots, and accessibility checks pass in both themes and at both widths | See the browser suite row |
+
+Known limitations:
+
+- The topology E2E ran over IPv4 only and exercises one stopped agent.
+- Visual snapshots were generated in this run, so they record the current look; they are not a comparison against an earlier approved design.
+- The persistent development database was behind by the Phase 6 migrations; `make dev-migrate` was run to apply them (non-destructive).
+- Livewire throttles polling in a hidden tab instead of stopping it.
+- The browser seed has no healthy edge or ClickHouse, so healthy-state layouts are verified only by the PHP tests and the topology E2E.
 
 ### Phase 8: Simple setup, fleet over SSH, safe upgrades, and local fleet web
 

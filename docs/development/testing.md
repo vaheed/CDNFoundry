@@ -173,6 +173,16 @@ chain normalization and API/Filament repeat-upload behavior. This fixture does
 not qualify signed agent delivery, ACME renewal or public-browser trust. CI and
 the production runner require it through the `uploaded-tls` gate.
 
+## Browser suite
+
+Agents run `tests/browser/run.sh` for any UI change. It starts a disposable
+SQLite stack from `compose.browser.yml` with generated credentials and a
+deliberately awkward seed, then runs Playwright in light and dark mode at
+desktop and phone width, with visual snapshots and an axe check on every page.
+It never uses PostgreSQL, a named volume, or a non-local URL. See
+[Frontend development](frontend.md#browser-suite) for the details and for what
+to do after an intended design change.
+
 ## Non-browser real-runtime tests
 
 Start and migrate the persistent development stack, then:
@@ -237,7 +247,7 @@ startup or health are not prerequisites for this static check.
 ## Reporting
 
 Record the exact commands, revision, environment, result counts or terminal
-markers, migration activity, and limitations. Historical
+markers, migration activity, browser suite results, and limitations. Historical
 results in `docs/legacy/` are evidence for their recorded commits, not proof for
 the current tree.
 
