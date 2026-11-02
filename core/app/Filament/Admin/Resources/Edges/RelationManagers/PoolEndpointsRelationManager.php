@@ -24,6 +24,8 @@ class PoolEndpointsRelationManager extends RelationManager
 {
     protected static string $relationship = 'poolEndpoints';
 
+    protected static ?string $title = 'Pool endpoints';
+
     public static function getBadge(Model $ownerRecord, string $pageClass): ?string
     {
         return number_format($ownerRecord->poolEndpoints()->count());

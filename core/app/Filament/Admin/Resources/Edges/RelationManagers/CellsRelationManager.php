@@ -13,6 +13,7 @@ use App\Models\Operation;
 use App\Support\FilamentHelp;
 use App\Support\PlatformSettings;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -77,6 +78,7 @@ class CellsRelationManager extends RelationManager
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('runtime_path')->label('Runtime path')->toggleable(isToggledHiddenByDefault: true),
             ])->recordActions([
+                ActionGroup::make([
                 Action::make('assignPool')->label('Assign service pool')->icon('phosphor-link')
                     ->visible(fn (EdgeCell $record): bool => $record->edge_pool_id === null)
                     ->schema([
@@ -147,6 +149,7 @@ class CellsRelationManager extends RelationManager
                 Action::make('drain')->icon('phosphor-pause-circle')->requiresConfirmation()->visible(fn (EdgeCell $record): bool => ! $record->drained)->action(fn (EdgeCell $record) => self::queue($record, 'drain')),
                 Action::make('undrain')->icon('phosphor-play-circle')->visible(fn (EdgeCell $record): bool => $record->drained)->action(fn (EdgeCell $record) => self::queue($record, 'undrain')),
                 Action::make('restart')->icon('phosphor-arrows-counter-clockwise')->color('warning')->requiresConfirmation()->action(fn (EdgeCell $record) => self::queue($record, 'restart')),
+                ])->label('Cell actions')->icon('phosphor-dots-three'),
             ]);
     }
 

@@ -2138,16 +2138,16 @@ a.cdn-stat-card:hover {
 }
 
 /* Counts (tabs, navigation) and entered values (tag chips) are not statuses: no dot, neutral fill. */
-.fi-tabs-item-badge.fi-badge,
-.fi-sidebar-item .fi-badge {
+.fi-tabs-item .fi-badge.fi-color,
+.fi-sidebar-item .fi-badge.fi-color {
     background-color: var(--cdn-fill);
     color: var(--cdn-neutral-text);
 }
 
-.fi-tabs-item-badge.fi-badge::before,
-.fi-sidebar-item .fi-badge::before,
-.fi-badge:has(.fi-badge-delete-btn)::before,
-.fi-fo-tags-input .fi-badge::before {
+.fi-tabs-item .fi-badge.fi-color:not(:has(.fi-icon))::before,
+.fi-sidebar-item .fi-badge.fi-color:not(:has(.fi-icon))::before,
+.fi-badge.fi-color:has(.fi-badge-delete-btn)::before,
+.fi-fo-tags-input .fi-badge.fi-color:not(:has(.fi-icon))::before {
     content: none;
 }
 
