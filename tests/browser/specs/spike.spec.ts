@@ -91,6 +91,18 @@ test.describe('platform settings', () => {
     });
 });
 
+test('platform settings categories scroll to their section and search filters settings', async ({ page }) => {
+    await signIn(page, 'admin', 'admin@browser.test', adminPassword);
+    await page.goto('/admin/platform-settings');
+    await settle(page);
+    await page.getByTestId('settings-category-settings-proxy-defaults').click();
+    await expect(page.locator('[data-settings-section="settings-proxy-defaults"]')).toBeInViewport();
+    await page.getByTestId('settings-search').fill('audit retention');
+    await expect(page.locator('[data-settings-section="settings-operations"]')).toBeVisible();
+    await expect(page.locator('[data-settings-section="settings-proxy-defaults"]')).toBeHidden();
+    await expect(page.getByTestId('settings-save-button')).toBeDisabled();
+});
+
 test('editing a DNS record opens a grouped single-column sheet', async ({ page }) => {
     await signIn(page, 'admin', 'admin@browser.test', adminPassword);
     await page.goto('/admin/domains/1');
