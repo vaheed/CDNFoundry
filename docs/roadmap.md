@@ -1146,19 +1146,24 @@ HA. Domains, DNS records, pools, TLS, WAF, and users stay in the Filament
 panels and in PostgreSQL. The fleet web may link to those panels, and it may
 read their status through the API, but it never edits them.
 
-**Status 2026-11-03 (gate open).** Built and tested on `dev`: the encrypted SQLite vault; one Fleet SSH key
-pair for all nodes with host key pinning; the plan and apply engine (bootstrap, rolling upgrade with canary, pre-pull
-digest check, on-node validation of every service config, health gate, rollback, resume, config change); signed
-release manifests produced in CI and verified against the checkout; PoP enrollment; backup, restore, vault backup and
-restore on a new workstation (real restic); security status; the stack check; the local fleet web with every page
-backed by the engine; the admin first-run wizard; removal of the edge management address fields; and the Fleet browser
-suite in four projects. See [Fleet engine, vault, and local web](operations/fleet-engine.md).
+**Status 2026-11-03 (gate open).** Built on `dev` and exercised on three real servers (control, two DNS-and-edge PoPs; Ubuntu 24.04,
+dual-stack) with a private registry on the control host, then cleaned. What is met: the encrypted vault; one Fleet SSH key for
+all nodes (sudo for non-root users); first install of a signed release through `set-release` and `bootstrap`; automatic PoP
+enrollment with its service endpoint and its in-memory key material; the standby control node from its address alone;
+rolling upgrade of the whole fleet (17 steps, 242 s) during which DNS answered over UDP and TCP on IPv4 and IPv6 for every
+second and no instant had both PoPs failing; a broken image stopping at the canary, rolling it back, and leaving the other
+nodes untouched; a dropped SSH connection resuming on a second run; whole-fleet rollback and repeat rollback; every service
+validator rejecting a broken config on a real node (DNSdist, PowerDNS, Caddy, Prometheus, Alertmanager, Vector; OpenResty and
+edge-control carry their config inside the image); the one-click check catching a stopped container, a stopped agent, and an
+expiring certificate; the local web driving the real fleet; vault backup and restore against real restic; the admin first-run
+wizard; the removal of the edge management address fields; and the Fleet browser suite in four projects. See [Fleet engine,
+vault, and local web](operations/fleet-engine.md).
 
-Not met, because they need disposable virtual machines or a published release that this work could not create: the
-scripted quick start on fresh VMs (`tests/e2e/fleet_quickstart.py` is written, not run), the rolling upgrade of a whole
-fleet with IPv4 and IPv6 traffic checks, the broken-image canary on real Docker, and the injected-failure matrix for
-the one-click check (expired certificate, broken replication, stale backup, lagging PoP) on a real stack. Major-version
-guided upgrades of PostgreSQL, ClickHouse, and Valkey are also not built. The gate stays open.
+Not met: the scripted quick start on fresh VMs through both the CLI and the web (`tests/e2e/fleet_quickstart.py` is written, not
+run), an active proxied customer domain (it needs registrar delegation of a real zone, which the staging run could not do), the
+SOA/NS serial check on every DNS target (no zone was delegated), broken PostgreSQL/Valkey replication and a stale backup on a
+real stack (HA needs a private network and a fourth server; backups need an S3 repository), the Watchdog delivery (no alert
+receiver), and guided major-version upgrades of PostgreSQL, ClickHouse, and Valkey. The gate stays open.
 
 #### Fleet engine
 
