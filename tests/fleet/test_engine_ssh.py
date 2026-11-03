@@ -71,6 +71,7 @@ def fleet(tmp_path: Path, sshd):
     for n, r in roots.items():
         stub(Path(r), "2.0.0")
         (Path(r) / "running").write_text("2.0.0\n")
+        (Path(r) / ".cdnf-good").write_text("")  # the running release passed its gate
     bundles = tmp_path / "bundles"
     for n in NODES:
         stub(bundles / n, "2.0.1")
@@ -163,3 +164,14 @@ def test_activation_is_safe_to_run_twice_after_a_drop_that_happened_after_the_sw
     assert again[0], again[1]
     assert (Path(roots["pop-1"]) / "RELEASE").read_text().strip() == "2.0.1"
     assert (Path(roots["pop-1"] + ".previous") / "RELEASE").read_text().strip() == "2.0.0"
+
+
+def test_only_a_bundle_that_passed_its_gate_becomes_the_rollback_target(fleet) -> None:
+    make, _, roots, bundles = fleet
+    (Path(roots["pop-1"]) / ".cdnf-good").unlink()  # the running bundle never passed a gate (a first install that failed)
+    stub(bundles / "pop-1", "2.0.1")
+    out = make().apply(plan(), manifest("2.0.1", D2))
+    assert out.ok
+    assert not Path(roots["pop-1"] + ".previous").exists()  # nothing known-good to keep
+    assert (Path(roots["pop-1"]) / ".cdnf-good").exists()  # the new bundle passed its gate and is now the one to keep
+    assert (Path(roots["pop-2"] + ".previous") / "RELEASE").read_text().strip() == "2.0.0"

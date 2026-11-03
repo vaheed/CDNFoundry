@@ -107,3 +107,18 @@ def test_binding_to_the_public_address_passes_beside_a_loopback_resolver() -> No
     assert dns_port_conflicts(_ss("udp|127.0.0.54", "tcp|127.0.0.53"), TARGET, node) == (True, "")
     assert not dns_port_conflicts(_ss("udp|93.184.216.12"), TARGET, node)[0]
     assert dns_port_conflicts(_ss("udp|127.0.0.54"), TARGET, {"role": "edge", "name": "e", "bind_ipv4": "0.0.0.0"}) == (True, "")
+
+
+def test_the_gate_probes_the_bind_addresses_and_loopback_only_for_a_wildcard_bind() -> None:
+    from cdnfoundry_fleet.checks import node_gate
+
+    state = {"global": {"operator_domain": "ops.example.test", "platform_domain": "cdn.example.test"}}
+    t = T()
+    node = {"role": "dns-edge", "name": "p", "bind_ipv4": "93.184.216.12", "bind_ipv6": "2001:db8::12", "public_ipv6": "2001:db8::12"}
+    assert node_gate(t, TARGET, node, state)[0]
+    joined = "\n".join(t.ran)
+    assert "dig @93.184.216.12" in joined and "dig @2001:db8::12" in joined and "https://93.184.216.12/" in joined and "https://[2001:db8::12]/" in joined
+    assert "127.0.0.1" not in joined
+    t2 = T()
+    node_gate(t2, TARGET, {"role": "dns", "name": "d", "bind_ipv4": "0.0.0.0", "bind_ipv6": None}, state)
+    assert any("dig @127.0.0.1" in c for c in t2.ran)

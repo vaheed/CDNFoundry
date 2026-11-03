@@ -61,7 +61,13 @@ def node_gate(transport: Any, target: Target, node: dict[str, Any], state: dict[
         return False, f"containers not healthy: {detail}"
     role = node["role"]
     zone = state["global"]["platform_domain"]
-    families = [("127.0.0.1", "127.0.0.1")] + ([("::1", "[::1]")] if node.get("public_ipv6") else [])
+    # Probe the address the node really serves on: its bind address, or loopback when it binds the wildcard.
+    v4 = node.get("bind_ipv4") or "0.0.0.0"
+    families = [("127.0.0.1" if v4 == "0.0.0.0" else v4, "127.0.0.1" if v4 == "0.0.0.0" else v4)]
+    v6 = node.get("bind_ipv6") or ""
+    if node.get("public_ipv6") or v6:
+        host6 = "::1" if v6 in ("", "::") else v6
+        families.append((host6, f"[{host6}]"))
     for addr, url_host in families:
         if role in {"dns", "dns-edge"}:
             for proto in ("", "+tcp"):

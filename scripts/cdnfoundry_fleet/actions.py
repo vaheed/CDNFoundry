@@ -253,13 +253,17 @@ class Engine:
             # Safe to run twice: a retry after a dropped connection finds the swap already done and only starts the services.
             r = self.t.run(
                 target,
-                f"set -e; if [ -d {remote}.next ]; then rm -rf {remote}.previous; if [ -d {remote} ]; then mv {remote} {remote}.previous; fi; mv {remote}.next {remote}; fi; "
+                # Only a bundle that passed its health gate (it carries .cdnf-good) becomes the rollback target; a broken one is discarded.
+                f"set -e; if [ -d {remote}.next ]; then rm -rf {remote}.previous; if [ -d {remote} ]; then if [ -e {remote}/.cdnf-good ]; then mv {remote} {remote}.previous; else rm -rf {remote}; fi; fi; mv {remote}.next {remote}; fi; "
                 f"cd {remote} && ./start.sh",
                 timeout=LONG_STEP_SECONDS,
             )
             return r.ok, "" if r.ok else ((r.stderr or r.stdout).strip()[-600:] or f"start.sh exited with {r.code} and printed nothing")
         if step.kind == "gate":
-            return self.gate(step.node)
+            ok, detail = self.gate(step.node)
+            if ok:
+                self.t.run(target, f"touch {remote}/.cdnf-good")
+            return ok, detail
         raise ActionError(f"Unknown step kind: {step.kind}")
 
     def _rollback(self, failed: list[str], also: list[str], log: Callable[[str], None]) -> list[str]:
