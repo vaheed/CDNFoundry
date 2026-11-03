@@ -106,7 +106,8 @@ def test_password_and_unknown_keys_do_not_work(tmp_path: Path, sshd: Sshd) -> No
     other = tmp_path / "other"
     subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(other)], check=True)
     install_key(t, other)
-    assert not t.run(target, "true").ok
+    with pytest.raises(SshError):
+        t.run(target, "true")  # authentication fails: ssh itself fails, which is a transport error
 
 
 def test_failed_command_raises_when_checked(tmp_path: Path, sshd: Sshd) -> None:
