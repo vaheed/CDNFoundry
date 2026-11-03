@@ -39,7 +39,9 @@ CERT_WARN_DAYS = 30
 
 
 def _containers(transport: Any, target: Target) -> tuple[bool, str]:
-    r = transport.run(target, f"cd {REMOTE} && docker compose --env-file .env.prod --profile '*' ps -a --format json")
+    """Every long-running service of the bundle (restart policy other than "no") must be running and not unhealthy."""
+    base = f"cd {REMOTE} && docker compose --env-file .env.prod --profile '*'"
+    r = transport.run(target, f"{base} ps -a --format json")
     if not r.ok:
         return False, "docker compose ps failed"
     rows = []
@@ -48,10 +50,28 @@ def _containers(transport: Any, target: Target) -> tuple[bool, str]:
         if line:
             parsed = json.loads(line)
             rows += parsed if isinstance(parsed, list) else [parsed]
-    # One-shot tool services exit by design; a long-running service must be running and not unhealthy.
-    bad = [x.get("Service", x.get("Name", "?")) for x in rows
-           if x.get("Health") == "unhealthy" or (x.get("State") != "running" and x.get("ExitCode", 0) not in (0, None)) or x.get("State") in {"restarting", "dead"}]
-    return not bad, ", ".join(bad[:5])
+    expected: set[str] | None = None
+    config = transport.run(target, f"{base} config --format json")
+    if config.ok and config.stdout.strip():
+        try:
+            services = json.loads(config.stdout)["services"]
+            expected = {name for name, svc in services.items() if svc.get("restart", "no") != "no"}
+        except (ValueError, KeyError, TypeError):
+            expected = None
+    seen = {x.get("Service", x.get("Name", "?")): x for x in rows}
+    bad = []
+    for name, x in sorted(seen.items()):
+        running = x.get("State") == "running"
+        if x.get("Health") == "unhealthy" or x.get("State") in {"restarting", "dead"}:
+            bad.append(name)
+        elif expected is not None:
+            if name in expected and not running:
+                bad.append(name)
+        elif not running and x.get("ExitCode", 0) not in (0, None):
+            bad.append(name)
+    if expected is not None:
+        bad += sorted(n for n in expected if n not in seen)
+    return not bad, ", ".join(bad[:5]) + (" and more" if len(bad) > 5 else "")
 
 
 def node_gate(transport: Any, target: Target, node: dict[str, Any], state: dict[str, Any]) -> tuple[bool, str]:

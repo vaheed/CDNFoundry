@@ -164,3 +164,20 @@ def test_a_public_port_that_refuses_connections_fails_the_gate() -> None:
     state = {"global": {"operator_domain": "ops.example.test", "platform_domain": "cdn.example.test"}}
     ok, detail = node_gate(Closed(), TARGET, {"role": "edge", "name": "e", "bind_ipv4": "93.184.216.12", "bind_ipv6": ""}, state)
     assert not ok and detail == "https not accepting connections on 93.184.216.12:443"
+
+
+def test_a_stopped_long_running_service_fails_the_container_check_but_a_finished_one_shot_does_not() -> None:
+    import json as j
+
+    from cdnfoundry_fleet.checks import _containers
+
+    class Node:
+        def run(self, target, command, **_):
+            if " ps -a " in command:
+                rows = [{"Service": "cell-03", "State": "exited", "ExitCode": 0}, {"Service": "migrate", "State": "exited", "ExitCode": 0},
+                        {"Service": "edge-agent", "State": "running", "Health": "healthy"}]
+                return R(0, "", "\n".join(j.dumps(r) for r in rows))
+            return R(0, "", j.dumps({"services": {"cell-03": {"restart": "unless-stopped"}, "edge-agent": {"restart": "unless-stopped"}, "migrate": {}}}))
+
+    ok, detail = _containers(Node(), TARGET)
+    assert not ok and detail == "cell-03"
