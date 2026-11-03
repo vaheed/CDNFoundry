@@ -31,7 +31,7 @@ class T:
             return R(1, "syntax error")
         if command.startswith("dig "):
             return R(0, "", ";; ->>HEADER<<- opcode: QUERY, status: REFUSED, id: 1\n")
-        return R(0, "", "200") if command.startswith("curl ") else R(0)
+        return R(0)
 
 
 TARGET = Target("n", "127.0.0.1")
@@ -121,7 +121,7 @@ def test_the_gate_probes_the_bind_addresses_and_loopback_only_for_a_wildcard_bin
     node = {"role": "dns-edge", "name": "p", "bind_ipv4": "93.184.216.12", "bind_ipv6": "2001:db8::12", "public_ipv6": "2001:db8::12"}
     assert node_gate(t, TARGET, node, state)[0]
     joined = "\n".join(t.ran)
-    assert "dig @93.184.216.12" in joined.replace("  ", " ") and "dig @2001:db8::12" in joined.replace("  ", " ") and "https://93.184.216.12/" in joined and "https://[2001:db8::12]/" in joined
+    assert "dig @93.184.216.12" in joined.replace("  ", " ") and "dig @2001:db8::12" in joined.replace("  ", " ") and "/dev/tcp/93.184.216.12/443" in joined and "/dev/tcp/2001:db8::12/80" in joined
     assert "127.0.0.1" not in joined
     t2 = T()
     node_gate(t2, TARGET, {"role": "dns", "name": "d", "bind_ipv4": "0.0.0.0", "bind_ipv6": None}, state)
@@ -152,3 +152,15 @@ def test_our_own_docker_proxy_on_port_53_is_not_a_conflict() -> None:
 
     node = {"role": "dns-edge", "name": "pop-1", "bind_ipv4": "93.184.216.12", "bind_ipv6": ""}
     assert dns_port_conflicts(Ss(), TARGET, node) == (True, "")
+
+
+def test_a_public_port_that_refuses_connections_fails_the_gate() -> None:
+    from cdnfoundry_fleet.checks import node_gate
+
+    class Closed(T):
+        def run(self, target, command, **kw):
+            return R(1) if "/dev/tcp/" in command and command.endswith("/443'") else super().run(target, command, **kw)
+
+    state = {"global": {"operator_domain": "ops.example.test", "platform_domain": "cdn.example.test"}}
+    ok, detail = node_gate(Closed(), TARGET, {"role": "edge", "name": "e", "bind_ipv4": "93.184.216.12", "bind_ipv6": ""}, state)
+    assert not ok and detail == "https not accepting connections on 93.184.216.12:443"

@@ -76,10 +76,12 @@ def node_gate(transport: Any, target: Target, node: dict[str, Any], state: dict[
                 if not r.ok or "status:" not in r.stdout:
                     return False, f"DNS did not answer {proto.lstrip('+') or 'udp'} on {addr}"
         if role in {"edge", "dns-edge"}:
-            for scheme in ("http", "https"):
-                r = transport.run(target, f"curl -sk -o /dev/null -m 5 -w '%{{http_code}}' {scheme}://{url_host}/")
-                if not r.ok or r.stdout.strip() in {"", "000"}:
-                    return False, f"{scheme} not served on {addr}"
+            # The gateway routes by Host and SNI and drops connections that carry neither, so an HTTP request here would be refused.
+            # A completed TCP handshake on each public port proves the listener is up.
+            for scheme, port in (("http", 80), ("https", 443)):
+                r = transport.run(target, f"timeout 6 bash -c 'exec 3<>/dev/tcp/{addr}/{port}'")
+                if not r.ok:
+                    return False, f"{scheme} not accepting connections on {addr}:{port}"
     if role == "control":
         host = f"control.{state['global']['operator_domain']}"
         r = transport.run(target, f"curl -fsk -m 8 --resolve {host}:443:127.0.0.1 https://{host}/api/health")
