@@ -75,6 +75,7 @@ def fleet(tmp_path: Path, sshd):
     for n in NODES:
         stub(bundles / n, "2.0.1")
     transport = Counting(real)
+    transport.port = sshd.port
 
     def gate(node: str) -> tuple[bool, str]:
         running = Path(roots[node]) / "running"
@@ -139,3 +140,16 @@ def test_rollback_returns_the_previous_bundle(fleet) -> None:
     assert engine._rollback(["pop-1", "pop-2"], [], lambda _m: None) == ["pop-1", "pop-2"]
     for root in roots.values():
         assert (Path(root) / "RELEASE").read_text().strip() == "2.0.0"
+
+
+def test_validation_runs_the_start_script_up_to_validate_and_no_further(fleet) -> None:
+    from cdnfoundry_fleet.validators import validate_node_config
+
+    _, transport, roots, bundles = fleet
+    staged = Path(roots["pop-1"] + ".next")
+    stub(staged, "2.0.1")
+    (staged / "start.sh").write_text("#!/bin/sh\ntouch prepared\n./validate.sh\ntouch started\n")
+    target = Target("pop-1", "127.0.0.1", transport.port, "root")
+    ok, detail = validate_node_config(transport, target, "edge", str(staged), set())
+    assert ok, detail
+    assert (staged / "prepared").exists() and not (staged / "started").exists()
