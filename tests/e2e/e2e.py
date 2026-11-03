@@ -268,8 +268,8 @@ def main() -> None:
         "platform_domain": "cdnf.test",
         "proxy_hostname": "proxy.cdnf.test",
         "nameservers": [
-            {"hostname": "ns1.cdnf.test", "ipv4": "8.8.8.8", "ipv6": "2001:4860:4860::8888"},
-            {"hostname": "ns2.cdnf.test", "ipv4": "1.1.1.1", "ipv6": "2606:4700:4700::1111"},
+            {"hostname": "ns1.cdnf.test", "ipv4": "8.8.8.8"},
+            {"hostname": "ns2.cdnf.test", "ipv4": "1.1.1.1"},
         ],
         "soa_primary": "ns1.cdnf.test",
         "soa_mailbox": "hostmaster.cdnf.test",
