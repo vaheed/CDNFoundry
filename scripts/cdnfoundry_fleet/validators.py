@@ -28,8 +28,8 @@ ALL_ROLES = frozenset({"control", "edge", "dns", "dns-edge", "monitoring"})
 VALIDATORS = [
     # start.sh sets file ownership and then calls ./validate.sh; the same prefix runs here so a staged bundle is checked exactly as it will be started.
     Validator("compose", ALL_ROLES, "cd {dir} && export " + PROJECT + " && if grep -qx './validate.sh' start.sh; then sed '/^\\.\\/validate\\.sh$/q' start.sh | sh; else ./validate.sh; fi", "compose"),
-    # The entrypoint writes worker-processes.conf before nginx starts; `nginx -t` alone would fail on the missing include, so write a placeholder first. `vector` is a sibling container the check does not start, so it resolves to a placeholder address.
-    Validator("openresty", frozenset({"edge", "dns-edge"}), _RUN + " --entrypoint sh cell-01 -c 'mkdir -p /var/lib/nginx/tmp && echo \"worker_processes 1;\" > /var/lib/nginx/tmp/worker-processes.conf && echo 127.0.0.1 vector >> /etc/hosts && nginx -t'", "cell-01"),
+    # The entrypoint writes worker-processes.conf before nginx starts; `nginx -t` alone would fail on the missing include, so write a placeholder first. `vector` is a sibling container the check does not start, so the copy under test points at a loopback address.
+    Validator("openresty", frozenset({"edge", "dns-edge"}), _RUN + " --entrypoint sh cell-01 -c 'mkdir -p /var/lib/nginx/tmp && echo \"worker_processes 1;\" > /var/lib/nginx/tmp/worker-processes.conf && sed s/vector:9000/127.0.0.1:9000/ /usr/local/openresty/nginx/conf/nginx.conf > /var/lib/nginx/tmp/check.conf && nginx -t -c /var/lib/nginx/tmp/check.conf'", "cell-01"),
     Validator("edge-control", frozenset({"control"}), _RUN + " --entrypoint nginx edge-control -t", "edge-control"),
     Validator("dnsdist", frozenset({"dns", "dns-edge"}), _RUN + " dnsdist --check-config --config /etc/dnsdist/dnsdist.conf", "dnsdist"),
     Validator("powerdns", frozenset({"control"}), _RUN + " --entrypoint pdns_server pdns-primary --config=check", "pdns-primary"),
