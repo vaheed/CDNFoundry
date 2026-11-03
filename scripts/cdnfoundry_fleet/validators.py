@@ -26,7 +26,7 @@ _RUN = "cd {dir} && " + PROJECT + " docker compose --env-file .env.prod --profil
 ALL_ROLES = frozenset({"control", "edge", "dns", "dns-edge", "monitoring"})
 VALIDATORS = [
     # start.sh sets file ownership and then calls ./validate.sh; the same prefix runs here so a staged bundle is checked exactly as it will be started.
-    Validator("compose", ALL_ROLES, "cd {dir} && if grep -qx './validate.sh' start.sh; then sed '/^\\.\\/validate\\.sh$/q' start.sh | sh; else ./validate.sh; fi", "compose"),
+    Validator("compose", ALL_ROLES, "cd {dir} && export " + PROJECT + " && if grep -qx './validate.sh' start.sh; then sed '/^\\.\\/validate\\.sh$/q' start.sh | sh; else ./validate.sh; fi", "compose"),
     Validator("openresty", frozenset({"edge", "dns-edge"}), _RUN + " --entrypoint nginx cell-01 -t", "cell-01"),
     Validator("edge-control", frozenset({"control"}), _RUN + " --entrypoint nginx edge-control -t", "edge-control"),
     Validator("dnsdist", frozenset({"dns", "dns-edge"}), _RUN + " dnsdist --check-config --config /etc/dnsdist/dnsdist.conf", "dnsdist"),
