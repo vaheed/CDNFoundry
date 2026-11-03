@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from . import control_cli
+from .vault import Vault, VaultError
 from .common import FleetError, StateError, ValidationError, load_json, utc_now
 from .render import Renderer
 from .state import (
@@ -21,6 +22,10 @@ from .state import (
     FleetState,
     ROLES,
 )
+
+DEFAULT_VAULT = Path.home() / ".config" / "cdnfoundry-fleet" / "fleet.db"
+PASSPHRASE_ENV = "CDNF_FLEET_PASSPHRASE"
+PASSPHRASE_FILE_ENV = "CDNF_FLEET_PASSPHRASE_FILE"
 
 EXIT_OK = 0
 EXIT_USAGE = 2
@@ -76,12 +81,18 @@ def _common_parser(*, suppressed_defaults: bool) -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     default = argparse.SUPPRESS if suppressed_defaults else None
     common.add_argument(
+        "--vault",
+        default=default if suppressed_defaults else str(DEFAULT_VAULT),
+        help="encrypted SQLite fleet state (default: %(default)s)" if not suppressed_defaults else argparse.SUPPRESS,
+    )
+    common.add_argument(
         "--state-dir",
-        default=default if suppressed_defaults else "/var/lib/cdnfoundry-fleet",
+        default=default,
+        help="unencrypted state directory for development and tests only; replaces the vault" if not suppressed_defaults else argparse.SUPPRESS,
     )
     common.add_argument(
         "--output-dir",
-        default=default if suppressed_defaults else "/var/lib/cdnfoundry-fleet/bundles",
+        default=default if suppressed_defaults else str(DEFAULT_VAULT.parent / "bundles"),
     )
     common.add_argument(
         "--repo-root",
@@ -932,6 +943,49 @@ def import_secret_env(store: FleetState, node: str, role: str, env: dict[str, st
             atomic_write(path, env[key] + "\n", 0o600)
 
 
+def _passphrase(*, confirm: bool) -> str:
+    import getpass
+    import os
+
+    if os.environ.get(PASSPHRASE_ENV):
+        return os.environ[PASSPHRASE_ENV]
+    if os.environ.get(PASSPHRASE_FILE_ENV):
+        return Path(os.environ[PASSPHRASE_FILE_ENV]).read_text(encoding="utf-8").rstrip("\r\n")
+    if not sys.stdin.isatty():
+        raise StateError(f"Set {PASSPHRASE_ENV} or {PASSPHRASE_FILE_ENV} to unlock the fleet vault")
+    value = getpass.getpass("Fleet vault passphrase: ")
+    if confirm and getpass.getpass("Repeat passphrase: ") != value:
+        raise ValidationError("The passphrases do not match")
+    return value
+
+
+def run(args: argparse.Namespace) -> int:
+    """Run one command against the vault, or against --state-dir when given."""
+    if args.state_dir or args.dry_run or args.command in {"doctor"}:
+        args.state_dir = args.state_dir or "/nonexistent-dry-run-state"
+        return execute(args)
+    vault_path = Path(args.vault)
+    vault = Vault(vault_path, "")
+    creating = not vault.exists()
+    vault = Vault(vault_path, _passphrase(confirm=creating))
+    if creating:
+        if args.command not in {"setup", "init"}:
+            raise StateError(f"No fleet vault at {vault_path}; run setup first")
+        vault.create()
+    with vault.session() as work:
+        args.state_dir = str(work)
+        code = execute(args)
+        if code != EXIT_OK:
+            raise _Unsealed(code)
+    vault.record("command", args.command)
+    return EXIT_OK
+
+
+class _Unsealed(Exception):
+    def __init__(self, code: int) -> None:
+        self.code = code
+
+
 def main(argv: list[str] | None = None) -> int:
     try:
         effective = list(sys.argv[1:] if argv is None else argv)
@@ -941,7 +995,9 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 parser().print_help()
                 return EXIT_OK
-        return execute(parser().parse_args(effective))
+        return run(parser().parse_args(effective))
+    except _Unsealed as exc:
+        return exc.code
     except ValidationError as exc:
         print(f"validation error: {exc}", file=sys.stderr)
         return EXIT_VALIDATION
