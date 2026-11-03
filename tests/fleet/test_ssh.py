@@ -159,3 +159,23 @@ def test_the_generated_fleet_key_logs_in_to_a_server_that_authorises_its_public_
     (sshd.root / "authorized_keys").write_text(t.public_key() + "\n")
     t.pin_host_key(target)
     assert t.run(target, "echo ok").stdout.strip() == "ok"
+
+
+def test_a_non_root_user_runs_every_command_through_passwordless_sudo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[list[str]] = []
+
+    class Done:
+        returncode, stdout, stderr = 0, b"", b""
+
+    monkeypatch.setattr(subprocess, "run", lambda args, **kw: seen.append(list(args)) or Done())
+    t = SshTransport(tmp_path / "state")
+    t.ensure_fleet_key = lambda: ""  # type: ignore[method-assign]
+    t.dir.mkdir(parents=True)
+    t.key_path().write_text("k")
+    t.run(Target("n", "h", 22, "vk-user"), "echo 'a b'; id")
+    t.run_raw(Target("n", "h", 22, "vk-user"), "id")
+    t.run(Target("n", "h", 22, "root"), "id")
+    assert seen[0][-1] == "sudo -n sh -c 'echo '\"'\"'a b'\"'\"'; id'"
+    assert seen[1][-1] == "sudo -n sh -c id"
+    assert seen[2][-1] == "id"
+    assert seen[0][-2].startswith("vk-user@")

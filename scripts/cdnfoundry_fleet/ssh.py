@@ -118,10 +118,15 @@ class SshTransport:
         atomic_write(self.known_hosts(), pinned + "\n".join(lines) + "\n", 0o600)
         return marker
 
+    @staticmethod
+    def _as_root(target: Target, command: str) -> str:
+        """Nodes are managed as root. A non-root SSH user needs passwordless sudo; Fleet never asks for a password."""
+        return command if target.user == "root" else f"sudo -n sh -c {shlex.quote(command)}"
+
     def run(self, target: Target, command: str, *, stdin: bytes | None = None, check: bool = False) -> Result:
         try:
             done = subprocess.run(
-                self._base(target) + [command], input=stdin, capture_output=True, timeout=self.timeout, check=False,
+                self._base(target) + [self._as_root(target, command)], input=stdin, capture_output=True, timeout=self.timeout, check=False,
             )
         except subprocess.TimeoutExpired as exc:
             raise SshError(f"SSH to {target.name} timed out") from exc
@@ -135,7 +140,7 @@ class SshTransport:
 
     def run_raw(self, target: Target, command: str, *, stdin: bytes | None = None, timeout: int = 1800) -> "subprocess.CompletedProcess[bytes]":
         """Run with the pinned key and return the raw process, for callers that stream bytes."""
-        return subprocess.run(self._base(target) + [command], input=stdin, capture_output=True, timeout=timeout, check=False)
+        return subprocess.run(self._base(target) + [self._as_root(target, command)], input=stdin, capture_output=True, timeout=timeout, check=False)
 
     def upload_tree(self, target: Target, local: Path, remote: str, *, keep_previous: bool = True) -> None:
         """Replace `remote` with a copy of `local`. Interrupting the stream leaves `remote` untouched."""
