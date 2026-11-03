@@ -13,6 +13,18 @@ class HealthApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_fleet_doctor_command_prints_components_and_queues_as_json(): void
+    {
+        $this->assertSame(0, \Illuminate\Support\Facades\Artisan::call('cdnf:system:components'));
+
+        $output = \Illuminate\Support\Facades\Artisan::output();
+        $payload = json_decode($output, true, flags: JSON_THROW_ON_ERROR);
+        $this->assertContains($payload['status'], ['healthy', 'degraded', 'unavailable']);
+        $this->assertArrayHasKey('control_database', $payload['components']);
+        $this->assertArrayHasKey('backups', $payload['components']);
+        $this->assertIsArray($payload['queues']);
+    }
+
     public function test_liveness_does_not_require_authentication(): void
     {
         $this->getJson('/api/health')->assertOk()->assertExactJson(['status' => 'ok']);
