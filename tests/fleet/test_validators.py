@@ -52,3 +52,10 @@ def test_valid_config_passes_and_unknown_services_are_not_checked() -> None:
     t = T()
     assert validate_node_config(t, TARGET, "edge", "/d", {"cell-01"})[0]
     assert not any("caddy" in c for c in t.ran)
+
+
+def test_validation_uses_the_install_directory_name_as_its_compose_project_and_removes_nothing() -> None:
+    t = T()
+    validate_node_config(t, TARGET, "edge", "/opt/cdnfoundry.next", {"cell-01"})
+    assert t.ran and all("COMPOSE_PROJECT_NAME=cdnfoundry " in c or "COMPOSE_PROJECT_NAME=cdnfoundry&" in c or "COMPOSE_PROJECT_NAME=cdnfoundry" in c for c in t.ran)
+    assert not any(" down" in c or "volume rm" in c for c in t.ran)

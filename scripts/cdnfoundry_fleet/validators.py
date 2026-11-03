@@ -20,9 +20,10 @@ class Validator:
     compose_service: str = ""  # the Compose service the command runs in
 
 
-# A private project name keeps validation from creating networks or volumes under the real project's name.
-PROJECT = "COMPOSE_PROJECT_NAME=cdnf-validate"
-_RUN = "cd {dir} && " + PROJECT + " docker compose --env-file .env.prod --profile '*' run --rm --no-deps -T"
+# Validation runs under the project name the bundle will run under (the install directory's name, not the staging directory's),
+# so it reuses the same fixed-subnet networks instead of colliding with them. It never removes anything.
+PROJECT = "COMPOSE_PROJECT_NAME={project}"
+_RUN = "cd {dir} && export " + PROJECT + " && docker compose --env-file .env.prod --profile '*' run --rm --no-deps -T"
 ALL_ROLES = frozenset({"control", "edge", "dns", "dns-edge", "monitoring"})
 VALIDATORS = [
     # start.sh sets file ownership and then calls ./validate.sh; the same prefix runs here so a staged bundle is checked exactly as it will be started.
@@ -44,13 +45,10 @@ def validators_for(role: str, services: set[str]) -> list[Validator]:
 
 
 def validate_node_config(transport: Any, target: Target, role: str, directory: str, services: set[str]) -> tuple[bool, str]:
-    try:
-        for validator in validators_for(role, services):
-            result = transport.run(target, validator.command.format(dir=directory))
-            if not result.ok:
-                detail = (result.stderr or result.stdout).strip()[-300:]
-                return False, f"{validator.service} rejected the new config: {detail}"
-        return True, ""
-    finally:
-        # Remove whatever the validation containers created; only the private validation project is touched.
-        transport.run(target, f"cd {directory} && {PROJECT} docker compose --env-file .env.prod --profile '*' down -v --remove-orphans >/dev/null 2>&1; true")
+    project = directory.rstrip("/").removesuffix(".next").rsplit("/", 1)[-1].replace(".", "") or "cdnfoundry"
+    for validator in validators_for(role, services):
+        result = transport.run(target, validator.command.format(dir=directory, project=project))
+        if not result.ok:
+            detail = (result.stderr or result.stdout).strip()[-300:]
+            return False, f"{validator.service} rejected the new config: {detail}"
+    return True, ""
