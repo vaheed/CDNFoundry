@@ -220,6 +220,10 @@ def parser() -> argparse.ArgumentParser:
     rotate.add_argument("--secret", required=True)
     rotate.add_argument("--phase", choices=("prepare", "commit", "abort"), default="prepare")
 
+    web = sub.add_parser("web", parents=[command_common], help="local fleet web on 127.0.0.1")
+    web.add_argument("--host", default="127.0.0.1")
+    web.add_argument("--port", type=int, default=8765)
+
     control_cli.add_parser(sub, command_common)
 
     return root
@@ -961,10 +965,25 @@ def _passphrase(*, confirm: bool) -> str:
 
 def run(args: argparse.Namespace) -> int:
     """Run one command against the vault, or against --state-dir when given."""
-    if args.state_dir or args.dry_run or args.command in {"doctor"}:
+    if args.command == "web" and args.host != "127.0.0.1":
+        raise ValidationError("The fleet web binds to 127.0.0.1 only")
+    if args.command != "web" and (args.state_dir or args.dry_run or args.command in {"doctor"}):
         args.state_dir = args.state_dir or "/nonexistent-dry-run-state"
         return execute(args)
     vault_path = Path(args.vault)
+    if args.command == "web":
+        from .web import FleetWeb, make_server, require_loopback
+
+        require_loopback(args.host)
+        vault = Vault(vault_path, _passphrase(confirm=False))
+        vault.unlock()
+        server = make_server(FleetWeb(vault, Path(args.repo_root)), args.host, args.port)
+        print(f"Fleet web on http://{args.host}:{args.port}/ (Ctrl+C to stop)")
+        try:
+            server.serve_forever()
+        finally:
+            server.server_close()
+        return EXIT_OK
     vault = Vault(vault_path, "")
     creating = not vault.exists()
     vault = Vault(vault_path, _passphrase(confirm=creating))
