@@ -8,7 +8,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 RASTER = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 # The product screenshots are intentionally kept; any new raster image must be added here deliberately.
 # Visual regression baselines for the browser suite, required by AGENTS.md for every UI change.
-SNAPSHOT_DIR = "tests/browser/specs/__snapshots__/"
+SNAPSHOT_DIR = "tests/browser/fleet-specs/__snapshots__/"
 ALLOWLIST = {
     "docs/public/images/screencapture-admin.png",
     "docs/public/images/screencapture-edges.png",
