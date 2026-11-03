@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import actions, manifest as mf
-from .checks import Check, node_gate, run_checks
+from .checks import Check, gate_with_retry, node_gate, run_checks
 from .common import ValidationError, atomic_json, utc_now
 from .control_cli import Runner, bundle_digest
 from .render import Renderer
@@ -102,7 +102,7 @@ class FleetEngine:
                 services[name] = set((yaml.safe_load(compose.read_text(encoding="utf-8")) or {}).get("services", {}))
         return actions.Engine(
             self.transport, targets, state["nodes"], self.output_dir, journal,
-            gate=lambda n: node_gate(self.transport, targets[n], state["nodes"][n], state), switchover=self._switchover,
+            gate=lambda n: gate_with_retry(lambda: node_gate(self.transport, targets[n], state["nodes"][n], state)), switchover=self._switchover,
             mixed_versions_ok=mixed_versions_ok, services=services,
         )
 

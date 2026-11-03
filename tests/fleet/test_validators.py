@@ -59,3 +59,15 @@ def test_validation_uses_the_install_directory_name_as_its_compose_project_and_r
     validate_node_config(t, TARGET, "edge", "/opt/cdnfoundry.next", {"cell-01"})
     assert t.ran and all("COMPOSE_PROJECT_NAME=cdnfoundry " in c or "COMPOSE_PROJECT_NAME=cdnfoundry&" in c or "COMPOSE_PROJECT_NAME=cdnfoundry" in c for c in t.ran)
     assert not any(" down" in c or "volume rm" in c for c in t.ran)
+
+
+def test_the_health_gate_waits_for_a_slow_start_but_not_forever() -> None:
+    from cdnfoundry_fleet.checks import gate_with_retry
+
+    answers = iter([(False, "not yet"), (False, "not yet"), (True, "")])
+    slept: list[float] = []
+    assert gate_with_retry(lambda: next(answers), attempts=5, delay=7, sleep=slept.append) == (True, "")
+    assert slept == [7, 7]
+    slept.clear()
+    assert gate_with_retry(lambda: (False, "still down"), attempts=3, delay=7, sleep=slept.append) == (False, "still down")
+    assert slept == [7, 7]

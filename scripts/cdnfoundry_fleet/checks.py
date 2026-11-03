@@ -81,6 +81,21 @@ def node_gate(transport: Any, target: Target, node: dict[str, Any], state: dict[
     return True, ""
 
 
+def gate_with_retry(check: Any, *, attempts: int = 18, delay: float = 10.0, sleep: Any = None) -> tuple[bool, str]:
+    """Services take a while to answer after a start; the gate passes as soon as one attempt does and fails after a bounded wait."""
+    import time
+
+    sleep = sleep or time.sleep
+    detail = ""
+    for attempt in range(attempts):
+        ok, detail = check()
+        if ok:
+            return True, ""
+        if attempt < attempts - 1:
+            sleep(delay)
+    return False, detail
+
+
 def _cert_check(transport: Any, target: Target) -> Check:
     days = CERT_WARN_DAYS
     r = transport.run(target, f"cd {REMOTE} && openssl x509 -checkend {days * 86400} -noout -in pki/node.crt")
