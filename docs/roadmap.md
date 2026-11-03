@@ -1358,7 +1358,7 @@ hand is a combination that no test has run.
 - The fleet web refuses to bind to anything other than `127.0.0.1`.
 - The browser suite passes.
 
-### Phase 7: Observability, role-based Grafana, and agent-run Grafana qualification
+### Phase 9: Observability, role-based Grafana, and agent-run Grafana qualification
 
 Fixes O1, O2, O3, O4, O5, O6, O7, O8, O9, O10, O11, O12.
 
