@@ -42,7 +42,7 @@ flowchart LR
 | `control.<operator-zone>`, `edge-control.<operator-zone>`, `telemetry.<operator-zone>`, `grafana.<operator-zone>` | Independent external DNS provider; management and recovery reachability | Never |
 | `ns1.<platform-zone>`, `ns2.<platform-zone>` and glue | Parent/registrar delegation to public DNSdist addresses | Served by DNSdist from derived PowerDNS state after bootstrap |
 | Enrolled customer zones | PostgreSQL desired state reconciled into private PowerDNS databases | Yes |
-| Edge pool service addresses | Public HTTP/HTTPS addresses selected through platform/customer DNS | Stored as platform desired state, not management addresses |
+| Edge pool service addresses | Public HTTP/HTTPS addresses selected through platform/customer DNS | Stored as platform desired state |
 | Private PowerDNS, PostgreSQL, Valkey, ClickHouse, agent/status addresses | Host or private service networks | No public DNS required |
 
 ::: danger Avoid a DNS bootstrap loop

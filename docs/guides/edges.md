@@ -55,13 +55,12 @@ override that repeats the bounded cell shape with unique ports and volumes.
 Create an edge with:
 
 - unique name;
-- ISO country code and continent code;
-- optional unique management IPv4;
-- optional unique management IPv6.
+- ISO country code and continent code.
 
-Management addresses may be private. They are operator inventory and are not
-used by the edge-control connection or bound by the customer gateway. The
-agent initiates control traffic outbound to `EDGE_CONTROL_URL`.
+Edges carry no host addresses. Fleet owns where a host is; the control plane
+only knows the public service endpoints of pools. The agent initiates control
+traffic outbound to `EDGE_CONTROL_URL`. Fleet can do all of this for you:
+`cdnfoundry-fleet bootstrap --node NAME --country DE --continent EU`.
 
 The create response exposes an edge UUID and bootstrap token once. Store them
 only long enough to enroll the agent.

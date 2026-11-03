@@ -185,7 +185,7 @@ In the administrator panel:
 3. create shared and quarantine pools if they are not present;
 4. create the `EDGE_1` and `EDGE_2` rows and copy each one-time UUID/token;
 5. assign bounded cells to pools and create one public service endpoint pair for
-   each participating edge/pool; keep management addresses distinct.
+   each participating edge/pool.
 
 Put `EDGE_ID` and `EDGE_BOOTSTRAP_TOKEN` into the corresponding prepared edge
 host and run `sudo docker compose --env-file .env.prod --profile edge up -d`.

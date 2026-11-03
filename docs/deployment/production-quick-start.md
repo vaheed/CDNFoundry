@@ -489,9 +489,7 @@ and omitted from the candidate until a cell participates, then converges to the
 same listener-only generation. Follow the bounded pool and address rules in the
 [Fleet operator guide](production-fleet-operator-guide.md).
 
-If a host's only public address will be its service endpoint, leave that edge's
-optional **Management IPv4/IPv6** blank. Management inventory addresses must be
-different from service endpoints. Assign a cell to the Geo-Unicast pool before
+Assign a cell to the Geo-Unicast pool before
 creating the endpoint; the first endpoint is valid before any customer domain
 exists and activates an empty runtime for that assigned cell.
 
@@ -547,7 +545,7 @@ protected request file or an API client that reads secrets without echoing them.
 | Verify real delegation | `POST /domains/{id}/verify-nameservers` | Empty object after saving the exact assigned names at the registrar; poll `data.id`; expect `lifecycle_state: active`; never use force-verification for qualification |
 | Customer user | `POST /admin/users` | `name`, `email`, `password` (12+ characters with upper/lower case and digits), `type: "user"`; retain `data.id` |
 | Assign customer user | `POST /admin/domains/{domain}/users` | `{"user_id": USER_ID}`; log in separately as this user and check `GET /domains`; administrator API calls must return 403 |
-| Edge, once per PoP | `POST /admin/edges` | `name`, actual `country_code` and `continent_code`, `cell_slot_count: 8`; leave management IPs null when the same addresses serve traffic; securely retain `data.id` and one-time `data.bootstrap_token`; perform step 8 host enrollment |
+| Edge, once per PoP | `POST /admin/edges` | `name`, actual `country_code` and `continent_code`, `cell_slot_count: 8`; securely retain `data.id` and one-time `data.bootstrap_token`; perform step 8 host enrollment |
 | Shared service pool | `POST /admin/edge-pools` | `name`, `kind: "shared"`, `routing_mode: "geo_unicast"`, `minimum_ready_cells: 1`, `replicas_per_edge: 1`, `maximum_domains_per_cell: 1000`, `cache_profile: "standard"`, `compression_profile: "standard"`, `waf_capable: false`; created disabled |
 | Assign a cell on each edge | `PUT /admin/edge-pools/{pool}/cells/{cell}` | Empty object; select an unassigned, non-drained cell from `GET /admin/edges/{edge}`; poll `data.operation_id` |
 | Endpoint, once per edge | `POST /admin/edge-pools/{pool}/edges/{edge}/endpoint` | `ipv4`, `ipv6: null` for IPv4-only, `withdrawn: false`; use the actual service address |

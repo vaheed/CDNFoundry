@@ -460,9 +460,7 @@ Sign in at `https://control.ops.example.com/admin` and use this order:
    create the public service endpoints that are directly assigned to the host or
    correspond exactly to its NAT-only `EDGE_GATEWAY_ADDRESS_MAP` entries.
 
-If the service endpoint is the host's only public address, leave the optional
-management address blank on the edge record; management inventory addresses
-cannot also be service endpoints. A correctly enrolled edge becomes healthy
+A correctly enrolled edge becomes healthy
 with zero domains by activating an empty sequence-`0` generation. Assign a cell
 before creating its Geo-Unicast endpoint; no placeholder customer domain is
 required.

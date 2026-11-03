@@ -42,11 +42,10 @@ There are two different identities in the edge-control mTLS connection:
   belongs to the control service, not an edge management or pool endpoint.
 - The **edge-agent client certificate** is created during enrollment from the
   agent's CSR. Its common name is the administrator-created edge UUID. It does
-  not contain a management IP or service endpoint IP.
+  not contain a service endpoint IP.
 
-Management addresses may be absent or private. Pool endpoint addresses are
-customer traffic listeners. Neither is required for agent enrollment, task
-polling, heartbeats, or artifact acknowledgement.
+Pool endpoint addresses are customer traffic listeners. They are not required
+for agent enrollment, task polling, heartbeats, or artifact acknowledgement.
 
 ## Identity verification boundary
 

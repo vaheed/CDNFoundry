@@ -58,17 +58,16 @@ cell endpoints.
 
 ## Enrollment
 
-An administrator creates an edge with name, country, continent, and optional
-management IPv4/IPv6 addresses. Management addresses are inventory for
-operator access and monitoring; they are not used for control delivery or
-customer traffic. The returned UUID and bootstrap token are shown once. The
+Fleet creates an edge with name, country, and continent when a PoP is added
+(`cdnf:edges:enroll`), puts its cells in the default shared pool, and hands the
+node its UUID and bootstrap token. An administrator can also create one through
+the API or the panel. The UUID and bootstrap token are shown once. The
 agent opens an outbound connection and submits a CSR to the mutual-TLS
 edge-control endpoint. On success it persists the issued identity and no
 longer needs the bootstrap token.
 
 The client identity certificate uses the edge UUID as its common name and has
-no IP-address SAN. It is independent of both optional management addresses and
-public pool endpoint addresses.
+no IP-address SAN. It is independent of public pool endpoint addresses.
 
 Exact registration retries can reuse a pending key and CSR. A different CSR for
 the same consumed token fails closed. Identity rotation invalidates the old

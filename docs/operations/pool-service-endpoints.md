@@ -15,10 +15,7 @@ For one pool-owned pair shared across explicitly attached POPs, use
 [Simple Anycast pools](simple-anycast.md).
 
 An edge/pool endpoint owns one public IPv4 address, one public IPv6 address, or
-one of each. An edge management address is optional, may be private, and is
-used for operator inventory/management rather than public traffic. Management
-addresses cannot be reused as service endpoint addresses.
-Several cells assigned to the same pool and edge are private gateway targets;
+one of each. Several cells assigned to the same pool and edge are private gateway targets;
 they do not own additional public addresses.
 
 Endpoint addresses are advertised identities. A directly assigned address may
@@ -28,16 +25,14 @@ one-to-one forwarding, and record the pair in the host map. Invalid translations
 are rejected while the previous valid gateway map remains active.
 
 Create endpoints under **Edge network → Edges → Pool endpoints** after assigning
-the pool's cells. Address ownership is globally unique and unsafe, management,
+the pool's cells. Address ownership is globally unique and unsafe,
 duplicate, and empty pairs fail before desired state changes. Endpoint edits
 increment the endpoint revision and return it to `pending` until the gateway
 reports the active revision.
 
 The first endpoint may be created while the edge has no customer domains. The
 agent activates an empty runtime for each assigned cell, then publishes the
-gateway listener generation. If the service address is the host's only public
-address, leave the optional edge management address blank rather than reusing
-the service address as management inventory.
+gateway listener generation.
 
 An endpoint with no non-drained cell assigned to its pool remains saved but is
 omitted from the gateway candidate. It cannot poison the edge's previous valid

@@ -119,8 +119,7 @@ See [Desired state](../concepts/desired-state.md) for failure behaviour.
 
 Laravel and its workers never initiate a connection to an edge host. They
 commit desired state, artifacts, and durable tasks; the agent pulls them over
-its outbound control connection and posts results. Therefore an edge does not
-need an inbound management address for control delivery.
+its outbound control connection and posts results. Therefore an edge needs no inbound address for control delivery.
 
 ## Pool routing
 
