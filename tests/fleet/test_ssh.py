@@ -179,3 +179,16 @@ def test_a_non_root_user_runs_every_command_through_passwordless_sudo(tmp_path: 
     assert seen[1][-1] == "sudo -n sh -c id"
     assert seen[2][-1] == "id"
     assert seen[0][-2].startswith("vk-user@")
+
+
+def test_a_dropped_connection_is_a_transport_error_not_a_command_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    class Dropped:
+        returncode, stdout, stderr = 255, b"", b"Connection to host closed by remote host."
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: Dropped())
+    t = SshTransport(tmp_path / "state")
+    t.ensure_fleet_key = lambda: ""  # type: ignore[method-assign]
+    t.dir.mkdir(parents=True)
+    t.key_path().write_text("k")
+    with pytest.raises(SshError, match="failed or was interrupted"):
+        t.run(Target("pop-1", "h"), "./start.sh")

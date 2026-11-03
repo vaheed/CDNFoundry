@@ -133,6 +133,9 @@ class SshTransport:
         stderr = done.stderr.decode(errors="replace")
         if done.returncode == 255 and ("REMOTE HOST IDENTIFICATION HAS CHANGED" in stderr or "Host key verification failed" in stderr):
             raise HostKeyChanged(f"The host key of {target.name} changed or is not pinned; refusing to connect")
+        if done.returncode == 255:
+            # ssh itself failed (dropped, refused, timed out): the command's outcome is unknown, so this is never a verdict on the node.
+            raise SshError(f"SSH to {target.name} failed or was interrupted: {stderr.strip()[-200:] or 'connection lost'}")
         result = Result(done.returncode, done.stdout.decode(errors="replace"), stderr)
         if check and not result.ok:
             raise SshError(f"{target.name}: `{command}` failed ({result.code}): {(result.stderr or result.stdout).strip()[:500]}")
