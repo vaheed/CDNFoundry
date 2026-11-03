@@ -231,7 +231,7 @@ class Engine:
                 f"set -e; test -d {remote}.next; rm -rf {remote}.previous; if [ -d {remote} ]; then mv {remote} {remote}.previous; fi; "
                 f"mv {remote}.next {remote}; cd {remote} && ./start.sh",
             )
-            return r.ok, "" if r.ok else (r.stderr or r.stdout).strip()[:300]
+            return r.ok, "" if r.ok else (r.stderr or r.stdout).strip()[-600:]
         if step.kind == "gate":
             return self.gate(step.node)
         raise ActionError(f"Unknown step kind: {step.kind}")
