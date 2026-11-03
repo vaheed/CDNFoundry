@@ -71,9 +71,10 @@ def node_gate(transport: Any, target: Target, node: dict[str, Any], state: dict[
     for addr, url_host in families:
         if role in {"dns", "dns-edge"}:
             for proto in ("", "+tcp"):
-                r = transport.run(target, f"dig @{addr} {proto} +time=3 +tries=1 +short SOA {zone}".replace("  ", " "))
-                if not r.ok or not r.stdout.strip():
-                    return False, f"DNS did not answer {proto or 'udp'} on {addr}"
+                # Any reply proves DNSdist is serving; a PoP that has not received its zones yet answers REFUSED, which is fine.
+                r = transport.run(target, f"dig @{addr} {proto} +time=3 +tries=1 +noall +comments SOA {zone}".replace("  ", " "))
+                if not r.ok or "status:" not in r.stdout:
+                    return False, f"DNS did not answer {proto.lstrip('+') or 'udp'} on {addr}"
         if role in {"edge", "dns-edge"}:
             for scheme in ("http", "https"):
                 r = transport.run(target, f"curl -sk -o /dev/null -m 5 -w '%{{http_code}}' {scheme}://{url_host}/")
@@ -91,10 +92,11 @@ def dns_port_conflicts(transport: Any, target: Target, node: dict[str, Any]) -> 
     """DNSdist publishes port 53. A host resolver already on it (Ubuntu's systemd-resolved listens on 127.0.0.x) breaks a wildcard bind."""
     if node["role"] not in {"dns", "dns-edge"}:
         return True, ""
-    result = transport.run(target, "ss -H -ltnu 'sport = :53'")
+    result = transport.run(target, "ss -H -ltnup 'sport = :53'")
     if not result.ok:
         return True, ""  # cannot tell; the start itself will report a real conflict
-    owners = [line.split()[4].rsplit(":", 1)[0].strip("[]") for line in result.stdout.splitlines() if len(line.split()) >= 5]
+    # Docker's own proxy on the port is this stack from an earlier start, not a foreign listener.
+    owners = [line.split()[4].rsplit(":", 1)[0].strip("[]") for line in result.stdout.splitlines() if len(line.split()) >= 5 and "docker-proxy" not in line]
     families = ((node.get("bind_ipv4") or "0.0.0.0", "0.0.0.0"), (node.get("bind_ipv6") or "", "::"))
     for bind, wildcard in families:
         if not bind:

@@ -27,7 +27,11 @@ class T:
 
     def run(self, target, command, **_):
         self.ran.append(command)
-        return R(1, "syntax error") if self.bad and self.bad in command else R(0)
+        if self.bad and self.bad in command:
+            return R(1, "syntax error")
+        if command.startswith("dig "):
+            return R(0, "", ";; ->>HEADER<<- opcode: QUERY, status: REFUSED, id: 1\n")
+        return R(0, "", "200") if command.startswith("curl ") else R(0)
 
 
 TARGET = Target("n", "127.0.0.1")
@@ -117,8 +121,34 @@ def test_the_gate_probes_the_bind_addresses_and_loopback_only_for_a_wildcard_bin
     node = {"role": "dns-edge", "name": "p", "bind_ipv4": "93.184.216.12", "bind_ipv6": "2001:db8::12", "public_ipv6": "2001:db8::12"}
     assert node_gate(t, TARGET, node, state)[0]
     joined = "\n".join(t.ran)
-    assert "dig @93.184.216.12" in joined and "dig @2001:db8::12" in joined and "https://93.184.216.12/" in joined and "https://[2001:db8::12]/" in joined
+    assert "dig @93.184.216.12" in joined.replace("  ", " ") and "dig @2001:db8::12" in joined.replace("  ", " ") and "https://93.184.216.12/" in joined and "https://[2001:db8::12]/" in joined
     assert "127.0.0.1" not in joined
     t2 = T()
     node_gate(t2, TARGET, {"role": "dns", "name": "d", "bind_ipv4": "0.0.0.0", "bind_ipv6": None}, state)
     assert any("dig @127.0.0.1" in c for c in t2.ran)
+
+
+def test_the_gate_accepts_any_dns_reply_but_not_silence() -> None:
+    from cdnfoundry_fleet.checks import node_gate
+
+    state = {"global": {"operator_domain": "ops.example.test", "platform_domain": "cdn.example.test"}}
+    node = {"role": "dns", "name": "d", "bind_ipv4": "93.184.216.12", "bind_ipv6": None}
+    assert node_gate(T(), TARGET, node, state)[0]  # REFUSED: the PoP has no zones yet but is serving
+
+    class Silent(T):
+        def run(self, target, command, **kw):
+            return R(0) if command.startswith("dig ") else super().run(target, command, **kw)
+
+    ok, detail = node_gate(Silent(), TARGET, node, state)
+    assert not ok and "DNS did not answer udp on 93.184.216.12" in detail
+
+
+def test_our_own_docker_proxy_on_port_53_is_not_a_conflict() -> None:
+    from cdnfoundry_fleet.checks import dns_port_conflicts
+
+    class Ss:
+        def run(self, target, command, **_):
+            return R(0, "", 'udp   UNCONN 0 0 93.184.216.12:53 0.0.0.0:* users:(("docker-proxy",pid=1,fd=7))\n')
+
+    node = {"role": "dns-edge", "name": "pop-1", "bind_ipv4": "93.184.216.12", "bind_ipv6": ""}
+    assert dns_port_conflicts(Ss(), TARGET, node) == (True, "")
