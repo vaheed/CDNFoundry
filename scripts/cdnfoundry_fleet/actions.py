@@ -16,6 +16,7 @@ from typing import Any, Callable, Protocol
 from . import manifest as mf
 from .common import FleetError, atomic_json, load_json, utc_now
 from .ssh import SshError, Target
+from .checks import dns_port_conflicts
 from .validators import validate_node_config
 
 # Telemetry and monitoring go last: serving never depends on them.
@@ -239,7 +240,9 @@ class Engine:
             return self.provision(step.node) if self.provision else (False, "no provisioning available")
         if step.kind == "prereq":
             r = self.t.run(target, PREREQUISITES)
-            return r.ok, "" if r.ok else (r.stderr or r.stdout).strip()[-300:]
+            if not r.ok:
+                return False, (r.stderr or r.stdout).strip()[-300:]
+            return dns_port_conflicts(self.t, target, {**self.nodes[step.node], "name": step.node})
         if step.kind == "validate":
             return validate_node_config(self.t, target, role, remote + ".next", self.services.get(step.node, set()))
         if step.kind == "switchover":

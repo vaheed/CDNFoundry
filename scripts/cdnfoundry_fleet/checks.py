@@ -81,6 +81,26 @@ def node_gate(transport: Any, target: Target, node: dict[str, Any], state: dict[
     return True, ""
 
 
+def dns_port_conflicts(transport: Any, target: Target, node: dict[str, Any]) -> tuple[bool, str]:
+    """DNSdist publishes port 53. A host resolver already on it (Ubuntu's systemd-resolved listens on 127.0.0.x) breaks a wildcard bind."""
+    if node["role"] not in {"dns", "dns-edge"}:
+        return True, ""
+    result = transport.run(target, "ss -H -ltnu 'sport = :53'")
+    if not result.ok:
+        return True, ""  # cannot tell; the start itself will report a real conflict
+    owners = [line.split()[4].rsplit(":", 1)[0].strip("[]") for line in result.stdout.splitlines() if len(line.split()) >= 5]
+    families = ((node.get("bind_ipv4") or "0.0.0.0", "0.0.0.0"), (node.get("bind_ipv6") or "", "::"))
+    for bind, wildcard in families:
+        if not bind:
+            continue
+        clash = sorted({o for o in owners if (":" in o) == (":" in wildcard) and (bind == wildcard or o in (bind, wildcard, "*"))})
+        if clash:
+            return False, (f"port 53 on {', '.join(clash)} is already in use (the host resolver?). A wildcard bind cannot share it: "
+                           f"set the node's bind address to its public address with `update-node --node {node['name']} --bind-ipv4 <address>`"
+                           f"{' --bind-ipv6 <address>' if node.get('bind_ipv6') else ''}")
+    return True, ""
+
+
 def gate_with_retry(check: Any, *, attempts: int = 18, delay: float = 10.0, sleep: Any = None) -> tuple[bool, str]:
     """Services take a while to answer after a start; the gate passes as soon as one attempt does and fails after a bounded wait."""
     import time

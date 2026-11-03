@@ -82,3 +82,28 @@ def test_the_control_gate_asks_the_control_hostname_not_the_operator_domain() ->
     assert ok
     health = next(c for c in t.ran if "/api/health" in c)
     assert "--resolve control.ops.example.test:443:127.0.0.1 https://control.ops.example.test/api/health" in health
+
+
+def _ss(*listeners: str):
+    class Ss:
+        def run(self, target, command, **_):
+            return R(0, "", "".join(f"{p:<6}UNCONN 0 0 {a:>20}:53   0.0.0.0:*\n" for p, a in (x.split("|") for x in listeners)))
+
+    return Ss()
+
+
+def test_a_host_resolver_on_port_53_blocks_a_wildcard_bind_with_the_fix_named() -> None:
+    from cdnfoundry_fleet.checks import dns_port_conflicts
+
+    node = {"role": "dns-edge", "name": "pop-1", "bind_ipv4": "0.0.0.0", "bind_ipv6": "::"}
+    ok, detail = dns_port_conflicts(_ss("udp|127.0.0.54", "tcp|127.0.0.53"), TARGET, node)
+    assert not ok and "127.0.0.5" in detail and "update-node --node pop-1 --bind-ipv4" in detail
+
+
+def test_binding_to_the_public_address_passes_beside_a_loopback_resolver() -> None:
+    from cdnfoundry_fleet.checks import dns_port_conflicts
+
+    node = {"role": "dns-edge", "name": "pop-1", "bind_ipv4": "93.184.216.12", "bind_ipv6": "2001:db8::12"}
+    assert dns_port_conflicts(_ss("udp|127.0.0.54", "tcp|127.0.0.53"), TARGET, node) == (True, "")
+    assert not dns_port_conflicts(_ss("udp|93.184.216.12"), TARGET, node)[0]
+    assert dns_port_conflicts(_ss("udp|127.0.0.54"), TARGET, {"role": "edge", "name": "e", "bind_ipv4": "0.0.0.0"}) == (True, "")
