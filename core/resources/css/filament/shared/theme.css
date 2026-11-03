@@ -2155,3 +2155,26 @@ a.cdn-stat-card:hover {
 .fi-modal-header {
     padding-block: var(--cdn-space-4);
 }
+
+/* Wizard steps: selection is neutral ink on the tint, never the brand color, and the step number keeps AA contrast in both themes. */
+.fi-sc-wizard .fi-sc-wizard-header-step.fi-active .fi-sc-wizard-header-step-btn .fi-sc-wizard-header-step-icon-ctn {
+    border-color: var(--cdn-text-strong);
+    background: var(--cdn-tint);
+}
+
+.fi-sc-wizard .fi-sc-wizard-header-step.fi-active .fi-sc-wizard-header-step-number,
+.fi-sc-wizard .fi-sc-wizard-header-step.fi-active .fi-sc-wizard-header-step-icon-ctn .fi-icon {
+    color: var(--cdn-text-strong);
+}
+
+.fi-sc-wizard .fi-sc-wizard-header-step.fi-completed .fi-sc-wizard-header-step-btn .fi-sc-wizard-header-step-icon-ctn {
+    background: var(--cdn-text-strong);
+}
+
+.fi-sc-wizard .fi-sc-wizard-header-step.fi-completed .fi-sc-wizard-header-step-icon-ctn .fi-icon {
+    color: var(--cdn-base);
+}
+
+.fi-sc-wizard .fi-sc-wizard-header-step:not(.fi-active):not(.fi-completed) .fi-sc-wizard-header-step-number {
+    color: var(--cdn-text-subtle);
+}
