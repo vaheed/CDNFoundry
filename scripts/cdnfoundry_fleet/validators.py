@@ -29,19 +29,20 @@ VALIDATORS = [
     # start.sh sets file ownership and then calls ./validate.sh; the same prefix runs here so a staged bundle is checked exactly as it will be started.
     Validator("compose", ALL_ROLES, "cd {dir} && export " + PROJECT + " && if grep -qx './validate.sh' start.sh; then sed '/^\\.\\/validate\\.sh$/q' start.sh | sh; else ./validate.sh; fi", "compose"),
     # The image entrypoint prepares every generated include and tolerates the sibling Vector being absent, so the real binary is run through it.
-    Validator("openresty", frozenset({"edge", "dns-edge"}), _RUN + " cell-01 /usr/local/openresty/bin/openresty -t", "cell-01"),
-    Validator("edge-control", frozenset({"control"}), _RUN + " --entrypoint nginx edge-control -t", "edge-control"),
-    Validator("dnsdist", frozenset({"dns", "dns-edge"}), _RUN + " dnsdist --check-config --config /etc/dnsdist/dnsdist.conf", "dnsdist"),
-    Validator("powerdns", frozenset({"control"}), _RUN + " --entrypoint pdns_server pdns-primary --config=check", "pdns-primary"),
-    Validator("caddy", frozenset({"control"}), _RUN + " caddy caddy validate --config /etc/caddy/Caddyfile", "caddy"),
-    Validator("prometheus", frozenset({"monitoring"}), _RUN + " --entrypoint promtool prometheus check config /etc/prometheus/prometheus.yml", "prometheus"),
-    Validator("alertmanager", frozenset({"monitoring"}), _RUN + " --entrypoint amtool alertmanager check-config /etc/alertmanager/alertmanager.yml", "alertmanager"),
+    Validator("openresty", ALL_ROLES, _RUN + " cell-01 /usr/local/openresty/bin/openresty -t", "cell-01"),
+    Validator("edge-control", ALL_ROLES, _RUN + " --entrypoint nginx edge-control -t", "edge-control"),
+    Validator("dnsdist", ALL_ROLES, _RUN + " dnsdist --check-config --config /etc/dnsdist/dnsdist.conf", "dnsdist"),
+    Validator("powerdns", ALL_ROLES, _RUN + " --entrypoint pdns_server pdns-primary --config=check", "pdns-primary"),
+    Validator("telemetry-gateway", ALL_ROLES, _RUN + " telemetry-gateway caddy validate --config /etc/caddy/Caddyfile", "telemetry-gateway"),
+    Validator("caddy", ALL_ROLES, _RUN + " caddy caddy validate --config /etc/caddy/Caddyfile", "caddy"),
+    Validator("prometheus", ALL_ROLES, _RUN + " --entrypoint promtool prometheus check config /etc/prometheus/prometheus.yml", "prometheus"),
+    Validator("alertmanager", ALL_ROLES, _RUN + " --entrypoint amtool alertmanager check-config /etc/alertmanager/alertmanager.yml", "alertmanager"),
     Validator("vector", ALL_ROLES, _RUN + " vector validate --no-environment /etc/vector/vector.yaml", "vector"),
 ]
 
 
 def validators_for(role: str, services: set[str]) -> list[Validator]:
-    """Only services that the node's compose file defines are checked."""
+    """A validator applies wherever its service exists in the node's compose file, whatever the role (monitoring may share the control host)."""
     return [v for v in VALIDATORS if role in v.roles and (v.service == "compose" or v.compose_service in services)]
 
 
