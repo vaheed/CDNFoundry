@@ -1129,18 +1129,19 @@ HA. Domains, DNS records, pools, TLS, WAF, and users stay in the Filament
 panels and in PostgreSQL. The fleet web may link to those panels, and it may
 read their status through the API, but it never edits them.
 
-**Status 2026-11-03 (in progress, gate open).** Built and tested on `dev`:
-the encrypted SQLite vault, the key-only SSH transport with host key pinning
-(tested against a real local `sshd`), signed release manifests with diff and
-rollback guard, the plan and apply engine with canary order, pre-pull digest
-check, per-service config validation before activation, health gate, rollback,
-and resume (tested with an in-memory transport that drops connections), and the
-local fleet web bound to `127.0.0.1`. See [Fleet engine, vault, and local
-web](operations/fleet-engine.md). Open: CLI commands that run the engine on real
-hosts, backup of the vault to restic, the full one-click check, security status,
-the first-run wizard, removal of the edge management address fields, the
-browser suite for the fleet web, and the fresh-VM quick start. No exit
-criterion is met yet.
+**Status 2026-11-03 (gate open).** Built and tested on `dev`: the encrypted SQLite vault; one Fleet SSH key
+pair for all nodes with host key pinning; the plan and apply engine (bootstrap, rolling upgrade with canary, pre-pull
+digest check, on-node validation of every service config, health gate, rollback, resume, config change); signed
+release manifests produced in CI and verified against the checkout; PoP enrollment; backup, restore, vault backup and
+restore on a new workstation (real restic); security status; the stack check; the local fleet web with every page
+backed by the engine; the admin first-run wizard; removal of the edge management address fields; and the Fleet browser
+suite in four projects. See [Fleet engine, vault, and local web](operations/fleet-engine.md).
+
+Not met, because they need disposable virtual machines or a published release that this work could not create: the
+scripted quick start on fresh VMs (`tests/e2e/fleet_quickstart.py` is written, not run), the rolling upgrade of a whole
+fleet with IPv4 and IPv6 traffic checks, the broken-image canary on real Docker, and the injected-failure matrix for
+the one-click check (expired certificate, broken replication, stale backup, lagging PoP) on a real stack. Major-version
+guided upgrades of PostgreSQL, ClickHouse, and Valkey are also not built. The gate stays open.
 
 #### Fleet engine
 
