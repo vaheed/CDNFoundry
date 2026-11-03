@@ -34,7 +34,7 @@ VALIDATORS = [
     Validator("caddy", frozenset({"control"}), _RUN + " caddy caddy validate --config /etc/caddy/Caddyfile", "caddy"),
     Validator("prometheus", frozenset({"monitoring"}), _RUN + " --entrypoint promtool prometheus check config /etc/prometheus/prometheus.yml", "prometheus"),
     Validator("alertmanager", frozenset({"monitoring"}), _RUN + " --entrypoint amtool alertmanager check-config /etc/alertmanager/alertmanager.yml", "alertmanager"),
-    Validator("vector", ALL_ROLES, _RUN + " vector vector validate --no-environment /etc/vector/vector.yaml", "vector"),
+    Validator("vector", ALL_ROLES, _RUN + " vector validate --no-environment /etc/vector/vector.yaml", "vector"),
 ]
 
 
