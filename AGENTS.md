@@ -19,6 +19,8 @@ Project skills in `.agents/skills/` (linked as `.claude/skills/`) give the file 
 
 Implement only documented behavior or work the owner explicitly admits. Do not add microservices, Kafka, Kubernetes requirements, CQRS, event sourcing, GraphQL, custom RBAC, reseller or billing hierarchies, plugin runtimes, custom expression languages, multiple dashboards, or a second backend/frontend.
 
+The Fleet tool (`scripts/cdnfoundry_fleet`) owns infrastructure: hosts, roles, containers, releases, certificates, backups, and HA. It has a CLI and a local web page that run the same engine actions; the local web binds to `127.0.0.1` only. That web page is part of the Fleet tool, not a second dashboard or backend, and it never edits CDN state. Domains, DNS records, pools, TLS, WAF, and users stay in the Filament panels and PostgreSQL. Fleet deploys only signed, CI-qualified release manifests and never changes an image or config on a host outside a release.
+
 Use standard Laravel controllers, form requests, API resources, policies, Eloquent models, jobs, commands, events, notifications, Scheduler, and Horizon. Normal CRUD belongs in controllers and Eloquent. Do not create repository wrappers, manager/service layers for ordinary CRUD, empty abstractions, or interface/implementation pairs without a genuine second implementation or external boundary.
 
 Synchronous external effects and synchronous deployment work are forbidden.
