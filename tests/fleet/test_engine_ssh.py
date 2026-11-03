@@ -1,6 +1,7 @@
 """Upgrade engine over a real SSH connection to a local sshd, with stub bundles in place of Docker."""
 from __future__ import annotations
 
+import getpass
 import shutil
 import sys
 from pathlib import Path
@@ -61,7 +62,7 @@ class Counting:
 @pytest.fixture()
 def fleet(tmp_path: Path, sshd):
     real = SshTransport(tmp_path / "state")
-    targets = {n: Target(n, "127.0.0.1", sshd.port, "root") for n in NODES}
+    targets = {n: Target(n, "127.0.0.1", sshd.port, getpass.getuser()) for n in NODES}
     real.dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     shutil.copy(sshd.client_key, real.key_path())
     real.key_path().chmod(0o600)
@@ -150,7 +151,7 @@ def test_validation_runs_the_start_script_up_to_validate_and_no_further(fleet) -
     staged = Path(roots["pop-1"] + ".next")
     stub(staged, "2.0.1")
     (staged / "start.sh").write_text("#!/bin/sh\ntouch prepared\n./validate.sh\ntouch started\n")
-    target = Target("pop-1", "127.0.0.1", transport.port, "root")
+    target = Target("pop-1", "127.0.0.1", transport.port, getpass.getuser())
     ok, detail = validate_node_config(transport, target, "edge", str(staged), set())
     assert ok, detail
     assert (staged / "prepared").exists() and not (staged / "started").exists()
