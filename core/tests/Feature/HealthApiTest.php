@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Support\SystemHealth;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -15,9 +16,9 @@ class HealthApiTest extends TestCase
 
     public function test_fleet_doctor_command_prints_components_and_queues_as_json(): void
     {
-        $this->assertSame(0, \Illuminate\Support\Facades\Artisan::call('cdnf:system:components'));
+        $this->assertSame(0, Artisan::call('cdnf:system:components'));
 
-        $output = \Illuminate\Support\Facades\Artisan::output();
+        $output = Artisan::output();
         $payload = json_decode($output, true, flags: JSON_THROW_ON_ERROR);
         $this->assertContains($payload['status'], ['healthy', 'degraded', 'unavailable']);
         $this->assertArrayHasKey('control_database', $payload['components']);
