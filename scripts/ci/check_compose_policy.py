@@ -30,7 +30,10 @@ def check(config: dict) -> list[str]:
             problems.append(f"{name}: missing security_opt no-new-privileges:true")
         if "ALL" not in [str(cap).upper() for cap in service.get("cap_drop") or []]:
             problems.append(f"{name}: cap_drop must include ALL")
-        extra = {str(cap).upper() for cap in service.get("cap_add") or []} - ALLOWED_CAP_ADD
+        # ClickHouse's upstream first-run entrypoint signals its temporary server
+        # after dropping privileges. Keep CAP_KILL exclusive to that one service.
+        allowed_cap_add = ALLOWED_CAP_ADD | ({"KILL"} if name == "clickhouse" else set())
+        extra = {str(cap).upper() for cap in service.get("cap_add") or []} - allowed_cap_add
         if extra:
             problems.append(f"{name}: cap_add outside the allowed set: {', '.join(sorted(extra))}")
         if not memory_limit(service):
