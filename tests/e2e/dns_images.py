@@ -22,8 +22,12 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix=name) as directory:
         root = Path(directory)
         root.chmod(0o755)
-        config = (ROOT / 'docker/pdns/pdns.conf').read_text()
-        config = '\n'.join(line for line in config.splitlines() if not line.startswith('geoip-database-files='))+'\ngeoip-database-files=\n'
+        # This fixture writes its zone to PostgreSQL, so use the PostgreSQL-backed
+        # primary config rather than the SQLite-backed secondary-node config.
+        config = (ROOT / 'docker/pdns/primary.conf').read_text()
+        config = config.replace('launch=gpgsql\n', 'launch=gpgsql,geoip\n')
+        config = config.replace('local-port=5300\n', 'local-port=53\n')
+        config += '\ngeoip-zones-file=/etc/powerdns/geoip-zones.yml\ngeoip-database-files=\n'
         (root / 'pdns.conf').write_text(config)
         (root / 'pdns.conf').chmod(0o640)
         import os
