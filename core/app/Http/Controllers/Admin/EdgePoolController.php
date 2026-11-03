@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Actions\AssignCellToPool;
 use App\Http\Controllers\Controller;
 use App\Jobs\ReconcileAllEdgeDomains;
 use App\Jobs\ReconcilePlatformDnsIdentity;
@@ -169,32 +170,7 @@ class EdgePoolController extends Controller
             'service_ipv4' => ['prohibited'],
             'service_ipv6' => ['prohibited'],
         ]);
-        abort_if($cell->edge_pool_id !== null && $cell->edge_pool_id !== $pool->id, 409, 'The cell is already assigned to another pool.');
-        abort_if($cell->drained, 409, 'A drained cell cannot participate in a pool.');
-        [$operation] = DB::transaction(function () use ($request, $pool, $cell): array {
-            $pool = EdgePool::query()->lockForUpdate()->findOrFail($pool->id);
-            $cell = EdgeCell::query()->lockForUpdate()->findOrFail($cell->id);
-            abort_if($cell->edge_pool_id !== null && $cell->edge_pool_id !== $pool->id, 409, 'The cell is already assigned to another pool.');
-            abort_if($cell->drained, 409, 'A drained cell cannot participate in a pool.');
-            $cell->update(['edge_pool_id' => $pool->id, 'status' => $cell->status === 'ready' ? 'ready' : 'assigned']);
-            if ($pool->isSimpleAnycast()) {
-                $endpoint = $pool->endpoints()->firstOrCreate(['edge_id' => $cell->edge_id], [
-                    'revision' => 1, 'gateway_state' => 'pending', 'readiness_reason' => 'gateway_not_acknowledged',
-                ]);
-                if ($endpoint->wasRecentlyCreated) {
-                    AuditLog::record($request->user(), 'edge.pool_endpoint_created', $endpoint, [
-                        'edge_id' => $cell->edge_id, 'pool_id' => $pool->id, 'source' => 'cell_assignment',
-                    ], $request->ip());
-                }
-            }
-            $pool->update(['revision' => $pool->revision + 1]);
-            $operation = Operation::query()->create(['actor_id' => $request->user()->id, 'type' => 'edge.global_reconcile', 'status' => 'pending', 'input' => ['pool_id' => $pool->id, 'cell_id' => $cell->id]]);
-            AuditLog::record($request->user(), 'edge.pool_cell_assigned', $cell, ['pool_id' => $pool->id, 'operation_id' => $operation->id], $request->ip());
-
-            return [$operation];
-        });
-        ReconcileAllEdgeDomains::dispatch($operation->id)->afterCommit();
-        ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
+        $operation = app(AssignCellToPool::class)->handle($pool, $cell, $request->user(), $request->ip());
 
         return response()->json(['data' => ['operation_id' => $operation->id, 'cell_id' => $cell->id, 'pool_id' => $pool->id]], 202);
     }
