@@ -71,3 +71,14 @@ def test_the_health_gate_waits_for_a_slow_start_but_not_forever() -> None:
     slept.clear()
     assert gate_with_retry(lambda: (False, "still down"), attempts=3, delay=7, sleep=slept.append) == (False, "still down")
     assert slept == [7, 7]
+
+
+def test_the_control_gate_asks_the_control_hostname_not_the_operator_domain() -> None:
+    from cdnfoundry_fleet.checks import node_gate
+
+    t = T()
+    state = {"global": {"operator_domain": "ops.example.test", "platform_domain": "cdn.example.test"}}
+    ok, _ = node_gate(t, TARGET, {"role": "control", "name": "c"}, state)
+    assert ok
+    health = next(c for c in t.ran if "/api/health" in c)
+    assert "--resolve control.ops.example.test:443:127.0.0.1 https://control.ops.example.test/api/health" in health

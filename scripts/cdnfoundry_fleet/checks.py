@@ -74,7 +74,7 @@ def node_gate(transport: Any, target: Target, node: dict[str, Any], state: dict[
                 if not r.ok or r.stdout.strip() in {"", "000"}:
                     return False, f"{scheme} not served on {addr}"
     if role == "control":
-        host = state["global"]["operator_domain"]
+        host = f"control.{state['global']['operator_domain']}"
         r = transport.run(target, f"curl -fsk -m 8 --resolve {host}:443:127.0.0.1 https://{host}/api/health")
         if not r.ok:
             return False, "control /api/health did not answer"
