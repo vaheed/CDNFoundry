@@ -1477,7 +1477,7 @@ migration service from Phase 5. It extends the Playwright suite from Phase 6.
 
 Each dashboard has a fixed uid and lives in its audience's folder.
 
-**Overview**
+##### Overview
 
 - [ ] **Now** (home for every team): one status line that names what is
       wrong ("Degraded: 10 components unhealthy, 8 edges stale"), a firing
@@ -1648,7 +1648,6 @@ Each dashboard has a fixed uid and lives in its audience's folder.
 - A 30-day usage report matches the dashboard totals, and shows p95 latency
   and 95th-percentile bandwidth from rollups only.
 - `CDNFoundryFailedOperations` resolves after the failure window passes.
-
 
 ### Phase 10: Cleanup, documentation, and adoption
 
