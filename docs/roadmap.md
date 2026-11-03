@@ -149,6 +149,23 @@ What each severity means:
 | A45 | Two Trivy classifications expire on 2026-11-28, and expiry is enforced in CI. | `supply-chain/trivy-classifications.yaml` |
 | A46 | Small code-quality items: a stateless 23-line `MetricComparisonService`, and `fleet-test`, `qualification-tools-check`, and `supply-chain-check` missing from `.PHONY`. `edge-agent/main.go` (1993 lines) and `runtime.lua` (1136 lines) need splitting when Phase 4 touches them. | `core/app/Ops/Services/`, `Makefile` |
 
+### Observability
+
+| ID | Finding | Where | Impact |
+| --- | --- | --- | --- |
+| O1 | **Nothing alerts on customer traffic.** Edge HTTP events exist only in ClickHouse, Prometheus has no edge request metrics, and Grafana alert provisioning is empty. | `docker/grafana/provisioning/alerting/.gitkeep`, `telemetry-alerts.yml` | A 5xx surge, an origin outage, a cache-hit collapse, or an attack raises no alert. |
+| O2 | **Running services are not scraped.** The PowerDNS panel queries `pdns_auth_*`, but no job scrapes `pdns-auth:8081`. PostgreSQL, Valkey, PHP-FPM, Horizon, Caddy, the telemetry gateway, the OpenResty cells, Grafana, and container metrics are not scraped. | `docker/prometheus/prometheus.yml` | Empty panels, and restarts or OOM kills are visible only in logs. |
+| O3 | **The edge log lacks core CDN fields.** No `request_time`, upstream connect or header time, protocol, TLS version, IP version, scheme, request ID, or PoP. `tls_error` is hard-coded to `""`. `bytes_out` is `$body_bytes_sent`, which excludes headers. | `docker/nginx/openresty.conf` `edge_json` | No edge latency, no per-PoP view, TLS failure panels can never show data, and egress is undercounted. |
+| O4 | **Rollups cannot answer long-range questions.** Hourly and daily rollups keep no latency quantiles, method, protocol, origin role, WAF action, or security reason. Every dashboard reads the raw 7-day tables. | `docker/clickhouse/init.sql` | After 7 days there is no p95, no WAF trend, and no monthly or 95th-percentile report. |
+| O5 | **Two dashboards cover every audience, and key CDN measurements do not exist.** No purge propagation time, config propagation time, ACME issuance rate or latency, or API latency. | `docker/grafana/dashboards/`, `MetricsController.php` | NOC, SOC, and administrators share one crowded screen, and the most important CDN timings are unmeasured. |
+| O6 | **No SLOs, recording rules, or retention setting.** No `record:` rules and no `--storage.tsdb.retention.*` flag. | `prometheus.yml`, `compose.prod.yml` | No error budgets, slow long-range queries, and an implicit 15-day history. |
+| O7 | **No external probes.** Nothing checks HTTP, TLS, or DNS from outside each PoP over IPv4 and IPv6. | — | C3-class failures (edges serve, DNS stops publishing them) are seen only from inside. |
+| O8 | **No correlation.** No request ID across edge, origin, and logs. No annotations for deploys, rollouts, purges, or settings changes. No Loki derived fields. | `openresty.conf`, dashboards | An operator cannot connect a spike to its cause. |
+| O9 | **Grafana has no structure for its users.** One folder, no teams or folder permissions, no library panels, no sample queries, no seed data, and no report delivery on Grafana OSS. | `docker/grafana/provisioning/` | Every user sees everything. A fresh stack shows "No data" almost everywhere. |
+| O10 | **Grafana is tested only through its HTTP API.** | `tests/e2e/grafana_observability.py` | A panel that errors, is empty, or is unreadable passes CI. |
+| O11 | **Lifetime counters are shown and alerted on as current state.** `cdnfoundry_operations_failed` counts every failed operation ever recorded, so the panel stays red and `CDNFoundryFailedOperations` never resolves. `cdnfoundry_dns_deployments_drifted` and the gateway error total have the same shape. | `MetricsController.php:39-45`, `telemetry-alerts.yml` | A permanent false alert hides new failures. |
+| O12 | **The home dashboard cannot be read.** 17 stat panels at width 2–3 truncate titles to one letter or none. The platform state shows its query text. Empty states are red. Every cause sits in a collapsed row. | `system-command-center.json` | An operator sees "degraded" but not what, where, or since when. |
+
 ### High availability
 
 These items use the severity scale above. HA1 is High only after Phase 2
@@ -1336,7 +1353,299 @@ hand is a combination that no test has run.
 - The fleet web refuses to bind to anything other than `127.0.0.1`.
 - The browser suite passes.
 
-### Phase 9: Cleanup, documentation, and adoption
+### Phase 7: Observability, role-based Grafana, and agent-run Grafana qualification
+
+Fixes O1, O2, O3, O4, O5, O6, O7, O8, O9, O10, O11, O12.
+
+This phase gives every audience its own view of the platform: administrators,
+the NOC, the SOC, on-call engineers, domain support, and business owners. It
+also proves with an agent-run browser suite that every view renders real data.
+It builds on the alert receivers from Phase 2, the telemetry
+authentication and DNS tenant tagging from Phase 1, and the ClickHouse
+migration service from Phase 5. It extends the Playwright suite from Phase 6.
+
+#### 9.1 Telemetry data
+
+- [ ] Extend `edge_json` with `request_time`, `upstream_connect_time`,
+      `upstream_header_time`, `server_protocol`, `ssl_protocol`,
+      `ssl_cipher`, IP version, `scheme`, `request_id`, and `bytes_sent`
+      (headers included). Egress and billing use `bytes_sent`.
+- [ ] Tag every edge and DNS event with `pop` and `region` at the PoP
+      collector, from the enrolled edge record, never from the payload.
+- [ ] Emit real TLS handshake failures (reason, SNI, protocol) from the
+      edge as `event_type = "tls"`, and remove the hard-coded `tls_error`.
+- [ ] Emit security events with a fixed reason set: `waf`, `block`,
+      `cache_abuse_detected`, `emergency_mode`, `dns_response_limit`, and
+      `waf_body_limit`. A contract test fails on an unknown reason.
+- [ ] Add ASN to edge and DNS events from the bundled GeoIP data.
+- [ ] Widen the hourly and daily rollups with `pop`, `region`, method,
+      protocol, IP version, origin role, WAF action, security reason, and
+      `quantilesTDigestState` for edge latency, origin latency, and TTFB.
+      Add a 1-minute rollup kept for 48 hours for live and NOC panels.
+- [ ] Add a per-domain, per-pool, per-PoP usage rollup that keeps bytes per
+      5-minute interval for 95th-percentile billing.
+- [ ] Ship every schema change as a tracked migration through the Phase 5
+      ClickHouse migration service, with a backfill-free default.
+- [ ] Document the retention tiers in one table: raw 7 days, 1-minute 48
+      hours, hourly 400 days, daily 3 years, Prometheus 30 days, Loki 14 days.
+      Each is a typed setting with a visible default.
+
+#### 9.2 Metrics coverage
+
+- [ ] Scrape PowerDNS, PostgreSQL (control-db, pdns-db), Valkey, PHP-FPM,
+      Horizon, Caddy, the telemetry gateway, Grafana, and container metrics
+      (cAdvisor or the Docker engine endpoint). Add the exporters to the
+      Compose files with the Phase 5 hardening anchor.
+- [ ] A contract test fails when a Compose service has neither a scrape job
+      nor a recorded exemption with its reason.
+- [ ] Export live edge counters from each cell to Prometheus: requests by
+      status class and cache status, bytes, and edge and origin latency
+      histograms. Labels are bounded to `pop`, `edge`, `pool`, and `domain`.
+      A cardinality budget is checked in CI.
+- [ ] Add control-plane metrics: purge propagation time (request to applied
+      on every PoP), config propagation time (artifact published to applied on
+      every PoP), DNS serial propagation, ACME issuance success and latency,
+      API and panel latency by route, login successes and failures, and token
+      use by ability.
+- [ ] Replace lifetime counters with state that can recover: failed
+      operations in the last window, open DNS drift, and per-edge gateway
+      error rates. Fix `CDNFoundryFailedOperations` to fire on new failures.
+- [ ] Add a blackbox exporter that probes HTTP, TLS, and DNS for every PoP,
+      nameserver, and pool canary domain, over IPv4 and IPv6, from at least
+      one vantage outside the PoP network.
+- [ ] Add recording rules for every SLO and every dashboard query that
+      spans more than 6 hours. Set Prometheus retention explicitly.
+
+#### 9.3 Alerting
+
+- [ ] Define SLOs with multi-window burn-rate alerts: edge availability,
+      5xx ratio, edge p95 latency, purge propagation time, config propagation
+      time, DNS answer success, and telemetry delivery.
+- [ ] Traffic alerts: global and per-domain 5xx ratio, origin failure ratio,
+      origin failover, cache-hit collapse, egress anomaly versus the same
+      hour last week, and a PoP whose traffic drops to zero while others serve.
+- [ ] Security alerts: WAF block spike, request flood on one domain, one
+      client network or ASN above a share threshold, `cache_abuse_detected`
+      spike, emergency mode turned on, DNS random-subdomain or NXDOMAIN flood,
+      `dns_response_limit` spike, failed-login burst, and admin login from a
+      new network.
+- [ ] Provision Grafana alert rules for ClickHouse-only signals, and send
+      them through the Phase 2 Alertmanager receivers.
+- [ ] Every alert carries `team` (`noc`, `soc`, `platform`), `severity`,
+      `summary`, `runbook_url`, and `dashboard_url`. Alertmanager routes by
+      `team`. A contract test fails on an alert without them.
+- [ ] Inhibition rules: a PoP-down alert silences that PoP's per-domain
+      alerts, and a control-plane outage silences derived staleness alerts.
+
+#### 9.4 Grafana structure and readability
+
+- [ ] Folders per audience, provisioned as code: `00 Overview`,
+      `10 NOC`, `20 SOC`, `30 Platform Admin`, `40 On-call & SLO`,
+      `50 Domains`, `60 Business & Capacity`, `90 Samples`.
+- [ ] Teams `platform-admin`, `noc`, `soc`, `support`, and `business`, with
+      folder permissions provisioned as code. Each team gets its own home
+      dashboard. Only `platform-admin` can edit, and it edits through the
+      repository.
+- [ ] Standard variables on every dashboard, in one order: `environment`,
+      `region`, `pop`, `edge`, `pool`, `domain`, `hostname`. Each defaults
+      to "All", and "All" means aggregated across every PoP.
+- [ ] A dashboard style contract, enforced by `test_grafana_contract.py`:
+      - every panel has a title that fits its width, a description, and a
+        unit
+      - no query text appears in a legend or a stat
+      - at most six stat panels per row, each at least 4 grid units wide
+      - thresholds come from one shared set; empty and no-traffic states use
+        a neutral color
+      - a counter is shown as a rate or as `increase` over the selected range
+      - the first screen of a home dashboard has no collapsed rows
+      - every dashboard links to its parent, its siblings, and its runbook
+- [ ] Annotations on every time-series panel for deploys, fleet rollouts,
+      artifact publishes, purges, settings changes, emergency mode, and
+      firing critical alerts, read from the control database and Prometheus.
+- [ ] Loki derived fields and data links: `request_id` opens the request
+      tail, `domain_id` opens the domain dashboard, `pop` and `edge` open the
+      PoP dashboard, and an alert opens its dashboard at its start time.
+- [ ] Library panels for every repeated panel, so one fix changes every
+      dashboard.
+
+#### 9.5 Dashboards
+
+Each dashboard has a fixed uid and lives in its audience's folder.
+
+**Overview**
+
+- [ ] **Now** (home for every team): one status line that names what is
+      wrong ("Degraded: 10 components unhealthy, 8 edges stale"), a firing
+      alert table with cause, start time, team, and links, then five
+      sections: Health, Global traffic, PoPs, DNS, and Telemetry pipeline.
+      Replaces the System Command Center as the home page.
+
+**NOC** (`10 NOC`)
+
+- [ ] **NOC wall**: built for kiosk mode on a large screen. Global requests,
+      bandwidth, 5xx, cache-hit, and edge p95 across all PoPs. A geomap of
+      PoPs colored by health. Probe results. Firing alerts. Readable from
+      3 meters, with no scrolling.
+- [ ] **Global traffic**: every traffic measure summed across all PoPs, then
+      split by region, PoP, pool, protocol, IP version, country, and ASN.
+      Top domains by requests, bandwidth, and errors.
+- [ ] **PoP fleet**: one row per PoP with health, heartbeat age, applied
+      revision versus latest, traffic, error rate, p95, CPU, memory, disk,
+      and cache fill. Version drift and rollout state.
+- [ ] **PoP detail**: one PoP's edges, cells, gateway, cache, upstream
+      connections, host resources, and logs.
+- [ ] **Origin health**: origin latency percentiles, error codes, connect
+      failures, failover events, and the slowest and failing origins.
+- [ ] **Cache**: hit ratio by requests and by bytes, status mix, egress
+      saved, cache fill, eviction, purge volume, and purge propagation time.
+- [ ] **Edge latency**: TTFB and total edge time by PoP, protocol, and
+      country, with the origin share of each.
+- [ ] **DNS authoritative**: QPS, RCODE mix, latency, dnsdist backend
+      health, PowerDNS cache, serial propagation per target, and Geo-DNS
+      answers by region.
+- [ ] **Synthetic probes**: each probe's result, latency, and certificate
+      expiry, per PoP and per IP version.
+- [ ] **Config & purge propagation**: artifact publish to applied, per PoP,
+      with the slowest PoP named.
+
+**SOC** (`20 SOC`)
+
+- [ ] **Security overview**: blocks, WAF matches, emergency-mode domains,
+      security events by reason, and the top attacked domains, all with
+      trends.
+- [ ] **WAF**: actions, rules, scores, processing time, body-limit hits,
+      exclusions in use, and the top rules by domain. Links from a rule to
+      matching requests.
+- [ ] **L7 attack and flood**: request rate per domain against its baseline,
+      and top client networks, ASNs, countries, user agents, and paths
+      during a spike. `cache_abuse_detected` events.
+- [ ] **DNS abuse**: random-subdomain and NXDOMAIN floods, response-limit
+      hits, top queried zones and client networks, and amplification-prone
+      query types.
+- [ ] **TLS posture**: handshake failures by reason, protocol and cipher
+      mix, certificates by expiry, and ACME failures.
+- [ ] **Access and audit**: admin and user logins, failed logins by account
+      and network, token use by ability, and `AuditLog` entries for settings,
+      domain, and security-rule changes.
+- [ ] **Telemetry integrity**: rejected and forged events (from Phase 1),
+      drops, and insert failures, so the SOC knows whether the data is
+      complete.
+
+**Platform admin** (`30 Platform Admin`)
+
+- [ ] **Control plane**: component health matrix, API and panel latency,
+      Horizon queue lanes, scheduler runs, failed jobs, and ACME orders.
+- [ ] **Fleet and rollouts**: edges, cells, placements, pool endpoints,
+      `FleetRollout` progress and pauses, and edge tasks.
+- [ ] **Data stores**: PostgreSQL (connections, locks, replication, size,
+      slow queries), Valkey (memory, evictions, hit ratio), ClickHouse (insert
+      rate, parts, merges, disk), and Loki (ingest, retention).
+- [ ] **Telemetry pipeline**: Vector per role, buffers, drops, sink errors,
+      and ingest delay from edge to ClickHouse.
+- [ ] **Backups and recovery**: last backup age, size, `restic check`
+      result, and last restore preflight, per the Phase 5 checks.
+- [ ] **Hosts and containers**: CPU, memory, disk, network, clock, restarts,
+      and OOM kills per host and container.
+- [ ] **Daily checks**: every row of "Daily checks this roadmap must make
+      visible" as one panel with its pass or fail state.
+
+**On-call and SLO** (`40 On-call & SLO`)
+
+- [ ] **SLOs**: each SLO with its target, current value, remaining error
+      budget, and burn rate.
+- [ ] **Incident view**: one alert or time range shows its metrics, related
+      logs, annotations, and affected domains and PoPs.
+- [ ] **Logs explorer**: saved LogQL for each service, with level and
+      service filters and live tail.
+- [ ] **Request trace**: one `request_id` from edge log to origin result to
+      operational logs.
+
+**Domains** (`50 Domains`)
+
+- [ ] **Domain overview**: the Domain Command Center rebuilt to the style
+      contract, with traffic, cache, origin, security, TLS, DNS, purge
+      history, and configuration changes for one domain.
+- [ ] **Domain comparison**: several domains side by side for support.
+
+**Business and capacity** (`60 Business & Capacity`)
+
+- [ ] **Usage and billing**: monthly bandwidth, 95th-percentile bandwidth,
+      requests, and DNS queries per domain, pool, and region, from rollups
+      only, matching `UsageRollup` exactly.
+- [ ] **Growth**: domains, traffic, and bandwidth by month, and top growing
+      domains.
+- [ ] **Capacity**: headroom per PoP and pool (bandwidth, connections,
+      cache, CPU) and a 30-day `predict_linear` forecast that names the
+      first PoP to run out.
+
+#### 9.6 Ready samples and seed data
+
+- [ ] `make dev-observability-seed` loads deterministic traffic into
+      ClickHouse, Loki, and Prometheus. Scenarios: `normal`, `origin-down`,
+      `l7-flood`, `dns-flood`, `pop-loss`, `cert-expiry`, `purge-stuck`, and
+      `telemetry-drop`. Each scenario has its own time window and annotation.
+- [ ] A **Query samples** dashboard in `90 Samples` with documented PromQL,
+      SQL, and LogQL for the common questions ("top domains by egress",
+      "which PoP is slowest", "who triggered this WAF rule"), each in a panel
+      that runs.
+- [ ] Grafana playlists for the NOC wall and the SOC wall.
+
+#### 9.7 Reports
+
+- [ ] A scheduled control-plane job builds the monthly usage report (per
+      domain, pool, and region, with 95th-percentile bandwidth) from rollups,
+      as CSV and PDF, and links it from the Usage and billing dashboard. This
+      works on Grafana OSS, which has no scheduled reporting.
+- [ ] A weekly operations report: SLO results, incidents, top errors, top
+      attacked domains, and capacity forecast.
+- [ ] Every report's totals equal the matching dashboard totals for the same
+      range. A test checks this on seeded data.
+
+#### 9.8 Agent-run Grafana browser qualification
+
+- [ ] Add a Playwright suite under `tests/browser/grafana`. Agents run it
+      against non-production stacks and report its results. It joins the
+      phase gate from here on.
+- [ ] It signs in once per team and checks folder permissions: each team
+      sees its folders, only `platform-admin` can edit, and anonymous access
+      is refused.
+- [ ] For every dashboard, at desktop width, phone width, and 1080p kiosk
+      mode, and for the last 15 minutes, 6 hours, 7 days, and 30 days:
+      - no panel shows an error or a query failure
+      - no panel shows "No data" against the seeded `normal` scenario
+      - no panel title is truncated, and no panel shows query text
+      - every variable value loads, and "All" aggregates across PoPs
+      - every link and data link resolves
+      - the browser console has no errors
+- [ ] For each seed scenario, the matching panels change as expected and the
+      matching alert fires and appears in the Grafana alerting UI (for
+      example, `l7-flood` shows on the SOC attack dashboard and fires the
+      flood alert with `team="soc"`).
+- [ ] It checks live tail, Explore from a panel, drill-down from the NOC
+      wall to PoP detail, and from an alert to its dashboard.
+- [ ] It saves a screenshot of every dashboard per run as gate evidence.
+
+#### 9.9 Runbooks
+
+- [ ] Every alert's `runbook_url` resolves to a page that names the
+      dashboard to open, the likely causes, and the first action. Phase 8
+      rewrites the rest of the documentation.
+
+**Exit:**
+
+- On the seeded stack, every panel on every dashboard returns data, and the
+  Grafana browser suite passes for every team, width, and time range.
+- Every seed scenario fires its alert, which reaches the receiver for its
+  team, and shows on its dashboard.
+- Contract tests prove that every Compose service is scraped or exempt, that
+  every alert has its labels and runbook, that every dashboard meets the
+  style contract, and that cardinality stays in budget.
+- A 30-day usage report matches the dashboard totals, and shows p95 latency
+  and 95th-percentile bandwidth from rollups only.
+- `CDNFoundryFailedOperations` resolves after the failure window passes.
+
+
+### Phase 10: Cleanup, documentation, and adoption
 
 Fixes L2, L3, L4, A44, A46.
 
@@ -1467,11 +1776,11 @@ with a few Linux servers can understand CDNFoundry and run it step by step.
   no undocumented step.
 - Every screenshot is generated, and none is older than the current release.
 
-### Phase 10: Real production qualification
+### Phase 11: Real production qualification
 
 - [ ] On real servers (one active and one standby control node, and at
       least three PoPs in two regions, IPv4 and IPv6), an agent follows the
-      Phase 9 documentation word for word. Every deviation is a documentation
+      Phase 10 documentation word for word. Every deviation is a documentation
       defect to fix and retest.
 - [ ] Test every feature through the API, the CLI, and the browser suite,
       against real domains.
