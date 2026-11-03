@@ -93,3 +93,32 @@ def test_restore_rejects_a_non_control_node(tmp_path: Path) -> None:
     e.store.add_node(s, {"name": "pop-1", "role": "edge", "public_ipv4": "203.0.113.11"})
     with pytest.raises(ValidationError, match="control node"):
         ControlActions(e).restore_plan("pop-1", SNAP, False)
+
+
+def test_rolling_back_twice_counts_a_node_that_already_runs_the_previous_release(tmp_path: Path) -> None:
+    import json
+
+    class Rb(T):
+        def __init__(self) -> None:
+            super().__init__()
+            self.release = {"control-1": "v2"}
+
+        def run(self, target, command, **_):
+            self.ran.append(command)
+            if "cat /opt/cdnfoundry/RELEASE" in command:
+                return R(0, self.release[target.name] + "\n")
+            return R()
+
+    e = engine(tmp_path, Rb())
+    (e.work / "releases").mkdir(exist_ok=True)
+    for name, release in (("current", "v3"), ("previous", "v2")):
+        (e.work / "releases" / f"{name}.json").write_text(json.dumps({"release": release, "irreversible_migration": False, "env_images": {"CDNF_CORE_IMAGE": f"r/c@sha256:{release[-1] * 64}"}}))
+    running = e.state()
+    running["global"]["release"] = "v3"
+    running["nodes"]["control-1"].update({"release": "v3", "extra_env": {"CDNF_CORE_IMAGE": "r/c@sha256:" + "3" * 64}})
+    e.store._write(running)
+    assert e.rollback() == ["control-1"]
+    assert not any("mv /opt/cdnfoundry " in c for c in e.transport.ran)  # nothing was swapped: it already ran v2
+    assert json.loads((e.work / "releases" / "current.json").read_text())["release"] == "v2"
+    node = e.state()["nodes"]["control-1"]
+    assert node["release"] == "v2" and node["extra_env"]["CDNF_CORE_IMAGE"].endswith("2" * 64)

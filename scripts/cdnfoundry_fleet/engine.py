@@ -266,8 +266,25 @@ class FleetEngine:
         names = scope or actions.order_nodes(state["nodes"])
         self._missing_access(state, names)
         engine = self._engine(state)
-        rolled = engine._rollback(names, [], log or self.say)
+        say = log or self.say
+        targets = self.targets(state)
+        already = []
+        for n in names:
+            running = self.transport.run(targets[n], f"cat {actions.REMOTE_ROOT}/RELEASE 2>/dev/null").stdout.strip()
+            if running == previous["release"]:
+                say(f"{n}: already runs {running}")
+                already.append(n)
+        rolled = already + engine._rollback([n for n in names if n not in already], [], say)
         if not scope and set(rolled) == set(names):
+            candidate = copy.deepcopy(state)
+            was = candidate["global"]["release"]
+            candidate["global"]["release"] = previous["release"]
+            for node in candidate["nodes"].values():
+                if node.get("release") == was:
+                    node["release"] = previous["release"]
+                node["extra_env"] = {**node.get("extra_env", {}), **previous.get("env_images", {})}
+            self.store.validate(candidate, require_secrets=False)
+            self.store._write(candidate)
             releases = self.work / RELEASES
             atomic_json(releases / "current.json", previous, 0o600)
             (releases / "previous.json").unlink(missing_ok=True)

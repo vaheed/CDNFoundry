@@ -271,13 +271,18 @@ class Engine:
         for node in [*failed, *reversed(also)]:
             target = self.targets[node]
             remote = self.root(node)
-            r = self.t.run(
-                target,
-                f"set -e; test -d {remote}.previous; rm -rf {remote}.failed; mv {remote} {remote}.failed; "
-                f"mv {remote}.previous {remote}; cd {remote} && ./start.sh",
-                timeout=LONG_STEP_SECONDS,
-            )
-            log(f"{node}: rollback {'ok' if r.ok else 'FAILED'}")
+            try:
+                r = self.t.run(
+                    target,
+                    f"set -e; test -d {remote}.previous; rm -rf {remote}.failed; mv {remote} {remote}.failed; "
+                    f"mv {remote}.previous {remote}; cd {remote} && ./start.sh",
+                    timeout=LONG_STEP_SECONDS,
+                )
+            except SshError as exc:
+                log(f"{node}: rollback interrupted: {exc}")
+                continue
+            detail = "" if r.ok else " " + ((r.stderr or r.stdout).strip()[-300:] or f"exit {r.code}")
+            log(f"{node}: rollback {'ok' if r.ok else 'FAILED'}{detail}")
             if r.ok:
                 rolled.append(node)
         return rolled
