@@ -143,7 +143,7 @@ test('upgrade asks for a release key first, then refuses an unsigned manifest', 
     await page.getByRole('button', { name: 'Trust this key' }).click();
     await expect(page.getByText('Release key trusted')).toBeVisible();
     await page.getByLabel('Signed release manifest (JSON)').fill('{"manifest": {"release": "v9"}}');
-    await page.getByRole('button', { name: 'Show plan' }).click();
+    await page.getByRole('button', { name: 'Use this release for the first install' }).click();
     await expect(page.getByRole('alert')).toContainText('not signed');
     await expectAccessible(page);
 });
