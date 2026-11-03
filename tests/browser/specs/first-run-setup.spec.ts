@@ -14,16 +14,21 @@ test('first-run wizard shows defaults, resets a step, and keeps every default wi
     await expect(wizard).toBeVisible();
     await expect(wizard.getByText(/Default:/).first()).toBeVisible();
 
-    // Change a value on the first step, then reset the whole step: the default comes back.
-    const input = wizard.locator('input:visible').first();
+    // Walk to a step that has a number field, change it, then reset the step: the default comes back.
+    for (let i = 0; i < 10 && (await wizard.locator('input[type=number]:visible, input[inputmode=numeric]:visible').count()) === 0; i++) {
+        await wizard.getByRole('button', { name: 'Next', exact: true }).click();
+        await settle(page);
+    }
+    const input = wizard.locator('input[type=number]:visible, input[inputmode=numeric]:visible').first();
     const original = await input.inputValue();
-    await input.fill('37');
+    await input.fill(original === '37' ? '38' : '37');
     await wizard.getByRole('button', { name: 'Reset this step to defaults' }).click();
     await expect(input).toHaveValue(original);
+    await expectAccessible(page);
 
-    // Walk forward through the steps; each one stays accessible.
-    for (let i = 0; i < 2; i++) {
-        await wizard.getByRole('button', { name: 'Next step' }).click();
+    // Walk forward one more step; it stays accessible.
+    for (let i = 0; i < 1; i++) {
+        await wizard.getByRole('button', { name: 'Next', exact: true }).click();
         await settle(page);
         await expectAccessible(page);
     }
