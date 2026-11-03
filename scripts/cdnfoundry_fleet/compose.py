@@ -138,6 +138,10 @@ def select_services(
     if role == "control" and "pdns-migrate" in services:
         selected.add("pdns-migrate")
 
+    # ClickHouse's schema migration runs wherever ClickHouse does.
+    if "clickhouse" in selected and "clickhouse-migrate" in services:
+        selected.add("clickhouse-migrate")
+
     # Every monitored production host exports node metrics; only the monitoring host runs the full stack.
     if monitoring_enabled and "node-exporter" in services:
         selected.add("node-exporter")
