@@ -259,7 +259,9 @@ class FleetWeb:
             has_key = self.read(lambda e: e._release_file("trusted.pub").exists())
             trust = "" if has_key else ('<p class="empty">No release signing key is trusted yet. Paste the public key CI signs with.</p>'
                                         + self.action_form("/upgrade/trust", "Trust this key", fields='<label>Release public key (PEM)<textarea name="key" rows="4" required></textarea></label>'))
-            plan_form = self.action_form("/upgrade/plan", "Show plan", primary=True, fields='<label>Signed release manifest (JSON)<textarea name="manifest" rows="8" required></textarea></label>') if has_key else ""
+            manifest_field = '<label>Signed release manifest (JSON)<textarea name="manifest" rows="8" required></textarea></label>'
+            plan_form = ((self.action_form("/upgrade/plan", "Show plan", primary=True, fields=manifest_field) if current else
+                          self.action_form("/upgrade/first", "Use this release for the first install", primary=True, fields=manifest_field)) if has_key else "")
             current_line = f"<p>Running release: <b>{esc(current['release'])}</b></p>" if current else "<p>No signed release is recorded yet.</p>"
             return 200, self.layout(path, "Upgrade", current_line + trust + plan_form, flash)
         if path == "/config":
@@ -371,6 +373,9 @@ class FleetWeb:
                     + "".join(f"<p class=hint>Unchanged, not restarted: {esc(n)}</p>" for n in plan.skipped)
                     + (self.action_form("/upgrade/apply", "Upgrade the fleet", primary=True, fields=f'<input type="hidden" name="token" value="{esc(token)}">') if plan.steps else ""))
             raise _Render(self.layout("/upgrade", "Upgrade plan", body))
+        if path == "/upgrade/first":
+            document = json.loads(form["manifest"])
+            return self._sync("set-release", lambda e: e.set_release(document), "/nodes", f"Release {document['manifest']['release']} set. Nodes install from it.")
         if path == "/upgrade/apply":
             document = json.loads(self.pending_manifest.pop(form["token"], "null") or "null")
             if document is None:

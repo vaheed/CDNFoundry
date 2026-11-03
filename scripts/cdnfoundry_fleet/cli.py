@@ -27,7 +27,7 @@ DEFAULT_VAULT = Path.home() / ".config" / "cdnfoundry-fleet" / "fleet.db"
 PASSPHRASE_ENV = "CDNF_FLEET_PASSPHRASE"
 PASSPHRASE_FILE_ENV = "CDNF_FLEET_PASSPHRASE_FILE"
 
-ENGINE_COMMANDS = {"public-key", "node-ssh", "trust-release-key", "bootstrap", "upgrade", "apply-config", "rollback", "security", "backup-now", "restore", "vault-backup"}
+ENGINE_COMMANDS = {"set-release", "public-key", "node-ssh", "trust-release-key", "bootstrap", "upgrade", "apply-config", "rollback", "security", "backup-now", "restore", "vault-backup"}
 EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_VALIDATION = 3
@@ -229,6 +229,9 @@ def parser() -> argparse.ArgumentParser:
     nssh.add_argument("--ssh-user", default="root")
     trust = sub.add_parser("trust-release-key", parents=[command_common], help="trust the Ed25519 public key that signs release manifests")
     trust.add_argument("--key-file", required=True)
+    sr = sub.add_parser("set-release", parents=[command_common], help="adopt a signed release manifest for the first install (deploys nothing)")
+    sr.add_argument("--manifest", required=True)
+    sr.add_argument("--key-file", help="verify with this key instead of the trusted one")
     boot = sub.add_parser("bootstrap", parents=[command_common], help="install prerequisites on a node, deploy its bundle, and start it")
     boot.add_argument("--node", required=True)
     boot.add_argument("--plan-only", action="store_true")
@@ -1051,6 +1054,9 @@ def _engine_command(args: argparse.Namespace, store: FleetState, output_dir: Pat
     elif args.command == "trust-release-key":
         engine.trust_release_key(Path(args.key_file).read_text(encoding="utf-8"))
         print(json.dumps({"status": "trusted"}))
+    elif args.command == "set-release":
+        manifest = engine.set_release(json.loads(Path(args.manifest).read_text(encoding="utf-8")), key_pem=Path(args.key_file).read_text(encoding="utf-8") if args.key_file else None)
+        print(json.dumps({"status": "release-set", "release": manifest["release"], "profile": manifest["profile"]}))
     elif args.command == "bootstrap":
         plan = engine.bootstrap_plan(args.node)
         print("\n".join(plan.describe()))

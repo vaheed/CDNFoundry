@@ -67,3 +67,36 @@ def test_cli_writes_a_signed_file(tmp_path: Path) -> None:
         args += ["--env-image", f"{k}={v}"]
     assert release.main(args) == 0
     mf.verify(json.loads((tmp_path / "m.json").read_text()), mf.public_key_from_pem(public.read_text()))
+
+
+def test_first_install_adopts_a_signed_release_and_bootstrap_refuses_without_one(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from cdnfoundry_fleet.common import ValidationError
+    from cdnfoundry_fleet.engine import FleetEngine
+    from cdnfoundry_fleet.ssh import Target, save_target
+    from cdnfoundry_fleet.state import FleetState
+
+    store = FleetState(tmp_path / "state")
+    state = store.init({"operator_domain": "ops.example.test", "platform_domain": "cdn.example.test", "release": "v0"})
+    store.add_node(state, {"name": "control-1", "role": "control", "public_ipv4": "93.184.216.10"})
+    save_target(tmp_path / "state", Target("control-1", "93.184.216.10"))
+    engine = FleetEngine(tmp_path / "state", ROOT, tmp_path / "out", transport=object(), say=lambda _m: None)
+    with pytest.raises(ValidationError, match="No signed release is set"):
+        engine.bootstrap("control-1")
+
+    private, public = release.generate_key(tmp_path / "keys")
+    doc = release.sign_file(release.build(ROOT, release="v2.0.0", env_images=needed_env()), private.read_bytes())
+    with pytest.raises(ValidationError, match="No release signing key is trusted"):
+        engine.set_release(doc)
+    engine.trust_release_key(public.read_text())
+    assert engine.set_release(doc)["release"] == "v2.0.0"
+    node = engine.state()["nodes"]["control-1"]
+    assert node["release"] == "v2.0.0" and node["extra_env"]["CDNF_CORE_IMAGE"].endswith(D)
+    assert any(s.kind == "prepull" for s in engine.bootstrap_plan("control-1").steps)
+    with pytest.raises(ValidationError, match="already running"):
+        engine.set_release(doc)
+    forged = json.loads(json.dumps(doc))
+    forged["manifest"]["release"] = "v9"
+    engine2 = FleetEngine(tmp_path / "state", ROOT, tmp_path / "out", transport=object(), say=lambda _m: None)
+    (engine2.work / "releases" / "current.json").unlink()
+    with pytest.raises(mf.ManifestError, match="does not verify"):
+        engine2.set_release(forged)

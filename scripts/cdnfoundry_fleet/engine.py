@@ -123,16 +123,18 @@ class FleetEngine:
     def bootstrap_plan(self, name: str) -> actions.Plan:
         state = self.state()
         self._missing_access(state, [name])
-        return actions.plan_bootstrap(name, state["global"]["release"], enroll=self._needs_enrollment(state, name))
+        return actions.plan_bootstrap(name, state["global"]["release"], enroll=self._needs_enrollment(state, name), prepull=self.release_manifest() is not None)
 
     def bootstrap(self, name: str, *, country: str | None = None, continent: str | None = None, log: Callable[[str], None] | None = None) -> actions.Outcome:
         plan = self.bootstrap_plan(name)
         state = self.state()
         if any(s.kind == "enroll" for s in plan.steps) and not (country and continent):
             raise ValidationError("A PoP needs its country and continent codes (they place it in Geo-DNS): pass --country and --continent")
+        release = self.release_manifest()
+        if release is None:
+            raise ValidationError("No signed release is set. Run `cdnfoundry-fleet set-release --manifest release.json` first: Fleet installs only signed releases.")
         self._geo = (country, continent)
         self._render(state)
-        release = {"release": state["global"]["release"], "roles": {}, "images": {}}
         engine = self._engine(state)
         engine.enroll = self._enroll
         self.events.append({"kind": "bootstrap", "node": name})
@@ -181,6 +183,27 @@ class FleetEngine:
     def verify_release(self, document: dict[str, Any], *, key_pem: str | None = None) -> dict[str, Any]:
         manifest = mf.verify(document, mf.public_key_from_pem(key_pem or self.trusted_key()))
         mf.verify_checkout(manifest, self.repo_root)
+        return manifest
+
+    def set_release(self, document: dict[str, Any], *, key_pem: str | None = None) -> dict[str, Any]:
+        """Adopt a signed release for the first install: sets the release and image references, deploys nothing."""
+        if self.release_manifest() is not None:
+            raise ValidationError("A release is already running; use `upgrade` to move to another")
+        manifest = self.verify_release(document, key_pem=key_pem)
+        state = self.state()
+        candidate = copy.deepcopy(state)
+        old = candidate["global"]["release"]
+        candidate["global"]["release"] = manifest["release"]
+        for node in candidate["nodes"].values():
+            if node.get("release") == old:
+                node["release"] = manifest["release"]
+            node["extra_env"] = {**node.get("extra_env", {}), **manifest["env_images"]}
+        self.store.validate(candidate, require_secrets=False)
+        self.store._write(candidate)
+        releases = self.work / RELEASES
+        releases.mkdir(parents=True, exist_ok=True, mode=0o700)
+        atomic_json(releases / "current.json", manifest, 0o600)
+        self.events.append({"kind": "set-release", "release": manifest["release"]})
         return manifest
 
     def upgrade_plan(self, document: dict[str, Any], *, key_pem: str | None = None) -> tuple[actions.Plan, dict[str, Any], mf.Diff]:

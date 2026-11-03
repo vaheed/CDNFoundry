@@ -252,9 +252,9 @@ class Engine:
         return rolled
 
 
-def plan_bootstrap(name: str, release: str, *, enroll: bool = False) -> Plan:
+def plan_bootstrap(name: str, release: str, *, enroll: bool = False, prepull: bool = False) -> Plan:
     plan = Plan("bootstrap", release)
-    kinds = ("pin", "prereq") + (("enroll",) if enroll else ()) + ("upload", "validate", "activate", "gate")
+    kinds = ("pin", "prereq") + (("prepull",) if prepull else ()) + (("enroll",) if enroll else ()) + ("upload", "validate", "activate", "gate")
     for kind in kinds:
         plan.steps.append(Step(f"{name}:{kind}", name, kind))
     return plan
