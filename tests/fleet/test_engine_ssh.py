@@ -153,3 +153,13 @@ def test_validation_runs_the_start_script_up_to_validate_and_no_further(fleet) -
     ok, detail = validate_node_config(transport, target, "edge", str(staged), set())
     assert ok, detail
     assert (staged / "prepared").exists() and not (staged / "started").exists()
+
+
+def test_activation_is_safe_to_run_twice_after_a_drop_that_happened_after_the_swap(fleet) -> None:
+    make, _, roots, _ = fleet
+    engine = make()
+    assert engine.apply(plan(), manifest("2.0.1", D2)).ok
+    again = engine._run(a.Step("pop-1:activate", "pop-1", "activate"), manifest("2.0.1", D2))
+    assert again[0], again[1]
+    assert (Path(roots["pop-1"]) / "RELEASE").read_text().strip() == "2.0.1"
+    assert (Path(roots["pop-1"] + ".previous") / "RELEASE").read_text().strip() == "2.0.0"

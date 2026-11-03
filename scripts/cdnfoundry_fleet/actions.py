@@ -228,13 +228,14 @@ class Engine:
                 self.switchover(step.node)
             return True, ""
         if step.kind == "activate":
+            # Safe to run twice: a retry after a dropped connection finds the swap already done and only starts the services.
             r = self.t.run(
                 target,
-                f"set -e; test -d {remote}.next; rm -rf {remote}.previous; if [ -d {remote} ]; then mv {remote} {remote}.previous; fi; "
-                f"mv {remote}.next {remote}; cd {remote} && ./start.sh",
+                f"set -e; if [ -d {remote}.next ]; then rm -rf {remote}.previous; if [ -d {remote} ]; then mv {remote} {remote}.previous; fi; mv {remote}.next {remote}; fi; "
+                f"cd {remote} && ./start.sh",
                 timeout=LONG_STEP_SECONDS,
             )
-            return r.ok, "" if r.ok else (r.stderr or r.stdout).strip()[-600:]
+            return r.ok, "" if r.ok else ((r.stderr or r.stdout).strip()[-600:] or f"start.sh exited with {r.code} and printed nothing")
         if step.kind == "gate":
             return self.gate(step.node)
         raise ActionError(f"Unknown step kind: {step.kind}")
