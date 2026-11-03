@@ -1129,6 +1129,19 @@ HA. Domains, DNS records, pools, TLS, WAF, and users stay in the Filament
 panels and in PostgreSQL. The fleet web may link to those panels, and it may
 read their status through the API, but it never edits them.
 
+**Status 2026-11-03 (in progress, gate open).** Built and tested on `dev`:
+the encrypted SQLite vault, the key-only SSH transport with host key pinning
+(tested against a real local `sshd`), signed release manifests with diff and
+rollback guard, the plan and apply engine with canary order, pre-pull digest
+check, per-service config validation before activation, health gate, rollback,
+and resume (tested with an in-memory transport that drops connections), and the
+local fleet web bound to `127.0.0.1`. See [Fleet engine, vault, and local
+web](operations/fleet-engine.md). Open: CLI commands that run the engine on real
+hosts, backup of the vault to restic, the full one-click check, security status,
+the first-run wizard, removal of the edge management address fields, the
+browser suite for the fleet web, and the fresh-VM quick start. No exit
+criterion is met yet.
+
 #### Fleet engine
 
 - [ ] **State in one local SQLite file.** It holds nodes, roles, addresses,

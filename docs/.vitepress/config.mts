@@ -282,6 +282,7 @@ export default defineConfig({
             { text: 'Simple Anycast', link: '/operations/simple-anycast' },
             { text: 'Anycast qualification', link: '/operations/simple-anycast-qualification' },
             { text: 'Fleet rollouts', link: '/operations/fleet-rollouts' },
+            { text: 'Fleet engine and web', link: '/operations/fleet-engine' },
             { text: 'Runtime generations', link: '/operations/runtime-generations' },
             { text: 'Signing-key rotation', link: '/operations/signing-key-rotation' },
             { text: 'DNS nodes and the hidden primary', link: '/operations/dns-nodes' },
