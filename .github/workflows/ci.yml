@@ -62,11 +62,16 @@ jobs:
       - name: Generate PHP formatting patch (temporary)
         run: |
           vendor/bin/pint
-          git diff --binary -- core/app/Filament/Admin/Pages/SystemDnsIdentity.php core/app/Filament/Admin/Resources/EdgePools/EdgePoolResource.php core/app/Filament/Admin/Resources/Edges/RelationManagers/CellsRelationManager.php core/app/Filament/Admin/Resources/Operations/Pages/ListOperations.php core/app/Filament/Domain/Resources/Domains/RelationManagers/DnsRecordsRelationManager.php core/routes/api.php core/tests/Feature/BackupApiTest.php core/tests/Feature/HealthApiTest.php | base64 -w0
+          git diff --binary -- app/Filament/Admin/Pages/SystemDnsIdentity.php app/Filament/Admin/Resources/EdgePools/EdgePoolResource.php app/Filament/Admin/Resources/Edges/RelationManagers/CellsRelationManager.php app/Filament/Admin/Resources/Operations/Pages/ListOperations.php app/Filament/Domain/Resources/Domains/RelationManagers/DnsRecordsRelationManager.php routes/api.php tests/Feature/BackupApiTest.php tests/Feature/HealthApiTest.php | base64 -w0
       - name: Check PHP formatting
         run: vendor/bin/pint --test
       - name: Run static analysis against the committed baseline
         run: vendor/bin/phpstan analyse --memory-limit=2G --no-progress
+      - name: Capture current PHPStan baseline (temporary)
+        if: failure()
+        run: |
+          vendor/bin/phpstan analyse --generate-baseline=phpstan-baseline.neon --memory-limit=2G --no-progress || true
+          git diff --binary -- phpstan-baseline.neon | base64 -w0
       - name: Build frontend assets
         run: npm run build
       - name: Run application tests
