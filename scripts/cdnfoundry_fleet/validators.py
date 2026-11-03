@@ -28,7 +28,8 @@ ALL_ROLES = frozenset({"control", "edge", "dns", "dns-edge", "monitoring"})
 VALIDATORS = [
     # start.sh sets file ownership and then calls ./validate.sh; the same prefix runs here so a staged bundle is checked exactly as it will be started.
     Validator("compose", ALL_ROLES, "cd {dir} && export " + PROJECT + " && if grep -qx './validate.sh' start.sh; then sed '/^\\.\\/validate\\.sh$/q' start.sh | sh; else ./validate.sh; fi", "compose"),
-    Validator("openresty", frozenset({"edge", "dns-edge"}), _RUN + " --entrypoint nginx cell-01 -t", "cell-01"),
+    # The entrypoint writes worker-processes.conf before nginx starts; `nginx -t` alone would fail on the missing include, so write a placeholder first.
+    Validator("openresty", frozenset({"edge", "dns-edge"}), _RUN + " --entrypoint sh cell-01 -c 'mkdir -p /var/lib/nginx/tmp && echo \"worker_processes 1;\" > /var/lib/nginx/tmp/worker-processes.conf && nginx -t'", "cell-01"),
     Validator("edge-control", frozenset({"control"}), _RUN + " --entrypoint nginx edge-control -t", "edge-control"),
     Validator("dnsdist", frozenset({"dns", "dns-edge"}), _RUN + " dnsdist --check-config --config /etc/dnsdist/dnsdist.conf", "dnsdist"),
     Validator("powerdns", frozenset({"control"}), _RUN + " --entrypoint pdns_server pdns-primary --config=check", "pdns-primary"),

@@ -152,7 +152,7 @@ def test_gate_failure_rolls_back_only_the_failed_node_when_mixed_versions_are_al
 def test_config_rejected_by_its_validator_is_never_activated(tmp_path: Path) -> None:
     class Rejecting(FakeTransport):
         def run(self, target, command, **kw):
-            if "nginx cell-01 -t" in command:
+            if "nginx -t" in command:
                 self.calls.append((target.name, command))
                 return R(1, "bad directive")
             return super().run(target, command, **kw)
