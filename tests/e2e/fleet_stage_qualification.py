@@ -29,7 +29,7 @@ BREAKS = [
     ("dns-edge", "docker/dnsdist/dnsdist.conf", "\nthis is not lua ((\n", "dnsdist"),
     ("dns-edge", "docker/vector/vector.yaml", "\nsources: [unclosed\n", "vector"),
     ("control", "docker/nginx/edge-control.conf", "\nthis_is_not_an_nginx_directive on;\n", "edge-control"),
-    ("control", "docker/pdns/primary.conf", "\nlocal-port=not-a-port\n", "powerdns"),
+    ("control", "docker/pdns/primary.conf", "\nno-such-setting=1\n", "powerdns"),
     ("control", "deploy/production/Caddyfile", "\n{ this is not a caddyfile\n", "caddy"),
     ("control", "docker/prometheus/prometheus.yml", "\nscrape_configs: [unclosed\n", "prometheus"),
     ("control", "docker/alertmanager/alertmanager.yml", "\nroute: [unclosed\n", "alertmanager"),

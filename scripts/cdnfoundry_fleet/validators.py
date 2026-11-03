@@ -32,7 +32,7 @@ VALIDATORS = [
     Validator("openresty", ALL_ROLES, _RUN + " cell-01 /usr/local/openresty/bin/openresty -t", "cell-01"),
     Validator("edge-control", ALL_ROLES, _RUN + " --entrypoint nginx edge-control -t", "edge-control"),
     Validator("dnsdist", ALL_ROLES, _RUN + " dnsdist --check-config --config /etc/dnsdist/dnsdist.conf", "dnsdist"),
-    Validator("powerdns", ALL_ROLES, _RUN + " --entrypoint pdns_server pdns-primary --config=check", "pdns-primary"),
+    Validator("powerdns", ALL_ROLES, _RUN + " --user 0:0 --entrypoint pdns_server pdns-primary --config=check", "pdns-primary"),
     Validator("telemetry-gateway", ALL_ROLES, _RUN + " telemetry-gateway caddy validate --config /etc/caddy/Caddyfile", "telemetry-gateway"),
     Validator("caddy", ALL_ROLES, _RUN + " caddy caddy validate --config /etc/caddy/Caddyfile", "caddy"),
     Validator("prometheus", ALL_ROLES, _RUN + " --entrypoint promtool prometheus check config /etc/prometheus/prometheus.yml", "prometheus"),
