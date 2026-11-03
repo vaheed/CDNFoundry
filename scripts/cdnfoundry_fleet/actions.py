@@ -21,6 +21,8 @@ from .validators import validate_node_config
 # Telemetry and monitoring go last: serving never depends on them.
 ROLE_ORDER = ["dns", "dns-edge", "edge", "control", "monitoring"]
 REMOTE_ROOT = "/opt/cdnfoundry"
+# First starts pull images and run migrations, so activation and pre-pull get long, explicit bounds.
+LONG_STEP_SECONDS = 1800
 PREREQUISITES = (
     "set -e; need=0; for c in docker tar python3 openssl; do command -v $c >/dev/null || need=1; done; "
     "docker compose version >/dev/null 2>&1 || need=1; "
@@ -35,7 +37,7 @@ class ActionError(FleetError):
 
 
 class Transport(Protocol):
-    def run(self, target: Target, command: str, *, stdin: bytes | None = None, check: bool = False) -> Any: ...
+    def run(self, target: Target, command: str, *, stdin: bytes | None = None, check: bool = False, timeout: int | None = None) -> Any: ...
     def upload_tree(self, target: Target, local: Path, remote: str) -> None: ...
 
 
@@ -198,7 +200,7 @@ class Engine:
             for name in manifest["roles"].get(role, {}).get("images", []):
                 digest = manifest["images"][name]
                 image = mf.pull_ref(name, digest)
-                if not self.t.run(target, f"docker pull {image}").ok:
+                if not self.t.run(target, f"docker pull {image}", timeout=LONG_STEP_SECONDS).ok:
                     return False, f"could not pull {image}"
                 pulled = _pulled_digest(self.t, target, image)
                 try:
@@ -230,6 +232,7 @@ class Engine:
                 target,
                 f"set -e; test -d {remote}.next; rm -rf {remote}.previous; if [ -d {remote} ]; then mv {remote} {remote}.previous; fi; "
                 f"mv {remote}.next {remote}; cd {remote} && ./start.sh",
+                timeout=LONG_STEP_SECONDS,
             )
             return r.ok, "" if r.ok else (r.stderr or r.stdout).strip()[-600:]
         if step.kind == "gate":
@@ -245,6 +248,7 @@ class Engine:
                 target,
                 f"set -e; test -d {remote}.previous; rm -rf {remote}.failed; mv {remote} {remote}.failed; "
                 f"mv {remote}.previous {remote}; cd {remote} && ./start.sh",
+                timeout=LONG_STEP_SECONDS,
             )
             log(f"{node}: rollback {'ok' if r.ok else 'FAILED'}")
             if r.ok:

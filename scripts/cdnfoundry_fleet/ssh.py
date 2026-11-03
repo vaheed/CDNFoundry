@@ -123,10 +123,10 @@ class SshTransport:
         """Nodes are managed as root. A non-root SSH user needs passwordless sudo; Fleet never asks for a password."""
         return command if target.user == "root" else f"sudo -n sh -c {shlex.quote(command)}"
 
-    def run(self, target: Target, command: str, *, stdin: bytes | None = None, check: bool = False) -> Result:
+    def run(self, target: Target, command: str, *, stdin: bytes | None = None, check: bool = False, timeout: int | None = None) -> Result:
         try:
             done = subprocess.run(
-                self._base(target) + [self._as_root(target, command)], input=stdin, capture_output=True, timeout=self.timeout, check=False,
+                self._base(target) + [self._as_root(target, command)], input=stdin, capture_output=True, timeout=timeout or self.timeout, check=False,
             )
         except subprocess.TimeoutExpired as exc:
             raise SshError(f"SSH to {target.name} timed out") from exc

@@ -47,7 +47,7 @@ class FakeTransport:
         self.fail_activate: set[str] = set()
         self.pulled_digest: dict[str, str] = {}
 
-    def run(self, target: Target, command: str, *, stdin=None, check=False) -> R:
+    def run(self, target: Target, command: str, *, stdin=None, check=False, timeout=None) -> R:
         self.calls.append((target.name, command))
         if self.drop_on and self.drop_on in command:
             self.drop_on = None
