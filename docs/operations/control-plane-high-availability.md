@@ -116,15 +116,22 @@ the fingerprints to match. A node with a different signing key cannot become rea
 
 ## Add a standby
 
-On a running installation with active domains:
+Authorise the Fleet public key (`cdnfoundry-fleet public-key`) on the new host, put both control nodes on a private
+network or VPN, then give Fleet the new host's address and nothing else:
 
 ```sh
-cdnfoundry-fleet control add-standby 203.0.113.11 \
-  --name control-2 \
-  --replication-address 10.9.0.2 \
-  --active-replication-address 10.9.0.1 \
-  --ingress-certificate /secure/control.crt --ingress-key /secure/control.key
+cdnfoundry-fleet control add-standby 203.0.113.11
 ```
+
+Fleet already holds everything else. It names the node (`control-2`, or the next free `control-N`), records SSH access
+and pins the host key, installs the prerequisites on the host, reads the one private address of each node over SSH for
+replication, and reads the certificate the active node's Caddy already holds for `control.<operator zone>` so the standby
+can serve it. It copies the shared secrets from its own vault. If a node has no private address or several, Fleet stops
+and says so instead of guessing; pass `--replication-address` and `--active-replication-address` then. You can still
+supply `--ingress-certificate` and `--ingress-key` to use your own certificate.
+
+The control certificate renews on the active node. Run `cdnfoundry-fleet control refresh-ingress` to copy the renewed
+certificate to the standby; `cdnfoundry-fleet doctor` flags a standby certificate with less than 30 days left.
 
 The command stops at the first failure and can be run again to resume. In order, it:
 

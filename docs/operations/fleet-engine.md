@@ -69,6 +69,13 @@ it on the node, starts it with the bundle's own `start.sh`, and runs the health 
 `cdnf:edges:enroll` on the control node: it creates the edge, joins every cell slot to the default `shared` pool, and
 hands the node its edge ID and one-time bootstrap token. The country and continent codes place the PoP in Geo-DNS.
 
+## Adding a standby control node
+
+`cdnfoundry-fleet control add-standby HOST` needs only the host address. Fleet does the rest: it names the node, pins its
+host key, installs the prerequisites, reads each node's private replication address, takes the control hostname's
+certificate from the active node's Caddy, copies the shared secrets from the vault, and runs the documented sequence. See
+[Control plane high availability](control-plane-high-availability.md).
+
 ## Signed release manifests
 
 Fleet deploys only qualified releases and never changes an image or a config file on a host outside a release. CI
