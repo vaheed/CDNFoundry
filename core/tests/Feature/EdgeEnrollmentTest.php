@@ -49,4 +49,27 @@ class EdgeEnrollmentTest extends TestCase
         $this->assertSame(1, Artisan::call('cdnf:edges:enroll', ['name' => 'pop-1', '--country' => 'DE', '--continent' => 'EU']));
         $this->assertSame(0, Edge::query()->count());
     }
+
+    public function test_enrollment_gives_a_geo_unicast_pool_the_pops_service_endpoint(): void
+    {
+        Queue::fake();
+        $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
+        $pool->update(['routing_mode' => 'geo_unicast']);
+
+        $this->assertSame(0, Artisan::call('cdnf:edges:enroll', ['name' => 'pop-1', '--country' => 'DE', '--continent' => 'EU', '--ipv4' => '8.8.4.4', '--ipv6' => '2001:4860:4860::8844']));
+        $payload = json_decode(trim(Artisan::output()), true, flags: JSON_THROW_ON_ERROR);
+
+        $this->assertNotNull($payload['endpoint_id']);
+        $this->assertDatabaseHas('edge_pool_endpoints', ['id' => $payload['endpoint_id'], 'edge_id' => $payload['edge_id'], 'ipv4' => '8.8.4.4', 'withdrawn' => false]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'edge.pool_endpoint_created']);
+    }
+
+    public function test_enrollment_refuses_an_unsafe_service_address(): void
+    {
+        Queue::fake();
+        EdgePool::query()->where('kind', 'shared')->firstOrFail()->update(['routing_mode' => 'geo_unicast']);
+
+        $this->assertSame(1, Artisan::call('cdnf:edges:enroll', ['name' => 'pop-1', '--country' => 'DE', '--continent' => 'EU', '--ipv4' => '10.0.0.5']));
+        $this->assertStringContainsString('service address was refused', Artisan::output());
+    }
 }

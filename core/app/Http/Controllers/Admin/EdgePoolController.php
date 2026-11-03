@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Actions\AssignCellToPool;
+use App\Actions\CreatePoolEndpoint;
 use App\Http\Controllers\Controller;
 use App\Jobs\ReconcileAllEdgeDomains;
 use App\Jobs\ReconcilePlatformDnsIdentity;
@@ -39,16 +40,7 @@ class EdgePoolController extends Controller
 
     public function storeEndpoint(Request $request, EdgePool $pool, Edge $edge): JsonResponse
     {
-        abort_if($pool->isSimpleAnycast(), 409, 'Simple Anycast participation is created automatically when its first cell is assigned to this edge.');
-        abort_if($pool->endpoints()->where('edge_id', $edge->id)->exists(), 409, 'This pool already owns an endpoint on the edge.');
-        $data = EdgePoolEndpointData::validate($request->all(), null, $pool);
-        $endpoint = DB::transaction(function () use ($request, $pool, $edge, $data): EdgePoolEndpoint {
-            $endpoint = $pool->endpoints()->create([...$data, 'edge_id' => $edge->id, 'revision' => 1, 'gateway_state' => 'pending', 'readiness_reason' => 'gateway_not_acknowledged']);
-            $pool->update(['revision' => $pool->revision + 1]);
-            AuditLog::record($request->user(), 'edge.pool_endpoint_created', $endpoint, ['edge_id' => $edge->id, 'pool_id' => $pool->id], $request->ip());
-
-            return $endpoint;
-        });
+        $endpoint = app(CreatePoolEndpoint::class)->handle($pool, $edge, $request->all(), $request->user(), $request->ip());
         $operation = ReconcilePlatformDnsIdentity::dispatchForRoutingChange($request->user()->id);
 
         return response()->json(['data' => $endpoint->load(['edge', 'pool']), 'operation_id' => $operation?->id], 202);

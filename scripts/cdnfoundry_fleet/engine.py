@@ -160,7 +160,8 @@ class FleetEngine:
         country, continent = self._geo
         r = self.transport.run(
             targets[control],
-            f"cd {actions.REMOTE_ROOT} && docker compose --env-file .env.prod exec -T core php artisan cdnf:edges:enroll {shlex.quote(name)} --country={shlex.quote(country or '')} --continent={shlex.quote(continent or '')}",
+            f"cd {actions.REMOTE_ROOT} && docker compose --env-file .env.prod exec -T core php artisan cdnf:edges:enroll {shlex.quote(name)} --country={shlex.quote(country or '')} --continent={shlex.quote(continent or '')}"
+            f" --ipv4={shlex.quote(state['nodes'][name]['public_ipv4'])}" + (f" --ipv6={shlex.quote(state['nodes'][name]['public_ipv6'])}" if state['nodes'][name].get('public_ipv6') else ""),
         )
         if not r.ok:
             return False, (r.stderr or r.stdout).strip()[-300:]
