@@ -739,6 +739,32 @@ jobs:
           subject-name: ghcr.io/vaheed/cdnfoundry-mmdb-updater
           subject-digest: ${{ steps.publish.outputs.mmdb_updater }}
           push-to-registry: true
+      - name: Sign the Fleet release manifest
+        env:
+          FLEET_RELEASE_SIGNING_KEY: ${{ secrets.FLEET_RELEASE_SIGNING_KEY }}
+          RELEASE_REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${FLEET_RELEASE_SIGNING_KEY}" ]]; then
+            echo "FLEET_RELEASE_SIGNING_KEY is not set; Fleet cannot install this release." >&2
+            exit 1
+          fi
+          python3 -m pip install --quiet -r tests/fleet/requirements.txt
+          key="$(mktemp)"
+          trap 'rm -f "${key}"' EXIT
+          printf '%s\n' "${FLEET_RELEASE_SIGNING_KEY}" > "${key}"
+          args=()
+          for component in core web edge-control edge-runtime edge-agent edge-gateway mmdb-updater; do
+            var="CDNF_$(tr 'a-z-' 'A-Z_' <<<"${component}")_IMAGE"
+            digest="$(jq -r --arg c "${component}" '.images[] | select(.component == $c) | .image' release-evidence/release-manifest.json | sed 's/.*@//')"
+            args+=(--env-image "${var}=ghcr.io/vaheed/cdnfoundry-${component}@${digest}")
+          done
+          reports=()
+          for report in release-scans/*.json; do
+            [[ "${report}" == *.classified.json ]] || reports+=(--trivy-report "${report}")
+          done
+          python3 scripts/cdnfoundry-release-manifest --repo-root . --release "${RELEASE_REF_NAME}" \
+            --signing-key "${key}" "${args[@]}" "${reports[@]}" --out release-evidence/fleet-release-manifest.json
       - name: Normalize release evidence permissions
         if: always()
         run: |

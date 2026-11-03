@@ -18,6 +18,8 @@ from test_ssh import sshd  # noqa: E402,F401
 from cdnfoundry_fleet import actions as a  # noqa: E402
 from cdnfoundry_fleet.ssh import SshError, SshTransport, Target  # noqa: E402
 
+pytestmark = pytest.mark.skipif(not (shutil.which("sshd") or Path("/usr/sbin/sshd").exists()), reason="sshd is required")
+
 D1, D2 = "sha256:" + "1" * 64, "sha256:" + "2" * 64
 NODES = {"pop-1": {"role": "edge"}, "pop-2": {"role": "edge"}}
 
