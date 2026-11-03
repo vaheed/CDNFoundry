@@ -28,8 +28,7 @@ PREREQUISITES = (
     "set -e; need=0; for c in docker tar python3 openssl; do command -v $c >/dev/null || need=1; done; "
     "docker compose version >/dev/null 2>&1 || need=1; "
     "if [ $need = 1 ]; then command -v apt-get >/dev/null || { echo 'install Docker with Compose v2, tar, python3 and openssl' >&2; exit 1; }; "
-    "DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io docker-compose-v2 python3 openssl ca-certificates tar; fi; "
-    "install -d -m 0700 /opt/cdnfoundry.parent 2>/dev/null; true"
+    "DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io docker-compose-v2 python3 openssl ca-certificates tar; fi"
 )
 
 
