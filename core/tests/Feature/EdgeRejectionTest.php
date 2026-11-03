@@ -65,7 +65,7 @@ class EdgeRejectionTest extends TestCase
     private function edgeWithArtifacts(int $count): array
     {
         $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
-        $edge = Edge::query()->create(['name' => 'rejecting', 'country_code' => 'DE', 'continent_code' => 'EU', 'management_ipv4' => '203.0.113.99', 'registered_at' => now(), 'enabled' => true]);
+        $edge = Edge::query()->create(['name' => 'rejecting', 'country_code' => 'DE', 'continent_code' => 'EU', 'registered_at' => now(), 'enabled' => true]);
         $csr = openssl_csr_new(['commonName' => $edge->id], $key, ['digest_alg' => 'sha256']);
         openssl_csr_export($csr, $csrPem);
         $signed = EdgeCertificateAuthority::sign($csrPem, $edge->id);

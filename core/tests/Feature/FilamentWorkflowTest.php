@@ -164,7 +164,6 @@ class FilamentWorkflowTest extends TestCase
                 'cell_slot_count' => 8,
                 'country_code' => 'IR',
                 'continent_code' => 'AS',
-                'management_ipv4' => '203.0.113.90',
             ])
             ->call('create')
             ->assertHasNoFormErrors()
@@ -210,7 +209,6 @@ class FilamentWorkflowTest extends TestCase
             'name' => 'pop-rotate',
             'country_code' => 'IR',
             'continent_code' => 'AS',
-            'management_ipv4' => '203.0.113.91',
             'identity_hash' => hash('sha256', 'old-identity'),
             'identity_certificate_serial' => 'old-serial',
             'registered_at' => now(),
@@ -412,7 +410,6 @@ class FilamentWorkflowTest extends TestCase
         $admin = User::factory()->admin()->create();
         $edge = Edge::query()->create([
             'name' => 'edge-ui', 'country_code' => 'IR', 'continent_code' => 'AS',
-            'management_ipv4' => '203.0.113.10', 'management_ipv6' => '2001:db8::10',
         ]);
         $pool = EdgePool::query()->where('kind', 'shared')->orderBy('id')->firstOrFail();
         $cell = EdgeCell::query()->create([
@@ -559,7 +556,6 @@ class FilamentWorkflowTest extends TestCase
         ]);
         $edge = Edge::query()->create([
             'name' => 'disable-ui-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
-            'management_ipv4' => '203.0.113.44',
         ]);
         EdgeArtifact::query()->create([
             'edge_id' => $edge->id, 'domain_id' => $domain->id, 'revision' => 4, 'kind' => 'domain',
@@ -610,7 +606,7 @@ class FilamentWorkflowTest extends TestCase
         $domain = Domain::query()->create(['name' => 'cells-ui.example.test', 'display_name' => 'Cells UI', 'revision' => 4]);
         $source = EdgePool::query()->where('kind', 'shared')->firstOrFail();
         $target = EdgePool::query()->where('kind', 'quarantine')->firstOrFail();
-        $edge = Edge::query()->create(['name' => 'cells-ui-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.70']);
+        $edge = Edge::query()->create(['name' => 'cells-ui-edge', 'country_code' => 'IR', 'continent_code' => 'AS']);
         $activeCell = $edge->cells()->create(['slot' => 1, 'edge_pool_id' => $source->id, 'status' => 'assigned']);
         $targetCell = $edge->cells()->create(['slot' => 2, 'edge_pool_id' => $target->id, 'status' => 'assigned']);
         DomainEdgePlacement::query()->create(['domain_id' => $domain->id, 'active_pool_id' => $source->id, 'target_pool_id' => $target->id, 'desired_revision' => 4, 'state' => 'deploying']);
@@ -633,7 +629,7 @@ class FilamentWorkflowTest extends TestCase
         Queue::fake();
         $admin = User::factory()->admin()->create();
         $pool = EdgePool::query()->create(['name' => 'ui-cell-target', 'kind' => 'reserved', 'enabled' => false]);
-        $edge = Edge::query()->create(['name' => 'ui-free-cell-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.80']);
+        $edge = Edge::query()->create(['name' => 'ui-free-cell-edge', 'country_code' => 'IR', 'continent_code' => 'AS']);
         $cell = $edge->cells()->create(['slot' => 2, 'status' => 'unassigned']);
         Filament::setCurrentPanel(Filament::getPanel('admin'));
         $this->actingAs($admin);
@@ -661,7 +657,7 @@ class FilamentWorkflowTest extends TestCase
             'name' => 'ui-cell-remove', 'kind' => 'shared', 'routing_mode' => 'simple_anycast',
             'anycast_ipv4' => '198.51.100.80', 'enabled' => false,
         ]);
-        $edge = Edge::query()->create(['name' => 'ui-remove-cell-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.81']);
+        $edge = Edge::query()->create(['name' => 'ui-remove-cell-edge', 'country_code' => 'IR', 'continent_code' => 'AS']);
         $cell = $edge->cells()->create(['slot' => 3, 'edge_pool_id' => $pool->id, 'status' => 'assigned']);
         $pool->endpoints()->create(['edge_id' => $edge->id, 'revision' => 1, 'gateway_state' => 'pending']);
         Filament::setCurrentPanel(Filament::getPanel('admin'));

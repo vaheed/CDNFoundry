@@ -119,7 +119,6 @@ class FilamentPanelAccessTest extends TestCase
             'name' => 'gateway-ui-edge',
             'country_code' => 'IR',
             'continent_code' => 'AS',
-            'management_ipv4' => '203.0.113.80',
             'registered_at' => now(),
             'last_heartbeat_at' => now(),
             'runtime_versions_reported_at' => now(),

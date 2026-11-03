@@ -265,12 +265,12 @@ class SystemIdentityApiTest extends TestCase
         $settings = PlatformDnsSetting::query()->create(['id' => 1, ...$this->validPayload(), 'revision' => 1]);
         $ready = Edge::query()->create([
             'name' => 'ready-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
-            'management_ipv4' => '203.0.113.40', 'management_ipv6' => '2001:db8::40', 'registered_at' => now(),
+            'registered_at' => now(),
             'last_heartbeat_at' => now(), 'capacity' => ['listener_ready' => true],
         ]);
         $unready = Edge::query()->create([
             'name' => 'unready-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
-            'management_ipv4' => '203.0.113.41', 'management_ipv6' => '2001:db8::41', 'registered_at' => now(),
+            'registered_at' => now(),
             'last_heartbeat_at' => now(), 'capacity' => ['listener_ready' => false],
         ]);
         $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
@@ -302,7 +302,7 @@ class SystemIdentityApiTest extends TestCase
         $settings = PlatformDnsSetting::query()->create(['id' => 1, ...$this->validPayload(), 'revision' => 1]);
         $edge = Edge::query()->create([
             'name' => 'ipv4-only-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
-            'management_ipv4' => '203.0.113.50', 'management_ipv6' => null, 'registered_at' => now(),
+            'registered_at' => now(),
             'last_heartbeat_at' => now(), 'capacity' => ['listener_ready' => true],
         ]);
         $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
@@ -344,7 +344,7 @@ class SystemIdentityApiTest extends TestCase
     {
         Queue::fake();
         $admin = User::factory()->admin()->create();
-        $edge = Edge::query()->create(['name' => 'prober', 'country_code' => 'DE', 'continent_code' => 'EU', 'management_ipv4' => '203.0.113.60', 'enabled' => true, 'registered_at' => now(), 'last_heartbeat_at' => now()]);
+        $edge = Edge::query()->create(['name' => 'prober', 'country_code' => 'DE', 'continent_code' => 'EU', 'enabled' => true, 'registered_at' => now(), 'last_heartbeat_at' => now()]);
         $payload = $this->validPayload();
 
         $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)->assertUnprocessable()

@@ -85,7 +85,7 @@ class OperationsApiTest extends TestCase
             $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
             $edge = Edge::query()->create([
                 'id' => (string) Str::uuid(), 'name' => 'health-edge', 'country_code' => 'US', 'continent_code' => 'NA',
-                'management_ipv4' => '192.0.2.80', 'management_ipv6' => '2001:db8::80', 'enabled' => true, 'drained' => false,
+                'enabled' => true, 'drained' => false,
                 'registered_at' => now(), 'last_heartbeat_at' => now(), 'agent_version' => '1.1.0',
                 'capacity' => ['listener_ready' => false, 'last_rejection' => ['reason' => 'candidate_validation_failed']],
             ]);
@@ -165,7 +165,7 @@ class OperationsApiTest extends TestCase
         config(['services.metrics.token' => 'metrics-test-token']);
         $edge = Edge::query()->create([
             'id' => (string) Str::uuid(), 'name' => 'metrics-edge', 'country_code' => 'US', 'continent_code' => 'NA',
-            'management_ipv4' => '192.0.2.90', 'enabled' => true, 'drained' => false,
+            'enabled' => true, 'drained' => false,
             'last_heartbeat_at' => now(), 'capacity' => ['gateway' => [
                 'ready' => true, 'active_revision' => 7, 'routes' => 12, 'listeners' => 2,
                 'connections_active' => 3, 'connections_accepted' => 10, 'connections_rejected' => 1,

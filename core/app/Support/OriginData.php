@@ -3,7 +3,6 @@
 namespace App\Support;
 
 use App\Models\DnsCluster;
-use App\Models\Edge;
 use App\Models\EdgePoolEndpoint;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -197,8 +196,7 @@ final class OriginData
         if (! filter_var($address, FILTER_VALIDATE_IP)) {
             return true;
         }
-        if (Edge::query()->where('management_ipv4', $address)->orWhere('management_ipv6', $address)->exists()
-            || EdgePoolEndpoint::query()->where('ipv4', $address)->orWhere('ipv6', $address)->exists()
+        if (EdgePoolEndpoint::query()->where('ipv4', $address)->orWhere('ipv6', $address)->exists()
             || in_array($address, self::platformNodeAddresses(), true)
             || collect(app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_addresses'))
                 ->contains(fn (string $denied): bool => NetworkAddress::inCidr($address, $denied))) {

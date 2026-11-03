@@ -59,7 +59,6 @@ $edges = [];
 foreach (['edge-tehran-a', 'edge-tehran-b', 'edge-frankfurt-a', 'edge-with-a-very-long-point-of-presence-name'] as $i => $edgeName) {
     $edge = Edge::query()->create([
         'name' => $edgeName, 'country_code' => $i < 2 ? 'IR' : 'DE', 'continent_code' => $i < 2 ? 'AS' : 'EU',
-        'management_ipv4' => '203.0.113.'.(10 + $i), 'management_ipv6' => '2001:db8::'.(10 + $i),
         'registered_at' => now(), 'last_heartbeat_at' => $i === 3 ? now()->subDays(2) : now(),
     ]);
     $edges[] = [$edge, $edge->cells()->create(['slot' => 1, 'edge_pool_id' => $shared->id, 'status' => 'assigned'])];

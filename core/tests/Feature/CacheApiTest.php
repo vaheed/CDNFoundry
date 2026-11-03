@@ -51,7 +51,7 @@ class CacheApiTest extends TestCase
     {
         [$user, $domain] = $this->ownedDomain();
         $domain->update(['cache_settings' => $this->settings()]);
-        $edge = Edge::query()->create(['name' => 'cache-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.10', 'enabled' => true, 'registered_at' => now()]);
+        $edge = Edge::query()->create(['name' => 'cache-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'enabled' => true, 'registered_at' => now()]);
 
         $full = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/cache/purge", ['type' => 'all'])
             ->assertAccepted()->assertJsonPath('data.cache_epoch', 2);
@@ -95,7 +95,7 @@ class CacheApiTest extends TestCase
     {
         [$user, $domain] = $this->ownedDomain();
         $domain->update(['cache_settings' => $this->settings()]);
-        Edge::query()->create(['name' => 'op-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.11', 'enabled' => true, 'registered_at' => now()]);
+        Edge::query()->create(['name' => 'op-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'enabled' => true, 'registered_at' => now()]);
 
         $response = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/cache/purge", ['type' => 'all'])->assertAccepted();
         $operationId = $response->json('operation_id');
@@ -113,7 +113,7 @@ class CacheApiTest extends TestCase
     {
         [$user, $domain] = $this->ownedDomain();
         $edge = Edge::query()->create([
-            'name' => 'retry-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.11',
+            'name' => 'retry-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
             'enabled' => true, 'registered_at' => now(), 'identity_certificate_serial' => 'ABCD1234',
             'identity_certificate_expires_at' => now()->addDay(),
         ]);

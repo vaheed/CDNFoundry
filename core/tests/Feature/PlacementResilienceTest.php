@@ -171,7 +171,7 @@ class PlacementResilienceTest extends TestCase
     private function readyEdge(EdgePool $pool, string $name): Edge
     {
         $edge = Edge::query()->create([
-            'name' => $name, 'country_code' => 'DE', 'continent_code' => 'EU', 'management_ipv4' => '203.0.113.'.random_int(10, 250),
+            'name' => $name, 'country_code' => 'DE', 'continent_code' => 'EU'.random_int(10, 250),
             'cell_slot_count' => 8, 'enabled' => true, 'drained' => false, 'registered_at' => now(), 'last_heartbeat_at' => now(),
             'capacity' => ['listener_ready' => true], 'active_sequence' => 0,
         ]);

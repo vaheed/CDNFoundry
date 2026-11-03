@@ -13,7 +13,7 @@ class EdgeProxySecretTest extends TestCase
 
     public function test_a_genuine_edge_identity_is_refused_without_the_proxy_secret(): void
     {
-        $edge = Edge::query()->create(['name' => 'secret-edge', 'country_code' => 'DE', 'continent_code' => 'EU', 'management_ipv4' => '203.0.113.71', 'enabled' => true, 'registered_at' => now()]);
+        $edge = Edge::query()->create(['name' => 'secret-edge', 'country_code' => 'DE', 'continent_code' => 'EU', 'enabled' => true, 'registered_at' => now()]);
         $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
         $csr = openssl_csr_new(['commonName' => $edge->id], $key, ['digest_alg' => 'sha256']);
         openssl_csr_export($csr, $csrPem);

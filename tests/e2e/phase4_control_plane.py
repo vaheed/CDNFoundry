@@ -333,8 +333,6 @@ def provision_edge(token: str, name: str, country: str, continent: str, ipv4: st
         "name": name,
         "country_code": country,
         "continent_code": continent,
-        "management_ipv4": ipv4,
-        "management_ipv6": ipv6,
     }, token)
     edge = created["data"]
     key = directory / f"{name}.key"

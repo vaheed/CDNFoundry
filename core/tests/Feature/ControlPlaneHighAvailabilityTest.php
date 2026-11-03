@@ -23,7 +23,7 @@ class ControlPlaneHighAvailabilityTest extends TestCase
 
     private function identity(): array
     {
-        $edge = Edge::query()->create(['name' => 'ha-edge', 'country_code' => 'DE', 'continent_code' => 'EU', 'management_ipv4' => '203.0.113.81', 'enabled' => true, 'registered_at' => now()]);
+        $edge = Edge::query()->create(['name' => 'ha-edge', 'country_code' => 'DE', 'continent_code' => 'EU', 'enabled' => true, 'registered_at' => now()]);
         $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
         $csr = openssl_csr_new(['commonName' => $edge->id], $key, ['digest_alg' => 'sha256']);
         openssl_csr_export($csr, $csrPem);

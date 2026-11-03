@@ -87,7 +87,7 @@ class OriginFailoverTest extends TestCase
     {
         Queue::fake();
         [$owner, $domain, $record] = $this->proxiedRecord();
-        $edge = Edge::query()->create(['name' => 'failover-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.80']);
+        $edge = Edge::query()->create(['name' => 'failover-edge', 'country_code' => 'IR', 'continent_code' => 'AS']);
         $origin = $this->origin('8.8.8.8') + [
             'backup' => $this->origin('2001:4860:4860::8888'),
             'failover' => [

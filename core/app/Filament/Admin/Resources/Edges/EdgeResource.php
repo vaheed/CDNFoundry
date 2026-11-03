@@ -43,10 +43,7 @@ class EdgeResource extends Resource
             TextInput::make('name')->required()->maxLength(100)->unique(ignoreRecord: true),
             TextInput::make('cell_slot_count')->label(FilamentHelp::label('Cell slots', 'OpenResty slots created during edge installation. Production Compose runs exactly eight cells per PoP, so the count is fixed.'))->numeric()->integer()->required()->minValue(Edge::CELL_SLOT_COUNT)->maxValue(Edge::CELL_SLOT_COUNT)->default(Edge::CELL_SLOT_COUNT)->disabled()->dehydrated(),
             Select::make('country_code')->label('Country')->options(array_combine(GeoVocabulary::countries(), GeoVocabulary::countries()))->searchable()->required(),
-            Select::make('continent_code')->label('Continent')->options(array_combine(GeoVocabulary::CONTINENTS, GeoVocabulary::CONTINENTS))->required(),
-            TextInput::make('management_ipv4')->label(FilamentHelp::label('Management IPv4', 'Optional operator access address. It is never bound by the gateway or published in customer DNS.'))->ipv4()->nullable()->unique(ignoreRecord: true),
-            TextInput::make('management_ipv6')->label(FilamentHelp::label('Management IPv6', 'Optional operator access address. Public traffic addresses belong only to pool endpoints.'))->ipv6()->nullable()->unique(ignoreRecord: true),
-        ]);
+            Select::make('continent_code')->label('Continent')->options(array_combine(GeoVocabulary::CONTINENTS, GeoVocabulary::CONTINENTS))->required()]);
     }
 
     public static function infolist(Schema $schema): Schema
@@ -96,9 +93,7 @@ class EdgeResource extends Resource
                     TextEntry::make('capacity.gateway.errors')->label(FilamentHelp::label('Gateway errors', 'Bounded gateway error counter reported by the running process.'))->placeholder('Gateway not reporting'),
                     TextEntry::make('capacity.gateway.candidate_rejections')->label(FilamentHelp::label('Gateway rejected candidates', 'Configuration candidates rejected before activation because validation failed.'))->placeholder('Gateway not reporting'),
                     TextEntry::make('identity_certificate_expires_at')->label(FilamentHelp::label('Identity expires', 'Expiry time of the certificate used to authenticate this edge to the control plane.'))->dateTime()->placeholder('Not enrolled'),
-                    TextEntry::make('capacity.last_rejection.reason')->label(FilamentHelp::label('Latest deployment rejection', 'Most recent reason a runtime configuration could not be activated.'))->placeholder('None reported'),
-                ]),
-        ]);
+                    TextEntry::make('capacity.last_rejection.reason')->label(FilamentHelp::label('Latest deployment rejection', 'Most recent reason a runtime configuration could not be activated.'))->placeholder('None reported')])]);
     }
 
     public static function table(Table $table): Table
@@ -118,8 +113,6 @@ class EdgeResource extends Resource
                     default => 'gray',
                 }),
             TextColumn::make('country_code')->label('Location')->formatStateUsing(fn (string $state, Edge $record): string => $state.' / '.$record->continent_code),
-            TextColumn::make('management_ipv4')->label('Management IPv4'),
-            TextColumn::make('management_ipv6')->label('Management IPv6')->toggleable(isToggledHiddenByDefault: true),
             TextColumn::make('last_heartbeat_at')->label('Heartbeat')->since()->placeholder('Never')->sortable(),
             TextColumn::make('agent_version')->label('Agent'),
             TextColumn::make('cells_count')->counts('cells')->label('Cells')->alignEnd(),
@@ -128,25 +121,21 @@ class EdgeResource extends Resource
                 ->color(fn (string $state): string => $state === 'Drifted' ? 'warning' : 'success'),
             TextColumn::make('capacity.last_rejection.reason')->label('Deployment failure')->limit(40),
             TextColumn::make('runtime_versions_reported_at')->label('Version report')->since()->toggleable(isToggledHiddenByDefault: true),
-            TextColumn::make('active_sequence')->label('Active revision')->sortable()->alignEnd()->toggleable(isToggledHiddenByDefault: true),
-        ])->recordActions([
-            ViewAction::make()->iconButton(),
-            EditAction::make()->iconButton(),
-            ActionGroup::make([
-                Action::make('enable')->icon('phosphor-check-circle')->visible(fn (Edge $record): bool => ! $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => true], 'edge.enable')),
-                Action::make('disable')->icon('phosphor-prohibit')->color('danger')->requiresConfirmation()->visible(fn (Edge $record): bool => $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => false], 'edge.disable')),
-                Action::make('drain')->icon('phosphor-pause-circle')->color('warning')->requiresConfirmation()->visible(fn (Edge $record): bool => ! $record->drained)->action(fn (Edge $record) => self::changeState($record, ['drained' => true], 'edge.drain')),
-                Action::make('undrain')->icon('phosphor-play-circle')->visible(fn (Edge $record): bool => $record->drained)->action(fn (Edge $record) => self::changeState($record, ['drained' => false], 'edge.undrain')),
-                Action::make('rotateIdentity')
-                    ->label('Rotate identity')
-                    ->icon('phosphor-arrows-clockwise')
-                    ->color('danger')
-                    ->url(fn (Edge $record): string => self::getUrl('view', [
-                        'record' => $record,
-                        'action' => 'rotateIdentity',
-                    ])),
-            ])->label('More')->icon('phosphor-dots-three'),
-        ])->defaultSort('name');
+            TextColumn::make('active_sequence')->label('Active revision')->sortable()->alignEnd()->toggleable(isToggledHiddenByDefault: true)])->recordActions([
+                ViewAction::make()->iconButton(),
+                EditAction::make()->iconButton(),
+                ActionGroup::make([
+                    Action::make('enable')->icon('phosphor-check-circle')->visible(fn (Edge $record): bool => ! $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => true], 'edge.enable')),
+                    Action::make('disable')->icon('phosphor-prohibit')->color('danger')->requiresConfirmation()->visible(fn (Edge $record): bool => $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => false], 'edge.disable')),
+                    Action::make('drain')->icon('phosphor-pause-circle')->color('warning')->requiresConfirmation()->visible(fn (Edge $record): bool => ! $record->drained)->action(fn (Edge $record) => self::changeState($record, ['drained' => true], 'edge.drain')),
+                    Action::make('undrain')->icon('phosphor-play-circle')->visible(fn (Edge $record): bool => $record->drained)->action(fn (Edge $record) => self::changeState($record, ['drained' => false], 'edge.undrain')),
+                    Action::make('rotateIdentity')
+                        ->label('Rotate identity')
+                        ->icon('phosphor-arrows-clockwise')
+                        ->color('danger')
+                        ->url(fn (Edge $record): string => self::getUrl('view', [
+                            'record' => $record,
+                            'action' => 'rotateIdentity']))])->label('More')->icon('phosphor-dots-three')])->defaultSort('name');
     }
 
     public static function getRelations(): array

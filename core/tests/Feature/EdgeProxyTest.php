@@ -29,7 +29,7 @@ class EdgeProxyTest extends TestCase
 
     public function test_edge_identity_is_a_leaf_and_authentication_binds_the_enrolled_certificate(): void
     {
-        $edge = Edge::query()->create(['name' => 'certificate-bound-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.19']);
+        $edge = Edge::query()->create(['name' => 'certificate-bound-edge', 'country_code' => 'IR', 'continent_code' => 'AS']);
         $signed = EdgeCertificateAuthority::sign($this->certificateRequest($edge->id), $edge->id);
         $parsed = openssl_x509_parse($signed['certificate']);
         $this->assertSame('CA:FALSE', $parsed['extensions']['basicConstraints']);
@@ -140,7 +140,6 @@ class EdgeProxyTest extends TestCase
         ]);
         $edge = Edge::query()->create([
             'name' => 'coalesced-move-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
-            'management_ipv4' => '203.0.113.45',
         ]);
         foreach ([$shared, $quarantine] as $slot => $pool) {
             $edge->cells()->create(['slot' => $slot + 1, 'edge_pool_id' => $pool->id, 'status' => 'assigned']);
@@ -237,7 +236,6 @@ class EdgeProxyTest extends TestCase
         $admin = User::factory()->admin()->create();
         $created = $this->actingAs($admin)->postJson('/api/admin/edges', [
             'name' => 'first-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
-            'management_ipv4' => '203.0.113.40', 'management_ipv6' => '2001:db8::40',
         ])->assertCreated();
         $edgeId = $created->json('data.id');
         $edge = Edge::query()->findOrFail($edgeId);
@@ -354,7 +352,7 @@ class EdgeProxyTest extends TestCase
         // asynchronous while this test exercises edge enrollment and delivery.
         Queue::fake([EnsureManagedCertificates::class]);
         $admin = User::factory()->create(['type' => 'admin']);
-        $created = $this->actingAs($admin)->postJson('/api/admin/edges', ['name' => 'edge-ir-1', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.10', 'management_ipv6' => '2001:db8::10'])
+        $created = $this->actingAs($admin)->postJson('/api/admin/edges', ['name' => 'edge-ir-1', 'country_code' => 'IR', 'continent_code' => 'AS'])
             ->assertCreated();
         $id = $created->json('data.id');
         $slots = Edge::query()->findOrFail($id)->cells()->orderBy('slot')->get();
@@ -372,9 +370,9 @@ class EdgeProxyTest extends TestCase
         $this->assertCount(8, $slots->pluck('http_port')->unique());
         $this->assertSame(7, $slots->whereNull('edge_pool_id')->where('status', 'unassigned')->count());
         $this->assertSame(536870912, $slots->first()->resource_limits['memory_bytes']);
-        $this->actingAs($admin)->postJson('/api/admin/edges', ['name' => 'too-many-slots', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.19', 'cell_slot_count' => 33])->assertUnprocessable();
+        $this->actingAs($admin)->postJson('/api/admin/edges', ['name' => 'too-many-slots', 'country_code' => 'IR', 'continent_code' => 'AS', 'cell_slot_count' => 33])->assertUnprocessable();
         foreach ([1, 16] as $unsupported) {
-            $this->actingAs($admin)->postJson('/api/admin/edges', ['name' => "slots-{$unsupported}", 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.19', 'cell_slot_count' => $unsupported])
+            $this->actingAs($admin)->postJson('/api/admin/edges', ['name' => "slots-{$unsupported}", 'country_code' => 'IR', 'continent_code' => 'AS', 'cell_slot_count' => $unsupported])
                 ->assertUnprocessable()->assertJsonValidationErrors('cell_slot_count');
         }
         $bootstrap = $created->json('data.bootstrap_token');
@@ -508,8 +506,6 @@ class EdgeProxyTest extends TestCase
             'name' => 'edge-without-dedicated-addresses',
             'country_code' => 'DE',
             'continent_code' => 'EU',
-            'management_ipv4' => '203.0.113.30',
-            'management_ipv6' => '2001:db8::30',
             'registered_at' => now(),
             'last_heartbeat_at' => now(),
             'agent_version' => '1.0.0',
@@ -567,7 +563,7 @@ class EdgeProxyTest extends TestCase
     public function test_origin_test_tasks_and_phase_four_operations_are_visible_to_administrators(): void
     {
         $admin = User::factory()->create(['type' => 'admin']);
-        $created = $this->actingAs($admin)->postJson('/api/admin/edges', ['name' => 'edge-test', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.20'])
+        $created = $this->actingAs($admin)->postJson('/api/admin/edges', ['name' => 'edge-test', 'country_code' => 'IR', 'continent_code' => 'AS'])
             ->assertCreated();
         $edgeId = $created->json('data.id');
         $registered = $this->postJson('/edge/v1/register', ['edge_id' => $edgeId, 'bootstrap_token' => $created->json('data.bootstrap_token'), 'agent_version' => '1.0.0', 'certificate_request' => $this->certificateRequest($edgeId)])->assertCreated();

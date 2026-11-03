@@ -139,7 +139,7 @@ class Lab:
             ' echo $u->createToken("ha", ["*"])->plainTextToken;'
         )
         token = self.on("control-a", f"docker compose --env-file .env.prod exec -T core php -r {shlex.quote(php)}").stdout.strip().splitlines()[-1]
-        body = json.dumps({"name": EDGE_NAME, "country_code": "DE", "continent_code": "EU", "management_ipv4": "203.0.113.50"})
+        body = json.dumps({"name": EDGE_NAME, "country_code": "DE", "continent_code": "EU"})
         out = self.run("curl", "-sS", "--max-time", "30", "-X", "POST", f"http://{ADDRESS['control-a']}:18080/api/admin/edges", "-H", f"Authorization: Bearer {token}",
                        "-H", "Content-Type: application/json", "-H", "Accept: application/json", "-H", "Idempotency-Key: 11111111-1111-4111-8111-111111111111", "-d", body).stdout
         data = json.loads(out)["data"]

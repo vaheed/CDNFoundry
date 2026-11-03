@@ -141,7 +141,7 @@ class PopFailStaticTest extends TestCase
     private function endpoint(EdgePool $pool, string $name, string $address): array
     {
         $edge = Edge::query()->create([
-            'name' => $name, 'country_code' => 'DE', 'continent_code' => 'EU', 'management_ipv4' => '203.0.113.'.random_int(2, 250),
+            'name' => $name, 'country_code' => 'DE', 'continent_code' => 'EU'.random_int(2, 250),
             'enabled' => true, 'drained' => false, 'registered_at' => now(), 'last_heartbeat_at' => now(), 'capacity' => ['listener_ready' => true],
         ]);
         $edge->cells()->create(['slot' => 1, 'name' => 'cell-01', 'edge_pool_id' => $pool->id, 'status' => 'ready']);
@@ -153,7 +153,7 @@ class PopFailStaticTest extends TestCase
     private function observer(): Edge
     {
         return Edge::query()->create([
-            'name' => 'observer-'.Str::random(5), 'country_code' => 'US', 'continent_code' => 'NA', 'management_ipv4' => '203.0.113.'.random_int(2, 250),
+            'name' => 'observer-'.Str::random(5), 'country_code' => 'US', 'continent_code' => 'NA'.random_int(2, 250),
             'enabled' => true, 'registered_at' => now(), 'last_heartbeat_at' => now(), 'capacity' => ['listener_ready' => true],
         ]);
     }

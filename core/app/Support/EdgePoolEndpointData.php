@@ -2,7 +2,6 @@
 
 namespace App\Support;
 
-use App\Models\Edge;
 use App\Models\EdgePool;
 use App\Models\EdgePoolEndpoint;
 use Illuminate\Support\Facades\Validator;
@@ -27,8 +26,8 @@ final class EdgePoolEndpointData
             }
             foreach (['ipv4', 'ipv6'] as $field) {
                 $address = $input[$field] ?? null;
-                if ($address && (NetworkAddress::isUnsafe($address) || Edge::query()->where('management_ipv4', $address)->orWhere('management_ipv6', $address)->exists())) {
-                    $validator->errors()->add($field, 'The endpoint must use a public unicast address distinct from management addresses.');
+                if ($address && NetworkAddress::isUnsafe($address)) {
+                    $validator->errors()->add($field, 'The endpoint must use a public unicast address.');
                 }
                 if ($address && EdgePoolEndpoint::query()->where($field, $address)->when($endpoint, fn ($query) => $query->whereKeyNot($endpoint->id))->exists()) {
                     $validator->errors()->add($field, 'The service address is already assigned to another endpoint.');

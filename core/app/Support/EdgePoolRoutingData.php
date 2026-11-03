@@ -2,7 +2,6 @@
 
 namespace App\Support;
 
-use App\Models\Edge;
 use App\Models\EdgePool;
 use App\Models\EdgePoolEndpoint;
 use Illuminate\Support\Facades\Validator;
@@ -31,8 +30,8 @@ final class EdgePoolRoutingData
                 if (! $address) {
                     continue;
                 }
-                if (NetworkAddress::isUnsafe($address) || Edge::query()->where('management_ipv4', $address)->orWhere('management_ipv6', $address)->exists()) {
-                    $validator->errors()->add('anycast_'.$family, 'The Anycast endpoint must use public unicast space distinct from management addresses.');
+                if (NetworkAddress::isUnsafe($address)) {
+                    $validator->errors()->add('anycast_'.$family, 'The Anycast endpoint must use public unicast space.');
                 }
                 if (EdgePoolEndpoint::query()->where($family, $address)->exists()) {
                     $validator->errors()->add('anycast_'.$family, 'The service address is already assigned to a Geo-Unicast endpoint.');

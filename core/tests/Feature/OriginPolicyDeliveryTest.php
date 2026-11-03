@@ -53,7 +53,7 @@ class OriginPolicyDeliveryTest extends TestCase
 
     private function enrolledHeaders(): array
     {
-        $edge = Edge::query()->create(['name' => 'policy-edge', 'country_code' => 'DE', 'continent_code' => 'EU', 'management_ipv4' => '203.0.113.88', 'enabled' => true, 'registered_at' => now()]);
+        $edge = Edge::query()->create(['name' => 'policy-edge', 'country_code' => 'DE', 'continent_code' => 'EU', 'enabled' => true, 'registered_at' => now()]);
         $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
         openssl_csr_export(openssl_csr_new(['commonName' => $edge->id], $key, ['digest_alg' => 'sha256']), $csr);
         $signed = EdgeCertificateAuthority::sign($csr, $edge->id);

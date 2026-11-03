@@ -2,7 +2,6 @@
 
 namespace App\Support;
 
-use App\Models\Edge;
 use App\Models\EdgePool;
 use App\Models\EdgePoolEndpoint;
 
@@ -17,8 +16,7 @@ final class OriginPolicy
     public static function compile(): array
     {
         $settings = app(PlatformSettings::class);
-        $addresses = Edge::query()->pluck('management_ipv4')->merge(Edge::query()->pluck('management_ipv6'))
-            ->merge(EdgePoolEndpoint::query()->pluck('ipv4'))->merge(EdgePoolEndpoint::query()->pluck('ipv6'))
+        $addresses = EdgePoolEndpoint::query()->pluck('ipv4')->merge(EdgePoolEndpoint::query()->pluck('ipv6'))
             ->merge(EdgePool::query()->pluck('anycast_ipv4'))->merge(EdgePool::query()->pluck('anycast_ipv6'))
             ->filter()->merge($settings->get('origin_safety', 'blocked_origin_addresses'));
 

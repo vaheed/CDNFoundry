@@ -91,7 +91,7 @@ class AccountHardeningTest extends TestCase
 
     public function test_an_unused_bootstrap_token_expires(): void
     {
-        $edge = Edge::query()->create(['name' => 'fresh', 'country_code' => 'DE', 'continent_code' => 'EU', 'management_ipv4' => '203.0.113.88', 'enabled' => true]);
+        $edge = Edge::query()->create(['name' => 'fresh', 'country_code' => 'DE', 'continent_code' => 'EU', 'enabled' => true]);
         $edge->update(['bootstrap_token_hash' => hash('sha256', str_repeat('a', 64)), 'bootstrap_consumed_at' => null, 'bootstrap_expires_at' => now()->subMinute()]);
 
         $this->postJson('/edge/v1/register', ['edge_id' => $edge->id, 'bootstrap_token' => str_repeat('a', 64), 'agent_version' => '1', 'certificate_request' => 'x'])

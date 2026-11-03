@@ -25,8 +25,8 @@ class TopologyTest extends TestCase
 
     public function test_a_stale_pop_is_failed_and_its_link_takes_the_worse_status(): void
     {
-        $fresh = Edge::query()->create(['name' => 'pop-fresh', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.1', 'last_heartbeat_at' => now()]);
-        $stale = Edge::query()->create(['name' => 'pop-stopped', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.2', 'last_heartbeat_at' => now()->subDay()]);
+        $fresh = Edge::query()->create(['name' => 'pop-fresh', 'country_code' => 'IR', 'continent_code' => 'AS', 'last_heartbeat_at' => now()]);
+        $stale = Edge::query()->create(['name' => 'pop-stopped', 'country_code' => 'IR', 'continent_code' => 'AS', 'last_heartbeat_at' => now()->subDay()]);
         $stale->cells()->create(['slot' => 1, 'status' => 'ready']);
         DnsCluster::query()->create(['name' => 'dns-a', 'location' => 'x', 'enabled' => true, 'api_url' => 'http://dns.test', 'api_key' => 'k', 'nameservers' => ['ns1.t', 'ns2.t'], 'last_health_status' => 'healthy']);
 

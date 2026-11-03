@@ -78,7 +78,7 @@ class EdgeIdentityRenewalTest extends TestCase
     /** @return array{0: Edge, 1: array<string,string>} */
     private function enrolledEdge(): array
     {
-        $edge = Edge::query()->create(['name' => 'renewing', 'country_code' => 'DE', 'continent_code' => 'EU', 'management_ipv4' => '203.0.113.77', 'enabled' => true, 'registered_at' => now()]);
+        $edge = Edge::query()->create(['name' => 'renewing', 'country_code' => 'DE', 'continent_code' => 'EU', 'enabled' => true, 'registered_at' => now()]);
         [$csr] = $this->csr($edge->id);
         $signed = EdgeCertificateAuthority::sign($csr, $edge->id);
         $edge->update(['identity_certificate' => $signed['certificate'], 'identity_certificate_serial' => $signed['serial'], 'identity_certificate_expires_at' => $signed['expires_at']]);
