@@ -163,6 +163,18 @@ class Vault:
             self.seal(work)
 
     @contextmanager
+    def read_session(self) -> Iterator[Path]:
+        """Unlock into a work directory and discard it without sealing, for pages that only read."""
+        self.unlock()
+        work = Path(tempfile.mkdtemp(prefix="cdnf-fleet-"))
+        work.chmod(0o700)
+        try:
+            self.materialize(work)
+            yield work
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+
+    @contextmanager
     def session(self) -> Iterator[Path]:
         """Unlock into a private work directory, seal on success, always wipe."""
         self.unlock()

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import json
+import shlex
 from pathlib import Path
 from typing import Any, Callable
 
@@ -38,6 +39,8 @@ class FleetEngine:
         self.work, self.repo_root, self.output_dir, self.say = work, repo_root, output_dir, say
         self.store = FleetState(work)
         self.transport = transport or SshTransport(work)
+        self.events: list[dict[str, Any]] = []
+        self._geo: tuple[str | None, str | None] = (None, None)
 
     # -- state ------------------------------------------------------------------------------------------
     def state(self) -> dict[str, Any]:
@@ -109,17 +112,53 @@ class FleetEngine:
             raise ValidationError(f"No SSH access stored for: {', '.join(missing)}; run `node-ssh` first")
 
     # -- actions ----------------------------------------------------------------------------------------
+    def _needs_enrollment(self, state: dict[str, Any], name: str) -> bool:
+        node = state["nodes"][name]
+        return node["role"] in {"edge", "dns-edge"} and "EDGE_ID" not in node.get("extra_env", {})
+
     def bootstrap_plan(self, name: str) -> actions.Plan:
         state = self.state()
         self._missing_access(state, [name])
-        return actions.plan_bootstrap(name, state["global"]["release"])
+        return actions.plan_bootstrap(name, state["global"]["release"], enroll=self._needs_enrollment(state, name))
 
-    def bootstrap(self, name: str, *, log: Callable[[str], None] | None = None) -> actions.Outcome:
+    def bootstrap(self, name: str, *, country: str | None = None, continent: str | None = None, log: Callable[[str], None] | None = None) -> actions.Outcome:
         plan = self.bootstrap_plan(name)
         state = self.state()
+        if any(s.kind == "enroll" for s in plan.steps) and not (country and continent):
+            raise ValidationError("A PoP needs its country and continent codes (they place it in Geo-DNS): pass --country and --continent")
+        self._geo = (country, continent)
         self._render(state)
         release = {"release": state["global"]["release"], "roles": {}, "images": {}}
-        return self._engine(state).apply(plan, release, log=log or self.say)
+        engine = self._engine(state)
+        engine.enroll = self._enroll
+        self.events.append({"kind": "bootstrap", "node": name})
+        return engine.apply(plan, release, log=log or self.say)
+
+    def _enroll(self, name: str) -> tuple[bool, str]:
+        """Register the PoP in the control plane, put its cells in the shared pool, and give the node its identity."""
+        state = self.state()
+        control = next((n for n, v in sorted(state["nodes"].items()) if v["role"] == "control"), None)
+        targets = self.targets(state)
+        if control is None or control not in targets:
+            return False, "no control node with stored SSH access to enroll against"
+        country, continent = self._geo
+        r = self.transport.run(
+            targets[control],
+            f"cd {actions.REMOTE_ROOT} && docker compose --env-file .env.prod exec -T core php artisan cdnf:edges:enroll {shlex.quote(name)} --country={shlex.quote(country or '')} --continent={shlex.quote(continent or '')}",
+        )
+        if not r.ok:
+            return False, (r.stderr or r.stdout).strip()[-300:]
+        try:
+            data = json.loads(r.stdout.strip().splitlines()[-1])
+            edge_id, token = data["edge_id"], data["bootstrap_token"]
+        except (ValueError, KeyError, IndexError):
+            return False, "the control plane returned no enrollment"
+        extra = dict(state["nodes"][name].get("extra_env", {}))
+        extra["EDGE_ID"] = edge_id
+        state = self.store.update_node(state, name, {"extra_env": extra})
+        self.store.write_secret("edge-bootstrap-token", token, node=name)
+        self._render(state)
+        return True, f"enrolled as {edge_id}"
 
     def config_plan(self) -> tuple[actions.Plan, dict[str, tuple[str, str]]]:
         state = self.state()
@@ -262,3 +301,20 @@ class ControlActions:
             target, f"cd {actions.REMOTE_ROOT} && docker compose --env-file .env.prod run --rm --no-deps -e BACKUP_RESTORE_ALLOWED=true core php artisan cdnf:backups:restore {arg}", check=True,
         )
         return r.stdout.strip()[-300:]
+
+
+def ha_action(engine: FleetEngine, action: str, **options: Any) -> dict[str, Any]:
+    """The Phase 6 control commands, run with each node's stored key and pinned host key."""
+    import argparse
+
+    from . import control_cli
+
+    state = engine.state()
+    runner = VaultRunner(engine.transport, engine.targets(state))
+    defaults = dict(
+        control_action=action, repo_root=str(engine.repo_root), ssh_user="root", deploy_dir=actions.REMOTE_ROOT, ssh_command="ssh",
+        edge_timeout=300, extra_env=[], control_address_family="ipv4", bind_ipv4="0.0.0.0", bind_ipv6=None, public_ipv6=None, region="global",
+        old_active_is_powered_off=False, replication_address=None, active_replication_address=None, name="control-2",
+    )
+    args = argparse.Namespace(**{**defaults, **options})
+    return control_cli.execute(args, engine.store, engine.output_dir, runner=runner, say=engine.say)

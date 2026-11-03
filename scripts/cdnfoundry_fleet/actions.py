@@ -43,7 +43,7 @@ class Transport(Protocol):
 class Step:
     id: str
     node: str
-    kind: str  # prepull | upload | validate | activate | gate | rollback | switchover
+    kind: str  # pin | prereq | enroll | prepull | upload | validate | activate | gate | rollback | switchover
     detail: str = ""
 
     def label(self) -> str:
@@ -136,9 +136,11 @@ class Engine:
         self, transport: Transport, targets: dict[str, Target], nodes: dict[str, dict[str, Any]], bundles: Path,
         journal: Journal, *, gate: Callable[[str], tuple[bool, str]], switchover: Callable[[str], None] | None = None,
         mixed_versions_ok: bool = True, services: dict[str, set[str]] | None = None,
+        enroll: Callable[[str], tuple[bool, str]] | None = None,
         roots: dict[str, str] | None = None,
     ) -> None:
         self.services = services or {}
+        self.enroll = enroll
         self.roots = roots or {}
         self.t, self.targets, self.nodes, self.bundles = transport, targets, nodes, bundles
         self.journal, self.gate, self.switchover = journal, gate, switchover
@@ -212,6 +214,8 @@ class Engine:
             if pin:
                 pin(target)
             return True, ""
+        if step.kind == "enroll":
+            return self.enroll(step.node) if self.enroll else (False, "no enrollment available")
         if step.kind == "prereq":
             r = self.t.run(target, PREREQUISITES)
             return r.ok, "" if r.ok else (r.stderr or r.stdout).strip()[-300:]
@@ -248,9 +252,10 @@ class Engine:
         return rolled
 
 
-def plan_bootstrap(name: str, release: str) -> Plan:
+def plan_bootstrap(name: str, release: str, *, enroll: bool = False) -> Plan:
     plan = Plan("bootstrap", release)
-    for kind in ("pin", "prereq", "upload", "validate", "activate", "gate"):
+    kinds = ("pin", "prereq") + (("enroll",) if enroll else ()) + ("upload", "validate", "activate", "gate")
+    for kind in kinds:
         plan.steps.append(Step(f"{name}:{kind}", name, kind))
     return plan
 

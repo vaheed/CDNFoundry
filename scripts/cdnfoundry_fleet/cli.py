@@ -232,6 +232,8 @@ def parser() -> argparse.ArgumentParser:
     boot = sub.add_parser("bootstrap", parents=[command_common], help="install prerequisites on a node, deploy its bundle, and start it")
     boot.add_argument("--node", required=True)
     boot.add_argument("--plan-only", action="store_true")
+    boot.add_argument("--country", help="ISO country code of a PoP (Geo-DNS placement)")
+    boot.add_argument("--continent", help="continent code of a PoP (Geo-DNS placement)")
     up = sub.add_parser("upgrade", parents=[command_common], help="show, then apply, a rolling upgrade to a signed release manifest")
     up.add_argument("--manifest", required=True)
     up.add_argument("--key-file", help="verify with this key instead of the trusted one")
@@ -1043,7 +1045,7 @@ def _engine_command(args: argparse.Namespace, store: FleetState, output_dir: Pat
         if args.plan_only:
             return EXIT_OK
         _confirm(args, f"Install and start {args.node}")
-        return outcome(engine.bootstrap(args.node))
+        return outcome(engine.bootstrap(args.node, country=args.country, continent=args.continent))
     elif args.command == "upgrade":
         document = json.loads(Path(args.manifest).read_text(encoding="utf-8"))
         key = Path(args.key_file).read_text(encoding="utf-8") if args.key_file else None
@@ -1115,7 +1117,7 @@ def run(args: argparse.Namespace) -> int:
         require_loopback(args.host)
         vault = Vault(vault_path, _passphrase(confirm=False))
         vault.unlock()
-        server = make_server(FleetWeb(vault, Path(args.repo_root)), args.host, args.port)
+        server = make_server(FleetWeb(vault, Path(args.repo_root), Path(args.output_dir)), args.host, args.port)
         print(f"Fleet web on http://{args.host}:{args.port}/ (Ctrl+C to stop)")
         try:
             server.serve_forever()
