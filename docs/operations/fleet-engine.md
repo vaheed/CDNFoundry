@@ -55,6 +55,11 @@ stream a tar archive to a temporary directory on the node and move it into place
 a half-written bundle. `cdnfoundry-fleet node-ssh --node NAME --host H [--ssh-port P] [--ssh-user U]` records how to
 reach a node and pins its host key.
 
+## Reaching nodes as a non-root user
+
+Fleet manages nodes as root. If the SSH user is not root (`node-ssh --ssh-user vk-user`), every remote command runs through
+`sudo -n`, so the user needs passwordless sudo. Fleet never asks for or stores a password.
+
 ## Adding a node
 
 ```sh
@@ -63,11 +68,22 @@ cdnfoundry-fleet node-ssh --node pop-1 --host 203.0.113.30
 cdnfoundry-fleet bootstrap --node pop-1 --country DE --continent EU
 ```
 
-`bootstrap` shows a plan, asks for confirmation, then: pins the host key, installs the prerequisites (Docker with
-Compose v2, `tar`, `python3`, `openssl`; on apt systems it installs them), enrolls a PoP, uploads the bundle, validates
-it on the node, starts it with the bundle's own `start.sh`, and runs the health gate. Enrolling a PoP runs
+`bootstrap` needs a signed release first (`trust-release-key`, then `set-release --manifest release.json`). It shows a plan,
+asks for confirmation, then: pins the host key, installs the prerequisites (Docker with Compose v2, `tar`, `python3`,
+`openssl`; on apt systems it installs them) and refuses a wildcard DNS bind that the host resolver already occupies,
+pre-pulls and digest-checks the release images, enrolls a PoP, issues and installs a PoP's in-memory key material,
+uploads the bundle, validates it on the node, starts it with the bundle's own `start.sh`, and runs the health gate. Enrolling a PoP runs
 `cdnf:edges:enroll` on the control node: it creates the edge, joins every cell slot to the default `shared` pool, and
-hands the node its edge ID and one-time bootstrap token. The country and continent codes place the PoP in Geo-DNS.
+creates the PoP's service endpoint from its public addresses, and hands the node its edge ID and one-time bootstrap token.
+The country and continent codes place the PoP in Geo-DNS.
+
+Edge and DNS-edge hosts keep a listener certificate and key, a state encryption key, and (DNS-edge) the node key in
+`/dev/shm/cdnfoundry`, owned by UID 10101, mode 0400. Fleet issues them from its own PKI, stores them in the vault, and
+writes them again on every deploy because tmpfs does not survive a reboot. It also turns host swap off, as the bundle
+requires. Nobody copies keys by hand.
+
+If a host binds DNS to a wildcard address and `systemd-resolved` already listens on port 53, bootstrap stops before
+starting anything and names the fix: `update-node --node NAME --bind-ipv4 ADDRESS [--bind-ipv6 ADDRESS]`.
 
 ## Adding a standby control node
 
@@ -102,9 +118,10 @@ restarted.
 3. The new bundle is uploaded next to the active one and validated on the node: the bundle's `validate.sh` and the
    service's own validator (`nginx -t`, `dnsdist --check-config`, `caddy validate`, `promtool check config`,
    `amtool check-config`, `vector validate`). A config that fails is never activated.
-4. Activation swaps the directories and runs `start.sh`. The health gate then checks that containers are healthy, DNS
-   answers over UDP and TCP, HTTP and HTTPS are served on IPv4 and IPv6 where the node has an address, and control
-   answers `/api/health`. If activation or the gate fails, that node returns to its previous bundle and the roll stops.
+4. Activation swaps the directories and runs `start.sh`. Only a bundle that passed its health gate becomes the rollback
+   target. The gate waits a bounded time and checks that every long-running service is running and healthy, DNS answers
+   over UDP and TCP (any reply proves serving; a PoP without zones answers REFUSED), ports 80 and 443 accept connections,
+   all on the node's bind addresses over IPv4 and IPv6, and control answers `/api/health` on its own hostname. If activation or the gate fails, that node returns to its previous bundle and the roll stops.
    When the manifest forbids mixed versions, nodes already upgraded return too.
 5. Progress is journaled per step. If the SSH connection drops, run the same command again and it continues after the
    last finished step.
