@@ -121,7 +121,7 @@ class SshTransport:
             raise SshError(f"{target.name}: `{command}` failed ({result.code}): {(result.stderr or result.stdout).strip()[:500]}")
         return result
 
-    def upload_tree(self, target: Target, local: Path, remote: str) -> None:
+    def upload_tree(self, target: Target, local: Path, remote: str, *, keep_previous: bool = True) -> None:
         """Replace `remote` with a copy of `local`. Interrupting the stream leaves `remote` untouched."""
         if not remote.startswith("/") or remote.rstrip("/") in {"", "/"}:
             raise ValidationError("The remote directory must be an absolute path below /")
@@ -133,6 +133,7 @@ class SshTransport:
             archive.seek(0)
             script = (
                 f"set -e; rm -rf {staging}; mkdir -p {staging}; tar -C {staging} -xf -; "
-                f"rm -rf {quoted}.previous; if [ -d {quoted} ]; then mv {quoted} {quoted}.previous; fi; mv {staging} {quoted}"
+                + (f"rm -rf {quoted}.previous; if [ -d {quoted} ]; then mv {quoted} {quoted}.previous; fi; " if keep_previous else f"rm -rf {quoted}; ")
+                + f"mv {staging} {quoted}"
             )
             self.run(target, script, stdin=archive.read(), check=True)

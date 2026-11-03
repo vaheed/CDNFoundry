@@ -55,11 +55,11 @@ class FakeTransport:
         if "docker image inspect" in command:
             image = command.rsplit(" ", 1)[-1]
             return R(0, f"{image.split('@')[0]}@{self.pulled_digest.get(target.name, image.split('@')[1])}\n")
-        if "compose up" in command and "mv " not in command and target.name in self.fail_activate:
+        if "compose up" in command and "failed" not in command and target.name in self.fail_activate:
             return R(1, "", "boom")
         return R()
 
-    def upload_tree(self, target: Target, local: Path, remote: str) -> None:
+    def upload_tree(self, target: Target, local: Path, remote: str, **_) -> None:
         self.calls.append((target.name, f"upload {remote}"))
 
 
@@ -97,8 +97,8 @@ def test_digest_mismatch_after_pull_stops_before_anything_restarts(tmp_path: Pat
     t.pulled_digest["pop-1"] = D1
     new = manifest("2.0.1", D2)
     out = engine(tmp_path, t).apply(a.plan_upgrade(NODES, manifest("2.0.0", D1), new), new)
-    assert not out.ok and "pins" in out.detail
-    assert not any("compose up" in c and "mv " not in c for _, c in t.calls)
+    assert not out.ok and "pins" in out.detail and out.rolled_back == []
+    assert not any("compose up" in c for _, c in t.calls)
 
 
 def test_dropped_connection_resumes_where_it_stopped(tmp_path: Path) -> None:
@@ -144,3 +144,19 @@ def test_gate_failure_rolls_back_only_the_failed_node_when_mixed_versions_are_al
     new = manifest("2.0.1", D2)
     out = engine(tmp_path, FakeTransport(), gate=lambda n: (n != "pop-2", "bad")).apply(a.plan_upgrade(NODES, manifest("2.0.0", D1), new), new)
     assert out.rolled_back == ["pop-2"]
+
+
+def test_config_rejected_by_its_validator_is_never_activated(tmp_path: Path) -> None:
+    class Rejecting(FakeTransport):
+        def run(self, target, command, **kw):
+            if "nginx cell-01 -t" in command:
+                self.calls.append((target.name, command))
+                return R(1, "bad directive")
+            return super().run(target, command, **kw)
+
+    t = Rejecting()
+    new = manifest("2.0.1", D2)
+    eng = engine(tmp_path, t, services={"pop-1": {"cell-01"}, "pop-2": {"cell-01"}})
+    out = eng.apply(a.plan_upgrade(NODES, manifest("2.0.0", D1), new), new)
+    assert out.failed == "pop-1:validate" and "openresty rejected" in out.detail
+    assert not any("compose up" in c and "failed" not in c for _, c in t.calls)

@@ -16,6 +16,7 @@ from typing import Any, Callable, Protocol
 from . import manifest as mf
 from .common import FleetError, atomic_json, load_json, utc_now
 from .ssh import SshError, Target
+from .validators import validate_node_config
 
 # Telemetry and monitoring go last: serving never depends on them.
 ROLE_ORDER = ["dns", "dns-edge", "edge", "control", "monitoring"]
@@ -35,7 +36,7 @@ class Transport(Protocol):
 class Step:
     id: str
     node: str
-    kind: str  # prepull | upload | activate | gate | rollback | switchover
+    kind: str  # prepull | upload | validate | activate | gate | rollback | switchover
     detail: str = ""
 
     def label(self) -> str:
@@ -84,6 +85,7 @@ def plan_upgrade(nodes: dict[str, dict[str, Any]], current: dict[str, Any] | Non
             continue
         plan.steps.append(Step(f"{name}:prepull", name, "prepull"))
         plan.steps.append(Step(f"{name}:upload", name, "upload"))
+        plan.steps.append(Step(f"{name}:validate", name, "validate"))
         if role == "control" and ha_standby and name != ha_standby:
             plan.steps.append(Step(f"{name}:switchover", name, "switchover", "planned switchover before upgrading the old active node"))
         plan.steps.append(Step(f"{name}:activate", name, "activate"))
@@ -126,8 +128,9 @@ class Engine:
     def __init__(
         self, transport: Transport, targets: dict[str, Target], nodes: dict[str, dict[str, Any]], bundles: Path,
         journal: Journal, *, gate: Callable[[str], tuple[bool, str]], switchover: Callable[[str], None] | None = None,
-        mixed_versions_ok: bool = True,
+        mixed_versions_ok: bool = True, services: dict[str, set[str]] | None = None,
     ) -> None:
+        self.services = services or {}
         self.t, self.targets, self.nodes, self.bundles = transport, targets, nodes, bundles
         self.journal, self.gate, self.switchover = journal, gate, switchover
         self.mixed_versions_ok = mixed_versions_ok
@@ -150,7 +153,9 @@ class Engine:
             state["log"].append({"at": utc_now(), "step": step.id, "ok": ok, "detail": detail})
             log(f"{step.label()}: {'ok' if ok else 'FAILED'} {detail}".strip())
             if not ok:
-                rolled = self._rollback(step.node, upgraded if not self.mixed_versions_ok else [], log)
+                # Before the swap the node still runs its old release; there is nothing to undo on it.
+                swapped = step.kind in {"activate", "gate"}
+                rolled = self._rollback([step.node] if swapped else [], upgraded if not self.mixed_versions_ok else [], log)
                 state["done"] = []
                 self.journal.save(state)
                 return Outcome(False, done, step.id, detail, rolled)
@@ -178,22 +183,28 @@ class Engine:
                     return False, str(exc)
             return True, ""
         if step.kind == "upload":
-            self.t.upload_tree(target, self.bundles / step.node, remote)
+            self.t.upload_tree(target, self.bundles / step.node, remote + ".next", keep_previous=False)
             return True, ""
+        if step.kind == "validate":
+            return validate_node_config(self.t, target, role, remote + ".next", self.services.get(step.node, set()))
         if step.kind == "switchover":
             if self.switchover:
                 self.switchover(step.node)
             return True, ""
         if step.kind == "activate":
-            r = self.t.run(target, f"cd {remote} && docker compose config -q && docker compose up -d --remove-orphans")
+            r = self.t.run(
+                target,
+                f"set -e; test -d {remote}.next; rm -rf {remote}.previous; if [ -d {remote} ]; then mv {remote} {remote}.previous; fi; "
+                f"mv {remote}.next {remote}; cd {remote} && docker compose up -d --remove-orphans",
+            )
             return r.ok, "" if r.ok else (r.stderr or r.stdout).strip()[:300]
         if step.kind == "gate":
             return self.gate(step.node)
         raise ActionError(f"Unknown step kind: {step.kind}")
 
-    def _rollback(self, failed: str, also: list[str], log: Callable[[str], None]) -> list[str]:
+    def _rollback(self, failed: list[str], also: list[str], log: Callable[[str], None]) -> list[str]:
         rolled: list[str] = []
-        for node in [failed, *reversed(also)]:
+        for node in [*failed, *reversed(also)]:
             target = self.targets[node]
             remote = f"{REMOTE_ROOT}/{node}"
             r = self.t.run(
