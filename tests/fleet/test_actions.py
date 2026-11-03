@@ -163,3 +163,17 @@ def test_config_rejected_by_its_validator_is_never_activated(tmp_path: Path) -> 
     out = eng.apply(a.plan_upgrade(NODES, manifest("2.0.0", D1), new), new)
     assert out.failed == "pop-1:validate" and "openresty rejected" in out.detail
     assert not any("&& ./start.sh" in c and "failed" not in c for _, c in t.calls)
+
+
+def test_a_resumed_run_uploads_again_when_the_rendered_bundle_changed(tmp_path: Path) -> None:
+    new = manifest("2.0.1", D2)
+    plan = a.plan_upgrade(NODES, manifest("2.0.0", D1), new)
+    t = FakeTransport()
+    t.drop_on = "&& ./start.sh"
+    assert not engine(tmp_path, t).apply(plan, new).ok
+    uploads = lambda: [n for n, c in t.calls if c.startswith("upload")]  # noqa: E731
+    assert uploads() == ["pop-1"]
+    resumed = engine(tmp_path, t)  # building the engine writes the stub bundles; change one afterwards
+    (tmp_path / "bundles" / "pop-1" / "start.sh").write_text("a different, re-rendered bundle")
+    assert resumed.apply(plan, new).ok
+    assert uploads().count("pop-1") == 2  # the changed bundle went up again instead of resuming past the upload

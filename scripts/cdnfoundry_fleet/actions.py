@@ -148,8 +148,21 @@ class Engine:
         self.journal, self.gate, self.switchover = journal, gate, switchover
         self.mixed_versions_ok = mixed_versions_ok
 
+    def journal_key(self, plan: Plan) -> str:
+        """A resumed run may skip a step only for the same plan over the same bundle bytes: a re-rendered bundle must be uploaded again."""
+        import hashlib
+
+        digest = hashlib.sha256(plan.id.encode())
+        for node in sorted({s.node for s in plan.steps}):
+            root = self.bundles / node
+            if root.is_dir():
+                for item in sorted(p for p in root.rglob("*") if p.is_file()):
+                    digest.update(str(item.relative_to(root)).encode())
+                    digest.update(item.read_bytes())
+        return digest.hexdigest()[:24]
+
     def apply(self, plan: Plan, manifest: dict[str, Any], *, log: Callable[[str], None] = lambda _m: None) -> Outcome:
-        state = self.journal.load(plan.id)
+        state = self.journal.load(self.journal_key(plan))
         done: list[str] = list(state["done"])
         upgraded: list[str] = []
         for step in plan.steps:
