@@ -20,7 +20,9 @@ class Validator:
     compose_service: str = ""  # the Compose service the command runs in
 
 
-_RUN = "cd {dir} && docker compose --env-file .env.prod --profile '*' run --rm --no-deps -T"
+# A private project name keeps validation from creating networks or volumes under the real project's name.
+PROJECT = "COMPOSE_PROJECT_NAME=cdnf-validate"
+_RUN = "cd {dir} && " + PROJECT + " docker compose --env-file .env.prod --profile '*' run --rm --no-deps -T"
 ALL_ROLES = frozenset({"control", "edge", "dns", "dns-edge", "monitoring"})
 VALIDATORS = [
     # start.sh sets file ownership and then calls ./validate.sh; the same prefix runs here so a staged bundle is checked exactly as it will be started.
@@ -28,7 +30,7 @@ VALIDATORS = [
     Validator("openresty", frozenset({"edge", "dns-edge"}), _RUN + " --entrypoint nginx cell-01 -t", "cell-01"),
     Validator("edge-control", frozenset({"control"}), _RUN + " --entrypoint nginx edge-control -t", "edge-control"),
     Validator("dnsdist", frozenset({"dns", "dns-edge"}), _RUN + " dnsdist --check-config --config /etc/dnsdist/dnsdist.conf", "dnsdist"),
-    Validator("powerdns", frozenset({"control"}), _RUN + " --entrypoint pdns_control pdns-primary version", "pdns-primary"),
+    Validator("powerdns", frozenset({"control"}), _RUN + " --entrypoint pdns_server pdns-primary --config=check", "pdns-primary"),
     Validator("caddy", frozenset({"control"}), _RUN + " caddy caddy validate --config /etc/caddy/Caddyfile", "caddy"),
     Validator("prometheus", frozenset({"monitoring"}), _RUN + " --entrypoint promtool prometheus check config /etc/prometheus/prometheus.yml", "prometheus"),
     Validator("alertmanager", frozenset({"monitoring"}), _RUN + " --entrypoint amtool alertmanager check-config /etc/alertmanager/alertmanager.yml", "alertmanager"),
@@ -42,9 +44,13 @@ def validators_for(role: str, services: set[str]) -> list[Validator]:
 
 
 def validate_node_config(transport: Any, target: Target, role: str, directory: str, services: set[str]) -> tuple[bool, str]:
-    for validator in validators_for(role, services):
-        result = transport.run(target, validator.command.format(dir=directory))
-        if not result.ok:
-            detail = (result.stderr or result.stdout).strip()[:300]
-            return False, f"{validator.service} rejected the new config: {detail}"
-    return True, ""
+    try:
+        for validator in validators_for(role, services):
+            result = transport.run(target, validator.command.format(dir=directory))
+            if not result.ok:
+                detail = (result.stderr or result.stdout).strip()[-300:]
+                return False, f"{validator.service} rejected the new config: {detail}"
+        return True, ""
+    finally:
+        # Remove whatever the validation containers created; only the private validation project is touched.
+        transport.run(target, f"cd {directory} && {PROJECT} docker compose --env-file .env.prod --profile '*' down -v --remove-orphans >/dev/null 2>&1; true")
