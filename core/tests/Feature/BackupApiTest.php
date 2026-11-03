@@ -107,7 +107,7 @@ class BackupApiTest extends TestCase
             $this->mock(ResticBackupRepository::class, fn (MockInterface $mock) => $mock->shouldReceive('restore')->never());
             $this->artisan('cdnf:backups:restore', ['--snapshot' => 'not a snapshot'])->assertFailed();
 
-            \App\Models\User::factory()->create();
+            User::factory()->create();
             $this->artisan('cdnf:backups:restore', ['--snapshot' => str_repeat('a', 64)])
                 ->expectsOutput('This database already holds users. Restore into a fresh control node, or use a preflight operation.')
                 ->assertFailed();
