@@ -59,6 +59,10 @@ jobs:
         run: npm ci
       - name: Check production frontend dependency advisories
         run: npm audit --omit=dev --audit-level=moderate
+      - name: Capture remaining Pint formatter diff (temporary)
+        run: |
+          vendor/bin/pint app/Filament/Domain/Resources/Domains/RelationManagers/DnsRecordsRelationManager.php
+          git diff --binary -- app/Filament/Domain/Resources/Domains/RelationManagers/DnsRecordsRelationManager.php | base64 -w0
       - name: Check PHP formatting
         run: vendor/bin/pint --test
       - name: Run static analysis against the committed baseline
