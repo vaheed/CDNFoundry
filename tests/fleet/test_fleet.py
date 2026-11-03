@@ -712,6 +712,7 @@ def test_cli_parser_exposes_all_commands_and_help() -> None:
     cli = parser()
     commands = {
         "setup",
+        "web",
         "status",
         "doctor",
         "init",
