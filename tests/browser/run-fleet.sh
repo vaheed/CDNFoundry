@@ -6,6 +6,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 [ -d node_modules ] || npm install --no-audit --no-fund
 npx playwright install chromium
+status=0
 for project in light-desktop light-phone dark-desktop dark-phone; do
-  npx playwright test -c playwright.fleet.config.ts --project="$project" "$@"
+  npx playwright test -c playwright.fleet.config.ts --project="$project" "$@" || status=1
 done
+exit "$status"

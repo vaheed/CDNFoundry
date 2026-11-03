@@ -78,7 +78,7 @@ class SshTransport:
         done = subprocess.run(["ssh-keygen", "-y", "-f", str(private)], capture_output=True, text=True, check=False)
         if done.returncode != 0:
             raise SshError("The Fleet SSH key is unreadable")
-        return done.stdout.strip() + " cdnfoundry-fleet"
+        return done.stdout.strip()
 
     def public_key(self) -> str:
         return self.ensure_fleet_key()

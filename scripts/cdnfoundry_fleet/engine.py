@@ -248,7 +248,14 @@ class FleetEngine:
         hosts = {n for n, v in state["nodes"].items() if v["role"] == "monitoring"} | ({n for n, v in state["nodes"].items() if v["role"] == "control"} if mon["mode"] == "colocated" else set())
         checks = run_checks(self.transport, targets, state["global"]["release"], roles, hosts)
         missing = [n for n in state["nodes"] if n not in targets]
-        return checks + [Check(n, "SSH access stored", False, "run node-ssh") for n in missing]
+        extra = [Check(n, "SSH access stored", False, "run node-ssh") for n in missing]
+        ingress = self.work / "ha" / "ingress.crt"
+        if (state.get("ha") or {}).get("standby") and ingress.exists():
+            import subprocess
+
+            ok = subprocess.run(["openssl", "x509", "-noout", "-checkend", str(30 * 86400)], input=ingress.read_bytes(), capture_output=True, check=False).returncode == 0
+            extra.append(Check("fleet", "Standby control certificate valid for 30 days", ok, "" if ok else "run `control refresh-ingress`"))
+        return checks + extra
 
     def security_status(self) -> list[dict[str, Any]]:
         from .security import classify
@@ -307,12 +314,138 @@ class ControlActions:
         return r.stdout.strip()[-300:]
 
 
+class StandbySetup:
+    """Everything Fleet already knows about a fleet, used to add the standby control node from a host address alone."""
+
+    def __init__(self, engine: FleetEngine) -> None:
+        self.e = engine
+
+    def _run(self, target: Target, command: str) -> str:
+        return self.e.transport.run(target, command, check=True).stdout
+
+    def private_address(self, target: Target) -> str:
+        """The node's one private (VPN or LAN) address. Replication must not cross the public internet, so Fleet will not guess."""
+        from . import ha
+
+        found: list[str] = []
+        for line in self._run(target, "ip -o -4 addr show scope global").splitlines():
+            parts = line.split()
+            if len(parts) >= 4:
+                address = parts[3].split("/")[0]
+                try:
+                    found.append(ha.validate_replication_address(address))
+                except ValidationError:
+                    continue
+        found = sorted(set(found))
+        if len(found) != 1:
+            raise ValidationError(
+                f"{target.name} has {'no private address' if not found else 'several private addresses: ' + ', '.join(found)}. "
+                "Put both control nodes on a private network or VPN, or pass the address explicitly."
+            )
+        return found[0]
+
+    def ingress_certificate(self, state: dict[str, Any], active: Target) -> tuple[str, str]:
+        """The certificate Caddy on the active node already holds for the control hostname, so nobody supplies one."""
+        host = f"control.{state['global']['operator_domain']}"
+        base = f"cd {actions.REMOTE_ROOT} && docker compose --env-file .env.prod exec -T caddy"
+        path = self._run(active, f"{base} find /data/caddy/certificates -type f -name {shlex.quote(host + '.crt')}").strip().splitlines()
+        if not path:
+            raise ValidationError(f"The active node's Caddy holds no certificate for {host} yet. Wait for it to be issued, then try again.")
+        crt = path[0].strip()
+        key = crt[:-4] + ".key"
+        return self._run(active, f"{base} cat {shlex.quote(crt)}"), self._run(active, f"{base} cat {shlex.quote(key)}")
+
+    def next_name(self, state: dict[str, Any]) -> str:
+        n = 2
+        while f"control-{n}" in state["nodes"]:
+            n += 1
+        return f"control-{n}"
+
+    def add(self, host: str, *, name: str | None = None, ssh_port: int = 22, ssh_user: str = "root", replication_address: str | None = None,
+            active_replication_address: str | None = None, certificate: Path | None = None, key: Path | None = None, **options: Any) -> dict[str, Any]:
+        from .control_cli import Control
+
+        e = self.e
+        state = e.state()
+        controls = [n for n, v in sorted(state["nodes"].items()) if v["role"] == "control"]
+        if len(controls) != 1:
+            raise ValidationError("add-standby needs exactly one existing control node")
+        active_name = controls[0]
+        targets = e.targets(state)
+        if active_name not in targets:
+            raise ValidationError(f"No SSH access stored for {active_name}; run node-ssh first")
+        name = name or self.next_name(state)
+        target = Target(name, host, ssh_port, ssh_user)
+        e.public_key()
+        save_target(e.work, target)
+        e.transport.pin_host_key(target)
+        e.say(f"{name}: installing prerequisites")
+        self._run(target, actions.PREREQUISITES)
+        e.say("reading the private replication addresses and the control certificate from the nodes")
+        standby_address = replication_address or self.private_address(target)
+        active_address = active_replication_address or self.private_address(targets[active_name])
+        if certificate and key:
+            cert_text, key_text = certificate.read_text(encoding="utf-8"), key.read_text(encoding="utf-8")
+        else:
+            cert_text, key_text = self.ingress_certificate(state, targets[active_name])
+        stage = e.work / "ha-incoming"
+        stage.mkdir(mode=0o700, exist_ok=True)
+        (stage / "ingress.crt").write_text(cert_text, encoding="utf-8")
+        (stage / "ingress.key").write_text(key_text, encoding="utf-8")
+        (stage / "ingress.key").chmod(0o600)
+        runner = VaultRunner(e.transport, e.targets(e.state()))
+        control = Control(e.store, e.repo_root, e.output_dir, runner, say=e.say)
+        try:
+            result = control.add_standby(host, name=name, replication_address=standby_address, active_replication_address=active_address,
+                                         certificate=stage / "ingress.crt", key=stage / "ingress.key", public_ipv4=host, **options)
+        finally:
+            (stage / "ingress.key").unlink(missing_ok=True)
+        e.events.append({"kind": "add-standby", "node": name})
+        return result
+
+    def refresh(self) -> dict[str, Any]:
+        """Re-read the control certificate from the active node (it renews there) and redeploy it to the standby."""
+        e = self.e
+        state = e.state()
+        section = state.get("ha") or {}
+        if not section.get("standby"):
+            raise ValidationError("This fleet has no standby control node")
+        active = e.targets(state)[section["active"]]
+        cert_text, key_text = self.ingress_certificate(state, active)
+        from .control_cli import Control
+
+        stage = e.work / "ha-incoming"
+        stage.mkdir(mode=0o700, exist_ok=True)
+        (stage / "ingress.crt").write_text(cert_text, encoding="utf-8")
+        (stage / "ingress.key").write_text(key_text, encoding="utf-8")
+        (stage / "ingress.key").chmod(0o600)
+        try:
+            Control._validate_ingress_certificate(state, stage / "ingress.crt", stage / "ingress.key")
+            ha_dir = e.work / "ha"
+            (ha_dir / "ingress.crt").write_text(cert_text, encoding="utf-8")
+            (ha_dir / "ingress.key").write_text(key_text, encoding="utf-8")
+            (ha_dir / "ingress.key").chmod(0o600)
+        finally:
+            (stage / "ingress.key").unlink(missing_ok=True)
+        outcome = e.apply_config()
+        return {"ok": outcome.ok, "detail": outcome.detail}
+
+
 def ha_action(engine: FleetEngine, action: str, **options: Any) -> dict[str, Any]:
     """The Phase 6 control commands, run with each node's stored key and pinned host key."""
     import argparse
 
     from . import control_cli
 
+    if action == "add-standby":
+        keep = {k: options[k] for k in ("name", "ssh_port", "ssh_user", "replication_address", "active_replication_address") if options.get(k) is not None}
+        for k in ("certificate", "key"):
+            if options.get(f"ingress_{k if k == 'key' else 'certificate'}"):
+                keep[k] = Path(options["ingress_certificate" if k == "certificate" else "ingress_key"])
+        extra = {k: options[k] for k in ("public_ipv6", "region", "bind_ipv4", "bind_ipv6", "edge_wait") if options.get(k) is not None}
+        return StandbySetup(engine).add(options["host"], **keep, **extra)
+    if action == "refresh-ingress":
+        return StandbySetup(engine).refresh()
     state = engine.state()
     runner = VaultRunner(engine.transport, engine.targets(state))
     defaults = dict(

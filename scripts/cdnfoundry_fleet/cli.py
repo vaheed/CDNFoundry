@@ -697,6 +697,16 @@ def execute(args: argparse.Namespace) -> int:
         return _doctor(args, store)
     if args.command == "control":
         with store.locked(exclusive=getattr(args, "control_action", "") not in {"status"}):
+            if args.control_action in {"add-standby", "refresh-ingress"} and not args.dry_run:
+                from .engine import FleetEngine, ha_action
+
+                engine = FleetEngine(state_dir, Path(args.repo_root), output_dir, say=lambda m: print(m, flush=True))
+                options = {k: v for k, v in vars(args).items() if k in {"name", "ssh_port", "ssh_user", "replication_address", "active_replication_address",
+                                                                       "ingress_certificate", "ingress_key", "public_ipv6", "region", "bind_ipv4", "bind_ipv6"}}
+                if args.control_action == "add-standby":
+                    options |= {"host": args.host, "edge_wait": args.edge_timeout}
+                print(json.dumps(ha_action(engine, args.control_action, **options), indent=2))
+                return EXIT_OK
             runner = None
             if (state_dir / "ssh" / "targets.json").exists() and args.ssh_command == " ".join(control_cli.DEFAULT_SSH):
                 from .engine import VaultRunner

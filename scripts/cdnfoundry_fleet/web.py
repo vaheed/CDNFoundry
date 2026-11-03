@@ -49,11 +49,12 @@ def state_word(kind: str, label: str) -> str:
     return f'<span class="state {kind}">{esc(label)}</span>'
 
 
-def table(headers: list[str], rows: list[list[str]], numeric: set[int] | None = None) -> str:
+def table(headers: list[str], rows: list[list[str]], numeric: set[int] | None = None, label: str = "Table") -> str:
     numeric = numeric or set()
     head = "".join(f'<th{" class=num" if i in numeric else ""}>{esc(h)}</th>' for i, h in enumerate(headers))
     body = "".join("<tr>" + "".join(f'<td{" class=num" if i in numeric else ""}>{c}</td>' for i, c in enumerate(r)) + "</tr>" for r in rows)
-    return f'<div class="tablewrap"><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
+    # A table that scrolls sideways on a phone must be reachable by keyboard.
+    return f'<div class="tablewrap" role="region" tabindex="0" aria-label="{esc(label)}"><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
 
 
 def topology_svg(state: dict[str, Any], results: dict[str, bool]) -> str:
@@ -191,7 +192,7 @@ class FleetWeb:
             badge = {"running": state_word("warn", "Running"), "ok": state_word("ok", "Finished"), "failed": state_word("bad", "Failed")}[job.state]
             log = esc("\n".join(job.lines) or "Waiting for the first step...")
             extra = f"<p>{esc(job.result)}</p>" if job.result else ""
-            return 200, self.layout(path, job.title, f"<p>{badge}</p><pre class=\"log\">{log}</pre>{extra}<p><a href=\"/\">Back to overview</a></p>", refresh=running)
+            return 200, self.layout(path, job.title, f"<p>{badge}</p><pre class=\"log\" tabindex=\"0\" aria-label=\"Action log\">{log}</pre>{extra}<p><a href=\"/\">Back to overview</a></p>", refresh=running)
         state, current, previous, history = self.read(lambda e: (e.state(), e.release_manifest(), e.release_manifest("previous"), None))
         nodes = state["nodes"]
         if path == "/":
@@ -211,7 +212,7 @@ class FleetWeb:
                 needs = '<ul class="attention">' + "".join(f"<li>{state_word('bad', a)}</li>" for a in attention) + "</ul>"
             else:
                 needs = '<p class="attention">Every check passed.</p>'
-            body = (kpis + '<h2>Topology</h2><div class="topology">' + topology_svg(state, results) + "</div><h2>Needs attention</h2>" + needs
+            body = (kpis + '<h2>Topology</h2><div class="topology" role="region" tabindex="0" aria-label="Topology diagram">' + topology_svg(state, results) + "</div><h2>Needs attention</h2>" + needs
                     + self.action_form("/check", "Run check of the whole stack", primary=True))
             return 200, self.layout(path, "Overview", body, flash)
         if path == "/nodes":
@@ -219,7 +220,7 @@ class FleetWeb:
                      (state_word("ok" if self.results().get(n["name"]) else "bad", "Healthy" if self.results().get(n["name"]) else "Needs attention")
                       if n["name"] in self.results() else state_word("", "Not checked")),
                      f'<a href="/nodes/{esc(n["name"])}">Open</a>'] for n in (nodes[k] for k in sorted(nodes))]
-            listing = table(["Name", "Role", "Host", "IPv4", "Release", "State", ""], rows) if rows else '<p class="empty">No nodes yet.</p>'
+            listing = table(["Name", "Role", "Host", "IPv4", "Release", "State", ""], rows, label="Nodes") if rows else '<p class="empty">No nodes yet.</p>'
             fields = (
                 '<label>Name<input name="name" required pattern="[a-z0-9-]+" autocomplete="off"></label>'
                 '<label>Role<select name="role"><option>control</option><option>dns</option><option>edge</option><option>dns-edge</option><option>monitoring</option></select></label>'
@@ -229,7 +230,7 @@ class FleetWeb:
             )
             key_block = ("<h2>Fleet SSH public key</h2><p>One key reaches every node. Add this line to <b>/root/.ssh/authorized_keys</b> on each host "
                          "<b>before</b> you add it here. Fleet logs in with key authentication only.</p>"
-                         f'<pre class="log" aria-label="Fleet SSH public key">{esc(self.fleet_public_key())}</pre>')
+                         f'<pre class="log" tabindex="0" aria-label="Fleet SSH public key">{esc(self.fleet_public_key())}</pre>')
             return 200, self.layout(path, "Nodes", listing + key_block + "<h2>Add a node</h2>" + self.action_form("/nodes/add", "Add node and show plan", primary=True, fields=fields), flash)
         if path.startswith("/nodes/"):
             name = path.split("/", 2)[2]
@@ -240,7 +241,7 @@ class FleetWeb:
             enroll = any(s.kind == "enroll" for s in plan.steps)
             geo = ('<label>Country code<input name="country" value="US" maxlength="2" required><span class="hint">Places this PoP in Geo-DNS.</span></label>'
                    '<label>Continent code<input name="continent" value="NA" maxlength="2" required></label>') if enroll else ""
-            facts = table(["Role", "Host", "IPv4", "Release"], [[esc(node["role"]), esc(node["hostname"]), esc(node["public_ipv4"]), esc(node["release"])]])
+            facts = table(["Role", "Host", "IPv4", "Release"], label="Node facts", rows=[[esc(node["role"]), esc(node["hostname"]), esc(node["public_ipv4"]), esc(node["release"])]])
             body = (facts + "<h2>Plan</h2><ol>" + "".join(f"<li>{esc(s.label())}</li>" for s in plan.steps) + "</ol>"
                     + self.action_form(f"/nodes/{esc(name)}/bootstrap", "Install and start this node", primary=True, fields=geo))
             return 200, self.layout(path, name, body, flash)
@@ -252,7 +253,7 @@ class FleetWeb:
                 body = f'<p class="attention">Release {esc(current["release"])} has no known vulnerabilities in its scan.</p>'
             else:
                 kind = {"fixed": "ok", "classified": "warn", "no-fix": "warn", "fix-upstream": "bad", "expired": "bad"}
-                body = table(["Severity", "Finding", "Image", "State"], [[esc(r["severity"]), esc(r["id"]), esc(r["image"]), state_word(kind[r["state"]], r["detail"])] for r in rows])
+                body = table(["Severity", "Finding", "Image", "State"], label="Vulnerabilities", rows=[[esc(r["severity"]), esc(r["id"]), esc(r["image"]), state_word(kind[r["state"]], r["detail"])] for r in rows])
             return 200, self.layout(path, "Security", body, flash)
         if path == "/upgrade":
             has_key = self.read(lambda e: e._release_file("trusted.pub").exists())
@@ -291,14 +292,15 @@ class FleetWeb:
             section = state.get("ha") or {}
             if not section or section.get("mode") == "none" or not section.get("standby"):
                 info = '<p class="empty">This fleet has one control node (<b>ha: none</b>). Add a standby to survive losing it.</p>'
-                fields = ('<label>Standby host<input name="host" required autocomplete="off"></label><label>Name<input name="name" value="control-2" required></label>'
-                          '<label>Ingress certificate path<input name="cert" required autocomplete="off"></label><label>Ingress key path<input name="key" required autocomplete="off"></label>')
+                fields = ('<label>Standby host address<input name="host" required autocomplete="off"><span class="hint">Fleet installs the prerequisites, reads the private replication '
+                          'addresses and the control certificate from the nodes, and sets everything up. Authorise the Fleet public key on the host first.</span></label>'
+                          '<label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="22" required></label>')
                 actions_html = self.action_form("/ha/add-standby", "Add standby", primary=True, fields=fields)
             else:
-                info = table(["Active", "Standby"], [[esc(section.get("active", "?")), esc(section.get("standby", "?"))]])
+                info = table(["Active", "Standby"], label="Control nodes", rows=[[esc(section.get("active", "?")), esc(section.get("standby", "?"))]])
                 actions_html = "".join(self.action_form(f"/ha/{a}", label, confirm=a.upper()) for a, label in
                                        [("switchover", "Planned switchover"), ("demote", "Demote the active node"), ("promote", "Promote the standby"),
-                                        ("rejoin", "Rejoin the former active node"), ("remove-standby", "Remove the standby")])
+                                        ("rejoin", "Rejoin the former active node"), ("remove-standby", "Remove the standby"), ("refresh-ingress", "Refresh the standby's control certificate")])
             return 200, self.layout(path, "HA", info + actions_html, flash)
         if path == "/secrets":
             options = "".join(f"<option>{esc(n)}</option>" for n in ROTATABLE)
@@ -316,7 +318,7 @@ class FleetWeb:
                 except ValueError:
                     summary = h["detail"]
                 rows.append([esc(h["at"]), esc(h["kind"]), esc(summary)])
-            body = table(["When", "Action", "Result"], rows) if rows else '<p class="empty">No actions recorded yet.</p>'
+            body = table(["When", "Action", "Result"], rows, label="History") if rows else '<p class="empty">No actions recorded yet.</p>'
             return 200, self.layout(path, "History", body, flash)
         return 404, self.layout(path, "Not found", '<p class="empty">There is no such page.</p>')
 
@@ -390,7 +392,7 @@ class FleetWeb:
         if path.startswith("/ha/"):
             action = path.split("/", 2)[2]
             if action == "add-standby":
-                return job("Add standby", lambda e: json.dumps(ha_action(e, "add-standby", host=form["host"], name=form["name"], ingress_certificate=form["cert"], ingress_key=form["key"], public_ipv4=form["host"])), "ha")
+                return job("Add standby", lambda e: json.dumps(ha_action(e, "add-standby", host=form["host"], ssh_port=int(form.get("ssh_port", "22")))), "ha")
             need(action.upper())
             return job(f"HA: {action}", lambda e: json.dumps(ha_action(e, action)), "ha")
         if path == "/secrets/rotate":
