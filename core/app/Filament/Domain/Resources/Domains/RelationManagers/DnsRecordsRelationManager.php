@@ -18,8 +18,8 @@ use App\Support\DnsZoneValidator;
 use App\Support\EdgeRoutingCompiler;
 use App\Support\FilamentHelp;
 use App\Support\GeoDnsConfig;
-use App\Support\GeoVocabulary;
 use App\Support\GeoIpClassifier;
+use App\Support\GeoVocabulary;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -28,19 +28,19 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Repeater\TableColumn;
-use Filament\Schemas\Components\Grid;
-use Filament\Schemas\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
-use Filament\Tables\Columns\TextColumn;
 use Filament\Support\Enums\Width;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
@@ -94,45 +94,45 @@ class DnsRecordsRelationManager extends RelationManager
     {
         return $schema->columns(1)->components([
             Grid::make(['default' => 1, 'sm' => 2])->schema([
-                            Select::make('type')->options(function (): array {
-                $types = collect(DnsRecordData::TYPES)
-                    ->reject(fn (string $type): bool => $type === 'NS' && auth()->user()?->isAdmin() !== true)
-                    ->reject(fn (string $type): bool => $type === 'PTR' && ! str_ends_with($this->getOwnerRecord()->name, '.in-addr.arpa') && ! str_ends_with($this->getOwnerRecord()->name, '.ip6.arpa'));
+                Select::make('type')->options(function (): array {
+                    $types = collect(DnsRecordData::TYPES)
+                        ->reject(fn (string $type): bool => $type === 'NS' && auth()->user()?->isAdmin() !== true)
+                        ->reject(fn (string $type): bool => $type === 'PTR' && ! str_ends_with($this->getOwnerRecord()->name, '.in-addr.arpa') && ! str_ends_with($this->getOwnerRecord()->name, '.ip6.arpa'));
 
-                return $types->mapWithKeys(fn (string $type): array => [$type => $type])->all();
-            })->required()->live()->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
-                if (! in_array($state, ['A', 'AAAA', 'CNAME'], true) && $get('mode') === 'proxied') {
-                    $set('mode', 'dns_only');
-                }
-            }),
-                            Select::make('mode')
-                ->label(FilamentHelp::label('Mode', 'Geo-DNS answers directly. Proxied records send traffic through the domain\'s assigned service pool: the apex publishes managed A/AAAA answers, while subdomains publish a pool-specific CNAME.'))
-                ->options(function (Get $get): array {
-                    $options = ['dns_only' => 'DNS only'];
-                    if (in_array($get('type'), GeoDnsConfig::SUPPORTED_TYPES, true)) {
-                        $options['geo_dns'] = 'Geo-DNS';
-                    }
-                    if (in_array($get('type'), ['A', 'AAAA', 'CNAME'], true)) {
-                        $options['proxied'] = 'Proxied';
-                    }
-
-                    return $options;
-                })
-                ->default('dns_only')->required()->live()
-                ->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
-                    if ($state !== 'proxied') {
-                        return;
-                    }
-                    $hostname = $this->ownerHostname((string) $get('name'));
-                    if (blank($get('origin.host_header'))) {
-                        $set('origin.host_header', $hostname);
-                    }
-                    if (blank($get('origin.sni'))) {
-                        $set('origin.sni', $hostname);
+                    return $types->mapWithKeys(fn (string $type): array => [$type => $type])->all();
+                })->required()->live()->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
+                    if (! in_array($state, ['A', 'AAAA', 'CNAME'], true) && $get('mode') === 'proxied') {
+                        $set('mode', 'dns_only');
                     }
                 }),
+                Select::make('mode')
+                    ->label(FilamentHelp::label('Mode', 'Geo-DNS answers directly. Proxied records send traffic through the domain\'s assigned service pool: the apex publishes managed A/AAAA answers, while subdomains publish a pool-specific CNAME.'))
+                    ->options(function (Get $get): array {
+                        $options = ['dns_only' => 'DNS only'];
+                        if (in_array($get('type'), GeoDnsConfig::SUPPORTED_TYPES, true)) {
+                            $options['geo_dns'] = 'Geo-DNS';
+                        }
+                        if (in_array($get('type'), ['A', 'AAAA', 'CNAME'], true)) {
+                            $options['proxied'] = 'Proxied';
+                        }
+
+                        return $options;
+                    })
+                    ->default('dns_only')->required()->live()
+                    ->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
+                        if ($state !== 'proxied') {
+                            return;
+                        }
+                        $hostname = $this->ownerHostname((string) $get('name'));
+                        if (blank($get('origin.host_header'))) {
+                            $set('origin.host_header', $hostname);
+                        }
+                        if (blank($get('origin.sni'))) {
+                            $set('origin.sni', $hostname);
+                        }
+                    }),
             ]),
-                        TextInput::make('name')
+            TextInput::make('name')
                 ->label('Name')->placeholder('@ or www')
                 ->helperText(fn (Get $get): ?string => $this->recordNameHelp($get))
                 ->required()->default('@')->maxLength(253)->live(onBlur: true)
@@ -146,34 +146,33 @@ class DnsRecordsRelationManager extends RelationManager
                         $set('origin.sni', $hostname);
                     }
                 }),
-                        TextInput::make('content')->label('Value')->required(fn ($get): bool => $get('mode') === 'dns_only')->maxLength(4096)
+            TextInput::make('content')->label('Value')->required(fn ($get): bool => $get('mode') === 'dns_only')->maxLength(4096)
                 ->placeholder(fn (Get $get): string => self::CONTENT_EXAMPLES[$get('type')] ?? '')
                 ->helperText(fn (Get $get): ?string => self::CONTENT_HELP[$get('type')] ?? null)
                 ->visible(fn ($get): bool => $get('mode') === 'dns_only'),
             Grid::make(['default' => 2, 'sm' => 4])->schema([
-                            TextInput::make('ttl')->label('TTL (seconds)')->numeric()->required()->default(300)->minValue(30)->maxValue(2147483647),
-                            TextInput::make('priority')->numeric()->default(0)->minValue(0)->maxValue(65535)->visible(fn ($get): bool => in_array($get('type'), ['MX', 'SRV'], true)),
-                            TextInput::make('weight')->numeric()->default(0)->minValue(0)->maxValue(65535)->visible(fn ($get): bool => $get('type') === 'SRV'),
-                            TextInput::make('port')->numeric()->default(0)->minValue(0)->maxValue(65535)->visible(fn ($get): bool => $get('type') === 'SRV'),
+                TextInput::make('ttl')->label('TTL (seconds)')->numeric()->required()->default(300)->minValue(30)->maxValue(2147483647),
+                TextInput::make('priority')->numeric()->default(0)->minValue(0)->maxValue(65535)->visible(fn ($get): bool => in_array($get('type'), ['MX', 'SRV'], true)),
+                TextInput::make('weight')->numeric()->default(0)->minValue(0)->maxValue(65535)->visible(fn ($get): bool => $get('type') === 'SRV'),
+                TextInput::make('port')->numeric()->default(0)->minValue(0)->maxValue(65535)->visible(fn ($get): bool => $get('type') === 'SRV'),
             ]),
             Section::make('Geo-DNS routing')->compact()->visible(fn ($get): bool => $get('mode') === 'geo_dns')->schema([
-                            TagsInput::make('geo_default')->label('Default answers')
-                ->placeholder(fn (Get $get): string => 'Add an answer such as '.(self::CONTENT_EXAMPLES[$get('type')] ?? 'a value').', then press Enter')
-                ->helperText('Answers for visitors that no country or continent override matches.')
-                ->visible(fn ($get): bool => $get('mode') === 'geo_dns')
-                ->required(fn ($get): bool => $get('mode') === 'geo_dns')
-                ->nestedRecursiveRules(['string', 'max:4096']),
-                            Repeater::make('geo_countries')->label('Country overrides')->maxItems(GeoDnsConfig::MAX_COUNTRIES)
-                ->visible(fn ($get): bool => $get('mode') === 'geo_dns')->schema([
+                TagsInput::make('geo_default')->label('Default answers')
+                    ->placeholder(fn (Get $get): string => 'Add an answer such as '.(self::CONTENT_EXAMPLES[$get('type')] ?? 'a value').', then press Enter')
+                    ->helperText('Answers for visitors that no country or continent override matches.')
+                    ->visible(fn ($get): bool => $get('mode') === 'geo_dns')
+                    ->required(fn ($get): bool => $get('mode') === 'geo_dns')
+                    ->nestedRecursiveRules(['string', 'max:4096']),
+                Repeater::make('geo_countries')->label('Country overrides')->maxItems(GeoDnsConfig::MAX_COUNTRIES)
+                    ->visible(fn ($get): bool => $get('mode') === 'geo_dns')->schema([
                     Select::make('code')->label('Country')->options(GeoVocabulary::countryOptions())->searchable()->required()->placeholder('Search by name or code')->extraInputAttributes(['aria-label' => 'Country']),
                     TagsInput::make('targets')->label('Answers')->placeholder('Add an answer, then press Enter')->extraInputAttributes(['aria-label' => 'Answers'])->required()->nestedRecursiveRules(['string', 'max:4096']),
                 ])->table([
                     TableColumn::make('Country'),
                     TableColumn::make('Answers'),
                 ])->compact()->addActionLabel('Add country override'),
-                            Repeater::make('geo_continents')->label(FilamentHelp::label('Continent overrides', 'Country overrides win over continent overrides. Each answer set is limited to 8 type-valid values.'))->maxItems(GeoDnsConfig::MAX_CONTINENTS)
-                
-                ->visible(fn ($get): bool => $get('mode') === 'geo_dns')->schema([
+                Repeater::make('geo_continents')->label(FilamentHelp::label('Continent overrides', 'Country overrides win over continent overrides. Each answer set is limited to 8 type-valid values.'))->maxItems(GeoDnsConfig::MAX_CONTINENTS)
+                    ->visible(fn ($get): bool => $get('mode') === 'geo_dns')->schema([
                     Select::make('code')->label('Continent')->options(GeoVocabulary::continentOptions())->required()->placeholder('Choose a continent')->extraInputAttributes(['aria-label' => 'Continent']),
                     TagsInput::make('targets')->label('Answers')->placeholder('Add an answer, then press Enter')->extraInputAttributes(['aria-label' => 'Answers'])->required()->nestedRecursiveRules(['string', 'max:4096']),
                 ])->table([
@@ -183,77 +182,77 @@ class DnsRecordsRelationManager extends RelationManager
             ]),
             Section::make('Origin')->compact()->visible(fn ($get): bool => $get('mode') === 'proxied')->schema([
                 Grid::make(['default' => 1, 'sm' => 2])->schema([
-                            TextInput::make('origin.host')->label('Origin server')->placeholder('origin.example.com or 203.0.113.20')
-                ->helperText('The server that holds your site. For shared hosting, use its hostname or dedicated IP. Never an address that points back to this CDN.')->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
-                            Select::make('origin.scheme')->options(['https' => 'HTTPS', 'http' => 'HTTP'])->default('https')->live()->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied')
-                ->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
-                    if ($state === 'https') {
-                        $set('origin.port', 443);
-                        $set('origin.verify_tls', true);
-                        if (blank($get('origin.sni'))) {
-                            $set('origin.sni', $this->ownerHostname((string) $get('name')));
-                        }
-                    } elseif ($state === 'http') {
-                        $set('origin.port', 80);
-                        $set('origin.verify_tls', false);
-                        $set('origin.sni', null);
-                    }
-                }),
-                            TextInput::make('origin.port')->label(FilamentHelp::label('Origin port', 'Managed by the scheme: HTTP uses 80 and HTTPS uses 443. Advanced custom ports remain available through the API.'))->numeric()->default(443)->disabled()->dehydrated()
-                ->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
-                            TextInput::make('origin.host_header')->label('Host header')->placeholder('www.example.com')->helperText('The site name the origin expects. Usually the record name.')->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
-                            TextInput::make('origin.sni')->label('TLS server name (SNI)')->placeholder('www.example.com')->required(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.scheme') === 'https' && (bool) $get('origin.verify_tls'))
-                ->visible(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.scheme') === 'https'),
+                    TextInput::make('origin.host')->label('Origin server')->placeholder('origin.example.com or 203.0.113.20')
+                        ->helperText('The server that holds your site. For shared hosting, use its hostname or dedicated IP. Never an address that points back to this CDN.')->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
+                    Select::make('origin.scheme')->options(['https' => 'HTTPS', 'http' => 'HTTP'])->default('https')->live()->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied')
+                        ->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
+                            if ($state === 'https') {
+                                $set('origin.port', 443);
+                                $set('origin.verify_tls', true);
+                                if (blank($get('origin.sni'))) {
+                                    $set('origin.sni', $this->ownerHostname((string) $get('name')));
+                                }
+                            } elseif ($state === 'http') {
+                                $set('origin.port', 80);
+                                $set('origin.verify_tls', false);
+                                $set('origin.sni', null);
+                            }
+                        }),
+                    TextInput::make('origin.port')->label(FilamentHelp::label('Origin port', 'Managed by the scheme: HTTP uses 80 and HTTPS uses 443. Advanced custom ports remain available through the API.'))->numeric()->default(443)->disabled()->dehydrated()
+                        ->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
+                    TextInput::make('origin.host_header')->label('Host header')->placeholder('www.example.com')->helperText('The site name the origin expects. Usually the record name.')->required(fn ($get): bool => $get('mode') === 'proxied')->visible(fn ($get): bool => $get('mode') === 'proxied'),
+                    TextInput::make('origin.sni')->label('TLS server name (SNI)')->placeholder('www.example.com')->required(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.scheme') === 'https' && (bool) $get('origin.verify_tls'))
+                        ->visible(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.scheme') === 'https'),
                 ]),
-                            Toggle::make('origin.verify_tls')->label('Verify origin TLS')->default(true)
-                ->visible(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.scheme') === 'https'),
-                            Toggle::make('origin.websocket')->label('Allow WebSocket upgrade')->default(false)->visible(fn ($get): bool => $get('mode') === 'proxied'),
+                Toggle::make('origin.verify_tls')->label('Verify origin TLS')->default(true)
+                    ->visible(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.scheme') === 'https'),
+                Toggle::make('origin.websocket')->label('Allow WebSocket upgrade')->default(false)->visible(fn ($get): bool => $get('mode') === 'proxied'),
                 Grid::make(['default' => 1, 'sm' => 3])->schema([
-                            TextInput::make('origin.connect_timeout_ms')->label('Connect timeout (ms)')->numeric()->default(2000)->minValue(100)->maxValue(10000)->visible(fn ($get): bool => $get('mode') === 'proxied'),
-                            TextInput::make('origin.response_timeout_ms')->label('Response timeout (ms)')->numeric()->default(30000)->minValue(500)->maxValue(60000)->visible(fn ($get): bool => $get('mode') === 'proxied'),
-                            TextInput::make('origin.retry_count')->label('Retries')->numeric()->default(1)->minValue(0)->maxValue(2)->visible(fn ($get): bool => $get('mode') === 'proxied'),
+                    TextInput::make('origin.connect_timeout_ms')->label('Connect timeout (ms)')->numeric()->default(2000)->minValue(100)->maxValue(10000)->visible(fn ($get): bool => $get('mode') === 'proxied'),
+                    TextInput::make('origin.response_timeout_ms')->label('Response timeout (ms)')->numeric()->default(30000)->minValue(500)->maxValue(60000)->visible(fn ($get): bool => $get('mode') === 'proxied'),
+                    TextInput::make('origin.retry_count')->label('Retries')->numeric()->default(1)->minValue(0)->maxValue(2)->visible(fn ($get): bool => $get('mode') === 'proxied'),
                 ]),
             ]),
             Section::make('Health check')->compact()->collapsed()->visible(fn ($get): bool => $get('mode') === 'proxied')->schema([
-                            Toggle::make('origin.health_check.enabled')->label('Enable scheduled origin health check')->default(false)->visible(fn ($get): bool => $get('mode') === 'proxied'),
-                            TextInput::make('origin.health_check.path')->label('Health-check path')->placeholder('/healthz')->default('/')->maxLength(1024)->visible(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.health_check.enabled')),
-                            TextInput::make('origin.health_check.interval_seconds')->label('Health-check interval (seconds)')->numeric()->default(300)->minValue(60)->maxValue(86400)->visible(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.health_check.enabled')),
+                Toggle::make('origin.health_check.enabled')->label('Enable scheduled origin health check')->default(false)->visible(fn ($get): bool => $get('mode') === 'proxied'),
+                TextInput::make('origin.health_check.path')->label('Health-check path')->placeholder('/healthz')->default('/')->maxLength(1024)->visible(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.health_check.enabled')),
+                TextInput::make('origin.health_check.interval_seconds')->label('Health-check interval (seconds)')->numeric()->default(300)->minValue(60)->maxValue(86400)->visible(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.health_check.enabled')),
             ]),
             Section::make('Backup origin')->compact()->collapsed()->visible(fn ($get): bool => $get('mode') === 'proxied')->schema([
-                            Toggle::make('origin.backup_enabled')->label('Enable backup origin')->default(false)->live()->visible(fn ($get): bool => $get('mode') === 'proxied'),
+                Toggle::make('origin.backup_enabled')->label('Enable backup origin')->default(false)->live()->visible(fn ($get): bool => $get('mode') === 'proxied'),
                 Grid::make(['default' => 1, 'sm' => 2])->schema([
-                            TextInput::make('origin.backup.host')->label('Backup server hostname or IP')->required(fn ($get): bool => (bool) $get('origin.backup_enabled'))
-                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
-                            Select::make('origin.backup.scheme')->label('Backup scheme')->options(['https' => 'HTTPS', 'http' => 'HTTP'])->default('https')->live()
-                ->required(fn ($get): bool => (bool) $get('origin.backup_enabled'))->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled'))
-                ->afterStateUpdated(function (?string $state, Set $set): void {
-                    $set('origin.backup.port', $state === 'http' ? 80 : 443);
-                    $set('origin.backup.verify_tls', $state !== 'http');
-                    if ($state === 'http') {
-                        $set('origin.backup.sni', null);
-                    }
-                }),
-                            TextInput::make('origin.backup.port')->label('Backup port')->numeric()->default(443)->disabled()->dehydrated()
-                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
-                            TextInput::make('origin.backup.host_header')->label('Backup Host header')->required(fn ($get): bool => (bool) $get('origin.backup_enabled'))
-                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
-                            TextInput::make('origin.backup.sni')->label('Backup TLS SNI')
-                ->required(fn ($get): bool => (bool) $get('origin.backup_enabled') && $get('origin.backup.scheme') === 'https' && (bool) $get('origin.backup.verify_tls'))
-                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled') && $get('origin.backup.scheme') === 'https'),
-                            Toggle::make('origin.backup.verify_tls')->label('Verify backup TLS')->default(true)
-                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled') && $get('origin.backup.scheme') === 'https'),
-                            TextInput::make('origin.backup.connect_timeout_ms')->label('Backup connect timeout (ms)')->numeric()->default(2000)->minValue(100)->maxValue(10000)
-                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
-                            TextInput::make('origin.backup.response_timeout_ms')->label('Backup response timeout (ms)')->numeric()->default(30000)->minValue(500)->maxValue(60000)
-                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
-                            TextInput::make('origin.failover.failure_threshold')->label('Failures before failover')->numeric()->default(3)->minValue(1)->maxValue(20)
-                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
-                            TextInput::make('origin.failover.recovery_threshold')->label('Successes before failback')->numeric()->default(2)->minValue(1)->maxValue(20)
-                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
-                            TextInput::make('origin.failover.hold_down_seconds')->label('Minimum backup hold-down (seconds)')->numeric()->default(30)->minValue(5)->maxValue(3600)
-                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
-                            TextInput::make('origin.failover.failback_delay_seconds')->label('Primary failback delay (seconds)')->numeric()->default(60)->minValue(5)->maxValue(86400)
-                ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
+                    TextInput::make('origin.backup.host')->label('Backup server hostname or IP')->required(fn ($get): bool => (bool) $get('origin.backup_enabled'))
+                        ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
+                    Select::make('origin.backup.scheme')->label('Backup scheme')->options(['https' => 'HTTPS', 'http' => 'HTTP'])->default('https')->live()
+                        ->required(fn ($get): bool => (bool) $get('origin.backup_enabled'))->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled'))
+                        ->afterStateUpdated(function (?string $state, Set $set): void {
+                            $set('origin.backup.port', $state === 'http' ? 80 : 443);
+                            $set('origin.backup.verify_tls', $state !== 'http');
+                            if ($state === 'http') {
+                                $set('origin.backup.sni', null);
+                            }
+                        }),
+                    TextInput::make('origin.backup.port')->label('Backup port')->numeric()->default(443)->disabled()->dehydrated()
+                        ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
+                    TextInput::make('origin.backup.host_header')->label('Backup Host header')->required(fn ($get): bool => (bool) $get('origin.backup_enabled'))
+                        ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
+                    TextInput::make('origin.backup.sni')->label('Backup TLS SNI')
+                        ->required(fn ($get): bool => (bool) $get('origin.backup_enabled') && $get('origin.backup.scheme') === 'https' && (bool) $get('origin.backup.verify_tls'))
+                        ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled') && $get('origin.backup.scheme') === 'https'),
+                    Toggle::make('origin.backup.verify_tls')->label('Verify backup TLS')->default(true)
+                        ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled') && $get('origin.backup.scheme') === 'https'),
+                    TextInput::make('origin.backup.connect_timeout_ms')->label('Backup connect timeout (ms)')->numeric()->default(2000)->minValue(100)->maxValue(10000)
+                        ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
+                    TextInput::make('origin.backup.response_timeout_ms')->label('Backup response timeout (ms)')->numeric()->default(30000)->minValue(500)->maxValue(60000)
+                        ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
+                    TextInput::make('origin.failover.failure_threshold')->label('Failures before failover')->numeric()->default(3)->minValue(1)->maxValue(20)
+                        ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
+                    TextInput::make('origin.failover.recovery_threshold')->label('Successes before failback')->numeric()->default(2)->minValue(1)->maxValue(20)
+                        ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
+                    TextInput::make('origin.failover.hold_down_seconds')->label('Minimum backup hold-down (seconds)')->numeric()->default(30)->minValue(5)->maxValue(3600)
+                        ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
+                    TextInput::make('origin.failover.failback_delay_seconds')->label('Primary failback delay (seconds)')->numeric()->default(60)->minValue(5)->maxValue(86400)
+                        ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
                 ]),
             ]),
         ]);
@@ -297,33 +296,33 @@ class DnsRecordsRelationManager extends RelationManager
                 ->visible(fn (DnsRecord $record): bool => $record->type !== 'NS' || auth()->user()?->isAdmin() === true)->using(function (DnsRecord $record, array $data): DnsRecord {
                     return $this->updateRecord($record, $data);
                 }),
-                Action::make('testOrigin')->label('Test origin')->icon('phosphor-pulse')
-                    ->visible(fn (DnsRecord $record): bool => $record->mode === 'proxied')
-                    ->disabled(fn (): bool => ! $this->originTestingAvailable())
-                    ->tooltip('Requires an active, verified domain.')
-                    ->action(function (DnsRecord $record): void {
-                        $operation = $record->requestOriginTest(auth()->user());
-                        Notification::make()->info()->title('Origin test queued')->body("Operation {$operation->id} will run on qualified edges.")->send();
-                    }),
-                Action::make('testBackupOrigin')->label('Test backup')->icon('phosphor-pulse')
-                    ->visible(fn (DnsRecord $record): bool => $record->mode === 'proxied' && is_array($record->origin['backup'] ?? null))
-                    ->disabled(fn (): bool => ! $this->originTestingAvailable())
-                    ->tooltip('Requires an active, verified domain.')
-                    ->action(function (DnsRecord $record): void {
-                        $operation = $record->requestOriginTest(auth()->user(), 'backup');
-                        Notification::make()->info()->title('Backup origin test queued')->body("Operation {$operation->id} will run on qualified edges.")->send();
-                    }),
-                Action::make('previewGeo')->icon('phosphor-eye')->label('Preview')->visible(fn (DnsRecord $record): bool => $record->mode === 'geo_dns')
-                    ->schema([TextInput::make('ip')->ip()->required()])
-                    ->action(function (DnsRecord $record, array $data): void {
-                        $geo = app(GeoIpClassifier::class)->classify($data['ip']);
-                        $targets = GeoDnsConfig::select($record->geo_config, $geo['country'], $geo['continent']);
-                        Notification::make()->info()->title('Geo-DNS preview')
-                            ->body(sprintf('%s / %s → %s. Runtime uses trusted ECS, otherwise the recursive resolver.', $geo['country'] ?? 'unknown', $geo['continent'] ?? 'unknown', implode(', ', $targets)))->send();
-                    }),
-                DeleteAction::make()->iconButton()->visible(fn (DnsRecord $record): bool => $record->type !== 'NS' || auth()->user()?->isAdmin() === true)->using(function (DnsRecord $record): bool {
-                    return $this->deleteRecord($record);
+            Action::make('testOrigin')->label('Test origin')->icon('phosphor-pulse')
+                ->visible(fn (DnsRecord $record): bool => $record->mode === 'proxied')
+                ->disabled(fn (): bool => ! $this->originTestingAvailable())
+                ->tooltip('Requires an active, verified domain.')
+                ->action(function (DnsRecord $record): void {
+                    $operation = $record->requestOriginTest(auth()->user());
+                    Notification::make()->info()->title('Origin test queued')->body("Operation {$operation->id} will run on qualified edges.")->send();
                 }),
+            Action::make('testBackupOrigin')->label('Test backup')->icon('phosphor-pulse')
+                ->visible(fn (DnsRecord $record): bool => $record->mode === 'proxied' && is_array($record->origin['backup'] ?? null))
+                ->disabled(fn (): bool => ! $this->originTestingAvailable())
+                ->tooltip('Requires an active, verified domain.')
+                ->action(function (DnsRecord $record): void {
+                    $operation = $record->requestOriginTest(auth()->user(), 'backup');
+                    Notification::make()->info()->title('Backup origin test queued')->body("Operation {$operation->id} will run on qualified edges.")->send();
+                }),
+            Action::make('previewGeo')->icon('phosphor-eye')->label('Preview')->visible(fn (DnsRecord $record): bool => $record->mode === 'geo_dns')
+                ->schema([TextInput::make('ip')->ip()->required()])
+                ->action(function (DnsRecord $record, array $data): void {
+                    $geo = app(GeoIpClassifier::class)->classify($data['ip']);
+                    $targets = GeoDnsConfig::select($record->geo_config, $geo['country'], $geo['continent']);
+                    Notification::make()->info()->title('Geo-DNS preview')
+                        ->body(sprintf('%s / %s → %s. Runtime uses trusted ECS, otherwise the recursive resolver.', $geo['country'] ?? 'unknown', $geo['continent'] ?? 'unknown', implode(', ', $targets)))->send();
+                }),
+            DeleteAction::make()->iconButton()->visible(fn (DnsRecord $record): bool => $record->type !== 'NS' || auth()->user()?->isAdmin() === true)->using(function (DnsRecord $record): bool {
+                return $this->deleteRecord($record);
+            }),
         ])->toolbarActions([
             BulkActionGroup::make([
                 BulkAction::make('delete')->icon('phosphor-trash')->label('Delete selected')->color('danger')->requiresConfirmation()->deselectRecordsAfterCompletion()
