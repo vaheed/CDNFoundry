@@ -713,6 +713,7 @@ def test_cli_parser_exposes_all_commands_and_help() -> None:
     commands = {
         "setup",
         "web",
+        "public-key",
         "node-ssh",
         "trust-release-key",
         "bootstrap",
@@ -1261,8 +1262,11 @@ def test_status_and_doctor_are_actionable(source_repo: Path, tmp_path: Path) -> 
     status = subprocess.run(common + ["status"], check=True, text=True, stdout=subprocess.PIPE)
     assert "Monitoring: colocated" in status.stdout
     assert "control-1: control" in status.stdout
-    doctor = subprocess.run(common + ["doctor"], check=True, text=True, stdout=subprocess.PIPE)
-    assert "Doctor result: ready" in doctor.stdout
+    # A node without stored SSH access cannot be checked: doctor says so and names the command that fixes it.
+    doctor = subprocess.run(common + ["doctor"], check=False, text=True, stdout=subprocess.PIPE)
+    assert doctor.returncode == 3
+    assert "FAIL  control-1: SSH access stored" in doctor.stdout and "run node-ssh" in doctor.stdout
+    assert "Doctor result: problems found" in doctor.stdout
 
 
 def test_optional_extra_env_is_preserved_for_manual_edge_registration(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
