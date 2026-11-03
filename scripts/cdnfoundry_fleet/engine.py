@@ -84,6 +84,8 @@ class FleetEngine:
         return self.transport.pin_host_key(target)
 
     def _render(self, state: dict[str, Any]) -> dict[str, tuple[str, str]]:
+        for node in state["nodes"].values():
+            self.store._ensure_node_secrets(node)  # a vault from an older release may lack a secret the compose file needs
         before = {n: bundle_digest(self.output_dir / n) for n in state["nodes"]}
         Renderer(self.repo_root, self.store, self.output_dir).render(state)
         return {n: (before[n], bundle_digest(self.output_dir / n)) for n in state["nodes"] if state["nodes"][n].get("enabled", True)}

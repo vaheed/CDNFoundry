@@ -532,8 +532,8 @@ class FleetState:
         if node["role"] == "control":
             self.ensure_secret("pdns-db-password", node=node["name"])
             self.ensure_secret("pdns-api-key", node=node["name"])
-        if node["role"] in {"edge", "dns-edge"}:
-            self.ensure_secret("edge-status-token", node=node["name"])
+        # Vector runs on every role and its compose file interpolates the token, even on a host that scrapes no edge.
+        self.ensure_secret("edge-status-token", node=node["name"])
 
 
 class StateTransaction:
