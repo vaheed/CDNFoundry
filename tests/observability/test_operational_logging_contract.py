@@ -54,8 +54,16 @@ class OperationalLoggingContractTest(unittest.TestCase):
         self.assertEqual(["logs"], service["profiles"])
         self.assertTrue(service["read_only"])
         self.assertEqual(["ALL"], service["cap_drop"])
-        socket = next(volume for volume in service["volumes"] if volume.get("target") == "/var/run/docker.sock")
+        # Vector must not receive the Docker socket directly. It talks to a narrowly
+        # configured read-only API proxy, which alone mounts the host socket.
+        self.assertFalse(any(volume.get("target") == "/var/run/docker.sock" for volume in service["volumes"]))
+        self.assertIn("docker-socket-proxy", service["depends_on"])
+        proxy = self.production["services"]["docker-socket-proxy"]
+        socket = next(volume for volume in proxy["volumes"] if volume.get("target") == "/var/run/docker.sock")
         self.assertTrue(socket["read_only"])
+        self.assertEqual("0", proxy["environment"]["POST"])
+        self.assertEqual("1", proxy["environment"]["CONTAINERS"])
+        self.assertEqual("1", proxy["environment"]["EVENTS"])
         self.assertEqual("2147483648", service["environment"]["LOG_BUFFER_BYTES"])
         self.assertIn("when_full: drop_newest", self.vector)
         self.assertIn("retry_attempts: 10", self.vector)
