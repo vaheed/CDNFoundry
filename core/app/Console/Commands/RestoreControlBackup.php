@@ -13,11 +13,13 @@ use App\Models\Operation;
 use App\Support\ResticBackupRepository;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 class RestoreControlBackup extends Command
 {
-    protected $signature = 'cdnf:backups:restore {operation : Successful backup.restore preflight operation UUID}';
+    protected $signature = 'cdnf:backups:restore {operation? : Successful backup.restore preflight operation UUID} {--snapshot= : Restore this snapshot into an empty control database on a fresh node}';
 
     protected $description = 'Restore a preflighted control backup while the deployment is in explicit maintenance mode';
 
@@ -25,6 +27,14 @@ class RestoreControlBackup extends Command
     {
         if (! filter_var(env('BACKUP_RESTORE_ALLOWED', false), FILTER_VALIDATE_BOOL)) {
             $this->error('Set BACKUP_RESTORE_ALLOWED=true only in the one-off maintenance container.');
+
+            return self::FAILURE;
+        }
+        if ($this->option('snapshot') !== null) {
+            return $this->restoreIntoFreshNode($repository, (string) $this->option('snapshot'));
+        }
+        if ($this->argument('operation') === null) {
+            $this->error('Give a preflight operation UUID, or --snapshot for a fresh node.');
 
             return self::FAILURE;
         }
@@ -67,6 +77,41 @@ class RestoreControlBackup extends Command
             } catch (Throwable) {
                 // The restore may have failed while replacing PostgreSQL itself.
             }
+            $this->error('Restore failed; keep maintenance mode active and inspect the recovery host logs.');
+            report($exception);
+
+            return self::FAILURE;
+        }
+    }
+
+    /** A replacement node has an empty database and no preflight operation; refuse anything that already holds users. */
+    private function restoreIntoFreshNode(ResticBackupRepository $repository, string $snapshot): int
+    {
+        if ($this->argument('operation') !== null) {
+            $this->error('Use either an operation UUID or --snapshot, not both.');
+
+            return self::FAILURE;
+        }
+        if (! preg_match('/^[0-9a-f]{8,64}$/', $snapshot)) {
+            $this->error('The snapshot must be a Restic snapshot ID.');
+
+            return self::FAILURE;
+        }
+        if (Schema::hasTable('users') && DB::table('users')->exists()) {
+            $this->error('This database already holds users. Restore into a fresh control node, or use a preflight operation.');
+
+            return self::FAILURE;
+        }
+        Artisan::call('down', ['--retry' => 60]);
+        try {
+            $repository->restore($snapshot);
+            Artisan::call('migrate', ['--force' => true]);
+            AuditLog::record(null, 'backup.restore_completed', null, ['snapshot_id' => $snapshot, 'mode' => 'fresh_node']);
+            Artisan::call('up');
+            $this->info('Restore completed into a fresh node. Reconciliation runs on the first scheduler cycle.');
+
+            return self::SUCCESS;
+        } catch (Throwable $exception) {
             $this->error('Restore failed; keep maintenance mode active and inspect the recovery host logs.');
             report($exception);
 

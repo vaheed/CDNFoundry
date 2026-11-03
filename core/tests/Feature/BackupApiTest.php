@@ -100,6 +100,35 @@ class BackupApiTest extends TestCase
             ->assertFailed();
     }
 
+    public function test_fresh_node_restore_refuses_a_database_that_holds_users_and_bad_snapshot_ids(): void
+    {
+        putenv('BACKUP_RESTORE_ALLOWED=true');
+        try {
+            $this->mock(ResticBackupRepository::class, fn (MockInterface $mock) => $mock->shouldReceive('restore')->never());
+            $this->artisan('cdnf:backups:restore', ['--snapshot' => 'not a snapshot'])->assertFailed();
+
+            \App\Models\User::factory()->create();
+            $this->artisan('cdnf:backups:restore', ['--snapshot' => str_repeat('a', 64)])
+                ->expectsOutput('This database already holds users. Restore into a fresh control node, or use a preflight operation.')
+                ->assertFailed();
+            $this->artisan('cdnf:backups:restore', ['operation' => (string) Str::uuid(), '--snapshot' => str_repeat('a', 64)])->assertFailed();
+        } finally {
+            putenv('BACKUP_RESTORE_ALLOWED');
+        }
+    }
+
+    public function test_fresh_node_restore_restores_the_snapshot_into_an_empty_database(): void
+    {
+        putenv('BACKUP_RESTORE_ALLOWED=true');
+        $snapshot = str_repeat('b', 64);
+        try {
+            $this->mock(ResticBackupRepository::class, fn (MockInterface $mock) => $mock->shouldReceive('restore')->once()->with($snapshot));
+            $this->artisan('cdnf:backups:restore', ['--snapshot' => $snapshot])->assertSuccessful();
+        } finally {
+            putenv('BACKUP_RESTORE_ALLOWED');
+        }
+    }
+
     public function test_restore_preflight_remains_running_until_maintenance_executor_finishes(): void
     {
         $snapshot = str_repeat('e', 64);
