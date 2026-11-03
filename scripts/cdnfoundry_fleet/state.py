@@ -151,8 +151,15 @@ class FleetState:
         if not self.dry_run:
             self._prepare_dirs()
             self._ensure_global_secrets()
+            self._ensure_fleet_ssh_key()
             self._write(state, backup=False)
         return state
+
+    def _ensure_fleet_ssh_key(self) -> None:
+        """The single SSH key pair Fleet uses to reach every node, created with the fleet."""
+        from .ssh import SshTransport
+
+        SshTransport(self.state_dir).ensure_fleet_key()
 
     def _prepare_dirs(self) -> None:
         for directory in (self.state_dir, self.secrets_dir, self.pki_dir, self.backup_dir):

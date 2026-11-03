@@ -161,6 +161,18 @@ class FleetWeb:
             by_node[c.node] = by_node.get(c.node, True) and c.ok
         return by_node
 
+    def fleet_public_key(self) -> str:
+        """The public half of the one Fleet key. A vault from before the key existed gets it created and sealed here."""
+        from .ssh import FLEET_KEY
+
+        with self.vault.read_session() as work:
+            have = (work / "ssh" / FLEET_KEY).exists()
+            key = self._engine(work).public_key() if have else ""
+        if have:
+            return key
+        with self.write_lock, self.vault.session() as work:
+            return self._engine(work).public_key()
+
     def csrf_field(self) -> str:
         return f'<input type="hidden" name="csrf" value="{esc(self.csrf)}">'
 
@@ -214,9 +226,11 @@ class FleetWeb:
                 '<label>Public IPv4<input name="public_ipv4" required autocomplete="off"></label>'
                 '<label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="22" required></label>'
                 '<label>SSH user<input name="ssh_user" value="root" required autocomplete="off"></label>'
-                '<label>SSH private key<textarea name="ssh_key" rows="4" required autocomplete="off"></textarea><span class="hint">Stored encrypted in the vault. Key authentication only.</span></label>'
             )
-            return 200, self.layout(path, "Nodes", listing + "<h2>Add a node</h2>" + self.action_form("/nodes/add", "Add node and show plan", primary=True, fields=fields), flash)
+            key_block = ("<h2>Fleet SSH public key</h2><p>One key reaches every node. Add this line to <b>/root/.ssh/authorized_keys</b> on each host "
+                         "<b>before</b> you add it here. Fleet logs in with key authentication only.</p>"
+                         f'<pre class="log" aria-label="Fleet SSH public key">{esc(self.fleet_public_key())}</pre>')
+            return 200, self.layout(path, "Nodes", listing + key_block + "<h2>Add a node</h2>" + self.action_form("/nodes/add", "Add node and show plan", primary=True, fields=fields), flash)
         if path.startswith("/nodes/"):
             name = path.split("/", 2)[2]
             if name not in nodes:
@@ -265,7 +279,8 @@ class FleetWeb:
             fields = (f'<label>Control node<select name="node">{controls}</select></label>'
                       '<label>Snapshot ID<input name="snapshot" required pattern="[0-9a-f]{8,64}" autocomplete="off"></label>'
                       '<label>Preflight operation UUID<input name="operation" autocomplete="off"><span class="hint">Only for overwriting a live control node.</span></label>'
-                      '<label><span><input type="checkbox" name="overwrite" value="1"> Allow overwriting a live control node</span></label>')
+                      '<label><span><input type="checkbox" name="overwrite" value="1"> Allow overwriting a live control node</span></label>'
+                      '<label>Type RESTORE followed by the snapshot ID<input name="confirm" required autocomplete="off" pattern="RESTORE [0-9a-f]{8,64}"></label>')
             body = (self.action_form("/backups/now", "Back up now", primary=True)
                     + self.action_form("/backups/vault", "Back up the Fleet vault to the restic repository")
                     + "<h2>Restore</h2><p>Restores into an empty control node by default. The exact confirmation is <b>RESTORE</b> followed by the snapshot ID.</p>"
@@ -332,7 +347,7 @@ class FleetWeb:
                     engine = self._engine(work)
                     name = form["name"]
                     engine.store.add_node(engine.state(), {"name": name, "role": form["role"], "public_ipv4": form["public_ipv4"]})
-                    engine.set_node_ssh(name, form["public_ipv4"], int(form["ssh_port"]), form["ssh_user"], form["ssh_key"])
+                    engine.set_node_ssh(name, form["public_ipv4"], int(form["ssh_port"]), form["ssh_user"])
             finally:
                 self.write_lock.release()
             self.vault.record("add-node", json.dumps({"operator": self.operator, "title": f"Add node {name}"}))

@@ -27,7 +27,7 @@ DEFAULT_VAULT = Path.home() / ".config" / "cdnfoundry-fleet" / "fleet.db"
 PASSPHRASE_ENV = "CDNF_FLEET_PASSPHRASE"
 PASSPHRASE_FILE_ENV = "CDNF_FLEET_PASSPHRASE_FILE"
 
-ENGINE_COMMANDS = {"node-ssh", "trust-release-key", "bootstrap", "upgrade", "apply-config", "rollback", "security", "backup-now", "restore", "vault-backup"}
+ENGINE_COMMANDS = {"public-key", "node-ssh", "trust-release-key", "bootstrap", "upgrade", "apply-config", "rollback", "security", "backup-now", "restore", "vault-backup"}
 EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_VALIDATION = 3
@@ -221,12 +221,12 @@ def parser() -> argparse.ArgumentParser:
     rotate.add_argument("--secret", required=True)
     rotate.add_argument("--phase", choices=("prepare", "commit", "abort"), default="prepare")
 
-    nssh = sub.add_parser("node-ssh", parents=[command_common], help="store SSH access for a node and pin its host key")
+    sub.add_parser("public-key", parents=[command_common], help="print the Fleet SSH public key; add it to root's authorized_keys on every node")
+    nssh = sub.add_parser("node-ssh", parents=[command_common], help="record how to reach a node over SSH and pin its host key (the node must already authorise the Fleet public key)")
     nssh.add_argument("--node", required=True)
     nssh.add_argument("--host", required=True)
     nssh.add_argument("--ssh-port", type=int, default=22)
     nssh.add_argument("--ssh-user", default="root")
-    nssh.add_argument("--key-file", required=True)
     trust = sub.add_parser("trust-release-key", parents=[command_common], help="trust the Ed25519 public key that signs release manifests")
     trust.add_argument("--key-file", required=True)
     boot = sub.add_parser("bootstrap", parents=[command_common], help="install prerequisites on a node, deploy its bundle, and start it")
@@ -1033,8 +1033,10 @@ def _engine_command(args: argparse.Namespace, store: FleetState, output_dir: Pat
         print(json.dumps({"ok": out.ok, "failed": out.failed, "detail": out.detail, "rolled_back": out.rolled_back, "steps_done": len(out.done)}))
         return EXIT_OK if out.ok else EXIT_EXTERNAL
 
-    if args.command == "node-ssh":
-        marker = engine.set_node_ssh(args.node, args.host, args.ssh_port, args.ssh_user, Path(args.key_file).read_text(encoding="utf-8"))
+    if args.command == "public-key":
+        print(engine.public_key())
+    elif args.command == "node-ssh":
+        marker = engine.set_node_ssh(args.node, args.host, args.ssh_port, args.ssh_user)
         print(json.dumps({"status": "stored", "node": args.node, "host_key_pinned": marker}))
     elif args.command == "trust-release-key":
         engine.trust_release_key(Path(args.key_file).read_text(encoding="utf-8"))

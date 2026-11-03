@@ -22,7 +22,6 @@ from cdnfoundry_fleet.web import FleetWeb, make_server, require_loopback  # noqa
 
 ROOT = Path(__file__).resolve().parents[2]
 PASS = "correct horse battery"
-KEY = "-----BEGIN OPENSSH PRIVATE KEY-----\nSECRETKEYBODY\n-----END OPENSSH PRIVATE KEY-----"
 PAGES = ["/", "/nodes", "/security", "/upgrade", "/config", "/rollback", "/backups", "/ha", "/secrets", "/history"]
 
 
@@ -46,9 +45,8 @@ class Fake:
     def __init__(self, work: Path) -> None:
         self.work = work
 
-    def store_key(self, target, key):
-        (self.work / "ssh").mkdir(exist_ok=True)
-        (self.work / "ssh" / f"key-{target.name}").write_text(key)
+    def ensure_fleet_key(self):
+        return "ssh-ed25519 AAAAFLEETPUBLICKEY cdnfoundry-fleet"
 
     def pin_host_key(self, target):
         return target.host
@@ -107,7 +105,7 @@ def wait_job(port: int, location: str) -> str:
 
 
 def add_node(web, port, name="control-1", role="control", ip="203.0.113.5"):
-    return post(port, "/nodes/add", {"csrf": web.csrf, "name": name, "role": role, "public_ipv4": ip, "ssh_port": "2222", "ssh_user": "root", "ssh_key": KEY})
+    return post(port, "/nodes/add", {"csrf": web.csrf, "name": name, "role": role, "public_ipv4": ip, "ssh_port": "2222", "ssh_user": "root"})
 
 
 def test_refuses_any_bind_address_but_loopback() -> None:
@@ -144,15 +142,17 @@ def test_post_without_the_csrf_token_is_refused_and_changes_nothing(served) -> N
     assert web.read(lambda e: e.state())["nodes"] == {}
 
 
-def test_add_node_shows_its_plan_and_keeps_the_key_only_in_the_vault(served, tmp_path: Path) -> None:
+def test_add_node_shows_its_plan_and_the_one_fleet_public_key(served, tmp_path: Path) -> None:
     web, port = served
     status, _, r = add_node(web, port)
     assert status == 303 and r.getheader("Location").startswith("/nodes/control-1")
     page = get(port, "/nodes/control-1")[1]
     assert "prereq" in page and "Install and start this node" in page
     assert "control-1" in get(port, "/nodes")[1]
-    assert b"SECRETKEYBODY" not in (tmp_path / "fleet.db").read_bytes()
-    assert "SECRETKEYBODY" not in get(port, "/nodes")[1]
+    nodes_page = get(port, "/nodes")[1]
+    assert "AAAAFLEETPUBLICKEY" in nodes_page and "authorized_keys" in nodes_page
+    assert "PRIVATE KEY" not in nodes_page and "ssh_key" not in nodes_page
+    assert b"ops.example.test" not in (tmp_path / "fleet.db").read_bytes()
 
 
 def test_a_pop_plan_asks_for_its_location(served) -> None:

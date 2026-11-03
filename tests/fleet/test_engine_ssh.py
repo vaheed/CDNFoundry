@@ -62,8 +62,10 @@ class Counting:
 def fleet(tmp_path: Path, sshd):
     real = SshTransport(tmp_path / "state")
     targets = {n: Target(n, "127.0.0.1", sshd.port, "root") for n in NODES}
+    real.dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    shutil.copy(sshd.client_key, real.key_path())
+    real.key_path().chmod(0o600)
     for t in targets.values():
-        real.store_key(t, sshd.client_key.read_text())
         real.pin_host_key(t)
     roots = {n: str(tmp_path / "remote" / n) for n in NODES}
     for n, r in roots.items():

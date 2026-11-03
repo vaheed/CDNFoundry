@@ -4,7 +4,7 @@ import { adminPassword, expectAccessible, settle, signIn, userPassword } from '.
 // Every screen of both panels loads without a server error and passes the accessibility check.
 const adminScreens = [
     '/admin', '/admin/telemetry', '/admin/operations', '/admin/audit-logs', '/admin/users', '/admin/domains',
-    '/admin/edges', '/admin/edge-pools', '/admin/dns-clusters', '/admin/system-dns-identity', '/admin/platform-settings',
+    '/admin/edges', '/admin/edge-pools', '/admin/dns-clusters', '/admin/system-dns-identity', '/admin/platform-settings', '/admin/first-run-setup',
     '/admin/profile', '/admin/tokens', '/admin/users/create', '/admin/edges/create', '/admin/edge-pools/create',
     '/admin/dns-clusters/create',
 ];

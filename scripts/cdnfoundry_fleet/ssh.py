@@ -17,6 +17,7 @@ from pathlib import Path
 from .common import FleetError, ValidationError, atomic_write
 
 SSH_TIMEOUT = 120
+FLEET_KEY = "fleet_ed25519"
 
 
 class SshError(FleetError):
@@ -61,22 +62,33 @@ class SshTransport:
         self.dir = state_dir / "ssh"
         self.timeout = timeout
 
-    def key_path(self, target: Target) -> Path:
-        return self.dir / "keys" / target.name
+    def key_path(self, target: Target | None = None) -> Path:
+        """One key for the whole fleet: every node authorises the same Fleet public key."""
+        return self.dir / FLEET_KEY
+
+    def ensure_fleet_key(self) -> str:
+        """Create the Fleet key pair on first use and return the public half. The private half never leaves the vault."""
+        private = self.key_path()
+        if not private.exists():
+            self.dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+            done = subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "cdnfoundry-fleet", "-f", str(private)], capture_output=True, text=True, check=False)
+            if done.returncode != 0:
+                raise SshError(f"Could not generate the Fleet SSH key: {done.stderr.strip()[-200:]}")
+            Path(str(private) + ".pub").unlink(missing_ok=True)
+        done = subprocess.run(["ssh-keygen", "-y", "-f", str(private)], capture_output=True, text=True, check=False)
+        if done.returncode != 0:
+            raise SshError("The Fleet SSH key is unreadable")
+        return done.stdout.strip() + " cdnfoundry-fleet"
+
+    def public_key(self) -> str:
+        return self.ensure_fleet_key()
 
     def known_hosts(self) -> Path:
         return self.dir / "known_hosts"
 
-    def store_key(self, target: Target, private_key: str) -> None:
-        if "PRIVATE KEY" not in private_key:
-            raise ValidationError("The SSH key is not a private key")
-        (self.dir / "keys").mkdir(parents=True, exist_ok=True, mode=0o700)
-        atomic_write(self.key_path(target), private_key.rstrip("\n") + "\n", 0o600)
-
     def _base(self, target: Target, *, strict: str = "yes") -> list[str]:
-        key = self.key_path(target)
-        if not key.is_file():
-            raise SshError(f"No SSH key stored for {target.name}")
+        self.ensure_fleet_key()
+        key = self.key_path()
         self.dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.known_hosts().touch(mode=0o600)
         return [

@@ -110,3 +110,19 @@ def test_cli_keeps_state_only_in_the_encrypted_vault(tmp_path: Path, monkeypatch
     assert "ops.example.test" in capsys.readouterr().out
     monkeypatch.setenv("CDNF_FLEET_PASSPHRASE", "not the passphrase")
     assert main(["status", *common]) == 4
+
+
+def test_a_new_fleet_gets_one_ssh_key_pair_inside_the_vault_and_can_print_the_public_half(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    from cdnfoundry_fleet.cli import main
+
+    vault = tmp_path / "fleet.db"
+    monkeypatch.setenv("CDNF_FLEET_PASSPHRASE", PASS)
+    assert main(["init", "--vault", str(vault), "--non-interactive", "--operator-domain", "ops.example.test", "--platform-domain", "cdn.example.test", "--release", "v2.0.0"]) == 0
+    capsys.readouterr()
+    assert main(["public-key", "--vault", str(vault), "--non-interactive"]) == 0
+    first = capsys.readouterr().out.strip()
+    assert first.startswith("ssh-ed25519 ")
+    assert main(["public-key", "--vault", str(vault), "--non-interactive"]) == 0
+    assert capsys.readouterr().out.strip() == first
+    assert b"OPENSSH PRIVATE KEY" not in vault.read_bytes()
+    assert "ssh/fleet_ed25519" in Vault(vault, PASS).paths()

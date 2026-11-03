@@ -67,10 +67,17 @@ def sshd(tmp_path: Path):
     server.stop()
 
 
+def install_key(t: SshTransport, private: Path) -> None:
+    """Stands in for the Fleet key: the test server authorises this key pair."""
+    t.dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    shutil.copy(private, t.key_path())
+    t.key_path().chmod(0o600)
+
+
 def transport(tmp_path: Path, sshd: Sshd) -> tuple[SshTransport, Target]:
     t = SshTransport(tmp_path / "state")
     target = Target("pop-1", "127.0.0.1", sshd.port, "root")
-    t.store_key(target, sshd.client_key.read_text())
+    install_key(t, sshd.client_key)
     return t, target
 
 
@@ -98,7 +105,7 @@ def test_password_and_unknown_keys_do_not_work(tmp_path: Path, sshd: Sshd) -> No
     t.pin_host_key(target)
     other = tmp_path / "other"
     subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(other)], check=True)
-    t.store_key(target, other.read_text())
+    install_key(t, other)
     assert not t.run(target, "true").ok
 
 
@@ -134,3 +141,21 @@ def test_unsafe_targets_and_paths_are_rejected(tmp_path: Path) -> None:
     t = SshTransport(tmp_path)
     with pytest.raises(ValidationError):
         t.upload_tree(Target("n", "h"), tmp_path, "/")
+
+
+def test_one_fleet_key_is_created_once_and_never_changes(tmp_path: Path) -> None:
+    t = SshTransport(tmp_path / "state")
+    first = t.ensure_fleet_key()
+    assert first.startswith("ssh-ed25519 ") and first.endswith("cdnfoundry-fleet")
+    assert t.ensure_fleet_key() == first == t.public_key()
+    assert oct(t.key_path().stat().st_mode & 0o777) == "0o600"
+    assert not Path(str(t.key_path()) + ".pub").exists()
+    assert t.key_path(Target("a", "h")) == t.key_path(Target("b", "h"))
+
+
+def test_the_generated_fleet_key_logs_in_to_a_server_that_authorises_its_public_key(tmp_path: Path, sshd: Sshd) -> None:
+    t = SshTransport(tmp_path / "state")
+    target = Target("pop-1", "127.0.0.1", sshd.port, "root")
+    (sshd.root / "authorized_keys").write_text(t.public_key() + "\n")
+    t.pin_host_key(target)
+    assert t.run(target, "echo ok").stdout.strip() == "ok"

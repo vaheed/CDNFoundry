@@ -70,12 +70,16 @@ class FleetEngine:
         path.write_text(pem.strip() + "\n", encoding="utf-8")
 
     # -- nodes ------------------------------------------------------------------------------------------
-    def set_node_ssh(self, name: str, host: str, port: int, user: str, private_key: str) -> str:
+    def public_key(self) -> str:
+        """The one public key every node must authorise before it is added."""
+        return self.transport.ensure_fleet_key() if hasattr(self.transport, "ensure_fleet_key") else ""
+
+    def set_node_ssh(self, name: str, host: str, port: int, user: str) -> str:
         state = self.state()
         if name not in state["nodes"]:
             raise ValidationError(f"Unknown node: {name}")
         target = Target(name, host, port, user)
-        self.transport.store_key(target, private_key)
+        self.public_key()
         save_target(self.work, target)
         return self.transport.pin_host_key(target)
 
