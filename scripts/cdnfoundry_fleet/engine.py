@@ -12,7 +12,7 @@ import shlex
 from pathlib import Path
 from typing import Any, Callable
 
-from . import actions, manifest as mf
+from . import actions, manifest as mf, provision as tmpfs_material
 from .checks import Check, gate_with_retry, node_gate, run_checks
 from .common import ValidationError, atomic_json, utc_now
 from .control_cli import Runner, bundle_digest
@@ -103,8 +103,15 @@ class FleetEngine:
         return actions.Engine(
             self.transport, targets, state["nodes"], self.output_dir, journal,
             gate=lambda n: gate_with_retry(lambda: node_gate(self.transport, targets[n], state["nodes"][n], state)), switchover=self._switchover,
-            mixed_versions_ok=mixed_versions_ok, services=services,
+            mixed_versions_ok=mixed_versions_ok, services=services, provision=self._provision,
         )
+
+    def _provision(self, name: str) -> tuple[bool, str]:
+        """Issue the node's in-memory key material from the vault's PKI and write it to the host's tmpfs."""
+        state = self.state()
+        node = state["nodes"][name]
+        files = tmpfs_material.issue(self.work, self.repo_root, node)
+        return tmpfs_material.install(self.transport, self.targets(state)[name], files)
 
     def _switchover(self, node: str) -> None:
         from .control_cli import Control
@@ -125,7 +132,8 @@ class FleetEngine:
     def bootstrap_plan(self, name: str) -> actions.Plan:
         state = self.state()
         self._missing_access(state, [name])
-        return actions.plan_bootstrap(name, state["global"]["release"], enroll=self._needs_enrollment(state, name), prepull=self.release_manifest() is not None)
+        return actions.plan_bootstrap(name, state["global"]["release"], enroll=self._needs_enrollment(state, name), prepull=self.release_manifest() is not None,
+                                      provision=tmpfs_material.needs_material(state["nodes"][name]["role"]))
 
     def bootstrap(self, name: str, *, country: str | None = None, continent: str | None = None, log: Callable[[str], None] | None = None) -> actions.Outcome:
         plan = self.bootstrap_plan(name)

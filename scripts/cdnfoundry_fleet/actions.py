@@ -45,7 +45,7 @@ class Transport(Protocol):
 class Step:
     id: str
     node: str
-    kind: str  # pin | prereq | enroll | prepull | upload | validate | activate | gate | rollback | switchover
+    kind: str  # pin | prereq | enroll | provision | prepull | upload | validate | activate | gate | rollback | switchover
     detail: str = ""
 
     def label(self) -> str:
@@ -93,6 +93,8 @@ def plan_upgrade(nodes: dict[str, dict[str, Any]], current: dict[str, Any] | Non
             plan.skipped.append(name)
             continue
         plan.steps.append(Step(f"{name}:prepull", name, "prepull"))
+        if role in {"edge", "dns-edge"}:
+            plan.steps.append(Step(f"{name}:provision", name, "provision"))
         plan.steps.append(Step(f"{name}:upload", name, "upload"))
         plan.steps.append(Step(f"{name}:validate", name, "validate"))
         if role == "control" and ha_standby and name != ha_standby:
@@ -139,10 +141,12 @@ class Engine:
         journal: Journal, *, gate: Callable[[str], tuple[bool, str]], switchover: Callable[[str], None] | None = None,
         mixed_versions_ok: bool = True, services: dict[str, set[str]] | None = None,
         enroll: Callable[[str], tuple[bool, str]] | None = None,
+        provision: Callable[[str], tuple[bool, str]] | None = None,
         roots: dict[str, str] | None = None,
     ) -> None:
         self.services = services or {}
         self.enroll = enroll
+        self.provision = provision
         self.roots = roots or {}
         self.t, self.targets, self.nodes, self.bundles = transport, targets, nodes, bundles
         self.journal, self.gate, self.switchover = journal, gate, switchover
@@ -231,6 +235,8 @@ class Engine:
             return True, ""
         if step.kind == "enroll":
             return self.enroll(step.node) if self.enroll else (False, "no enrollment available")
+        if step.kind == "provision":
+            return self.provision(step.node) if self.provision else (False, "no provisioning available")
         if step.kind == "prereq":
             r = self.t.run(target, PREREQUISITES)
             return r.ok, "" if r.ok else (r.stderr or r.stdout).strip()[-300:]
@@ -270,9 +276,10 @@ class Engine:
         return rolled
 
 
-def plan_bootstrap(name: str, release: str, *, enroll: bool = False, prepull: bool = False) -> Plan:
+def plan_bootstrap(name: str, release: str, *, enroll: bool = False, prepull: bool = False, provision: bool = False) -> Plan:
     plan = Plan("bootstrap", release)
-    kinds = ("pin", "prereq") + (("prepull",) if prepull else ()) + (("enroll",) if enroll else ()) + ("upload", "validate", "activate", "gate")
+    kinds = (("pin", "prereq") + (("prepull",) if prepull else ()) + (("enroll",) if enroll else ()) + (("provision",) if provision else ())
+             + ("upload", "validate", "activate", "gate"))
     for kind in kinds:
         plan.steps.append(Step(f"{name}:{kind}", name, kind))
     return plan
@@ -285,6 +292,7 @@ def plan_config_change(nodes: dict[str, dict[str, Any]], changed: set[str], rele
         if name not in changed:
             plan.skipped.append(name)
             continue
-        for kind in ("upload", "validate", "activate", "gate"):
+        kinds = (("provision",) if nodes[name]["role"] in {"edge", "dns-edge"} else ()) + ("upload", "validate", "activate", "gate")
+        for kind in kinds:
             plan.steps.append(Step(f"{name}:{kind}", name, kind))
     return plan

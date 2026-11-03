@@ -68,7 +68,7 @@ def engine(tmp_path: Path, t: FakeTransport, gate=lambda n: (True, ""), **kw) ->
     for n in NODES:
         (tmp_path / "bundles" / n).mkdir(parents=True, exist_ok=True)
         (tmp_path / "bundles" / n / "start.sh").write_text("x")
-    return a.Engine(t, targets, NODES, tmp_path / "bundles", a.Journal(tmp_path / "journal.json"), gate=gate, **kw)
+    return a.Engine(t, targets, NODES, tmp_path / "bundles", a.Journal(tmp_path / "journal.json"), gate=gate, provision=lambda _n: (True, ""), **kw)
 
 
 def test_plan_orders_dns_then_pops_then_control_and_skips_unchanged_roles() -> None:

@@ -82,7 +82,7 @@ def fleet(tmp_path: Path, sshd):
         return (running.exists() and running.read_text().strip() == "2.0.1", "release not running")
 
     def make(**kw) -> a.Engine:
-        return a.Engine(transport, targets, NODES, bundles, a.Journal(tmp_path / "journal.json"), gate=gate, roots=roots,
+        return a.Engine(transport, targets, NODES, bundles, a.Journal(tmp_path / "journal.json"), gate=gate, roots=roots, provision=lambda _n: (True, ""),
                         services={n: set() for n in NODES}, **kw)
 
     return make, transport, roots, bundles
