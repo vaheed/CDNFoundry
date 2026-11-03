@@ -20,7 +20,7 @@ C = "a" * 64
 def release(version: str = "2.0.1", **over):
     base = {
         "release": version, "profile": "full", "ci_passed": True, "irreversible_migration": False,
-        "images": {"openresty": D1, "pdns": D1}, "configs": {"nginx.conf": C},
+        "images": {"openresty": D1, "pdns": D1}, "configs": {"nginx.conf": C}, "env_images": {},
         "roles": {"edge": {"images": ["openresty"], "configs": ["nginx.conf"]}, "dns": {"images": ["pdns"], "configs": []}},
     }
     base.update(over)
@@ -81,3 +81,18 @@ def test_rollback_refuses_to_cross_an_irreversible_migration() -> None:
     with pytest.raises(ValidationError, match="irreversible"):
         m.rollback_allowed(release("2.0.1", irreversible_migration=True), release("2.0.0"))
     m.rollback_allowed(release("2.0.1"), release("2.0.0"))
+
+
+def test_checkout_must_match_the_release(tmp_path: Path) -> None:
+    import hashlib
+
+    (tmp_path / "compose.prod.yml").write_text(f"services:\n  db:\n    image: postgres:18@{D1}\n")
+    (tmp_path / "nginx.conf").write_text("x")
+    good = release(images={"postgres:18": D1}, configs={"nginx.conf": hashlib.sha256(b"x").hexdigest()})
+    m.verify_checkout(good, tmp_path)
+    with pytest.raises(m.ManifestError, match="differs from the release"):
+        m.verify_checkout({**good, "configs": {"nginx.conf": C}}, tmp_path)
+    with pytest.raises(m.ManifestError, match="pins postgres:18"):
+        m.verify_checkout({**good, "images": {"postgres:18": D2}}, tmp_path)
+    with pytest.raises(m.ManifestError, match="does not list"):
+        m.verify_checkout({**good, "images": {}}, tmp_path)

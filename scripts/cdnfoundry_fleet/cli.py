@@ -27,6 +27,7 @@ DEFAULT_VAULT = Path.home() / ".config" / "cdnfoundry-fleet" / "fleet.db"
 PASSPHRASE_ENV = "CDNF_FLEET_PASSPHRASE"
 PASSPHRASE_FILE_ENV = "CDNF_FLEET_PASSPHRASE_FILE"
 
+ENGINE_COMMANDS = {"node-ssh", "trust-release-key", "bootstrap", "upgrade", "apply-config", "rollback", "security", "backup-now", "restore", "vault-backup"}
 EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_VALIDATION = 3
@@ -220,6 +221,40 @@ def parser() -> argparse.ArgumentParser:
     rotate.add_argument("--secret", required=True)
     rotate.add_argument("--phase", choices=("prepare", "commit", "abort"), default="prepare")
 
+    nssh = sub.add_parser("node-ssh", parents=[command_common], help="store SSH access for a node and pin its host key")
+    nssh.add_argument("--node", required=True)
+    nssh.add_argument("--host", required=True)
+    nssh.add_argument("--ssh-port", type=int, default=22)
+    nssh.add_argument("--ssh-user", default="root")
+    nssh.add_argument("--key-file", required=True)
+    trust = sub.add_parser("trust-release-key", parents=[command_common], help="trust the Ed25519 public key that signs release manifests")
+    trust.add_argument("--key-file", required=True)
+    boot = sub.add_parser("bootstrap", parents=[command_common], help="install prerequisites on a node, deploy its bundle, and start it")
+    boot.add_argument("--node", required=True)
+    boot.add_argument("--plan-only", action="store_true")
+    up = sub.add_parser("upgrade", parents=[command_common], help="show, then apply, a rolling upgrade to a signed release manifest")
+    up.add_argument("--manifest", required=True)
+    up.add_argument("--key-file", help="verify with this key instead of the trusted one")
+    up.add_argument("--plan-only", action="store_true")
+    cfg = sub.add_parser("apply-config", parents=[command_common], help="deploy re-rendered configs to the nodes whose bundle changed")
+    cfg.add_argument("--plan-only", action="store_true")
+    rb = sub.add_parser("rollback", parents=[command_common], help="return nodes to the previous release and config")
+    rb.add_argument("--node", action="append", help="repeatable; default is the whole fleet")
+    sec = sub.add_parser("security", parents=[command_common], help="known vulnerabilities in the running release")
+    sec.add_argument("--available-manifest", help="a newer signed manifest to check for fixes")
+    sec.add_argument("--json", action="store_true")
+    bk = sub.add_parser("backup-now", parents=[command_common], help="start a control backup on the active control node and wait")
+    rs = sub.add_parser("restore", parents=[command_common], help="restore a control backup into a control node")
+    rs.add_argument("--node", required=True)
+    rs.add_argument("--snapshot", required=True)
+    rs.add_argument("--operation", help="preflight operation UUID, needed with --overwrite-live")
+    rs.add_argument("--confirm", help="type RESTORE <snapshot> to proceed")
+    rs.add_argument("--overwrite-live", action="store_true", help="allow restoring over a control node that holds data")
+    vb = sub.add_parser("vault-backup", parents=[command_common], help="back up the encrypted vault to the off-host restic repository")
+    vr = sub.add_parser("vault-restore", parents=[command_common], help="restore the vault on a new workstation")
+    vr.add_argument("--snapshot", default="latest")
+    vr.add_argument("--repository", required=True)
+    vr.add_argument("--password-file", required=True)
     web = sub.add_parser("web", parents=[command_common], help="local fleet web on 127.0.0.1")
     web.add_argument("--host", default="127.0.0.1")
     web.add_argument("--port", type=int, default=8765)
@@ -634,6 +669,12 @@ def _doctor(args: argparse.Namespace, store: FleetState) -> int:
             checks.append({"check": "fleet-state", "ok": False, "detail": str(exc)})
     else:
         checks.append({"check": "fleet-state", "ok": True, "detail": "not initialized yet"})
+    if store.exists() and not args.dry_run:
+        from .engine import FleetEngine
+
+        engine = FleetEngine(store.state_dir, root, Path(args.output_dir))
+        for c in engine.doctor():
+            checks.append({"check": f"{c.node}: {c.name}", "ok": c.ok, "detail": c.detail})
     ok = all(item["ok"] for item in checks if item.get("required_for_render", True))
     if args.json:
         print(json.dumps({"ok": ok, "checks": checks}, indent=2))
@@ -654,10 +695,18 @@ def execute(args: argparse.Namespace) -> int:
         return _doctor(args, store)
     if args.command == "control":
         with store.locked(exclusive=getattr(args, "control_action", "") not in {"status"}):
-            print(json.dumps(control_cli.execute(args, store, output_dir), indent=2))
+            runner = None
+            if (state_dir / "ssh" / "targets.json").exists() and args.ssh_command == " ".join(control_cli.DEFAULT_SSH):
+                from .engine import VaultRunner
+                from .ssh import SshTransport, load_targets
+
+                runner = VaultRunner(SshTransport(state_dir), load_targets(state_dir), args.deploy_dir)
+            print(json.dumps(control_cli.execute(args, store, output_dir, runner=runner), indent=2))
         return EXIT_OK
 
-    with store.locked(exclusive=args.command not in {"list-nodes", "show-start-order", "status"}):
+    with store.locked(exclusive=args.command not in {"list-nodes", "show-start-order", "status", "security"}):
+        if args.command in ENGINE_COMMANDS:
+            return _engine_command(args, store, output_dir)
         if args.command == "setup":
             return _setup(args, store, output_dir, config)
         if args.command == "init":
@@ -963,11 +1012,100 @@ def _passphrase(*, confirm: bool) -> str:
     return value
 
 
+def _vault_restore(args: argparse.Namespace, vault_path: Path) -> int:
+    from .vault_backup import restic_env, restore_vault
+
+    password = Path(args.password_file).read_text(encoding="utf-8").rstrip("\r\n")
+    restore_vault(vault_path, restic_env(args.repository, password), args.snapshot)
+    Vault(vault_path, _passphrase(confirm=False)).unlock()
+    print(json.dumps({"status": "restored", "vault": str(vault_path)}))
+    return EXIT_OK
+
+
+def _engine_command(args: argparse.Namespace, store: FleetState, output_dir: Path) -> int:
+    from .engine import ControlActions, FleetEngine
+
+    engine = FleetEngine(store.state_dir, Path(args.repo_root), output_dir, say=lambda m: print(m, flush=True))
+
+    def outcome(out: Any) -> int:
+        print(json.dumps({"ok": out.ok, "failed": out.failed, "detail": out.detail, "rolled_back": out.rolled_back, "steps_done": len(out.done)}))
+        return EXIT_OK if out.ok else EXIT_EXTERNAL
+
+    if args.command == "node-ssh":
+        marker = engine.set_node_ssh(args.node, args.host, args.ssh_port, args.ssh_user, Path(args.key_file).read_text(encoding="utf-8"))
+        print(json.dumps({"status": "stored", "node": args.node, "host_key_pinned": marker}))
+    elif args.command == "trust-release-key":
+        engine.trust_release_key(Path(args.key_file).read_text(encoding="utf-8"))
+        print(json.dumps({"status": "trusted"}))
+    elif args.command == "bootstrap":
+        plan = engine.bootstrap_plan(args.node)
+        print("\n".join(plan.describe()))
+        if args.plan_only:
+            return EXIT_OK
+        _confirm(args, f"Install and start {args.node}")
+        return outcome(engine.bootstrap(args.node))
+    elif args.command == "upgrade":
+        document = json.loads(Path(args.manifest).read_text(encoding="utf-8"))
+        key = Path(args.key_file).read_text(encoding="utf-8") if args.key_file else None
+        plan, manifest, diff = engine.upgrade_plan(document, key_pem=key)
+        print(f"Profile: {manifest['profile']}; irreversible migration: {'yes' if diff.migrations else 'no'}")
+        for name, (old, new) in diff.images.items():
+            print(f"  image {name}: {old or 'new'} -> {new or 'removed'}")
+        for path in diff.configs:
+            print(f"  config {path} changes")
+        print("\n".join(plan.describe()))
+        if diff.empty:
+            print("Nothing changes between the running release and the target.")
+        if args.plan_only or not plan.steps:
+            return EXIT_OK
+        _confirm(args, f"Upgrade the fleet to {manifest['release']}")
+        return outcome(engine.upgrade(document, key_pem=key))
+    elif args.command == "apply-config":
+        plan, _ = engine.config_plan()
+        print("\n".join(plan.describe()))
+        if args.plan_only or not plan.steps:
+            return EXIT_OK
+        _confirm(args, "Deploy the changed configs")
+        return outcome(engine.apply_config())
+    elif args.command == "rollback":
+        _confirm(args, "Return " + (", ".join(args.node) if args.node else "the whole fleet") + " to the previous release")
+        rolled = engine.rollback(args.node)
+        print(json.dumps({"status": "rolled-back", "nodes": rolled}))
+    elif args.command == "security":
+        available = json.loads(Path(args.available_manifest).read_text(encoding="utf-8"))["manifest"] if args.available_manifest else None
+        from .security import classify
+
+        rows = classify(engine.release_manifest(), Path(args.repo_root), available)
+        if args.json:
+            print(json.dumps(rows, indent=2))
+        else:
+            for r in rows:
+                print(f"{r['severity']:9} {r['id']}  {r['image']}  {r['detail']}")
+            print(f"{len(rows)} finding(s)")
+    elif args.command == "backup-now":
+        print(ControlActions(engine).backup_now())
+    elif args.command == "restore":
+        control = ControlActions(engine)
+        plan = control.restore_plan(args.node, args.snapshot, args.overwrite_live)
+        print(f"Restore snapshot {plan['snapshot']} into {plan['node']}; this replaces {plan['replaces']}.")
+        print(control.restore(args.node, args.snapshot, args.confirm, overwrite_live=args.overwrite_live, operation=args.operation))
+    elif args.command == "vault-backup":
+        from .vault_backup import backup_vault, restic_env
+
+        state = store.load()
+        feature = state["features"]["backups"]
+        if feature["mode"] == "disabled" or not feature.get("repository"):
+            raise ValidationError("Configure backups first: the vault goes to the same restic repository")
+        env = restic_env(feature["repository"], store.read_secret("backup-password"), store.read_secret("backup-access-key"), store.read_secret("backup-secret-key"), feature.get("region"))
+        print(json.dumps({"status": "backed-up", "snapshot": backup_vault(Path(args.vault), env)}))
+    return EXIT_OK
+
+
 def run(args: argparse.Namespace) -> int:
     """Run one command against the vault, or against --state-dir when given."""
     if args.command == "web" and args.host != "127.0.0.1":
         raise ValidationError("The fleet web binds to 127.0.0.1 only")
-    if args.command != "web" and (args.state_dir or args.dry_run or args.command in {"doctor"}):
+    if args.command != "web" and (args.state_dir or args.dry_run or (args.command == "doctor" and not Path(args.vault).exists())):
         args.state_dir = args.state_dir or "/nonexistent-dry-run-state"
         return execute(args)
     vault_path = Path(args.vault)
@@ -984,6 +1122,8 @@ def run(args: argparse.Namespace) -> int:
         finally:
             server.server_close()
         return EXIT_OK
+    if args.command == "vault-restore":
+        return _vault_restore(args, vault_path)
     vault = Vault(vault_path, "")
     creating = not vault.exists()
     vault = Vault(vault_path, _passphrase(confirm=creating))
@@ -994,10 +1134,11 @@ def run(args: argparse.Namespace) -> int:
     with vault.session() as work:
         args.state_dir = str(work)
         code = execute(args)
-        if code != EXIT_OK:
+        # A failed engine action keeps its journal and state so the same command can resume.
+        if code not in (EXIT_OK, EXIT_EXTERNAL):
             raise _Unsealed(code)
-    vault.record("command", args.command)
-    return EXIT_OK
+    vault.record("command", args.command if code == EXIT_OK else f"{args.command} (failed)")
+    return code
 
 
 class _Unsealed(Exception):

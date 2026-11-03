@@ -18,7 +18,7 @@ D1, D2 = "sha256:" + "1" * 64, "sha256:" + "2" * 64
 def manifest(version: str, edge_digest: str) -> dict[str, Any]:
     return {
         "release": version, "profile": "full", "ci_passed": True, "irreversible_migration": False,
-        "images": {"openresty": edge_digest, "pdns": D1, "app": D1}, "configs": {},
+        "images": {"openresty": edge_digest, "pdns": D1, "app": D1}, "configs": {}, "env_images": {},
         "roles": {"edge": {"images": ["openresty"]}, "dns": {"images": ["pdns"]}, "control": {"images": ["app"]}},
     }
 
@@ -55,7 +55,7 @@ class FakeTransport:
         if "docker image inspect" in command:
             image = command.rsplit(" ", 1)[-1]
             return R(0, f"{image.split('@')[0]}@{self.pulled_digest.get(target.name, image.split('@')[1])}\n")
-        if "compose up" in command and "failed" not in command and target.name in self.fail_activate:
+        if "start.sh" in command and "failed" not in command and target.name in self.fail_activate:
             return R(1, "", "boom")
         return R()
 
@@ -65,6 +65,9 @@ class FakeTransport:
 
 def engine(tmp_path: Path, t: FakeTransport, gate=lambda n: (True, ""), **kw) -> a.Engine:
     targets = {n: Target(n, "127.0.0.1") for n in NODES}
+    for n in NODES:
+        (tmp_path / "bundles" / n).mkdir(parents=True, exist_ok=True)
+        (tmp_path / "bundles" / n / "start.sh").write_text("x")
     return a.Engine(t, targets, NODES, tmp_path / "bundles", a.Journal(tmp_path / "journal.json"), gate=gate, **kw)
 
 
@@ -88,7 +91,7 @@ def test_apply_runs_every_step_and_prepulls_before_activating(tmp_path: Path) ->
     out = engine(tmp_path, t).apply(plan, manifest("2.0.1", D2))
     assert out.ok
     pop1 = [c for n, c in t.calls if n == "pop-1"]
-    assert pop1.index(next(c for c in pop1 if "docker pull" in c)) < pop1.index(next(c for c in pop1 if "compose up" in c))
+    assert pop1.index(next(c for c in pop1 if "docker pull" in c)) < pop1.index(next(c for c in pop1 if "start.sh" in c))
     assert not any(c.startswith("docker pull") for n, c in t.calls if n == "dns-1")
 
 
@@ -98,14 +101,14 @@ def test_digest_mismatch_after_pull_stops_before_anything_restarts(tmp_path: Pat
     new = manifest("2.0.1", D2)
     out = engine(tmp_path, t).apply(a.plan_upgrade(NODES, manifest("2.0.0", D1), new), new)
     assert not out.ok and "pins" in out.detail and out.rolled_back == []
-    assert not any("compose up" in c for _, c in t.calls)
+    assert not any("start.sh" in c for _, c in t.calls)
 
 
 def test_dropped_connection_resumes_where_it_stopped(tmp_path: Path) -> None:
     new = manifest("2.0.1", D2)
     plan = a.plan_upgrade(NODES, manifest("2.0.0", D1), new)
     t = FakeTransport()
-    t.drop_on = "compose up"
+    t.drop_on = "start.sh"
     first = engine(tmp_path, t).apply(plan, new)
     assert not first.ok and "run the action again" in first.detail
     uploads_before = sum(1 for _, c in t.calls if c.startswith("upload"))
@@ -159,4 +162,4 @@ def test_config_rejected_by_its_validator_is_never_activated(tmp_path: Path) -> 
     eng = engine(tmp_path, t, services={"pop-1": {"cell-01"}, "pop-2": {"cell-01"}})
     out = eng.apply(a.plan_upgrade(NODES, manifest("2.0.0", D1), new), new)
     assert out.failed == "pop-1:validate" and "openresty rejected" in out.detail
-    assert not any("compose up" in c and "failed" not in c for _, c in t.calls)
+    assert not any("start.sh" in c and "failed" not in c for _, c in t.calls)

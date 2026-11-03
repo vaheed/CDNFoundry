@@ -41,7 +41,7 @@ def test_every_validated_service_is_covered() -> None:
 
 def test_each_invalid_config_is_rejected_and_named() -> None:
     cases = {"nginx cell-01 -t": "openresty", "--check-config": "dnsdist", "caddy validate": "caddy",
-             "promtool": "prometheus", "amtool": "alertmanager", "vector validate": "vector", "compose config": "compose"}
+             "promtool": "prometheus", "amtool": "alertmanager", "vector validate": "vector", "validate.sh": "compose"}
     for needle, service in cases.items():
         role = {"openresty": "edge", "dnsdist": "dns", "caddy": "control", "prometheus": "monitoring", "alertmanager": "monitoring"}.get(service, "edge")
         ok, detail = validate_node_config(T(needle), TARGET, role, "/opt/x.incoming", {"cell-01", "dnsdist", "caddy", "prometheus", "alertmanager", "vector"})

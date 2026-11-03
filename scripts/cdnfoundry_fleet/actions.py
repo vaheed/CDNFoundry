@@ -21,6 +21,13 @@ from .validators import validate_node_config
 # Telemetry and monitoring go last: serving never depends on them.
 ROLE_ORDER = ["dns", "dns-edge", "edge", "control", "monitoring"]
 REMOTE_ROOT = "/opt/cdnfoundry"
+PREREQUISITES = (
+    "set -e; need=0; for c in docker tar python3 openssl; do command -v $c >/dev/null || need=1; done; "
+    "docker compose version >/dev/null 2>&1 || need=1; "
+    "if [ $need = 1 ]; then command -v apt-get >/dev/null || { echo 'install Docker with Compose v2, tar, python3 and openssl' >&2; exit 1; }; "
+    "DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io docker-compose-v2 python3 openssl ca-certificates tar; fi; "
+    "install -d -m 0700 /opt/cdnfoundry.parent 2>/dev/null; true"
+)
 
 
 class ActionError(FleetError):
@@ -129,8 +136,10 @@ class Engine:
         self, transport: Transport, targets: dict[str, Target], nodes: dict[str, dict[str, Any]], bundles: Path,
         journal: Journal, *, gate: Callable[[str], tuple[bool, str]], switchover: Callable[[str], None] | None = None,
         mixed_versions_ok: bool = True, services: dict[str, set[str]] | None = None,
+        roots: dict[str, str] | None = None,
     ) -> None:
         self.services = services or {}
+        self.roots = roots or {}
         self.t, self.targets, self.nodes, self.bundles = transport, targets, nodes, bundles
         self.journal, self.gate, self.switchover = journal, gate, switchover
         self.mixed_versions_ok = mixed_versions_ok
@@ -166,14 +175,27 @@ class Engine:
                 upgraded.append(step.node)
         return Outcome(True, done)
 
+    def root(self, node: str) -> str:
+        return self.roots.get(node, REMOTE_ROOT)
+
+    def _stage(self, node: str, manifest: dict[str, Any]) -> Path:
+        """Copy the rendered bundle and stamp the release the node will run."""
+        import shutil
+        import tempfile
+
+        staged = Path(tempfile.mkdtemp(prefix="cdnf-stage-"))
+        shutil.copytree(self.bundles / node, staged / "bundle", dirs_exist_ok=True)
+        (staged / "bundle" / "RELEASE").write_text(str(manifest["release"]) + "\n", encoding="utf-8")
+        return staged / "bundle"
+
     def _run(self, step: Step, manifest: dict[str, Any]) -> tuple[bool, str]:
         target = self.targets[step.node]
-        remote = f"{REMOTE_ROOT}/{step.node}"
+        remote = self.root(step.node)
         role = self.nodes[step.node]["role"]
         if step.kind == "prepull":
             for name in manifest["roles"].get(role, {}).get("images", []):
                 digest = manifest["images"][name]
-                image = f"{name}@{digest}"
+                image = mf.pull_ref(name, digest)
                 if not self.t.run(target, f"docker pull {image}").ok:
                     return False, f"could not pull {image}"
                 pulled = _pulled_digest(self.t, target, image)
@@ -183,8 +205,16 @@ class Engine:
                     return False, str(exc)
             return True, ""
         if step.kind == "upload":
-            self.t.upload_tree(target, self.bundles / step.node, remote + ".next", keep_previous=False)
+            self.t.upload_tree(target, self._stage(step.node, manifest), remote + ".next", keep_previous=False)
             return True, ""
+        if step.kind == "pin":
+            pin = getattr(self.t, "pin_host_key", None)
+            if pin:
+                pin(target)
+            return True, ""
+        if step.kind == "prereq":
+            r = self.t.run(target, PREREQUISITES)
+            return r.ok, "" if r.ok else (r.stderr or r.stdout).strip()[-300:]
         if step.kind == "validate":
             return validate_node_config(self.t, target, role, remote + ".next", self.services.get(step.node, set()))
         if step.kind == "switchover":
@@ -195,7 +225,7 @@ class Engine:
             r = self.t.run(
                 target,
                 f"set -e; test -d {remote}.next; rm -rf {remote}.previous; if [ -d {remote} ]; then mv {remote} {remote}.previous; fi; "
-                f"mv {remote}.next {remote}; cd {remote} && docker compose up -d --remove-orphans",
+                f"mv {remote}.next {remote}; cd {remote} && ./start.sh",
             )
             return r.ok, "" if r.ok else (r.stderr or r.stdout).strip()[:300]
         if step.kind == "gate":
@@ -206,13 +236,32 @@ class Engine:
         rolled: list[str] = []
         for node in [*failed, *reversed(also)]:
             target = self.targets[node]
-            remote = f"{REMOTE_ROOT}/{node}"
+            remote = self.root(node)
             r = self.t.run(
                 target,
                 f"set -e; test -d {remote}.previous; rm -rf {remote}.failed; mv {remote} {remote}.failed; "
-                f"mv {remote}.previous {remote}; cd {remote} && docker compose up -d --remove-orphans",
+                f"mv {remote}.previous {remote}; cd {remote} && ./start.sh",
             )
             log(f"{node}: rollback {'ok' if r.ok else 'FAILED'}")
             if r.ok:
                 rolled.append(node)
         return rolled
+
+
+def plan_bootstrap(name: str, release: str) -> Plan:
+    plan = Plan("bootstrap", release)
+    for kind in ("pin", "prereq", "upload", "validate", "activate", "gate"):
+        plan.steps.append(Step(f"{name}:{kind}", name, kind))
+    return plan
+
+
+def plan_config_change(nodes: dict[str, dict[str, Any]], changed: set[str], release: str, *, ha_standby: str | None = None) -> Plan:
+    """Deploy re-rendered bundles to the nodes whose bundle changed; others are not touched."""
+    plan = Plan("config", release)
+    for name in order_nodes(nodes, ha_standby=ha_standby):
+        if name not in changed:
+            plan.skipped.append(name)
+            continue
+        for kind in ("upload", "validate", "activate", "gate"):
+            plan.steps.append(Step(f"{name}:{kind}", name, kind))
+    return plan

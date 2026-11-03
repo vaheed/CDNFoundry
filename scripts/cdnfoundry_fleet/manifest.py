@@ -44,7 +44,7 @@ def public_key_from_pem(pem: str) -> Ed25519PublicKey:
 
 
 def check_shape(manifest: dict[str, Any]) -> None:
-    for key in ("release", "images", "configs", "profile", "ci_passed", "irreversible_migration", "roles"):
+    for key in ("release", "images", "configs", "profile", "ci_passed", "irreversible_migration", "roles", "env_images"):
         if key not in manifest:
             raise ManifestError(f"Manifest field missing: {key}")
     if manifest["profile"] not in PROFILES:
@@ -118,3 +118,37 @@ def rollback_allowed(current: dict[str, Any], previous: dict[str, Any]) -> None:
         raise ValidationError(
             f"Release {current['release']} holds an irreversible migration; restore from backup instead of rolling back to {previous['release']}"
         )
+
+
+def pull_ref(name: str, digest: str) -> str:
+    """`repo:tag` and `repo` both pull as `repo@digest`; the digest alone selects the content."""
+    repo = name.rsplit(":", 1)[0] if ":" in name.rsplit("/", 1)[-1] else name
+    return f"{repo}@{digest}"
+
+
+def verify_checkout(manifest: dict[str, Any], repo_root: Any) -> None:
+    """The checkout Fleet renders from must be the release the manifest describes."""
+    import hashlib
+    from pathlib import Path
+
+    import yaml
+
+    root = Path(repo_root)
+    for path, wanted in manifest["configs"].items():
+        file = root / path
+        if not file.is_file():
+            raise ManifestError(f"The checkout lacks {path}, which the manifest lists")
+        if hashlib.sha256(file.read_bytes()).hexdigest() != wanted:
+            raise ManifestError(f"{path} in the checkout differs from the release; check out the release tag before upgrading")
+    compose = yaml.safe_load((root / "compose.prod.yml").read_text(encoding="utf-8"))
+    pinned: dict[str, str] = {}
+    for service in compose.get("services", {}).values():
+        image = str(service.get("image", ""))
+        if "@sha256:" in image:
+            repo, digest = image.split("@", 1)
+            pinned[repo] = digest
+    for repo, digest in pinned.items():
+        if repo not in manifest["images"]:
+            raise ManifestError(f"The manifest does not list the image {repo}")
+        if manifest["images"][repo] != digest:
+            raise ManifestError(f"The checkout pins {repo} to {digest}, the manifest to {manifest['images'][repo]}")

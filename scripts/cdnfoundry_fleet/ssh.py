@@ -121,6 +121,10 @@ class SshTransport:
             raise SshError(f"{target.name}: `{command}` failed ({result.code}): {(result.stderr or result.stdout).strip()[:500]}")
         return result
 
+    def run_raw(self, target: Target, command: str, *, stdin: bytes | None = None, timeout: int = 1800) -> "subprocess.CompletedProcess[bytes]":
+        """Run with the pinned key and return the raw process, for callers that stream bytes."""
+        return subprocess.run(self._base(target) + [command], input=stdin, capture_output=True, timeout=timeout, check=False)
+
     def upload_tree(self, target: Target, local: Path, remote: str, *, keep_previous: bool = True) -> None:
         """Replace `remote` with a copy of `local`. Interrupting the stream leaves `remote` untouched."""
         if not remote.startswith("/") or remote.rstrip("/") in {"", "/"}:
@@ -137,3 +141,24 @@ class SshTransport:
                 + f"mv {staging} {quoted}"
             )
             self.run(target, script, stdin=archive.read(), check=True)
+
+
+TARGETS_FILE = "targets.json"
+
+
+def load_targets(state_dir: Path, node_names: set[str] | None = None) -> dict[str, Target]:
+    import json
+
+    path = state_dir / "ssh" / TARGETS_FILE
+    data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    return {n: Target(n, v["host"], int(v["port"]), v["user"]) for n, v in data.items() if node_names is None or n in node_names}
+
+
+def save_target(state_dir: Path, target: Target) -> None:
+    import json
+
+    path = state_dir / "ssh" / TARGETS_FILE
+    data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    data[target.name] = {"host": target.host, "port": target.port, "user": target.user}
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    atomic_write(path, json.dumps(data, indent=1, sort_keys=True), 0o600)
