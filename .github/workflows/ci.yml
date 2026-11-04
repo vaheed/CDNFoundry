@@ -309,7 +309,7 @@ jobs:
       - name: Qualify generated production observability topology
         run: |
           if ! sudo -E python3 tests/e2e/production_observability.py --release ci > /tmp/cdnfoundry-production-observability.log 2>&1; then
-            grep -Ei 'unhealthy|dependency failed|error response|permission denied|returned non-zero|failed to|invalid|timed out' /tmp/cdnfoundry-production-observability.log | tail -n 35 > /tmp/cdnfoundry-production-observability-tail.log || true
+            grep -Ei 'PRODUCTION_START_TRACE|unhealthy|dependency failed|error response|permission denied|returned non-zero|failed to|invalid|timed out' /tmp/cdnfoundry-production-observability.log | tail -n 35 > /tmp/cdnfoundry-production-observability-tail.log || true
             tail -n 12 /tmp/cdnfoundry-production-observability.log >> /tmp/cdnfoundry-production-observability-tail.log
             cat /tmp/cdnfoundry-production-observability-tail.log
             annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-production-observability-tail.log)"
