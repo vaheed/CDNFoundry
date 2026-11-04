@@ -93,6 +93,9 @@ def main() -> int:
                 "platform_domain": "example.net",
                 "release": args.release,
                 "acme_email": "qualification@example.com",
+                # Alertmanager requires a notifier even in the isolated test
+                # topology. Loopback keeps any accidental delivery off-host.
+                "alert_webhook_url": "https://127.0.0.1:1/qualification-alerts",
                 "ipv6": False,
             },
             "nodes": [{
