@@ -51,6 +51,14 @@ def artisan(expression: str) -> None:
     subprocess.run(["docker", "compose", "-f", COMPOSE, "exec", "-T", "core", "php", "artisan", "tinker", f"--execute={expression}"], cwd=ROOT, check=True, timeout=30, stdout=subprocess.DEVNULL)
 
 
+def artisan_output(expression: str) -> str:
+    result = subprocess.run(
+        ["docker", "compose", "-f", COMPOSE, "exec", "-T", "core", "php", "artisan", "tinker", f"--execute={expression}"],
+        cwd=ROOT, check=True, capture_output=True, text=True, timeout=30,
+    )
+    return result.stdout.strip()
+
+
 def quote(value: str) -> str:
     return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
@@ -176,8 +184,20 @@ def main() -> None:
     _, identity = call("PATCH", "/api/admin/system/settings/dns", settings | {"confirmation_token": validated_settings["data"]["confirmation_token"]}, token)
     completed_identity = wait_operation(token, identity["data"]["id"])
     assert completed_identity["result"]["targets"] == 1, completed_identity
-    _, created_domain = call("POST", "/api/domains", {"name": ZONE}, token)
-    domain_id = created_domain["data"]["id"]
+    # This fixture uses the reserved .test TLD, which has no public parent
+    # delegation. Seed the already-assigned platform pair directly so the test
+    # exercises DNS publication and serving without weakening the production
+    # registrar-delegation verifier or depending on external DNS.
+    domain_id = int(artisan_output(
+        "echo App\\\\Models\\\\Domain::query()->create(["
+        + "'name'=>" + quote(ZONE) + ","
+        + "'display_name'=>" + quote(ZONE) + ","
+        + "'lifecycle_state'=>'pending_verification','revision'=>1,"
+        + "'delegation_token'=>bin2hex(random_bytes(16)),"
+        + "'delegation_nameservers'=>App\\\\Support\\\\NameserverPairs::all()[0],"
+        + "'claim_expires_at'=>now()->addDays(7),"
+        + "])->id;"
+    ))
     call("POST", f"/api/admin/domains/{domain_id}/force-verify", {}, token)
     call("POST", f"/api/domains/{domain_id}/activate", {}, token)
     records = [
