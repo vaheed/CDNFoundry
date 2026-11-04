@@ -189,12 +189,12 @@ def main() -> None:
     # exercises DNS publication and serving without weakening the production
     # registrar-delegation verifier or depending on external DNS.
     domain_id = int(artisan_output(
-        "echo App\\\\Models\\\\Domain::query()->create(["
+        "echo App\\Models\\Domain::query()->create(["
         + "'name'=>" + quote(ZONE) + ","
         + "'display_name'=>" + quote(ZONE) + ","
         + "'lifecycle_state'=>'pending_verification','revision'=>1,"
         + "'delegation_token'=>bin2hex(random_bytes(16)),"
-        + "'delegation_nameservers'=>App\\\\Support\\\\NameserverPairs::all()[0],"
+        + "'delegation_nameservers'=>App\\Support\\NameserverPairs::all()[0],"
         + "'claim_expires_at'=>now()->addDays(7),"
         + "])->id;"
     ))
