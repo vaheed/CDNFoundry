@@ -330,6 +330,28 @@ jobs:
         run: make dev-control-up
       - name: Apply migrations explicitly
         run: make dev-migrate
+      - name: Enroll disposable development edge agents
+        shell: bash
+        run: |
+          set -euo pipefail
+          enroll() {
+            local name="$1"
+            local suffix="$2"
+            local payload
+            payload="$(docker compose -f compose.dev.yml exec -T core php artisan cdnf:edges:enroll "$name" --country=DE --continent=EU)"
+            local edge_id token
+            edge_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["edge_id"])' <<< "$payload")"
+            token="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["bootstrap_token"])' <<< "$payload")"
+            test -n "$edge_id"
+            test "${#token}" -eq 64
+            echo "::add-mask::$token"
+            {
+              echo "CDNF_DEV_EDGE_${suffix}_ID=$edge_id"
+              echo "CDNF_DEV_EDGE_${suffix}_BOOTSTRAP_TOKEN=$token"
+            } >> "$GITHUB_ENV"
+          }
+          enroll ci-edge-a A
+          enroll ci-edge-b B
       - name: Start real development topology
         shell: bash
         run: |
