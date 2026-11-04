@@ -79,76 +79,76 @@ class CellsRelationManager extends RelationManager
                 TextColumn::make('runtime_path')->label('Runtime path')->toggleable(isToggledHiddenByDefault: true),
             ])->recordActions([
                 ActionGroup::make([
-                Action::make('assignPool')->label('Assign service pool')->icon('phosphor-link')
-                    ->visible(fn (EdgeCell $record): bool => $record->edge_pool_id === null)
-                    ->schema([
-                        Select::make('edge_pool_id')->label('Service pool')
-                            ->options(fn (): array => EdgePool::query()->where('withdrawn', false)->orderBy('name')->pluck('name', 'id')->all())
-                            ->required()->searchable()->preload(),
-                    ])->action(function (EdgeCell $record, array $data): void {
-                        [$cell, $pool, $operation] = DB::transaction(function () use ($data, $record): array {
-                            $cell = EdgeCell::query()->lockForUpdate()->findOrFail($record->id);
-                            abort_if($cell->edge_pool_id !== null, 409, 'The cell has already been assigned to a service pool.');
-                            abort_if($cell->drained, 409, 'A drained cell cannot participate in a service pool.');
-                            $pool = EdgePool::query()->whereKey($data['edge_pool_id'])->where('withdrawn', false)->lockForUpdate()->firstOrFail();
-                            $cell->update(['edge_pool_id' => $pool->id, 'status' => 'assigned']);
-                            if ($pool->isSimpleAnycast()) {
-                                $endpoint = $pool->endpoints()->firstOrCreate(['edge_id' => $cell->edge_id], [
-                                    'revision' => 1, 'gateway_state' => 'pending', 'readiness_reason' => 'gateway_not_acknowledged',
+                    Action::make('assignPool')->label('Assign service pool')->icon('phosphor-link')
+                        ->visible(fn (EdgeCell $record): bool => $record->edge_pool_id === null)
+                        ->schema([
+                            Select::make('edge_pool_id')->label('Service pool')
+                                ->options(fn (): array => EdgePool::query()->where('withdrawn', false)->orderBy('name')->pluck('name', 'id')->all())
+                                ->required()->searchable()->preload(),
+                        ])->action(function (EdgeCell $record, array $data): void {
+                            [$cell, $pool, $operation] = DB::transaction(function () use ($data, $record): array {
+                                $cell = EdgeCell::query()->lockForUpdate()->findOrFail($record->id);
+                                abort_if($cell->edge_pool_id !== null, 409, 'The cell has already been assigned to a service pool.');
+                                abort_if($cell->drained, 409, 'A drained cell cannot participate in a service pool.');
+                                $pool = EdgePool::query()->whereKey($data['edge_pool_id'])->where('withdrawn', false)->lockForUpdate()->firstOrFail();
+                                $cell->update(['edge_pool_id' => $pool->id, 'status' => 'assigned']);
+                                if ($pool->isSimpleAnycast()) {
+                                    $endpoint = $pool->endpoints()->firstOrCreate(['edge_id' => $cell->edge_id], [
+                                        'revision' => 1, 'gateway_state' => 'pending', 'readiness_reason' => 'gateway_not_acknowledged',
+                                    ]);
+                                    if ($endpoint->wasRecentlyCreated) {
+                                        AuditLog::record(auth()->user(), 'edge.pool_endpoint_created', $endpoint, [
+                                            'edge_id' => $cell->edge_id, 'pool_id' => $pool->id, 'source' => 'cell_assignment',
+                                        ], request()->ip());
+                                    }
+                                }
+                                $pool->update(['revision' => $pool->revision + 1]);
+                                $operation = Operation::query()->create([
+                                    'actor_id' => auth()->id(), 'type' => 'edge.global_reconcile', 'status' => 'pending',
+                                    'input' => ['pool_id' => $pool->id, 'cell_id' => $cell->id],
                                 ]);
-                                if ($endpoint->wasRecentlyCreated) {
-                                    AuditLog::record(auth()->user(), 'edge.pool_endpoint_created', $endpoint, [
-                                        'edge_id' => $cell->edge_id, 'pool_id' => $pool->id, 'source' => 'cell_assignment',
-                                    ], request()->ip());
+                                AuditLog::record(auth()->user(), 'edge.pool_cell_assigned', $cell, [
+                                    'pool_id' => $pool->id, 'operation_id' => $operation->id,
+                                ], request()->ip());
+
+                                return [$cell, $pool, $operation];
+                            });
+                            ReconcileAllEdgeDomains::dispatch($operation->id)->afterCommit();
+                            ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
+                            Notification::make()->success()->title('Cell assigned to service pool')
+                                ->body($pool->isSimpleAnycast()
+                                    ? "{$cell->name} and its edge participation now inherit {$pool->name}'s Anycast pair. Operation {$operation->id} is reconciling runtime state."
+                                    : "Operation {$operation->id} is reconciling {$pool->name}; configure its Geo-Unicast endpoint on this edge.")->send();
+                        }),
+                    Action::make('unassignPool')->label('Unassign service pool')->icon('phosphor-link-break')->color('warning')->requiresConfirmation()
+                        ->visible(fn (EdgeCell $record): bool => $record->edge_pool_id !== null)
+                        ->action(function (EdgeCell $record): void {
+                            [$cell, $pool] = DB::transaction(function () use ($record): array {
+                                $cell = EdgeCell::query()->lockForUpdate()->findOrFail($record->id);
+                                $pool = EdgePool::query()->lockForUpdate()->findOrFail($cell->edge_pool_id);
+                                abort_if(DomainEdgeCell::query()->where(fn ($query) => $query->where('active_cell_id', $cell->id)->orWhere('target_cell_id', $cell->id))->exists(), 409, 'Move all domain placements away from this cell before unassigning it.');
+                                abort_if($pool->enabled && $pool->cells()->where('edge_id', $cell->edge_id)->where('id', '!=', $cell->id)->count() < $pool->minimum_ready_cells, 409, 'Disable the pool before removing a cell required by its minimum-ready policy.');
+
+                                $cell->update(['edge_pool_id' => null, 'status' => 'unassigned']);
+                                if ($pool->isSimpleAnycast() && ! $pool->cells()->where('edge_id', $cell->edge_id)->exists()) {
+                                    $endpoint = $pool->endpoints()->where('edge_id', $cell->edge_id)->first();
+                                    if ($endpoint !== null) {
+                                        AuditLog::record(auth()->user(), 'edge.pool_endpoint_deleted', $endpoint, ['source' => 'last_cell_unassigned'], request()->ip());
+                                        $endpoint->delete();
+                                    }
                                 }
-                            }
-                            $pool->update(['revision' => $pool->revision + 1]);
-                            $operation = Operation::query()->create([
-                                'actor_id' => auth()->id(), 'type' => 'edge.global_reconcile', 'status' => 'pending',
-                                'input' => ['pool_id' => $pool->id, 'cell_id' => $cell->id],
-                            ]);
-                            AuditLog::record(auth()->user(), 'edge.pool_cell_assigned', $cell, [
-                                'pool_id' => $pool->id, 'operation_id' => $operation->id,
-                            ], request()->ip());
+                                $pool->update(['revision' => $pool->revision + 1]);
+                                AuditLog::record(auth()->user(), 'edge.pool_cell_unassigned', $cell, ['pool_id' => $pool->id], request()->ip());
 
-                            return [$cell, $pool, $operation];
-                        });
-                        ReconcileAllEdgeDomains::dispatch($operation->id)->afterCommit();
-                        ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
-                        Notification::make()->success()->title('Cell assigned to service pool')
-                            ->body($pool->isSimpleAnycast()
-                                ? "{$cell->name} and its edge participation now inherit {$pool->name}'s Anycast pair. Operation {$operation->id} is reconciling runtime state."
-                                : "Operation {$operation->id} is reconciling {$pool->name}; configure its Geo-Unicast endpoint on this edge.")->send();
-                    }),
-                Action::make('unassignPool')->label('Unassign service pool')->icon('phosphor-link-break')->color('warning')->requiresConfirmation()
-                    ->visible(fn (EdgeCell $record): bool => $record->edge_pool_id !== null)
-                    ->action(function (EdgeCell $record): void {
-                        [$cell, $pool] = DB::transaction(function () use ($record): array {
-                            $cell = EdgeCell::query()->lockForUpdate()->findOrFail($record->id);
-                            $pool = EdgePool::query()->lockForUpdate()->findOrFail($cell->edge_pool_id);
-                            abort_if(DomainEdgeCell::query()->where(fn ($query) => $query->where('active_cell_id', $cell->id)->orWhere('target_cell_id', $cell->id))->exists(), 409, 'Move all domain placements away from this cell before unassigning it.');
-                            abort_if($pool->enabled && $pool->cells()->where('edge_id', $cell->edge_id)->where('id', '!=', $cell->id)->count() < $pool->minimum_ready_cells, 409, 'Disable the pool before removing a cell required by its minimum-ready policy.');
-
-                            $cell->update(['edge_pool_id' => null, 'status' => 'unassigned']);
-                            if ($pool->isSimpleAnycast() && ! $pool->cells()->where('edge_id', $cell->edge_id)->exists()) {
-                                $endpoint = $pool->endpoints()->where('edge_id', $cell->edge_id)->first();
-                                if ($endpoint !== null) {
-                                    AuditLog::record(auth()->user(), 'edge.pool_endpoint_deleted', $endpoint, ['source' => 'last_cell_unassigned'], request()->ip());
-                                    $endpoint->delete();
-                                }
-                            }
-                            $pool->update(['revision' => $pool->revision + 1]);
-                            AuditLog::record(auth()->user(), 'edge.pool_cell_unassigned', $cell, ['pool_id' => $pool->id], request()->ip());
-
-                            return [$cell, $pool];
-                        });
-                        ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
-                        Notification::make()->success()->title('Service pool unassigned')
-                            ->body("{$cell->name} is now free. You can delete {$pool->name} after unassigning its remaining cells and removing active domain placements.")->send();
-                    }),
-                Action::make('drain')->icon('phosphor-pause-circle')->requiresConfirmation()->visible(fn (EdgeCell $record): bool => ! $record->drained)->action(fn (EdgeCell $record) => self::queue($record, 'drain')),
-                Action::make('undrain')->icon('phosphor-play-circle')->visible(fn (EdgeCell $record): bool => $record->drained)->action(fn (EdgeCell $record) => self::queue($record, 'undrain')),
-                Action::make('restart')->icon('phosphor-arrows-counter-clockwise')->color('warning')->requiresConfirmation()->action(fn (EdgeCell $record) => self::queue($record, 'restart')),
+                                return [$cell, $pool];
+                            });
+                            ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
+                            Notification::make()->success()->title('Service pool unassigned')
+                                ->body("{$cell->name} is now free. You can delete {$pool->name} after unassigning its remaining cells and removing active domain placements.")->send();
+                        }),
+                    Action::make('drain')->icon('phosphor-pause-circle')->requiresConfirmation()->visible(fn (EdgeCell $record): bool => ! $record->drained)->action(fn (EdgeCell $record) => self::queue($record, 'drain')),
+                    Action::make('undrain')->icon('phosphor-play-circle')->visible(fn (EdgeCell $record): bool => $record->drained)->action(fn (EdgeCell $record) => self::queue($record, 'undrain')),
+                    Action::make('restart')->icon('phosphor-arrows-counter-clockwise')->color('warning')->requiresConfirmation()->action(fn (EdgeCell $record) => self::queue($record, 'restart')),
                 ])->label('Cell actions')->icon('phosphor-dots-three'),
             ]);
     }
