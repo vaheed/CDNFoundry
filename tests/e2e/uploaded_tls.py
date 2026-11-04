@@ -81,7 +81,7 @@ def main() -> None:
             (target / 'tls.key').write_text(valid['private_key'])
             (target / 'tls.key').chmod(0o600)
             (target / 'runtime.json').write_text(json.dumps(state({}, 1)))
-            (target / 'canary.conf').write_text('server { listen 18080; location / { return 200 "synthetic-tls-origin"; } }\n')
+            (target / 'canary.conf').write_text('server { listen 8080; location / { return 200 "synthetic-tls-origin"; } }\n')
             mounts = {
                 target: '/fixtures', target / 'tls.crt': '/run/edge/tls.crt', target / 'tls.key': '/run/edge/tls.key',
                 target / 'canary.conf': '/etc/nginx/conf.d/canary.conf',
@@ -113,7 +113,7 @@ def main() -> None:
                 candidate = state({HOST: HOST}, sequence)
                 host = candidate['hosts'][HOST]
                 host['cache']['enabled'] = False
-                host['origin'].update(host=address, port=18080, private_allowlist=[address + '/32'])
+                host['origin'].update(host=address, port=8080, private_allowlist=[address + '/32'])
                 host['tls'] = {'mode': 'custom', 'certificate_id': f'fixture-{sequence}'}
                 candidate['certificates'][f'fixture-{sequence}'] = {
                     'id': f'fixture-{sequence}', 'certificate_pem': bundle['certificate'],
@@ -172,7 +172,7 @@ def main() -> None:
 
             publish('valid')
             original, status, body = request('valid')
-            assert status == 200 and body == b'synthetic-tls-origin', 'Valid private-CA TLS must serve HTTP 200'
+            assert status == 200 and body == b'synthetic-tls-origin', f'Valid private-CA TLS must serve HTTP 200, got {status} {body[:200]!r}'
             results.append({'case': 'valid', 'admission': 'accepted', 'http_status': status})
             for name in cases:
                 if name == 'valid':
