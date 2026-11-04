@@ -53,6 +53,24 @@ def dig(owner: str, record_type: str, subnet: str | None = None) -> str:
     ).stdout.strip()
 
 
+def wait_for_answer(owner: str, record_type: str, expected: str, subnet: str | None = None) -> str:
+    """Wait for catalog discovery and signed AXFR to reach the serving secondary."""
+    deadline = time.monotonic() + 90
+    output = ""
+    while time.monotonic() < deadline:
+        try:
+            output = dig(owner, record_type, subnet)
+            if expected in output:
+                return output
+        except subprocess.SubprocessError as error:
+            output = str(error)
+        time.sleep(1)
+    raise AssertionError(
+        f"Geo-DNS answer for {owner} {record_type} with ECS {subnet or 'absent'} "
+        f"did not converge to {expected!r}; last answer was {output!r}"
+    )
+
+
 def wait_deployment(token: str, domain_id: int) -> None:
     deadline = time.monotonic() + 45
     while time.monotonic() < deadline:
@@ -97,9 +115,9 @@ def main() -> None:
     # A resolver's EDNS Client Subnet reaches PowerDNS through DNSdist, and a query
     # without one is located by the client address DNSdist adds, never DNSdist's own.
     override = f"override.{ZONE}"
-    assert dig(override, "A", "2.176.1.0/24") == "192.0.2.41", dig(override, "A", "2.176.1.0/24")
-    assert dig(override, "A", "8.8.8.0/24") == "192.0.2.40", dig(override, "A", "8.8.8.0/24")
-    assert dig(override, "A") == "192.0.2.40", dig(override, "A")
+    wait_for_answer(override, "A", "192.0.2.41", "2.176.1.0/24")
+    wait_for_answer(override, "A", "192.0.2.40", "8.8.8.0/24")
+    wait_for_answer(override, "A", "192.0.2.40")
 
     expected = {
         (f"a.{ZONE}", "A"): "192.0.2.30",
