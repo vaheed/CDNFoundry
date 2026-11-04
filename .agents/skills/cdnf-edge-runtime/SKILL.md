@@ -29,7 +29,7 @@ The snapshot fields, the affected cells and pools, bounds (bytes, domains, conne
 ## Validation commands
 - Backend: `make dev-test`, or one class with `docker compose -f compose.dev.yml -f compose.test.yml run --rm --no-deps core php artisan test --compact --filter <Class>` (the test override forces in-memory SQLite; never run tests against PostgreSQL).
 - Style: `docker compose -f compose.dev.yml -f compose.test.yml run --rm --no-deps core vendor/bin/pint --test`.
-- Go: `cd edge-agent && gofmt -l . && go vet ./... && go test ./...`, and the same in `edge-gateway` (or run them in `golang:1.26.8` with Docker).
+- Go: `cd edge-agent && gofmt -l . && go vet ./... && go test ./...`, and the same in `edge-gateway` (or run them in `golang:1.26.10` with Docker).
 - Feature: `EdgeProxyTest`, `MultiCellPlacementTest`, `CacheApiTest`, `OriginDestinationSafetyTest`.
 - Runtime: `python3 tests/e2e/phase4_runtime.py`, `edge_purge_protocol.py`, `origin_destinations.py`, `gateway_ingress.py`.
 
