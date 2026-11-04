@@ -141,13 +141,9 @@ def main() -> int:
             except subprocess.CalledProcessError as error:
                 # Keep the strict activation checks intact, but surface their
                 # non-secret shell trace so CI identifies the failing guard.
-                trace = (error.stderr or "").splitlines()
-                safe_trace = [
-                    line for line in trace[-100:]
-                    if not any(secret in line.lower() for secret in ("token", "password", "private_key", "metrics-token", "node.key"))
-                ]
-                if safe_trace:
-                    print("\\n".join(safe_trace))
+                trace = "\\n".join(part for part in (error.stdout, error.stderr) if part).splitlines()
+                if trace:
+                    print("\\n".join(f"PRODUCTION_START_TRACE: {line}" for line in trace[-100:]))
                 raise
             ready = json.loads(request(f"http://{LOOPBACK}:18080/api/ready"))
             if ready.get("status") != "ready":
