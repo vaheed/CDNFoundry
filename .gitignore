@@ -7,6 +7,7 @@
 /docs/.vitepress/.temp/
 /storage/qualification/
 /.vscode/
+/.mcp.json
 /.codegraph/
 /.cdnfoundry-fleet/
 /.pytest_cache/
@@ -15,4 +16,3 @@ __pycache__/
 storage
 .stage/
 .prod/
-.mcp*
