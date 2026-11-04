@@ -335,12 +335,21 @@ jobs:
         run: |
           set +e
           for attempt in 1 2; do
-            COMPOSE_PARALLEL_LIMIT=2 make dev-up 2>&1 | tee -a /tmp/cdnfoundry-dev-up.log
+            # Serialize container creation: this topology has several bridge networks
+            # and fixed gateway addresses, so concurrent endpoint attachment can race.
+            COMPOSE_PARALLEL_LIMIT=1 make dev-up 2>&1 | tee -a /tmp/cdnfoundry-dev-up.log
             status=${PIPESTATUS[0]}
             if (( status == 0 )); then
               exit 0
             fi
             echo "Development topology startup attempt ${attempt} failed."
+            if (( attempt == 1 )); then
+              # A failed Compose up can leave a partially attached topology. Remove
+              # only this Compose project's containers/networks; named volumes remain.
+              docker compose -f compose.dev.yml down --remove-orphans --timeout 20
+              make dev-control-up
+              make dev-migrate
+            fi
           done
           tail -n 10 /tmp/cdnfoundry-dev-up.log > /tmp/cdnfoundry-dev-up-tail.log
           docker compose -f compose.dev.yml ps edge-a edge-b >> /tmp/cdnfoundry-dev-up-tail.log 2>&1
