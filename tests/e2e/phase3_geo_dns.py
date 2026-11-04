@@ -128,8 +128,7 @@ def main() -> None:
         (f"_sip._tcp.geo.{ZONE}", "SRV"): "10 5 5060 sip-default.example.net.",
     }
     for query, answer in expected.items():
-        output = dig(*query)
-        assert answer in output, (query, output)
+        wait_for_answer(*query, answer)
     print("phase3_geo_dns_e2e=passed types=A,AAAA,CNAME,MX,TXT,SRV default_runtime=passed ecs_override=passed")
 
 
