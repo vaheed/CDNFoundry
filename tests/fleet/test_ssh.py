@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import getpass
 import shutil
 import socket
 import subprocess
@@ -76,7 +77,7 @@ def install_key(t: SshTransport, private: Path) -> None:
 
 def transport(tmp_path: Path, sshd: Sshd) -> tuple[SshTransport, Target]:
     t = SshTransport(tmp_path / "state")
-    target = Target("pop-1", "127.0.0.1", sshd.port, "root")
+    target = Target("pop-1", "127.0.0.1", sshd.port, getpass.getuser())
     install_key(t, sshd.client_key)
     return t, target
 
@@ -156,7 +157,7 @@ def test_one_fleet_key_is_created_once_and_never_changes(tmp_path: Path) -> None
 
 def test_the_generated_fleet_key_logs_in_to_a_server_that_authorises_its_public_key(tmp_path: Path, sshd: Sshd) -> None:
     t = SshTransport(tmp_path / "state")
-    target = Target("pop-1", "127.0.0.1", sshd.port, "root")
+    target = Target("pop-1", "127.0.0.1", sshd.port, getpass.getuser())
     (sshd.root / "authorized_keys").write_text(t.public_key() + "\n")
     t.pin_host_key(target)
     assert t.run(target, "echo ok").stdout.strip() == "ok"
