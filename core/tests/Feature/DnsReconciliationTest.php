@@ -101,15 +101,15 @@ class DnsReconciliationTest extends TestCase
         (new PowerDnsClient)->activate($cluster, $domain->name, PowerDnsZone::render($domain), []);
 
         $zoneCreate = collect($requests)->search(fn (array $item): bool => $item['method'] === 'POST'
-            && str_ends_with($item['url'], '/zones') && ($item['data']['name'] ?? null) === $domain->name.'.');
+            && str_ends_with($item['url'], '/zones') && ($item['data']['name'] ?? null) === $domain->name . '.');
         $transferPermission = collect($requests)->search(fn (array $item): bool => $item['method'] === 'POST'
-            && str_ends_with($item['url'], '/zones/'.$domain->name.'.' . '/metadata')
+            && str_ends_with($item['url'], '/zones/'.$domain->name . '.' . '/metadata')
             && ($item['data']['kind'] ?? null) === 'TSIG-ALLOW-AXFR');
         $catalogPublication = collect($requests)->search(fn (array $item): bool => $item['method'] === 'PUT'
-            && str_ends_with($item['url'], '/zones/'.$domain->name.'.')
+            && str_ends_with($item['url'], '/zones/'.$domain->name . '.')
             && ($item['data']['catalog'] ?? null) === PowerDnsClient::CATALOG_ZONE);
         $rrsetWrite = collect($requests)->search(fn (array $item): bool => $item['method'] === 'PATCH'
-            && str_ends_with($item['url'], '/zones/'.$domain->name.'.'));
+            && str_ends_with($item['url'], '/zones/'.$domain->name . '.'));
 
         $this->assertNotFalse($zoneCreate);
         $this->assertNotFalse($transferPermission);
