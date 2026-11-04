@@ -165,20 +165,20 @@ class DnsRecordsRelationManager extends RelationManager
                     ->nestedRecursiveRules(['string', 'max:4096']),
                 Repeater::make('geo_countries')->label('Country overrides')->maxItems(GeoDnsConfig::MAX_COUNTRIES)
                     ->visible(fn ($get): bool => $get('mode') === 'geo_dns')->schema([
-                    Select::make('code')->label('Country')->options(GeoVocabulary::countryOptions())->searchable()->required()->placeholder('Search by name or code')->extraInputAttributes(['aria-label' => 'Country']),
-                    TagsInput::make('targets')->label('Answers')->placeholder('Add an answer, then press Enter')->extraInputAttributes(['aria-label' => 'Answers'])->required()->nestedRecursiveRules(['string', 'max:4096']),
-                ])->table([
-                    TableColumn::make('Country'),
-                    TableColumn::make('Answers'),
-                ])->compact()->addActionLabel('Add country override'),
+                        Select::make('code')->label('Country')->options(GeoVocabulary::countryOptions())->searchable()->required()->placeholder('Search by name or code')->extraInputAttributes(['aria-label' => 'Country']),
+                        TagsInput::make('targets')->label('Answers')->placeholder('Add an answer, then press Enter')->extraInputAttributes(['aria-label' => 'Answers'])->required()->nestedRecursiveRules(['string', 'max:4096']),
+                    ])->table([
+                        TableColumn::make('Country'),
+                        TableColumn::make('Answers'),
+                    ])->compact()->addActionLabel('Add country override'),
                 Repeater::make('geo_continents')->label(FilamentHelp::label('Continent overrides', 'Country overrides win over continent overrides. Each answer set is limited to 8 type-valid values.'))->maxItems(GeoDnsConfig::MAX_CONTINENTS)
                     ->visible(fn ($get): bool => $get('mode') === 'geo_dns')->schema([
-                    Select::make('code')->label('Continent')->options(GeoVocabulary::continentOptions())->required()->placeholder('Choose a continent')->extraInputAttributes(['aria-label' => 'Continent']),
-                    TagsInput::make('targets')->label('Answers')->placeholder('Add an answer, then press Enter')->extraInputAttributes(['aria-label' => 'Answers'])->required()->nestedRecursiveRules(['string', 'max:4096']),
-                ])->table([
-                    TableColumn::make('Continent'),
-                    TableColumn::make('Answers'),
-                ])->compact()->addActionLabel('Add continent override'),
+                        Select::make('code')->label('Continent')->options(GeoVocabulary::continentOptions())->required()->placeholder('Choose a continent')->extraInputAttributes(['aria-label' => 'Continent']),
+                        TagsInput::make('targets')->label('Answers')->placeholder('Add an answer, then press Enter')->extraInputAttributes(['aria-label' => 'Answers'])->required()->nestedRecursiveRules(['string', 'max:4096']),
+                    ])->table([
+                        TableColumn::make('Continent'),
+                        TableColumn::make('Answers'),
+                    ])->compact()->addActionLabel('Add continent override'),
             ]),
             Section::make('Origin')->compact()->visible(fn ($get): bool => $get('mode') === 'proxied')->schema([
                 Grid::make(['default' => 1, 'sm' => 2])->schema([
