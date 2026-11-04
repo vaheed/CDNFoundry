@@ -81,7 +81,7 @@ def main() -> None:
             (target / 'tls.key').write_text(valid['private_key'])
             (target / 'tls.key').chmod(0o600)
             (target / 'runtime.json').write_text(json.dumps(state({}, 1)))
-            (target / 'canary.conf').write_text('server { listen 18080; location / { return 200 "synthetic-tls-origin"; } }\n')
+            (target / 'canary.conf').write_text('server { listen 8888; location / { return 200 "synthetic-tls-origin"; } }\n')
             mounts = {
                 target: '/fixtures', target / 'tls.crt': '/run/edge/tls.crt', target / 'tls.key': '/run/edge/tls.key',
                 target / 'canary.conf': '/etc/nginx/conf.d/canary.conf',
@@ -113,7 +113,7 @@ def main() -> None:
                 candidate = state({HOST: HOST}, sequence)
                 host = candidate['hosts'][HOST]
                 host['cache']['enabled'] = False
-                host['origin'].update(host=address, port=18080, private_allowlist=[address + '/32'])
+                host['origin'].update(host=address, port=8888, private_allowlist=[address + '/32'])
                 host['tls'] = {'mode': 'custom', 'certificate_id': f'fixture-{sequence}'}
                 candidate['certificates'][f'fixture-{sequence}'] = {
                     'id': f'fixture-{sequence}', 'certificate_pem': bundle['certificate'],
