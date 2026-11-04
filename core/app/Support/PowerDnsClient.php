@@ -40,19 +40,26 @@ class PowerDnsClient
         if ($created) {
             $this->ensureTransferSetup($cluster);
             $nameservers = collect($cluster->nameservers)->map(fn ($item): string => rtrim(is_array($item) ? $item['hostname'] : $item, '.').'.')->values()->all();
-            // A primary-kind zone that belongs to the catalog: DNS nodes learn of it from the catalog
-            // and pull it, signed with the transfer key.
+            // Install the per-zone transfer authorization before publishing catalog membership.
+            // Catalog consumers can discover a zone immediately; publishing it first creates a
+            // race where a secondary attempts AXFR before TSIG-ALLOW-AXFR exists and backs off.
             $request->post("/api/v1/servers/{$cluster->server_id}/zones", [
-                'name' => $zone.'.', 'kind' => 'Master', 'masters' => [], 'nameservers' => $nameservers, 'catalog' => self::CATALOG_ZONE,
+                'name' => $zone.'.', 'kind' => 'Master', 'masters' => [], 'nameservers' => $nameservers,
                 'soa_edit_api' => self::SOA_EDIT,
             ])->throw();
             $this->allowTransfer($cluster, $zone.'.');
+            $request->put("/api/v1/servers/{$cluster->server_id}/zones/$zoneId", [
+                'catalog' => self::CATALOG_ZONE, 'soa_edit_api' => self::SOA_EDIT,
+            ])->throw();
         } else {
             $exists->throw();
             if ($exists->json('kind') !== 'Master' || $exists->json('catalog') !== self::CATALOG_ZONE || $exists->json('soa_edit_api') !== self::SOA_EDIT) {
                 $this->ensureTransferSetup($cluster);
-                $request->put("/api/v1/servers/{$cluster->server_id}/zones/$zoneId", ['kind' => 'Master', 'catalog' => self::CATALOG_ZONE, 'soa_edit_api' => self::SOA_EDIT])->throw();
+                // Repair transfer authorization before making the zone visible through the catalog.
                 $this->allowTransfer($cluster, $zone.'.');
+                $request->put("/api/v1/servers/{$cluster->server_id}/zones/$zoneId", [
+                    'kind' => 'Master', 'catalog' => self::CATALOG_ZONE, 'soa_edit_api' => self::SOA_EDIT,
+                ])->throw();
             }
         }
 
