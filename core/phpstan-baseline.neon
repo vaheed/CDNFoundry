@@ -1,6 +1,12 @@
 parameters:
 	ignoreErrors:
 		-
+			message: '#^Anonymous function should return App\\Models\\EdgePoolEndpoint but returns Illuminate\\Database\\Eloquent\\Model\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/CreatePoolEndpoint.php
+
+		-
 			message: '#^Parameter \#1 \$settings of static method App\\Support\\CachePolicy\:\:normalize\(\) expects array\|null, string\|null given\.$#'
 			identifier: argument.type
 			count: 1
@@ -115,6 +121,12 @@ parameters:
 			path: app/Console/Commands/DispatchScheduledOriginChecks.php
 
 		-
+			message: '#^Parameter \#2 \$cell of method App\\Actions\\AssignCellToPool\:\:handle\(\) expects App\\Models\\EdgeCell, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Console/Commands/EnrollEdge.php
+
+		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
 			identifier: property.notFound
 			count: 2
@@ -221,6 +233,12 @@ parameters:
 			identifier: property.notFound
 			count: 1
 			path: app/Filament/Admin/Pages/AdminDashboard.php
+
+		-
+			message: '#^Access to an undefined property App\\Filament\\Admin\\Pages\\FirstRunSetup\:\:\$form\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Filament/Admin/Pages/FirstRunSetup.php
 
 		-
 			message: '#^Access to an undefined property App\\Filament\\Admin\\Pages\\PlatformSettings\:\:\$form\.$#'
@@ -403,9 +421,21 @@ parameters:
 			path: app/Filament/Admin/Resources/Edges/RelationManagers/CellsRelationManager.php
 
 		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:cells\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Filament/Admin/Resources/Edges/RelationManagers/CellsRelationManager.php
+
+		-
 			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:isSimpleAnycast\(\)\.$#'
 			identifier: method.notFound
 			count: 2
+			path: app/Filament/Admin/Resources/Edges/RelationManagers/PoolEndpointsRelationManager.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:poolEndpoints\(\)\.$#'
+			identifier: method.notFound
+			count: 1
 			path: app/Filament/Admin/Resources/Edges/RelationManagers/PoolEndpointsRelationManager.php
 
 		-
@@ -511,70 +541,112 @@ parameters:
 			path: app/Filament/Domain/Pages/DomainDashboard.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$activePool\.$#'
+			message: '#^Access to an undefined property App\\Models\\Domain\:\:\$claim_expires_at\.$#'
 			identifier: property.notFound
 			count: 1
-			path: app/Filament/Domain/Resources/Domains/DomainResource.php
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$activePool\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$cluster\.$#'
 			identifier: property.notFound
-			count: 1
-			path: app/Filament/Domain/Resources/Domains/DomainResource.php
+			count: 2
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$deployed_at\.$#'
 			identifier: property.notFound
 			count: 1
-			path: app/Filament/Domain/Resources/Domains/DomainResource.php
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$deployed_revision\.$#'
 			identifier: property.notFound
 			count: 1
-			path: app/Filament/Domain/Resources/Domains/DomainResource.php
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$desired_revision\.$#'
 			identifier: property.notFound
 			count: 1
-			path: app/Filament/Domain/Resources/Domains/DomainResource.php
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$edge\.$#'
 			identifier: property.notFound
 			count: 1
-			path: app/Filament/Domain/Resources/Domains/DomainResource.php
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$expires_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$fingerprint_sha256\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$last_error\.$#'
+			identifier: property.notFound
+			count: 4
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$names\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$occurred_at\.$#'
 			identifier: property.notFound
 			count: 1
-			path: app/Filament/Domain/Resources/Domains/DomainResource.php
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$reason_code\.$#'
 			identifier: property.notFound
 			count: 1
-			path: app/Filament/Domain/Resources/Domains/DomainResource.php
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$replica\.$#'
 			identifier: property.notFound
 			count: 1
-			path: app/Filament/Domain/Resources/Domains/DomainResource.php
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$state\.$#'
 			identifier: property.notFound
-			count: 2
-			path: app/Filament/Domain/Resources/Domains/DomainResource.php
+			count: 3
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$targetPool\.$#'
 			identifier: property.notFound
+			count: 2
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
+
+		-
+			message: '#^Cannot call method isFuture\(\) on string\.$#'
+			identifier: method.nonObject
 			count: 1
-			path: app/Filament/Domain/Resources/Domains/DomainResource.php
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Collection\<int, Illuminate\\Database\\Eloquent\\Model\>\|Illuminate\\Database\\Eloquent\\Model\:\:\$active_tls_certificate_id\.$#'
@@ -669,7 +741,7 @@ parameters:
 		-
 			message: '#^Cannot access property \$lifecycle_state on Illuminate\\Database\\Eloquent\\Model\|int\|string\.$#'
 			identifier: property.nonObject
-			count: 6
+			count: 7
 			path: app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php
 
 		-
@@ -801,7 +873,7 @@ parameters:
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
 			identifier: property.notFound
-			count: 6
+			count: 7
 			path: app/Filament/Domain/Resources/Domains/RelationManagers/DnsRecordsRelationManager.php
 
 		-
@@ -817,9 +889,27 @@ parameters:
 			path: app/Filament/Domain/Resources/Domains/RelationManagers/DnsRecordsRelationManager.php
 
 		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:dnsRecords\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/DnsRecordsRelationManager.php
+
+		-
 			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:edgePlacement\(\)\.$#'
 			identifier: method.notFound
 			count: 1
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/DnsRecordsRelationManager.php
+
+		-
+			message: '#^Cannot access property \$content on array\<string, mixed\>\|Illuminate\\Database\\Eloquent\\Model\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/DnsRecordsRelationManager.php
+
+		-
+			message: '#^Cannot access property \$name on array\<string, mixed\>\|Illuminate\\Database\\Eloquent\\Model\.$#'
+			identifier: property.nonObject
+			count: 2
 			path: app/Filament/Domain/Resources/Domains/RelationManagers/DnsRecordsRelationManager.php
 
 		-
@@ -879,7 +969,7 @@ parameters:
 		-
 			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:securityRules\(\)\.$#'
 			identifier: method.notFound
-			count: 2
+			count: 3
 			path: app/Filament/Domain/Resources/Domains/RelationManagers/SecurityRulesRelationManager.php
 
 		-
@@ -895,10 +985,40 @@ parameters:
 			path: app/Filament/Domain/Resources/Domains/RelationManagers/UsersRelationManager.php
 
 		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:users\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/UsersRelationManager.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:wafExclusions\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/WafExclusionsRelationManager.php
+
+		-
 			message: '#^Parameter \#2 \$domain of method App\\Http\\Controllers\\WafController\:\:destroyExclusion\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Filament/Domain/Resources/Domains/RelationManagers/WafExclusionsRelationManager.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$expires_at\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Filament/Domain/Resources/Domains/Widgets/DomainKpiStrip.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$last_error\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Filament/Domain/Resources/Domains/Widgets/DomainNeedsAttention.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>last_error" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/Widgets/DomainNeedsAttention.php
 
 		-
 			message: '#^Access to an undefined property App\\Filament\\Shared\\Pages\\ApiTokens\:\:\$domainChoices\.$#'
@@ -917,12 +1037,6 @@ parameters:
 			identifier: property.notFound
 			count: 1
 			path: app/Http/Controllers/Admin/DomainVerificationController.php
-
-		-
-			message: '#^Anonymous function should return App\\Models\\EdgePoolEndpoint but returns Illuminate\\Database\\Eloquent\\Model\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Http/Controllers/Admin/EdgePoolController.php
 
 		-
 			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:cells\(\)\.$#'
@@ -2107,12 +2221,6 @@ parameters:
 			path: app/Jobs/ReconcileEdgeDomain.php
 
 		-
-			message: '#^Parameter \#1 \$value of function collect expects Illuminate\\Contracts\\Support\\Arrayable\<\(int\|string\), mixed\>\|iterable\<\(int\|string\), mixed\>\|null, string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Jobs/ReconcilePlatformDnsIdentity.php
-
-		-
 			message: '#^Offset ''cluster_id'' does not exist on string\.$#'
 			identifier: offsetAccess.notFound
 			count: 1
@@ -2431,6 +2539,18 @@ parameters:
 			path: app/Support/BindZone.php
 
 		-
+			message: '#^Cannot call method lt\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Support/ControlPlane.php
+
+		-
+			message: '#^Parameter \#1 \$values of static method App\\Support\\ControlPlane\:\:sorted\(\) expects array\<string, mixed\>, string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Support/ControlPlane.php
+
+		-
 			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\)\: array\{type\: string, name\: string, content\: string, content_hash\: string, ttl\: int\<0, max\>, priority\: int\<0, max\>, weight\: int\<0, max\>, port\: int\<0, max\>, mode\: string\}, Closure\(App\\Models\\DnsRecord\)\: array\{type\: string, name\: string, content\: string, content_hash\: string, ttl\: int\<0, max\>, priority\: int\<0, max\>, weight\: int\<0, max\>, port\: int\<0, max\>, mode\: string\} given\.$#'
 			identifier: argument.type
 			count: 1
@@ -2663,3 +2783,9 @@ parameters:
 			identifier: method.notFound
 			count: 1
 			path: app/Support/SystemHealth.php
+
+		-
+			message: '#^Cannot call method lt\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: app/Support/TopologyGraph.php
