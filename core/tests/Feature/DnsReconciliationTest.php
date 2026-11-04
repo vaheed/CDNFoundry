@@ -78,6 +78,48 @@ class DnsReconciliationTest extends TestCase
             && collect($request->data()['rrsets'] ?? [])->contains(fn (array $rrset): bool => ($rrset['type'] ?? null) === 'A' && ($rrset['records'][0]['content'] ?? null) === '192.0.2.10'));
     }
 
+    public function test_zone_transfer_authorization_precedes_catalog_publication(): void
+    {
+        $domain = $this->domain();
+        $cluster = DnsCluster::query()->create($this->clusterData());
+        $this->platformIdentity();
+        $requests = [];
+        $published = null;
+        Http::fake(function (Request $request) use (&$requests, &$published) {
+            $requests[] = ['method' => $request->method(), 'url' => $request->url(), 'data' => $request->data()];
+            if ($request->method() === 'GET') {
+                return $published === null ? Http::response([], 404) : Http::response(['rrsets' => $published, 'serial' => 1]);
+            }
+            if ($request->method() === 'PATCH') {
+                $published = collect($request->data()['rrsets'])->where('changetype', 'REPLACE')
+                    ->map(fn (array $rrset): array => collect($rrset)->except('changetype')->all())->values()->all();
+            }
+
+            return Http::response([], $request->method() === 'POST' ? 201 : 204);
+        });
+
+        (new PowerDnsClient)->activate($cluster, $domain->name, PowerDnsZone::render($domain), []);
+
+        $zoneCreate = collect($requests)->search(fn (array $item): bool => $item['method'] === 'POST'
+            && str_ends_with($item['url'], '/zones') && ($item['data']['name'] ?? null) === $domain->name.'.');
+        $transferPermission = collect($requests)->search(fn (array $item): bool => $item['method'] === 'POST'
+            && str_ends_with($item['url'], '/zones/'.$domain->name.'.%2Fmetadata')
+            && ($item['data']['kind'] ?? null) === 'TSIG-ALLOW-AXFR');
+        $catalogPublication = collect($requests)->search(fn (array $item): bool => $item['method'] === 'PUT'
+            && str_ends_with($item['url'], '/zones/'.$domain->name.'.')
+            && ($item['data']['catalog'] ?? null) === PowerDnsClient::CATALOG_ZONE);
+        $rrsetWrite = collect($requests)->search(fn (array $item): bool => $item['method'] === 'PATCH'
+            && str_ends_with($item['url'], '/zones/'.$domain->name.'.'));
+
+        $this->assertNotFalse($zoneCreate);
+        $this->assertNotFalse($transferPermission);
+        $this->assertNotFalse($catalogPublication);
+        $this->assertNotFalse($rrsetWrite);
+        $this->assertArrayNotHasKey('catalog', $requests[$zoneCreate]['data']);
+        $this->assertLessThan($catalogPublication, $transferPermission, 'TSIG permission must exist before catalog membership is published');
+        $this->assertLessThan($rrsetWrite, $catalogPublication, 'RRsets are written only after the authorized zone is published');
+    }
+
     public function test_failed_target_keeps_previous_valid_snapshot_and_visible_error(): void
     {
         $domain = $this->domain();
