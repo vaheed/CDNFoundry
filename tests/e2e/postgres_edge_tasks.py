@@ -72,6 +72,10 @@ if ($mode === 'init') {
     $record = $domain->dnsRecords()->create(['type' => 'A', 'mode' => 'proxied', 'name' => $domain->name, 'content' => '8.8.8.8',
         'ttl' => 60, 'content_hash' => hash('sha256', '8.8.8.8'), 'origin' => ['host' => '8.8.8.8', 'port' => 80, 'scheme' => 'http']]);
     App\Models\Edge::query()->where('name', 'task-qualification')->update(['registered_at' => now(), 'last_heartbeat_at' => now()]);
+    $edge = App\Models\Edge::query()->where('name', 'task-qualification')->sole();
+    $cell = $edge->cells()->create(['slot' => 1, 'status' => 'ready']);
+    App\Models\DomainEdgeCell::query()->create(['domain_id' => $domain->id, 'edge_id' => $edge->id, 'replica' => 1,
+        'active_cell_id' => $cell->id, 'desired_revision' => 1, 'state' => 'active']);
     $operation = App\Models\Operation::query()->create(['type' => 'edge.origin_test', 'status' => 'pending', 'actor_id' => $owner->id,
         'input' => ['domain_id' => $domain->id, 'record_id' => $record->id, 'addresses' => ['8.8.8.8'],
             'origin_checksum' => hash('sha256', App\Support\ArtifactSigner::encode($record->origin))]]);
