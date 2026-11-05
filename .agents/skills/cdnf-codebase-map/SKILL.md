@@ -28,18 +28,30 @@ symbol and caller queries over reading whole files.
 | UI | `app/Filament/Admin/**` (admin panel `/admin`), `app/Filament/Domain/**` (domain panel `/app`), `app/Filament/Shared/Pages` | `FilamentPanelAccessTest`, `FilamentWorkflowTest` |
 | UI design system (Kumo, ported) | `resources/css/filament/shared/theme.css` (tokens and component skins), `app/Providers/Filament/PanelDesign.php` (palettes, shell), `app/Providers/Filament/PhosphorIcons.php` (Filament icons), `resources/views/components/ui/*` (shared Blade components); browser suite in `tests/browser` | `DesignSystemConsistencyTest`, `tests/browser/run.sh` |
 | Control-plane HA | `Support/ControlPlane.php` (epoch, fence, status), `Console/Commands/Control*.php`, `Http/Middleware/ControlEpoch.php`, `EdgeAgentController::controlAddresses` | `ControlPlaneHighAvailabilityTest` |
+| Reports | `Console/Commands/BuildReport.php`, `Models/GeneratedReport.php`, `Http/Controllers/Admin/ReportController.php` (monthly usage and weekly operations reports from rollups only) | `ReportTest` if present, else `OperationsApiTest` |
+| Database baseline | `database/schema/pgsql-schema.sql` and `sqlite-schema.sql` (squashed baseline, loaded on an empty database), then only the migrations after it in `database/migrations` | `RepositoryContractTest` |
 | Queues | `config/horizon.php` (lanes: interactive, runtime, certificate_purge, bulk_maintenance) | — |
 
 ## Runtime
 
 | Component | Files | Tests |
 | --- | --- | --- |
-| Edge agent (Go) | `edge-agent/main.go` (sync, activate, tasks, acks), `generation.go`, `backup.go` | `edge-agent/*_test.go` |
+| Edge agent (Go) | `edge-agent/main.go` (sync, activate, tasks, acks), `generation.go`, `backup.go`. `EDGE_RUNTIME_DIR` is required and there is one activation path (a compiled generation under that directory) | `edge-agent/*_test.go` |
 | Edge gateway (Go, L4 SNI/Host router) | `edge-gateway/main.go` | `edge-gateway/*_test.go` |
 | Cell runtime (OpenResty) | `docker/openresty/runtime.lua`, `docker/nginx/edge-runtime.conf`, `proxy-cache.conf`, `docker/openresty/waf.conf` | `tests/e2e/edge_purge_protocol.py`, `origin_destinations.py` |
 | DNS | `docker/pdns/pdns.conf`, `docker/dnsdist/dnsdist.conf`, `docker/pdns/geoip-zones.yml` | `tests/e2e/dns_authoritative.py`, `geo_dns.py`, `dns_images.py` |
 | Telemetry | `docker/vector/vector.yaml`, `docker/clickhouse/init.sql`, `docker/clickhouse/migrations/` | `tests/e2e/telemetry_analytics.py`, `vector_traffic.py` |
 | Control ingress | `docker/nginx/default.conf` (panel/API), `docker/nginx/edge-control.conf` (agent mTLS), `deploy/production/Caddyfile*` | `tests/e2e/edge_control_mtls.py`, `caddy_ingress.py` |
+
+## Observability and browser qualification
+
+| Concern | Files | Tests |
+| --- | --- | --- |
+| Prometheus, alerts, SLO and dashboard rules | `docker/prometheus/*.yml` (every alert carries a team label, a runbook, and a dashboard) | `tests/observability/test_metrics_contract.py`, `alerts.test.yml` |
+| Role-based Grafana as code | `docker/grafana/` (`build_dashboards.py` generates the dashboards, `library-panels`, `access.json`, `bootstrap.py`) | `tests/observability/test_grafana_contract.py`, `test_grafana_bootstrap.py`, `tests/browser/grafana` (`make dev-grafana-browser`) |
+| Deterministic observability seed | `scripts/observability`, `make dev-observability-seed` | `tests/e2e/grafana_observability.py` |
+| Fleet local web (127.0.0.1 only, same engine as the CLI) | `scripts/cdnfoundry_fleet/web.py`, `web_assets/` | `tests/fleet`, `tests/browser/fleet-specs` (`run-fleet.sh`) |
+| Admin and domain panel browser suite | `tests/browser/specs`, `seed.php`, `run.sh` (own disposable database) | `tests/browser/run.sh` |
 
 ## Deployment and tooling
 

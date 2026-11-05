@@ -20,7 +20,7 @@ The names (from `ManagedCertificateNames`), the issuer, the renewal window, key 
 ## Procedure
 1. Issue only for hostnames that are proxied on an active, verified domain, using DNS-01 TXT records published by `PowerDnsZone::render()`.
 2. Validate uploads: key matches certificate, full chain, names covered, algorithm and size, not expired.
-3. Keys stay encrypted (`encrypted` cast on `private_key_ciphertext`). Reading the attribute decrypts it, so never copy it into JSON, snapshots, logs, or API responses (roadmap C1, C2).
+3. Keys stay encrypted (`encrypted` cast on `private_key_ciphertext`). Reading the attribute decrypts it, so never copy it into JSON, snapshots, logs, or API responses.
 4. Spread renewals across days, not only by a few seconds of initial jitter. Keep the current certificate active until its replacement is deployed.
 5. The ACME directory in development is Pebble (`compose.dev.yml` service `pebble`).
 

@@ -20,9 +20,9 @@ Zone ownership, record types and modes (`dns_only`, `proxied`, `geo_dns`), limit
 ## Procedure
 1. Normalize names with `DomainName::normalize` (Punycode, trailing dot). Validate types, values, TTLs, CNAME exclusivity, duplicates, and A/AAAA parity in `DnsRecordData` and `DnsZoneValidator`.
 2. Write all record changes for one request in one transaction with one revision.
-3. Rendering must never throw for one record and block the whole zone. Today `PowerDnsZone::render()` throws for a proxied record without an active pool (roadmap H4).
+3. Rendering must never throw for one record and block the whole zone. A proxied record is published before its placement is active, using the default pool's hostname, so one record never blocks the zone.
 3a. Customer nameserver pairs (`platform_dns_settings.customer_nameserver_pairs`, `NameserverPairs`, `AllocateNameserverPair`) are separate from the apex NS set: A/AAAA only, no wildcard, allocated asynchronously against the parent delegation, reserved per name under `Domain::lockCanonicalName` with the `domains_name_pair_reserved` index.
-4. The serial must change exactly when the content changes. The platform zone serial currently does not follow its content (roadmap M3).
+4. The serial must change exactly when the content changes. The platform zone serial follows its content and is monotonic. The platform zone goes to the hidden DNS primary; `platform_dns_settings.cluster_targets` no longer exists.
 5. DNSdist is the only public endpoint. PowerDNS and its API stay private. Geo-DNS uses the local MMDB only.
 6. Verify with real queries through DNSdist over UDP and TCP, IPv4 and IPv6.
 
