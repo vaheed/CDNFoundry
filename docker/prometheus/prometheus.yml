@@ -3,6 +3,9 @@ global:
 rule_files:
   - /etc/prometheus/telemetry-alerts.yml
   - /etc/prometheus/control-ha-alerts.yml
+  - /etc/prometheus/traffic-alerts.yml
+  - /etc/prometheus/security-alerts.yml
+  - /etc/prometheus/slo-rules.yml
 alerting:
   alertmanagers:
     - static_configs:
@@ -49,3 +52,80 @@ scrape_configs:
   - job_name: clickhouse
     static_configs:
       - targets: [clickhouse:9363]
+  # Collectors on PoP and DNS hosts export live edge and DNS counters; the `vector` job above is the
+  # collector on the monitoring host itself.
+  - job_name: vector-pop
+    file_sd_configs:
+      - files: [/etc/prometheus/vector-targets.yml]
+        refresh_interval: 30s
+  - job_name: grafana
+    static_configs:
+      - targets: [grafana:3000]
+  # Synthetic probes. Each target file entry names its probe module, PoP, region, and IP version.
+  - job_name: blackbox-http
+    metrics_path: /probe
+    params: { module: [http_up] }
+    file_sd_configs:
+      - files: [/etc/prometheus/probe-targets.yml]
+        refresh_interval: 30s
+    relabel_configs:
+      - source_labels: [probe]
+        regex: http
+        action: keep
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+  - job_name: blackbox-tcp
+    metrics_path: /probe
+    params: { module: [tcp_connect] }
+    file_sd_configs:
+      - files: [/etc/prometheus/probe-targets.yml]
+        refresh_interval: 30s
+    relabel_configs:
+      - source_labels: [probe]
+        regex: tcp
+        action: keep
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+  - job_name: blackbox-dns-udp
+    metrics_path: /probe
+    params: { module: [dns_udp] }
+    file_sd_configs:
+      - files: [/etc/prometheus/probe-targets.yml]
+        refresh_interval: 30s
+    relabel_configs:
+      - source_labels: [probe]
+        regex: dns_udp
+        action: keep
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+  - job_name: blackbox-dns-tcp
+    metrics_path: /probe
+    params: { module: [dns_tcp] }
+    file_sd_configs:
+      - files: [/etc/prometheus/probe-targets.yml]
+        refresh_interval: 30s
+    relabel_configs:
+      - source_labels: [probe]
+        regex: dns_tcp
+        action: keep
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+  - job_name: blackbox
+    static_configs:
+      - targets: [blackbox:9115]

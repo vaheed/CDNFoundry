@@ -551,6 +551,8 @@ services:
     volumes:
       - ./docker/vector/vector.yaml:/etc/vector/vector.yaml:ro
       - vector-data:/vector-data-dir
+    # Prometheus on the monitoring host scrapes the live counters from this address.
+    ports: ["${VECTOR_METRICS_BIND}:9598"]
     networks: [telemetry, edge, dns-private]
     restart: unless-stopped
     healthcheck:
@@ -681,10 +683,17 @@ services:
     image: prom/prometheus:v3.13.3@sha256:6976aa8a60fec930796ce5772b8d12da7a318a5daa8d40d69c5c7819a05eeed7
     profiles: [telemetry]
     group_add: ["82"]
+    # Retention is explicit: it matches the typed telemetry.prometheus_retention_days default.
+    command: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.path=/prometheus, --storage.tsdb.retention.time=30d]
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro
       - ./docker/prometheus/control-ha-alerts.yml:/etc/prometheus/control-ha-alerts.yml:ro
+      - ./docker/prometheus/traffic-alerts.yml:/etc/prometheus/traffic-alerts.yml:ro
+      - ./docker/prometheus/security-alerts.yml:/etc/prometheus/security-alerts.yml:ro
+      - ./docker/prometheus/slo-rules.yml:/etc/prometheus/slo-rules.yml:ro
+      - ${PROMETHEUS_PROBE_TARGETS_FILE}:/etc/prometheus/probe-targets.yml:ro
+      - ${PROMETHEUS_VECTOR_TARGETS_FILE}:/etc/prometheus/vector-targets.yml:ro
       - ${PROMETHEUS_CONTROL_TARGETS_FILE}:/etc/prometheus/control-targets.yml:ro
       - ${PROMETHEUS_NODE_TARGETS_FILE}:/etc/prometheus/node-targets.yml:ro
       - ${PROMETHEUS_DNS_TARGETS_FILE}:/etc/prometheus/dns-targets.yml:ro
@@ -823,6 +832,24 @@ services:
       timeout: 3s
       retries: 5
 
+
+  blackbox:
+    logging: *bounded-logging
+    <<: *hardened
+    mem_limit: 128m
+    image: prom/blackbox-exporter:v0.28.0@sha256:e753ff9f3fc458d02cca5eddab5a77e1c175eee484a8925ac7d524f04366c2fc
+    profiles: [telemetry]
+    command: [--config.file=/etc/blackbox/blackbox.yml]
+    volumes:
+      - ./docker/prometheus/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    networks: [telemetry, egress]
+    read_only: true
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, wget, -qO-, http://127.0.0.1:9115/-/healthy]
+      interval: 30s
+      timeout: 3s
+      retries: 5
 
   alertmanager:
     logging: *bounded-logging

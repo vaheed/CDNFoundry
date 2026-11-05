@@ -245,6 +245,7 @@ transforms:
       . = {
         "kind": .event_type,
         "pop": .pop,
+        "region": .region,
         "edge": .edge_id,
         "status_class": status_class,
         "cache_status": cache,
@@ -279,29 +280,29 @@ transforms:
     type: log_to_metric
     inputs: [edge_request_events]
     metrics:
-      - { type: counter, field: kind, name: cdnf_edge_requests_total, tags: { pop: "{{pop}}", edge: "{{edge}}", status_class: "{{status_class}}", cache_status: "{{cache_status}}" } }
-      - { type: counter, field: bytes_sent, increment_by_value: true, name: cdnf_edge_bytes_sent_total, tags: { pop: "{{pop}}", edge: "{{edge}}" } }
-      - { type: histogram, field: request_seconds, name: cdnf_edge_request_duration_seconds, tags: { pop: "{{pop}}", edge: "{{edge}}" } }
+      - { type: counter, field: kind, name: cdnf_edge_requests_total, tags: { pop: "{{pop}}", region: "{{region}}", edge: "{{edge}}", status_class: "{{status_class}}", cache_status: "{{cache_status}}" } }
+      - { type: counter, field: bytes_sent, increment_by_value: true, name: cdnf_edge_bytes_sent_total, tags: { pop: "{{pop}}", region: "{{region}}", edge: "{{edge}}" } }
+      - { type: histogram, field: request_seconds, name: cdnf_edge_request_duration_seconds, tags: { pop: "{{pop}}", region: "{{region}}", edge: "{{edge}}" } }
   edge_origin_metrics:
     type: log_to_metric
     inputs: [edge_origin_events]
     metrics:
-      - { type: histogram, field: origin_seconds, name: cdnf_edge_origin_duration_seconds, tags: { pop: "{{pop}}", edge: "{{edge}}" } }
+      - { type: histogram, field: origin_seconds, name: cdnf_edge_origin_duration_seconds, tags: { pop: "{{pop}}", region: "{{region}}", edge: "{{edge}}" } }
   edge_origin_failure_metrics:
     type: log_to_metric
     inputs: [edge_origin_failure_events]
     metrics:
-      - { type: counter, field: kind, name: cdnf_edge_origin_failures_total, tags: { pop: "{{pop}}", edge: "{{edge}}" } }
+      - { type: counter, field: kind, name: cdnf_edge_origin_failures_total, tags: { pop: "{{pop}}", region: "{{region}}", edge: "{{edge}}" } }
   edge_security_metrics:
     type: log_to_metric
     inputs: [edge_security_events]
     metrics:
-      - { type: counter, field: kind, name: cdnf_edge_security_events_total, tags: { pop: "{{pop}}", edge: "{{edge}}", class: "{{security_class}}" } }
+      - { type: counter, field: kind, name: cdnf_edge_security_events_total, tags: { pop: "{{pop}}", region: "{{region}}", edge: "{{edge}}", class: "{{security_class}}" } }
   edge_tls_metrics:
     type: log_to_metric
     inputs: [edge_tls_events]
     metrics:
-      - { type: counter, field: kind, name: cdnf_edge_tls_failures_total, tags: { pop: "{{pop}}", edge: "{{edge}}", reason: "{{tls_reason}}" } }
+      - { type: counter, field: kind, name: cdnf_edge_tls_failures_total, tags: { pop: "{{pop}}", region: "{{region}}", edge: "{{edge}}", reason: "{{tls_reason}}" } }
   dns_metric_events:
     type: remap
     inputs: [safe_dns_events]
@@ -311,12 +312,12 @@ transforms:
       if !includes(["NOERROR", "NXDOMAIN", "SERVFAIL", "REFUSED", "FORMERR", "NOTIMP"], rcode) { rcode = "OTHER" }
       outcome = to_string(.outcome) ?? ""
       if outcome != "response_limit" { outcome = "answered" }
-      . = { "kind": "dns", "pop": .pop, "rcode": rcode, "outcome": outcome }
+      . = { "kind": "dns", "pop": .pop, "region": .region, "rcode": rcode, "outcome": outcome }
   dns_metrics:
     type: log_to_metric
     inputs: [dns_metric_events]
     metrics:
-      - { type: counter, field: kind, name: cdnf_dns_queries_total, tags: { pop: "{{pop}}", rcode: "{{rcode}}", outcome: "{{outcome}}" } }
+      - { type: counter, field: kind, name: cdnf_dns_queries_total, tags: { pop: "{{pop}}", region: "{{region}}", rcode: "{{rcode}}", outcome: "{{outcome}}" } }
 
 sinks:
   clickhouse_edge:

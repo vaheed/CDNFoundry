@@ -340,6 +340,9 @@ class Renderer:
             "LOKI_RETENTION_PERIOD": "336h",
             "LOKI_MAX_QUERY_LENGTH": "336h",
             "PROMETHEUS_EDGE_TARGETS_FILE": "./generated/prometheus-edge-targets.yml",
+            "PROMETHEUS_PROBE_TARGETS_FILE": "./generated/prometheus-probe-targets.yml",
+            "PROMETHEUS_VECTOR_TARGETS_FILE": "./generated/prometheus-vector-targets.yml",
+            "VECTOR_METRICS_BIND": f"{node.get('monitor_ipv4') or node['bind_ipv4']}:9598",
             "PROMETHEUS_LOG_TARGETS_FILE": "./generated/prometheus-log-targets.yml",
             "PROMETHEUS_CONTROL_TARGETS_FILE": "./generated/prometheus-control-targets.yml",
             "PROMETHEUS_NODE_TARGETS_FILE": "./generated/prometheus-node-targets.yml",
@@ -417,7 +420,7 @@ class Renderer:
                 f"Node {node['name']} is missing required environment values: {', '.join(missing)}; use extra_env"
             )
         # Minimal role environment: only variables referenced by the filtered Compose plus generated configs.
-        always = {"CDNF_RELEASE", "HOST_BIND_IPV4", "HOST_BIND_IPV6"}
+        always = {"CDNF_RELEASE", "HOST_BIND_IPV4", "HOST_BIND_IPV6", "VECTOR_METRICS_BIND"}
         if node["role"] in {"dns", "dns-edge"}:
             always |= {"PDNS_API_KEY"}
         if node["role"] == "dns-edge":
@@ -611,6 +614,8 @@ class Renderer:
             atomic_write(generated / "prometheus-node-targets.yml", self._prometheus_targets(state, node), 0o644)
             atomic_write(generated / "prometheus-dns-targets.yml", self._prometheus_service_targets(state, "dns", node), 0o644)
             atomic_write(generated / "prometheus-edge-targets.yml", self._prometheus_service_targets(state, "edge", node), 0o644)
+            atomic_write(generated / "prometheus-vector-targets.yml", self._prometheus_service_targets(state, "vector", node), 0o644)
+            atomic_write(generated / "prometheus-probe-targets.yml", self._prometheus_probe_targets(state), 0o644)
             atomic_write(generated / "prometheus-log-targets.yml", self._prometheus_service_targets(state, "logs", node), 0o644)
             atomic_write(generated / "geo-routing-policy.json", json.dumps(self._geo_policy(state), indent=2) + "\n", 0o600)
 
@@ -689,17 +694,43 @@ exec python3 ./reconcile-pdns-password.py
                 continue
             if service == "dns" and node["role"] not in {"dns", "dns-edge"}:
                 continue
+            if service == "vector" and node["role"] not in {"edge", "dns", "dns-edge"}:
+                continue
             if service == "logs" and state["features"]["logs"]["mode"] != "centralized":
                 continue
             if node["name"] == monitoring_node["name"]:
-                address = "log-collector" if service == "logs" else "dnsdist" if service == "dns" else address
+                address = "log-collector" if service == "logs" else "dnsdist" if service == "dns" else "vector" if service == "vector" else address
             groups.append({
-                "targets": [f"{address}:{'9105' if service == 'edge' else '8083' if service == 'dns' else '9599'}"],
+                "targets": [f"{address}:{'9105' if service == 'edge' else '8083' if service == 'dns' else '9598' if service == 'vector' else '9599'}"],
                 "labels": {"node": node["name"], "role": node["role"]},
             })
         import yaml
 
         return yaml.safe_dump(groups, sort_keys=False)
+
+    def _prometheus_probe_targets(self, state: dict[str, Any]) -> str:
+        """Every PoP and nameserver address is probed from the monitoring host, over IPv4 and IPv6 separately."""
+        import yaml
+
+        groups = []
+        for node in sorted(state["nodes"].values(), key=lambda item: item["name"]):
+            if not node["enabled"] or node["role"] not in {"edge", "dns", "dns-edge"}:
+                continue
+            for version, address in (("4", node.get("public_ipv4")), ("6", node.get("public_ipv6"))):
+                if not address:
+                    continue
+                host = f"[{address}]" if version == "6" else address
+                probes = []
+                if node["role"] in {"edge", "dns-edge"}:
+                    probes += [("http", f"http://{host}/"), ("tcp", f"{host}:443")]
+                if node["role"] in {"dns", "dns-edge"}:
+                    probes += [("dns_udp", f"{host}:53"), ("dns_tcp", f"{host}:53")]
+                for probe, target in probes:
+                    groups.append({
+                        "targets": [target],
+                        "labels": {"probe": probe, "pop": node["name"], "region": node["region"], "ip_version": version},
+                    })
+        return yaml.safe_dump(groups, sort_keys=False) if groups else "[]\n"
 
     def _geo_policy(self, state: dict[str, Any]) -> dict[str, Any]:
         edges = []

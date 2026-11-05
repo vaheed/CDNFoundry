@@ -1056,6 +1056,32 @@ def test_control_monitoring_bundle_uses_project_pki_contract(store: FleetState, 
     assert env["LOG_AUTH_TOKEN"]
 
 
+def test_monitoring_bundle_probes_every_pop_and_nameserver_over_both_ip_versions(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
+    add(store, node("control-1", "control", "192.0.2.140"))
+    add(store, {**node("pop-fra", "edge", "192.0.2.51", region="eu"), "public_ipv6": "2001:db8::51"})
+    add(store, node("dns-sin", "dns", "192.0.2.52", region="apac"))
+    with store.locked():
+        store.configure_feature(store.load(), "monitoring", {"mode": "colocated", "host": None})
+    output = tmp_path / "bundles"
+    Renderer(source_repo, store, output).render(store.load())
+    generated = output / "control-1/generated"
+
+    probes = yaml.safe_load((generated / "prometheus-probe-targets.yml").read_text(encoding="utf-8"))
+    by_pop = {(group["labels"]["pop"], group["labels"]["probe"], group["labels"]["ip_version"]): group["targets"][0] for group in probes}
+    assert by_pop[("pop-fra", "http", "4")] == "http://192.0.2.51/"
+    assert by_pop[("pop-fra", "http", "6")] == "http://[2001:db8::51]/"
+    assert by_pop[("pop-fra", "tcp", "6")] == "[2001:db8::51]:443"
+    assert by_pop[("dns-sin", "dns_udp", "4")] == "192.0.2.52:53"
+    assert ("dns-sin", "dns_tcp", "4") in by_pop
+    assert not any(pop == "dns-sin" and probe in {"http", "tcp"} for pop, probe, _ in by_pop)
+    assert not any(pop == "control-1" for pop, _, _ in by_pop)
+
+    collectors = yaml.safe_load((generated / "prometheus-vector-targets.yml").read_text(encoding="utf-8"))
+    assert sorted(group["labels"]["node"] for group in collectors) == ["dns-sin", "pop-fra"]
+    assert all(group["targets"][0].endswith(":9598") for group in collectors)
+    assert env_values(output / "control-1/.env.prod")["VECTOR_METRICS_BIND"] == "0.0.0.0:9598"
+
+
 def test_real_control_bundle_serves_scheduled_public_health(store: FleetState, tmp_path: Path) -> None:
     add(store, node("control-1", "control", "192.0.2.140"))
     output = tmp_path / "real-bundles"

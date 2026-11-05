@@ -1,0 +1,10 @@
+- targets: ["http://edge-a:8080/healthz"]
+  labels: { probe: http, pop: dev-a, region: dev, ip_version: "4" }
+- targets: ["http://edge-b:8080/healthz"]
+  labels: { probe: http, pop: dev-b, region: dev, ip_version: "4" }
+- targets: ["dnsdist:53"]
+  labels: { probe: tcp, pop: dev-dns, region: dev, ip_version: "4" }
+- targets: ["dnsdist:53"]
+  labels: { probe: dns_udp, pop: dev-dns, region: dev, ip_version: "4" }
+- targets: ["dnsdist:53"]
+  labels: { probe: dns_tcp, pop: dev-dns, region: dev, ip_version: "4" }
