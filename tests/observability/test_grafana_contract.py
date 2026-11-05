@@ -129,6 +129,7 @@ class GrafanaContractTest(unittest.TestCase):
     def test_folders_are_provisioned_with_fixed_uids(self) -> None:
         providers = yaml.safe_load((GRAFANA / "provisioning/dashboards/dashboards.yml").read_text())["providers"]
         self.assertEqual([(title, uid) for _, title, uid in FOLDERS], [(item["folder"], item["folderUid"]) for item in providers])
+        self.assertEqual({"cdnf-system-command-center", "cdnf-domain-command-center"}, set(ACCESS["retired_dashboards"]))
         for item, (directory, _, _) in zip(providers, FOLDERS):
             self.assertEqual(f"/var/lib/grafana/dashboards/{directory}", item["options"]["path"])
             self.assertTrue(item["disableDeletion"])

@@ -658,7 +658,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "table",
-          "rawSql": "SELECT zone, sum(queries) AS queries FROM cdnf.dns_hourly WHERE $__timeFilter(interval_start) AND zone != '' GROUP BY zone ORDER BY queries DESC LIMIT 10",
+          "rawSql": "SELECT zone, sum(queries) AS query_count FROM cdnf.dns_hourly WHERE $__timeFilter(interval_start) AND zone != '' GROUP BY zone ORDER BY query_count DESC LIMIT 10",
           "refId": "A"
         }
       ],
@@ -736,7 +736,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "table",
-          "rawSql": "SELECT zone, sum(queries) AS queries FROM cdnf.dns_hourly WHERE $__timeFilter(interval_start) AND rcode = 'NXDOMAIN' AND zone != '' GROUP BY zone ORDER BY queries DESC LIMIT 10",
+          "rawSql": "SELECT zone, sum(queries) AS query_count FROM cdnf.dns_hourly WHERE $__timeFilter(interval_start) AND rcode = 'NXDOMAIN' AND zone != '' GROUP BY zone ORDER BY query_count DESC LIMIT 10",
           "refId": "A"
         }
       ],
@@ -810,7 +810,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "table",
-          "rawSql": "SELECT qtype, sum(queries) AS queries FROM cdnf.dns_hourly WHERE $__timeFilter(interval_start) GROUP BY qtype ORDER BY queries DESC LIMIT 10",
+          "rawSql": "SELECT qtype, sum(queries) AS query_count FROM cdnf.dns_hourly WHERE $__timeFilter(interval_start) GROUP BY qtype ORDER BY query_count DESC LIMIT 10",
           "refId": "A"
         }
       ],

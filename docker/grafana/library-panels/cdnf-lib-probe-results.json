@@ -71,6 +71,23 @@
               }
             }
           ]
+        },
+        {
+          "matcher": {
+            "id": "byName",
+            "options": "PoP"
+          },
+          "properties": [
+            {
+              "id": "links",
+              "value": [
+                {
+                  "title": "Open PoP detail",
+                  "url": "/d/cdnf-pop-detail?var-pop=${__value.raw}"
+                }
+              ]
+            }
+          ]
         }
       ]
     },

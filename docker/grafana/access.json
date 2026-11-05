@@ -1,14 +1,76 @@
 {
   "teams": {
-    "platform-admin": {"edit": true, "folders": ["cdnf-folder-overview", "cdnf-folder-noc", "cdnf-folder-soc", "cdnf-folder-platform", "cdnf-folder-oncall", "cdnf-folder-domains", "cdnf-folder-business", "cdnf-folder-samples"], "home": "cdnf-control-plane"},
-    "noc": {"edit": false, "folders": ["cdnf-folder-overview", "cdnf-folder-noc", "cdnf-folder-oncall", "cdnf-folder-samples"], "home": "cdnf-now"},
-    "soc": {"edit": false, "folders": ["cdnf-folder-overview", "cdnf-folder-soc", "cdnf-folder-oncall", "cdnf-folder-samples"], "home": "cdnf-security-overview"},
-    "support": {"edit": false, "folders": ["cdnf-folder-overview", "cdnf-folder-domains", "cdnf-folder-samples"], "home": "cdnf-domain-overview"},
-    "business": {"edit": false, "folders": ["cdnf-folder-overview", "cdnf-folder-business", "cdnf-folder-samples"], "home": "cdnf-usage-billing"}
+    "platform-admin": {
+      "edit": true,
+      "folders": [
+        "cdnf-folder-overview",
+        "cdnf-folder-noc",
+        "cdnf-folder-soc",
+        "cdnf-folder-platform",
+        "cdnf-folder-oncall",
+        "cdnf-folder-domains",
+        "cdnf-folder-business",
+        "cdnf-folder-samples"
+      ],
+      "home": "cdnf-control-plane"
+    },
+    "noc": {
+      "edit": false,
+      "folders": [
+        "cdnf-folder-overview",
+        "cdnf-folder-noc",
+        "cdnf-folder-oncall",
+        "cdnf-folder-samples"
+      ],
+      "home": "cdnf-now"
+    },
+    "soc": {
+      "edit": false,
+      "folders": [
+        "cdnf-folder-overview",
+        "cdnf-folder-soc",
+        "cdnf-folder-oncall",
+        "cdnf-folder-samples"
+      ],
+      "home": "cdnf-security-overview"
+    },
+    "support": {
+      "edit": false,
+      "folders": [
+        "cdnf-folder-overview",
+        "cdnf-folder-domains",
+        "cdnf-folder-samples"
+      ],
+      "home": "cdnf-domain-overview"
+    },
+    "business": {
+      "edit": false,
+      "folders": [
+        "cdnf-folder-overview",
+        "cdnf-folder-business",
+        "cdnf-folder-samples"
+      ],
+      "home": "cdnf-usage-billing"
+    }
   },
   "default_home": "cdnf-now",
   "playlists": {
-    "NOC wall": ["cdnf-noc-wall", "cdnf-global-traffic", "cdnf-pop-fleet", "cdnf-dns-authoritative", "cdnf-synthetic-probes"],
-    "SOC wall": ["cdnf-security-overview", "cdnf-l7-flood", "cdnf-dns-abuse", "cdnf-waf"]
-  }
+    "NOC wall": [
+      "cdnf-noc-wall",
+      "cdnf-global-traffic",
+      "cdnf-pop-fleet",
+      "cdnf-dns-authoritative",
+      "cdnf-synthetic-probes"
+    ],
+    "SOC wall": [
+      "cdnf-security-overview",
+      "cdnf-l7-flood",
+      "cdnf-dns-abuse",
+      "cdnf-waf"
+    ]
+  },
+  "retired_dashboards": [
+    "cdnf-system-command-center",
+    "cdnf-domain-command-center"
+  ]
 }

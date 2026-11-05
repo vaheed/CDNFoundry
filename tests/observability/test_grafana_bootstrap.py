@@ -77,6 +77,10 @@ class FakeGrafana(http.server.BaseHTTPRequestHandler):
         state["library"][uid] = {"version": state["library"][uid]["version"] + 1, "model": body["model"], "name": body["name"]}
         return self._send(200, {"result": {}})
 
+    def do_DELETE(self) -> None:  # noqa: N802
+        self.state["calls"].append(("DELETE", self.path))
+        return self._send(404, {})
+
     def do_PUT(self) -> None:  # noqa: N802
         state, body = self.state, self._body()
         state["calls"].append(("PUT", self.path))
@@ -111,6 +115,11 @@ class BootstrapTest(unittest.TestCase):
             self.assertNotIn("Editor", [item.get("role") for item in items])
         self.assertEqual({names["noc"]}, {item["teamId"] for item in state["permissions"]["cdnf-folder-noc"] if item.get("teamId") and item["teamId"] != names["platform-admin"]})
         self.assertNotIn(names["noc"], {item.get("teamId") for item in state["permissions"]["cdnf-folder-soc"]})
+
+    def test_the_retired_dashboards_are_removed_and_a_missing_one_is_fine(self) -> None:
+        bootstrap.reconcile(self.grafana)
+        deleted = {call[1] for call in FakeGrafana.state["calls"] if call[0] == "DELETE"}
+        self.assertEqual({"/api/dashboards/uid/cdnf-system-command-center", "/api/dashboards/uid/cdnf-domain-command-center"}, deleted)
 
     def test_homes_and_playlists_are_set(self) -> None:
         bootstrap.reconcile(self.grafana)

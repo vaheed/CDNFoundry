@@ -197,7 +197,7 @@ def geomap(title: str, description: str, targets: list[dict[str, Any]], *, w: in
     return {
         "type": "geomap", "title": title, "description": description, "datasource": _source(targets), "targets": refs(targets),
         "gridPos": {"w": w, "h": h, "x": 0, "y": 0},
-        "fieldConfig": {"defaults": {**_defaults("short", "health", None), "unit": "short"}, "overrides": []},
+        "fieldConfig": {"defaults": {**_defaults("short", "health", None), "unit": "short", "links": [{"title": "Open PoP detail", "url": "/d/cdnf-pop-detail?var-pop=${__data.fields.pop}"}]}, "overrides": []},
         "options": {"view": {"id": "zero", "lat": 20, "lon": 10, "zoom": 1.2, "allLayers": True}, "controls": {"showZoom": True, "mouseWheelZoom": False},
                     "basemap": {"type": "default", "name": "Basemap", "config": {}},
                     "layers": [{"type": "markers", "name": "PoPs", "location": {"mode": "lookup", "lookup": "country", "gazetteer": "public/gazetteer/countries.json"},

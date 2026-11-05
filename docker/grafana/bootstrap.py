@@ -123,7 +123,14 @@ def test_users(grafana: Grafana, ids: dict[str, int], password: str) -> None:
         grafana.call("POST", f"/api/teams/{team_id}/members", {"userId": user_id}, allow=(400, 409))
 
 
+def retire(grafana: Grafana) -> None:
+    """Remove the two earlier command-center dashboards. Provisioning keeps a dashboard whose file is gone."""
+    for uid in ACCESS["retired_dashboards"]:
+        grafana.call("DELETE", f"/api/dashboards/uid/{uid}", allow=(404,))
+
+
 def reconcile(grafana: Grafana, *, test_password: str | None = None) -> None:
+    retire(grafana)
     library_panels(grafana)
     ids = teams(grafana)
     folders_ready = all(grafana.call("GET", f"/api/folders/{uid}", allow=(404,)) is not None for uid in {uid for s in ACCESS["teams"].values() for uid in s["folders"]})

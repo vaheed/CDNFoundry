@@ -70,7 +70,7 @@ def build() -> dict[pathlib.Path, str]:
 
 if __name__ == "__main__":
     files = build()
-    existing = {path for path in ROOT.rglob("*.json")} | {path for path in LIBRARY_ROOT.rglob("*.json")}
+    existing = {path for path in ROOT.rglob("*.json") if path.parent.name != "retired"} | {path for path in LIBRARY_ROOT.rglob("*.json")}
     if "--check" in sys.argv:
         stale = [str(path) for path, text in files.items() if not path.exists() or path.read_text() != text] + [str(path) for path in existing - set(files)]
         if stale:

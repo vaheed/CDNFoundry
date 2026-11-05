@@ -659,6 +659,12 @@
           "color": {
             "mode": "thresholds"
           },
+          "links": [
+            {
+              "title": "Open PoP detail",
+              "url": "/d/cdnf-pop-detail?var-pop=${__data.fields.pop}"
+            }
+          ],
           "mappings": [
             {
               "options": {

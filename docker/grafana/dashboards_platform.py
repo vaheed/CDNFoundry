@@ -241,7 +241,7 @@ def domain_overview() -> dict:
 def domain_comparison() -> dict:
     rows = [
         [table("Domains side by side", "The selected hostnames with requests, errors, cache hit, bytes, and latency, for support to compare.", [ch(traffic_sql(
-            f"sum(requests) AS requests, {CH_ERR_PCT} AS error_percent, {CH_HIT_PCT} AS hit_percent, sum(bytes_sent) AS bytes, {CH_P95} AS p95_ms", dims="hostname", hostname=True, order="requests DESC", limit=30), table=True)], w=24, h=9,
+            f"sum(requests) AS request_count, {CH_ERR_PCT} AS error_percent, {CH_HIT_PCT} AS hit_percent, sum(bytes_sent) AS bytes, {CH_P95} AS p95_ms", dims="hostname", hostname=True, order="request_count DESC", limit=30), table=True)], w=24, h=9,
             overrides=[{"matcher": {"id": "byName", "options": "bytes"}, "properties": [{"id": "unit", "value": "bytes"}]},
                        {"matcher": {"id": "byRegexp", "options": ".*_percent"}, "properties": [{"id": "unit", "value": "percent"}, {"id": "decimals", "value": 2}]},
                        {"matcher": {"id": "byName", "options": "p95_ms"}, "properties": [{"id": "unit", "value": "ms"}, {"id": "decimals", "value": 0}]}])],
@@ -262,8 +262,8 @@ def usage_billing() -> dict:
          stat("Requests this month", "Requests served this month.", [pg("SELECT COALESCE(sum(requests), 0) AS requests FROM grafana_usage_rollups WHERE interval_start >= date_trunc('month', now())")], "short", w=6),
          stat("DNS queries this month", "Authoritative DNS queries this month.", [pg("SELECT COALESCE(sum(dns_queries), 0) AS queries FROM grafana_usage_rollups WHERE interval_start >= date_trunc('month', now())")], "short", w=6)],
         [table("Usage by domain", "Bandwidth, 95th-percentile bandwidth, and requests per domain for the selected range.", [ch(
-            "SELECT domain_id, sum(bytes_sent) AS bytes, quantile(0.95)(bps) AS p95_bps, sum(requests) AS requests FROM "
-            "(SELECT domain_id, interval_start, sum(bytes_sent) AS bytes_sent, sum(requests) AS requests, 8 * sum(bytes_sent) / 300 AS bps FROM cdnf.edge_usage_5m WHERE $__timeFilter(interval_start) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY domain_id, interval_start) "
+            "SELECT domain_id, sum(sent) AS bytes, quantile(0.95)(bps) AS p95_bps, sum(reqs) AS request_count FROM "
+            "(SELECT domain_id, interval_start, sum(bytes_sent) AS sent, sum(requests) AS reqs, 8 * sum(bytes_sent) / 300 AS bps FROM cdnf.edge_usage_5m WHERE $__timeFilter(interval_start) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY domain_id, interval_start) "
             "GROUP BY domain_id ORDER BY bytes DESC LIMIT 100", table=True)], w=16,
             overrides=[{"matcher": {"id": "byName", "options": "bytes"}, "properties": [{"id": "unit", "value": "bytes"}]}, {"matcher": {"id": "byName", "options": "p95_bps"}, "properties": [{"id": "unit", "value": "bps"}, {"id": "decimals", "value": 1}]}]),
          table("Usage by region", "Bandwidth and requests per region for the selected range.", [ch("SELECT region, sum(bytes_sent) AS bytes, sum(requests) AS requests FROM cdnf.edge_usage_5m WHERE $__timeFilter(interval_start) AND $__conditionalAll(region IN (${region:singlequote}), $region) GROUP BY region ORDER BY bytes DESC", table=True)], w=8,

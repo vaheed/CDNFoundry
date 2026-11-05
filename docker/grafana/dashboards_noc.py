@@ -40,7 +40,8 @@ def probe_table(w: int = 12, h: int = 8) -> dict:
                                   "renameByName": {"job": "Probe", "pop": "PoP", "ip_version": "IP", "region": "Region", "Value": "Up"}}}],
                  overrides=[{"matcher": {"id": "byName", "options": "Up"}, "properties": [
                      {"id": "thresholds", "value": {"mode": "absolute", "steps": THRESHOLDS["health"]}},
-                     {"id": "custom.cellOptions", "value": {"type": "color-background"}}]}]), w=w, h=h)
+                     {"id": "custom.cellOptions", "value": {"type": "color-background"}}]},
+                     {"matcher": {"id": "byName", "options": "PoP"}, "properties": [{"id": "links", "value": [{"title": "Open PoP detail", "url": "/d/cdnf-pop-detail?var-pop=${__value.raw}"}]}]}]), w=w, h=h)
 
 
 def requests_by_status(w: int = 12, h: int = 8) -> dict:

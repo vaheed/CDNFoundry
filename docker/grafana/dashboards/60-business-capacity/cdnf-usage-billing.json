@@ -575,7 +575,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "table",
-          "rawSql": "SELECT domain_id, sum(bytes_sent) AS bytes, quantile(0.95)(bps) AS p95_bps, sum(requests) AS requests FROM (SELECT domain_id, interval_start, sum(bytes_sent) AS bytes_sent, sum(requests) AS requests, 8 * sum(bytes_sent) / 300 AS bps FROM cdnf.edge_usage_5m WHERE $__timeFilter(interval_start) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY domain_id, interval_start) GROUP BY domain_id ORDER BY bytes DESC LIMIT 100",
+          "rawSql": "SELECT domain_id, sum(sent) AS bytes, quantile(0.95)(bps) AS p95_bps, sum(reqs) AS request_count FROM (SELECT domain_id, interval_start, sum(bytes_sent) AS sent, sum(requests) AS reqs, 8 * sum(bytes_sent) / 300 AS bps FROM cdnf.edge_usage_5m WHERE $__timeFilter(interval_start) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY domain_id, interval_start) GROUP BY domain_id ORDER BY bytes DESC LIMIT 100",
           "refId": "A"
         }
       ],

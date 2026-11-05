@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import struct
 import subprocess
@@ -198,6 +199,7 @@ def backfill_prometheus(hours: int = 48) -> None:
 
 
 def backfill_loki(hours: int = 6) -> None:
+    os.environ["LOKI_URL"] = LOKI  # the exporter container uses the Compose name; the host uses the published port
     now = int(time.time() // 60)
     for minute in range(now - hours * 60, now):
         exporter.loki_lines(minute, model.Scenarios())

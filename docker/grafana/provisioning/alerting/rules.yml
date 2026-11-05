@@ -72,7 +72,6 @@ groups:
       summary: More than 20 percent of one domain's responses at one PoP are 5xx
       runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#domain-5xx-ratio-high
       dashboard_url: /d/cdnf-domain-overview
-      __dashboardUid__: cdnf-domain-overview
   - uid: cdnf-domain-flood
     title: DomainRequestFlood
     condition: C
@@ -95,7 +94,7 @@ groups:
         queryType: timeSeries
         rawSql: SELECT now() AS time, toString(cur.domain_id) AS domain_id, cur.pop AS pop, (cur.requests / 300) / nullIf(base.requests / 86400, 0) AS value FROM (SELECT domain_id, pop, sum(requests) AS requests FROM cdnf.edge_traffic_1m WHERE interval_start
           > now() - INTERVAL 5 MINUTE GROUP BY domain_id, pop) AS cur INNER JOIN (SELECT domain_id, sum(requests) AS requests FROM cdnf.edge_traffic_hourly WHERE interval_start BETWEEN now() - INTERVAL 25 HOUR AND now() - INTERVAL 1 HOUR GROUP BY domain_id
-          HAVING sum(requests) > 0) AS base USING domain_id WHERE cur.requests >= 1500
+          HAVING requests > 0) AS base USING domain_id WHERE cur.requests >= 1500
         refId: A
         intervalMs: 1000
         maxDataPoints: 43200
@@ -139,7 +138,6 @@ groups:
       summary: One domain receives over ten times its usual request rate at one PoP
       runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#domain-request-flood
       dashboard_url: /d/cdnf-l7-flood
-      __dashboardUid__: cdnf-l7-flood
   - uid: cdnf-domain-network-share
     title: DomainSingleNetworkShare
     condition: C
@@ -205,7 +203,6 @@ groups:
       summary: One client network sends over 60 percent of a domain's requests at one PoP
       runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#domain-single-network-share
       dashboard_url: /d/cdnf-l7-flood
-      __dashboardUid__: cdnf-l7-flood
   - uid: cdnf-origin-failover
     title: OriginFailover
     condition: C
@@ -270,4 +267,3 @@ groups:
       summary: A domain's traffic moved to its backup origin
       runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#origin-failover
       dashboard_url: /d/cdnf-origin-health
-      __dashboardUid__: cdnf-origin-health
