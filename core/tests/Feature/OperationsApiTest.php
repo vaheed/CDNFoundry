@@ -175,8 +175,8 @@ class OperationsApiTest extends TestCase
         $this->get('/metrics')->assertNotFound();
         $response = $this->withToken('metrics-test-token')->get('/metrics')->assertOk()->assertHeader('content-type', 'text/plain; version=0.0.4; charset=utf-8');
         $response->assertSee('cdnfoundry_component_health')
-            ->assertSee('cdnfoundry_edge_gateway_activations_total{edge="'.$edge->id.'"} 4', false)
-            ->assertSee('cdnfoundry_edge_gateway_connections_accepted_total{edge="'.$edge->id.'"} 10', false)
+            ->assertSee('cdnfoundry_edge_gateway_activations_total{edge="'.$edge->id.'",pop="metrics-edge"} 4', false)
+            ->assertSee('cdnfoundry_edge_gateway_connections_accepted_total{edge="'.$edge->id.'",pop="metrics-edge"} 10', false)
             ->assertDontSee((string) config('app.key'));
     }
 

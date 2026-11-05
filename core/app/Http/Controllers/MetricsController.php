@@ -22,6 +22,7 @@ use App\Support\PlatformSettings;
 use App\Support\SystemHealth;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
@@ -36,8 +37,10 @@ class MetricsController extends Controller
         }
         abort_if($configured === '' || ! hash_equals($configured, (string) $request->bearerToken()), 404);
         $lines = ['# HELP cdnfoundry_component_health Component health (healthy=1).', '# TYPE cdnfoundry_component_health gauge'];
+        $unhealthy = 0;
         foreach ($health->components() as $name => $component) {
             $lines[] = sprintf('cdnfoundry_component_health{component="%s",status="%s"} %d', $name, $component['status'], $component['status'] === 'healthy' ? 1 : 0);
+            $unhealthy += $component['status'] === 'healthy' ? 0 : 1;
         }
         foreach ($health->queues() as $queue => $state) {
             if ($state['depth'] !== null) {
@@ -68,7 +71,19 @@ class MetricsController extends Controller
         $lines[] = '# TYPE cdnfoundry_operations_failed_recent gauge';
         $lines[] = 'cdnfoundry_operations_failed_recent '.Operation::query()->where('status', 'failed')
             ->where(fn ($query) => $query->where('finished_at', '>=', $failureSince)->orWhere(fn ($query) => $query->whereNull('finished_at')->where('updated_at', '>=', $failureSince)))->count();
+        $lines[] = '# HELP cdnfoundry_failed_jobs_recent Queue jobs that failed inside the failed-operations window.';
+        $lines[] = '# TYPE cdnfoundry_failed_jobs_recent gauge';
+        $lines[] = 'cdnfoundry_failed_jobs_recent '.DB::table('failed_jobs')->where('failed_at', '>=', $failureSince)->count();
         $lines = [...$lines, ...$this->propagationLines(), ...ControlPlaneMetrics::lines()];
+        $staleEdges = Edge::query()->where('enabled', true)->where(fn ($query) => $query->whereNull('last_heartbeat_at')->orWhere('last_heartbeat_at', '<', now()->subSeconds(app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds'))))->count();
+        // The one sentence the home dashboard shows, built where every count is known. It names what is wrong.
+        $problems = array_values(array_filter([
+            $unhealthy > 0 ? sprintf('%d %s unhealthy', $unhealthy, $unhealthy === 1 ? 'component' : 'components') : null,
+            $staleEdges > 0 ? sprintf('%d %s stale', $staleEdges, $staleEdges === 1 ? 'edge' : 'edges') : null,
+        ]));
+        $lines[] = '# HELP cdnfoundry_status_summary One line naming what is wrong; the label is the sentence.';
+        $lines[] = '# TYPE cdnfoundry_status_summary gauge';
+        $lines[] = sprintf('cdnfoundry_status_summary{state="%s",summary="%s"} 1', $problems === [] ? 'healthy' : 'degraded', $problems === [] ? 'Healthy: every component reports in' : 'Degraded: '.implode(', ', $problems));
         $lines[] = 'cdnfoundry_dns_deployments_drifted '.DnsDeployment::query()->whereIn('status', ['pending', 'failed'])->count();
         $lines[] = 'cdnfoundry_edges_stale '.Edge::query()->where('enabled', true)->where(fn ($query) => $query->whereNull('last_heartbeat_at')->orWhere('last_heartbeat_at', '<', now()->subSeconds(app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds'))))->count();
         $enabledEdges = Edge::query()->where('enabled', true)->get(['capacity']);
@@ -83,8 +98,8 @@ class MetricsController extends Controller
             $gateway = $edge->capacity['gateway'] ?? [];
             $revision = (int) ($gateway['active_revision'] ?? 0);
             $status = ($gateway['ready'] ?? false) ? 'healthy' : ($edge->last_heartbeat_at?->gte(now()->subSeconds(30)) ? 'degraded' : 'unavailable');
-            $lines[] = sprintf('cdnfoundry_edge_runtime_state{edge="%s",component="gateway",status="%s",revision="%d"} 1', $edge->id, $status, $revision);
-            $lines[] = sprintf('cdnfoundry_edge_runtime_version_drift{edge="%s"} %d', $edge->id, $edge->desired_runtime_versions !== null && $edge->runtime_versions !== $edge->desired_runtime_versions ? 1 : 0);
+            $lines[] = sprintf('cdnfoundry_edge_runtime_state{edge="%s",pop="%s",component="gateway",status="%s",revision="%d"} 1', $edge->id, $this->label($edge->name), $status, $revision);
+            $lines[] = sprintf('cdnfoundry_edge_runtime_version_drift{edge="%s",pop="%s"} %d', $edge->id, $this->label($edge->name), $edge->desired_runtime_versions !== null && $edge->runtime_versions !== $edge->desired_runtime_versions ? 1 : 0);
             foreach ([
                 'ready' => 'ready',
                 'active_revision' => 'active_revision',
@@ -101,17 +116,18 @@ class MetricsController extends Controller
                     continue;
                 }
                 $value = $key === 'ready' ? (($gateway[$key] ?? false) ? 1 : 0) : (int) ($gateway[$key] ?? 0);
-                $lines[] = sprintf('cdnfoundry_edge_gateway_%s{edge="%s"} %d', $metric, $edge->id, $value);
+                $lines[] = sprintf('cdnfoundry_edge_gateway_%s{edge="%s",pop="%s"} %d', $metric, $edge->id, $this->label($edge->name), $value);
             }
         });
-        EdgeCell::query()->with(['edge', 'pool'])->orderBy('id')->limit(1000)->get()->each(function (EdgeCell $cell) use (&$lines): void {
+        $popNames = Edge::query()->pluck('name', 'id')->all();
+        EdgeCell::query()->with(['edge', 'pool'])->orderBy('id')->limit(1000)->get()->each(function (EdgeCell $cell) use (&$lines, $popNames): void {
             $capacity = $cell->capacity ?? [];
             $pool = $cell->pool?->id ?? 0;
             $revision = (int) ($cell->edge->capacity['gateway']['active_revision'] ?? 0);
-            $lines[] = sprintf('cdnfoundry_cell_runtime_state{edge="%s",pool="%s",cell="%s",status="%s",revision="%d"} 1', $cell->edge_id, $pool, $cell->name, $cell->status, $revision);
+            $lines[] = sprintf('cdnfoundry_cell_runtime_state{edge="%s",pop="%s",pool="%s",cell="%s",status="%s",revision="%d"} 1', $cell->edge_id, $this->label($popNames[$cell->edge_id] ?? 'unknown'), $pool, $cell->name, $cell->status, $revision);
             foreach ([['cache_usage', 'cache_limit', 'cache'], ['memory_usage', 'memory_limit', 'memory'], ['active_connections', 'connection_limit', 'connections']] as [$used, $limit, $resource]) {
                 if (is_numeric($capacity[$used] ?? null) && is_numeric($capacity[$limit] ?? null)) {
-                    $lines[] = sprintf('cdnfoundry_cell_capacity_ratio{edge="%s",pool="%s",cell="%s",resource="%s"} %.6f', $cell->edge_id, $pool, $cell->name, $resource, (float) $capacity[$limit] > 0 ? (float) $capacity[$used] / (float) $capacity[$limit] : 0);
+                    $lines[] = sprintf('cdnfoundry_cell_capacity_ratio{edge="%s",pop="%s",pool="%s",cell="%s",resource="%s"} %.6f', $cell->edge_id, $this->label($popNames[$cell->edge_id] ?? 'unknown'), $pool, $cell->name, $resource, (float) $capacity[$limit] > 0 ? (float) $capacity[$used] / (float) $capacity[$limit] : 0);
                 }
             }
         });
@@ -124,7 +140,7 @@ class MetricsController extends Controller
             $lines[] = sprintf('cdnfoundry_pool_dns_fail_static{pool="%d"} %d', $pool->id, $pool->dns_fail_static ? 1 : 0);
         });
         Edge::query()->where('enabled', true)->whereNotNull('registered_at')->orderBy('id')->limit(1000)->get(['id', 'name', 'last_heartbeat_at', 'identity_certificate_expires_at', 'reported_identity_expires_at'])->each(function (Edge $edge) use (&$lines): void {
-            $lines[] = sprintf('cdnfoundry_edge_heartbeat_age_seconds{edge="%s",pop="%s"} %d', $edge->id, addcslashes(str_replace(["\n", "\r"], ' ', $edge->name), '"\\'), $edge->last_heartbeat_at === null ? -1 : (int) $edge->last_heartbeat_at->diffInSeconds(now()));
+            $lines[] = sprintf('cdnfoundry_edge_heartbeat_age_seconds{edge="%s",pop="%s"} %d', $edge->id, $this->label($edge->name), $edge->last_heartbeat_at === null ? -1 : (int) $edge->last_heartbeat_at->diffInSeconds(now()));
             $expires = $edge->reported_identity_expires_at ?? $edge->identity_certificate_expires_at;
             if ($expires !== null) {
                 $lines[] = sprintf('cdnfoundry_edge_identity_expires_seconds{edge="%s"} %d', $edge->id, $expires->timestamp - now()->timestamp);
@@ -206,5 +222,11 @@ class MetricsController extends Controller
         }
 
         return $count;
+    }
+
+    /** A value safe inside a Prometheus label: one line, with quotes and backslashes escaped. */
+    private function label(string $value): string
+    {
+        return addcslashes(str_replace(["\n", "\r"], ' ', $value), '"\\');
     }
 }

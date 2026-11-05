@@ -109,4 +109,11 @@ class ControlPlaneMetricsTest extends TestCase
 
         $this->assertStringContainsString("cdnfoundry_emergency_modes_active 1\n", $this->scrape());
     }
+
+    public function test_the_status_summary_names_what_is_wrong(): void
+    {
+        $body = $this->scrape();
+
+        $this->assertMatchesRegularExpression('/cdnfoundry_status_summary\{state="degraded",summary="Degraded: \d+ components? unhealthy[^"]*"\} 1/', $body);
+    }
 }
