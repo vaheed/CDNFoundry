@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real Phase 8 operations, encrypted backup, and isolated restore qualification."""
+"""Real operations, encrypted backup, and isolated restore qualification."""
 
 from __future__ import annotations
 
@@ -17,9 +17,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 COMPOSE = os.environ.get("CDNF_COMPOSE_FILE", "compose.dev.yml")
 BASE = os.environ.get("CDNF_BASE_URL", "http://localhost:8080").rstrip("/")
 RUN = f"{int(time.time())}-{secrets.token_hex(4)}"
-EMAIL = f"phase8-admin-{RUN}@example.test"
-PASSWORD = f"Phase8-1-{secrets.token_urlsafe(20)}"
-RESTORE_CONTAINER = f"cdnfoundry-phase8-restore-{RUN}"
+EMAIL = f"e2e-admin-{RUN}@example.test"
+PASSWORD = f"e2e-1-{secrets.token_urlsafe(20)}"
+RESTORE_CONTAINER = f"cdnfoundry-e2e-restore-{RUN}"
 
 
 def run(*args: str, timeout: int = 120, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -98,11 +98,11 @@ def main() -> None:
     ensure_development_repository()
     expression = (
         "App\\Models\\User::query()->create(["
-        f"'name'=>'Phase 8 runtime admin','email'=>{php_string(EMAIL)},"
+        f"'name'=>'runtime admin','email'=>{php_string(EMAIL)},"
         f"'password'=>Illuminate\\Support\\Facades\\Hash::make({php_string(PASSWORD)}),'type'=>'admin']);"
     )
     compose("exec", "-T", "core", "php", "artisan", "tinker", f"--execute={expression}")
-    status, login = request("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD, "device_name": "phase8-e2e"})
+    status, login = request("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD, "device_name": "e2e-e2e"})
     assert status == 200, login
     token = login["data"]["token"]
 
@@ -127,7 +127,7 @@ def main() -> None:
     assert restore_status == 202, restore
 
     run("docker", "run", "-d", "--rm", "--name", RESTORE_CONTAINER, "--network", "cdnfoundry-dev_control",
-        "-e", "POSTGRES_DB=cdnf_restore", "-e", "POSTGRES_USER=cdnf_restore", "-e", "POSTGRES_PASSWORD=phase8-restore-only",
+        "-e", "POSTGRES_DB=cdnf_restore", "-e", "POSTGRES_USER=cdnf_restore", "-e", "POSTGRES_PASSWORD=e2e-restore-only",
         "-v", "/var/lib/postgresql", "postgres:18.4-alpine")
     try:
         deadline = time.monotonic() + 30
@@ -136,7 +136,7 @@ def main() -> None:
                 break
             time.sleep(1)
         compose("exec", "-T", "--user", "www-data", "-e", f"PGHOST={RESTORE_CONTAINER}", "-e", "PGPORT=5432", "-e", "PGDATABASE=cdnf_restore",
-                "-e", "PGUSER=cdnf_restore", "-e", "PGPASSWORD=phase8-restore-only", "core", "/usr/local/bin/cdnf-backup-restore", snapshot, timeout=180)
+                "-e", "PGUSER=cdnf_restore", "-e", "PGPASSWORD=e2e-restore-only", "core", "/usr/local/bin/cdnf-backup-restore", snapshot, timeout=180)
         restored = counts(RESTORE_CONTAINER, "cdnf_restore", "cdnf_restore")
         source_sql = "SELECT 'users='||count(*) FROM users UNION ALL SELECT 'domains='||count(*) FROM domains UNION ALL SELECT 'dns_records='||count(*) FROM dns_records UNION ALL SELECT 'migrations='||count(*) FROM migrations;"
         source = set(compose("exec", "-T", "control-db", "psql", "-U", "cdnf", "-d", "cdnf", "-Atc", source_sql).stdout.splitlines())
@@ -144,7 +144,7 @@ def main() -> None:
     finally:
         run("docker", "stop", RESTORE_CONTAINER, check=False)
 
-    print(f"phase8_operations=passed backup={backup['id']} snapshot={snapshot}")
+    print(f"backup_restore=passed backup={backup['id']} snapshot={snapshot}")
 
 
 if __name__ == "__main__":

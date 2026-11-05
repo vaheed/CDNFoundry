@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real Phase 7 telemetry, analytics, outage, privacy, and usage qualification."""
+"""Real telemetry, analytics, outage, privacy, and usage qualification."""
 
 import datetime as dt
 import base64
@@ -18,11 +18,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 COMPOSE = os.environ.get("CDNF_COMPOSE_FILE", "compose.dev.yml")
 BASE_URL = os.environ.get("CDNF_BASE_URL", "http://localhost:8080").rstrip("/")
 RUN_ID = f"{int(time.time())}-{secrets.token_hex(4)}"
-DOMAIN = f"analytics-{RUN_ID}.phase7.test"
+DOMAIN = f"analytics-{RUN_ID}.e2e.test"
 PASSWORD = f"Analytics-1-{secrets.token_urlsafe(18)}"
-USER_EMAIL = f"phase7-user-{RUN_ID}@example.test"
-STRANGER_EMAIL = f"phase7-stranger-{RUN_ID}@example.test"
-ADMIN_EMAIL = f"phase7-admin-{RUN_ID}@example.test"
+USER_EMAIL = f"e2e-user-{RUN_ID}@example.test"
+STRANGER_EMAIL = f"e2e-stranger-{RUN_ID}@example.test"
+ADMIN_EMAIL = f"e2e-admin-{RUN_ID}@example.test"
 
 
 class ApiError(RuntimeError):
@@ -178,19 +178,19 @@ def iso(value: dt.datetime) -> str:
 
 
 def login(email: str) -> str:
-    _, response = api("POST", "/api/auth/login", {"email": email, "password": PASSWORD, "device_name": "phase7-e2e"})
+    _, response = api("POST", "/api/auth/login", {"email": email, "password": PASSWORD, "device_name": "e2e-e2e"})
     return response["data"]["token"]
 
 
 def create_scope() -> tuple[int, str, str, str]:
     output = artisan(
         "$user=App\\Models\\User::query()->create(["
-        f"'name'=>'Phase 7 user','email'=>{php_string(USER_EMAIL)},'password'=>Illuminate\\Support\\Facades\\Hash::make({php_string(PASSWORD)}),'type'=>'user']);"
+        f"'name'=>'user','email'=>{php_string(USER_EMAIL)},'password'=>Illuminate\\Support\\Facades\\Hash::make({php_string(PASSWORD)}),'type'=>'user']);"
         "$stranger=App\\Models\\User::query()->create(["
-        f"'name'=>'Phase 7 stranger','email'=>{php_string(STRANGER_EMAIL)},'password'=>Illuminate\\Support\\Facades\\Hash::make({php_string(PASSWORD)}),'type'=>'user']);"
+        f"'name'=>'stranger','email'=>{php_string(STRANGER_EMAIL)},'password'=>Illuminate\\Support\\Facades\\Hash::make({php_string(PASSWORD)}),'type'=>'user']);"
         "$admin=App\\Models\\User::query()->create(["
-        f"'name'=>'Phase 7 admin','email'=>{php_string(ADMIN_EMAIL)},'password'=>Illuminate\\Support\\Facades\\Hash::make({php_string(PASSWORD)}),'type'=>'admin']);"
-        f"$domain=App\\Models\\Domain::query()->create(['name'=>{php_string(DOMAIN)},'display_name'=>'Phase 7 analytics','lifecycle_state'=>'active','revision'=>1]);"
+        f"'name'=>'admin','email'=>{php_string(ADMIN_EMAIL)},'password'=>Illuminate\\Support\\Facades\\Hash::make({php_string(PASSWORD)}),'type'=>'admin']);"
+        f"$domain=App\\Models\\Domain::query()->create(['name'=>{php_string(DOMAIN)},'display_name'=>'analytics','lifecycle_state'=>'active','revision'=>1]);"
         "$domain->users()->attach($user,['created_at'=>now()]);echo $domain->id;"
     )
     assert output.isdigit(), output
@@ -242,14 +242,14 @@ def qualify_ingestion_and_queries(domain_id: int, user: str, stranger: str, admi
         "cookie": "session=must-not-survive", "body": "must-not-survive", "status": 503,
         "bytes_in": 17, "bytes_out": 1700, "cache_status": "MISS", "origin_latency_ms": 12,
         "origin_error": "timeout", "security_action": "block", "security_reason": "rate_limit",
-        "client_ip": "192.0.2.123", "country": "IR", "continent": "AS", "edge_id": "edge-phase7",
+        "client_ip": "192.0.2.123", "country": "IR", "continent": "AS", "edge_id": "edge-e2e",
         "event_type": "request", "compression_encoding": "gzip", "compression_ratio": 2,
         "compression_profile": "standard", "compression_fallback": "none",
     })
     vector_event(8687, {
         "occurred_at": iso(event_time + dt.timedelta(seconds=1)), "event_id": dns_id,
         "domain_id": domain_id, "zone": DOMAIN, "qname": f"www.{DOMAIN}", "qtype": "AAAA",
-        "rcode": "NOERROR", "client_ip": "2001:db8:1234:5678::1", "dns_cluster": "dns-phase7",
+        "rcode": "NOERROR", "client_ip": "2001:db8:1234:5678::1", "dns_cluster": "dns-e2e",
         "country": "IR", "continent": "AS", "outcome": "answer", "query": "must-not-survive",
     })
     # Vector's disk buffer can retain the final event until another event reaches
@@ -258,15 +258,15 @@ def qualify_ingestion_and_queries(domain_id: int, user: str, stranger: str, admi
     # duplicating the events whose identity and redaction are under test.
     vector_event(8686, {
         "occurred_at": iso(event_time + dt.timedelta(seconds=2)), "event_id": str(uuid.uuid4()),
-        "domain_id": 0, "hostname": "flush.phase7.test", "method": "GET", "path": "/flush",
+        "domain_id": 0, "hostname": "flush.e2e.test", "method": "GET", "path": "/flush",
         "status": 204, "bytes_in": 0, "bytes_out": 0, "cache_status": "BYPASS",
-        "client_ip": "192.0.2.1", "edge_id": "edge-phase7", "event_type": "qualification",
+        "client_ip": "192.0.2.1", "edge_id": "edge-e2e", "event_type": "qualification",
     })
     vector_event(8687, {
         "occurred_at": iso(event_time + dt.timedelta(seconds=3)), "event_id": str(uuid.uuid4()),
-        "domain_id": 0, "zone": "flush.phase7.test", "qname": "flush.phase7.test",
+        "domain_id": 0, "zone": "flush.e2e.test", "qname": "flush.e2e.test",
         "qtype": "A", "rcode": "NOERROR", "client_ip": "192.0.2.1",
-        "dns_cluster": "dns-phase7", "country": "ZZ", "continent": "ZZ",
+        "dns_cluster": "dns-e2e", "country": "ZZ", "continent": "ZZ",
         "outcome": "qualification",
     })
     wait_for_clickhouse(lambda value: value == "1", f"SELECT count() FROM cdnf.edge_events WHERE event_id=toUUID('{edge_id}')")
@@ -347,7 +347,7 @@ def qualify_outage(domain_id: int, user: str) -> None:
             "occurred_at": iso(dt.datetime.now(dt.timezone.utc)), "event_id": buffered_id,
             "domain_id": domain_id, "hostname": DOMAIN, "method": "GET", "path": "/buffered",
             "status": 200, "bytes_in": 1, "bytes_out": 2, "cache_status": "HIT",
-            "client_ip": "198.51.100.7", "edge_id": "edge-phase7", "event_type": "request",
+            "client_ip": "198.51.100.7", "edge_id": "edge-e2e", "event_type": "request",
         })
         dns = run("dig", "+time=2", "+tries=1", "@127.0.0.1", "-p", "1053", f"outage.{DOMAIN}", "SOA")
         assert "status:" in dns.stdout, dns.stdout
@@ -371,7 +371,7 @@ def qualify_scale(admin: str) -> None:
         "INSERT INTO cdnf.edge_events (occurred_at,event_id,domain_id,hostname,method,path,status,bytes_in,bytes_out,"
         "cache_status,origin_latency_ms,origin_error,tls_error,security_action,security_reason,edge_id,client_ip,"
         "country,continent,user_agent,referrer,event_type) SELECT now64(3)-number%3600, generateUUIDv4(), "
-        "toUInt64(900000000+number), 'scale.phase7.test', 'GET', '/scale', 200, 0, 1, 'HIT', 0, '', '', '', '', "
+        "toUInt64(900000000+number), 'scale.e2e.test', 'GET', '/scale', 200, 0, 1, 'HIT', 0, '', '', '', '', "
         "'edge-scale', '192.0.2.1', 'ZZ', 'ZZ', '', '', 'request' FROM numbers(20000)"
     )
     started = time.monotonic()
@@ -388,7 +388,7 @@ def main() -> None:
     qualify_usage(domain_id, user, admin, interval_from, interval_to)
     qualify_scale(admin)
     qualify_outage(domain_id, user)
-    print("Phase 7 real-runtime telemetry, analytics, privacy, usage, scale, and outage qualification passed.")
+    print("real-runtime telemetry, analytics, privacy, usage, scale, and outage qualification passed.")
 
 
 if __name__ == "__main__":

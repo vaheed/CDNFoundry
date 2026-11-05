@@ -28,7 +28,7 @@ The names (from `ManagedCertificateNames`), the issuer, the renewal window, key 
 - Backend: `make dev-test`, or one class with `docker compose -f compose.dev.yml -f compose.test.yml run --rm --no-deps core php artisan test --compact --filter <Class>` (the test override forces in-memory SQLite; never run tests against PostgreSQL).
 - Style: `docker compose -f compose.dev.yml -f compose.test.yml run --rm --no-deps core vendor/bin/pint --test`.
 - Feature: `TlsApiTest`, `ManagedTlsTest`.
-- Runtime: `python3 tests/e2e/phase5_tls.py`, `python3 tests/e2e/uploaded_tls.py`.
+- Runtime: `python3 tests/e2e/managed_tls.py`, `python3 tests/e2e/uploaded_tls.py`.
 
 ## Definition of done
 Valid certificates never disappear, keys never appear outside `tls_certificates` and the cell, and failures and expiry are visible to the administrator.

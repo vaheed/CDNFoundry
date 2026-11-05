@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real OpenResty Phase 4 HTTP runtime qualification; no browser automation."""
+"""Real OpenResty HTTP runtime qualification; no browser automation."""
 
 import json
 import os
@@ -11,12 +11,12 @@ import zlib
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-NAME = "cdnf-phase4-runtime-e2e"
-TLS_NAME = "cdnf-phase4-tls-origin-e2e"
-QUARANTINE_NAME = "cdnf-phase4-quarantine-e2e"
-AGENT_NAME = "cdnf-phase4-agent-e2e"
-DEDICATED_NAME = "cdnf-phase4-dedicated-e2e"
-GRACEFUL_CLIENT_NAME = "cdnf-phase4-graceful-client-e2e"
+NAME = "cdnf-e2e-runtime-e2e"
+TLS_NAME = "cdnf-e2e-tls-origin-e2e"
+QUARANTINE_NAME = "cdnf-e2e-quarantine-e2e"
+AGENT_NAME = "cdnf-e2e-agent-e2e"
+DEDICATED_NAME = "cdnf-e2e-dedicated-e2e"
+GRACEFUL_CLIENT_NAME = "cdnf-e2e-graceful-client-e2e"
 COMPRESSION_CLIENT_NAME = "cdnf-compression-pressure-client-e2e"
 EDGE_NETWORK = os.environ.get(
     "CDNF_EDGE_NETWORK",
@@ -164,11 +164,11 @@ def main() -> None:
     run("docker", "compose", "-f", "compose.dev.yml", "up", "-d", "--force-recreate", "origin-http")
     run("docker", "build", "-t", "cdnfoundry/edge-agent:test", "edge-agent")
     run("docker", "build", "-f", "docker/openresty/Dockerfile", "-t", "cdnfoundry/edge-runtime:test", ".")
-    with tempfile.TemporaryDirectory(prefix="cdnf-phase4-") as directory:
+    with tempfile.TemporaryDirectory(prefix="cdnf-e2e-") as directory:
         os.chmod(directory, 0o755)
         temporary = pathlib.Path(directory)
         run("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
-            "-subj", "/CN=CDNFoundry Phase 4 Test CA", "-keyout", str(temporary / "ca.key"),
+            "-subj", "/CN=CDNFoundry Test CA", "-keyout", str(temporary / "ca.key"),
             "-out", str(temporary / "ca.crt"))
         run("openssl", "req", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=tls-origin",
             "-addext", "subjectAltName=DNS:tls-origin", "-keyout", str(temporary / "tls.key"),
@@ -650,7 +650,7 @@ def main() -> None:
                     "alpine:3.22", "chmod", "-R", "a+rwx", "/cache",
                     check=False,
                 )
-    print("Phase 4 OpenResty runtime qualification passed.")
+    print("OpenResty runtime qualification passed.")
 
 
 if __name__ == "__main__":

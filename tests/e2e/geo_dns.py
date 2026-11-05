@@ -15,9 +15,9 @@ BASE = os.environ.get("CDNF_BASE_URL", "http://localhost:8080").rstrip("/")
 COMPOSE = os.environ.get("CDNF_COMPOSE_FILE", "compose.dev.yml")
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 RUN = f"{int(time.time())}-{secrets.token_hex(3)}"
-EMAIL = f"phase3-{RUN}@example.test"
-PASSWORD = f"Phase3-{secrets.token_urlsafe(20)}"
-ZONE = f"phase3-{RUN}.test"
+EMAIL = f"e2e-{RUN}@example.test"
+PASSWORD = f"e2e-{secrets.token_urlsafe(20)}"
+ZONE = f"e2e-{RUN}.test"
 
 
 def call(method: str, path: str, payload: object | None = None, token: str | None = None) -> tuple[int, object]:
@@ -82,8 +82,8 @@ def wait_deployment(token: str, domain_id: int) -> None:
 
 
 def main() -> None:
-    artisan("App\\Models\\User::query()->create(['name'=>'Phase 3 E2E','email'=>" + quote(EMAIL) + ",'password'=>Illuminate\\Support\\Facades\\Hash::make(" + quote(PASSWORD) + "),'type'=>'admin']);")
-    _, login = call("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD, "device_name": "phase3-e2e"})
+    artisan("App\\Models\\User::query()->create(['name'=>'E2E','email'=>" + quote(EMAIL) + ",'password'=>Illuminate\\Support\\Facades\\Hash::make(" + quote(PASSWORD) + "),'type'=>'admin']);")
+    _, login = call("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD, "device_name": "e2e-e2e"})
     token = login["data"]["token"]
     _, created = call("POST", "/api/domains", {"name": ZONE}, token)
     domain_id = created["data"]["id"]
@@ -127,7 +127,7 @@ def main() -> None:
     }
     for query, answer in expected.items():
         eventually(query[0], query[1], answer)
-    print("phase3_geo_dns_e2e=passed types=A,AAAA,CNAME,MX,TXT,SRV default_runtime=passed ecs_override=passed")
+    print("geo_dns_e2e=passed types=A,AAAA,CNAME,MX,TXT,SRV default_runtime=passed ecs_override=passed")
 
 
 if __name__ == "__main__":

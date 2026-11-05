@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase 1 non-UI end-to-end qualification against the real development stack."""
+"""non-UI end-to-end qualification against the real development stack."""
 
 from __future__ import annotations
 
@@ -18,8 +18,8 @@ BASE_URL = os.environ.get("CDNF_BASE_URL", "http://localhost:8080").rstrip("/")
 COMPOSE_FILE = os.environ.get("CDNF_COMPOSE_FILE", "compose.dev.yml")
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 RUN_ID = f"{int(time.time())}-{secrets.token_hex(4)}"
-ADMIN_EMAIL = f"phase1-e2e-admin-{RUN_ID}@example.test"
-USER_EMAIL = f"phase1-e2e-user-{RUN_ID}@example.test"
+ADMIN_EMAIL = f"e2e-e2e-admin-{RUN_ID}@example.test"
+USER_EMAIL = f"e2e-e2e-user-{RUN_ID}@example.test"
 ADMIN_PASSWORD = f"Admin-1-{secrets.token_urlsafe(18)}"
 USER_PASSWORD = f"User-1-{secrets.token_urlsafe(18)}"
 
@@ -103,7 +103,7 @@ def login(email: str, password: str) -> str:
     _, payload = request("POST", "/api/auth/login", {
         "email": email,
         "password": password,
-        "device_name": "phase1-python-e2e",
+        "device_name": "e2e-python-e2e",
     })
     return payload["data"]["token"]
 
@@ -128,7 +128,7 @@ def main() -> None:
 
     artisan(
         "App\\Models\\User::query()->create(["
-        f"'name'=>'Phase 1 E2E Admin','email'=>{php_string(ADMIN_EMAIL)},"
+        f"'name'=>'E2E Admin','email'=>{php_string(ADMIN_EMAIL)},"
         f"'password'=>Illuminate\\Support\\Facades\\Hash::make({php_string(ADMIN_PASSWORD)}),"
         "'type'=>'admin']);"
     )
@@ -139,7 +139,7 @@ def main() -> None:
 
     create_key = str(uuid.uuid4())
     user_payload = {
-        "name": "Phase 1 E2E User",
+        "name": "E2E User",
         "email": USER_EMAIL,
         "password": USER_PASSWORD,
         "type": "user",
@@ -190,7 +190,7 @@ def main() -> None:
         )
 
     _, created_token = request(
-        "POST", "/api/me/tokens", {"name": "phase1-e2e"}, user_token, str(uuid.uuid4())
+        "POST", "/api/me/tokens", {"name": "e2e-e2e"}, user_token, str(uuid.uuid4())
     )
     token_id = created_token["data"]["id"]
     assert created_token["data"]["token"]
@@ -220,7 +220,7 @@ def main() -> None:
             "POST",
             "/api/admin/dns/clusters",
             {
-                "name": f"phase1-pdns-{RUN_ID}",
+                "name": f"e2e-pdns-{RUN_ID}",
                 "location": "local-compose",
                 "api_url": "http://pdns-primary:8081",
                 "transfer_endpoint": "172.28.30.10:5300",
@@ -307,7 +307,7 @@ def main() -> None:
     actions = {item["action"] for item in audits["data"]}
     assert {"user.created", "user.disabled", "user.enabled", "user.deleted"} <= actions
 
-    print("phase1_backend_e2e=passed")
+    print("e2e_backend_e2e=passed")
 
 
 if __name__ == "__main__":

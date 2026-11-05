@@ -29,7 +29,7 @@ The event fields, redaction, retention, query bounds (range, rows, execution tim
 - Style: `docker compose -f compose.dev.yml -f compose.test.yml run --rm --no-deps core vendor/bin/pint --test`.
 - Feature: `AnalyticsApiTest`, `TelemetryBrowserExportTest`.
 - Contract: `make contract-check` (Grafana and logging contracts).
-- Runtime: `python3 tests/e2e/phase7_analytics.py`, `vector_traffic.py`, `vector_buffer_startup.py`.
+- Runtime: `python3 tests/e2e/telemetry_analytics.py`, `vector_traffic.py`, `vector_buffer_startup.py`.
 
 ## Definition of done
 Counts match generated traffic, tenants see only their own events, and outages degrade analytics without affecting traffic.

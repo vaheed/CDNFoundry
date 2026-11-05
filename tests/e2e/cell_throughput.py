@@ -15,9 +15,9 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 EDGE_NETWORK = os.environ.get("CDNF_EDGE_NETWORK", "cdnfoundry-dev_edge")
-EDGE_IMAGE = os.environ.get("CDNF_EDGE_IMAGE", "cdnfoundry/edge-runtime:phase8-throughput")
-NAME = "cdnfoundry-phase8-throughput"
-HOSTNAMES = [f"throughput-{index}.phase8.test" for index in range(64)]
+EDGE_IMAGE = os.environ.get("CDNF_EDGE_IMAGE", "cdnfoundry/edge-runtime:e2e-throughput")
+NAME = "cdnfoundry-e2e-throughput"
+HOSTNAMES = [f"throughput-{index}.e2e.test" for index in range(64)]
 HTTP_PORT = 18081
 HTTPS_PORT = 18444
 WORKERS = int(os.environ.get("CDNF_THROUGHPUT_WORKERS", "32"))
@@ -51,7 +51,7 @@ def benchmark(scheme: str, port: int, edge_address: str) -> dict[str, float | in
             f'curl -sS {insecure} --http1.1 --connect-timeout 2 --max-time 3 '
             f'--resolve "{hostname}:{port}:{edge_address}" '
             f'-o /dev/null -w "%{{http_code}} %{{size_download}} %{{time_total}}\\n" '
-            f'"{scheme}://{hostname}:{port}/phase8-throughput" '
+            f'"{scheme}://{hostname}:{port}/e2e-throughput" '
             f'|| echo "curl_error 0 0"; sleep 0.012; done'
         )
         return run(
@@ -102,7 +102,7 @@ def main() -> None:
     run("docker", "compose", "-f", "compose.dev.yml", "up", "-d", "origin-http", "mmdb-updater")
     run("docker", "build", "-f", "docker/openresty/Dockerfile", "-t", EDGE_IMAGE, ".", timeout=900)
     image_id = run("docker", "image", "inspect", "--format={{.Id}}", EDGE_IMAGE).stdout.strip()
-    with tempfile.TemporaryDirectory(prefix="cdnfoundry-phase8-throughput-") as directory:
+    with tempfile.TemporaryDirectory(prefix="cdnfoundry-e2e-throughput-") as directory:
         temporary = pathlib.Path(directory)
         temporary.chmod(0o755)
         run(
@@ -117,8 +117,8 @@ def main() -> None:
             "sequence": 1,
             "generation_id": "e2e-generation-1",
             "certificates": {
-                "phase8-throughput": {
-                    "id": "phase8-throughput", "certificate_pem": certificate, "chain_pem": "",
+                "e2e-throughput": {
+                    "id": "e2e-throughput", "certificate_pem": certificate, "chain_pem": "",
                     "private_key_pem": private_key, "expires_at": int(time.time()) + 86400, "names": HOSTNAMES,
                 },
             },
@@ -139,7 +139,7 @@ def main() -> None:
                         "health_check": None, "private_allowlist": ["172.16.0.0/12"],
                         "blocked_networks": [], "blocked_addresses": [],
                     },
-                    "tls": {"mode": "custom", "certificate_id": "phase8-throughput"},
+                    "tls": {"mode": "custom", "certificate_id": "e2e-throughput"},
                 } for hostname in HOSTNAMES
             },
         }
@@ -152,7 +152,7 @@ def main() -> None:
             "--memory", "512m", "--cpus", "1", "--pids-limit", "128", "--ulimit", "nofile=65536:65536",
             "-p", f"127.0.0.1:{HTTP_PORT}:8080", "-p", f"127.0.0.1:{HTTPS_PORT}:8443",
             "-e", "EDGE_CELL_NAME=shared-default", "-e", "EDGE_RUNTIME_FILE=/runtime/shared-default.json",
-            "-e", "EDGE_STATUS_TOKEN=phase8-throughput-only", "-e", "GEOIP_DATABASE=/mmdb/GeoLite2-City.mmdb",
+            "-e", "EDGE_STATUS_TOKEN=e2e-throughput-only", "-e", "GEOIP_DATABASE=/mmdb/GeoLite2-City.mmdb",
             "-v", f"{runtime_file}:/runtime/shared-default.json:ro",
             "-v", "cdnfoundry-dev_dev-pki:/run/edge:ro", "-v", "cdnfoundry-dev_mmdb:/mmdb:ro",
             "--tmpfs", "/var/cache/nginx:rw,noexec,nosuid,size=256m",
@@ -161,7 +161,7 @@ def main() -> None:
         try:
             deadline = time.monotonic() + 30
             while time.monotonic() < deadline:
-                ready = run("curl", "-fsS", "-H", f"Host: {HOSTNAMES[0]}", f"http://127.0.0.1:{HTTP_PORT}/phase8-throughput", check=False)
+                ready = run("curl", "-fsS", "-H", f"Host: {HOSTNAMES[0]}", f"http://127.0.0.1:{HTTP_PORT}/e2e-throughput", check=False)
                 if ready.returncode == 0:
                     break
                 time.sleep(0.5)
@@ -170,10 +170,10 @@ def main() -> None:
                 raise RuntimeError(f"throughput edge did not become ready: {logs[-4000:]}")
             # Prime every deterministic key so measurements represent edge cache-hit capacity.
             for hostname in HOSTNAMES:
-                run("curl", "-fsS", "-H", f"Host: {hostname}", f"http://127.0.0.1:{HTTP_PORT}/phase8-throughput")
+                run("curl", "-fsS", "-H", f"Host: {hostname}", f"http://127.0.0.1:{HTTP_PORT}/e2e-throughput")
                 hit = run(
                     "curl", "-fsS", "-D", "-", "-o", "/dev/null", "-H", f"Host: {hostname}",
-                    f"http://127.0.0.1:{HTTP_PORT}/phase8-throughput",
+                    f"http://127.0.0.1:{HTTP_PORT}/e2e-throughput",
                 ).stdout.lower()
                 if "x-cdnf-cache: hit" not in hit:
                     raise AssertionError(f"throughput path for {hostname} was not a cache HIT: {hit}")
@@ -188,7 +188,7 @@ def main() -> None:
                 platform.processor() or "unknown",
             )
             print(json.dumps({
-                "phase8_throughput": "passed",
+                "cell_throughput": "passed",
                 "host": {
                     "kernel": platform.release(), "architecture": platform.machine(),
                     "cpu_model": cpu_model, "logical_cpus": os.cpu_count(),

@@ -30,7 +30,7 @@ Run `python3 tests/e2e/cell_inventory.py` for the eight-slot non-browser cell
 inventory, isolation, restart, storage-bound, and idle/active overhead
 qualification.
 
-Run `make dev-phase9-e2e` to build the pinned image and execute the real
+Run `make dev-waf-e2e` to build the pinned image and execute the real
 managed-WAF corpus. It verifies off/monitor/balanced/strict behavior, malformed
 and oversized bodies, literal expiry-aware exclusions, privacy-safe telemetry,
 concurrent blocking load, and non-WAF-host isolation.
@@ -139,7 +139,7 @@ Laravel/database or signed-agent activation is implied by this fixture. CI runs
 it against the image it just built; the production runner calls it through
 `origin-destinations`.
 
-The cumulative `phase4_runtime.py` fixture resolves its syslog hostname to
+The cumulative `openresty_runtime.py` fixture resolves its syslog hostname to
 loopback explicitly. It verifies serving with telemetry unavailable and does
 not require a Vector container to exist on its test network.
 
@@ -208,10 +208,10 @@ Additional expensive jobs are separate:
 ```sh
 make dev-scale-e2e
 make dev-cache-e2e
-make dev-phase8-recovery-e2e
-make dev-phase8-upgrade-e2e
-make dev-phase8-throughput-e2e
-make dev-phase8-mmdb-e2e
+make dev-recovery-e2e
+make dev-upgrade-e2e
+make dev-throughput-e2e
+make dev-mmdb-e2e
 ```
 
 These may create disposable containers and temporary files, but must not remove

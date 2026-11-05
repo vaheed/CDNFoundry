@@ -19,14 +19,14 @@ NETWORK = os.environ.get("CDNF_CONTROL_NETWORK", "cdnfoundry-dev_control")
 POSTGRES_IMAGE = os.environ.get("CDNF_POSTGRES_IMAGE", "postgres:18.4-alpine")
 QUEUE_IMAGE = os.environ.get("CDNF_QUEUE_IMAGE", "valkey/valkey:9.1.0-alpine")
 RUN = f"{int(time.time())}-{secrets.token_hex(4)}"
-MINIO = f"cdnfoundry-phase8-object-{RUN}"
-RESTORE = f"cdnfoundry-phase8-replacement-{RUN}"
-QUEUE = f"cdnfoundry-phase8-queue-{RUN}"
-BUCKET = f"phase8-{RUN}"
-S3_USER = f"phase8{secrets.token_hex(8)}"
+MINIO = f"cdnfoundry-e2e-object-{RUN}"
+RESTORE = f"cdnfoundry-e2e-replacement-{RUN}"
+QUEUE = f"cdnfoundry-e2e-queue-{RUN}"
+BUCKET = f"e2e-{RUN}"
+S3_USER = f"e2e{secrets.token_hex(8)}"
 S3_PASSWORD = secrets.token_urlsafe(32)
 RESTIC_PASSWORD = secrets.token_urlsafe(40)
-MARKER = f"phase8-recovery-{RUN}@example.test"
+MARKER = f"e2e-recovery-{RUN}@example.test"
 
 
 def run(*args: str, timeout: int = 180, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -108,7 +108,7 @@ def main() -> None:
 
         source_psql(
             "INSERT INTO users (name,email,password,type,disabled_at,created_at,updated_at) "
-            f"VALUES ('Phase 8 recovery marker','{MARKER}','not-a-login-secret','admin',now(),now(),now())"
+            f"VALUES ('recovery marker','{MARKER}','not-a-login-secret','admin',now(),now(),now())"
         )
         cutoff_at = time.time()
         source_counts = state_counts_source()
@@ -140,12 +140,12 @@ def main() -> None:
             "docker", "run", "-d", "--rm", "--name", RESTORE, "--network", NETWORK,
             "--tmpfs", "/var/lib/postgresql:rw,nosuid,nodev,size=2g",
             "-e", "POSTGRES_DB=cdnf_restore", "-e", "POSTGRES_USER=cdnf_restore",
-            "-e", "POSTGRES_PASSWORD=phase8-restore-only", POSTGRES_IMAGE,
+            "-e", "POSTGRES_PASSWORD=e2e-restore-only", POSTGRES_IMAGE,
         )
         wait_ready(RESTORE, "cdnf_restore", "cdnf_restore")
         run(
             *common, *backup_environment(repository),
-            *postgres_environment(RESTORE, "cdnf_restore", "cdnf_restore", "phase8-restore-only"),
+            *postgres_environment(RESTORE, "cdnf_restore", "cdnf_restore", "e2e-restore-only"),
             image, "/usr/local/bin/cdnf-backup-restore", snapshot, timeout=600,
         )
         restored_counts = state_counts_restore()
@@ -158,7 +158,7 @@ def main() -> None:
             "run", "--rm", "--no-deps",
             "-e", "APP_ENV=production", "-e", f"DB_HOST={RESTORE}", "-e", "DB_PORT=5432",
             "-e", "DB_DATABASE=cdnf_restore", "-e", "DB_USERNAME=cdnf_restore",
-            "-e", "DB_PASSWORD=phase8-restore-only", "core", "php", "artisan", "migrate", "--force",
+            "-e", "DB_PASSWORD=e2e-restore-only", "core", "php", "artisan", "migrate", "--force",
             timeout=600,
         )
         recorded = set(psql(RESTORE, "cdnf_restore", "cdnf_restore", "SELECT migration FROM migrations").split())
@@ -196,7 +196,7 @@ def main() -> None:
         compose(
             "run", "--rm", "--no-deps", "-e", f"DB_HOST={RESTORE}", "-e", "DB_PORT=5432",
             "-e", "DB_DATABASE=cdnf_restore", "-e", "DB_USERNAME=cdnf_restore",
-            "-e", "DB_PASSWORD=phase8-restore-only", "-e", f"REDIS_HOST={QUEUE}",
+            "-e", "DB_PASSWORD=e2e-restore-only", "-e", f"REDIS_HOST={QUEUE}",
             "-e", "CACHE_STORE=redis", "-e", "QUEUE_CONNECTION=redis",
             "core", "php", "artisan", "tinker", f"--execute={expression}", timeout=180,
         )
@@ -206,7 +206,7 @@ def main() -> None:
         compose(
             "run", "--rm", "--no-deps", "-e", f"DB_HOST={RESTORE}", "-e", "DB_PORT=5432",
             "-e", "DB_DATABASE=cdnf_restore", "-e", "DB_USERNAME=cdnf_restore",
-            "-e", "DB_PASSWORD=phase8-restore-only", "-e", f"REDIS_HOST={QUEUE}",
+            "-e", "DB_PASSWORD=e2e-restore-only", "-e", f"REDIS_HOST={QUEUE}",
             "-e", "CACHE_STORE=redis", "-e", "QUEUE_CONNECTION=redis",
             "core", "php", "artisan", "queue:work", "redis", "--queue=bulk_maintenance,purge",
             "--stop-when-empty", "--tries=1", "--timeout=180", timeout=600,
@@ -239,7 +239,7 @@ def main() -> None:
         restore_completed_at = time.time()
 
         print(json.dumps({
-            "phase8_recovery": "passed",
+            "offhost_recovery": "passed",
             "object_host_image": object_store.IMAGE,
             "snapshot": snapshot,
             "rpo_seconds": round(backup_completed_at - cutoff_at, 3),

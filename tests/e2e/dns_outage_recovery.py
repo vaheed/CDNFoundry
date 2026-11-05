@@ -16,7 +16,7 @@ COMPOSE = os.environ.get("CDNF_COMPOSE_FILE", "compose.dev.yml")
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 RUN = f"{int(time.time())}-{secrets.token_hex(3)}"
 EMAIL = f"dns-outage-{RUN}@example.test"
-PASSWORD = f"Phase3-{secrets.token_urlsafe(20)}"
+PASSWORD = f"e2e-{secrets.token_urlsafe(20)}"
 ZONE = f"dns-outage-{RUN}.test"
 
 

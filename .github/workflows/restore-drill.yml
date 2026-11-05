@@ -29,7 +29,7 @@ jobs:
       - name: Apply migrations explicitly
         run: make dev-migrate
       - name: Back up to disposable S3 storage and restore into a clean PostgreSQL
-        run: make dev-phase8-recovery-e2e
+        run: make dev-recovery-e2e
       - name: Check Restic retention and integrity commands against the same repository
         run: python3 tests/e2e/backup_retention.py
       - name: Capture service state

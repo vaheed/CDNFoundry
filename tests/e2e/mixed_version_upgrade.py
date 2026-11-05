@@ -17,11 +17,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 NETWORK = os.environ.get("CDNF_CONTROL_NETWORK", "cdnfoundry-dev_control")
 POSTGRES_IMAGE = os.environ.get("CDNF_POSTGRES_IMAGE", "postgres:18.4-alpine")
 RUN = f"{int(time.time())}-{secrets.token_hex(4)}"
-DATABASE = f"cdnfoundry-phase8-upgrade-db-{RUN}"
-PRIOR_CORE = f"cdnfoundry-phase8-prior-core:{RUN}"
-CURRENT_CORE = f"cdnfoundry-phase8-current-core:{RUN}"
-PRIOR_AGENT = f"cdnfoundry-phase8-prior-agent:{RUN}"
-CURRENT_AGENT = f"cdnfoundry-phase8-current-agent:{RUN}"
+DATABASE = f"cdnfoundry-e2e-upgrade-db-{RUN}"
+PRIOR_CORE = f"cdnfoundry-e2e-prior-core:{RUN}"
+CURRENT_CORE = f"cdnfoundry-e2e-current-core:{RUN}"
+PRIOR_AGENT = f"cdnfoundry-e2e-prior-agent:{RUN}"
+CURRENT_AGENT = f"cdnfoundry-e2e-current-agent:{RUN}"
 APP_KEY = "base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
 
@@ -49,7 +49,7 @@ def application(image: str, *command: str) -> subprocess.CompletedProcess[str]:
         "-e", "APP_ENV=production", "-e", f"APP_KEY={APP_KEY}",
         "-e", "DB_CONNECTION=pgsql", "-e", f"DB_HOST={DATABASE}", "-e", "DB_PORT=5432",
         "-e", "DB_DATABASE=cdnf_upgrade", "-e", "DB_USERNAME=cdnf_upgrade",
-        "-e", "DB_PASSWORD=phase8-upgrade-only", "-e", "CACHE_STORE=array",
+        "-e", "DB_PASSWORD=e2e-upgrade-only", "-e", "CACHE_STORE=array",
         "-e", "SESSION_DRIVER=array", "-e", "QUEUE_CONNECTION=sync",
         image, *command,
     )
@@ -94,7 +94,7 @@ def prior_release(current_version: str) -> tuple[str, str]:
 def main() -> None:
     current_version = source_version(ROOT)
     prior_sha, expected_prior_version = prior_release(current_version)
-    with tempfile.TemporaryDirectory(prefix="cdnfoundry-phase8-upgrade-") as temp_name:
+    with tempfile.TemporaryDirectory(prefix="cdnfoundry-e2e-upgrade-") as temp_name:
         temp = pathlib.Path(temp_name)
         archive = temp / "prior.tar"
         prior = temp / "prior"
@@ -116,7 +116,7 @@ def main() -> None:
             "docker", "run", "-d", "--rm", "--name", DATABASE, "--network", NETWORK,
             "--tmpfs", "/var/lib/postgresql:rw,nosuid,nodev,size=2g",
             "-e", "POSTGRES_DB=cdnf_upgrade", "-e", "POSTGRES_USER=cdnf_upgrade",
-            "-e", "POSTGRES_PASSWORD=phase8-upgrade-only", POSTGRES_IMAGE,
+            "-e", "POSTGRES_PASSWORD=e2e-upgrade-only", POSTGRES_IMAGE,
         )
         try:
             wait_postgres()
@@ -158,7 +158,7 @@ def main() -> None:
                 raise AssertionError((observed_current, current_version))
 
             print(json.dumps({
-                "phase8_upgrade": "passed",
+                "mixed_version_upgrade": "passed",
                 "prior_commit": prior_sha,
                 "prior_agent_version": prior_version,
                 "current_agent_version": current_version,

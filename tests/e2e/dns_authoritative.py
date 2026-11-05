@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real Phase 2 authoritative DNS qualification through Laravel, PowerDNS, and DNSdist."""
+"""Real authoritative DNS qualification through Laravel, PowerDNS, and DNSdist."""
 
 from __future__ import annotations
 
@@ -16,10 +16,10 @@ BASE = os.environ.get("CDNF_BASE_URL", "http://localhost:8080").rstrip("/")
 COMPOSE = os.environ.get("CDNF_COMPOSE_FILE", "compose.dev.yml")
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 RUN = f"{int(time.time())}-{secrets.token_hex(3)}"
-EMAIL = f"phase2-{RUN}@example.test"
-PASSWORD = f"Phase2-{secrets.token_urlsafe(20)}"
-ZONE = f"phase2-{RUN}.test"
-REVERSE_ZONE = f"phase2-{RUN}.2.0.192.in-addr.arpa"
+EMAIL = f"e2e-{RUN}@example.test"
+PASSWORD = f"e2e-{secrets.token_urlsafe(20)}"
+ZONE = f"e2e-{RUN}.test"
+REVERSE_ZONE = f"e2e-{RUN}.2.0.192.in-addr.arpa"
 
 
 def call(method: str, path: str, payload: object | None = None, token: str | None = None) -> tuple[int, object]:
@@ -148,13 +148,13 @@ def wait_operation(token: str, operation_id: str, timeout: int = 30) -> dict[str
 
 
 def main() -> None:
-    artisan("App\\Models\\User::query()->create(['name'=>'Phase 2 E2E','email'=>" + quote(EMAIL) + ",'password'=>Illuminate\\Support\\Facades\\Hash::make(" + quote(PASSWORD) + "),'type'=>'admin']);")
-    _, login = call("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD, "device_name": "phase2-e2e"})
+    artisan("App\\Models\\User::query()->create(['name'=>'E2E','email'=>" + quote(EMAIL) + ",'password'=>Illuminate\\Support\\Facades\\Hash::make(" + quote(PASSWORD) + "),'type'=>'admin']);")
+    _, login = call("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD, "device_name": "e2e-e2e"})
     token = login["data"]["token"]
     _, clusters = call("GET", "/api/admin/dns/clusters", token=token)
     cluster = next((item for item in clusters["data"] if item["api_url"] == "http://pdns-primary:8081"), None)
     if cluster is None:
-        _, created = call("POST", "/api/admin/dns/clusters", {"name": f"phase2-{RUN}", "location": "e2e", "api_url": "http://pdns-primary:8081", "transfer_endpoint": "172.28.30.10:5300", "api_key": "pdns-dev-api-key", "server_id": "localhost", "nameservers": [{"hostname": "ns1.cdnf.test"}, {"hostname": "ns2.cdnf.test"}]}, token)
+        _, created = call("POST", "/api/admin/dns/clusters", {"name": f"e2e-{RUN}", "location": "e2e", "api_url": "http://pdns-primary:8081", "transfer_endpoint": "172.28.30.10:5300", "api_key": "pdns-dev-api-key", "server_id": "localhost", "nameservers": [{"hostname": "ns1.cdnf.test"}, {"hostname": "ns2.cdnf.test"}]}, token)
         cluster = created["data"]
         wait_operation(token, created["operation_id"])
         _, refreshed = call("GET", f"/api/admin/dns/clusters/{cluster['id']}", token=token)
@@ -183,7 +183,7 @@ def main() -> None:
     records = [
         ("A", "@", "192.0.2.20", {}), ("AAAA", "@", "2001:db8::20", {}),
         ("CNAME", "alias", ZONE + ".", {}), ("MX", "@", "mail.example.net.", {"priority": 10}),
-        ("TXT", "txt", "phase2-real-runtime", {}), ("NS", "delegated", "ns.example.net.", {}),
+        ("TXT", "txt", "e2e-real-runtime", {}), ("NS", "delegated", "ns.example.net.", {}),
         ("CAA", "@", '0 issue "letsencrypt.org"', {}),
         ("SRV", "_sip._tcp", "sip.example.net.", {"priority": 10, "weight": 20, "port": 5060}),
     ]
@@ -195,7 +195,7 @@ def main() -> None:
     wait_deployment(token, domain_id)
     expected = {
         (ZONE, "A"): "192.0.2.20", (ZONE, "AAAA"): "2001:db8::20", (f"alias.{ZONE}", "CNAME"): ZONE + ".",
-        (ZONE, "MX"): "10 mail.example.net.", (f"txt.{ZONE}", "TXT"): '"phase2-real-runtime"',
+        (ZONE, "MX"): "10 mail.example.net.", (f"txt.{ZONE}", "TXT"): '"e2e-real-runtime"',
         (f"delegated.{ZONE}", "NS"): "ns.example.net.", (ZONE, "CAA"): '0 issue "letsencrypt.org"',
         (f"_sip._tcp.{ZONE}", "SRV"): "10 20 5060 sip.example.net.",
     }
@@ -233,8 +233,8 @@ def main() -> None:
     compose("restart", "pdns-primary", "pdns-auth", "dnsdist", "horizon", "core")
     wait_http()
     wait_dns("192.0.2.120")
-    assert "phase2-real-runtime" in dig(f"txt.{ZONE}", "TXT")
-    print("phase2_dns_e2e=passed types=9 ipv4_transport=passed ipv6_transport=passed coalesced_updates=100:1 control_outage=passed restart=passed")
+    assert "e2e-real-runtime" in dig(f"txt.{ZONE}", "TXT")
+    print("dns_authoritative_e2e=passed types=9 ipv4_transport=passed ipv6_transport=passed coalesced_updates=100:1 control_outage=passed restart=passed")
 
 
 if __name__ == "__main__":

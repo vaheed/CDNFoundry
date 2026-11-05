@@ -14,8 +14,8 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 PROJECT = os.environ.get("COMPOSE_PROJECT_NAME", "cdnfoundry-dev")
 MMDB_VOLUME = os.environ.get("CDNF_MMDB_VOLUME", f"{PROJECT}_mmdb")
-IMAGE = os.environ.get("CDNF_MMDB_IMAGE", "cdnfoundry/mmdb-updater:phase8")
-NAME = f"cdnfoundry-phase8-mmdb-{secrets.token_hex(4)}"
+IMAGE = os.environ.get("CDNF_MMDB_IMAGE", "cdnfoundry/mmdb-updater:e2e")
+NAME = f"cdnfoundry-e2e-mmdb-{secrets.token_hex(4)}"
 
 
 def run(*args: str, timeout: int = 180, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -34,7 +34,7 @@ def checksum(directory: pathlib.Path) -> str:
 
 def main() -> None:
     run("docker", "build", "-t", IMAGE, "docker/mmdb-updater", timeout=600)
-    with tempfile.TemporaryDirectory(prefix="cdnfoundry-phase8-mmdb-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="cdnfoundry-e2e-mmdb-") as temporary:
         directory = pathlib.Path(temporary)
         run(
             "docker", "run", "--rm", "-v", f"{MMDB_VOLUME}:/source:ro", "-v", f"{directory}:/target",
@@ -63,7 +63,7 @@ def main() -> None:
             if (directory / ".GeoLite2-City.mmdb.candidate").exists():
                 raise AssertionError("failed provider left an activation candidate")
             print(json.dumps({
-                "phase8_mmdb_outage": "passed", "database_checksum": after,
+                "mmdb_provider_outage_outage": "passed", "database_checksum": after,
                 "provider_failure_logged": True, "last_valid_retained": True,
             }, sort_keys=True))
         finally:

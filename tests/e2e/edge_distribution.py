@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real Phase 4 control-plane, edge distribution, pool migration, and PowerDNS qualification."""
+"""Real control-plane, edge distribution, pool migration, and PowerDNS qualification."""
 
 from __future__ import annotations
 
@@ -19,11 +19,11 @@ BASE = os.environ.get("CDNF_BASE_URL", "http://localhost:8080").rstrip("/")
 COMPOSE = os.environ.get("CDNF_COMPOSE_FILE", "compose.dev.yml")
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 RUN = f"{int(time.time())}-{secrets.token_hex(3)}"
-EMAIL = f"phase4-{RUN}@example.test"
-PASSWORD = f"Phase4-{secrets.token_urlsafe(20)}"
-ZONE = f"phase4-{RUN}.test"
-EDGE_NAMES = [f"phase4-edge-a-{RUN}", f"phase4-edge-b-{RUN}"]
-EDGE_CONTROL_NAME = f"cdnf-phase4-control-{RUN}"
+EMAIL = f"e2e-{RUN}@example.test"
+PASSWORD = f"e2e-{secrets.token_urlsafe(20)}"
+ZONE = f"e2e-{RUN}.test"
+EDGE_NAMES = [f"e2e-edge-a-{RUN}", f"e2e-edge-b-{RUN}"]
+EDGE_CONTROL_NAME = f"cdnf-e2e-control-{RUN}"
 CONTROL_NETWORK = os.environ.get(
     "CDNF_CONTROL_NETWORK",
     f"{os.environ.get('COMPOSE_PROJECT_NAME', 'cdnfoundry-dev')}_control",
@@ -242,7 +242,7 @@ def ensure_cluster(token: str) -> dict:
     cluster = next((row for row in response["data"] if row["api_url"] == "http://pdns-primary:8081"), None)
     if cluster is None:
         _, created = call("POST", "/api/admin/dns/clusters", {
-            "name": f"phase4-pdns-{RUN}",
+            "name": f"e2e-pdns-{RUN}",
             "location": "local-compose",
             "api_url": "http://pdns-primary:8081",
                 "transfer_endpoint": "172.28.30.10:5300",
@@ -291,7 +291,7 @@ def start_edge_control(directory: pathlib.Path) -> pathlib.Path:
     directory.chmod(0o755)
     subprocess.run([
         "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
-        "-subj", "/CN=Phase 4 Edge Identity CA", "-keyout", str(directory / "ca.key"), "-out", str(directory / "ca.crt"),
+        "-subj", "/CN=Edge Identity CA", "-keyout", str(directory / "ca.key"), "-out", str(directory / "ca.crt"),
     ], check=True, capture_output=True, text=True, timeout=20)
     subprocess.run([
         "openssl", "req", "-newkey", "rsa:2048", "-nodes", "-subj", f"/CN={EDGE_CONTROL_NAME}",
@@ -534,7 +534,7 @@ def complete_purge_task(edge: dict, task_id: str, status: str = "succeeded") -> 
     }, context=edge["context"])
 
 
-def exercise_phase5_cache(token: str, domain_id: int, edges: list[dict], sequences: dict[str, int], baseline_revision: int) -> None:
+def exercise_cache(token: str, domain_id: int, edges: list[dict], sequences: dict[str, int], baseline_revision: int) -> None:
     settings = {
         "enabled": True,
         "edge_ttl_seconds": 120,
@@ -615,7 +615,7 @@ def exercise_phase5_cache(token: str, domain_id: int, edges: list[dict], sequenc
 
     _, persisted = call("GET", f"/api/domains/{domain_id}/cache", token=token)
     assert persisted["data"]["cache_epoch"] == first["data"]["cache_epoch"], persisted
-    print("phase5_cache_control_plane_e2e=passed propagation=acked rollback=acked purge_retry=2 idempotency=replayed")
+    print("e2e_cache_control_plane_e2e=passed propagation=acked rollback=acked purge_retry=2 idempotency=replayed")
 
 
 def exercise_simple_anycast(token: str, edges: list[dict]) -> None:
@@ -660,10 +660,10 @@ def exercise_simple_anycast(token: str, edges: list[dict]) -> None:
 def main() -> None:
     artisan(
         "App\\Models\\User::query()->create(["
-        f"'name'=>'Phase 4 E2E','email'=>{quote(EMAIL)},"
+        f"'name'=>'E2E','email'=>{quote(EMAIL)},"
         f"'password'=>Illuminate\\Support\\Facades\\Hash::make({quote(PASSWORD)}),'type'=>'admin']);"
     )
-    _, login = call("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD, "device_name": "phase4-e2e"})
+    _, login = call("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD, "device_name": "e2e-e2e"})
     token = login["data"]["token"]
     # The dev fleet's real PoPs probe every endpoint, and the synthetic addresses here are unreachable.
     # Require more vantage points than exist so these fake PoPs are never withdrawn by probes.
@@ -675,7 +675,7 @@ def main() -> None:
     if not cluster["enabled"]:
         call("POST", f"/api/admin/dns/clusters/{cluster['id']}/enable", {}, token)
 
-    with tempfile.TemporaryDirectory(prefix="cdnf-phase4-control-") as directory:
+    with tempfile.TemporaryDirectory(prefix="cdnf-e2e-control-") as directory:
         temporary = pathlib.Path(directory)
         start_edge_control(temporary)
         edges = [
@@ -787,7 +787,7 @@ def main() -> None:
         assert dig(ZONE, "TXT") == ['"proxy-apex=qualified"']
         assert dig(ZONE, "CAA") == ['0 issue "letsencrypt.org"']
         assert baseline_revision is not None
-        exercise_phase5_cache(token, domain_id, edges, sequences, baseline_revision)
+        exercise_cache(token, domain_id, edges, sequences, baseline_revision)
 
         for index, edge in enumerate(edges):
             call("POST", f"/api/admin/edge-pools/{quarantine['id']}/edges/{edge['id']}/endpoint", {
@@ -848,7 +848,7 @@ def main() -> None:
     coalesced_move_revisions = max(move_revisions.values()) - move_revision
     final_revision = max(final_revisions.values())
     print(
-        "phase4_control_plane_e2e=passed edges=2 pool_dns=ipv4+ipv6 drain=passed "
+        "edge_distribution_e2e=passed edges=2 pool_dns=ipv4+ipv6 drain=passed "
         f"migration=acknowledged coalesced_move_revisions={coalesced_move_revisions} "
         f"final_revision={final_revision} obsolete_artifacts=0"
     )
@@ -876,4 +876,4 @@ if __name__ == "__main__":
                 "App\\Jobs\\ReconcilePlatformDnsIdentity::dispatch();"
             )
         except Exception as cleanup_error:
-            print(f"warning: Phase 4 E2E cleanup failed: {cleanup_error}")
+            print(f"warning: E2E cleanup failed: {cleanup_error}")

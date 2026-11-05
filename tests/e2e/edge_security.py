@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real control-plane and OpenResty Phase 6 qualification; no browser automation."""
+"""Real control-plane and OpenResty qualification; no browser automation."""
 
 import json
 import os
@@ -15,16 +15,16 @@ import uuid
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 BASE_URL = os.environ.get("CDNF_BASE_URL", "http://localhost:8080").rstrip("/")
 COMPOSE_FILE = os.environ.get("CDNF_COMPOSE_FILE", "compose.dev.yml")
-NAME = "cdnf-phase6-security-e2e"
-SLOW_CLIENT = "cdnf-phase6-slow-client-e2e"
-SLOW_ORIGIN_CLIENT = "cdnf-phase6-origin-client-e2e"
+NAME = "cdnf-e2e-security-e2e"
+SLOW_CLIENT = "cdnf-e2e-slow-client-e2e"
+SLOW_ORIGIN_CLIENT = "cdnf-e2e-origin-client-e2e"
 EDGE_NETWORK = os.environ.get("CDNF_EDGE_NETWORK", f"{os.environ.get('COMPOSE_PROJECT_NAME', 'cdnfoundry-dev')}_edge")
 MMDB_VOLUME = f"{os.environ.get('COMPOSE_PROJECT_NAME', 'cdnfoundry-dev')}_mmdb"
 RUN_ID = f"{int(time.time())}-{secrets.token_hex(4)}"
-USER_EMAIL = f"phase6-profile-{RUN_ID}@example.test"
-STRANGER_EMAIL = f"phase6-stranger-{RUN_ID}@example.test"
+USER_EMAIL = f"e2e-profile-{RUN_ID}@example.test"
+STRANGER_EMAIL = f"e2e-stranger-{RUN_ID}@example.test"
 PASSWORD = f"Security-1-{secrets.token_urlsafe(18)}"
-DOMAIN = f"profile-{RUN_ID}.phase6.test"
+DOMAIN = f"profile-{RUN_ID}.e2e.test"
 PRESET_LIMITS = {
     "standard": {
         "requests_per_second": 100, "request_burst": 200, "connections_per_client": 64,
@@ -152,17 +152,17 @@ def qualify_profile_control_plane() -> None:
     wait_for_api()
     domain_id = artisan(
         "$user=App\\Models\\User::query()->create(["
-        f"'name'=>'Phase 6 profile user','email'=>{php_string(USER_EMAIL)},"
+        f"'name'=>'profile user','email'=>{php_string(USER_EMAIL)},"
         f"'password'=>Illuminate\\Support\\Facades\\Hash::make({php_string(PASSWORD)}),'type'=>'user']);"
         "$stranger=App\\Models\\User::query()->create(["
-        f"'name'=>'Phase 6 stranger','email'=>{php_string(STRANGER_EMAIL)},"
+        f"'name'=>'stranger','email'=>{php_string(STRANGER_EMAIL)},"
         f"'password'=>Illuminate\\Support\\Facades\\Hash::make({php_string(PASSWORD)}),'type'=>'user']);"
-        f"$domain=App\\Models\\Domain::query()->create(['name'=>{php_string(DOMAIN)},'display_name'=>'Phase 6 profiles','revision'=>1]);"
+        f"$domain=App\\Models\\Domain::query()->create(['name'=>{php_string(DOMAIN)},'display_name'=>'profiles','revision'=>1]);"
         "$domain->users()->attach($user);echo $domain->id;"
     )
     assert domain_id.isdigit(), domain_id
-    _, login = api("POST", "/api/auth/login", {"email": USER_EMAIL, "password": PASSWORD, "device_name": "phase6-profile-e2e"})
-    _, stranger_login = api("POST", "/api/auth/login", {"email": STRANGER_EMAIL, "password": PASSWORD, "device_name": "phase6-stranger-e2e"})
+    _, login = api("POST", "/api/auth/login", {"email": USER_EMAIL, "password": PASSWORD, "device_name": "e2e-profile-e2e"})
+    _, stranger_login = api("POST", "/api/auth/login", {"email": STRANGER_EMAIL, "password": PASSWORD, "device_name": "e2e-stranger-e2e"})
     token = login["data"]["token"]
     stranger_token = stranger_login["data"]["token"]
     path = f"/api/domains/{domain_id}/security"
@@ -261,7 +261,7 @@ def host(domain_id: int, rules: list[dict] | None = None, state: str = "normal",
             "rules": rules or [],
         },
         "origin": {
-            "host": "origin-http", "port": 80, "scheme": "http", "host_header": "phase6-origin.example",
+            "host": "origin-http", "port": 80, "scheme": "http", "host_header": "e2e-origin.example",
             "sni": None, "verify_tls": False, "connect_timeout_ms": 1000,
             "response_timeout_ms": 10000, "retry_count": 0, "websocket": False,
             "private_allowlist": ["172.16.0.0/12"], "blocked_networks": [], "blocked_addresses": [],
@@ -294,11 +294,11 @@ def main() -> None:
     run("docker", "compose", "-f", "compose.dev.yml", "up", "-d", "--force-recreate", "origin-http")
     run("docker", "compose", "-f", "compose.dev.yml", "up", "-d", "mmdb-updater")
     qualify_profile_control_plane()
-    run("docker", "build", "-f", "docker/openresty/Dockerfile", "-t", "cdnfoundry/edge-runtime:phase6", ".")
-    with tempfile.TemporaryDirectory(prefix="cdnf-phase6-") as directory:
+    run("docker", "build", "-f", "docker/openresty/Dockerfile", "-t", "cdnfoundry/edge-runtime:e2e", ".")
+    with tempfile.TemporaryDirectory(prefix="cdnf-e2e-") as directory:
         os.chmod(directory, 0o755)
         temporary = pathlib.Path(directory)
-        run("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=phase6-runtime", "-keyout", str(temporary / "tls.key"), "-out", str(temporary / "tls.crt"))
+        run("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=e2e-runtime", "-keyout", str(temporary / "tls.key"), "-out", str(temporary / "tls.crt"))
         hosts = {
             "healthy.example": host(1),
             "ipv4.example": host(2, [{"id": 1, "match_type": "cidr", "value": "127.0.0.0/8", "action": "block", "priority": 1}]),
@@ -322,7 +322,7 @@ def main() -> None:
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/active.json", "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
             "-e", "GEOIP_DATABASE=/mmdb/GeoLite2-City.mmdb", "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro",
             "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro", "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
-            "-v", f"{MMDB_VOLUME}:/mmdb:ro", "cdnfoundry/edge-runtime:phase6")
+            "-v", f"{MMDB_VOLUME}:/mmdb:ro", "cdnfoundry/edge-runtime:e2e")
         try:
             run("docker", "exec", NAME, "sh", "-c", "if test -f /var/lib/nginx/tmp/nginx-without-syslog.conf; then openresty -t -c /var/lib/nginx/tmp/nginx-without-syslog.conf; else openresty -t; fi")
             time.sleep(1.2)
@@ -363,10 +363,10 @@ def main() -> None:
             finally:
                 run("docker", "rm", "-f", SLOW_ORIGIN_CLIENT, check=False); origin_slow.wait(timeout=5)
 
-            applied = control("phase6-emergency-1", True, ["allow_get_head_only", "disable_origin_retries"], int(time.time()) + 2)
+            applied = control("e2e-emergency-1", True, ["allow_get_head_only", "disable_origin_retries"], int(time.time()) + 2)
             assert applied["accepted"] is True and applied["replayed"] is False, applied
             status(curl("healthy.example", method="POST", data="ok"), 405, "edge_emergency_mode")
-            assert control("phase6-emergency-1", True, ["allow_get_head_only", "disable_origin_retries"], int(time.time()) + 2)["replayed"] is True
+            assert control("e2e-emergency-1", True, ["allow_get_head_only", "disable_origin_retries"], int(time.time()) + 2)["replayed"] is True
             time.sleep(2.2)
             status(curl("healthy.example", method="POST", data="ok"), 200)
 
@@ -382,7 +382,7 @@ def main() -> None:
             status(curl("healthy.example"), 200)
             logs = run("docker", "logs", NAME, check=False).stdout + run("docker", "logs", NAME, check=False).stderr
             assert "invalid runtime state" in logs, logs
-            print("Phase 6 profile control-plane and real security runtime qualification passed")
+            print("profile control-plane and real security runtime qualification passed")
         finally:
             if os.environ.get("CDNF_KEEP_FAILED_RUNTIME") != "1":
                 run("docker", "rm", "-f", SLOW_CLIENT, SLOW_ORIGIN_CLIENT, check=False)

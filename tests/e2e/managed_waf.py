@@ -9,9 +9,9 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-IMAGE = os.environ.get("CDNF_WAF_IMAGE", "cdnfoundry/edge-runtime:phase9-qualification")
-CELL = "cdnf-phase9-waf"
-ORIGIN = "cdnf-phase9-origin"
+IMAGE = os.environ.get("CDNF_WAF_IMAGE", "cdnfoundry/edge-runtime:waf-qualification")
+CELL = "cdnf-e2e-waf"
+ORIGIN = "cdnf-e2e-origin"
 NETWORK = os.environ.get("CDNF_EDGE_NETWORK", "cdnfoundry-dev_edge")
 
 
@@ -66,7 +66,7 @@ def main() -> None:
     run("docker", "rm", "-f", CELL, ORIGIN, check=False)
     run("docker", "run", "-d", "--name", ORIGIN, "--network", NETWORK, "nginx:1.30.3-alpine")
     origin_ip = json.loads(run("docker", "inspect", ORIGIN).stdout)[0]["NetworkSettings"]["Networks"][NETWORK]["IPAddress"]
-    with tempfile.TemporaryDirectory(prefix="cdnf-phase9-waf-") as directory:
+    with tempfile.TemporaryDirectory(prefix="cdnf-e2e-waf-") as directory:
         temporary = pathlib.Path(directory)
         temporary.chmod(0o755)
         # A stale runtime file may still carry exclusions; none may weaken CRS.
@@ -88,7 +88,7 @@ def main() -> None:
         for item in (temporary / "tls.key", temporary / "tls.crt"):
             item.chmod(0o644)
         run("docker", "run", "-d", "--name", CELL, "--network", NETWORK,
-            "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/active.json", "-e", "EDGE_STATUS_TOKEN=phase9",
+            "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/active.json", "-e", "EDGE_STATUS_TOKEN=e2e",
             "-v", f"{runtime}:/var/lib/cdnfoundry/runtime/active.json:ro",
             "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro", "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
             "--tmpfs", "/var/cache/nginx:rw,noexec,nosuid,size=64m,mode=0777", IMAGE)
@@ -132,7 +132,7 @@ def main() -> None:
             assert not leaked, "\n".join(leaked[:5])
         finally:
             run("docker", "rm", "-f", CELL, ORIGIN, check=False)
-    print("phase9 managed WAF runtime qualification passed")
+    print("e2e managed WAF runtime qualification passed")
 
 
 if __name__ == "__main__":

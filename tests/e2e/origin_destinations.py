@@ -46,7 +46,7 @@ def main() -> None:
     instance = 'cdnf-origin-destinations-' + uuid.uuid4().hex[:12]
     prefix = uuid.uuid4().hex[:10]
     subnet = f'fd{prefix[:2]}:{prefix[2:6]}:{prefix[6:]}::/64'
-    spec = importlib.util.spec_from_file_location('runtime_fixture', ROOT / 'tests/e2e/phase4_runtime.py')
+    spec = importlib.util.spec_from_file_location('runtime_fixture', ROOT / 'tests/e2e/openresty_runtime.py')
     fixture = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(fixture)
     run('docker', 'network', 'create', '--ipv6', '--subnet', subnet,

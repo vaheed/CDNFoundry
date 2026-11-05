@@ -3,7 +3,7 @@ COMPOSE_TEST := $(COMPOSE_DEV) -f compose.test.yml
 COMPOSE_PROD := docker compose --env-file .env.prod -f compose.prod.yml
 COMPOSE_PROD_EXAMPLE := docker compose --env-file .env.prod.example -f compose.prod.yml
 
-.PHONY: backend-test contract-check dev-assets dev-control-up dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-clickhouse-migrate dev-pdns-migrate dev-test dev-e2e dev-waf-image dev-phase9-e2e dev-gateway-e2e dev-cache-e2e dev-compression-e2e dev-origin-failover-e2e dev-phase7-e2e dev-phase8-e2e dev-phase8-recovery-e2e dev-phase8-upgrade-e2e dev-phase8-throughput-e2e dev-phase8-mmdb-e2e dev-scale-e2e dev-grafana-smoke dev-observability-seed dev-grafana-browser dev-operational-logs-smoke dev-production-qualification dev-logs prod-pull prod-migrate prod-clickhouse-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge prod-logs config-check openapi-check version-check check-no-screenshots docs-dev docs-build docs-check
+.PHONY: backend-test contract-check dev-assets dev-control-up dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-clickhouse-migrate dev-pdns-migrate dev-test dev-e2e dev-waf-image dev-waf-e2e dev-gateway-e2e dev-cache-e2e dev-compression-e2e dev-origin-failover-e2e dev-analytics-e2e dev-backup-e2e dev-recovery-e2e dev-upgrade-e2e dev-throughput-e2e dev-mmdb-e2e dev-scale-e2e dev-grafana-smoke dev-observability-seed dev-grafana-browser dev-operational-logs-smoke dev-production-qualification dev-logs prod-pull prod-migrate prod-clickhouse-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge prod-logs config-check openapi-check version-check check-no-screenshots docs-dev docs-build docs-check
 
 backend-test: dev-test
 
@@ -58,57 +58,57 @@ dev-test: dev-assets
 
 dev-e2e: dev-waf-image
 	python3 tests/e2e/e2e.py
-	python3 tests/e2e/phase2_dns.py
-	python3 tests/e2e/phase3_geo_dns.py
-	python3 tests/e2e/phase4_control_plane.py
-	python3 tests/e2e/phase4_mtls.py
-	python3 tests/e2e/phase5_tls.py
-	python3 tests/e2e/phase6_security.py
-	python3 tests/e2e/phase7_analytics.py
-	python3 tests/e2e/phase8_operations.py
-	python3 tests/e2e/phase9_waf.py
+	python3 tests/e2e/dns_authoritative.py
+	python3 tests/e2e/geo_dns.py
+	python3 tests/e2e/edge_distribution.py
+	python3 tests/e2e/edge_control_mtls.py
+	python3 tests/e2e/managed_tls.py
+	python3 tests/e2e/edge_security.py
+	python3 tests/e2e/telemetry_analytics.py
+	python3 tests/e2e/backup_restore.py
+	python3 tests/e2e/managed_waf.py
 	python3 tests/e2e/origin_failover.py
-	python3 tests/e2e/phase4_runtime.py
+	python3 tests/e2e/openresty_runtime.py
 
 dev-waf-image:
-	docker build -f docker/openresty/Dockerfile -t cdnfoundry/edge-runtime:phase9-qualification .
+	docker build -f docker/openresty/Dockerfile -t cdnfoundry/edge-runtime:waf-qualification .
 
-dev-phase9-e2e: dev-waf-image
-	python3 tests/e2e/phase9_waf.py
+dev-waf-e2e: dev-waf-image
+	python3 tests/e2e/managed_waf.py
 
 dev-gateway-e2e:
 	docker build -t cdnfoundry/edge-gateway:qualification edge-gateway
 	python3 tests/e2e/gateway_ingress.py
 
 dev-cache-e2e:
-	python3 tests/e2e/phase4_runtime.py
+	python3 tests/e2e/openresty_runtime.py
 
 dev-compression-e2e:
-	python3 tests/e2e/phase4_runtime.py
+	python3 tests/e2e/openresty_runtime.py
 
 dev-origin-failover-e2e:
 	python3 tests/e2e/origin_failover.py
 
 dev-scale-e2e:
-	python3 tests/e2e/phase2_scale.py
+	python3 tests/e2e/control_plane_scale.py
 
-dev-phase7-e2e:
-	python3 tests/e2e/phase7_analytics.py
+dev-analytics-e2e:
+	python3 tests/e2e/telemetry_analytics.py
 
-dev-phase8-e2e:
-	python3 tests/e2e/phase8_operations.py
+dev-backup-e2e:
+	python3 tests/e2e/backup_restore.py
 
-dev-phase8-recovery-e2e:
-	python3 tests/e2e/phase8_recovery.py
+dev-recovery-e2e:
+	python3 tests/e2e/offhost_recovery.py
 
-dev-phase8-upgrade-e2e:
-	python3 tests/e2e/phase8_upgrade.py
+dev-upgrade-e2e:
+	python3 tests/e2e/mixed_version_upgrade.py
 
-dev-phase8-throughput-e2e:
-	python3 tests/e2e/phase8_throughput.py
+dev-throughput-e2e:
+	python3 tests/e2e/cell_throughput.py
 
-dev-phase8-mmdb-e2e:
-	python3 tests/e2e/phase8_mmdb.py
+dev-mmdb-e2e:
+	python3 tests/e2e/mmdb_provider_outage.py
 
 dev-production-qualification:
 	python3 tests/e2e/production_qualification.py

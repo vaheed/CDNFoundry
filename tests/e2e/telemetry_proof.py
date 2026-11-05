@@ -10,7 +10,7 @@ import tempfile
 import time
 import uuid
 
-from phase4_runtime import state
+from openresty_runtime import state
 
 ROOT = Path(__file__).resolve().parents[2]
 TOKEN = 'telemetry-proof-qualification-only'

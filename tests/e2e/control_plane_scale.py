@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded Phase 2 control-plane dataset and DNS mutation qualification."""
+"""Bounded control-plane dataset and DNS mutation qualification."""
 
 from __future__ import annotations
 
@@ -54,8 +54,8 @@ def main() -> None:
     assert counts == "500000:1000000", counts
     dataset_seconds = time.monotonic() - dataset_started
 
-    artisan("App\\Models\\User::query()->create(['name'=>'Phase 2 Scale','email'=>" + quote(EMAIL) + ",'password'=>Illuminate\\Support\\Facades\\Hash::make(" + quote(PASSWORD) + "),'type'=>'admin']);")
-    login = api("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD, "device_name": "phase2-scale"})
+    artisan("App\\Models\\User::query()->create(['name'=>'Scale','email'=>" + quote(EMAIL) + ",'password'=>Illuminate\\Support\\Facades\\Hash::make(" + quote(PASSWORD) + "),'type'=>'admin']);")
+    login = api("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD, "device_name": "e2e-scale"})
     token = login["data"]["token"]
     domains: list[int] = []
     for index in range(10):
@@ -75,7 +75,7 @@ def main() -> None:
     mutation_seconds = time.monotonic() - mutation_started
     assert processed == 50000
     assert sql(f"SELECT count(*) FROM dns_records r JOIN domains d ON d.id=r.domain_id WHERE d.name LIKE '{PREFIX}-mut-%'") == "50000"
-    print(f"phase2_scale=passed zones=500000 records=1000000 changes=50000 burst_first_two=10000 dataset_seconds={dataset_seconds:.2f} mutation_seconds={mutation_seconds:.2f}")
+    print(f"control_plane_scale=passed zones=500000 records=1000000 changes=50000 burst_first_two=10000 dataset_seconds={dataset_seconds:.2f} mutation_seconds={mutation_seconds:.2f}")
 
 
 if __name__ == "__main__":

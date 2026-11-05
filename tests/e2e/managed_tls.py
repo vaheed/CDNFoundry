@@ -21,9 +21,9 @@ import uuid
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 BASE = "http://localhost:8080"
 RUN = f"{int(time.time())}-{secrets.token_hex(3)}"
-EMAIL = f"phase5-tls-{RUN}@example.test"
-PASSWORD = f"Phase5-{secrets.token_urlsafe(20)}"
-ZONE = f"phase5-tls-{RUN}.test"
+EMAIL = f"e2e-tls-{RUN}@example.test"
+PASSWORD = f"e2e-{secrets.token_urlsafe(20)}"
+ZONE = f"e2e-tls-{RUN}.test"
 
 
 def call(method: str, path: str, payload: object | None = None, token: str | None = None) -> tuple[int, dict]:
@@ -131,9 +131,9 @@ def verify_edge_https(hostname: str, fingerprint: str) -> None:
 
 def main() -> None:
     if sql("select count(*) from dns_clusters where enabled and last_health_status='healthy'") == "0":
-        raise AssertionError("Phase 5 TLS qualification requires the qualified local PowerDNS cluster")
+        raise AssertionError("TLS qualification requires the qualified local PowerDNS cluster")
     if sql("select count(*) from edge_pools where name='shared-default' and enabled") != "1":
-        raise AssertionError("Phase 5 TLS qualification requires the shared-default edge pool")
+        raise AssertionError("TLS qualification requires the shared-default edge pool")
     # CI starts disposable agents without enrollment credentials. The issuance
     # fixture runs there; enrolled developer stacks also qualify both gateways.
     agent_ids = [subprocess.run(
@@ -169,10 +169,10 @@ def main() -> None:
     )
     artisan(
         "App\\Models\\User::query()->create(["
-        f"'name'=>'Phase 5 TLS E2E','email'=>{quote(EMAIL)},"
+        f"'name'=>'TLS E2E','email'=>{quote(EMAIL)},"
         f"'password'=>Illuminate\\Support\\Facades\\Hash::make({quote(PASSWORD)}),'type'=>'admin']);"
     )
-    _, login = call("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD, "device_name": "phase5-tls-e2e"})
+    _, login = call("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD, "device_name": "e2e-tls-e2e"})
     token = login["data"]["token"]
     _, created = call("POST", "/api/domains", {"name": ZONE}, token)
     domain_id = int(created["data"]["id"])
@@ -246,4 +246,4 @@ if __name__ == "__main__":
         try:
             cleanup()
         except Exception as cleanup_error:
-            print(f"warning: Phase 5 TLS E2E cleanup failed: {cleanup_error}")
+            print(f"warning: TLS E2E cleanup failed: {cleanup_error}")

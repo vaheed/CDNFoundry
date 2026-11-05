@@ -30,7 +30,7 @@ Zone ownership, record types and modes (`dns_only`, `proxied`, `geo_dns`), limit
 - Backend: `make dev-test`, or one class with `docker compose -f compose.dev.yml -f compose.test.yml run --rm --no-deps core php artisan test --compact --filter <Class>` (the test override forces in-memory SQLite; never run tests against PostgreSQL).
 - Style: `docker compose -f compose.dev.yml -f compose.test.yml run --rm --no-deps core vendor/bin/pint --test`.
 - Feature: `DnsRecordApiTest`, `DnsReconciliationTest`, `GeoDnsTest`, `DnsZoneImportExportTest`.
-- Runtime: `python3 tests/e2e/phase2_dns.py`, `python3 tests/e2e/phase3_geo_dns.py`, and `dig @127.0.0.1 -p <dnsdist port> <name> <type> +tcp`.
+- Runtime: `python3 tests/e2e/dns_authoritative.py`, `python3 tests/e2e/geo_dns.py`, and `dig @127.0.0.1 -p <dnsdist port> <name> <type> +tcp`.
 
 ## Definition of done
 Valid state serves without Laravel, invalid state is rejected before activation, and the serial is monotonic.

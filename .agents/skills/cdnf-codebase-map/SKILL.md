@@ -37,9 +37,9 @@ symbol and caller queries over reading whole files.
 | Edge agent (Go) | `edge-agent/main.go` (sync, activate, tasks, acks), `generation.go`, `backup.go` | `edge-agent/*_test.go` |
 | Edge gateway (Go, L4 SNI/Host router) | `edge-gateway/main.go` | `edge-gateway/*_test.go` |
 | Cell runtime (OpenResty) | `docker/openresty/runtime.lua`, `docker/nginx/edge-runtime.conf`, `proxy-cache.conf`, `docker/openresty/waf.conf` | `tests/e2e/edge_purge_protocol.py`, `origin_destinations.py` |
-| DNS | `docker/pdns/pdns.conf`, `docker/dnsdist/dnsdist.conf`, `docker/pdns/geoip-zones.yml` | `tests/e2e/phase2_dns.py`, `phase3_geo_dns.py`, `dns_images.py` |
-| Telemetry | `docker/vector/vector.yaml`, `docker/clickhouse/init.sql`, `docker/clickhouse/migrations/` | `tests/e2e/phase7_analytics.py`, `vector_traffic.py` |
-| Control ingress | `docker/nginx/default.conf` (panel/API), `docker/nginx/edge-control.conf` (agent mTLS), `deploy/production/Caddyfile*` | `tests/e2e/phase4_mtls.py`, `caddy_ingress.py` |
+| DNS | `docker/pdns/pdns.conf`, `docker/dnsdist/dnsdist.conf`, `docker/pdns/geoip-zones.yml` | `tests/e2e/dns_authoritative.py`, `geo_dns.py`, `dns_images.py` |
+| Telemetry | `docker/vector/vector.yaml`, `docker/clickhouse/init.sql`, `docker/clickhouse/migrations/` | `tests/e2e/telemetry_analytics.py`, `vector_traffic.py` |
+| Control ingress | `docker/nginx/default.conf` (panel/API), `docker/nginx/edge-control.conf` (agent mTLS), `deploy/production/Caddyfile*` | `tests/e2e/edge_control_mtls.py`, `caddy_ingress.py` |
 
 ## Deployment and tooling
 

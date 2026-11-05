@@ -29,7 +29,7 @@ The desired-state fields, the revision column, the target set, the obsolete-work
 - Backend: `make dev-test`, or one class with `docker compose -f compose.dev.yml -f compose.test.yml run --rm --no-deps core php artisan test --compact --filter <Class>` (the test override forces in-memory SQLite; never run tests against PostgreSQL).
 - Style: `docker compose -f compose.dev.yml -f compose.test.yml run --rm --no-deps core vendor/bin/pint --test`.
 - Add tests for: an obsolete revision is skipped, a concurrent edit coalesces, a target failure keeps the previous state, and a retry succeeds after recovery.
-- Runtime: `tests/e2e/phase4_runtime.py` (edge), `tests/e2e/phase2_dns.py` (DNS).
+- Runtime: `tests/e2e/openresty_runtime.py` (edge), `tests/e2e/dns_authoritative.py` (DNS).
 
 ## Definition of done
 Each change produces exactly one effective deployment per target. Failures are visible on the operation, and the previous valid state keeps serving.
