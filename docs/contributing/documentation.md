@@ -84,6 +84,10 @@ Use the documentation components instead of plain Markdown where they fit.
 - Tabs: `<DocTabs :labels="['Admin panel', 'API', 'Fleet CLI']">` with one
   `<template #tab-1>` per label.
 - Callouts: `::: info`, `::: tip`, `::: warning`, `::: danger`.
+- Screenshots: `<Screenshot name="admin-edges" alt="..." />`. The browser suite
+  (`tests/browser/specs/docs-screenshots.spec.ts`) generates the files for both
+  themes from the seeded demo stack at every release. Never add or edit one by
+  hand; `scripts/ci/check_no_screenshots.py` fails the build on any other image.
 - Diagrams: a `mermaid` fence.
 - Executable blocks: open a shell block with ```` ```sh test ```` and CI runs it
   from the repository root with `bash -euo pipefail`. The block must pass

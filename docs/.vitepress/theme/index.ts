@@ -5,6 +5,7 @@ import CardGrid from './CardGrid.vue'
 import DocTabs from './DocTabs.vue'
 import MermaidDiagram from './MermaidDiagram.vue'
 import PageFeedback from './PageFeedback.vue'
+import Screenshot from './Screenshot.vue'
 import './custom.css'
 
 export default {
@@ -17,5 +18,6 @@ export default {
     app.component('CardGrid', CardGrid)
     app.component('DocTabs', DocTabs)
     app.component('MermaidDiagram', MermaidDiagram)
+    app.component('Screenshot', Screenshot)
   }
 }

@@ -5,6 +5,8 @@ description: Query bounded telemetry, understand privacy and partial data, and e
 
 # Analytics, logs, and usage
 
+<Screenshot name="app-analytics" alt="The Analytics page in the domain panel, with traffic for the selected domain and range." />
+
 ```mermaid
 flowchart LR
     subgraph Collect["Collect and protect"]

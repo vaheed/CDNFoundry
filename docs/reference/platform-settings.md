@@ -5,6 +5,8 @@ description: Reference every PostgreSQL-backed CDNFoundry platform policy field,
 
 # Platform settings reference
 
+<Screenshot name="admin-platform-settings" alt="The Platform settings page in the admin panel." />
+
 ::: warning Settings are durable product policy
 These values live in PostgreSQL, are audited, and may queue global runtime
 reconciliation. An environment variable does not replace a setting, and a

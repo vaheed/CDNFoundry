@@ -5,6 +5,8 @@ description: Create, verify, activate, disable, deprovision, and re-create domai
 
 # Domain lifecycle
 
+<Screenshot name="app-domains" alt="The Domains list in the domain panel, showing the domains assigned to the signed-in user." />
+
 | Concern | Implemented boundary |
 | --- | --- |
 | Durable owner | PostgreSQL domain, deployment, and tombstone rows |

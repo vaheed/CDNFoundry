@@ -5,6 +5,8 @@ description: How zones reach the DNS nodes, how convergence is reported, and how
 
 # DNS nodes and the hidden primary
 
+<Screenshot name="admin-dns-clusters" alt="The DNS clusters list in the admin panel." />
+
 Laravel writes every zone to **one private PowerDNS primary** that runs on the
 control host. It answers no public queries. Each DNS node is a PowerDNS
 **secondary** that pulls the zones it serves. Nothing connects to a node from the

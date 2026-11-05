@@ -5,6 +5,8 @@ description: Create edge pools and hosts, enroll agents, manage cells, and move 
 
 # Edges and placement
 
+<Screenshot name="admin-edges" alt="The Edges list in the admin panel, showing each PoP with its status, location, heartbeat, and version drift." />
+
 | Concern | Durable/runtime boundary |
 | --- | --- |
 | Identity | Edge UUID plus short-lived mTLS certificate |

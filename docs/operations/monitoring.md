@@ -5,6 +5,8 @@ description: Interpret CDNFoundry liveness, readiness, component health, metrics
 
 # Monitoring and alerts
 
+<Screenshot name="admin-telemetry" alt="The Traffic and telemetry page in the admin panel." />
+
 ::: info Metrics are evidence, not control state
 Use metrics to detect and investigate symptoms. PostgreSQL desired state,
 revision acknowledgements, and last-valid runtime state remain authoritative;

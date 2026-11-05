@@ -5,6 +5,8 @@ description: Architecture, data sources, refresh behavior, limits, and failure s
 
 # Laravel operations dashboard
 
+<Screenshot name="admin-overview" alt="The administrator overview with platform health and recent operations." />
+
 The administrator operations overview is the existing `/admin` Filament page.
 It is not a second frontend or an additional observability backend. PostgreSQL
 remains authoritative for desired and operational state; ClickHouse, Vector,

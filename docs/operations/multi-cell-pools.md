@@ -5,6 +5,8 @@ description: Operate stable bounded placement across several cells on each edge.
 
 # Multi-cell pools and placement
 
+<Screenshot name="admin-edge-pools" alt="The Service pools list in the admin panel." />
+
 ::: warning Activate before draining
 When moving traffic, make the target cell ready and acknowledged before
 draining the source. Removing the source first can reduce the pool below its
