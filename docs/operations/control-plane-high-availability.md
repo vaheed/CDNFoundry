@@ -233,7 +233,7 @@ the installation to `ha: none` with no edge or DNS error.
 | `ControlSecretFingerprintMismatch` | The nodes do not hold the same secrets. |
 | `EdgeMissingControlAddresses` | A PoP has not reported the current address list for 15 minutes. |
 
-Run the Phase 2 external probers and the `Watchdog` receiver outside both control
+Run the external probers and the `Watchdog` receiver outside both control
 nodes, so an external dead-man alarm fires if both nodes go silent.
 
 ## Limitations

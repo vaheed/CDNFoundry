@@ -331,8 +331,9 @@ certificate, local mapping, status token, log identity, edge UUID, and
 bootstrap token.
 
 Keep IPv6 absent until routing, firewalling, DNS, and external reachability all
-work. The base Compose file publishes IPv4; do not claim IPv6 service merely by
-setting `HOST_BIND_IPV6`.
+work. Fleet's dual-stack bundles publish IPv6 beside IPv4. With a hand-written
+environment, publish IPv6 only after you have tested it end to end, and do not
+claim IPv6 service merely by setting `HOST_BIND_IPV6`.
 
 ## 6. Validate and pull without helper commands
 

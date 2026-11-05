@@ -86,3 +86,14 @@ npm --prefix docs run dev
 
 Set `DOCS_SITE_URL` and `DOCS_BASE` when deploying somewhere other than the
 default GitHub Pages project path.
+
+## Documentation checks
+
+`make docs-check` runs, in order: the design-token match with the product theme,
+the generated Fleet CLI reference check, the link and environment-key checks, every
+shell block marked `test`, the Markdown lint, the VitePress build, and the built-site
+check. Regenerate the Fleet CLI reference with
+`python3 scripts/ci/generate_fleet_cli_reference.py` after changing a Fleet command.
+Regenerate the documentation screenshots with
+`tests/browser/run.sh docs-screenshots` at every release;
+`scripts/ci/check_no_screenshots.py` fails when they are older than `VERSION`.
