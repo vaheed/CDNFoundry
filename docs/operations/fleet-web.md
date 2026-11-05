@@ -8,7 +8,7 @@ description: Install, check, upgrade, back up, and roll back your hosts from the
 Fleet web is a web page that runs on your own workstation. It does the same jobs
 as the Fleet command line: install hosts, check them, upgrade, back up, and roll
 back. It never changes domains, DNS records, or users. Those stay in the
-[admin and domain panels](../getting-started/using-cdnfoundry.md).
+[admin and domain panels](../guides/admin-panel.md).
 
 **You need:** the Fleet vault you created during [setup](../deployment/production-quick-start.md),
 its passphrase, and a browser on the same workstation.

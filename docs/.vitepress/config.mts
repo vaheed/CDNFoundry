@@ -71,6 +71,8 @@ const guides = [
     text: 'Guides',
     items: [
       { text: 'All guides', link: '/guides/' },
+      { text: 'Admin panel tour', link: '/guides/admin-panel' },
+      { text: 'Domain panel tour', link: '/guides/domain-panel' },
       { text: 'Users and access', link: '/guides/users-and-access' },
       { text: 'Domains', link: '/guides/domains' },
       { text: 'Authoritative DNS', link: '/guides/dns' },
