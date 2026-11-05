@@ -5,7 +5,7 @@ groups:
       # broken, so the absence of alerts is never mistaken for health.
       - alert: Watchdog
         expr: vector(1)
-        labels: { team: platform, severity: none }
+        labels: { team: platform, severity: none, dashboard: cdnf-now }
         annotations:
           summary: Alerting pipeline heartbeat; it must always be firing
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#alerting-heartbeat
@@ -14,7 +14,7 @@ groups:
       - alert: EdgeHeartbeatStale
         expr: cdnfoundry_edge_heartbeat_age_seconds > 180 or cdnfoundry_edge_heartbeat_age_seconds < 0
         for: 2m
-        labels: { team: noc, severity: warning }
+        labels: { team: noc, severity: warning, dashboard: cdnf-pop-fleet }
         annotations:
           summary: A registered edge has stopped sending heartbeats; DNS still publishes it
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#stale-edge-heartbeat
@@ -22,7 +22,7 @@ groups:
       - alert: PoolServingLastPublishedSet
         expr: cdnfoundry_pool_dns_fail_static == 1
         for: 5m
-        labels: { team: noc, severity: critical }
+        labels: { team: noc, severity: critical, dashboard: cdnf-pop-fleet }
         annotations:
           summary: Every endpoint of a pool looks unhealthy; DNS keeps the last published set
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#pool-serving-last-published-set
@@ -30,7 +30,7 @@ groups:
       - alert: EdgeIdentityCertificateExpiring
         expr: cdnfoundry_edge_identity_expires_seconds < 30 * 86400
         for: 10m
-        labels: { team: platform, severity: critical }
+        labels: { team: platform, severity: critical, dashboard: cdnf-pop-fleet }
         annotations:
           summary: An edge identity certificate expires within 30 days and has not been renewed
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#edge-identity-certificate-expiring
@@ -38,7 +38,7 @@ groups:
       - alert: ControlPlaneMetricsUnavailable
         expr: up{job="cdnfoundry-control"} == 0
         for: 2m
-        labels: { team: platform, severity: critical }
+        labels: { team: platform, severity: critical, dashboard: cdnf-control-plane }
         annotations:
           summary: CDNFoundry operational metrics are unavailable
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-plane-metrics-unavailable
@@ -46,7 +46,7 @@ groups:
       - alert: CDNFoundryComponentUnhealthy
         expr: cdnfoundry_component_health == 0
         for: 5m
-        labels: { team: platform, severity: warning }
+        labels: { team: platform, severity: warning, dashboard: cdnf-control-plane }
         annotations:
           summary: A CDNFoundry dependency or reconciliation component is degraded
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#component-unhealthy
@@ -56,7 +56,7 @@ groups:
         # and when the weekly repository integrity check fails.
         expr: cdnfoundry_component_health{component="backups"} == 0
         for: 30m
-        labels: { team: platform, severity: critical }
+        labels: { team: platform, severity: critical, dashboard: cdnf-backups }
         annotations:
           summary: No recent verified control backup, or the backup repository failed its integrity check
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#backup-stale
@@ -64,7 +64,7 @@ groups:
       - alert: CDNFoundryQueueBacklog
         expr: cdnfoundry_queue_depth > 1000 or cdnfoundry_queue_oldest_job_age_seconds > 900
         for: 5m
-        labels: { team: platform, severity: warning }
+        labels: { team: platform, severity: warning, dashboard: cdnf-control-plane }
         annotations:
           summary: A bounded CDNFoundry worker lane has excessive depth or age
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#queue-backlog
@@ -72,7 +72,7 @@ groups:
       - alert: CDNFoundryFailedOperations
         expr: cdnfoundry_operations_failed_recent > 0
         for: 1m
-        labels: { team: platform, severity: warning }
+        labels: { team: platform, severity: warning, dashboard: cdnf-control-plane }
         annotations:
           summary: CDNFoundry has failed operations requiring inspection
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#failed-operations
@@ -80,7 +80,7 @@ groups:
       - alert: CDNFoundryCertificateExpiry
         expr: cdnfoundry_tls_certificates_expiring > 0
         for: 5m
-        labels: { team: noc, severity: critical }
+        labels: { team: noc, severity: critical, dashboard: cdnf-tls-posture }
         annotations:
           summary: One or more active TLS certificates are inside the expiry alert window
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#certificate-expiry
@@ -88,7 +88,7 @@ groups:
       - alert: DNSDistUnavailable
         expr: up{job="dnsdist"} == 0
         for: 2m
-        labels: { team: noc, severity: critical }
+        labels: { team: noc, severity: critical, dashboard: cdnf-dns-authoritative }
         annotations:
           summary: DNSdist authoritative ingress is unavailable
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#dns-cluster-failure
@@ -96,7 +96,7 @@ groups:
       - alert: EdgeGatewayUnready
         expr: cdnfoundry_edge_gateways_unready > 0
         for: 2m
-        labels: { team: noc, severity: critical }
+        labels: { team: noc, severity: critical, dashboard: cdnf-pop-detail }
         annotations:
           summary: One or more enabled edge gateways are not ready
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#edge-or-cell-failure
@@ -104,7 +104,7 @@ groups:
       - alert: EdgeGatewayCandidateRejected
         expr: increase(cdnfoundry_edge_gateway_candidate_rejections_total[10m]) > 0
         for: 1m
-        labels: { team: platform, severity: warning }
+        labels: { team: platform, severity: warning, dashboard: cdnf-pop-detail }
         annotations:
           summary: An edge gateway rejected a routing-map candidate and retained its last valid map
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#gateway-candidate-rejected
@@ -112,7 +112,7 @@ groups:
       - alert: EdgeGatewayErrors
         expr: increase(cdnfoundry_edge_gateway_errors_total[5m]) > 0
         for: 2m
-        labels: { team: noc, severity: warning }
+        labels: { team: noc, severity: warning, dashboard: cdnf-pop-detail }
         annotations:
           summary: An edge gateway is reporting bounded connection or listener errors
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#edge-or-cell-failure
@@ -120,7 +120,7 @@ groups:
       - alert: DNSDistBackendUnavailable
         expr: dnsdist_server_status == 0
         for: 2m
-        labels: { team: noc, severity: critical }
+        labels: { team: noc, severity: critical, dashboard: cdnf-dns-authoritative }
         annotations:
           summary: DNSdist has marked an authoritative backend unavailable
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#dns-cluster-failure
@@ -128,7 +128,7 @@ groups:
       - alert: HostClockUnsynchronized
         expr: node_timex_sync_status == 0
         for: 2m
-        labels: { team: platform, severity: critical }
+        labels: { team: platform, severity: critical, dashboard: cdnf-hosts-containers }
         annotations:
           summary: A CDNFoundry host clock is not synchronized
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#host-clock
@@ -136,7 +136,7 @@ groups:
       - alert: HostClockDrift
         expr: abs(node_timex_offset_seconds) > 5
         for: 2m
-        labels: { team: platform, severity: critical }
+        labels: { team: platform, severity: critical, dashboard: cdnf-hosts-containers }
         annotations:
           summary: A CDNFoundry host clock offset exceeds five seconds
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#host-clock
@@ -146,7 +146,7 @@ groups:
       - alert: LokiUnavailable
         expr: up{job="loki"} == 0
         for: 2m
-        labels: { team: platform, severity: warning }
+        labels: { team: platform, severity: warning, dashboard: cdnf-telemetry-pipeline }
         annotations:
           summary: Loki operational-log storage is unavailable; traffic serving remains independent
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#loki-or-operational-log-collector-outage
@@ -154,7 +154,7 @@ groups:
       - alert: OperationalLogCollectorUnavailable
         expr: up{job=~"operational-log-collector.*"} == 0
         for: 2m
-        labels: { team: platform, severity: warning }
+        labels: { team: platform, severity: warning, dashboard: cdnf-telemetry-pipeline }
         annotations:
           summary: Prometheus cannot scrape an operational-log collector
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#loki-or-operational-log-collector-outage
@@ -162,7 +162,7 @@ groups:
       - alert: OperationalLogsDropped
         expr: increase(vector_component_discarded_events_total{job=~"operational-log-collector.*",intentional!="true"}[5m]) > 0
         for: 1m
-        labels: { team: platform, severity: warning }
+        labels: { team: platform, severity: warning, dashboard: cdnf-telemetry-pipeline }
         annotations:
           summary: An operational-log collector dropped events after reaching a bound
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#loki-or-operational-log-collector-outage
@@ -170,7 +170,7 @@ groups:
       - alert: OperationalLogDeliveryFailures
         expr: increase(vector_component_errors_total{job=~"operational-log-collector.*",component_id="loki"}[5m]) > 0
         for: 2m
-        labels: { team: platform, severity: warning }
+        labels: { team: platform, severity: warning, dashboard: cdnf-telemetry-pipeline }
         annotations:
           summary: An operational-log collector cannot deliver to Loki
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#loki-or-operational-log-collector-outage
@@ -178,7 +178,7 @@ groups:
       - alert: OperationalLogBufferNearLimit
         expr: vector_buffer_size_bytes{job=~"operational-log-collector.*",component_id="loki"} / vector_buffer_max_size_bytes{job=~"operational-log-collector.*",component_id="loki"} > 0.8
         for: 5m
-        labels: { team: platform, severity: warning }
+        labels: { team: platform, severity: warning, dashboard: cdnf-telemetry-pipeline }
         annotations:
           summary: An operational-log disk buffer is above 80 percent
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#loki-or-operational-log-collector-outage
@@ -186,7 +186,7 @@ groups:
       - alert: LokiIngestionRejected
         expr: increase(loki_discarded_samples_total[5m]) > 0
         for: 2m
-        labels: { team: platform, severity: warning }
+        labels: { team: platform, severity: warning, dashboard: cdnf-data-stores }
         annotations:
           summary: Loki rejected operational-log lines because an ingestion limit was reached
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#loki-or-operational-log-collector-outage
@@ -194,7 +194,7 @@ groups:
       - alert: LokiCompactorRetentionStalled
         expr: (loki_compactor_apply_retention_last_successful_run_timestamp_seconds > 0 and time() - loki_compactor_apply_retention_last_successful_run_timestamp_seconds > 3600) or (loki_compactor_apply_retention_last_successful_run_timestamp_seconds == 0 and time() - process_start_time_seconds{job="loki"} > 3600)
         for: 10m
-        labels: { team: platform, severity: warning }
+        labels: { team: platform, severity: warning, dashboard: cdnf-data-stores }
         annotations:
           summary: Loki compactor retention has not completed successfully for one hour
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#loki-or-operational-log-collector-outage
@@ -202,7 +202,7 @@ groups:
       - alert: OperationalErrorLogSpike
         expr: sum by (service) (increase(cdnfoundry_operational_log_events{level=~"error|critical"}[5m])) > 20
         for: 2m
-        labels: { team: platform, severity: warning }
+        labels: { team: platform, severity: warning, dashboard: cdnf-logs-explorer }
         annotations:
           summary: A service emitted more than 20 error logs in five minutes
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#operational-error-logs
@@ -210,7 +210,7 @@ groups:
       - alert: OperationalCriticalServiceSilent
         expr: sum by (service) (increase(cdnfoundry_operational_log_events{service=~"core|edge-agent|edge-gateway|dnsdist|pdns-auth|loki"}[30m])) == 0 and sum by (service) (increase(cdnfoundry_operational_log_events{service=~"core|edge-agent|edge-gateway|dnsdist|pdns-auth|loki"}[30m] offset 30m)) > 0
         for: 10m
-        labels: { team: platform, severity: warning }
+        labels: { team: platform, severity: warning, dashboard: cdnf-logs-explorer }
         annotations:
           summary: A previously active critical service has stopped emitting operational logs
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#operational-error-logs
@@ -218,7 +218,7 @@ groups:
       - alert: LokiHostFilesystemPressure
         expr: 1 - node_filesystem_avail_bytes{job="node",mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{job="node",mountpoint="/",fstype!~"tmpfs|overlay"} > 0.8
         for: 10m
-        labels: { team: platform, severity: warning }
+        labels: { team: platform, severity: warning, dashboard: cdnf-hosts-containers }
         annotations:
           summary: A host filesystem, including the bounded Loki volume host, is over 80 percent full
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#host-filesystem-pressure
@@ -226,7 +226,7 @@ groups:
       - alert: LokiHostFilesystemCritical
         expr: 1 - node_filesystem_avail_bytes{job="node",mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{job="node",mountpoint="/",fstype!~"tmpfs|overlay"} > 0.9
         for: 5m
-        labels: { team: platform, severity: critical }
+        labels: { team: platform, severity: critical, dashboard: cdnf-hosts-containers }
         annotations:
           summary: A host filesystem, including the bounded Loki volume host, is over 90 percent full
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#host-filesystem-pressure
@@ -234,7 +234,7 @@ groups:
       - alert: TelemetryEventsDropped
         expr: increase(vector_component_discarded_events_total[5m]) > 0
         for: 1m
-        labels: { team: platform, severity: warning }
+        labels: { team: platform, severity: warning, dashboard: cdnf-telemetry-pipeline }
         annotations:
           summary: Vector dropped telemetry after a bounded buffer or transform limit
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#clickhouse-or-vector-outage
@@ -242,7 +242,7 @@ groups:
       - alert: TelemetryDeliveryFailures
         expr: increase(vector_component_errors_total[5m]) > 0
         for: 2m
-        labels: { team: platform, severity: warning }
+        labels: { team: platform, severity: warning, dashboard: cdnf-telemetry-pipeline }
         annotations:
           summary: Vector is failing to deliver telemetry
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#clickhouse-or-vector-outage
@@ -250,7 +250,7 @@ groups:
       - alert: TelemetryBufferNearLimit
         expr: vector_buffer_byte_size > 858993459
         for: 5m
-        labels: { team: platform, severity: warning }
+        labels: { team: platform, severity: warning, dashboard: cdnf-telemetry-pipeline }
         annotations:
           summary: A Vector telemetry buffer is above 80 percent of its 1 GiB limit
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#clickhouse-or-vector-outage
@@ -258,7 +258,7 @@ groups:
       - alert: TelemetryCollectorUnavailable
         expr: up{job="vector"} == 0
         for: 2m
-        labels: { team: platform, severity: warning }
+        labels: { team: platform, severity: warning, dashboard: cdnf-telemetry-pipeline }
         annotations:
           summary: Prometheus cannot scrape the Vector telemetry collector
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#clickhouse-or-vector-outage
@@ -266,7 +266,7 @@ groups:
       - alert: EdgeMapStale
         expr: cdnfoundry_pool_endpoint_revision_mismatch == 1
         for: 2m
-        labels: { team: noc, severity: warning }
+        labels: { team: noc, severity: warning, dashboard: cdnf-propagation }
         annotations:
           summary: An edge endpoint has not acknowledged its desired map
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#stale-edge-map-or-endpoint-mismatch
@@ -274,7 +274,7 @@ groups:
       - alert: EdgeCellCapacityPressure
         expr: cdnfoundry_cell_capacity_ratio >= 0.8
         for: 5m
-        labels: { team: noc, severity: warning }
+        labels: { team: noc, severity: warning, dashboard: cdnf-pop-detail }
         annotations:
           summary: A bounded edge-cell resource is nearing its limit
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#cell-cache-or-compression-pressure
@@ -282,7 +282,7 @@ groups:
       - alert: FleetRolloutPaused
         expr: cdnfoundry_fleet_rollouts_paused > 0
         for: 1m
-        labels: { team: platform, severity: warning }
+        labels: { team: platform, severity: warning, dashboard: cdnf-fleet-rollouts }
         annotations:
           summary: A fleet rollout paused on a safety threshold
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#paused-fleet-rollout

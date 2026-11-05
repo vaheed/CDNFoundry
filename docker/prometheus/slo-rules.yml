@@ -124,6 +124,7 @@ groups:
       team: noc
       severity: critical
       slo: edge_availability
+      dashboard: cdnf-slos
     annotations:
       summary: Edge availability is burning its error budget 14.4 times too fast over 1h and 5m
       runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#edge-availability-burn
@@ -135,6 +136,7 @@ groups:
       team: noc
       severity: warning
       slo: edge_availability
+      dashboard: cdnf-slos
     annotations:
       summary: Edge availability is burning its error budget 6 times too fast over 6h and 30m
       runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#edge-availability-burn
@@ -146,6 +148,7 @@ groups:
       team: noc
       severity: critical
       slo: edge_5xx
+      dashboard: cdnf-slos
     annotations:
       summary: Edge 5xx ratio is burning its error budget 14.4 times too fast over 1h and 5m
       runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#edge-5xx-burn
@@ -157,6 +160,7 @@ groups:
       team: noc
       severity: warning
       slo: edge_5xx
+      dashboard: cdnf-slos
     annotations:
       summary: Edge 5xx ratio is burning its error budget 6 times too fast over 6h and 30m
       runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#edge-5xx-burn
@@ -168,6 +172,7 @@ groups:
       team: noc
       severity: critical
       slo: edge_latency
+      dashboard: cdnf-slos
     annotations:
       summary: Edge latency (95 percent under 500 ms) is burning its error budget 14.4 times too fast over 1h and 5m
       runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#edge-latency-burn
@@ -179,6 +184,7 @@ groups:
       team: noc
       severity: warning
       slo: edge_latency
+      dashboard: cdnf-slos
     annotations:
       summary: Edge latency (95 percent under 500 ms) is burning its error budget 6 times too fast over 6h and 30m
       runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#edge-latency-burn
@@ -190,6 +196,7 @@ groups:
       team: platform
       severity: critical
       slo: purge_propagation
+      dashboard: cdnf-slos
     annotations:
       summary: Purge propagation (applied within 30 s) is burning its error budget 14.4 times too fast over 1h and 5m
       runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#propagation-burn
@@ -201,6 +208,7 @@ groups:
       team: platform
       severity: warning
       slo: purge_propagation
+      dashboard: cdnf-slos
     annotations:
       summary: Purge propagation (applied within 30 s) is burning its error budget 6 times too fast over 6h and 30m
       runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#propagation-burn
@@ -212,6 +220,7 @@ groups:
       team: platform
       severity: critical
       slo: config_propagation
+      dashboard: cdnf-slos
     annotations:
       summary: Config propagation (applied within 120 s) is burning its error budget 14.4 times too fast over 1h and 5m
       runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#propagation-burn
@@ -223,6 +232,7 @@ groups:
       team: platform
       severity: warning
       slo: config_propagation
+      dashboard: cdnf-slos
     annotations:
       summary: Config propagation (applied within 120 s) is burning its error budget 6 times too fast over 6h and 30m
       runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#propagation-burn
@@ -234,6 +244,7 @@ groups:
       team: noc
       severity: critical
       slo: dns_answer
+      dashboard: cdnf-slos
     annotations:
       summary: DNS answer success is burning its error budget 14.4 times too fast over 1h and 5m
       runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#dns-answer-burn
@@ -245,6 +256,7 @@ groups:
       team: noc
       severity: warning
       slo: dns_answer
+      dashboard: cdnf-slos
     annotations:
       summary: DNS answer success is burning its error budget 6 times too fast over 6h and 30m
       runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#dns-answer-burn
@@ -256,6 +268,7 @@ groups:
       team: platform
       severity: critical
       slo: telemetry_delivery
+      dashboard: cdnf-slos
     annotations:
       summary: Telemetry delivery is burning its error budget 14.4 times too fast over 1h and 5m
       runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#telemetry-delivery-burn
@@ -267,6 +280,7 @@ groups:
       team: platform
       severity: warning
       slo: telemetry_delivery
+      dashboard: cdnf-slos
     annotations:
       summary: Telemetry delivery is burning its error budget 6 times too fast over 6h and 30m
       runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#telemetry-delivery-burn

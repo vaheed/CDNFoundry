@@ -39,21 +39,45 @@ edge reconciliation operation. It does not configure an external Grafana instanc
 | `scheduler_stale_seconds` | 180 | 60–3,600 |
 | `clock_drift_warning_seconds` | 5 | 1–300 |
 | `backup_stale_hours` | 26 | 1–168 |
+| `failed_operations_window_minutes` | 60 | 5–1,440 |
+
+`failed_operations_window_minutes` is how long a failed operation counts toward
+the `cdnfoundry_operations_failed_recent` gauge and the `CDNFoundryFailedOperations`
+alert. The alert resolves once the last failure is older than the window.
 
 ## Telemetry
 
 | Field | Default | Allowed |
 | --- | --- | --- |
 | `raw_retention_days` | 7 | 1–30 |
+| `one_minute_retention_hours` | 48 | 12–168 |
 | `hourly_retention_days` | 400 | 30–730 |
 | `daily_retention_days` | 1,095 | 365–3,650 |
+| `prometheus_retention_days` | 30 | 7–365 |
+| `loki_retention_days` | 14 | 1–90 |
 | `finalization_delay_minutes` | 15 | 5–1,440 |
 | `ipv4_mask_bits` | 24 | 8–32 |
 | `ipv6_mask_bits` | 48 | 16–64 |
 
 The masking and finalization fields are active application policy. The shipped
-ClickHouse DDL has fixed TTLs of 7, 400, and 3 years; changing retention values
-does not migrate ClickHouse tables automatically.
+ClickHouse DDL has fixed TTLs; changing a retention value does not migrate
+ClickHouse tables, Prometheus, or Loki automatically. Each default below matches
+the shipped schema and Compose files, and a contract test fails if they drift.
+
+### Retention tiers
+
+| Tier | Holds | Retention | Setting |
+| --- | --- | --- | --- |
+| Raw events | Every request, security, TLS, and DNS event | 7 days | `raw_retention_days` |
+| 1-minute rollup | Live and NOC panels, split by PoP, protocol, and status | 48 hours | `one_minute_retention_hours` |
+| Hourly rollup | Traffic with latency quantiles, 5-minute usage for billing | 400 days | `hourly_retention_days` |
+| Daily rollup | The same traffic at day resolution | 3 years | `daily_retention_days` |
+| Prometheus | Metrics, recorded SLO and dashboard series | 30 days | `prometheus_retention_days` |
+| Loki | Operational logs | 14 days | `loki_retention_days` |
+
+The 5-minute usage rollup (`edge_usage_5m`) is kept as long as the hourly
+rollup, because 95th-percentile billing needs every 5-minute interval of a
+month.
 
 ## DNS lifecycle
 

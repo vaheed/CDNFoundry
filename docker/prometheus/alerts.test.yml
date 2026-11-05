@@ -4,6 +4,7 @@ rule_files:
 - traffic-alerts.yml
 - security-alerts.yml
 - slo-rules.yml
+- dashboard-rules.yml
 evaluation_interval: 1m
 tests:
 - interval: 1m
@@ -24,6 +25,7 @@ tests:
         severity: critical
         instance: test-host
         team: platform
+        dashboard: cdnf-hosts-containers
       exp_annotations:
         summary: A CDNFoundry host clock is not synchronized
         runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#host-clock
@@ -35,6 +37,7 @@ tests:
         severity: critical
         instance: test-host
         team: platform
+        dashboard: cdnf-hosts-containers
       exp_annotations:
         summary: A CDNFoundry host clock offset exceeds five seconds
         runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#host-clock
@@ -47,6 +50,7 @@ tests:
         job: dnsdist
         instance: dns-host
         team: noc
+        dashboard: cdnf-dns-authoritative
       exp_annotations:
         summary: DNSdist authoritative ingress is unavailable
         runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#dns-cluster-failure
@@ -59,6 +63,7 @@ tests:
         instance: dns-host
         server: pdns-auth
         team: noc
+        dashboard: cdnf-dns-authoritative
       exp_annotations:
         summary: DNSdist has marked an authoritative backend unavailable
         runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#dns-cluster-failure
@@ -90,6 +95,7 @@ tests:
         node: control-1
         instance: active
         team: platform
+        dashboard: cdnf-control-plane
       exp_annotations:
         summary: A control node is unreachable from the node that watches it
         runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-node-lost
@@ -100,6 +106,7 @@ tests:
     - exp_labels:
         severity: warning
         team: platform
+        dashboard: cdnf-data-stores
       exp_annotations:
         summary: Control database replication lag exceeds ten seconds
         runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-node-lost
@@ -110,6 +117,7 @@ tests:
     - exp_labels:
         severity: warning
         team: platform
+        dashboard: cdnf-data-stores
       exp_annotations:
         summary: The Valkey replica is not linked to the active node
         runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-node-lost
@@ -120,6 +128,7 @@ tests:
     - exp_labels:
         severity: critical
         team: platform
+        dashboard: cdnf-control-plane
       exp_annotations:
         summary: The control nodes do not hold the same shared secrets
         runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-node-lost
@@ -130,6 +139,7 @@ tests:
     - exp_labels:
         severity: critical
         team: platform
+        dashboard: cdnf-data-stores
       exp_annotations:
         summary: The standby control node is not streaming PostgreSQL from the active node
         runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-node-lost
@@ -140,6 +150,7 @@ tests:
     - exp_labels:
         severity: warning
         team: platform
+        dashboard: cdnf-pop-fleet
       exp_annotations:
         summary: At least one PoP has not reported the current control address list
         runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-node-lost
@@ -155,6 +166,7 @@ tests:
     - exp_labels:
         team: platform
         severity: warning
+        dashboard: cdnf-control-plane
       exp_annotations:
         summary: CDNFoundry has failed operations requiring inspection
         runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#failed-operations
@@ -177,6 +189,7 @@ tests:
     - exp_labels:
         team: noc
         severity: critical
+        dashboard: cdnf-global-traffic
       exp_annotations:
         summary: More than 5 percent of edge responses are 5xx across all PoPs
         runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#edge-5xx-ratio-high
@@ -188,6 +201,7 @@ tests:
         team: noc
         severity: warning
         pop: pop-a
+        dashboard: cdnf-pop-detail
       exp_annotations:
         summary: More than 10 percent of one PoP's responses are 5xx
         runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#edge-5xx-ratio-high
@@ -206,6 +220,7 @@ tests:
         team: noc
         severity: critical
         pop: pop-a
+        dashboard: cdnf-pop-fleet
       exp_annotations:
         summary: A PoP that served traffic half an hour ago serves none while other PoPs do
         runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#pop-traffic-dropped
@@ -224,6 +239,7 @@ tests:
         team: noc
         severity: critical
         slo: edge_5xx
+        dashboard: cdnf-slos
       exp_annotations:
         summary: Edge 5xx ratio is burning its error budget 14.4 times too fast over 1h and 5m
         runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#edge-5xx-burn
@@ -241,6 +257,7 @@ tests:
     - exp_labels:
         team: soc
         severity: critical
+        dashboard: cdnf-security-overview
       exp_annotations:
         summary: Emergency mode is switched on for a domain, pool, or the platform
         runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#emergency-mode
