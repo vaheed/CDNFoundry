@@ -85,6 +85,9 @@ Use the documentation components instead of plain Markdown where they fit.
   `<template #tab-1>` per label.
 - Callouts: `::: info`, `::: tip`, `::: warning`, `::: danger`.
 - Diagrams: a `mermaid` fence.
+- Executable blocks: open a shell block with ```` ```sh test ```` and CI runs it
+  from the repository root with `bash -euo pipefail`. The block must pass
+  without a running stack, secrets, or the network.
 
 ## Source-of-truth order
 

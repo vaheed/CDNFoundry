@@ -1704,7 +1704,7 @@ with a few Linux servers can understand CDNFoundry and run it step by step.
 
 #### Structure
 
-- [ ] Reorganize the site into top-level tabs, each with its own sidebar:
+- [x] Reorganize the site into top-level tabs, each with its own sidebar:
   - **Get started:** what CDNFoundry is, how it works in one diagram, a
     quick start, and the first domain.
   - **Guides:** one page per feature, for operators and domain users.
@@ -1716,7 +1716,7 @@ with a few Linux servers can understand CDNFoundry and run it step by step.
     decisions.
   - **Community:** contributing, support, security reporting, and the
     roadmap.
-- [ ] A landing page with card grids that send each reader to the right
+- [x] A landing page with card grids that send each reader to the right
       place: evaluate, install, operate, use as a domain owner, or
       contribute.
 
@@ -1759,7 +1759,7 @@ with a few Linux servers can understand CDNFoundry and run it step by step.
 
 #### Presentation
 
-- [ ] Restyle the VitePress site with the Phase 7 design tokens, so the docs
+- [x] Restyle the VitePress site with the Phase 7 design tokens, so the docs
       and the product look like one product, in light and dark mode.
 - [ ] Add documentation components: cards and card grids, numbered steps,
       tabs (Admin panel / API / Fleet), callouts (note, tip, warning,
@@ -1769,14 +1769,14 @@ with a few Linux servers can understand CDNFoundry and run it step by step.
       dark mode, at every release. Change `scripts/ci/check_no_screenshots.py`
       to allow only the generated screenshot directory, so screenshots are
       never added or edited by hand and are never out of date.
-- [ ] Full-text search, "Edit this page" links, "Was this page helpful"
+- [x] Full-text search, "Edit this page" links, "Was this page helpful"
       feedback, and an `llms.txt` index for AI assistants.
 - [ ] Versioned documentation: each release has its own docs, and the latest
       is the default.
 
 #### Documentation tests
 
-- [ ] Run every shell block marked `test` in CI.
+- [x] Run every shell block marked `test` in CI.
 - [ ] A reader test: an agent with no prior knowledge of the project follows
       the quick start and the production guide on fresh VMs, using only the
       published pages. Every place where it has to guess is a documentation

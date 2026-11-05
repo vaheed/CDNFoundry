@@ -344,6 +344,12 @@ docker compose --env-file .env.prod -f compose.prod.yml config --profiles
 docker compose --env-file .env.prod -f compose.prod.yml pull
 ```
 
+The checked-in template must always validate. CI runs this block:
+
+```sh test
+docker compose --env-file .env.prod.example -f compose.prod.yml config --quiet
+```
+
 Review the fully rendered model without saving it to a shared location because
 it contains secrets:
 
