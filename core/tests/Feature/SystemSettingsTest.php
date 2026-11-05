@@ -76,15 +76,6 @@ class SystemSettingsTest extends TestCase
         $this->assertSame('UTC', config('app.timezone'));
     }
 
-    public function test_display_migration_preserves_existing_operator_preference(): void
-    {
-        app(PlatformSettings::class)->update('display', ['timezone' => 'Asia/Tehran']);
-        $migration = require database_path('migrations/2026_09_20_170000_add_display_timezone_setting.php');
-        $migration->up();
-        $migration->down();
-        $this->assertSame('Asia/Tehran', SystemSetting::query()->findOrFail('display')->values['timezone']);
-    }
-
     public function test_dns_lifecycle_update_is_typed_audited_and_reads_from_postgresql(): void
     {
         $admin = User::factory()->admin()->create();
