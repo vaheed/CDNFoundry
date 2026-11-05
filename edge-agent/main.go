@@ -123,7 +123,7 @@ func main() {
 	}
 	c := &client{
 		base: strings.TrimRight(required("EDGE_CONTROL_URL"), "/"), dir: env("EDGE_STATE_DIR", "/var/lib/cdnfoundry/agent"),
-		runtimeDir: env("EDGE_RUNTIME_DIR", ""), statusToken: env("EDGE_STATUS_TOKEN", ""),
+		runtimeDir: required("EDGE_RUNTIME_DIR"), statusToken: env("EDGE_STATUS_TOKEN", ""),
 		gatewayBindings:  env("EDGE_GATEWAY_BINDINGS", ""),
 		gatewayStatusURL: env("EDGE_GATEWAY_STATUS_URL", ""),
 		statusURLs:       splitNonempty(env("EDGE_CELL_STATUS_URLS", "")), http: &http.Client{Timeout: 15 * time.Second},
@@ -186,9 +186,6 @@ func main() {
 		fatal(err)
 	}
 	if len(c.backupKey) > 0 {
-		if c.runtimeDir == "" {
-			fatal(errors.New("encrypted edge recovery requires a runtime directory"))
-		}
 		var filesystem syscall.Statfs_t
 		if err := syscall.Statfs(c.runtimeDir, &filesystem); err != nil || filesystem.Type != tmpfsMagic {
 			fatal(errors.New("active edge runtime must be on tmpfs"))
@@ -278,7 +275,7 @@ func (c *client) configureServerTrust(path string) error {
 }
 
 func (c *client) ensureDerivedRuntime(current state) error {
-	if c.runtimeDir == "" || c.derivedEnsured {
+	if c.derivedEnsured {
 		return nil
 	}
 
@@ -1224,65 +1221,57 @@ func (c *client) activate(s state) error {
 }
 
 func (c *client) activateWithKeys(s state, keys map[string]string) error {
-	if c.runtimeDir != "" {
-		logger.Info("runtime generation activation started", "event", "runtime_generation_activation_started", "edge_id", c.id.EdgeID, "revision_id", s.Sequence)
-		manifest, err := replaceGeneration(c.runtimeDir, c.gatewayActiveRevision(s.Sequence), func(candidate, generationID string) error {
-			runtime, pools, err := compileRuntime(s, keys)
-			if err != nil {
-				return candidateError{err}
-			}
-			applyOriginPolicy(runtime, c.originPolicy)
-			for name := range pools {
-				if !validPoolName(name) {
-					return errors.New("invalid runtime pool name")
-				}
-			}
-			// A generation always holds at least this small summary, so an empty PoP still has a
-			// verifiable, publishable generation.
-			if err := atomicJSON(filepath.Join(candidate, "summary.json"), map[string]any{
-				"schema_version": 1, "generation_id": generationID, "sequence": s.Sequence, "domain_count": len(s.Domains),
-			}); err != nil {
-				return err
-			}
-			if err := c.writeCellRuntimesAt(candidate, s.Sequence, pools); err != nil {
-				return err
-			}
-			if c.gatewayBindings != "" {
-				gateway, err := compileGateway(c.gatewayActiveRevision(s.Sequence), pools, c.gatewayBindings)
-				if err != nil {
-					return err
-				}
-				gateway["generation_id"] = generationID
-				if err := atomicJSON(filepath.Join(candidate, "gateway.json"), gateway); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
+	logger.Info("runtime generation activation started", "event", "runtime_generation_activation_started", "edge_id", c.id.EdgeID, "revision_id", s.Sequence)
+	manifest, err := replaceGeneration(c.runtimeDir, c.gatewayActiveRevision(s.Sequence), func(candidate, generationID string) error {
+		runtime, pools, err := compileRuntime(s, keys)
 		if err != nil {
+			return candidateError{err}
+		}
+		applyOriginPolicy(runtime, c.originPolicy)
+		for name := range pools {
+			if !validPoolName(name) {
+				return errors.New("invalid runtime pool name")
+			}
+		}
+		// A generation always holds at least this small summary, so an empty PoP still has a
+		// verifiable, publishable generation.
+		if err := atomicJSON(filepath.Join(candidate, "summary.json"), map[string]any{
+			"schema_version": 1, "generation_id": generationID, "sequence": s.Sequence, "domain_count": len(s.Domains),
+		}); err != nil {
 			return err
 		}
-		// The compiled runtime is published; now the durable state follows it. A crash in between
-		// leaves the state behind the runtime, and the agent catches up from its older sequence.
-		if _, err := c.persistState(s); err != nil {
+		if err := c.writeCellRuntimesAt(candidate, s.Sequence, pools); err != nil {
 			return err
 		}
-		if c.lastBackup.IsZero() || time.Since(c.lastBackup) >= backupInterval {
-			if err := c.saveBackup(s); err != nil {
+		if c.gatewayBindings != "" {
+			gateway, err := compileGateway(c.gatewayActiveRevision(s.Sequence), pools, c.gatewayBindings)
+			if err != nil {
 				return err
 			}
-			c.lastBackup = time.Now()
+			gateway["generation_id"] = generationID
+			if err := atomicJSON(filepath.Join(candidate, "gateway.json"), gateway); err != nil {
+				return err
+			}
 		}
-		c.derivedEnsured = true
-		logger.Info("runtime generation activation succeeded", "event", "runtime_generation_activation_succeeded", "edge_id", c.id.EdgeID, "generation_id", manifest.GenerationID, "revision_id", manifest.Revision)
 		return nil
+	})
+	if err != nil {
+		return err
 	}
-	// Without a runtime directory there is nothing to publish; the state is still validated and kept.
-	if _, _, err := compileRuntime(s, keys); err != nil {
-		return candidateError{err}
+	// The compiled runtime is published; now the durable state follows it. A crash in between
+	// leaves the state behind the runtime, and the agent catches up from its older sequence.
+	if _, err := c.persistState(s); err != nil {
+		return err
 	}
-	_, err := c.persistState(s)
-	return err
+	if c.lastBackup.IsZero() || time.Since(c.lastBackup) >= backupInterval {
+		if err := c.saveBackup(s); err != nil {
+			return err
+		}
+		c.lastBackup = time.Now()
+	}
+	c.derivedEnsured = true
+	logger.Info("runtime generation activation succeeded", "event", "runtime_generation_activation_succeeded", "edge_id", c.id.EdgeID, "generation_id", manifest.GenerationID, "revision_id", manifest.Revision)
+	return nil
 }
 
 func (c *client) writeCellRuntimesAt(directory string, sequence uint64, pools map[string]map[string]any) error {
@@ -1317,7 +1306,7 @@ func (c *client) writeCellRuntime(directory, cellName string, sequence uint64, r
 	}
 	identity := digest(base)
 	file := filepath.Join(directory, cellName+".json")
-	if c.runtimeDir != "" && directory != c.runtimeDir {
+	if directory != c.runtimeDir {
 		previous := filepath.Join(c.runtimeDir, "current", cellName+".json")
 		if stamp, err := os.ReadFile(runtimeStampPath(previous)); err == nil && strings.TrimSpace(string(stamp)) == identity {
 			if os.Link(previous, file) == nil && os.Link(runtimeStampPath(previous), runtimeStampPath(file)) == nil {
@@ -1668,7 +1657,7 @@ const defaultTLSHandshakeBudget = 50
 // current generation, or the generation's own identity when the cell has no file there.
 func (c *client) expectedCellIdentity(cell map[string]any, generation string) string {
 	name, _ := cell["name"].(string)
-	if c.runtimeDir == "" || !validCellName(name) {
+	if !validCellName(name) {
 		return generation
 	}
 	if stamp, err := os.ReadFile(runtimeStampPath(filepath.Join(c.runtimeDir, "current", name+".json"))); err == nil {
@@ -1683,10 +1672,8 @@ func (c *client) heartbeat(sequence uint64) error {
 	cells, failures, security := c.runtimeStatus()
 	listenerReady := false
 	expectedGeneration := ""
-	if c.runtimeDir != "" {
-		if manifest, err := readGenerationPointer(c.runtimeDir, "current"); err == nil {
-			expectedGeneration = manifest.GenerationID
-		}
+	if manifest, err := readGenerationPointer(c.runtimeDir, "current"); err == nil {
+		expectedGeneration = manifest.GenerationID
 	}
 	mismatchedGenerations := map[string]int{}
 	for _, cell := range cells {

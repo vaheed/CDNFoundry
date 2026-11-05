@@ -266,7 +266,7 @@ The edge-agent binary also accepts these internal variables:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `EDGE_STATE_DIR` | `/var/lib/cdnfoundry/agent` | Persistent identity, state, controls, acknowledgements |
-| `EDGE_RUNTIME_DIR` | empty | Active and previous compiled runtime directories |
+| `EDGE_RUNTIME_DIR` | required | Active and previous compiled runtime directories |
 | `EDGE_CELL_STATUS_URLS` | empty | Comma-separated internal cell endpoints |
 | `EDGE_CELL_ASSIGNMENTS` | `{}` | JSON object mapping at most 32 stable `cell-NN` names to a pool name or an empty unassigned value |
 | `EDGE_RUNTIME_VERSIONS` | `{}` | JSON object containing the four immutable gateway, agent, normal-cell, and WAF-cell image digests reported after a fixed installer upgrade |

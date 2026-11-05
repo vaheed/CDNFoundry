@@ -191,7 +191,7 @@ func (c *client) saveBackup(s state) error {
 }
 
 func (c *client) restoreBackup() error {
-	if c.runtimeDir == "" || len(c.backupKey) == 0 {
+	if len(c.backupKey) == 0 {
 		return nil
 	}
 	if stored, err := c.hasStoredState(); err != nil || stored {
