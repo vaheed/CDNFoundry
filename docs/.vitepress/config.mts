@@ -137,6 +137,7 @@ const operate = [
     text: 'Troubleshoot',
     items: [
       { text: 'Start here', link: '/troubleshooting/' },
+      { text: 'By symptom', link: '/troubleshooting/by-symptom' },
       { text: 'DNS', link: '/troubleshooting/dns' },
       { text: 'Edge and origin', link: '/troubleshooting/edge-and-origin' },
       { text: 'TLS and cache', link: '/troubleshooting/tls-and-cache' },

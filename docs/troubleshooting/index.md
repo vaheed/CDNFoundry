@@ -20,7 +20,7 @@ Start with the durable operation and desired revision, then move outward:
 5. Check the private runtime service and its last-valid state.
 6. Reconcile only the smallest affected scope.
 
-Choose a symptom:
+Start from what you see in [Troubleshoot by symptom](by-symptom.md), or choose an area:
 
 - [DNS](dns.md)
 - [Edge and origin](edge-and-origin.md)
