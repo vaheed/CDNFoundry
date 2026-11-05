@@ -1,23 +1,39 @@
 ---
 title: Internal certificates
-description: Generate, distribute, verify, and rotate CDNFoundry edge-control and runtime certificates.
+description: Create, distribute, check, and rotate the private certificates that CDNFoundry services use to trust each other, including edge identities.
 ---
 
 # Internal certificates
 
 ::: danger CA private keys define fleet identity
 Never copy `edge-server-ca.key` or `edge-identity-ca.key` to an edge host.
-Losing or replacing the identity CA without a planned rotation breaks agent
-trust and cannot be repaired from PostgreSQL alone.
+If you lose or replace the identity CA without a plan, agents stop trusting the
+control plane. PostgreSQL cannot repair that.
 :::
 
-Customer TLS is documented in [TLS certificates](../guides/tls.md). This page covers
-private service PKI used by edge enrollment, agent control, bootstrap listeners,
-and the edge runtime.
+This page covers the private certificates between CDNFoundry's own services:
+edge enrollment, agent control, bootstrap listeners, and the edge runtime. For
+certificates that visitors see, read [TLS certificates](../guides/tls.md).
 
-## Generated material
+**You need:** a protected host to create the certificate authorities (CAs), and
+the hostname from `EDGE_CONTROL_URL`. If you use Fleet, it creates all of this
+for you and you only need the rotation and verification sections.
 
-`scripts/generate-production-certificates.sh` creates:
+## Create the certificates
+
+Run the helper with an output directory, the edge-control hostname, and a
+bootstrap hostname for the edge runtime:
+
+```bash
+scripts/generate-production-certificates.sh ./pki edge-control.ops.example.com runtime.ops.example.com
+```
+
+Expect `openssl verify` to print `OK` for both server certificates, then
+`Certificates created in ./pki (valid for 3650 days).` The script stops if the
+output directory exists and is not empty. For a script-free procedure, see
+[manual Compose deployment](manual-compose.md).
+
+The helper creates:
 
 | File | Purpose |
 | --- | --- |
@@ -28,39 +44,39 @@ and the edge runtime.
 | `edge-control-server.crt/.key` | Mutual-TLS control listener |
 | `edge-runtime.crt/.key` | Bootstrap/default OpenResty listener |
 
-The helper creates ECDSA P-256 CAs and server certificates, sets certificate
-files mode `0644` and keys `0600`, verifies the chains, and refuses to overwrite
-an existing output directory.
+The helper uses ECDSA P-256 keys. It sets certificate files to mode `0644` and
+keys to `0600`, and it checks both certificate chains.
 
-## Which address belongs in a certificate?
+## Which name goes in which certificate?
 
-There are two different identities in the edge-control mTLS connection:
+The mutual TLS (mTLS) connection between an edge agent and edge-control uses two
+identities:
 
 - The **edge-control server certificate** must contain the DNS hostname from
-  `EDGE_CONTROL_URL`. CDNFoundry requires a hostname here; publish it in
-  operator DNS instead of configuring agents with a literal IP. This hostname
-  belongs to the control service, not an edge management or pool endpoint.
-- The **edge-agent client certificate** is created during enrollment from the
-  agent's CSR. Its common name is the administrator-created edge UUID. It does
-  not contain a service endpoint IP.
+  `EDGE_CONTROL_URL`. It must be a hostname, not an IP address. Publish it in your
+  operator DNS. This name belongs to the control service. It is not an edge
+  management address or a pool endpoint.
+- The **edge-agent client certificate** is issued during enrollment, from a
+  request the agent creates. Its common name is the edge UUID that the
+  administrator created. It holds no IP address.
 
-Pool endpoint addresses are customer traffic listeners. They are not required
-for agent enrollment, task polling, heartbeats, or artifact acknowledgement.
+Pool endpoint addresses carry customer traffic. Agents do not need them to
+enroll, poll for tasks, send heartbeats, or acknowledge artifacts.
 
 ## Identity verification boundary
 
-Issued edge-agent certificates explicitly prohibit CA use and permit only
-client authentication with digital signatures. Edge-control passes its verified
-client certificate, verification result and serial directly to PHP-FPM. Laravel
-requires the SHA-256 fingerprint of that certificate to match the enrolled
-certificate stored for the edge. The ordinary web ingress clears all three
+An issued edge-agent certificate cannot act as a CA. It allows only client
+authentication with digital signatures. Edge-control passes the verified client
+certificate, the verification result, and the serial straight to PHP-FPM. Laravel
+checks that the certificate's SHA-256 fingerprint equals the certificate stored
+for that edge when it enrolled. The ordinary web ingress clears these three
 identity headers and denies `/edge/v1/` routes.
 
-A valid chain or a caller-supplied serial alone does not authenticate an edge.
-Custom ingress configurations must preserve this boundary. Follow the
-[update order](upgrade.md#order) when updating
-existing listeners and identities. Fleet refuses incomplete CA pairs and reports
-which recovery material to restore; it does not replace a surviving CA key.
+A valid chain, or a serial number sent by a caller, is not enough to
+authenticate an edge. If you write your own ingress, keep this boundary. Follow
+the [update order](upgrade.md#order) when you change existing listeners and
+identities. Fleet refuses a CA pair that is incomplete and tells you which
+recovery material to restore. It never replaces a CA key that survived.
 
 ## Distribution
 
@@ -70,40 +86,57 @@ which recovery material to restore; it does not replace a surviving CA key.
 - Each edge runtime needs the runtime server pair.
 - The server and identity CA private keys belong in the encrypted recovery set.
 
-For the shipped core image, the identity CA key should be readable by the
-PHP-FPM worker without being world-readable; use group ID 82 and mode `0640`.
-The entrypoint fails closed if PHP-FPM cannot read it.
+In the shipped core image, PHP-FPM must read the identity CA key without the key
+being world-readable. Give it group ID 82 and mode `0640`. If PHP-FPM cannot read
+the key, the entrypoint refuses to start.
 
 ## Rotation
 
-Use overlap:
+### Rotate a server certificate or a CA
 
-1. issue a new certificate or CA;
-2. deploy new trust before new identity where a CA changes;
-3. restart one gateway, control listener, agent, or cell at a time;
-4. verify mutual TLS, health, artifact acknowledgement, and serving;
-5. remove old trust only after all dependants use the new identity.
+Let the old and new material overlap:
 
-For edge identity rotation, open the edge under **Infrastructure → Edges** and
-choose **Rotate identity**. The confirmation explains the immediate effect:
-the old certificate is rejected and heartbeat/configuration delivery pauses,
-while the gateway and cells can continue serving their previous valid runtime.
-Confirm only while an operator has access to the matching edge host.
+<div class="steps">
 
-After rotation, the non-dismissible modal uses the same deployment-neutral
-layout as initial enrollment and shows the unchanged `EDGE_ID` plus the new
-`EDGE_BOOTSTRAP_TOKEN`. Paste both values into the matching prepared host's
-mode-`0600` `.env.prod` and run
-`sudo docker compose --env-file .env.prod --profile edge up -d`. Compose
-recreates the agent when its environment changes. The agent keeps the previous
-identity file until replacement issuance succeeds. Blank the spent token after
-a fresh heartbeat.
+1. Issue the new certificate or CA.
+2. If a CA changes, deploy the new trust before the new identity.
+3. Restart one gateway, control listener, agent, or cell at a time.
+4. After each restart, check mTLS, health, artifact acknowledgement, and serving.
+5. Remove the old trust only when every dependant uses the new identity.
 
-Do not stop DNS, the gateway, or cells, reuse the token, delete
-`edge-agent-state`, or copy another edge's identity volume. If the modal is left
-before the replacement token is saved, rotate again and use the newest token
-only. The flow is also documented in the
+</div>
+
+### Rotate an edge identity
+
+Use this when an agent identity or its saved state is lost or may be stolen. It
+revokes the old identity at once. Edge identity certificates also renew
+themselves before they expire (default validity 365 days, set by
+`EDGE_IDENTITY_VALIDITY_DAYS`; see [Edges and placement](../guides/edges.md#identity-renewal)).
+
+<div class="steps">
+
+1. Open the edge under **Infrastructure → Edges** and choose **Rotate identity**.
+2. Read the confirmation. The old certificate is rejected immediately, and
+   heartbeats and configuration delivery pause. The gateway and cells keep
+   serving their last valid runtime. Confirm only when you can reach the matching
+   edge host.
+3. The modal shows the same `EDGE_ID` and a new `EDGE_BOOTSTRAP_TOKEN`. You
+   cannot close and reopen it. Paste both values into the `.env.prod` on that
+   host (mode `0600`).
+4. Run `sudo docker compose --env-file .env.prod --profile edge up -d`. Compose
+   recreates the agent because its environment changed.
+
+</div>
+
+**Expected result:** the edge sends a fresh heartbeat with the new identity. The
+agent keeps its previous identity file until the new certificate is issued. After
+the heartbeat, blank the spent token in `.env.prod`.
+
+**If it fails:** if you closed the modal before saving the token, rotate again and
+use only the newest token. Do not reuse a token. Do not stop DNS, the gateway, or
+the cells. Do not delete `edge-agent-state` or copy another edge's identity
+volume. More detail is in the
 [Fleet operator guide](production-fleet-operator-guide.md#rotate-an-edge-identity).
 
-Public Caddy certificates are ACME-managed by Caddy and are separate from this
-private PKI.
+Caddy gets and renews its own public certificates through ACME. They are separate
+from this private PKI.

@@ -30,7 +30,7 @@ service. They are safety limits, not performance promises.
 
 | Service | Memory | CPU | Notes |
 | --- | --- | --- | --- |
-| OpenResty cell | 512 MiB | 0.5 | Up to 32 cells per edge host; 8 by default |
+| OpenResty cell | 512 MiB | 0.5 | Eight cells per edge host; the count is fixed |
 | Edge agent | 256 MiB | 0.25 | Never carries customer traffic |
 
 Other limits, such as request body size, connections per client, and cache
