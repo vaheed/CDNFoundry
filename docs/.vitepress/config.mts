@@ -91,6 +91,8 @@ const operate = [
     text: 'Deploy',
     items: [
       { text: 'Production deployment', link: '/deployment/' },
+      { text: 'Production guide', link: '/deployment/production-guide' },
+      { text: 'Sizing guide', link: '/deployment/sizing' },
       { text: 'Production quick start', link: '/deployment/production-quick-start' },
       { text: 'Multi-region quick start', link: '/deployment/production-quick-start-multi-region' },
       { text: 'After the quick start', link: '/deployment/production-setup-after-quick-start' },

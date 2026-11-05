@@ -1734,7 +1734,7 @@ with a few Linux servers can understand CDNFoundry and run it step by step.
 - [ ] **Quick start.** From zero to a domain served through the CDN on one
       control node and one PoP, with the fleet web. It is generated from the
       Phase 8 scripted quick start, so the page and the test cannot differ.
-- [ ] **Production guide.** Step by step for a real deployment: planning
+- [x] **Production guide.** Step by step for a real deployment: planning
       (sizing, network, DNS delegation, IPv6), installing, the first domain,
       adding PoPs and DNS hosts, adding HA, monitoring, and backups. Each step
       ends with a check.
