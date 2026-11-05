@@ -180,7 +180,7 @@ Volumetric saturation requires upstream provider or network mitigation.
 
 ## Alert runbooks
 
-Every alert links here. Each section names the Grafana dashboard to open, the likely causes, and the first action. Grafana shows the dashboard folder in the alert.
+Every alert links here. To find a runbook from an alert's name, look it up in the [alert reference](../reference/alerts.md). Each section names the Grafana dashboard to open, the likely causes, and the first action. Grafana shows the dashboard folder in the alert.
 
 ## Watchdog stopped {#alerting-heartbeat}
 

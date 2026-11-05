@@ -165,6 +165,7 @@ const reference = [
       { text: 'Fleet CLI', link: '/reference/fleet-cli' },
       { text: 'Telemetry schema', link: '/reference/telemetry-schema' },
       { text: 'Grafana dashboards', link: '/reference/grafana-dashboards' },
+      { text: 'Alerts', link: '/reference/alerts' },
       { text: 'Glossary', link: '/reference/glossary' }
     ]
   },

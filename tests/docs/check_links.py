@@ -121,7 +121,8 @@ def heading_ids(document: pathlib.Path) -> tuple[set[str], list[tuple[int, str]]
         match = HEADING.match(line)
         if not match:
             continue
-        identifier = slug(match.group(2))
+        explicit = re.search(r"\s*\{#([A-Za-z0-9_-]+)\}\s*$", match.group(2))
+        identifier = explicit.group(1) if explicit else slug(match.group(2))
         if identifier in ids:
             duplicates.append((number, identifier))
         ids.add(identifier)
