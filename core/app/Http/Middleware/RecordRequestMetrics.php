@@ -25,7 +25,7 @@ class RecordRequestMetrics
     {
         $started = $request->attributes->get('metrics_started_at');
         // The scrape endpoint and health probes would only measure themselves.
-        if (! is_int($started) || $request->is('metrics', 'up')) {
+        if (! is_int($started) || $request->is('metrics', 'up', 'health', 'api/health', 'api/ready')) {
             return;
         }
         ControlPlaneMetrics::recordRequest($request->route()?->uri(), $response->getStatusCode(), (hrtime(true) - $started) / 1e9);

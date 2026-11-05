@@ -148,6 +148,7 @@ docker compose -f compose.dev.yml run --rm core php artisan cdnf:platform:settin
 | Command and syntax | Purpose and effects | Scheduled |
 | --- | --- | --- |
 | `cdnf:usage:finalize` | Dispatches an idempotent rebuild for the most recently finalized UTC usage hour. It does not wait for ClickHouse aggregation. | Hourly at minute 20 |
+| `cdnf:reports:build {usage\|operations} [--period=]` | Builds the monthly usage report or weekly operations report from rollups as CSV and PDF, and records each file with its checksum. A period that has not finished is refused. | Usage on the 2nd at 03:40 UTC; operations Mondays at 06:00 UTC |
 
 ## Scheduler
 
@@ -171,6 +172,8 @@ or internal non-command work, which is intentionally not renamed here.
 | `cdnf:security:reconcile-readiness` | Every minute | Advance bounded security recovery |
 | `cdnf:waf:expire-exclusions` | Every minute | Remove due WAF exclusions |
 | `cdnf:usage:finalize` | Hourly at minute 20 | Queue the finalized usage hour |
+| `cdnf:reports:build usage` | Monthly on the 2nd at 03:40 | Build last month's usage report |
+| `cdnf:reports:build operations` | Mondays at 06:00 | Build last week's operations report |
 | `cdnf:audit:prune` | Daily at 03:10 | Delete one expired audit batch |
 | `cdnf:backups:create` | Daily at 01:30 when configured | Queue the control-plane backup |
 | `cdnf:backups:maintain prune` | Daily at 04:10 when configured | Apply backup retention |
