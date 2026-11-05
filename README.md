@@ -29,10 +29,9 @@ anyone who must keep traffic and data on their own network.
 
 ## Screenshots
 
-<p>
-  <img src="docs/public/screenshots/light/admin-edges.png" alt="The Edges list in the admin panel" width="48%">
-  <img src="docs/public/screenshots/dark/admin-operations.png" alt="The Operations list in the admin panel, dark theme" width="48%">
-</p>
+![The Edges list in the admin panel](docs/public/screenshots/light/admin-edges.png)
+
+![The Operations list in the admin panel, dark theme](docs/public/screenshots/dark/admin-operations.png)
 
 ## Quick start
 
