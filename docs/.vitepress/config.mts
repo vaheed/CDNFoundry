@@ -60,9 +60,6 @@ export default defineConfig({
       }
     }
   },
-  srcExclude: [
-    'legacy/**'
-  ],
   head: [
     ['meta', { name: 'theme-color', content: '#0f5f7a' }],
     ['meta', {

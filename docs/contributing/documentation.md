@@ -7,11 +7,11 @@ description: Maintain CDNFoundry documentation as verified, linked, accessible, 
 
 ::: warning Document observed behavior
 Verify fields, routes, limits, services, and commands against the current code
-and rendered Compose configuration. Do not promote roadmap proposals or legacy
-phase documents into current instructions before implementation qualifies.
+and rendered Compose configuration. Do not promote roadmap proposals into current
+instructions before implementation qualifies.
 :::
 
-Authored documentation lives in `docs/**/*.md`, excluding `docs/legacy/`.
+Authored documentation lives in `docs/**/*.md`.
 VitePress config, theme code, and static SEO assets support the site but are not
 documentation content. The OpenAPI JSON file is generated machine-readable
 contract data.
@@ -25,10 +25,7 @@ when upgrading VitePress; do not remove them without a clean `npm audit`.
 1. executable code and runtime configuration;
 2. tests that prove the behaviour;
 3. `AGENTS.md` and repository governance for product invariants;
-4. current documentation;
-5. legacy documents as historical evidence only.
-
-Never copy a legacy claim without verifying it in the current tree.
+4. current documentation.
 
 ## Page requirements
 
@@ -68,9 +65,6 @@ implementation. After VitePress builds, a second validator crawls every
 generated internal link and anchor. A documented command that no longer exists,
 a newly introduced configuration key without reference coverage, or an
 unresolvable source or rendered link fails CI.
-
-Do not edit `docs/legacy/` to repair old links. It is a verbatim archive and is
-excluded from build, search, lint, and current-link guarantees.
 
 ## Generated API files
 

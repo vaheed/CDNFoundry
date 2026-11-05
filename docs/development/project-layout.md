@@ -37,7 +37,6 @@ remain rebuildable rather than becoming hidden sources of truth.
 | `.github/` | Issue forms and CI/publish workflow |
 | `.agents/skills/` | Repository execution guides governed by `AGENTS.md` |
 | `docs/` | VitePress Markdown source and machine-generated API artifact |
-| `docs/legacy/` | Verbatim archived documentation, excluded from the site |
 
 ## Module rule
 

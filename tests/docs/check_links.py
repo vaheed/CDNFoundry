@@ -76,7 +76,7 @@ def maintained_documents() -> list[pathlib.Path]:
     documents = [
         path
         for path in DOCS_ROOT.rglob("*.md")
-        if not {"legacy", "node_modules", ".vitepress"}.intersection(
+        if not {"node_modules", ".vitepress"}.intersection(
             path.relative_to(DOCS_ROOT).parts
         )
     ]

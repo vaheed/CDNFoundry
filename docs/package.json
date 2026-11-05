@@ -7,7 +7,7 @@
     "dev": "vitepress .",
     "build": "vitepress build .",
     "preview": "vitepress preview .",
-    "lint": "markdownlint-cli2 \"**/*.md\" \"../README.md\" \"../CONTRIBUTING.md\" \"../SECURITY.md\" \"../CODE_OF_CONDUCT.md\" \"../core/README.md\" \"../.github/pull_request_template.md\" \"#legacy/**\" \"#node_modules/**\" \"#.vitepress/**\""
+    "lint": "markdownlint-cli2 \"**/*.md\" \"../README.md\" \"../CONTRIBUTING.md\" \"../SECURITY.md\" \"../CODE_OF_CONDUCT.md\" \"../core/README.md\" \"../.github/pull_request_template.md\" \"#node_modules/**\" \"#.vitepress/**\""
   },
   "devDependencies": {
     "markdownlint-cli2": "0.23.3",

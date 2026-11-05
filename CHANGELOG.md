@@ -87,7 +87,7 @@ upgrade path from 0.x. Entries below cover everything since `v0.9.9`.
 - API error envelope and proxy scheme aligned; fleet dry run and start activation hardened.
 - Edge agent, edge gateway, fleet generator, API contract and release manifest
   all report the single project version.
-- The staged roadmap is finished and archived under `docs/legacy/`.
+- The staged roadmap is finished and removed from the tree.
 
 ### Fixed
 
@@ -107,15 +107,13 @@ upgrade path from 0.x. Entries below cover everything since `v0.9.9`.
 
 ### Removed
 
-- Staging-era handoff, audit and per-phase evidence reports moved to `docs/legacy/`
-  (historical, unmaintained).
+- Staging-era handoff, audit and per-phase evidence reports.
 
 ### Documentation
 
-- Current docs aligned to the project; stale and unrelated pages archived in `docs/legacy/`.
+- Current docs aligned to the project; stale and unrelated pages removed.
 - Release notes: [v1.2.1](docs/operations/releases/v1.2.1.md).
 
 ## Earlier releases
 
-`v0.4.0` to `v0.9.9` are published as GitHub releases. Their notes are archived in
-[`docs/legacy/releases/`](docs/legacy/releases/).
+`v0.4.0` to `v0.9.9` are published as GitHub releases.

@@ -198,7 +198,7 @@ def main() -> int:
         path
         for path in SOURCE_DOCS.rglob("*.md")
         if path.name not in UNPUBLISHED_DOCUMENTS
-        and not {"legacy", "node_modules", ".vitepress"}.intersection(
+        and not {"node_modules", ".vitepress"}.intersection(
             path.relative_to(SOURCE_DOCS).parts
         )
     ]

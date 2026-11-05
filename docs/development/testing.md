@@ -247,8 +247,7 @@ startup or health are not prerequisites for this static check.
 ## Reporting
 
 Record the exact commands, revision, environment, result counts or terminal
-markers, migration activity, browser suite results, and limitations. Historical
-results in `docs/legacy/` are evidence for their recorded commits, not proof for
+markers, migration activity, browser suite results, and limitations. Results recorded for earlier commits are not proof for
 the current tree.
 
 ## Domain claim database qualification
