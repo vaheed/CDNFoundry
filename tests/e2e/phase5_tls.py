@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import re
 import secrets
@@ -145,6 +146,11 @@ def main() -> None:
         cwd=ROOT, capture_output=True, timeout=15,
     ).returncode == 0 for edge in ("a", "b"))
     enrolled_edges = persisted_identities or (all(agent_ids) and len(set(agent_ids)) == 2)
+    # CI enrolls its development PoPs only so the DNS node pulls zones. It sets this to leave the per-gateway
+    # HTTPS check to developer stacks, and the result line then says so instead of reporting a pass.
+    gateway_check_skipped = enrolled_edges and os.environ.get("CDNF_E2E_SKIP_EDGE_GATEWAY_CHECK") == "1"
+    if gateway_check_skipped:
+        enrolled_edges = False
     if enrolled_edges and all(agent_ids):
         assert all(re.fullmatch(r"[0-9a-fA-F-]{36}", edge_id) for edge_id in agent_ids)
         heartbeat_deadline = time.monotonic() + 120
@@ -221,7 +227,7 @@ def main() -> None:
     assert "PRIVATE KEY" not in raw_key, "managed private key was stored as plaintext"
     print(json.dumps({"result": "passed", "domain_id": domain_id, "zone": ZONE,
                       "certificate_id": certificate["id"],
-                      "verified_edge_https": "passed" if enrolled_edges else "not_run_no_enrolled_agents"}))
+                      "verified_edge_https": "passed" if enrolled_edges else ("not_run_skipped_by_environment" if gateway_check_skipped else "not_run_no_enrolled_agents")}))
 
 
 def cleanup() -> None:
