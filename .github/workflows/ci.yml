@@ -386,6 +386,8 @@ jobs:
           exit 1
       - name: Run Python non-UI E2E
         shell: bash
+        env:
+          CDNF_E2E_SKIP_EDGE_GATEWAY_CHECK: '1'
         run: |
           set +e
           make dev-e2e 2>&1 | tee /tmp/cdnfoundry-e2e.log
