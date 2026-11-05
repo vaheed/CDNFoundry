@@ -1676,15 +1676,15 @@ with a few Linux servers can understand CDNFoundry and run it step by step.
 
 #### Cleanup
 
-- [ ] Delete `docs/legacy/`, the second agent activation path, every
+- [x] Delete `docs/legacy/`, the second agent activation path, every
       compatibility branch, and squash migrations into a fresh baseline.
-- [ ] Drop the unused `platform_dns_settings.cluster_targets` column (contract step of the 2026-11-03 hidden-primary change).
-- [ ] Rename phase-numbered tests after the feature they test.
-- [ ] Wire or delete every documented environment variable. Extend the
+- [x] Drop the unused `platform_dns_settings.cluster_targets` column (contract step of the 2026-11-03 hidden-primary change).
+- [x] Rename phase-numbered tests after the feature they test.
+- [x] Wire or delete every documented environment variable. Extend the
       documentation check so that a documented key that is not wired fails.
-- [ ] Delete thin helpers such as `MetricComparisonService`, and fix the
+- [x] Delete thin helpers such as `MetricComparisonService`, and fix the
       `.PHONY` list.
-- [ ] Update the project skills in `.agents/skills/` to match every behavior
+- [x] Update the project skills in `.agents/skills/` to match every behavior
       changed by Phases 1–8.
 
 #### Writing rules
