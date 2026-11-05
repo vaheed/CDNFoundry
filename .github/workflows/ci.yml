@@ -355,7 +355,7 @@ jobs:
           cp .env.dev.example .env.dev
           for side in a b; do
             if [ "${side}" = a ]; then country=DE; continent=EU; else country=US; continent=NA; fi
-            output="$(docker compose -f compose.dev.yml exec -T core php artisan cdnf:edges:enroll "dev-pop-${side}" --country="${country}" --continent="${continent}" | tail -n 1)"
+            output="$(docker compose -f compose.dev.yml exec -T core php artisan tinker --execute="[\$edge, \$token] = app(App\\Actions\\CreateEdge::class)->handle(['name' => 'dev-pop-${side}', 'country_code' => '${country}', 'continent_code' => '${continent}'], null, null); echo json_encode(['edge_id' => \$edge->id, 'bootstrap_token' => \$token]);" | tail -n 1)"
             CDNF_ENROLLMENT="${output}" CDNF_SIDE="${side}" python3 - <<'PY'
           import json, os, re
           from pathlib import Path
@@ -376,10 +376,7 @@ jobs:
           for _ in $(seq 1 90); do
             ready="$(docker compose -f compose.dev.yml exec -T core php artisan tinker --execute="echo App\\Models\\Edge::query()->whereNotNull('registered_at')->whereNotNull('last_heartbeat_at')->count();" | tail -n 1 | tr -dc '0-9')"
             if [ "${ready:-0}" -ge 2 ]; then
-              # These PoPs exist so the DNS node pulls zones. Drained PoPs keep their agents running but take no
-              # domain placement, so the E2E scripts' own simulated PoPs stay the only placement targets.
-              docker compose -f compose.dev.yml exec -T core php artisan tinker --execute="App\\Models\\Edge::query()->whereIn('name', ['dev-pop-a', 'dev-pop-b'])->update(['drained' => true]);" >/dev/null
-              echo "Both development PoPs are registered, sending heartbeats, and drained from placement."
+              echo "Both development PoPs are registered and sending heartbeats."
               exit 0
             fi
             sleep 2
