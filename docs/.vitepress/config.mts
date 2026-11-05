@@ -121,6 +121,7 @@ const operate = [
       { text: 'Laravel operations dashboard', link: '/operations/laravel-operations-dashboard' },
       { text: 'CLI commands', link: '/operations/cli-commands' },
       { text: 'Fleet engine and web', link: '/operations/fleet-engine' },
+      { text: 'Fleet web guide', link: '/operations/fleet-web' },
       { text: 'Fleet rollouts', link: '/operations/fleet-rollouts' },
       { text: 'DNS nodes and the hidden primary', link: '/operations/dns-nodes' },
       { text: 'Edge gateway ingress', link: '/operations/gateway-ingress' },
