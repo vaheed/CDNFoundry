@@ -945,7 +945,7 @@ such as the topology view. No second frontend is added.
   - Every long-running action shows its operation, with live progress, in a
     bell panel for background work.
   - Empty states that say what to do next, with one primary action.
-- [ ] **Less text in the UI.** A screen states facts and actions. Each card
+- [x] **Less text in the UI.** A screen states facts and actions. Each card
       keeps at most one short line of description. Explanations move to the
       documentation, linked with a small help icon.
 - [x] **A UI guide in `docs/development/frontend.md`.** The tokens, the
@@ -961,16 +961,16 @@ On 2026-11-02 the owner set the Kumo design language (`kumo`, MIT) as the design
 - [x] **Owner review fixes (2026-11-03).** Colored status badges in sentence case; neutral counts and menus with icons; equal table row heights; compact dialogs for short forms and single-column sheets for long ones; example placeholders and helper lines on forms (security rules, DNS records, Geo-DNS, origins, API tokens); named country and continent selects; platform settings with categories and search; one top tab row on the domain and edge pages; a slimmer cells table; a lighter dark theme; the landing and service health pages on the same tokens; documentation link to the documentation site.
 - [x] **One hidden DNS primary.** The platform zone goes to the enabled, healthy DNS primary; `cluster_targets` is no longer accepted by `PUT /api/admin/system/settings/dns` (it returns a validation error), and the UI shows the hidden primary read-only. The `platform_dns_settings.cluster_targets` column is optional now (expand); a Phase 9 contract migration drops it.
 - [x] **Agent-run crawl.** `tests/browser/specs/crawl.spec.ts` visits every sidebar link and the first record of every list in both panels, opens every header action, menu item, row action, and tab, and fails on any HTTP 5xx or script error.
-- [ ] **Decision spike on Kumo.** Overview, Domains list, domain detail, and platform settings, reviewed by the owner before the remaining screen groups (domain detail surfaces, infrastructure, observe, customers and account, the domain panel) are redesigned one by one.
+- [x] **Decision spike on Kumo.** Overview, Domains list, domain detail, and platform settings, reviewed by the owner before the remaining screen groups (domain detail surfaces, infrastructure, observe, customers and account, the domain panel) are redesigned one by one.
 
 #### Screens
 
-- [ ] **Decision spike first.** Rebuild three screens on the design system:
+- [x] **Decision spike first.** Rebuild three screens on the design system:
       the administrator overview, the Domains list with a domain detail page,
       and one settings page. The owner reviews them against the target
       before the remaining screens start.
       *Status 2026-11-02: Built and committed. Waiting for the owner's approval; not self-certified.*
-- [ ] **Administrator overview.** It answers, on one screen without
+- [x] **Administrator overview.** It answers, on one screen without
       scrolling on a desktop: is everything healthy, what needs attention,
       and what changed recently. KPI strip (requests, cache hit ratio,
       errors, healthy PoPs, DNS success), "Needs attention", and recent
@@ -980,19 +980,19 @@ On 2026-11-02 the owner set the Kumo design language (`kumo`, MIT) as the design
       links of control, DNS hosts, PoPs, cells, and telemetry with health
       status; the Phase 8 fleet web reuses it. *Status 2026-11-02: the owner
       removed the admin panel Topology page; the API stays.*
-- [ ] **Rebuild every admin screen** on the design system: domains, DNS
+- [x] **Rebuild every admin screen** on the design system: domains, DNS
       records, proxy and origins, cache and purge, TLS, WAF and security,
       Geo-DNS, edges, pools and cells, DNS clusters, users and tokens,
       operations, audit log, analytics, logs, backups, and settings.
       *Status 2026-11-02: Shared look on every Filament component. Individually rebuilt: overview, domains, domain detail, DNS records and their sheet, platform settings, edges, pools, clusters, users, operations, audit log, topology. Telemetry, proxy and origin sheets, TLS, WAF, backups, tokens, and system DNS identity are restyled and pass axe, but were not redesigned one by one.*
-- [ ] **Rebuild every domain-user screen** with the same patterns, showing
+- [x] **Rebuild every domain-user screen** with the same patterns, showing
       only that user's domains.
       *Status 2026-11-02: Overview and Domains rebuilt; analytics, tokens, and profile are restyled only.*
-- [ ] **Live views.** Operations, logs, and edge status refresh by polling
+- [x] **Live views.** Operations, logs, and edge status refresh by polling
       with a visible "live" indicator, and stop polling when the tab is
       hidden.
       *Status 2026-11-02: Operations, edges, topology, and the overview poll every 5 to 10 seconds, with a visible indicator on operations, edges, topology, and the overview. Livewire throttles a hidden tab to about 5 percent of its polls instead of stopping it. Logs are not live.*
-- [ ] **Accessibility.** Keyboard navigation for every action, visible focus,
+- [x] **Accessibility.** Keyboard navigation for every action, visible focus,
       and WCAG AA contrast in both themes.
       *Status 2026-11-02: axe passes on every screen. Keyboard use of every action was not walked through.*
 
@@ -1107,6 +1107,16 @@ Exit items:
 | The overview answers healthy, needs attention, recent changes on one desktop screen | Built; not verified in a healthy state |
 | The topology view shows a stopped PoP within one refresh | Met (`topology_failure.py`) |
 | The browser suite, snapshots, and accessibility checks pass in both themes and at both widths | See the browser suite row |
+
+**Closure (2026-11-05).** The owner confirmed the remaining Phase 7 work as complete and instructed that every open item be ticked, including the decision spike and its approval. The ticks record that instruction, not new verification.
+
+| Field | Status | Evidence |
+| --- | --- | --- |
+| Implementation | Owner-confirmed | Telemetry, analytics, and queue health screens trimmed to facts and separate rows; first-run setup limited to a fresh install |
+| Regression tests | Pass for the touched areas | `FirstRunSetupTest`, `FilamentPanelAccessTest`, `AnalyticsApiTest`, `OpsDashboardTest`, `DesignSystemConsistencyTest`. A full run had one unrelated failure: `ReportsTest` cannot read `docker/grafana` from the test container |
+| Runtime tests | Not run for this update | Presentation and page visibility only |
+| Documentation | Updated | Fleet engine guide (first-run wizard) |
+| Browser suite | See the run recorded in the commit that follows | The first-run wizard flow is covered on a pristine database by `FirstRunSetupTest`; the seeded browser stack asserts it is hidden |
 
 Known limitations:
 
