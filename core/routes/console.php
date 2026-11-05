@@ -33,6 +33,9 @@ Schedule::command('cdnf:health:publish')->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:waf:expire-exclusions')->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:usage:finalize')->hourlyAt(20)->withoutOverlapping();
 Schedule::command('cdnf:audit:prune')->dailyAt('03:10')->withoutOverlapping();
+// The monthly usage report waits a day after month end, so the last hour's rollup is final. The operations report is weekly.
+Schedule::command('cdnf:reports:build usage')->monthlyOn(2, '03:40')->withoutOverlapping();
+Schedule::command('cdnf:reports:build operations')->weeklyOn(1, '06:00')->withoutOverlapping();
 Schedule::command('cdnf:backups:create')->dailyAt('01:30')->withoutOverlapping()
     ->when(fn (): bool => app(ResticBackupRepository::class)->configured());
 Schedule::command('cdnf:backups:maintain prune')->dailyAt('04:10')->withoutOverlapping()

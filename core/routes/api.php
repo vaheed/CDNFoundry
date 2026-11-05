@@ -15,6 +15,7 @@ use App\Http\Controllers\Admin\FleetRolloutController;
 use App\Http\Controllers\Admin\LogController as AdminLogController;
 use App\Http\Controllers\Admin\PlatformDnsSettingsController;
 use App\Http\Controllers\Admin\ReconciliationController;
+use App\Http\Controllers\Admin\ReportController as AdminReportController;
 use App\Http\Controllers\Admin\SecurityOperationsController;
 use App\Http\Controllers\Admin\SystemOperationsController;
 use App\Http\Controllers\Admin\SystemSettingsController;
@@ -148,6 +149,8 @@ Route::middleware(['auth:sanctum', 'account.active', 'token.scope', 'throttle:ac
         Route::get('/usage', [AdminUsageController::class, 'index']);
         Route::get('/usage/export', [AdminUsageController::class, 'export']);
         Route::post('/usage/rebuild', [AdminUsageController::class, 'rebuild'])->middleware('idempotent');
+        Route::get('/reports', [AdminReportController::class, 'index']);
+        Route::get('/reports/{report}/download', [AdminReportController::class, 'download']);
         Route::get('/users', [UserController::class, 'index']);
         Route::post('/users', [UserController::class, 'store'])->middleware('idempotent');
         Route::get('/users/{user}', [UserController::class, 'show']);

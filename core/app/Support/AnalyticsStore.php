@@ -195,6 +195,43 @@ final class AnalyticsStore
         return $this->query("SELECT domain_id, sum(requests) AS requests, sum(bytes_in) AS bytes_in, sum(bytes_out) AS bytes_out, sumIf(requests, cache_status = 'HIT') AS cache_hits, 0 AS dns_queries FROM cdnf.edge_hourly WHERE domain_id IN {domain_ids:Array(UInt64)} AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64} GROUP BY domain_id UNION ALL WITH {domain_names:Array(String)} AS names, {domain_ids:Array(UInt64)} AS ids SELECT arrayElement(ids, arrayFirstIndex(name -> zone = name OR endsWith(zone, concat('.', name)), names)) AS mapped_domain_id, 0, 0, 0, 0, sum(queries) FROM cdnf.dns_hourly WHERE arrayFirstIndex(name -> zone = name OR endsWith(zone, concat('.', name)), names) > 0 AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64} GROUP BY mapped_domain_id", $parameters);
     }
 
+    /**
+     * Bandwidth (bytes sent, headers included), requests, and 95th-percentile bandwidth per domain, from the
+     * 5-minute usage rollup. The Usage and billing dashboard runs the same query, so a report and the dashboard
+     * agree for the same range.
+     *
+     * @return list<array{domain_id: int|string, bytes: int|string, p95_bps: float|string, request_count: int|string}>
+     */
+    public function usageByDomain(CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        return $this->query('SELECT domain_id, sum(sent) AS bytes, quantile(0.95)(bps) AS p95_bps, sum(reqs) AS request_count FROM '
+            .'(SELECT domain_id, interval_start, sum(bytes_sent) AS sent, sum(requests) AS reqs, 8 * sum(bytes_sent) / 300 AS bps FROM cdnf.edge_usage_5m '
+            .'WHERE interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64} GROUP BY domain_id, interval_start) GROUP BY domain_id ORDER BY bytes DESC LIMIT 10000',
+            ['from' => $from->format('Y-m-d H:i:s.u'), 'to' => $to->format('Y-m-d H:i:s.u')]);
+    }
+
+    /** @return list<array{region: string, bytes: int|string, request_count: int|string}> */
+    public function usageByRegion(CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        return $this->query('SELECT region, sum(bytes_sent) AS bytes, sum(requests) AS request_count FROM cdnf.edge_usage_5m '
+            .'WHERE interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64} GROUP BY region ORDER BY bytes DESC LIMIT 1000',
+            ['from' => $from->format('Y-m-d H:i:s.u'), 'to' => $to->format('Y-m-d H:i:s.u')]);
+    }
+
+    /** @return list<array{hostname: string, errors: int|string}> */
+    public function topErrorHostnames(CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        return $this->query("SELECT hostname, sumIf(requests, status >= 500) AS errors FROM cdnf.edge_traffic_hourly WHERE interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64} AND hostname != '' GROUP BY hostname HAVING errors > 0 ORDER BY errors DESC LIMIT 10",
+            ['from' => $from->format('Y-m-d H:i:s.u'), 'to' => $to->format('Y-m-d H:i:s.u')]);
+    }
+
+    /** @return list<array{hostname: string, blocked: int|string}> */
+    public function topAttackedHostnames(CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        return $this->query("SELECT hostname, sum(security_blocks) AS blocked FROM cdnf.edge_traffic_hourly WHERE interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64} AND hostname != '' GROUP BY hostname HAVING blocked > 0 ORDER BY blocked DESC LIMIT 10",
+            ['from' => $from->format('Y-m-d H:i:s.u'), 'to' => $to->format('Y-m-d H:i:s.u')]);
+    }
+
     public function metadata(array $range): array
     {
         $delay = app(PlatformSettings::class)->integer('telemetry', 'finalization_delay_minutes');
