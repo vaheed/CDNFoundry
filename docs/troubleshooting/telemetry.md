@@ -1,69 +1,85 @@
 ---
 title: Troubleshoot telemetry
-description: Diagnose analytics outages, missing events, Vector buffers, ClickHouse, usage lag, and privacy.
+description: Fix analytics 503 errors, missing events, full Vector buffers, DNS events with domain ID zero, stale usage, and masked client addresses.
 ---
 
 # Troubleshoot telemetry
 
-::: info Serving remains independent
-A telemetry outage should never stop DNS or HTTP. Bounded buffers eventually
-discard old events under a prolonged outage, so missing historical telemetry
-cannot always be recovered after the sink returns.
+Use this page when analytics pages fail, events are missing, or usage numbers are
+old. You need administrator access.
+
+::: info Serving continues
+A telemetry outage does not stop DNS or HTTP. During a long outage, bounded buffers
+fill and then discard new events. Missing history cannot always be recovered
+after the sink returns.
 :::
 
 ## Analytics returns 503
 
-`analytics_unavailable` means the bounded ClickHouse request failed. Check
-ClickHouse health, credentials, URL/TLS, query timeout, and network. Serving
-traffic should remain healthy.
+The error code `analytics_unavailable` means the bounded ClickHouse request failed.
+Check ClickHouse health, credentials, URL and TLS settings, the query timeout, and
+the network. Serving traffic should stay healthy.
 
 ## Events are missing
 
-Check the relevant path:
+Follow the path the event takes:
 
-- OpenResty syslog or HTTP source → Vector `safe_edge_events`;
-- DNSdist dnstap → Vector `decoded_dns_dnstap` → `safe_dns_events`;
-- Vector sink → ClickHouse table.
+- OpenResty syslog or HTTP source, then Vector `safe_edge_events`.
+- DNSdist dnstap, then Vector `decoded_dns_dnstap`, then `safe_dns_events`.
+- The Vector sink, then the ClickHouse table.
 
 Inspect Vector transform errors, discarded-event counters, disk-buffer bytes,
-delivery errors, and ClickHouse insert errors. Events dropped after the buffer
-fills cannot be reconstructed.
+delivery errors, and ClickHouse insert errors. You cannot rebuild events dropped
+after a buffer filled.
 
-The edge request/billing sink has a 1 GiB disk cap, security events have a
-separate 256 MiB cap, and DNS telemetry has a 256 MiB cap. All use
-`drop_newest` when full. Security traffic therefore cannot be displaced by a
-flood of ordinary requests, and DNS has a smaller loss budget. A prolonged
-ClickHouse outage can still exhaust any cap; reconcile billing against other
-durable records before using incomplete intervals.
+Each sink has its own disk buffer. All of them use `drop_newest` when full:
 
-The administrator telemetry page aggregates labeled Vector Prometheus series:
-buffer bytes/events are current gauges, while discarded events and component
-errors are lifetime counters since Vector started. An available collector shows
-zero values explicitly instead of an empty panel.
+| Stream | Disk buffer |
+| --- | --- |
+| Edge requests and billing | 1 GiB |
+| Security events | 256 MiB |
+| DNS telemetry | 256 MiB |
+
+A flood of ordinary requests cannot push out security events, and DNS has a smaller
+loss budget. A long ClickHouse outage can still fill any buffer. Before you bill
+from an interval with a gap, compare it with other durable records.
+
+The administrator **Traffic and telemetry** page shows labeled Vector Prometheus series. Buffer
+bytes and events are current values. Discarded events and component errors are
+counters since Vector started. When the collector is available, the page shows zeros
+instead of an empty panel.
 
 ## DNS events have domain ID zero
 
-The dnstap fallback does not map question names to Laravel domain IDs and stores
-zero by design. Zone/name analytics remain available; usage requiring exact
-domain mapping depends on enriched events.
+The dnstap fallback does not map question names to Laravel domain IDs, so it stores
+zero by design. Zone and name analytics still work. Usage that needs an exact domain
+mapping depends on enriched events.
 
 ## Usage is stale
 
-Confirm scheduler heartbeat, `cdnf:usage:finalize`, the `bulk_maintenance` lane,
-ClickHouse availability, and the latest finalized `usage_rollups.interval_end`.
-The component becomes degraded when no finalized interval exists or lag exceeds
-three hours.
+<div class="steps">
 
-The live 24-hour analytics range intentionally includes the newest
-`finalization_delay_minutes` window. The blue **Live window included** label is
-informational, not degraded health. Rows in **Finalized usage** are separate,
-stable PostgreSQL rollups and the page shows only the latest five finalized
-intervals.
+1. Confirm the scheduler is running.
+2. Confirm the `cdnf:usage:finalize` command runs. The scheduler starts it hourly,
+   at 20 minutes past the hour.
+3. Check ClickHouse availability.
+4. Find the newest finalized `usage_rollups.interval_end`.
+
+</div>
+
+**Expected result:** the Usage rollups component is healthy. It becomes degraded
+when no finalized interval exists or the newest one is more than three hours old.
+
+The live 24-hour analytics range includes the newest `finalization_delay_minutes`
+window. The blue **Live window included** label is information, not a health problem.
+The **Finalized usage** section is separate. It reads stable PostgreSQL rollups and
+shows the latest five intervals.
 
 ## Client address looks truncated
 
-Normal views and exports intentionally apply the platform IPv4/IPv6 prefix mask.
-Raw storage retention is short and access remains policy scoped. Do not weaken
-masking to troubleshoot unrelated delivery.
+Normal views and exports apply the platform IPv4 and IPv6 prefix mask on purpose.
+Raw storage is kept briefly, and access follows policy. Do not weaken masking to
+debug an unrelated delivery problem.
 
-Use the [ClickHouse or Vector runbook](../operations/runbooks.md#clickhouse-or-vector-outage).
+Use the
+[ClickHouse or Vector runbook](../operations/runbooks.md#clickhouse-or-vector-outage).

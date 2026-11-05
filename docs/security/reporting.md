@@ -1,33 +1,37 @@
 ---
 title: Report a vulnerability
-description: Report CDNFoundry security vulnerabilities privately without exposing sensitive data.
+description: How to report a CDNFoundry security vulnerability privately, what to include, and what to leave out.
 ---
 
 # Report a vulnerability
 
+Use this page if you think you found a security problem in CDNFoundry. You need a
+GitHub account and the exact version or commit you tested.
+
 ::: danger Report privately
-Do not open a public issue, discussion, or pull request containing exploit
+Do not open a public issue, discussion, or pull request that contains exploit
 details, secrets, customer data, private addresses, or raw production evidence.
-Use the private advisory channel below.
 :::
 
-Do not open a public issue for a suspected vulnerability.
+## Send the report
 
-Use the repository's private
-[GitHub security advisory form](https://github.com/vaheed/CDNFoundry/security/advisories/new).
-Include:
+Open the private
+[GitHub security advisory form](https://github.com/vaheed/CDNFoundry/security/advisories/new)
+and include:
 
-- affected exact version or commit;
-- deployment role and topology;
-- minimal reproduction steps;
-- impact and trust boundary;
-- sanitized logs or requests;
-- any temporary mitigation.
+- The exact affected version or commit.
+- The role of the host and the topology around it.
+- The smallest set of steps that reproduces the problem.
+- The impact, and which trust boundary it crosses.
+- Sanitized logs or requests.
+- Any temporary mitigation you found.
 
-Do not include customer data, access tokens, passwords, database dumps,
-certificate private keys, CA keys, signing keys, backup credentials, or raw
-telemetry.
+Leave out customer data, access tokens, passwords, database dumps, certificate
+private keys, CA keys, signing keys, backup credentials, and raw telemetry.
 
-The project does not publish a fixed response SLA or supported-version matrix in
-the implementation. Operators should track exact immutable releases and apply
-security updates after qualification.
+## What to expect
+
+The project sets no fixed response time. The repository's `SECURITY.md` lists
+version 1.2.x as the supported line. As an operator, run exact immutable releases,
+and apply a security update soon after you qualify it. See
+[Software supply chain](../operations/software-supply-chain.md).

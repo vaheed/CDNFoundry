@@ -1,6 +1,6 @@
 ---
 title: Documentation contributions
-description: Maintain CDNFoundry documentation as verified, linked, accessible, and buildable Markdown.
+description: Writing rules, review checklist, components, and validation commands for CDNFoundry documentation contributors.
 ---
 
 # Documentation contributions
@@ -11,14 +11,9 @@ and rendered Compose configuration. Do not promote roadmap proposals into curren
 instructions before implementation qualifies.
 :::
 
-Authored documentation lives in `docs/**/*.md`.
-VitePress config, theme code, and static SEO assets support the site but are not
-documentation content. The OpenAPI JSON file is generated machine-readable
-contract data.
+Authored documentation lives in `docs/**/*.md`. VitePress config, theme code, and static SEO assets support the site but are not documentation content. The OpenAPI JSON file is generated machine-readable contract data.
 
-The package overrides keep VitePress on its stable `1.6.4` site contract while
-pinning audited transitive Vite and YAML parser patches. Recheck the overrides
-when upgrading VitePress; do not remove them without a clean `npm audit`.
+The overrides in `docs/package.json` keep VitePress on version `1.6.4` and pin patched versions of its transitive dependencies (Vite, markdown-it, and others). Recheck the overrides when you upgrade VitePress. Do not remove them without a clean `npm audit`.
 
 ## Writing rules
 
@@ -75,7 +70,7 @@ Copy this list into the pull request for each page you add or change.
 
 ### Components
 
-Use the documentation components instead of plain Markdown where they fit.
+Use the documentation components instead of plain Markdown where they fit. The allowed HTML tags are `Card`, `CardGrid`, `DocTabs`, `Screenshot`, `template`, and `div`.
 
 - Cards: `<CardGrid>` with `<Card title="..." link="...">` for paths into the
   site.
@@ -95,26 +90,28 @@ Use the documentation components instead of plain Markdown where they fit.
 
 ## Source-of-truth order
 
+When sources disagree, trust them in this order:
+
 1. executable code and runtime configuration;
-2. tests that prove the behaviour;
+2. tests that prove the behavior;
 3. `AGENTS.md` and repository governance for product invariants;
 4. current documentation.
 
 ## Page requirements
 
-Each page must have front matter with a unique `title` and useful
-`description`, one logical H1, meaningful headings, relative internal links,
-language-tagged code fences, and no raw secret values. Prefer links to a shared
-reference over repeating limits or procedures.
+Each page must have:
 
-Use images only when they add information. Give every Markdown image meaningful
-alt text; use empty alt text only for a truly decorative image. The current site
-uses no prose images.
+- front matter with a unique `title` and a useful `description`;
+- one H1 and meaningful headings;
+- relative internal links;
+- language-tagged code fences;
+- no raw secret values.
 
-Use Mermaid when a state machine, request path, trust boundary, ownership
-relationship, or multi-step activation is easier to understand visually.
-Include the same meaning in nearby prose or a table so the page remains useful
-to assistive technology and plain Markdown readers.
+Link to a shared reference instead of repeating limits or procedures.
+
+Screenshots are the only images (see [Components](#components)). Prose images are not used.
+
+Use Mermaid when a state machine, request path, trust boundary, ownership relationship, or multi-step activation is easier to understand visually. Repeat the same meaning in nearby prose or a table, so the page still works for assistive technology and plain Markdown readers.
 
 Use VitePress callouts deliberately:
 
@@ -125,19 +122,19 @@ Use VitePress callouts deliberately:
 
 ## Add or move a page
 
-1. add the Markdown file in the audience-oriented section;
-2. add it to `.vitepress/config.mts` navigation when it is a primary page;
-3. update inbound links instead of leaving redirects undocumented;
-4. update `tests/docs/check_links.py` if the required architecture changes;
-5. run `make docs-check`.
+<div class="steps">
 
-The source validator rejects missing files and anchors, root-relative links,
-and extensionless Markdown links that would fail on GitHub. It also extracts
-Make targets, script/Compose command paths, and environment variables from the
-implementation. After VitePress builds, a second validator crawls every
-generated internal link and anchor. A documented command that no longer exists,
-a newly introduced configuration key without reference coverage, or an
-unresolvable source or rendered link fails CI.
+1. Add the Markdown file in the section for its audience.
+2. Add it to the navigation in `.vitepress/config.mts` when it is a primary page.
+3. Update inbound links instead of leaving redirects.
+4. Update `tests/docs/check_links.py` if the required architecture changes.
+5. Run `make docs-check`.
+
+</div>
+
+`make docs-check` runs these checks in order: `tests/docs/check_tokens.py` (docs design tokens match the product theme), the Fleet CLI reference check, `tests/docs/check_links.py`, `tests/docs/run_test_blocks.py` (the `sh test` blocks), the markdown lint, the VitePress build, and `tests/docs/check_built_site.py`.
+
+The source validator rejects missing files and anchors, root-relative links, and extensionless Markdown links that would fail on GitHub. It also extracts Make targets, script and Compose command paths, and environment variables from the implementation. After VitePress builds, a second validator crawls every generated internal link and anchor. CI fails on a documented command that no longer exists, a new configuration key without reference coverage, or a source or rendered link that does not resolve.
 
 ## Generated API files
 
@@ -147,56 +144,25 @@ After changing Laravel API routes:
 docker compose -f compose.dev.yml run --rm core php artisan cdnf:api:openapi
 ```
 
-Commit both `docs/public/openapi.json` and
-`docs/reference/api/endpoints.md`. CI runs the command with `--check`.
+Expected result: the command rewrites `docs/public/openapi.json` and `docs/reference/api/endpoints.md`. Commit both. CI runs `make openapi-check`, which runs the command with `--check` and fails when the files are stale.
 
 ## SEO deployment
 
-VitePress generates clean URLs, local search, metadata chunks, and a sitemap.
-`transformHead` emits canonical and social metadata from each page. Set
-`DOCS_SITE_URL` and `DOCS_BASE` to the production location; update
-`docs/public/robots.txt` if the canonical origin changes.
+VitePress generates clean URLs, local search, metadata chunks, and a sitemap. `transformHead` emits canonical and social metadata for each page. Set `DOCS_SITE_URL` and `DOCS_BASE` to the production location. Update `docs/public/robots.txt` if the canonical origin changes.
 
-GitHub Pages project sites are published below a path such as `/CDNFoundry/`.
-Search crawlers only recognize `robots.txt` at the host root, so the project
-file cannot control `vaheed.github.io` or advertise the sitemap by itself.
-Submit the generated `sitemap.xml` through the matching Google Search Console
-URL-prefix property. A custom domain can serve an effective root-level
-`robots.txt`.
+GitHub Pages project sites are published below a path such as `/CDNFoundry/`. Search crawlers read `robots.txt` only at the host root, so the project file cannot control `vaheed.github.io` or advertise the sitemap by itself. Submit the generated `sitemap.xml` through the matching Google Search Console URL-prefix property. A custom domain can serve a root-level `robots.txt`.
 
-The single `CI` GitHub Actions workflow checks out full Git history so VitePress
-can calculate accurate per-page modification dates, validates the source and
-rendered output in its documentation stage, uploads `docs/.vitepress/dist`, and
-deploys that artifact to GitHub Pages after every validation stage passes on
-`main`.
-Production uses:
+The `CI` GitHub Actions workflow does the documentation work. Its documentation job checks out the full Git history so VitePress can calculate each page's modification date. It validates the source and the rendered output and uploads `docs/.vitepress/dist`. The deploy job publishes that artifact to GitHub Pages on a push to `main`, after the core, compose, backend-e2e, scale-e2e, go, and docs jobs pass. The CI build uses:
 
 ```text
 DOCS_SITE_URL=https://vaheed.github.io/CDNFoundry
 DOCS_BASE=/CDNFoundry/
 ```
 
-The repository's **Settings → Pages → Build and deployment → Source** must be
-set to **GitHub Actions**. A push to `main` that changes documentation,
-documentation validation, or the website workflow then publishes
-<https://vaheed.github.io/CDNFoundry/>. The deployment workflow uses the
-protected `github-pages` environment and does not need a repository secret.
+In the repository, set **Settings → Pages → Build and deployment → Source** to **GitHub Actions**. A push to `main` then publishes <https://vaheed.github.io/CDNFoundry/>. The deploy job uses the protected `github-pages` environment and needs no repository secret.
 
-The default VitePress theme provides keyboard-accessible local search,
-responsive navigation, and a light/dark appearance switch. The local diagram
-component server-renders the complete diagram source as a fallback, then uses
-Mermaid to replace it with an SVG and rerenders when the color theme changes.
-Rendered diagrams use a compact page-height limit by default; readers can open
-the full-size view with **View larger** and close it with the button or Escape.
-If client rendering fails, readers see a diagnostic fallback instead of an
-empty box. The rendered-site validator requires navigation, search, appearance
-control, a fallback for every diagram, rendered custom callouts, and the Google
-Search Console verification meta tag before an artifact can deploy.
+The default VitePress theme provides keyboard-accessible local search, responsive navigation, and a light and dark appearance switch. The local diagram component renders the full diagram source on the server as a fallback. Mermaid then replaces it with an SVG in the browser and renders again when the color theme changes. Diagrams have a compact height limit by default. Readers open the full-size view with **View larger** and close it with the button or Escape. If client rendering fails, readers see a diagnostic fallback instead of an empty box.
 
-Pages with specific search intent should express it naturally in the visible
-title, heading, introduction, and useful body content. The optional `keywords`
-frontmatter provides general metadata but is not a substitute for visible
-content and does not influence Google Search ranking. The generated head also
-contains `TechArticle` or `WebSite` and `BreadcrumbList` JSON-LD. Titles and
-descriptions must describe verified implementation rather than promise
-unsupported scale or security.
+Before an artifact can deploy, the rendered-site validator requires navigation, search, the appearance control, a fallback for every diagram, rendered custom callouts, and the Google Search Console verification meta tag.
+
+For pages with a specific search intent, say that intent in the visible title, heading, introduction, and body. The optional `keywords` front matter gives general metadata. It does not replace visible content and does not influence Google Search ranking. The generated head also contains `TechArticle` or `WebSite` and `BreadcrumbList` JSON-LD. Titles and descriptions must describe verified behavior and must not promise unsupported scale or security.

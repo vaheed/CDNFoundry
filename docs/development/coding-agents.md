@@ -10,7 +10,7 @@ optional and run only on the developer's machine.
 
 | Aid | Where | What it does |
 | --- | --- | --- |
-| Project skills | `.agents/skills/`, linked as `.claude/skills/` | Short, task-specific guides with the real file paths, commands, tests, and known traps for each area. The agent loads one only when a task needs it. |
+| Project skills | `.agents/skills/`, linked as `.claude/skills/` | Short, task-specific guides with the real file paths, commands, tests, and known traps for each area. The agent loads a guide only when a task needs it. |
 | CodeGraph MCP server | `.mcp.json` | A local, pre-built code graph (symbols, callers, callees, imports) for PHP, Go, Lua, and Python. The agent queries the graph instead of searching and reading whole files. |
 
 `AGENTS.md` remains the contract. Skills explain how to apply it in each area,
@@ -29,6 +29,8 @@ and they never override it.
 | `cdnf-tls-lifecycle` | Managed and uploaded certificates |
 | `cdnf-telemetry-analytics` | Vector, ClickHouse, analytics and logs |
 | `cdnf-filament-ui` | Admin and domain panel screens |
+| `cdnf-ui-design` | The CDNFoundry design system, used with `cdnf-filament-ui` |
+| `antislop` | Filter for UI copy and code comments in every frontend stage |
 | `cdnf-compose-operations` | Compose, images, profiles, the fleet installer |
 | `cdnf-production-qualification` | Release and fleet qualification evidence |
 
@@ -75,7 +77,7 @@ only against development data.
 
 ## Frontend work and antislop
 
-The [anti-slop](https://github.com/miqdadbadjuber/anti-slop) rules are vendored as one file, `.agents/skills/antislop/SKILL.md` (pinned in its header, MIT). Agents load it with `cdnf-ui-design` before any frontend, UI copy, or screenshot work, in every stage, and report the Delivery Gate result. It filters generic AI output; the CDNFoundry design system stays the direction.
+The [anti-slop](https://github.com/miqdadbadjuber/anti-slop) rules are vendored as one file, `.agents/skills/antislop/SKILL.md` (pinned in its header, MIT). Agents load it with `cdnf-ui-design` before any frontend, UI copy, or screenshot work, in every stage. They report its Delivery Gate result. It filters generic AI output. The CDNFoundry design system stays the direction.
 
 ## Commits
 

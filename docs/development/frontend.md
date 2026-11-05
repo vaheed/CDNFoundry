@@ -1,17 +1,17 @@
 ---
 title: Frontend development
-description: Develop and qualify the CDNFoundry Filament administrator and domain-user panels with the design system and the Playwright browser suite.
+description: Build, style, and test the CDNFoundry Filament administrator and domain-user panels with the design system and the Playwright browser suite.
 ---
 
 # Frontend development
+
+This page is for contributors who change a screen. It covers the panels, the asset build, the design system, and the browser tests. Load the `antislop` and `cdnf-ui-design` skills before you touch a frontend file, and report the antislop Delivery Gate result when you finish.
 
 ::: tip Browser qualification is agent-run
 The Playwright suite in `tests/browser` covers both panels in light and dark mode at desktop and phone width, with visual snapshots and axe accessibility checks. Run it against a development or test stack with seeded data, never production. See [Browser suite](#browser-suite).
 :::
 
-The frontend is Filament inside the Laravel monolith. There is no second SPA or
-frontend API client. Both panels compile the shared
-`resources/css/filament/shared/theme.css` through Vite.
+The frontend is Filament inside the Laravel monolith. It has no second SPA and no separate frontend API client. Both panels compile the shared `resources/css/filament/shared/theme.css` through Vite.
 
 ## Panels
 
@@ -20,21 +20,11 @@ frontend API client. Both panels compile the shared
 | `/admin` | administrators | Observe, Operate, Infrastructure, Customers, Governance, Account |
 | `/app` | assigned domain users | Domains, Observe, Account |
 
-The administrator panel exposes dashboard, system DNS identity, platform
-settings, users, domains, DNS clusters, edge pools, edges/cells, operations,
-audit logs, telemetry, profile, and tokens.
+The administrator panel has these screens: dashboard, system DNS identity, platform settings, users, domains, DNS clusters, edge pools, edges and cells, operations, audit logs, telemetry, profile, and tokens.
 
-The `/admin` landing page is a full-width operations overview composed of
-independently polling Filament widgets. Its compact investigation section spans
-the entire dashboard width; filters persist in the URL, and charts use
-Filament's bundled Chart.js integration. See
-[Laravel operations dashboard](../operations/laravel-operations-dashboard.md)
-for data sources, cache keys, refresh intervals, failure semantics, and the
-performance budget.
+The `/admin` landing page is a full-width operations overview built from independent Filament widgets that poll on their own. Its compact investigation section spans the whole dashboard width. Filters persist in the URL, and charts use Filament's bundled Chart.js integration. See [Laravel operations dashboard](../operations/laravel-operations-dashboard.md) for data sources, cache keys, refresh intervals, failure behavior, and the performance budget.
 
-The domain panel exposes dashboard, domains, domain detail/actions, DNS records,
-security rules, analytics, profile, and tokens. Administrator domain views reuse
-the same policy-aware domain resource and add administrator actions.
+The domain panel has these screens: dashboard, domains, domain detail and actions, DNS records, security rules, analytics, profile, and tokens. Administrator domain views reuse the same policy-aware domain resource and add administrator actions.
 
 ## Build assets
 
@@ -42,25 +32,18 @@ the same policy-aware domain resource and add administrator actions.
 make dev-assets
 ```
 
-This builds the production theme inside Docker and exports
-`core/public/build`. `make dev-up` invokes it automatically. For host-local
-development inside `core`, `npm run dev` and `npm run build` are available, but
-the supported clean-checkout path does not require host Node.js.
+Expected result: the command builds the production theme inside Docker and exports it to `core/public/build`. `make dev-up` runs this step for you. If you work on the host inside `core`, `npm run dev` and `npm run build` also work. A clean checkout does not need host Node.js.
 
 ## Shared components
 
-Blade components under `resources/views/components/ui` provide status pills,
-stat cards, empty/widget states, data tables, form actions, and list rows. Keep
-business validation in controllers/support types and mirror bounds in Filament
-forms for usability.
+Blade components under `resources/views/components/ui` provide status pills, stat cards, KPI strips, detail sections, empty and widget states, data tables, form actions, list rows, and the sidebar footer. Keep business validation in controllers and support types. Mirror the bounds in Filament forms so users get early feedback.
 
-Use `App\Support\FilamentHelp::label()` for optional explanatory copy on
-Filament fields, entries, table headings, and section headings. The rendered
-label is the help target: pointer hover and keyboard focus reveal the tooltip,
-without a separate help icon or persistent paragraph. Keep validation errors,
-warnings, destructive-action confirmations, degraded-state reasons, live
-measurements, and other operational evidence visible because they are state,
-not optional help.
+Use `App\Support\FilamentHelp::label()` for optional explanatory copy on Filament fields, entries, table headings, and section headings. The rendered label is the help target. Pointer hover and keyboard focus show the tooltip, with no separate help icon and no persistent paragraph. Keep these visible, because they are state and not optional help:
+
+- validation errors and warnings;
+- destructive-action confirmations;
+- reasons for a degraded state;
+- live measurements and other operational evidence.
 
 ## Design system
 
@@ -119,26 +102,49 @@ The panels use the Kumo design language (the design system behind `kumo`, MIT), 
 
 ## Browser suite
 
-Agents own browser qualification. The Playwright suite in `tests/browser` signs in to both panels in light and dark mode at desktop (1440 px) and phone (390 px) width, takes visual snapshots, and runs axe against every page (serious and critical violations fail).
+Agents own browser qualification. The Playwright suite in `tests/browser` signs in to both panels in light and dark mode at desktop (1440 px) and phone (390 px) width. It takes visual snapshots and runs axe against every page. Serious and critical accessibility violations fail the run.
 
 ```sh
 tests/browser/run.sh                       # run
 tests/browser/run.sh --update-snapshots    # after an intended design change; say what changed and why
 ```
 
-`run.sh` builds assets, starts `browser-app` from `compose.browser.yml` (a disposable SQLite database on tmpfs, generated credentials, no PostgreSQL and no named volumes), runs the suite, and removes the container. It refuses any base URL other than localhost. Never point it at production. The seed (`tests/browser/seed.php`) is deliberately awkward: 40 domains, very long names, IPv6, punycode, long errors, ten revisions, and failures, because most layout defects only show with real data. `spike.spec.ts` covers the rebuilt workflows with snapshots, and `every-screen.spec.ts` loads every screen of both panels and runs axe on each. Set `CDNF_BROWSER_REVIEW=1` to also write review screenshots to `tests/browser/review/`.
+Expected result: Playwright lists every spec as passed in all four projects (light and dark, desktop and phone), and the script removes its container. If a snapshot differs and the change was intended, update the snapshots and say what changed and why. If the change was not intended, fix the screen.
+
+`run.sh` does this:
+
+1. It generates the admin and user passwords.
+2. It builds the assets and starts `browser-app` from `compose.browser.yml`. That service uses a disposable SQLite database on tmpfs, no PostgreSQL, and no named volumes.
+3. It runs the suite and removes the container.
+
+The script refuses any base URL other than localhost. Never point it at production.
+
+The seed (`tests/browser/seed.php`) is deliberately awkward. It creates 40 domains, very long names, IPv6 records, a punycode name, long errors, ten edge revisions, and failed operations, because most layout defects only show with realistic data.
+
+The specs in `tests/browser/specs`:
+
+| Spec | Covers |
+| --- | --- |
+| `spike.spec.ts` | Key workflows, with snapshots |
+| `every-screen.spec.ts` | Loads every screen of both panels and runs axe on each |
+| `crawl.spec.ts` | Opens every sidebar link, list record, action, and tab, and fails on any server error or uncaught JavaScript error |
+| `first-run-setup.spec.ts` | Hides the first-run wizard once the system has data |
+| `screens-rich.spec.ts` | Review screenshots, only when requested |
+| `docs-screenshots.spec.ts` | Generates the documentation screenshots |
+
+Set `CDNF_BROWSER_REVIEW=1` to write review screenshots to `tests/browser/review/`.
+
+The fleet web page and Grafana have their own browser suites: `tests/browser/run-fleet.sh` and `tests/browser/run-grafana.sh`. The Grafana suite needs a development or staging stack seeded with `make dev-observability-seed`.
 
 ## Qualification
 
-Feature tests render panel routes, scope resources, confirm shared themes and
-navigation, and exercise Livewire/Filament actions without browser automation.
-Feature tests do not claim to prove visual layout, keyboard navigation, mobile
-viewports, focus behavior, or real browser downloads.
+Feature tests render panel routes, scope resources, confirm shared themes and navigation, and run Livewire and Filament actions without browser automation. They do not prove visual layout, keyboard navigation, mobile viewports, focus behavior, or real browser downloads. Only the browser suite proves those. Run `make dev-test` for the feature tests (see [Testing and qualification](testing.md)).
 
-The operations filter section spans the dashboard width. Telemetry exposes
-range, domain, and edge scope in one column on mobile, two columns on tablet,
-and one aligned row on desktop. Content-heavy overview widgets use half or full
-rows instead of compressing several paragraphs into one-third-width cards.
-Delayed and stale aggregate notices appear once in the page-level status area,
-not repeatedly inside charts. Full-height states are reserved for a chart that
-cannot render. Paired overview charts use equal grid spans and maximum heights.
+Layout rules for the dashboard and telemetry pages:
+
+- The operations filter section spans the dashboard width.
+- Telemetry shows range, domain, and edge scope in one column on mobile, two columns on tablet, and one aligned row on desktop.
+- Content-heavy overview widgets use half or full rows. Do not squeeze several paragraphs into one-third-width cards.
+- Delayed and stale aggregate notices appear once in the page-level status area, not repeatedly inside charts.
+- A full-height state is only for a chart that cannot render.
+- Paired overview charts use equal grid spans and maximum heights.
