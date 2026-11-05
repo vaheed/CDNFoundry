@@ -43,6 +43,7 @@ const getStarted = [
     items: [
       { text: 'Overview', link: '/getting-started/' },
       { text: 'Why CDNFoundry', link: '/getting-started/why-cdnfoundry' },
+      { text: 'What is in CDNFoundry', link: '/getting-started/whats-in-the-box' },
       { text: 'Private CDN design guide', link: '/getting-started/private-cdn-design' },
       { text: 'Using CDNFoundry', link: '/getting-started/using-cdnfoundry' },
       { text: 'Installation', link: '/getting-started/installation' },

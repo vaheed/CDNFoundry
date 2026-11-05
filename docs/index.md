@@ -21,6 +21,7 @@ hero:
 ## Choose where you are
 
 <CardGrid>
+<Card title="See every tool" link="/getting-started/whats-in-the-box">The panels, API, Fleet, Grafana, and alerts, and when to open each.</Card>
 <Card title="Evaluate" link="/getting-started/private-cdn-design">Check whether a private CDN fits your network, and what it needs.</Card>
 <Card title="Install" link="/getting-started/installation">Start a local stack, then add your first domain.</Card>
 <Card title="Operate" link="/deployment/">Deploy a production fleet, upgrade it, back it up, and answer alerts.</Card>
