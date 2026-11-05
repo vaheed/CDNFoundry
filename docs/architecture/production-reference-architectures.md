@@ -1,25 +1,29 @@
 ---
 title: Production reference architectures
-description: Choose a CDNFoundry production topology for a company, hosting provider, or ISP and understand its failure, network, and scaling tradeoffs.
+description: Choose a CDNFoundry production layout for a company, hosting provider, or ISP. Compare four architectures by failure domain, network exposure, and growth path.
 keywords: CDN architecture, private CDN architecture, ISP CDN design, CDNFoundry production topology, CDN high availability
 ---
 
 # Production reference architectures
 
-There is no single best topology for every network. The recommended starting
-architecture is the smallest design that provides two independent DNS and edge
-failure domains while keeping internal services private. Split roles only when
-measurement, ownership, or failure isolation requires it.
+No single layout fits every network. Start with the smallest design that gives you two independent DNS and edge failure domains and keeps internal services private. Split roles only when measurement, ownership, or failure isolation requires it.
+
+This page helps you choose. It compares four architectures, then covers network boundaries, what to back up, and how to grow. The terms edge, pool, cell, and PoP (point of presence, one site with serving hosts) are defined in the [glossary](../reference/glossary.md).
+
+| Architecture | Hosts | Pick it when |
+| --- | --- | --- |
+| A: minimum fleet | 1 control, 2 DNS and edge | You are starting out or proving demand. |
+| B: separated roles | Control, telemetry, DNS, and edge hosts apart | Load or ownership needs independent scaling. |
+| C: multi-POP | Edges in several locations | Measured latency or origin offload justifies more sites. |
+| D: Simple Anycast | Edges sharing one address | You run BGP and can prove routing yourself. |
 
 ::: info Start small, preserve boundaries
-Adding hosts does not improve reliability if they share one rack, uplink,
-provider, route, power source, or administrative failure. Define failure
-domains first; assign CDNFoundry roles second.
+Extra hosts do not add reliability if they share a rack, uplink, provider, route, power source, or administrator. Define your failure domains first. Then assign CDNFoundry roles to them.
 :::
 
 ## Design inputs
 
-Record these before choosing a topology:
+Write down these answers before you choose:
 
 | Input | Questions |
 | --- | --- |
@@ -32,13 +36,11 @@ Record these before choosing a topology:
 | Recovery | Required RPO/RTO for desired state, keys, PKI, and TLS material? |
 | Operations | Who owns DNS, routing, Linux, databases, incidents, and on-call? |
 
-Published container limits are safety ceilings, not capacity claims. Qualify
-the chosen hardware and real request mix.
+Container limits in the Compose files are safety ceilings, not capacity figures. Test your own hardware with your real request mix. The [sizing guide](../deployment/sizing.md) gives a method.
 
 ## Architecture A: minimum production fleet
 
-Use one control host and two combined DNS/edge hosts in distinct failure
-domains.
+One control host, and two combined DNS and edge hosts in different failure domains.
 
 ```mermaid
 flowchart LR
@@ -78,17 +80,14 @@ Tradeoffs:
 - optional telemetry on `CONTROL` competes for host resources unless measured
   and constrained.
 
-An outage of `CONTROL` pauses management but must not stop previously activated
-DNS and HTTP service. Loss of either edge reduces redundancy; it must not leave
-both authoritative nameservers or every pool endpoint unavailable.
+If `CONTROL` goes down, you cannot change configuration, but DNS and HTTP keep serving the last activated state. If one edge goes down, redundancy drops, and the other edge keeps answering DNS and HTTP.
 
 Follow the [Production quick start](../deployment/production-quick-start.md) for
 this topology.
 
 ## Architecture B: separated serving and observability roles
 
-Use separate control, telemetry, DNS, and edge hosts when traffic or ownership
-justifies independent scaling.
+Separate control, telemetry, DNS, and edge hosts, so each can scale and be maintained on its own.
 
 ```mermaid
 flowchart TB
@@ -134,9 +133,7 @@ Tradeoffs:
 - separating roles without separate failure domains mainly improves resource
   isolation, not site resilience.
 
-CDNFoundry supplies role profiles, generated node bundles, and external endpoint settings. It does not supply a
-PostgreSQL, Valkey, or ClickHouse clustering product. The operator owns those
-systems' quorum, fencing, failover, consistency, and restore qualification.
+CDNFoundry supplies role profiles, generated node bundles, and settings for external endpoints. It does not include PostgreSQL, Valkey, or ClickHouse clustering. You own the quorum, fencing, failover, consistency, and restore tests of those systems.
 
 For the control plane itself, Architecture A or B can add a **warm standby control
 node** (`cdnfoundry-fleet control add-standby`) in a second failure domain. It is a
@@ -149,8 +146,7 @@ for the requirements, the failure behavior, and the runbooks.
 
 ## Architecture C: multi-POP private CDN
 
-Add qualified edge capacity by location while keeping domain state and runtime
-formats shared.
+Add edge capacity in more locations. Domain state and runtime formats stay shared.
 
 ```mermaid
 flowchart LR
@@ -184,14 +180,11 @@ Each POP should have:
 - a documented drain and withdrawal procedure;
 - IPv4/IPv6 parity only when both paths are qualified.
 
-Geo-Unicast uses endpoint geography and readiness to render addresses. It is
-not continuous latency-based global load balancing. DNS caches delay movement,
-so test failure and recovery through at least the effective TTL window.
+Geo-Unicast picks addresses from the endpoint's country or continent and its readiness. It is not continuous, latency-based global load balancing. DNS caches delay traffic movement, so test failure and recovery for at least the effective TTL (the time resolvers keep an answer).
 
 ## Architecture D: operator-routed Simple Anycast
 
-Simple Anycast publishes one pool address pair from multiple qualified edges.
-The network operator advertises and withdraws those routes outside CDNFoundry.
+Simple Anycast publishes one pool address pair (IPv4 and IPv6) from several edges. You advertise and withdraw those routes with BGP, outside CDNFoundry.
 
 ```mermaid
 flowchart TB
@@ -210,7 +203,7 @@ flowchart TB
     end
 ```
 
-Use this only when the operator can prove:
+Use this only when you can prove all of these:
 
 - the same address is assigned locally at every participating gateway;
 - BGP advertisements and withdrawals are correct and monitored;
@@ -221,10 +214,7 @@ Use this only when the operator can prove:
 - routing evidence is retained for release qualification.
 
 ::: danger CDNFoundry does not operate BGP
-Simple Anycast records desired membership and endpoint readiness. It has no
-router credentials, does not advertise or withdraw a prefix, and cannot prove
-Internet convergence. Routing automation and rollback remain entirely
-operator-owned.
+Simple Anycast records which edges belong to a pool and whether their endpoints are ready. CDNFoundry has no router credentials, does not advertise or withdraw a prefix, and cannot prove that Internet routing has converged. Routing automation and rollback are entirely yours.
 :::
 
 Use [Simple Anycast](../operations/simple-anycast.md) and its
@@ -254,15 +244,11 @@ Use [Simple Anycast](../operations/simple-anycast.md) and its
 | Databases and Valkey | Owning application roles only | Private; never general public ingress |
 | Grafana | Operator → authenticated proxy/tunnel | Native port remains private or loopback |
 
-Public/NAT identity is not necessarily a local bind address. Use a locally
-assigned private address or wildcard bind behind DNAT/firewall for shared
-listeners. Edge service addresses require an explicit advertised-to-local
-gateway address map and a distinct local destination for each advertised
-service address.
+A public or NAT address is not always a local bind address. For shared listeners behind DNAT or a firewall, bind a local private address or the wildcard. Each advertised edge service address needs an entry in the advertised-to-local gateway address map, and each must map to its own local address.
 
 ## Durable state and recovery placement
 
-The production design must protect together:
+Back up and protect all of these together:
 
 - PostgreSQL desired state and audit history;
 - `APP_KEY` and artifact-signing private key;
@@ -272,9 +258,7 @@ The production design must protect together:
 - backup repository password and least-privilege credentials;
 - exact release identifiers and restore procedures.
 
-PowerDNS runtime rows, edge artifacts, active snapshots, cache objects, and
-telemetry aggregates are derived or expendable according to their documented
-role. Do not promote manual runtime edits to source of truth.
+PowerDNS runtime rows, edge artifacts, active snapshots, cache objects, and telemetry aggregates can be rebuilt or lost without losing desired state. Do not treat a manual edit on a runtime service as the source of truth. CDNFoundry treats such an edit as drift.
 
 ## Growth path
 
@@ -289,8 +273,7 @@ role. Do not promote manual runtime edits to source of truth.
 7. Adopt Anycast only after routing qualification and operational ownership
    exist.
 
-Scale the constrained plane. Do not add microservices, per-domain containers,
-or a second control backend to solve a bandwidth or cache-capacity problem.
+Scale the part that is short of capacity: workers, DNS, ClickHouse, edges, or cells. Do not add per-domain containers or a second control backend to fix a bandwidth or cache problem.
 
 ## Architecture review checklist
 
@@ -305,7 +288,7 @@ or a second control backend to solve a bandwidth or cache-capacity problem.
 - [ ] RPO/RTO and restore evidence exist for operator-owned data services.
 - [ ] IPv4, IPv6, UDP/TCP DNS, TLS, cache, and failure paths are tested where
   advertised.
-- [ ] The deployment acknowledges that uplink saturation needs upstream help.
+- [ ] You accept that a saturated uplink needs help from your upstream provider. CDNFoundry's protection is bounded per client, domain, and cell and does not scrub volumetric attacks.
 
 Continue with [Production best practices](../operations/production-best-practices.md),
 [Topology and Compose roles](../deployment/topology.md), and

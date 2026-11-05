@@ -5,10 +5,10 @@ description: See CDNFoundry component boundaries, state ownership, and failure i
 
 # System architecture
 
-CDNFoundry is a modular Laravel monolith surrounded by specialized data-plane
-services. PostgreSQL stores desired state. PowerDNS data, signed edge artifacts,
-runtime snapshots, cache contents, ClickHouse events, and aggregates are derived
-or rebuildable.
+CDNFoundry is one Laravel application (the control plane) surrounded by
+separate DNS, edge, and monitoring services. PostgreSQL stores the desired
+state. You can rebuild everything else: PowerDNS data, signed edge artifacts,
+runtime snapshots, cache contents, ClickHouse events, and aggregates.
 
 ```mermaid
 flowchart LR
@@ -42,14 +42,13 @@ flowchart LR
 | `control.<operator-zone>`, `edge-control.<operator-zone>`, `telemetry.<operator-zone>`, `grafana.<operator-zone>` | Independent external DNS provider; management and recovery reachability | Never |
 | `ns1.<platform-zone>`, `ns2.<platform-zone>` and glue | Parent/registrar delegation to public DNSdist addresses | Served by DNSdist from derived PowerDNS state after bootstrap |
 | Enrolled customer zones | PostgreSQL desired state reconciled into private PowerDNS databases | Yes |
-| Edge pool service addresses | Public HTTP/HTTPS addresses selected through platform/customer DNS | Stored as platform desired state |
-| Private PowerDNS, PostgreSQL, Valkey, ClickHouse, agent/status addresses | Host or private service networks | No public DNS required |
+| Edge pool service addresses | Public HTTP and HTTPS addresses that platform and customer DNS return | Stored as platform desired state |
+| Private PowerDNS, PostgreSQL, Valkey, ClickHouse, and agent or status addresses | Host or private service networks | No public DNS needed |
 
 ::: danger Avoid a DNS bootstrap loop
-Management records must remain resolvable while CDNFoundry DNS is empty,
-degraded, or being restored. Hosting them in the platform's own PowerDNS can
-leave the control plane unreachable precisely when operators need
-them for repair.
+Management names must resolve while CDNFoundry DNS is empty, degraded, or being
+restored. If you host them in the platform's own PowerDNS, the control plane can
+become unreachable exactly when you need it to repair DNS.
 :::
 
 | Plane | Components | Responsibility |
@@ -60,53 +59,55 @@ them for repair.
 | Edge HTTP | Edge agent, edge gateway, bounded OpenResty cells | Artifact activation, destination/Host/SNI routing, TLS selection, proxying, cache, security |
 | Observability | Vector, ClickHouse, Prometheus, Alertmanager, Grafana | Bounded event delivery, analytics, metrics, alerts, read-only operator diagnosis |
 
-Only DNSdist, mapped edge-gateway service listeners, and the browser/API reverse proxy
-belong on public ingress. Edge control uses mutual TLS. Telemetry and PowerDNS
-API gateways are source restricted by the production Caddy configuration. Internal
-databases, Valkey, ClickHouse, raw metrics, Grafana port 3000, and PowerDNS
-itself remain private. Remote Grafana access uses a deployment-owned
-authenticated HTTPS proxy or trusted tunnel.
+Only three things belong on public ingress: DNSdist, the edge-gateway service
+listeners, and the reverse proxy for the browser and API. Edge control uses
+mutual TLS. The production Caddy configuration restricts the telemetry and
+PowerDNS API gateways by source address. Keep these private: databases, Valkey,
+ClickHouse, raw metrics, Grafana port 3000, and PowerDNS itself. For remote
+Grafana access, use an authenticated HTTPS proxy or a trusted tunnel that you
+run.
 
 ## Architectural decisions
 
 ### PostgreSQL owns intent
 
-The control schema stores what the operator asked for, who may change it,
-which revision is current, and whether derived targets acknowledged it.
-PowerDNS tables, artifacts, active edge directories, cache objects, and
-analytics aggregates can be rebuilt.
+The control database stores what the operator asked for, who may change it,
+which revision is current, and whether each derived target acknowledged it.
+You can rebuild PowerDNS tables, artifacts, active edge directories, cache
+objects, and analytics aggregates.
 
 ### Reconciliation owns side effects
 
-Controllers and Filament actions validate, authorize, and commit desired state.
-They do not call PowerDNS, ACME, an edge, an origin, or ClickHouse synchronously
-to finish a mutation. Unique jobs coalesce work, skip obsolete revisions,
-validate candidates, activate atomically, and record receipts.
+Controllers and Filament actions authorize, validate, and commit desired state.
+They do not call PowerDNS, ACME, an edge, an origin, or ClickHouse to finish a
+request. Background jobs do that work. A job is unique per target, so repeated
+changes coalesce. Jobs skip obsolete revisions, validate candidates, activate
+them in one step, and record receipts.
 
 ### Data planes remain autonomous
 
-An outage of Laravel, PostgreSQL, Valkey, ClickHouse, or Vector must not stop
-an already-configured DNS answer or HTTP request. DNSdist and OpenResty operate
-from private runtime state, and the edge agent retains active and previous
-snapshots.
+An outage of Laravel, PostgreSQL, Valkey, ClickHouse, or Vector does not stop
+DNS answers or HTTP requests that are already configured. DNSdist and OpenResty
+work from their own private runtime state. The edge agent keeps the active and
+previous snapshots.
 
 ### Observability is read-only and downstream
 
-Grafana reads Prometheus, bounded ClickHouse telemetry, and a sanitized
-PostgreSQL view through separate least-privilege accounts. It cannot mutate
-desired state or ingest traffic. The two provisioned dashboards are diagnostic
-read models; dashboard or datasource failure cannot affect serving or
+Grafana reads Prometheus, ClickHouse telemetry, and a sanitized PostgreSQL view,
+each through a separate account with minimal rights. It cannot change desired
+state or ingest traffic. The provisioned dashboards are read-only views for
+diagnosis. A dashboard or datasource failure does not affect serving or
 reconciliation.
 
 ### Scale uses bounded shared units
 
-Domains are data inside shared DNS and OpenResty runtimes. Scale comes from
-workers, DNS capacity, telemetry capacity, edge nodes, and bounded cells—not a
-normal per-domain container, daemon, timer, cache directory, or reload.
+Domains are data inside shared DNS and OpenResty runtimes. You scale by adding
+workers, DNS capacity, telemetry capacity, edge nodes, and cells. A normal
+domain never gets its own container, daemon, timer, cache directory, or reload.
 
 ::: warning Boundary test
-If a feature requires Laravel, PostgreSQL, ClickHouse, or an external API
-during a customer DNS or HTTP request, it violates the serving boundary.
+A feature must not need Laravel, PostgreSQL, ClickHouse, or an external API
+while it answers a visitor's DNS or HTTP request.
 :::
 
 ## Failure isolation
@@ -114,12 +115,12 @@ during a customer DNS or HTTP request, it violates the serving boundary.
 | Failure | Existing traffic | Management/recovery |
 | --- | --- | --- |
 | Laravel or PostgreSQL unavailable | DNS and HTTP continue from active runtime | UI, mutations, and reconciliation pause |
-| One PowerDNS target fails | Other authoritative targets continue | Failed target keeps its last valid zone |
-| Invalid edge artifact | Active cell continues | Candidate is rejected and failure recorded |
+| One PowerDNS target fails | Other authoritative targets keep answering | The failed target keeps its last valid zone |
+| Invalid edge artifact | The active cell keeps serving | CDNFoundry rejects the candidate and records the failure |
 | ClickHouse or Vector unavailable | DNS and HTTP continue | Analytics becomes partial or unavailable |
-| Grafana or Prometheus unavailable | DNS and HTTP continue | Command centers or alert evaluation become unavailable; source state is unchanged |
-| Origin unavailable | Cache/stale policy may serve eligible objects | Origin health and errors become visible |
+| Grafana or Prometheus unavailable | DNS and HTTP continue | Dashboards or alert rules stop working; the source data is unchanged |
+| Origin unavailable | Cache and stale policy may serve eligible objects | Origin health and errors show in monitoring |
 
-Continue with [Components](components.md), [Data flows](data-flows.md), and
+Next, read [Components](components.md), [Data flows](data-flows.md), and
 [Data model](data-model.md). Before allocating production hosts, compare the
 [Production reference architectures](production-reference-architectures.md).
