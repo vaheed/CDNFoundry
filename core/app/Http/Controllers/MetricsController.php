@@ -123,8 +123,8 @@ class MetricsController extends Controller
         EdgePool::query()->where('enabled', true)->orderBy('id')->limit(1000)->get(['id', 'dns_fail_static'])->each(function (EdgePool $pool) use (&$lines): void {
             $lines[] = sprintf('cdnfoundry_pool_dns_fail_static{pool="%d"} %d', $pool->id, $pool->dns_fail_static ? 1 : 0);
         });
-        Edge::query()->where('enabled', true)->whereNotNull('registered_at')->orderBy('id')->limit(1000)->get(['id', 'last_heartbeat_at', 'identity_certificate_expires_at', 'reported_identity_expires_at'])->each(function (Edge $edge) use (&$lines): void {
-            $lines[] = sprintf('cdnfoundry_edge_heartbeat_age_seconds{edge="%s"} %d', $edge->id, $edge->last_heartbeat_at === null ? -1 : (int) $edge->last_heartbeat_at->diffInSeconds(now()));
+        Edge::query()->where('enabled', true)->whereNotNull('registered_at')->orderBy('id')->limit(1000)->get(['id', 'name', 'last_heartbeat_at', 'identity_certificate_expires_at', 'reported_identity_expires_at'])->each(function (Edge $edge) use (&$lines): void {
+            $lines[] = sprintf('cdnfoundry_edge_heartbeat_age_seconds{edge="%s",pop="%s"} %d', $edge->id, addcslashes(str_replace(["\n", "\r"], ' ', $edge->name), '"\\'), $edge->last_heartbeat_at === null ? -1 : (int) $edge->last_heartbeat_at->diffInSeconds(now()));
             $expires = $edge->reported_identity_expires_at ?? $edge->identity_certificate_expires_at;
             if ($expires !== null) {
                 $lines[] = sprintf('cdnfoundry_edge_identity_expires_seconds{edge="%s"} %d', $edge->id, $expires->timestamp - now()->timestamp);

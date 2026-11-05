@@ -6,36 +6,48 @@ groups:
       - alert: ControlNodeUnreachable
         expr: up{job="node", role="control"} == 0
         for: 2m
-        labels: { severity: critical }
+        labels: { team: platform, severity: critical }
         annotations:
           summary: A control node is unreachable from the node that watches it
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-node-lost
+          dashboard_url: /d/cdnf-control-plane
       - alert: ControlStandbyNotStreaming
         expr: cdnfoundry_control_standby_unreachable == 1
         for: 5m
-        labels: { severity: critical }
+        labels: { team: platform, severity: critical }
         annotations:
           summary: The standby control node is not streaming PostgreSQL from the active node
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-node-lost
+          dashboard_url: /d/cdnf-data-stores
       - alert: ControlReplicationLagHigh
         expr: cdnfoundry_control_replication_lag_seconds > 10
         for: 2m
-        labels: { severity: warning }
+        labels: { team: platform, severity: warning }
         annotations:
           summary: Control database replication lag exceeds ten seconds
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-node-lost
+          dashboard_url: /d/cdnf-data-stores
       - alert: ControlValkeyReplicationBroken
         expr: cdnfoundry_control_valkey_replica_linked == 0
         for: 5m
-        labels: { severity: warning }
+        labels: { team: platform, severity: warning }
         annotations:
           summary: The Valkey replica is not linked to the active node
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-node-lost
+          dashboard_url: /d/cdnf-data-stores
       - alert: ControlSecretFingerprintMismatch
         expr: cdnfoundry_control_fingerprint_mismatch == 1
         for: 5m
-        labels: { severity: critical }
+        labels: { team: platform, severity: critical }
         annotations:
           summary: The control nodes do not hold the same shared secrets
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-node-lost
+          dashboard_url: /d/cdnf-control-plane
       - alert: EdgeMissingControlAddresses
         expr: cdnfoundry_control_edges_missing_addresses > 0
         for: 15m
-        labels: { severity: warning }
+        labels: { team: platform, severity: warning }
         annotations:
           summary: At least one PoP has not reported the current control address list
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-node-lost
+          dashboard_url: /d/cdnf-pop-fleet

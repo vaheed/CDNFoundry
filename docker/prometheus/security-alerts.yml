@@ -1,0 +1,83 @@
+groups:
+  - name: cdnfoundry-security
+    rules:
+      - alert: WafBlockSpike
+        expr: sum(rate(cdnf_edge_security_events_total{class="waf"}[5m])) > 3 * sum(rate(cdnf_edge_security_events_total{class="waf"}[1h] offset 5m)) + 1
+        for: 5m
+        labels: { team: soc, severity: warning }
+        annotations:
+          summary: WAF blocks are running at over three times their recent rate
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#waf-block-spike
+          dashboard_url: /d/cdnf-waf
+      - alert: RequestFloodOnEdge
+        expr: sum by (pop) (rate(cdnf_edge_requests_total[2m])) > 4 * sum by (pop) (rate(cdnf_edge_requests_total[1h] offset 10m)) and sum by (pop) (rate(cdnf_edge_requests_total[2m])) > 500
+        for: 3m
+        labels: { team: soc, severity: critical }
+        annotations:
+          summary: One PoP receives over four times its recent request rate
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#request-flood
+          dashboard_url: /d/cdnf-l7-flood
+      - alert: CacheAbuseDetectedSpike
+        expr: sum(rate(cdnf_edge_security_events_total{class="cache_abuse_detected"}[5m])) > 3 * sum(rate(cdnf_edge_security_events_total{class="cache_abuse_detected"}[1h] offset 5m)) + 0.5
+        for: 5m
+        labels: { team: soc, severity: warning }
+        annotations:
+          summary: Requests that look like cache abuse are running at over three times their recent rate
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#cache-abuse
+          dashboard_url: /d/cdnf-l7-flood
+      - alert: EmergencyModeEnabled
+        expr: cdnfoundry_emergency_modes_active > 0
+        for: 1m
+        labels: { team: soc, severity: critical }
+        annotations:
+          summary: Emergency mode is switched on for a domain, pool, or the platform
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#emergency-mode
+          dashboard_url: /d/cdnf-security-overview
+      - alert: DnsNxdomainFlood
+        expr: sum(rate(cdnf_dns_queries_total{rcode="NXDOMAIN"}[5m])) / sum(rate(cdnf_dns_queries_total[5m])) > 0.5 and sum(rate(cdnf_dns_queries_total[5m])) > 50
+        for: 5m
+        labels: { team: soc, severity: warning }
+        annotations:
+          summary: Over half of authoritative DNS answers are NXDOMAIN, which looks like a random-subdomain flood
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#dns-flood
+          dashboard_url: /d/cdnf-dns-abuse
+      - alert: DnsResponseLimitSpike
+        expr: sum(rate(cdnf_dns_queries_total{outcome="response_limit"}[5m])) > 20
+        for: 5m
+        labels: { team: soc, severity: warning }
+        annotations:
+          summary: DNSdist is truncating more than 20 answers per second to limit one or more clients
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#dns-flood
+          dashboard_url: /d/cdnf-dns-abuse
+      - alert: TlsHandshakeFailureSpike
+        expr: sum(rate(cdnf_edge_tls_failures_total[5m])) > 5
+        for: 5m
+        labels: { team: soc, severity: warning }
+        annotations:
+          summary: TLS handshakes fail at more than five per second across the fleet
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#tls-handshake-failures
+          dashboard_url: /d/cdnf-tls-posture
+      - alert: FailedLoginBurst
+        expr: sum(increase(cdnfoundry_logins_total{result="failure"}[5m])) > 20
+        for: 1m
+        labels: { team: soc, severity: warning }
+        annotations:
+          summary: More than 20 failed sign-ins in five minutes
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#failed-login-burst
+          dashboard_url: /d/cdnf-access-audit
+      - alert: AdminLoginFromNewNetwork
+        expr: cdnfoundry_admin_logins_new_network_recent > 0
+        for: 1m
+        labels: { team: soc, severity: warning }
+        annotations:
+          summary: An administrator signed in from a network they have not used in 30 days
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#admin-login-from-new-network
+          dashboard_url: /d/cdnf-access-audit
+      - alert: TelemetryEventsRejected
+        expr: sum(increase(vector_component_discarded_events_total{component_id=~"safe_.*|decoded_.*"}[10m])) > 100
+        for: 5m
+        labels: { team: soc, severity: warning }
+        annotations:
+          summary: Vector rejected over 100 telemetry events in ten minutes, which can mean forged or malformed events
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#telemetry-integrity
+          dashboard_url: /d/cdnf-telemetry-integrity
