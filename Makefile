@@ -185,6 +185,7 @@ docs-build:
 	npm --prefix docs run build
 
 docs-check:
+	python3 tests/docs/check_tokens.py
 	python3 tests/docs/check_links.py
 	npm --prefix docs run lint
 	$(MAKE) docs-build

@@ -1,13 +1,250 @@
+@import '@fontsource-variable/inter/index.css';
+@import './tokens.css';
+
+/* The documentation uses the product design tokens: neutral selection, blue only for links, primary actions, and focus. */
 :root {
-  --vp-c-brand-1: #0f6f8f;
-  --vp-c-brand-2: #0c5c77;
-  --vp-c-brand-3: #09485e;
-  --vp-c-brand-soft: rgb(15 111 143 / 14%);
-  --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: linear-gradient(120deg, #0f6f8f 20%, #1c9a7d);
-  --vp-home-hero-image-background-image: radial-gradient(circle, rgb(15 111 143 / 24%), transparent 65%);
-  --vp-home-hero-image-filter: blur(44px);
+  --vp-font-family-base: var(--font-family);
+  --vp-font-family-mono: var(--cdn-code-font);
+  --vp-c-bg: var(--cdn-base);
+  --vp-c-bg-alt: var(--cdn-canvas);
+  --vp-c-bg-elv: var(--cdn-elevated);
+  --vp-c-bg-soft: var(--cdn-recessed);
+  --vp-c-divider: var(--cdn-hairline);
+  --vp-c-gutter: var(--cdn-hairline);
+  --vp-c-border: var(--cdn-line);
+  --vp-c-text-1: var(--cdn-text-strong);
+  --vp-c-text-2: var(--cdn-text-subtle);
+  --vp-c-text-3: var(--cdn-text-subtle);
+  --vp-c-brand-1: var(--cdn-link);
+  --vp-c-brand-2: var(--cdn-brand-hover);
+  --vp-c-brand-3: var(--cdn-brand);
+  --vp-c-brand-soft: var(--cdn-tint);
+  --vp-button-brand-bg: var(--cdn-brand);
+  --vp-button-brand-hover-bg: var(--cdn-brand-hover);
+  --vp-button-brand-text: var(--cdn-on-fill);
+  --vp-c-tip-1: var(--cdn-success-text);
+  --vp-c-tip-soft: var(--cdn-success-tint);
+  --vp-c-warning-1: var(--cdn-warning-text);
+  --vp-c-warning-soft: var(--cdn-warning-tint);
+  --vp-c-danger-1: var(--cdn-danger-text);
+  --vp-c-danger-soft: var(--cdn-danger-tint);
+  --vp-c-note-1: var(--cdn-info-text);
+  --vp-c-note-soft: var(--cdn-info-tint);
+  --vp-code-block-bg: var(--cdn-recessed);
+  --vp-custom-block-radius: var(--cdn-radius-lg);
 }
+
+body {
+  font-feature-settings: "cv11", "ss01", "tnum";
+  font-variant-numeric: tabular-nums;
+}
+
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3 {
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.vp-doc h2 {
+  border-top: 0;
+  margin-top: 40px;
+}
+
+.VPSidebarItem.is-active > .item .text,
+.VPNavBarMenuLink.active,
+.VPNavBarMenuLink:hover {
+  color: var(--cdn-text-strong);
+}
+
+.VPSidebarItem.is-active > .item {
+  background: var(--cdn-tint);
+  border-radius: var(--cdn-radius-md);
+}
+
+:focus-visible {
+  outline: 2px solid var(--cdn-focus);
+  outline-offset: 2px;
+}
+
+/* Callouts keep the ring edge of the product cards. */
+.vp-doc .custom-block {
+  border: 0;
+  box-shadow: 0 0 0 1px var(--cdn-line);
+}
+
+/* Numbered steps: wrap an ordered list in <div class="steps">. */
+.vp-doc .steps > ol {
+  list-style: none;
+  counter-reset: step;
+  margin: 1rem 0;
+  padding: 0;
+}
+
+.vp-doc .steps > ol > li {
+  counter-increment: step;
+  position: relative;
+  margin: 0;
+  padding: 0 0 1.25rem 2.5rem;
+}
+
+.vp-doc .steps > ol > li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  display: grid;
+  place-items: center;
+  border-radius: 9999px;
+  background: var(--cdn-tint);
+  box-shadow: 0 0 0 1px var(--cdn-line);
+  color: var(--cdn-text-strong);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.vp-doc .steps > ol > li::after {
+  content: "";
+  position: absolute;
+  left: 0.875rem;
+  top: 1.9rem;
+  bottom: 0.15rem;
+  width: 1px;
+  background: var(--cdn-hairline);
+}
+
+.vp-doc .steps > ol > li:last-child::after {
+  display: none;
+}
+
+/* Card grid. */
+.cdnf-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+}
+
+.cdnf-card {
+  display: block;
+  padding: 1rem;
+  border-radius: var(--cdn-radius-lg);
+  background: var(--cdn-base);
+  box-shadow: 0 0 0 1px var(--cdn-line), var(--cdn-shadow-xs);
+  color: var(--cdn-text-default);
+  text-decoration: none;
+}
+
+.cdnf-card:hover {
+  background: var(--cdn-tint);
+}
+
+.cdnf-card-title {
+  display: block;
+  color: var(--cdn-text-strong);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.cdnf-card-body {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--cdn-text-subtle);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* Tabs. */
+.cdnf-tabs {
+  margin: 1rem 0;
+  border-radius: var(--cdn-radius-lg);
+  box-shadow: 0 0 0 1px var(--cdn-line);
+}
+
+.cdnf-tablist {
+  display: flex;
+  gap: 1.25rem;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--cdn-hairline);
+  overflow-x: auto;
+}
+
+.cdnf-tab {
+  padding: 0.6rem 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--cdn-text-subtle);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cdnf-tab:hover {
+  color: var(--cdn-text-strong);
+}
+
+.cdnf-tab[aria-selected="true"] {
+  border-bottom-color: var(--cdn-text-strong);
+  color: var(--cdn-text-strong);
+}
+
+.cdnf-tab:disabled {
+  cursor: not-allowed;
+}
+
+.cdnf-tabpanel {
+  padding: 0.25rem 1rem 0.5rem;
+}
+
+/* Framed screenshot. */
+.cdnf-shot {
+  margin: 1.25rem 0;
+}
+
+.cdnf-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--cdn-radius-lg);
+  box-shadow: 0 0 0 1px var(--cdn-line), var(--cdn-shadow-xs);
+}
+
+/* Page feedback. */
+.cdnf-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--cdn-hairline);
+  color: var(--cdn-text-subtle);
+  font-size: 0.875rem;
+}
+
+.cdnf-feedback button,
+.cdnf-feedback a {
+  padding: 0.3rem 0.75rem;
+  border: 0;
+  border-radius: var(--cdn-radius-md);
+  background: var(--cdn-base);
+  box-shadow: 0 0 0 1px var(--cdn-line), var(--cdn-shadow-xs);
+  color: var(--cdn-text-strong);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.cdnf-feedback button:hover,
+.cdnf-feedback a:hover {
+  background: var(--cdn-tint);
+}
+
 
 .VPDoc table {
   display: block;
@@ -151,4 +388,16 @@ html.cdnf-diagram-open {
   .vp-doc .cdnf-diagram-svg svg {
     max-height: none;
   }
+}
+
+.vp-doc a.cdnf-card,
+.vp-doc a.cdnf-card:hover {
+  text-decoration: none;
+}
+
+.VPNavBarMenuGroup .text,
+.VPNavBarMenuGroup .button,
+.VPNavBarMenuGroup .button:hover,
+.VPNavBarMenuGroup.active .button {
+  color: var(--cdn-text-strong);
 }

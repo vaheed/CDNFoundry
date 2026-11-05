@@ -1,0 +1,130 @@
+/* Copied from core/resources/css/filament/shared/theme.css by tests/docs/check_tokens.py --write. Do not edit by hand. */
+:root {
+    --font-family: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono-font-family: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+    --cdn-code-font: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+    --cdn-canvas: oklch(95.6% 0.003 286);
+    --cdn-elevated: oklch(96.6% 0.003 286);
+    --cdn-recessed: oklch(94.5% 0.003 286);
+    --cdn-base: oklch(98.4% 0.002 286);
+    --cdn-control: oklch(99% 0.002 286);
+    --cdn-overlay: oklch(99% 0.002 286);
+    --cdn-tint: oklch(94.8% 0.003 286);
+    --cdn-fill: oklch(91.5% 0.003 286);
+    --cdn-fill-hover: oklch(94% 0.003 286);
+    --cdn-interact: oklch(87% 0 0);
+    --cdn-line: oklch(14.5% 0 0 / 0.12);
+    --cdn-hairline: oklch(91.8% 0.003 286);
+    --cdn-focus: oklch(15% 0 0);
+    --cdn-shadow-edge: oklch(0% 0 0 / 0.12);
+    --cdn-shadow-drop: oklch(0% 0 0 / 0.08);
+    --cdn-backdrop: oklch(14.5% 0 0 / 0.4);
+
+    --cdn-text-strong: oklch(14.5% 0 0);
+    --cdn-text-default: oklch(21% 0.006 285.885);
+    --cdn-text-subtle: oklch(49% 0 0);
+    --cdn-text-placeholder: oklch(70.8% 0 0);
+    --cdn-text-inactive: oklch(87% 0 0);
+    --cdn-text-inverse: oklch(97% 0 0);
+    --cdn-on-fill: oklch(100% 0 0);
+
+    --cdn-brand: oklch(57.72% 0.2324 260);
+    --cdn-brand-hover: oklch(48.8% 0.243 264.376);
+    --cdn-link: oklch(42.4% 0.199 265.638);
+
+    --cdn-success: oklch(59.6% 0.145 163.225);
+    --cdn-success-text: oklch(43.2% 0.095 166.913);
+    --cdn-success-tint: oklch(96.2% 0.043 156.7 / 0.57);
+    --cdn-warning: oklch(73.9% 0.177 58.2);
+    --cdn-warning-text: oklch(50% 0.13 55);
+    --cdn-warning-tint: oklch(93.1% 0.107 94.6 / 0.2);
+    --cdn-danger: oklch(63.7% 0.237 25.331);
+    --cdn-danger-text: oklch(50.5% 0.213 27.518);
+    --cdn-danger-tint: oklch(93.6% 0.032 17.7 / 0.42);
+    --cdn-info: oklch(68.5% 0.169 237.323);
+    --cdn-info-text: oklch(42.4% 0.199 265.638);
+    --cdn-info-tint: oklch(93.2% 0.032 255.6 / 0.45);
+    --cdn-neutral: oklch(55.6% 0 0);
+    --cdn-neutral-text: oklch(26.9% 0 0);
+    --cdn-maintenance: oklch(55.8% 0.288 302.321);
+    --cdn-maintenance-text: oklch(49.6% 0.265 301.924);
+    --cdn-banner-info: oklch(93.2% 0.032 255.585 / 0.7);
+    --cdn-banner-warning: oklch(97.3% 0.071 103.193);
+
+    --cdn-chart-1: oklch(54.6% 0.245 262.881);
+    --cdn-chart-2: oklch(54.9% 0.096 184.565);
+    --cdn-chart-3: oklch(81.5% 0.197 76);
+    --cdn-chart-4: oklch(55.8% 0.288 302.321);
+    --cdn-chart-grid: oklch(91.8% 0.003 286);
+
+    --cdn-radius-sm: 0.25rem;
+    --cdn-radius-md: 0.375rem;
+    --cdn-radius-lg: 0.5rem;
+    --cdn-radius-xl: 0.75rem;
+    --cdn-shadow-xs: 0 1px 2px 0 var(--cdn-shadow-drop);
+    --cdn-shadow-popover: 0 0 0 1px var(--cdn-line), 0 8px 24px -6px var(--cdn-shadow-edge);
+    --cdn-space-1: 0.25rem;
+    --cdn-space-2: 0.5rem;
+    --cdn-space-3: 0.75rem;
+    --cdn-space-4: 1rem;
+    --cdn-space-5: 1.25rem;
+    --cdn-space-6: 1.5rem;
+    --cdn-sidebar-width: 16.25rem;
+}
+
+.dark {
+    --cdn-canvas: oklch(18% 0.004 286);
+    --cdn-elevated: oklch(25% 0.004 286);
+    --cdn-recessed: oklch(20% 0.004 286);
+    --cdn-base: oklch(22.5% 0.004 286);
+    --cdn-control: oklch(26% 0.005 286);
+    --cdn-overlay: oklch(26% 0.005 286);
+    --cdn-tint: oklch(29% 0.005 286);
+    --cdn-fill: oklch(32% 0.005 286);
+    --cdn-fill-hover: oklch(37% 0.005 286);
+    --cdn-interact: oklch(42% 0.005 286);
+    --cdn-line: oklch(35% 0.005 286);
+    --cdn-hairline: oklch(30% 0.005 286);
+    --cdn-focus: oklch(93.5% 0 0);
+    --cdn-shadow-edge: oklch(100% 0 0 / 0.1);
+    --cdn-shadow-drop: oklch(0% 0 0 / 0.3);
+    --cdn-backdrop: oklch(0% 0 0 / 0.6);
+
+    --cdn-text-strong: oklch(98.5% 0 0);
+    --cdn-text-default: oklch(97% 0 0);
+    --cdn-text-subtle: oklch(75% 0.005 286);
+    --cdn-text-placeholder: oklch(55.6% 0 0);
+    --cdn-text-inactive: oklch(43.9% 0 0);
+    --cdn-text-inverse: oklch(20.5% 0 0);
+    --cdn-on-fill: oklch(100% 0 0);
+
+    --cdn-brand: oklch(52% 0.2324 260);
+    --cdn-brand-hover: oklch(48.8% 0.243 264.376);
+    --cdn-link: oklch(70.7% 0.165 254.624);
+
+    --cdn-success: oklch(76.5% 0.177 163.223);
+    --cdn-success-text: oklch(90.5% 0.093 164.15);
+    --cdn-success-tint: oklch(39.3% 0.096 152.3 / 0.2);
+    --cdn-warning: oklch(64.5% 0.168 50);
+    --cdn-warning-text: oklch(75% 0.183 55.934);
+    --cdn-warning-tint: oklch(35.3% 0.079 65 / 0.37);
+    --cdn-danger: oklch(57.7% 0.245 27.325);
+    --cdn-danger-text: oklch(70.4% 0.191 22.216);
+    --cdn-danger-tint: oklch(42.9% 0.176 28.7 / 0.17);
+    --cdn-info: oklch(68.5% 0.169 237.323);
+    --cdn-info-text: oklch(70.7% 0.165 254.624);
+    --cdn-info-tint: oklch(38% 0.145 265.5 / 0.22);
+    --cdn-neutral: oklch(55.6% 0 0);
+    --cdn-neutral-text: oklch(92.2% 0 0);
+    --cdn-maintenance: oklch(62.7% 0.265 303.9);
+    --cdn-maintenance-text: oklch(82.7% 0.119 306.383);
+    --cdn-banner-info: oklch(38% 0.145 265.5 / 0.22);
+    --cdn-banner-warning: oklch(35.3% 0.079 65 / 0.45);
+
+    --cdn-chart-1: oklch(70.7% 0.165 254.624);
+    --cdn-chart-2: oklch(70.4% 0.14 182.503);
+    --cdn-chart-3: oklch(81.5% 0.197 76);
+    --cdn-chart-4: oklch(71.4% 0.203 305.504);
+    --cdn-chart-grid: oklch(32% 0.005 286);
+}
