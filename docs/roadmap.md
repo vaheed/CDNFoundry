@@ -1722,13 +1722,13 @@ with a few Linux servers can understand CDNFoundry and run it step by step.
 
 #### New and rewritten content
 
-- [ ] **Why CDNFoundry.** Who it is for (ISPs, hosting providers,
+- [x] **Why CDNFoundry.** Who it is for (ISPs, hosting providers,
       enterprises, governments, and anyone who must keep traffic and data on
       their own infrastructure), what it does, what it does not do, and an
       honest comparison with commercial CDNs and with a hand-built Nginx
       setup. Every claim must be backed by a feature that exists and passed
       qualification.
-- [ ] **How it works.** One page with one diagram per flow: a DNS query, an
+- [x] **How it works.** One page with one diagram per flow: a DNS query, an
       HTTP request through a PoP, a configuration change from the panel to
       the edges, and telemetry to analytics.
 - [ ] **Quick start.** From zero to a domain served through the CDN on one
@@ -1752,7 +1752,7 @@ with a few Linux servers can understand CDNFoundry and run it step by step.
 - [ ] **Generated reference.** The API reference is generated from
       `openapi.json`, the CLI reference from the Fleet command definitions,
       and the configuration reference from the code. None is written by hand.
-- [ ] **FAQ and glossary.** CDN and DNS terms explained for operators new to
+- [x] **FAQ and glossary.** CDN and DNS terms explained for operators new to
       running a CDN.
 - [ ] **README.** A short project page: one paragraph, the main features,
       the screenshots, the quick start link, and the license.
