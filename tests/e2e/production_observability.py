@@ -135,7 +135,13 @@ def main() -> int:
         os.environ["COMPOSE_FILE"] = "compose.yml:qualification.override.yml"
 
         try:
-            run("./start.sh", cwd=bundle)
+            try:
+                run("./start.sh", cwd=bundle)
+            except subprocess.CalledProcessError:
+                # ClickHouse can fail its first-boot initialisation on a busy runner. Activation is idempotent,
+                # so one more attempt shows whether the stack really cannot start.
+                print("start.sh failed once; running it again", flush=True)
+                run("./start.sh", cwd=bundle)
             ready = json.loads(request(f"http://{LOOPBACK}:18080/api/ready"))
             if ready.get("status") != "ready":
                 raise RuntimeError(f"control readiness failed: {ready}")
