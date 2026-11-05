@@ -44,7 +44,7 @@ class SystemDnsIdentity extends Page
 
     public function mount(): void
     {
-        $stored = collect(PlatformDnsSetting::query()->find(1)?->toArray())->except('cluster_targets')->all() ?: null;
+        $stored = collect(PlatformDnsSetting::query()->find(1)?->toArray())->all() ?: null;
         $stored = $stored === null ? null : $this->withPairRows($stored);
         $this->form->fill($stored ?? [
             'nameservers' => [[], []],
