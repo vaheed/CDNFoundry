@@ -68,6 +68,12 @@
         <query>GRANT SELECT ON cdnf.dns_hourly</query>
         <query>GRANT SELECT ON cdnf.edge_daily</query>
         <query>GRANT SELECT ON cdnf.dns_daily</query>
+        <query>GRANT SELECT ON cdnf.edge_traffic_1m</query>
+        <query>GRANT SELECT ON cdnf.edge_traffic_hourly</query>
+        <query>GRANT SELECT ON cdnf.edge_traffic_daily</query>
+        <query>GRANT SELECT ON cdnf.edge_usage_5m</query>
+        <query>GRANT SELECT ON cdnf.tls_failures_hourly</query>
+        <query>GRANT SELECT ON cdnf.dns_traffic_1m</query>
         <query>GRANT SELECT ON cdnf.dns_top_names</query>
       </grants>
     </cdnf_reader>
