@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\DomainLifecycleState;
+use App\Filament\Admin\Pages\PlatformSettings;
 use App\Jobs\ReconcileAllEdgeDomains;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\Domain;
@@ -63,7 +64,7 @@ class SystemSettingsTest extends TestCase
     public function test_platform_form_and_filament_components_share_the_saved_timezone(): void
     {
         $admin = User::factory()->admin()->create();
-        Livewire::actingAs($admin)->test(\App\Filament\Admin\Pages\PlatformSettings::class)
+        Livewire::actingAs($admin)->test(PlatformSettings::class)
             ->fillForm(['display.timezone' => 'Asia/Tehran'])
             ->call('save')->assertHasNoFormErrors();
         $this->assertSame('Asia/Tehran', FilamentTimezone::get());
