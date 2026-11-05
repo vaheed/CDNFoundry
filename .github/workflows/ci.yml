@@ -348,6 +348,42 @@ jobs:
           annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-dev-up-tail.log)"
           echo "::error title=Development topology startup failed::${annotation}"
           exit "${status}"
+      - name: Enroll the development PoPs and start their agents
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .env.dev.example .env.dev
+          for side in a b; do
+            if [ "${side}" = a ]; then country=DE; continent=EU; else country=US; continent=NA; fi
+            output="$(docker compose -f compose.dev.yml exec -T core php artisan cdnf:edges:enroll "dev-pop-${side}" --country="${country}" --continent="${continent}" | tail -n 1)"
+            CDNF_ENROLLMENT="${output}" CDNF_SIDE="${side}" python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+
+          side = os.environ['CDNF_SIDE'].upper()
+          enrolled = json.loads(os.environ['CDNF_ENROLLMENT'])
+          print(f"::add-mask::{enrolled['bootstrap_token']}")
+          path = Path('.env.dev')
+          text = path.read_text()
+          for key, value in ((f'CDNF_DEV_EDGE_{side}_ID', enrolled['edge_id']), (f'CDNF_DEV_EDGE_{side}_BOOTSTRAP_TOKEN', enrolled['bootstrap_token'])):
+              text = re.sub(rf'^{key}=.*$', f'{key}={value}', text, flags=re.M)
+          path.write_text(text)
+          PY
+          done
+          # Compose reads .env on its own, so every later compose call in the E2E scripts keeps the agents' identities.
+          cp .env.dev .env
+          docker compose --env-file .env.dev -f compose.dev.yml up -d --no-build edge-agent-a edge-agent-b
+          for _ in $(seq 1 90); do
+            ready="$(docker compose -f compose.dev.yml exec -T core php artisan tinker --execute="echo App\\Models\\Edge::query()->whereNotNull('registered_at')->whereNotNull('last_heartbeat_at')->count();" | tail -n 1 | tr -dc '0-9')"
+            if [ "${ready:-0}" -ge 2 ]; then
+              echo "Both development PoPs are registered and sending heartbeats."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error title=Development PoPs did not register::fewer than two edges sent a heartbeat within 180 seconds"
+          docker compose -f compose.dev.yml logs --no-color --tail 20 edge-agent-a edge-agent-b | sed -E 's/(token|TOKEN)[=:][^ ]+/\1=<redacted>/g'
+          exit 1
       - name: Run Python non-UI E2E
         shell: bash
         run: |
