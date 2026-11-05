@@ -477,7 +477,7 @@ services:
     ports: ["127.0.0.1:3100:3100"]
     environment:
       LOKI_RETENTION_PERIOD: 168h
-      LOKI_MAX_QUERY_LENGTH: 168h
+      LOKI_MAX_QUERY_LENGTH: 744h
     volumes: [./docker/loki/loki.yml:/etc/loki/loki.yml:ro, loki-data:/loki, loki-tools:/tools:ro]
     depends_on:
       loki-data-init: { condition: service_completed_successfully }

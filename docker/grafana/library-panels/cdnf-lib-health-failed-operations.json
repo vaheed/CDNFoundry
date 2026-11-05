@@ -73,9 +73,9 @@
         "refId": "A"
       }
     ],
-    "title": "Failed operations",
+    "title": "Failed ops",
     "type": "stat"
   },
-  "name": "Failed operations",
+  "name": "Failed ops",
   "uid": "cdnf-lib-health-failed-operations"
 }

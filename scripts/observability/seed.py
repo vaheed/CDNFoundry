@@ -60,7 +60,7 @@ SELECT
     if(cityHash64(n, 7) % 100 < 72, 'HIT', arrayElement(['MISS','EXPIRED','BYPASS','STALE','UNKNOWN'], 1 + cityHash64(n, 8) % 5)) AS cache,
     if(cache = 'HIT', NULL, toUInt32(20 + (cityHash64(n, 9) % 1000) / 1000 * 600)) AS origin,
     if(cache = 'HIT', NULL, toUInt32(origin * 0.6)),
-    if(status >= 500 AND cache != 'HIT', '502', ''), 'primary', 'none',
+    if(status >= 500 AND cache != 'HIT', '502', ''), 'primary', if(cityHash64(n, 30) % 2000 = 0, 'failover', 'none'),
     multiIf(cityHash64(n, 10) % 1000 < 8, 'block', 'allow') AS action,
     multiIf(cityHash64(n, 10) % 1000 < 3, 'waf_rule_matched', cityHash64(n, 10) % 1000 < 5, 'cache_abuse_detected', cityHash64(n, 10) % 1000 < 8, 'domain_rate_exceeded', ''),
     multiIf(cityHash64(n, 10) % 1000 < 3, 'waf', cityHash64(n, 10) % 1000 < 5, 'cache_abuse_detected', cityHash64(n, 10) % 1000 < 8, 'block', ''),
@@ -88,6 +88,10 @@ FROM (SELECT number AS n, arrayElement({pops}, 1 + number % 3) AS pop_row FROM n
     clickhouse(select(str(recent), "60 * 2880", "now() - INTERVAL 2880 MINUTE").replace("FROM (SELECT number AS n", "FROM (SELECT number AS n", 1))
     clickhouse(select(str(older), "3600 * 24 * 28", "now() - INTERVAL 30 DAY"))
     clickhouse("""
+INSERT INTO cdnf.edge_events (occurred_at, domain_id, hostname, method, path, status, bytes_sent, bytes_out, cache_status, origin_latency_ms, request_time_ms, edge_id, pop, region,
+    server_protocol, ssl_protocol, scheme, request_id, event_type, security_action)
+VALUES (now() - INTERVAL 1 HOUR, 9001, 'site1.seed.test', 'GET', '/assets/trace-sample.js', 200, 4800, 4400, 'MISS', 120, 180, '00000000-0000-4000-8000-0000000000a1', 'seed-fra', 'eu',
+    'h2', 'TLSv1.3', 'https', 'cdnf-seed-request-0001', 'request', 'allow');
 INSERT INTO cdnf.edge_events (occurred_at, event_type, hostname, tls_error, ssl_protocol, edge_id, pop, region, security_action)
 SELECT now() - toIntervalSecond(cityHash64(number) % (86400 * 28)), 'tls', 'unknown.invalid', 'unknown_sni', 'TLSv1.3', 'seed', 'seed-fra', 'eu', 'allow' FROM numbers(4000);
 INSERT INTO cdnf.dns_events (occurred_at, domain_id, zone, qname, qtype, rcode, client_ip, dns_cluster, country, continent, outcome, asn, pop, region)

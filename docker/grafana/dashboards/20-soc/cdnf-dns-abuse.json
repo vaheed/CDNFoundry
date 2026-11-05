@@ -658,7 +658,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "table",
-          "rawSql": "SELECT zone, sum(queries) AS query_count FROM cdnf.dns_hourly WHERE $__timeFilter(interval_start) AND zone != '' GROUP BY zone ORDER BY query_count DESC LIMIT 10",
+          "rawSql": "SELECT if(zone = '', '(outside served zones)', zone) AS zone_name, sum(queries) AS query_count FROM cdnf.dns_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime GROUP BY zone_name ORDER BY query_count DESC LIMIT 10",
           "refId": "A"
         }
       ],
@@ -709,7 +709,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 9,
         "x": 8,
         "y": 12
       },
@@ -736,7 +736,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "table",
-          "rawSql": "SELECT zone, sum(queries) AS query_count FROM cdnf.dns_hourly WHERE $__timeFilter(interval_start) AND rcode = 'NXDOMAIN' AND zone != '' GROUP BY zone ORDER BY query_count DESC LIMIT 10",
+          "rawSql": "SELECT if(zone = '', '(outside served zones)', zone) AS zone_name, sum(queries) AS query_count FROM cdnf.dns_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND rcode = 'NXDOMAIN' GROUP BY zone_name ORDER BY query_count DESC LIMIT 10",
           "refId": "A"
         }
       ],
@@ -783,8 +783,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
+        "w": 7,
+        "x": 17,
         "y": 12
       },
       "id": 9,
@@ -810,7 +810,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "table",
-          "rawSql": "SELECT qtype, sum(queries) AS query_count FROM cdnf.dns_hourly WHERE $__timeFilter(interval_start) GROUP BY qtype ORDER BY query_count DESC LIMIT 10",
+          "rawSql": "SELECT qtype, sum(queries) AS query_count FROM cdnf.dns_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime GROUP BY qtype ORDER BY query_count DESC LIMIT 10",
           "refId": "A"
         }
       ],
@@ -970,7 +970,7 @@
           "editorType": "sql",
           "format": 0,
           "queryType": "timeSeries",
-          "rawSql": "SELECT $__timeInterval(interval_start) AS time, qtype, sum(queries) AS queries FROM cdnf.dns_hourly WHERE $__timeFilter(interval_start) AND qtype IN ('ANY', 'TXT', 'DNSKEY') GROUP BY time, qtype ORDER BY time",
+          "rawSql": "SELECT $__timeInterval(interval_start) AS time, qtype, sum(queries) AS queries FROM cdnf.dns_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND qtype IN ('ANY', 'TXT', 'DNSKEY') GROUP BY time, qtype ORDER BY time",
           "refId": "A"
         }
       ],

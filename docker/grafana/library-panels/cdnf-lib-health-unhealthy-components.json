@@ -73,9 +73,9 @@
         "refId": "A"
       }
     ],
-    "title": "Unhealthy components",
+    "title": "Unhealthy",
     "type": "stat"
   },
-  "name": "Unhealthy components",
+  "name": "Unhealthy",
   "uid": "cdnf-lib-health-unhealthy-components"
 }

@@ -255,10 +255,10 @@
       },
       "id": 4,
       "libraryPanel": {
-        "name": "Unhealthy components",
+        "name": "Unhealthy",
         "uid": "cdnf-lib-health-unhealthy-components"
       },
-      "title": "Unhealthy components",
+      "title": "Unhealthy",
       "type": "stat"
     },
     {
@@ -270,10 +270,10 @@
       },
       "id": 5,
       "libraryPanel": {
-        "name": "Stale edges",
+        "name": "Stale",
         "uid": "cdnf-lib-health-stale-edges"
       },
-      "title": "Stale edges",
+      "title": "Stale",
       "type": "stat"
     },
     {
@@ -285,10 +285,10 @@
       },
       "id": 6,
       "libraryPanel": {
-        "name": "Failed operations",
+        "name": "Failed ops",
         "uid": "cdnf-lib-health-failed-operations"
       },
-      "title": "Failed operations",
+      "title": "Failed ops",
       "type": "stat"
     },
     {
@@ -315,10 +315,10 @@
       },
       "id": 8,
       "libraryPanel": {
-        "name": "Firing alerts",
+        "name": "Alerts",
         "uid": "cdnf-lib-health-firing-alerts"
       },
-      "title": "Firing alerts",
+      "title": "Alerts",
       "type": "stat"
     },
     {
@@ -330,10 +330,10 @@
       },
       "id": 9,
       "libraryPanel": {
-        "name": "Paused rollouts",
+        "name": "Paused",
         "uid": "cdnf-lib-health-paused-rollouts"
       },
-      "title": "Paused rollouts",
+      "title": "Paused",
       "type": "stat"
     },
     {
@@ -512,7 +512,7 @@
               "type": "special"
             }
           ],
-          "noValue": "No traffic",
+          "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
             "steps": [

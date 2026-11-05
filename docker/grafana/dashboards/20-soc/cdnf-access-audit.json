@@ -190,7 +190,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 4,
         "x": 0,
         "y": 0
       },
@@ -222,7 +222,7 @@
           "refId": "A"
         }
       ],
-      "title": "Sign-ins (1h)",
+      "title": "Sign-ins",
       "type": "stat"
     },
     {
@@ -269,7 +269,7 @@
       "gridPos": {
         "h": 4,
         "w": 6,
-        "x": 6,
+        "x": 4,
         "y": 0
       },
       "id": 2,
@@ -346,8 +346,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 12,
+        "w": 8,
+        "x": 10,
         "y": 0
       },
       "id": 3,
@@ -446,7 +446,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(cdnfoundry_api_token_requests_total[5m]))",
+          "expr": "sum(rate(cdnfoundry_api_token_requests_total[5m])) or vector(0)",
           "instant": true,
           "legendFormat": "tokens",
           "range": false,
@@ -532,7 +532,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (result, surface) (cdnf:logins:rate5m)",
+          "expr": "sum by (result, surface) (cdnf:logins:rate5m) or label_replace(label_replace(vector(0), \"result\", \"none\", \"\", \"\"), \"surface\", \"none\", \"\", \"\")",
           "instant": false,
           "legendFormat": "{{result}} {{surface}}",
           "range": true,
@@ -618,7 +618,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (ability) (rate(cdnfoundry_api_token_requests_total[5m]))",
+          "expr": "sum by (ability) (rate(cdnfoundry_api_token_requests_total[5m])) or label_replace(vector(0), \"ability\", \"none\", \"\", \"\")",
           "instant": false,
           "legendFormat": "{{ability}}",
           "range": true,
@@ -658,7 +658,7 @@
               "type": "special"
             }
           ],
-          "noValue": "No traffic",
+          "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -674,7 +674,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 11,
         "x": 0,
         "y": 12
       },
@@ -695,7 +695,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT created_at AS time, actor_id AS account, network FROM grafana_audit_events WHERE action = 'auth.login' AND $__timeFilter(created_at) ORDER BY created_at DESC LIMIT 50",
+          "rawSql": "SELECT created_at AS time, actor_id AS account, network FROM grafana_audit_events WHERE action = 'auth.login' ORDER BY created_at DESC LIMIT 50",
           "refId": "A"
         }
       ],
@@ -732,7 +732,7 @@
               "type": "special"
             }
           ],
-          "noValue": "No traffic",
+          "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -748,8 +748,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 13,
+        "x": 11,
         "y": 12
       },
       "id": 8,
@@ -769,7 +769,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT created_at AS time, actor_id AS account, action FROM grafana_audit_events WHERE $__timeFilter(created_at) AND (action LIKE 'settings.%' OR action LIKE 'platform.%' OR action LIKE 'domain.%' OR action LIKE 'security.%' OR action LIKE 'waf.%') ORDER BY created_at DESC LIMIT 50",
+          "rawSql": "SELECT created_at AS time, actor_id AS account, action FROM grafana_audit_events WHERE (action LIKE 'settings.%' OR action LIKE 'platform.%' OR action LIKE 'domain.%' OR action LIKE 'security.%' OR action LIKE 'waf.%') ORDER BY created_at DESC LIMIT 50",
           "refId": "A"
         }
       ],
@@ -855,7 +855,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT date_trunc('hour', created_at) AS time, count(*) AS entries FROM grafana_audit_events WHERE $__timeFilter(created_at) GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT t AS time, count(a.id) AS entries FROM generate_series(date_trunc('hour', $__timeFrom()::timestamptz), $__timeTo()::timestamptz, interval '1 hour') AS t LEFT JOIN grafana_audit_events a ON a.created_at >= t AND a.created_at < t + interval '1 hour' GROUP BY t ORDER BY t",
           "refId": "A"
         }
       ],

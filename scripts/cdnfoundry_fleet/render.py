@@ -338,7 +338,7 @@ class Renderer:
             # an advertised NAT or floating address and is not necessarily bindable.
             "LOG_METRICS_BIND": f"{node.get('monitor_ipv4') or node['bind_ipv4']}:9599",
             "LOKI_RETENTION_PERIOD": "336h",
-            "LOKI_MAX_QUERY_LENGTH": "336h",
+            "LOKI_MAX_QUERY_LENGTH": "744h",
             "PROMETHEUS_EDGE_TARGETS_FILE": "./generated/prometheus-edge-targets.yml",
             "PROMETHEUS_PROBE_TARGETS_FILE": "./generated/prometheus-probe-targets.yml",
             "PROMETHEUS_VECTOR_TARGETS_FILE": "./generated/prometheus-vector-targets.yml",

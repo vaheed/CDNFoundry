@@ -171,8 +171,8 @@ def insert(table: str, rows: list[dict]) -> None:
         return
     endpoint = os.environ.get("CLICKHOUSE_URL", "http://clickhouse:8123")
     body = "\n".join(json.dumps(row) for row in rows).encode()
-    query = f"INSERT INTO cdnf.{table} FORMAT JSONEachRow SETTINGS input_format_skip_unknown_fields=1"
-    request = urllib.request.Request(f"{endpoint}/?query={urllib.request.quote(query)}", data=body, method="POST", headers={
+    query = f"INSERT INTO cdnf.{table} FORMAT JSONEachRow"
+    request = urllib.request.Request(f"{endpoint}/?input_format_skip_unknown_fields=1&query={urllib.request.quote(query)}", data=body, method="POST", headers={
         "X-ClickHouse-User": os.environ.get("CLICKHOUSE_USER", "cdnf_ingest"), "X-ClickHouse-Key": os.environ.get("CLICKHOUSE_PASSWORD", "cdnf-ingest-dev-only")})
     urllib.request.urlopen(request, timeout=20).read()
 
@@ -214,7 +214,8 @@ def feeder() -> None:
                 loki_lines(minute, scenarios)
                 delivered = minute
             except (urllib.error.URLError, OSError) as error:
-                print(f"seed feeder: {error}", file=sys.stderr, flush=True)
+                detail = error.read().decode()[:300] if isinstance(error, urllib.error.HTTPError) else ""
+                print(f"seed feeder: {error} {detail}", file=sys.stderr, flush=True)
                 break
 
 

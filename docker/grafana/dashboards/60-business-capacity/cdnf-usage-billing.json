@@ -328,7 +328,7 @@
           "refId": "A"
         }
       ],
-      "title": "95th-percentile bandwidth",
+      "title": "p95 bandwidth",
       "type": "stat"
     },
     {
@@ -476,7 +476,7 @@
           "refId": "A"
         }
       ],
-      "title": "DNS queries this month",
+      "title": "DNS this month",
       "type": "stat"
     },
     {
@@ -509,7 +509,7 @@
               "type": "special"
             }
           ],
-          "noValue": "No traffic",
+          "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -612,7 +612,7 @@
               "type": "special"
             }
           ],
-          "noValue": "No traffic",
+          "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -834,7 +834,7 @@
           "editorType": "sql",
           "format": 0,
           "queryType": "timeSeries",
-          "rawSql": "SELECT toStartOfMonth(interval_start) AS time, sum(bytes_sent) AS bytes FROM cdnf.edge_traffic_daily WHERE $__timeFilter(interval_start) AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time ORDER BY time",
+          "rawSql": "SELECT toStartOfMonth(interval_start) AS time, sum(bytes_sent) AS bytes FROM cdnf.edge_traffic_daily WHERE interval_start > now() - INTERVAL 12 MONTH AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time ORDER BY time",
           "refId": "A"
         }
       ],
@@ -871,7 +871,7 @@
               "type": "special"
             }
           ],
-          "noValue": "No traffic",
+          "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -921,7 +921,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT date_trunc('day', interval_start) AS day, sum(requests) AS requests, sum(bytes_out) AS bytes_out, sum(cache_hits) AS cache_hits, sum(dns_queries) AS dns_queries FROM grafana_usage_rollups WHERE $__timeFilter(interval_start) GROUP BY 1 ORDER BY 1 DESC LIMIT 62",
+          "rawSql": "SELECT date_trunc('day', interval_start) AS day, sum(requests) AS requests, sum(bytes_out) AS bytes_out, sum(cache_hits) AS cache_hits, sum(dns_queries) AS dns_queries FROM grafana_usage_rollups WHERE interval_start > now() - interval '62 days' GROUP BY 1 ORDER BY 1 DESC LIMIT 62",
           "refId": "A"
         }
       ],

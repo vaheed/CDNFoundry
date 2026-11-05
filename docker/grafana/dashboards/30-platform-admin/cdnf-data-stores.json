@@ -190,7 +190,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 7,
         "x": 0,
         "y": 0
       },
@@ -264,8 +264,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 6,
+        "w": 5,
+        "x": 7,
         "y": 0
       },
       "id": 2,
@@ -731,7 +731,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 * ClickHouseAsyncMetrics_DiskUsed_default / ClickHouseAsyncMetrics_DiskTotal_default",
+          "expr": "100 * ClickHouseAsyncMetrics_DiskUsed / ClickHouseAsyncMetrics_DiskTotal",
           "instant": false,
           "legendFormat": "disk",
           "range": true,

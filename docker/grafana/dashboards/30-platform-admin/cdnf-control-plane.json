@@ -226,7 +226,7 @@
           "refId": "A"
         }
       ],
-      "title": "Components unhealthy",
+      "title": "Unhealthy",
       "type": "stat"
     },
     {
@@ -304,7 +304,7 @@
           "refId": "A"
         }
       ],
-      "title": "Failed operations",
+      "title": "Failed ops",
       "type": "stat"
     },
     {
@@ -382,7 +382,7 @@
           "refId": "A"
         }
       ],
-      "title": "Failed jobs",
+      "title": "Bad jobs",
       "type": "stat"
     },
     {
@@ -560,10 +560,10 @@
       },
       "id": 6,
       "libraryPanel": {
-        "name": "ACME failures (24h)",
-        "uid": "cdnf-lib-acme-failures--24h"
+        "name": "ACME fail",
+        "uid": "cdnf-lib-acme-fail"
       },
-      "title": "ACME failures (24h)",
+      "title": "ACME fail",
       "type": "stat"
     },
     {
@@ -596,7 +596,7 @@
               "type": "special"
             }
           ],
-          "noValue": "No traffic",
+          "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
             "steps": [

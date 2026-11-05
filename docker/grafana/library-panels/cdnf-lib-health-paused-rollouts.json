@@ -73,9 +73,9 @@
         "refId": "A"
       }
     ],
-    "title": "Paused rollouts",
+    "title": "Paused",
     "type": "stat"
   },
-  "name": "Paused rollouts",
+  "name": "Paused",
   "uid": "cdnf-lib-health-paused-rollouts"
 }

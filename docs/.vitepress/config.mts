@@ -272,7 +272,7 @@ export default defineConfig({
             { text: 'Production best practices', link: '/operations/production-best-practices' },
             { text: 'CLI commands', link: '/operations/cli-commands' },
             { text: 'Monitoring', link: '/operations/monitoring' },
-            { text: 'Grafana command centers', link: '/operations/grafana' },
+            { text: 'Grafana dashboards', link: '/operations/grafana' },
             { text: 'Operational logging', link: '/operations/operational-logging' },
             { text: 'Laravel operations dashboard', link: '/operations/laravel-operations-dashboard' },
             { text: 'Edge gateway ingress', link: '/operations/gateway-ingress' },

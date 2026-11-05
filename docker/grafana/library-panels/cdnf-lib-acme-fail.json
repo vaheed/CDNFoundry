@@ -67,9 +67,9 @@
         "refId": "A"
       }
     ],
-    "title": "ACME failures (24h)",
+    "title": "ACME fail",
     "type": "stat"
   },
-  "name": "ACME failures (24h)",
-  "uid": "cdnf-lib-acme-failures--24h"
+  "name": "ACME fail",
+  "uid": "cdnf-lib-acme-fail"
 }

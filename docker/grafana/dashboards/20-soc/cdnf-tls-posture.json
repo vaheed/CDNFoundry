@@ -222,7 +222,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "table",
-          "rawSql": "SELECT sum(failures) AS failures FROM cdnf.tls_failures_hourly WHERE $__timeFilter(interval_start)",
+          "rawSql": "SELECT sum(failures) AS failures FROM cdnf.tls_failures_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime",
           "refId": "A"
         }
       ],
@@ -316,10 +316,10 @@
       },
       "id": 3,
       "libraryPanel": {
-        "name": "ACME failures (24h)",
-        "uid": "cdnf-lib-acme-failures--24h"
+        "name": "ACME fail",
+        "uid": "cdnf-lib-acme-fail"
       },
-      "title": "ACME failures (24h)",
+      "title": "ACME fail",
       "type": "stat"
     },
     {
@@ -483,7 +483,7 @@
           "editorType": "sql",
           "format": 0,
           "queryType": "timeSeries",
-          "rawSql": "SELECT $__timeInterval(interval_start) AS time, reason, sum(failures) AS failures FROM cdnf.tls_failures_hourly WHERE $__timeFilter(interval_start) GROUP BY time, reason ORDER BY time",
+          "rawSql": "SELECT $__timeInterval(interval_start) AS time, reason, sum(failures) AS failures FROM cdnf.tls_failures_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime GROUP BY time, reason ORDER BY time",
           "refId": "A"
         }
       ],
@@ -569,7 +569,7 @@
           "editorType": "sql",
           "format": 0,
           "queryType": "timeSeries",
-          "rawSql": "SELECT $__timeInterval(interval_start) AS time, ssl_protocol AS protocol, sum(failures) AS failures FROM cdnf.tls_failures_hourly WHERE $__timeFilter(interval_start) GROUP BY time, protocol ORDER BY time",
+          "rawSql": "SELECT $__timeInterval(interval_start) AS time, ssl_protocol AS protocol, sum(failures) AS failures FROM cdnf.tls_failures_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime GROUP BY time, protocol ORDER BY time",
           "refId": "A"
         }
       ],
@@ -650,7 +650,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "table",
-          "rawSql": "SELECT * FROM (SELECT ssl_protocol, sum(requests) AS requests FROM cdnf.edge_traffic_hourly WHERE $__timeFilter(interval_start) AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND ssl_protocol != '' GROUP BY ssl_protocol UNION ALL SELECT ssl_protocol, sum(requests) AS requests FROM cdnf.edge_traffic_daily WHERE $__timeFilter(interval_start) AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND ssl_protocol != '' GROUP BY ssl_protocol) ORDER BY requests DESC LIMIT 10",
+          "rawSql": "SELECT * FROM (SELECT ssl_protocol, sum(requests) AS requests FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND ssl_protocol != '' GROUP BY ssl_protocol UNION ALL SELECT ssl_protocol, sum(requests) AS requests FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND ssl_protocol != '' GROUP BY ssl_protocol) ORDER BY requests DESC LIMIT 10",
           "refId": "A"
         }
       ],
@@ -731,7 +731,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "table",
-          "rawSql": "SELECT * FROM (SELECT ssl_cipher, sum(requests) AS requests FROM cdnf.edge_traffic_hourly WHERE $__timeFilter(interval_start) AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND ssl_cipher != '' GROUP BY ssl_cipher UNION ALL SELECT ssl_cipher, sum(requests) AS requests FROM cdnf.edge_traffic_daily WHERE $__timeFilter(interval_start) AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND ssl_cipher != '' GROUP BY ssl_cipher) ORDER BY requests DESC LIMIT 10",
+          "rawSql": "SELECT * FROM (SELECT ssl_cipher, sum(requests) AS requests FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND ssl_cipher != '' GROUP BY ssl_cipher UNION ALL SELECT ssl_cipher, sum(requests) AS requests FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND ssl_cipher != '' GROUP BY ssl_cipher) ORDER BY requests DESC LIMIT 10",
           "refId": "A"
         }
       ],
@@ -768,7 +768,7 @@
               "type": "special"
             }
           ],
-          "noValue": "No traffic",
+          "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -842,7 +842,7 @@
               "type": "special"
             }
           ],
-          "noValue": "No traffic",
+          "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
             "steps": [

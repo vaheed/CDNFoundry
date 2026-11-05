@@ -312,7 +312,7 @@
           "refId": "A"
         }
       ],
-      "title": "Oldest unapplied config",
+      "title": "Oldest config",
       "type": "stat"
     },
     {
@@ -476,7 +476,7 @@
           "refId": "A"
         }
       ],
-      "title": "Oldest pending DNS serial",
+      "title": "Oldest DNS serial",
       "type": "stat"
     },
     {
@@ -708,7 +708,7 @@
               "type": "special"
             }
           ],
-          "noValue": "No traffic",
+          "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
             "steps": [

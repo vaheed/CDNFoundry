@@ -272,7 +272,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 7,
         "x": 6,
         "y": 0
       },
@@ -351,7 +351,7 @@
       "gridPos": {
         "h": 4,
         "w": 6,
-        "x": 12,
+        "x": 13,
         "y": 0
       },
       "id": 3,
@@ -432,8 +432,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 18,
+        "w": 5,
+        "x": 19,
         "y": 0
       },
       "id": 4,
@@ -543,7 +543,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (component_id) (rate(vector_component_discarded_events_total{component_id=~\"decoded_.*|safe_.*\"}[5m]))",
+          "expr": "sum by (component_id) (rate(vector_component_discarded_events_total{component_id=~\"decoded_.*|safe_.*\"}[5m])) or label_replace(vector(0), \"component_id\", \"none\", \"\", \"\")",
           "instant": false,
           "legendFormat": "{{component_id}}",
           "range": true,
@@ -633,7 +633,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(vector_component_discarded_events_total{component_id=~\"clickhouse_.*\"}[5m]))",
+          "expr": "sum(rate(vector_component_discarded_events_total{component_id=~\"clickhouse_.*\"}[5m])) or vector(0)",
           "instant": false,
           "legendFormat": "buffer drops",
           "range": true,
@@ -644,7 +644,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(vector_component_errors_total{component_id=~\"clickhouse_.*\"}[5m]))",
+          "expr": "sum(rate(vector_component_errors_total{component_id=~\"clickhouse_.*\"}[5m])) or vector(0)",
           "instant": false,
           "legendFormat": "insert failures",
           "range": true,
@@ -733,7 +733,7 @@
           "editorType": "sql",
           "format": 0,
           "queryType": "timeSeries",
-          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, pop, sum(requests) AS events FROM cdnf.edge_traffic_1m WHERE $__timeFilter(interval_start) AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, pop UNION ALL SELECT $__timeInterval(interval_start) AS time, pop, sum(requests) AS events FROM cdnf.edge_traffic_hourly WHERE $__timeFilter(interval_start) AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, pop UNION ALL SELECT $__timeInterval(interval_start) AS time, pop, sum(requests) AS events FROM cdnf.edge_traffic_daily WHERE $__timeFilter(interval_start) AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, pop) ORDER BY time",
+          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, pop, sum(requests) AS events FROM cdnf.edge_traffic_1m WHERE interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, pop UNION ALL SELECT $__timeInterval(interval_start) AS time, pop, sum(requests) AS events FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, pop UNION ALL SELECT $__timeInterval(interval_start) AS time, pop, sum(requests) AS events FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, pop) ORDER BY time",
           "refId": "A"
         }
       ],

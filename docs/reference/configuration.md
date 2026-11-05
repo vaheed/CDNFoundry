@@ -151,6 +151,7 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `MMDB_REQUIRE_VERIFICATION` | updater | Production sets `true`: a download is activated only when one of the two checksums vouches for it. Otherwise the previous database, or the bundled empty fallback on a first start, stays in use |
 | `MMDB_DOWNLOAD_URL` | custom updater | HTTPS artifact URL |
 | `MMDB_DOWNLOAD_HEADER` | custom updater | Optional authorization header; treat as secret |
+| `MMDB_ASN_DOWNLOAD_URL`, `MMDB_ASN_EXPECTED_SHA256`, `MMDB_ASN_CHECKSUM_URL` | custom updater | Optional source and checksum of the autonomous-system database that edge cells use to add an ASN to each event. Empty uses the provider's ASN file when the provider has one; a failure leaves ASN at 0 and never stops the updater |
 
 Grafana telemetry variables are:
 
@@ -170,6 +171,10 @@ Grafana telemetry variables are:
 | `GRAFANA_POSTGRES_SSLMODE` | telemetry | Default `disable` for embedded private PostgreSQL; set `require` or `verify-full` for external endpoints |
 | `GRAFANA_POSTGRES_PROVISION_HOST`, `GRAFANA_POSTGRES_PROVISION_PORT` | local account provisioning | Privileged endpoint; external operators may apply the SQL separately |
 | `PROMETHEUS_EDGE_TARGETS_FILE` | telemetry | Private file_sd target file; production default is empty |
+| `PROMETHEUS_PROBE_TARGETS_FILE` | telemetry | Generated file_sd targets for the synthetic probes: every PoP and nameserver address, IPv4 and IPv6 |
+| `PROMETHEUS_VECTOR_TARGETS_FILE` | telemetry | Generated file_sd targets for the live-counter endpoint of each PoP and DNS collector |
+| `VECTOR_METRICS_BIND` | all | Where the collector publishes its live counters; generated bundles use `monitor_ipv4` or `bind_ipv4` |
+| `CDNF_TELEMETRY_POP`, `CDNF_TELEMETRY_REGION` | all | The PoP and region the collector stamps on every event it collects. Fleet renders them from the node name and region; the event itself never sets them |
 | `PROMETHEUS_LOG_TARGETS_FILE` | telemetry | Private file_sd targets for remote collector metrics; production default is empty |
 | `PROMETHEUS_CONTROL_TARGETS_FILE` | telemetry | Generated file_sd targets for authenticated control-plane metrics |
 | `PROMETHEUS_NODE_TARGETS_FILE` | telemetry | Generated file_sd targets for node-exporter metrics on every fleet host |
@@ -178,7 +183,7 @@ Grafana telemetry variables are:
 | `GRAFANA_HOSTNAME` | control/telemetry | Public Grafana hostname in the independently hosted operator DNS zone |
 | `GRAFANA_LOKI_URL` | telemetry | Private Grafana-to-Loki endpoint; default `http://loki:3100` |
 | `LOKI_RETENTION_PERIOD` | telemetry | Loki retention; production default `336h` |
-| `LOKI_MAX_QUERY_LENGTH` | telemetry | Maximum query range; production default `336h` |
+| `LOKI_MAX_QUERY_LENGTH` | telemetry | Maximum query range; production default `744h`, so a dashboard set to 30 days can query logs. Retention stays `LOKI_RETENTION_PERIOD` |
 | `LOKI_ENDPOINT` | logs | Collector push endpoint; use the source-restricted HTTPS telemetry gateway off-host |
 | `LOG_ROLE` | logs | Stable host role: `control`, `dns`, `edge`, or `telemetry` |
 | `LOG_HOST` | logs | Stable deployment host name |

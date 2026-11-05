@@ -73,9 +73,9 @@
         "refId": "A"
       }
     ],
-    "title": "Stale edges",
+    "title": "Stale",
     "type": "stat"
   },
-  "name": "Stale edges",
+  "name": "Stale",
   "uid": "cdnf-lib-health-stale-edges"
 }

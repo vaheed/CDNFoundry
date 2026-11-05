@@ -386,10 +386,10 @@
       },
       "id": 4,
       "libraryPanel": {
-        "name": "Paused rollouts",
-        "uid": "cdnf-lib-paused-rollouts"
+        "name": "Paused",
+        "uid": "cdnf-lib-paused"
       },
-      "title": "Paused rollouts",
+      "title": "Paused",
       "type": "stat"
     },
     {
@@ -397,18 +397,11 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "The newest rollouts with their wave, state, and pause reason.",
+      "description": "Rollouts by state. A paused rollout stopped on a safety threshold.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
+            "mode": "continuous-BlPu"
           },
           "mappings": [
             {
@@ -422,6 +415,7 @@
               "type": "special"
             }
           ],
+          "min": 0,
           "noValue": "No traffic",
           "thresholds": {
             "mode": "absolute",
@@ -444,11 +438,17 @@
       },
       "id": 5,
       "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "show": false
+        "displayMode": "gradient",
+        "namePlacement": "left",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
         },
-        "showHeader": true
+        "showUnfilled": true
       },
       "targets": [
         {
@@ -459,12 +459,12 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT created_at, status, current_wave, maximum_parallel, pause_reason, started_at, finished_at FROM grafana_fleet_rollouts ORDER BY created_at DESC LIMIT 20",
+          "rawSql": "SELECT s AS state, count(r.id) AS rollouts FROM unnest(ARRAY['pending', 'running', 'paused', 'succeeded', 'failed']) AS s LEFT JOIN grafana_fleet_rollouts r ON r.status = s GROUP BY s ORDER BY s",
           "refId": "A"
         }
       ],
-      "title": "Fleet rollouts",
-      "type": "table"
+      "title": "Fleet rollouts by state",
+      "type": "bargauge"
     },
     {
       "datasource": {
@@ -552,11 +552,11 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Tasks sent to PoPs, by state.",
+      "description": "Tasks sent to PoPs in the last 24 hours, by state.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "continuous-BlPu"
           },
           "mappings": [
             {
@@ -570,6 +570,7 @@
               "type": "special"
             }
           ],
+          "min": 0,
           "noValue": "No traffic",
           "thresholds": {
             "mode": "absolute",
@@ -586,21 +587,15 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 7,
         "x": 0,
         "y": 12
       },
       "id": 7,
       "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "showLegend": true,
-          "values": [
-            "value"
-          ]
-        },
-        "pieType": "donut",
+        "displayMode": "gradient",
+        "namePlacement": "left",
+        "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -608,9 +603,7 @@
           "fields": "",
           "values": true
         },
-        "tooltip": {
-          "mode": "single"
-        }
+        "showUnfilled": true
       },
       "targets": [
         {
@@ -621,12 +614,12 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT status, count(*) AS tasks FROM grafana_edge_tasks WHERE created_at > now() - interval '24 hours' GROUP BY status",
+          "rawSql": "SELECT s AS status, count(t.id) AS tasks FROM unnest(ARRAY['pending', 'running', 'succeeded', 'failed']) AS s LEFT JOIN grafana_edge_tasks t ON t.status = s AND t.created_at > now() - interval '24 hours' GROUP BY s ORDER BY s",
           "refId": "A"
         }
       ],
       "title": "Edge tasks by status",
-      "type": "piechart"
+      "type": "bargauge"
     },
     {
       "datasource": {
@@ -682,7 +675,7 @@
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 8,
+        "x": 7,
         "y": 12
       },
       "id": 8,
@@ -771,8 +764,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
+        "w": 9,
+        "x": 15,
         "y": 12
       },
       "id": 9,
@@ -834,7 +827,7 @@
               "type": "special"
             }
           ],
-          "noValue": "No traffic",
+          "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
             "steps": [

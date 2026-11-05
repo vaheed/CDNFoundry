@@ -67,9 +67,9 @@
         "refId": "A"
       }
     ],
-    "title": "Firing alerts",
+    "title": "Alerts",
     "type": "stat"
   },
-  "name": "Firing alerts",
+  "name": "Alerts",
   "uid": "cdnf-lib-health-firing-alerts"
 }

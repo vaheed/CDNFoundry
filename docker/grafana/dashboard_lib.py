@@ -70,8 +70,12 @@ def traffic_sql(select: str, *, dims: str = "", time: bool = False, where: str =
         columns = ([ "$__timeInterval(interval_start) AS time" ] if time else []) + ([dims] if dims else []) + [select]
         dim_group = dims.split(" AS ")[-1] if dims else ""
         group = ", ".join((["time"] if time else []) + ([dim_group] if dim_group else []))
+        # A bucket is stamped with its start, so a short range inside an hour needs the bucket that holds it.
+        bucket = {"edge_traffic_1m": "interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime",
+                  "edge_traffic_hourly": "interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime",
+                  "edge_traffic_daily": "interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime"}[table]
         branches.append(
-            f"SELECT {', '.join(columns)} FROM cdnf.{table} WHERE $__timeFilter(interval_start) "
+            f"SELECT {', '.join(columns)} FROM cdnf.{table} WHERE {bucket} "
             f"AND dateDiff('second', $__fromTime, $__toTime) BETWEEN {low} AND {high} AND {_clickhouse_scope(table, hostname)}"
             + (f" AND {where}" if where else "") + (f" GROUP BY {group}" if group else "")
         )
@@ -162,6 +166,7 @@ def timeseries(title: str, description: str, targets: list[dict[str, Any]], unit
 
 def table(title: str, description: str, targets: list[dict[str, Any]], unit: str = "short", *, w: int = 12, h: int = 8, overrides: list[dict[str, Any]] | None = None, transformations: list[dict[str, Any]] | None = None, sort: str | None = None) -> dict[str, Any]:
     defaults = _defaults(unit, "neutral", None)
+    defaults["noValue"] = "–"
     defaults["custom"] = {"align": "auto", "cellOptions": {"type": "auto"}, "inspect": False}
     panel = {
         "type": "table", "title": title, "description": description, "datasource": _source(targets), "targets": refs(targets),
@@ -291,6 +296,28 @@ def annotations() -> list[dict[str, Any]]:
 
 # --- dashboards -------------------------------------------------------------------------------------------
 
+CHARS_PER_COLUMN = 3.4
+
+
+def fit_titles(row_panels: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Give each panel in a row the columns its title needs, taking them from the panels that have room to spare."""
+    panels = [copy.deepcopy(panel) for panel in row_panels]
+    needed = [max(4, -(-int(len(panel["title"]) / CHARS_PER_COLUMN * 10) // 10)) if panel["type"] != "row" else panel["gridPos"]["w"] for panel in panels]
+    widths = [panel["gridPos"]["w"] for panel in panels]
+    for _ in range(40):
+        short = [i for i, (w, n) in enumerate(zip(widths, needed)) if w < n]
+        if not short:
+            break
+        donors = [i for i, (w, n) in enumerate(zip(widths, needed)) if w > max(n, 4)]
+        if not donors:
+            break
+        widths[short[0]] += 1
+        widths[max(donors, key=lambda i: widths[i] - needed[i])] -= 1
+    for panel, width in zip(panels, widths):
+        panel["gridPos"]["w"] = width
+    return panels
+
+
 def layout(rows: list[Any]) -> list[dict[str, Any]]:
     """Lay panels out left to right. A list is one row of panels sharing the 24 columns; a dict is a section header."""
     panels: list[dict[str, Any]] = []
@@ -303,6 +330,7 @@ def layout(rows: list[Any]) -> list[dict[str, Any]]:
             y += 1
             continue
         height = max(panel["gridPos"]["h"] for panel in item)
+        item = fit_titles(item)
         used = sum(panel["gridPos"]["w"] for panel in item)
         if used != 24:
             raise ValueError(f"panels in a row must fill 24 columns, got {used}: {[p['title'] for p in item]}")

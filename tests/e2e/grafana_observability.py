@@ -58,8 +58,8 @@ def interpolate(text: str, kind: str) -> str:
     wildcard = ".+" if kind == "loki" else ".*"
     for variable in ("environment", "region", "pop", "edge", "pool", "domain", "hostname", "alertname", "service", "level", "slo"):
         text = text.replace(f"${{{variable}}}", wildcard).replace(f"${variable}", wildcard)
-    text = text.replace("${rule_id}", "0").replace("${request_id}", "none")
-    return text.replace("$__auto", "1m")
+    text = text.replace("${rule_id}", "942100" if EXPECT_DATA else "0").replace("${request_id}", "cdnf-seed-request-0001" if EXPECT_DATA else "none")
+    return text
 
 
 def dashboards() -> list[dict]:

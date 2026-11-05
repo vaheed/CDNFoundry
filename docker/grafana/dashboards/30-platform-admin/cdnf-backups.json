@@ -542,7 +542,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT verified_at AS time, size_bytes AS size FROM grafana_backups WHERE status = 'succeeded' AND $__timeFilter(verified_at) ORDER BY verified_at",
+          "rawSql": "SELECT t AS time, COALESCE(max(b.size_bytes), 0) AS size FROM generate_series(date_trunc('day', $__timeFrom()::timestamptz), $__timeTo()::timestamptz, interval '1 day') AS t LEFT JOIN grafana_backups b ON b.status = 'succeeded' AND b.verified_at >= t AND b.verified_at < t + interval '1 day' GROUP BY t ORDER BY t",
           "refId": "A"
         }
       ],
@@ -579,7 +579,7 @@
               "type": "special"
             }
           ],
-          "noValue": "No traffic",
+          "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
             "steps": [

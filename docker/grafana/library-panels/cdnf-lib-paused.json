@@ -67,9 +67,9 @@
         "refId": "A"
       }
     ],
-    "title": "Paused rollouts",
+    "title": "Paused",
     "type": "stat"
   },
-  "name": "Paused rollouts",
-  "uid": "cdnf-lib-paused-rollouts"
+  "name": "Paused",
+  "uid": "cdnf-lib-paused"
 }

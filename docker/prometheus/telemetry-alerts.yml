@@ -248,7 +248,7 @@ groups:
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#clickhouse-or-vector-outage
           dashboard_url: /d/cdnf-telemetry-pipeline
       - alert: TelemetryBufferNearLimit
-        expr: vector_buffer_byte_size > 858993459
+        expr: vector_buffer_size_bytes{component_id=~"clickhouse_.*"} / vector_buffer_max_size_bytes{component_id=~"clickhouse_.*"} > 0.8
         for: 5m
         labels: { team: platform, severity: warning, dashboard: cdnf-telemetry-pipeline }
         annotations:

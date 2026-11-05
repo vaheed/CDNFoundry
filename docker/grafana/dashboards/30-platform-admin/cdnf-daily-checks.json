@@ -236,7 +236,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(max(cdnfoundry_edge_gateway_active_revision) - min(cdnfoundry_edge_gateway_active_revision) <= bool 5) or vector(0)",
+          "expr": "((max(cdnfoundry_edge_gateway_active_revision) - min(cdnfoundry_edge_gateway_active_revision) <= bool 5) or vector(0)) or vector(0)",
           "instant": true,
           "legendFormat": "PoPs hold the latest artifact",
           "range": false,
@@ -247,7 +247,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(cdnfoundry_dns_deployments_drifted == bool 0)",
+          "expr": "((cdnfoundry_dns_deployments_drifted == bool 0)) or vector(0)",
           "instant": true,
           "legendFormat": "DNS serials match desired",
           "range": false,
@@ -258,7 +258,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(sum(cdnfoundry_pool_dns_fail_static) == bool 0)",
+          "expr": "((sum(cdnfoundry_pool_dns_fail_static) == bool 0)) or vector(0)",
           "instant": true,
           "legendFormat": "No pool address set shrank",
           "range": false,
@@ -269,7 +269,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(min(cdnfoundry_edge_identity_expires_seconds) > bool 30 * 86400) or vector(1)",
+          "expr": "((min(cdnfoundry_edge_identity_expires_seconds) > bool 30 * 86400) or vector(1)) or vector(0)",
           "instant": true,
           "legendFormat": "No edge identity near expiry",
           "range": false,
@@ -280,7 +280,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "cdnfoundry_component_health{component=\"edge_placements\"}",
+          "expr": "(cdnfoundry_component_health{component=\"edge_placements\"}) or vector(0)",
           "instant": true,
           "legendFormat": "No placement stuck deploying",
           "range": false,
@@ -291,7 +291,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(max(cdnfoundry_queue_oldest_job_age_seconds) < bool 900) or vector(1)",
+          "expr": "((max(cdnfoundry_queue_oldest_job_age_seconds) < bool 900) or vector(1)) or vector(0)",
           "instant": true,
           "legendFormat": "Queue latency under bound",
           "range": false,
@@ -302,7 +302,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(sum(increase(alertmanager_notifications_total{integration=\"webhook\"}[1h])) > bool 0)",
+          "expr": "((sum(increase(alertmanager_notifications_total{integration=\"webhook\"}[1h])) > bool 0)) or vector(0)",
           "instant": true,
           "legendFormat": "Watchdog delivered within the hour",
           "range": false,
@@ -313,7 +313,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(cdnfoundry_tls_certificates_expiring == bool 0)",
+          "expr": "((cdnfoundry_tls_certificates_expiring == bool 0)) or vector(0)",
           "instant": true,
           "legendFormat": "No certificate near expiry unrenewed",
           "range": false,
@@ -324,7 +324,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "cdnfoundry_component_health{component=\"backups\"}",
+          "expr": "(cdnfoundry_component_health{component=\"backups\"}) or vector(0)",
           "instant": true,
           "legendFormat": "Backup fresh and checks pass",
           "range": false,
@@ -335,7 +335,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(sum(increase(vector_component_discarded_events_total{intentional!=\"true\"}[1h])) == bool 0) * (sum(increase(vector_component_errors_total{component_id=~\"clickhouse_.*\"}[1h])) == bool 0)",
+          "expr": "((sum(increase(vector_component_discarded_events_total{intentional!=\"true\"}[1h])) == bool 0) * (sum(increase(vector_component_errors_total{component_id=~\"clickhouse_.*\"}[1h])) == bool 0)) or vector(0)",
           "instant": true,
           "legendFormat": "Vector drops nothing, ClickHouse accepts",
           "range": false,
@@ -346,7 +346,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(cdnfoundry_control_ha_state{state=\"degraded\"} == bool 0) or vector(1)",
+          "expr": "((cdnfoundry_control_ha_state{state=\"degraded\"} == bool 0) or vector(1)) or vector(0)",
           "instant": true,
           "legendFormat": "Control HA state not degraded",
           "range": false,
@@ -357,7 +357,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "((cdnfoundry_control_valkey_replica_linked == bool 1) or vector(1)) * ((cdnfoundry_control_fingerprint_mismatch == bool 0) or vector(1))",
+          "expr": "(((cdnfoundry_control_valkey_replica_linked == bool 1) or vector(1)) * ((cdnfoundry_control_fingerprint_mismatch == bool 0) or vector(1))) or vector(0)",
           "instant": true,
           "legendFormat": "Valkey linked, secrets match",
           "range": false,
@@ -368,7 +368,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(cdnfoundry_control_edges_missing_addresses == bool 0)",
+          "expr": "((cdnfoundry_control_edges_missing_addresses == bool 0)) or vector(0)",
           "instant": true,
           "legendFormat": "PoPs hold the control addresses",
           "range": false,
@@ -379,7 +379,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "cdnfoundry_component_health{component=\"control_ha\"}",
+          "expr": "(cdnfoundry_component_health{component=\"control_ha\"}) or vector(0)",
           "instant": true,
           "legendFormat": "Services run on the primary node",
           "range": false,
@@ -390,7 +390,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(min(up{job=\"node\",role=\"control\"}) == bool 1) or vector(1)",
+          "expr": "((min(up{job=\"node\",role=\"control\"}) == bool 1) or vector(1)) or vector(0)",
           "instant": true,
           "legendFormat": "Standby watched, dead-man alarm delivered",
           "range": false,

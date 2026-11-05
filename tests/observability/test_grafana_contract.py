@@ -184,7 +184,7 @@ class GrafanaContractTest(unittest.TestCase):
                 name = f"{uid}/{panel.get('title')}"
                 self.assertTrue(panel.get("title"), name)
                 self.assertTrue(panel.get("description"), name)
-                self.assertLessEqual(len(panel["title"]), 5 * panel["gridPos"]["w"], f"{name}: title too long for its width")
+                self.assertLessEqual(len(panel["title"]), 10 if panel["gridPos"]["w"] <= 4 else 3.4 * panel["gridPos"]["w"], f"{name}: title too long for its width")
                 if panel["type"] != "text":
                     self.assertTrue(panel["fieldConfig"]["defaults"].get("unit"), name)
 

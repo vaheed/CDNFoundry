@@ -6,6 +6,8 @@ import { dashboards, adminUser, adminPassword, signIn, waitForPanels, screenshot
 const ranges: Record<string, string> = { '15m': 'now-15m', '6h': 'now-6h', '7d': 'now-7d', '30d': 'now-30d' };
 const selectedRanges = (process.env.GRAFANA_RANGES ?? Object.keys(ranges).join(',')).split(',');
 const expectData = process.env.GRAFANA_EXPECT_DATA !== '0';
+// Two dashboards take a value from the person; the seed holds a sample of each.
+const sampleInput: Record<string, string> = { 'cdnf-request-trace': '&var-request_id=cdnf-seed-request-0001', 'cdnf-waf': '&var-rule_id=942100' };
 
 // Console messages that mean nothing about the dashboard.
 const harmless = [/Failed to load resource: the server responded with a status of 40[134]/, /favicon/, /Content Security Policy/, /ResizeObserver/];
@@ -32,7 +34,7 @@ for (const dashboard of dashboards()) {
             const responses = await collectQueries(page);
             await signIn(page, adminUser, adminPassword);
             const kiosk = info.project.name === 'kiosk' ? '&kiosk' : '';
-            await page.goto(`/d/${dashboard.uid}?orgId=1&from=${ranges[range]}&to=now&refresh=${kiosk ? '' : ''}${kiosk}`);
+            await page.goto(`/d/${dashboard.uid}?orgId=1&from=${ranges[range]}&to=now${kiosk}${sampleInput[dashboard.uid] ?? ''}`);
             await waitForPanels(page);
 
             // No panel reports an error or a failed query.
@@ -51,8 +53,8 @@ for (const dashboard of dashboards()) {
             }
 
             // No panel title is cut off, and no panel prints its query.
-            const truncated = await page.locator('h2').evaluateAll((titles) =>
-                titles.filter((title) => (title as HTMLElement).offsetParent !== null && title.scrollWidth > title.clientWidth + 1).map((title) => title.textContent));
+            const truncated = await page.locator('section h2, section h2 *').evaluateAll((titles) =>
+                titles.filter((title) => (title as HTMLElement).offsetParent !== null && title.textContent && title.scrollWidth > title.clientWidth + 1).map((title) => title.textContent));
             expect(truncated, 'truncated panel titles').toEqual([]);
             const printed = await page.locator('section').evaluateAll((sections) =>
                 sections.filter((section) => /\b(sum|rate|histogram_quantile|increase|count_over_time)\s*\(/.test((section as HTMLElement).innerText)).map((section) => section.getAttribute('aria-label')));

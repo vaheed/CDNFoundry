@@ -167,7 +167,7 @@ jobs:
       - name: Validate production role overrides
         run: ./scripts/validate-production-overrides.sh
       - name: Validate observability contracts
-        run: python3 -m unittest tests/observability/test_grafana_contract.py tests/observability/test_operational_logging_contract.py
+        run: python3 -m unittest tests/observability/test_grafana_contract.py tests/observability/test_metrics_contract.py tests/observability/test_grafana_bootstrap.py tests/observability/test_operational_logging_contract.py
       - name: Validate Python syntax
         run: python3 -m compileall -q tests/e2e tests/docs tests/fleet tests/qualification tests/supply_chain scripts/cdnfoundry_fleet scripts/ci
       - name: Download exact production images
@@ -243,6 +243,10 @@ jobs:
             -v "$PWD/docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
             -v "$PWD/docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro" \
             -v "$PWD/docker/prometheus/control-ha-alerts.yml:/etc/prometheus/control-ha-alerts.yml:ro" \
+            -v "$PWD/docker/prometheus/traffic-alerts.yml:/etc/prometheus/traffic-alerts.yml:ro" \
+            -v "$PWD/docker/prometheus/security-alerts.yml:/etc/prometheus/security-alerts.yml:ro" \
+            -v "$PWD/docker/prometheus/slo-rules.yml:/etc/prometheus/slo-rules.yml:ro" \
+            -v "$PWD/docker/prometheus/dashboard-rules.yml:/etc/prometheus/dashboard-rules.yml:ro" \
             -v "$PWD/docker/prometheus/dev-metrics-token:/run/secrets/metrics-token:ro" \
             -v "$PWD/docker/prometheus/control-targets.dev.yml:/etc/prometheus/control-targets.yml:ro" \
             -v "$PWD/docker/prometheus/node-targets.dev.yml:/etc/prometheus/node-targets.yml:ro" \

@@ -1371,27 +1371,27 @@ migration service from Phase 5. It extends the Playwright suite from Phase 6.
 
 #### 9.1 Telemetry data
 
-- [ ] Extend `edge_json` with `request_time`, `upstream_connect_time`,
+- [x] Extend `edge_json` with `request_time`, `upstream_connect_time`,
       `upstream_header_time`, `server_protocol`, `ssl_protocol`,
       `ssl_cipher`, IP version, `scheme`, `request_id`, and `bytes_sent`
       (headers included). Egress and billing use `bytes_sent`.
-- [ ] Tag every edge and DNS event with `pop` and `region` at the PoP
+- [x] Tag every edge and DNS event with `pop` and `region` at the PoP
       collector, from the enrolled edge record, never from the payload.
-- [ ] Emit real TLS handshake failures (reason, SNI, protocol) from the
+- [x] Emit real TLS handshake failures (reason, SNI, protocol) from the
       edge as `event_type = "tls"`, and remove the hard-coded `tls_error`.
-- [ ] Emit security events with a fixed reason set: `waf`, `block`,
+- [x] Emit security events with a fixed reason set: `waf`, `block`,
       `cache_abuse_detected`, `emergency_mode`, `dns_response_limit`, and
       `waf_body_limit`. A contract test fails on an unknown reason.
 - [ ] Add ASN to edge and DNS events from the bundled GeoIP data.
-- [ ] Widen the hourly and daily rollups with `pop`, `region`, method,
+- [x] Widen the hourly and daily rollups with `pop`, `region`, method,
       protocol, IP version, origin role, WAF action, security reason, and
       `quantilesTDigestState` for edge latency, origin latency, and TTFB.
       Add a 1-minute rollup kept for 48 hours for live and NOC panels.
-- [ ] Add a per-domain, per-pool, per-PoP usage rollup that keeps bytes per
+- [x] Add a per-domain, per-pool, per-PoP usage rollup that keeps bytes per
       5-minute interval for 95th-percentile billing.
-- [ ] Ship every schema change as a tracked migration through the Phase 5
+- [x] Ship every schema change as a tracked migration through the Phase 5
       ClickHouse migration service, with a backfill-free default.
-- [ ] Document the retention tiers in one table: raw 7 days, 1-minute 48
+- [x] Document the retention tiers in one table: raw 7 days, 1-minute 48
       hours, hourly 400 days, daily 3 years, Prometheus 30 days, Loki 14 days.
       Each is a typed setting with a visible default.
 
@@ -1401,60 +1401,60 @@ migration service from Phase 5. It extends the Playwright suite from Phase 6.
       Horizon, Caddy, the telemetry gateway, Grafana, and container metrics
       (cAdvisor or the Docker engine endpoint). Add the exporters to the
       Compose files with the Phase 5 hardening anchor.
-- [ ] A contract test fails when a Compose service has neither a scrape job
+- [x] A contract test fails when a Compose service has neither a scrape job
       nor a recorded exemption with its reason.
-- [ ] Export live edge counters from each cell to Prometheus: requests by
+- [x] Export live edge counters from each cell to Prometheus: requests by
       status class and cache status, bytes, and edge and origin latency
       histograms. Labels are bounded to `pop`, `edge`, `pool`, and `domain`.
       A cardinality budget is checked in CI.
-- [ ] Add control-plane metrics: purge propagation time (request to applied
+- [x] Add control-plane metrics: purge propagation time (request to applied
       on every PoP), config propagation time (artifact published to applied on
       every PoP), DNS serial propagation, ACME issuance success and latency,
       API and panel latency by route, login successes and failures, and token
       use by ability.
-- [ ] Replace lifetime counters with state that can recover: failed
+- [x] Replace lifetime counters with state that can recover: failed
       operations in the last window, open DNS drift, and per-edge gateway
       error rates. Fix `CDNFoundryFailedOperations` to fire on new failures.
 - [ ] Add a blackbox exporter that probes HTTP, TLS, and DNS for every PoP,
       nameserver, and pool canary domain, over IPv4 and IPv6, from at least
       one vantage outside the PoP network.
-- [ ] Add recording rules for every SLO and every dashboard query that
+- [x] Add recording rules for every SLO and every dashboard query that
       spans more than 6 hours. Set Prometheus retention explicitly.
 
 #### 9.3 Alerting
 
-- [ ] Define SLOs with multi-window burn-rate alerts: edge availability,
+- [x] Define SLOs with multi-window burn-rate alerts: edge availability,
       5xx ratio, edge p95 latency, purge propagation time, config propagation
       time, DNS answer success, and telemetry delivery.
-- [ ] Traffic alerts: global and per-domain 5xx ratio, origin failure ratio,
+- [x] Traffic alerts: global and per-domain 5xx ratio, origin failure ratio,
       origin failover, cache-hit collapse, egress anomaly versus the same
       hour last week, and a PoP whose traffic drops to zero while others serve.
-- [ ] Security alerts: WAF block spike, request flood on one domain, one
+- [x] Security alerts: WAF block spike, request flood on one domain, one
       client network or ASN above a share threshold, `cache_abuse_detected`
       spike, emergency mode turned on, DNS random-subdomain or NXDOMAIN flood,
       `dns_response_limit` spike, failed-login burst, and admin login from a
       new network.
-- [ ] Provision Grafana alert rules for ClickHouse-only signals, and send
+- [x] Provision Grafana alert rules for ClickHouse-only signals, and send
       them through the Phase 2 Alertmanager receivers.
-- [ ] Every alert carries `team` (`noc`, `soc`, `platform`), `severity`,
+- [x] Every alert carries `team` (`noc`, `soc`, `platform`), `severity`,
       `summary`, `runbook_url`, and `dashboard_url`. Alertmanager routes by
       `team`. A contract test fails on an alert without them.
-- [ ] Inhibition rules: a PoP-down alert silences that PoP's per-domain
+- [x] Inhibition rules: a PoP-down alert silences that PoP's per-domain
       alerts, and a control-plane outage silences derived staleness alerts.
 
 #### 9.4 Grafana structure and readability
 
-- [ ] Folders per audience, provisioned as code: `00 Overview`,
+- [x] Folders per audience, provisioned as code: `00 Overview`,
       `10 NOC`, `20 SOC`, `30 Platform Admin`, `40 On-call & SLO`,
       `50 Domains`, `60 Business & Capacity`, `90 Samples`.
-- [ ] Teams `platform-admin`, `noc`, `soc`, `support`, and `business`, with
+- [x] Teams `platform-admin`, `noc`, `soc`, `support`, and `business`, with
       folder permissions provisioned as code. Each team gets its own home
       dashboard. Only `platform-admin` can edit, and it edits through the
       repository.
-- [ ] Standard variables on every dashboard, in one order: `environment`,
+- [x] Standard variables on every dashboard, in one order: `environment`,
       `region`, `pop`, `edge`, `pool`, `domain`, `hostname`. Each defaults
       to "All", and "All" means aggregated across every PoP.
-- [ ] A dashboard style contract, enforced by `test_grafana_contract.py`:
+- [x] A dashboard style contract, enforced by `test_grafana_contract.py`:
       - every panel has a title that fits its width, a description, and a
         unit
       - no query text appears in a legend or a stat
@@ -1464,13 +1464,13 @@ migration service from Phase 5. It extends the Playwright suite from Phase 6.
       - a counter is shown as a rate or as `increase` over the selected range
       - the first screen of a home dashboard has no collapsed rows
       - every dashboard links to its parent, its siblings, and its runbook
-- [ ] Annotations on every time-series panel for deploys, fleet rollouts,
+- [x] Annotations on every time-series panel for deploys, fleet rollouts,
       artifact publishes, purges, settings changes, emergency mode, and
       firing critical alerts, read from the control database and Prometheus.
-- [ ] Loki derived fields and data links: `request_id` opens the request
+- [x] Loki derived fields and data links: `request_id` opens the request
       tail, `domain_id` opens the domain dashboard, `pop` and `edge` open the
       PoP dashboard, and an alert opens its dashboard at its start time.
-- [ ] Library panels for every repeated panel, so one fix changes every
+- [x] Library panels for every repeated panel, so one fix changes every
       dashboard.
 
 #### 9.5 Dashboards
@@ -1479,7 +1479,7 @@ Each dashboard has a fixed uid and lives in its audience's folder.
 
 ##### Overview
 
-- [ ] **Now** (home for every team): one status line that names what is
+- [x] **Now** (home for every team): one status line that names what is
       wrong ("Degraded: 10 components unhealthy, 8 edges stale"), a firing
       alert table with cause, start time, team, and links, then five
       sections: Health, Global traffic, PoPs, DNS, and Telemetry pipeline.
@@ -1487,123 +1487,123 @@ Each dashboard has a fixed uid and lives in its audience's folder.
 
 **NOC** (`10 NOC`)
 
-- [ ] **NOC wall**: built for kiosk mode on a large screen. Global requests,
+- [x] **NOC wall**: built for kiosk mode on a large screen. Global requests,
       bandwidth, 5xx, cache-hit, and edge p95 across all PoPs. A geomap of
       PoPs colored by health. Probe results. Firing alerts. Readable from
       3 meters, with no scrolling.
-- [ ] **Global traffic**: every traffic measure summed across all PoPs, then
+- [x] **Global traffic**: every traffic measure summed across all PoPs, then
       split by region, PoP, pool, protocol, IP version, country, and ASN.
       Top domains by requests, bandwidth, and errors.
-- [ ] **PoP fleet**: one row per PoP with health, heartbeat age, applied
+- [x] **PoP fleet**: one row per PoP with health, heartbeat age, applied
       revision versus latest, traffic, error rate, p95, CPU, memory, disk,
       and cache fill. Version drift and rollout state.
-- [ ] **PoP detail**: one PoP's edges, cells, gateway, cache, upstream
+- [x] **PoP detail**: one PoP's edges, cells, gateway, cache, upstream
       connections, host resources, and logs.
-- [ ] **Origin health**: origin latency percentiles, error codes, connect
+- [x] **Origin health**: origin latency percentiles, error codes, connect
       failures, failover events, and the slowest and failing origins.
-- [ ] **Cache**: hit ratio by requests and by bytes, status mix, egress
+- [x] **Cache**: hit ratio by requests and by bytes, status mix, egress
       saved, cache fill, eviction, purge volume, and purge propagation time.
-- [ ] **Edge latency**: TTFB and total edge time by PoP, protocol, and
+- [x] **Edge latency**: TTFB and total edge time by PoP, protocol, and
       country, with the origin share of each.
-- [ ] **DNS authoritative**: QPS, RCODE mix, latency, dnsdist backend
+- [x] **DNS authoritative**: QPS, RCODE mix, latency, dnsdist backend
       health, PowerDNS cache, serial propagation per target, and Geo-DNS
       answers by region.
-- [ ] **Synthetic probes**: each probe's result, latency, and certificate
+- [x] **Synthetic probes**: each probe's result, latency, and certificate
       expiry, per PoP and per IP version.
-- [ ] **Config & purge propagation**: artifact publish to applied, per PoP,
+- [x] **Config & purge propagation**: artifact publish to applied, per PoP,
       with the slowest PoP named.
 
 **SOC** (`20 SOC`)
 
-- [ ] **Security overview**: blocks, WAF matches, emergency-mode domains,
+- [x] **Security overview**: blocks, WAF matches, emergency-mode domains,
       security events by reason, and the top attacked domains, all with
       trends.
-- [ ] **WAF**: actions, rules, scores, processing time, body-limit hits,
+- [x] **WAF**: actions, rules, scores, processing time, body-limit hits,
       exclusions in use, and the top rules by domain. Links from a rule to
       matching requests.
-- [ ] **L7 attack and flood**: request rate per domain against its baseline,
+- [x] **L7 attack and flood**: request rate per domain against its baseline,
       and top client networks, ASNs, countries, user agents, and paths
       during a spike. `cache_abuse_detected` events.
-- [ ] **DNS abuse**: random-subdomain and NXDOMAIN floods, response-limit
+- [x] **DNS abuse**: random-subdomain and NXDOMAIN floods, response-limit
       hits, top queried zones and client networks, and amplification-prone
       query types.
-- [ ] **TLS posture**: handshake failures by reason, protocol and cipher
+- [x] **TLS posture**: handshake failures by reason, protocol and cipher
       mix, certificates by expiry, and ACME failures.
-- [ ] **Access and audit**: admin and user logins, failed logins by account
+- [x] **Access and audit**: admin and user logins, failed logins by account
       and network, token use by ability, and `AuditLog` entries for settings,
       domain, and security-rule changes.
-- [ ] **Telemetry integrity**: rejected and forged events (from Phase 1),
+- [x] **Telemetry integrity**: rejected and forged events (from Phase 1),
       drops, and insert failures, so the SOC knows whether the data is
       complete.
 
 **Platform admin** (`30 Platform Admin`)
 
-- [ ] **Control plane**: component health matrix, API and panel latency,
+- [x] **Control plane**: component health matrix, API and panel latency,
       Horizon queue lanes, scheduler runs, failed jobs, and ACME orders.
-- [ ] **Fleet and rollouts**: edges, cells, placements, pool endpoints,
+- [x] **Fleet and rollouts**: edges, cells, placements, pool endpoints,
       `FleetRollout` progress and pauses, and edge tasks.
-- [ ] **Data stores**: PostgreSQL (connections, locks, replication, size,
+- [x] **Data stores**: PostgreSQL (connections, locks, replication, size,
       slow queries), Valkey (memory, evictions, hit ratio), ClickHouse (insert
       rate, parts, merges, disk), and Loki (ingest, retention).
-- [ ] **Telemetry pipeline**: Vector per role, buffers, drops, sink errors,
+- [x] **Telemetry pipeline**: Vector per role, buffers, drops, sink errors,
       and ingest delay from edge to ClickHouse.
-- [ ] **Backups and recovery**: last backup age, size, `restic check`
+- [x] **Backups and recovery**: last backup age, size, `restic check`
       result, and last restore preflight, per the Phase 5 checks.
-- [ ] **Hosts and containers**: CPU, memory, disk, network, clock, restarts,
+- [x] **Hosts and containers**: CPU, memory, disk, network, clock, restarts,
       and OOM kills per host and container.
-- [ ] **Daily checks**: every row of "Daily checks this roadmap must make
+- [x] **Daily checks**: every row of "Daily checks this roadmap must make
       visible" as one panel with its pass or fail state.
 
 **On-call and SLO** (`40 On-call & SLO`)
 
-- [ ] **SLOs**: each SLO with its target, current value, remaining error
+- [x] **SLOs**: each SLO with its target, current value, remaining error
       budget, and burn rate.
-- [ ] **Incident view**: one alert or time range shows its metrics, related
+- [x] **Incident view**: one alert or time range shows its metrics, related
       logs, annotations, and affected domains and PoPs.
-- [ ] **Logs explorer**: saved LogQL for each service, with level and
+- [x] **Logs explorer**: saved LogQL for each service, with level and
       service filters and live tail.
-- [ ] **Request trace**: one `request_id` from edge log to origin result to
+- [x] **Request trace**: one `request_id` from edge log to origin result to
       operational logs.
 
 **Domains** (`50 Domains`)
 
-- [ ] **Domain overview**: the Domain Command Center rebuilt to the style
+- [x] **Domain overview**: the Domain Command Center rebuilt to the style
       contract, with traffic, cache, origin, security, TLS, DNS, purge
       history, and configuration changes for one domain.
-- [ ] **Domain comparison**: several domains side by side for support.
+- [x] **Domain comparison**: several domains side by side for support.
 
 **Business and capacity** (`60 Business & Capacity`)
 
-- [ ] **Usage and billing**: monthly bandwidth, 95th-percentile bandwidth,
+- [x] **Usage and billing**: monthly bandwidth, 95th-percentile bandwidth,
       requests, and DNS queries per domain, pool, and region, from rollups
       only, matching `UsageRollup` exactly.
-- [ ] **Growth**: domains, traffic, and bandwidth by month, and top growing
+- [x] **Growth**: domains, traffic, and bandwidth by month, and top growing
       domains.
-- [ ] **Capacity**: headroom per PoP and pool (bandwidth, connections,
+- [x] **Capacity**: headroom per PoP and pool (bandwidth, connections,
       cache, CPU) and a 30-day `predict_linear` forecast that names the
       first PoP to run out.
 
 #### 9.6 Ready samples and seed data
 
-- [ ] `make dev-observability-seed` loads deterministic traffic into
+- [x] `make dev-observability-seed` loads deterministic traffic into
       ClickHouse, Loki, and Prometheus. Scenarios: `normal`, `origin-down`,
       `l7-flood`, `dns-flood`, `pop-loss`, `cert-expiry`, `purge-stuck`, and
       `telemetry-drop`. Each scenario has its own time window and annotation.
-- [ ] A **Query samples** dashboard in `90 Samples` with documented PromQL,
+- [x] A **Query samples** dashboard in `90 Samples` with documented PromQL,
       SQL, and LogQL for the common questions ("top domains by egress",
       "which PoP is slowest", "who triggered this WAF rule"), each in a panel
       that runs.
-- [ ] Grafana playlists for the NOC wall and the SOC wall.
+- [x] Grafana playlists for the NOC wall and the SOC wall.
 
 #### 9.7 Reports
 
-- [ ] A scheduled control-plane job builds the monthly usage report (per
+- [x] A scheduled control-plane job builds the monthly usage report (per
       domain, pool, and region, with 95th-percentile bandwidth) from rollups,
       as CSV and PDF, and links it from the Usage and billing dashboard. This
       works on Grafana OSS, which has no scheduled reporting.
-- [ ] A weekly operations report: SLO results, incidents, top errors, top
+- [x] A weekly operations report: SLO results, incidents, top errors, top
       attacked domains, and capacity forecast.
-- [ ] Every report's totals equal the matching dashboard totals for the same
+- [x] Every report's totals equal the matching dashboard totals for the same
       range. A test checks this on seeded data.
 
 #### 9.8 Agent-run Grafana browser qualification
@@ -1632,7 +1632,7 @@ Each dashboard has a fixed uid and lives in its audience's folder.
 
 #### 9.9 Runbooks
 
-- [ ] Every alert's `runbook_url` resolves to a page that names the
+- [x] Every alert's `runbook_url` resolves to a page that names the
       dashboard to open, the likely causes, and the first action. Phase 8
       rewrites the rest of the documentation.
 

@@ -626,7 +626,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (instance, component_id) (vector_buffer_byte_size)",
+          "expr": "sum by (instance, component_id) (vector_buffer_size_bytes)",
           "instant": false,
           "legendFormat": "{{instance}} {{component_id}}",
           "range": true,
@@ -846,7 +846,7 @@
               "type": "special"
             }
           ],
-          "noValue": "No traffic",
+          "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
             "steps": [

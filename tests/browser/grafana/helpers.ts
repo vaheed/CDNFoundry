@@ -47,6 +47,7 @@ export function screenshotPath(project: string, range: string, uid: string): str
 export async function waitForPanels(page: Page): Promise<void> {
     await page.waitForLoadState('domcontentloaded');
     await expect(page.locator('[data-testid="data-testid Panel loading bar"], [aria-label="Panel loading bar"]')).toHaveCount(0, { timeout: 90_000 });
+    await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0, { timeout: 90_000 });
     await page.waitForTimeout(1500);
     await expect(page.locator('[data-testid="data-testid Panel loading bar"], [aria-label="Panel loading bar"]')).toHaveCount(0, { timeout: 30_000 });
 }

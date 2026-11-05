@@ -29,7 +29,7 @@
             "type": "special"
           }
         ],
-        "noValue": "No traffic",
+        "noValue": "\u2013",
         "thresholds": {
           "mode": "absolute",
           "steps": [
@@ -103,15 +103,26 @@
     "title": "Firing alerts",
     "transformations": [
       {
+        "id": "filterFieldsByName",
+        "options": {
+          "include": {
+            "names": [
+              "alertname",
+              "team",
+              "severity",
+              "pop",
+              "dashboard",
+              "Value"
+            ]
+          }
+        }
+      },
+      {
         "id": "organize",
         "options": {
           "excludeByName": {
             "Time": true,
-            "__name__": true,
-            "alertgroup": true,
-            "instance": true,
-            "job": true,
-            "slo": true
+            "__name__": true
           },
           "indexByName": {
             "Cause": 0,

@@ -16,8 +16,9 @@ def wall(panel: dict) -> dict:
 
 ALERT_TABLE_EXPR = 'ALERTS_FOR_STATE{alertname!="Watchdog"} * 1000 and ignoring(alertstate) ALERTS{alertstate="firing",alertname!="Watchdog"}'
 ALERT_TRANSFORMS = [
+    {"id": "filterFieldsByName", "options": {"include": {"names": ["alertname", "team", "severity", "pop", "dashboard", "Value"]}}},
     {"id": "organize", "options": {
-        "excludeByName": {"Time": True, "__name__": True, "alertgroup": True, "job": True, "instance": True, "slo": True},
+        "excludeByName": {"Time": True, "__name__": True},
         "renameByName": {"alertname": "Cause", "team": "Team", "severity": "Severity", "Value": "Since", "dashboard": "Dashboard", "pop": "PoP"},
         "indexByName": {"Cause": 0, "Team": 1, "Severity": 2, "PoP": 3, "Since": 4, "Dashboard": 5}}},
 ]
@@ -54,12 +55,12 @@ def p95_by_pop(w: int = 12, h: int = 8) -> dict:
 
 
 HEALTH_STATS = lambda: [
-    shared("cdnf-lib-health-unhealthy-components", stat("Unhealthy components", "Control-plane components reporting degraded or unavailable.", [prom("count(cdnfoundry_component_health == 0) or vector(0)", "unhealthy", instant=True)], "short", "zero_good", link="/d/cdnf-control-plane")),
-    shared("cdnf-lib-health-stale-edges", stat("Stale edges", "Enabled edges whose heartbeat is older than the freshness limit.", [prom("cdnfoundry_edges_stale", "stale", instant=True)], "short", "zero_warn", link="/d/cdnf-pop-fleet")),
-    shared("cdnf-lib-health-failed-operations", stat("Failed operations", "Operations that failed in the failed-operations window.", [prom("cdnfoundry_operations_failed_recent", "failed", instant=True)], "short", "zero_warn", link="/d/cdnf-control-plane")),
+    shared("cdnf-lib-health-unhealthy-components", stat("Unhealthy", "Control-plane components reporting degraded or unavailable.", [prom("count(cdnfoundry_component_health == 0) or vector(0)", "unhealthy", instant=True)], "short", "zero_good", link="/d/cdnf-control-plane")),
+    shared("cdnf-lib-health-stale-edges", stat("Stale", "Enabled edges whose heartbeat is older than the freshness limit.", [prom("cdnfoundry_edges_stale", "stale", instant=True)], "short", "zero_warn", link="/d/cdnf-pop-fleet")),
+    shared("cdnf-lib-health-failed-operations", stat("Failed ops", "Operations that failed in the failed-operations window.", [prom("cdnfoundry_operations_failed_recent", "failed", instant=True)], "short", "zero_warn", link="/d/cdnf-control-plane")),
     shared("cdnf-lib-health-dns-drift", stat("DNS drift", "DNS deployments that have not reached their desired revision.", [prom("cdnfoundry_dns_deployments_drifted", "drift", instant=True)], "short", "zero_warn", link="/d/cdnf-dns-authoritative")),
-    shared("cdnf-lib-health-firing-alerts", stat("Firing alerts", "Alerts firing now, not counting the heartbeat.", [prom(FIRING, "firing", instant=True)], "short", "zero_warn")),
-    shared("cdnf-lib-health-paused-rollouts", stat("Paused rollouts", "Fleet rollouts paused on a safety threshold.", [prom("cdnfoundry_fleet_rollouts_paused", "paused", instant=True)], "short", "zero_warn", link="/d/cdnf-fleet-rollouts")),
+    shared("cdnf-lib-health-firing-alerts", stat("Alerts", "Alerts firing now, not counting the heartbeat.", [prom(FIRING, "firing", instant=True)], "short", "zero_warn")),
+    shared("cdnf-lib-health-paused-rollouts", stat("Paused", "Fleet rollouts paused on a safety threshold.", [prom("cdnfoundry_fleet_rollouts_paused", "paused", instant=True)], "short", "zero_warn", link="/d/cdnf-fleet-rollouts")),
 ]
 TRAFFIC_STATS = lambda: [
     shared("cdnf-lib-traffic-requests", stat("Requests", "Requests per second across the selected PoPs.", [prom(RPS, "requests", instant=True)], "reqps", decimals=1, link="/d/cdnf-global-traffic")),
@@ -109,7 +110,7 @@ def noc_wall() -> dict:
         wall(stat("5xx ratio", "Share of responses that are server errors.", [prom(ERR_PCT, "5xx", instant=True)], "percent", "error_percent", decimals=2, h=5)),
         wall(stat("Cache hit", "Share of requests served from cache.", [prom(HIT_PCT, "hit", instant=True)], "percent", "hit_percent", decimals=1, h=5)),
         wall(stat("Edge p95", "95th percentile time to serve a request.", [prom(P95_MS, "p95", instant=True)], "ms", "latency_ms", decimals=0, h=5)),
-        wall(stat("Firing alerts", "Alerts firing now.", [prom(FIRING, "firing", instant=True)], "short", "zero_warn", h=5)),
+        wall(stat("Alerts", "Alerts firing now.", [prom(FIRING, "firing", instant=True)], "short", "zero_warn", h=5)),
     ]
     rows = [stats, [pop_map, probe_table(6, 10), firing_alerts(6, 10, "Alerts")], [requests_by_status(12, 8), timeseries("5xx and p95", "5xx ratio and edge p95 on one axis pair.", [prom(ERR_PCT, "5xx %"), prom(P95_MS, "p95 ms")], "short", w=12, h=8)]]
     return dashboard("cdnf-noc-wall", "NOC wall", "cdnf-noc", "Built for a kiosk on a large screen: global traffic, a map of PoPs, probes, and alerts, with no scrolling.", rows,
@@ -126,7 +127,7 @@ def global_traffic() -> dict:
         [timeseries("Requests by IP version", "Requests from IPv4 and IPv6 clients.", [ch(split("ip_version", CH_REQUESTS, "requests"))], "short", stack=True, w=8),
          bargauge("Top countries", "Countries sending the most requests.", [ch(top("country", CH_REQUESTS, "requests"), table=True)], "short", w=8),
          bargauge("Top ASNs (last 7 days)", "Client networks sending the most requests. ASNs are kept in raw events only, so this covers at most 7 days.",
-                  [ch("SELECT toString(asn) AS asn, count() AS requests FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) AND occurred_at > now() - INTERVAL 7 DAY AND asn != 0 AND event_type = 'request' GROUP BY asn ORDER BY requests DESC LIMIT 10", table=True)], "short", w=8)],
+                  [ch("SELECT toString(asn) AS asn_label, count() AS request_count FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) AND occurred_at > now() - INTERVAL 7 DAY AND asn != 0 AND event_type = 'request' GROUP BY asn_label ORDER BY request_count DESC LIMIT 10", table=True)], "short", w=8)],
         [bargauge("Top domains by requests", "Hostnames with the most requests.", [ch(top("hostname", CH_REQUESTS, "requests", hostname=True), table=True)], "short", w=8),
          bargauge("Top domains by bandwidth", "Hostnames that sent the most bytes.", [ch(top("hostname", CH_BYTES, "bytes", hostname=True), table=True)], "bytes", w=8),
          bargauge("Top domains by errors", "Hostnames with the most 5xx responses.", [ch(top("hostname", "sumIf(requests, status >= 500)", "errors", hostname=True), table=True)], "short", "zero_warn", w=8)],
@@ -144,9 +145,9 @@ def pop_fleet() -> dict:
         prom(f"sum by (pop) ({req()})", "Requests", instant=True, fmt="table"),
         prom(f'100 * sum by (pop) ({req(",status_class=\"5xx\"")}) / sum by (pop) ({req()})', "5xx", instant=True, fmt="table"),
         prom(f'1000 * histogram_quantile(0.95, sum by (le, pop) (cdnf:edge_latency_bucket:rate5m{{{S}}}))', "p95", instant=True, fmt="table"),
-        prom(node_pop('100 * (1 - avg by (node) (rate(node_cpu_seconds_total{mode="idle",role=~"edge|dns-edge"}[5m])))'), "CPU", instant=True, fmt="table"),
-        prom(node_pop('100 * (1 - node_memory_MemAvailable_bytes{role=~"edge|dns-edge"} / node_memory_MemTotal_bytes{role=~"edge|dns-edge"})'), "Memory", instant=True, fmt="table"),
-        prom(node_pop('100 * (1 - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay",role=~"edge|dns-edge"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay",role=~"edge|dns-edge"})'), "Disk", instant=True, fmt="table"),
+        prom(node_pop('100 * (1 - avg by (node) (rate(node_cpu_seconds_total{mode="idle"}[5m])))'), "CPU", instant=True, fmt="table"),
+        prom(node_pop('100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)'), "Memory", instant=True, fmt="table"),
+        prom(node_pop('100 * (1 - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"})'), "Disk", instant=True, fmt="table"),
         prom('100 * max by (pop) (cdnfoundry_cell_capacity_ratio{resource="cache",pop=~"$pop"})', "Cache", instant=True, fmt="table"),
     ], w=24, h=10, transformations=[{"id": "merge", "options": {}}, {"id": "organize", "options": {"excludeByName": {"Time": True},
         "renameByName": {"pop": "PoP", **{f"Value #{chr(65 + i)}": name for i, name in enumerate(["Heartbeat age", "Applied revision", "Latest revision", "Requests/s", "5xx %", "p95 ms", "CPU %", "Memory %", "Disk %", "Cache fill %"])}}}}],
@@ -159,7 +160,7 @@ def pop_fleet() -> dict:
         [fleet],
         [stat("Edges behind", "Enabled PoPs whose applied revision is older than the latest.", [prom("count(cdnfoundry_edge_gateway_active_revision < scalar(max(cdnfoundry_edge_gateway_active_revision))) or vector(0)", "behind", instant=True)], "short", "zero_warn", w=6),
          stat("Version drift", "PoPs running component versions that differ from the desired versions.", [prom("sum(cdnfoundry_edge_runtime_version_drift) or vector(0)", "drift", instant=True)], "short", "zero_warn", w=6),
-         stat("Paused rollouts", "Fleet rollouts paused on a safety threshold.", [prom("cdnfoundry_fleet_rollouts_paused", "paused", instant=True)], "short", "zero_warn", w=6),
+         stat("Paused", "Fleet rollouts paused on a safety threshold.", [prom("cdnfoundry_fleet_rollouts_paused", "paused", instant=True)], "short", "zero_warn", w=6),
          stat("Gateways unready", "Enabled gateways that are not ready.", [prom("cdnfoundry_edge_gateways_unready", "unready", instant=True)], "short", "zero_good", w=6)],
         [timeseries("Heartbeat age by PoP", "Seconds since each PoP last reported.", [prom('max by (pop) (cdnfoundry_edge_heartbeat_age_seconds{pop=~"$pop"})', "{{pop}}")], "s", threshold="age_seconds"),
          timeseries("Applied revision by PoP", "The configuration revision each PoP serves.", [prom('max by (pop) (cdnfoundry_edge_gateway_active_revision{pop=~"$pop"})', "{{pop}}")], "short")],
@@ -211,7 +212,7 @@ def cache() -> dict:
         [timeseries("Cache status mix", "Requests per second by cache status.", [prom(f"sum by (cache_status) ({req()})", "{{cache_status}}")], "reqps", stack=True),
          timeseries("Hit ratio over time", "Requests served from cache, as a share of all requests.", [prom(HIT_PCT, "hit %")], "percent", threshold="hit_percent", max_value=100)],
         [timeseries("Cache fill by PoP", "How full the cache volume of each cell is.", [prom('max by (pop) (cdnfoundry_cell_capacity_ratio{resource="cache",pop=~"$pop"})', "{{pop}}")], "percentunit", threshold="ratio_utilization", max_value=1),
-         timeseries("Purge volume", "Cache purge requests per hour.", [pg("SELECT date_trunc('hour', created_at) AS time, count(*) AS purges FROM grafana_cache_purges WHERE $__timeFilter(created_at) GROUP BY 1 ORDER BY 1", table=False)], "short")],
+         timeseries("Purge volume", "Cache purge requests per hour.", [pg("SELECT t AS time, count(c.id) AS purges FROM generate_series(date_trunc('hour', $__timeFrom()::timestamptz), $__timeTo()::timestamptz, interval '1 hour') AS t LEFT JOIN grafana_cache_purges c ON c.created_at >= t AND c.created_at < t + interval '1 hour' GROUP BY t ORDER BY t", table=False)], "short")],
         [timeseries("Purge propagation time", "Longest time a purge took to apply on every PoP, over the last hour.", [prom("cdnfoundry_purge_propagation_seconds_max", "slowest purge")], "s"),
          timeseries("Evictions", "Cache evictions are not exported by the cells; this shows the cache volume ratio that precedes them.", [prom('max by (pop, cell) (cdnfoundry_cell_capacity_ratio{resource="cache",pop=~"$pop"})', "{{pop}} {{cell}}")], "percentunit", threshold="ratio_utilization", max_value=1)],
     ]
@@ -265,9 +266,9 @@ def synthetic_probes() -> dict:
 def propagation() -> dict:
     rows = [
         [stat("Oldest pending purge", "Age of the oldest purge not yet applied on every PoP.", [prom("cdnfoundry_purge_pending_oldest_seconds", "purge", instant=True)], "s", "age_seconds", w=6),
-         stat("Oldest unapplied config", "Age of the oldest published edge artifact a PoP has not applied.", [prom("cdnfoundry_config_pending_oldest_seconds", "config", instant=True)], "s", "age_seconds", w=6),
+         stat("Oldest config", "Age of the oldest published edge artifact a PoP has not applied.", [prom("cdnfoundry_config_pending_oldest_seconds", "config", instant=True)], "s", "age_seconds", w=6),
          stat("Slowest purge (1h)", "Longest request-to-applied time of a purge in the last hour.", [prom("cdnfoundry_purge_propagation_seconds_max", "slowest", instant=True)], "s", "age_seconds", w=6),
-         stat("Oldest pending DNS serial", "Age of the oldest DNS deployment that has not reached its serial.", [prom("cdnfoundry_dns_serial_pending_oldest_seconds", "dns", instant=True)], "s", "age_seconds", w=6)],
+         stat("Oldest DNS serial", "Age of the oldest DNS deployment that has not reached its serial.", [prom("cdnfoundry_dns_serial_pending_oldest_seconds", "dns", instant=True)], "s", "age_seconds", w=6)],
         [timeseries("Purge propagation", "Age of the oldest pending purge and the slowest finished purge.", [prom("cdnfoundry_purge_pending_oldest_seconds", "oldest pending"), prom("cdnfoundry_purge_propagation_seconds_max", "slowest in the last hour")], "s", threshold="age_seconds"),
          timeseries("Config propagation", "Age of the oldest published artifact a PoP has not applied.", [prom("cdnfoundry_config_pending_oldest_seconds", "oldest unapplied")], "s", threshold="age_seconds")],
         [table("Slowest PoP", "Edges that have not applied the newest published artifact, with how many artifacts each is behind.", [pg(
