@@ -6,6 +6,12 @@ use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
 abstract class TestCase extends BaseTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config(['edge.proxy_secret' => 'test-edge-proxy-secret-0123456789abcdef']);
+    }
+
     protected function setUpTraits()
     {
         $connection = config('database.default');

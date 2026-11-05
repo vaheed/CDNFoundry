@@ -21,7 +21,7 @@ return [
         'stale_hours' => (int) env('MMDB_STALE_HOURS', 48),
     ],
     'vector' => ['metrics_url' => env('VECTOR_METRICS_URL', 'http://vector:9598/metrics')],
-    'metrics' => ['token' => env('METRICS_TOKEN', ''), 'token_file' => env('METRICS_TOKEN_FILE')],
+    'metrics' => ['token' => '', 'token_file' => env('METRICS_TOKEN_FILE')],
     'backups' => [
         'repository' => env('RESTIC_REPOSITORY', ''), 'password_file' => env('RESTIC_PASSWORD_FILE', ''),
         'access_key' => env('BACKUP_ACCESS_KEY_ID', ''), 'secret_key' => env('BACKUP_SECRET_ACCESS_KEY', ''),
