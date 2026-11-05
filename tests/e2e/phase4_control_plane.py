@@ -778,7 +778,7 @@ def main() -> None:
             acknowledge(edge, sequence)
         wait_isolation(token, domain_id, "active")
         wait_deployment(token, domain_id)
-        assert dig(f"www.{ZONE}", "CNAME") == [f"pool-{shared['id']}.proxy.cdnf.test."]
+        assert wait_answers(f"www.{ZONE}", "CNAME", {f"pool-{shared['id']}.proxy.cdnf.test."}) == [f"pool-{shared['id']}.proxy.cdnf.test."]
         apex_ipv4 = set(dig(ZONE, "A"))
         apex_ipv6 = set(dig(ZONE, "AAAA"))
         assert apex_ipv4 and apex_ipv4 <= set(dig(shared_global, "A")), apex_ipv4
@@ -821,7 +821,7 @@ def main() -> None:
         _, moving_operation = call("GET", f"/api/operations/{move_operation}", token=token)
         assert moving_operation["data"]["status"] == "running", moving_operation
         wait_deployment(token, domain_id)
-        assert dig(f"www.{ZONE}", "CNAME") == [f"pool-{quarantine['id']}.proxy.cdnf.test."]
+        assert wait_answers(f"www.{ZONE}", "CNAME", {f"pool-{quarantine['id']}.proxy.cdnf.test."}) == [f"pool-{quarantine['id']}.proxy.cdnf.test."]
         quarantine_global = f"pool-{quarantine['id']}.global.all.proxy.cdnf.test"
         wait_answers(quarantine_global, "A", {"9.9.9.101", "9.9.9.102"})
         wait_answers(quarantine_global, "AAAA", {"2620:fe::101", "2620:fe::102"})
@@ -843,7 +843,7 @@ def main() -> None:
         )
         assert final["active_pool_id"] == quarantine["id"] and final["target_pool_id"] is None
         wait_operation(token, move_operation)
-        assert dig(f"www.{ZONE}", "CNAME") == [f"pool-{quarantine['id']}.proxy.cdnf.test."]
+        assert wait_answers(f"www.{ZONE}", "CNAME", {f"pool-{quarantine['id']}.proxy.cdnf.test."}) == [f"pool-{quarantine['id']}.proxy.cdnf.test."]
 
     coalesced_move_revisions = max(move_revisions.values()) - move_revision
     final_revision = max(final_revisions.values())
