@@ -11,13 +11,16 @@ the owning host administrators. Share individual cross-host values through a
 protected channel, never by copying the whole file.
 :::
 
-Use `.env.prod.example` as the production key inventory. Create `.env.prod` with
-`scripts/generate-production-env.sh` or copy the template, keep it mode `0600`,
-and never commit it. A variable is required only on hosts running its owning
-profile.
+`.env.prod.example` lists every production key. Create `.env.prod` with
+`scripts/generate-production-env.sh`, or copy the template. Keep it mode `0600`
+and never commit it. A host needs a variable only when it runs the profile that
+owns it. The **Required** column names that profile, for example `control`,
+`edge agent`, or `telemetry`. Fleet writes these files for you in a managed
+fleet, see the [Fleet CLI reference](fleet-cli.md).
 
-Runtime product policy is not an environment variable. Manage it through
-[Platform settings](platform-settings.md).
+Product policy, such as retention, rate limits, and proxy defaults, is not an
+environment variable. Change it in [Platform settings](platform-settings.md).
+Limits that the software enforces are listed in the [limits reference](limits.md).
 
 ## Control plane
 
@@ -89,7 +92,7 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `ACME_CONTACT_EMAIL` | control | ACME account contact |
 | `ACME_DIRECTORY_URL` | control | Let's Encrypt production directory by default |
 | `ACME_ORDER_BUDGET_PER_HOUR` | control | New-order ceiling; default `20` |
-| `TLS_UPLOAD_TRUST_FILE` | control | Optional PEM bundle of root certificates that replaces the system store when validating uploaded certificate chains. Leave empty to trust the operating system roots; set it for a private PKI. It is not in `compose.prod.yml`; add it, and a read-only mount of the bundle, with a compose override. |
+| `TLS_UPLOAD_TRUST_FILE` | control | Optional PEM bundle of root certificates that replaces the system store when validating uploaded certificate chains. Leave empty to trust the operating system roots; set it for a private PKI. `compose.prod.yml` passes the variable to the containers but does not mount a file. Add a read-only mount of the bundle with a Compose override, and set the variable to the path inside the container. |
 | `ACME_VERIFY_TLS` | optional | Verify ACME directory TLS; default true, false only for local Pebble |
 | `ACME_RENEW_BEFORE_DAYS` | optional | Renewal window; default `30` |
 | `ACME_DNS_TTL` | optional | Challenge TTL; default `30` seconds |
@@ -132,7 +135,7 @@ object storage; other Restic backends need their own credential/mount wiring.
 | --- | --- | --- |
 | `CLICKHOUSE_PASSWORD` | telemetry | Password of the ClickHouse administrator `cdnf`. Only the ClickHouse container uses it, for schema and migrations |
 | `CLICKHOUSE_INGEST_PASSWORD` | telemetry/edge/DNS | Password of `cdnf_ingest`, the insert-only account Vector uses. It can insert into `edge_events` and `dns_events` and nothing else |
-| `CLICKHOUSE_USER` | internal | Account Laravel and Vector log in as. Compose fixes `cdnf_reader` for Laravel and `cdnf_ingest` for Vector |
+| `CLICKHOUSE_USER` | internal | Account a service logs in to ClickHouse as. Compose fixes `cdnf_reader` for Laravel and `cdnf_ingest` for Vector. Do not set it |
 | `CLICKHOUSE_READER_PASSWORD` | control query | Password of `cdnf_reader`, the read-only account Laravel uses, with server-side limits on time, rows, and memory |
 | `CLICKHOUSE_ZONES_PASSWORD` | telemetry/control | Password of `cdnf_zones`, the account Laravel publishes the served-zone list with. It can insert into `served_zones` and nothing else; with it unset, no zones are published and DNS rollups use one unattributed bucket |
 | `CLICKHOUSE_URL` | telemetry/control query | Local `http://clickhouse:8123` or verified external endpoint |
@@ -141,16 +144,16 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `PROMETHEUS_URL` | optional control | Default `http://prometheus:9090` |
 | `VECTOR_METRICS_URL` | optional control | Vector metrics probe URL when overridden |
 | `MMDB_STALE_HOURS` | optional control | Health threshold; default `48` |
-| `MMDB_PROVIDER` | updater | `dbip-jsdelivr` default, `dbip-official`, `ip66`, or `generic` |
+| `MMDB_PROVIDER` | updater | `dbip-jsdelivr` (default), `dbip-official`, `ip66`, or `generic`. `generic` needs `MMDB_DOWNLOAD_URL` |
 | `MMDB_TARGET_FILE` | updater | Default `GeoLite2-City.mmdb` |
 | `MMDB_DOWNLOAD_INTERVAL_SECONDS` | updater | Default `86400`, clamped to at least 300 |
 | `MMDB_DOWNLOAD_RETRIES` | updater | Default `5` |
 | `MMDB_EXPECTED_SHA256` | updater | Lowercase SHA-256 the download must match |
 | `MMDB_CHECKSUM_URL` | updater | HTTPS URL of a published SHA-256 (first field of the first line) the download must match |
 | `MMDB_REQUIRE_VERIFICATION` | updater | Production sets `true`: a download is activated only when one of the two checksums vouches for it. Otherwise the previous database, or the bundled empty fallback on a first start, stays in use |
-| `MMDB_DOWNLOAD_URL` | custom updater | HTTPS artifact URL |
-| `MMDB_DOWNLOAD_HEADER` | custom updater | Optional authorization header; treat as secret |
-| `MMDB_ASN_DOWNLOAD_URL`, `MMDB_ASN_EXPECTED_SHA256`, `MMDB_ASN_CHECKSUM_URL` | custom updater | Optional source and checksum of the autonomous-system database that edge cells use to add an ASN to each event. Empty uses the provider's ASN file when the provider has one; a failure leaves ASN at 0 and never stops the updater |
+| `MMDB_DOWNLOAD_URL` | generic provider | HTTPS artifact URL; when set, it overrides the provider's URL |
+| `MMDB_DOWNLOAD_HEADER` | generic provider | Optional authorization header; treat as secret |
+| `MMDB_ASN_DOWNLOAD_URL`, `MMDB_ASN_EXPECTED_SHA256`, `MMDB_ASN_CHECKSUM_URL` | updater | Optional source and checksum of the autonomous-system database that edge cells use to add an ASN to each event. Empty uses the provider's ASN file when the provider has one; a failure leaves ASN at 0 and never stops the updater |
 
 Grafana telemetry variables are:
 
@@ -192,11 +195,12 @@ Grafana telemetry variables are:
 | `LOG_METRICS_BIND` | logs | Host metrics publication; generated bundles use `monitor_ipv4` or the local `bind_ipv4`, never an advertised NAT-only address |
 | `LOG_SOURCE_IPV4_ALLOWLIST` | telemetry gateway | Exact non-edge host sources allowed to push logs |
 
-Vector receives `CLICKHOUSE_ENDPOINT` and logs in as `cdnf_ingest` with
-`CLICKHOUSE_INGEST_PASSWORD`. A compromised edge or DNS node can therefore
-write events but cannot read or drop telemetry. The telemetry account split is
-one ingest password per fleet; it is not yet one per node. `MMDB_DIR` is an internal updater override
-whose default is `/mmdb`.
+Vector logs in as `cdnf_ingest` with `CLICKHOUSE_INGEST_PASSWORD`. A
+compromised edge or DNS node can therefore write events but cannot read or drop
+telemetry. There is one ingest password per fleet, not one per node.
+
+`MMDB_DIR` is an internal override of the updater's output directory. Its default
+is `/mmdb`.
 
 ### Moving an existing ClickHouse volume to the split accounts
 
@@ -370,16 +374,12 @@ child process; they are not deployment settings.
 isolated loopback cell endpoint and a temporary synthetic token file. Never point
 this fixture at a staging or production cell. These are not deployment settings.
 
-`REDIS_QUEUE_RETRY_AFTER` defaults to 3900 seconds. It must stay above every
-Horizon worker timeout and every job `$timeout` (the longest is the control
-backup at 3700 seconds), or a job that is still running is delivered a second
-time. `make config-check` runs `QueueTimingContractTest` to enforce this. A job
-whose worker dies without cleanup is redelivered after this interval, and the
-scheduled repair jobs cover the gap.
+## Other keys
 
-`ALERT_WEBHOOK_URL` is required on the host that runs Alertmanager. It must be
-an `https://` URL; `ALERT_WEBHOOK_ALLOW_HTTP=true` permits `http://` for
-development. `EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS` (cells) lists the networks
-whose PROXY protocol headers are honored; production Compose derives it from
-`EDGE_NETWORK_SUBNET`. `EDGE_IDENTITY_VALIDITY_DAYS` (control, 2–3650, default
-365) sets the lifetime of newly signed edge identity certificates.
+| Variable | Required | Meaning and default |
+| --- | --- | --- |
+| `REDIS_QUEUE_RETRY_AFTER` | control | Seconds before a queued job that is still reserved is delivered again; default `3900`. It must stay above every Horizon worker timeout and every job `$timeout`. The longest is the control backup at 3700 seconds. A lower value delivers a running job a second time. `make config-check` runs `QueueTimingContractTest` to enforce this. When a worker dies without cleanup, the job is redelivered after this interval, and the scheduled repair jobs cover the gap |
+| `ALERT_WEBHOOK_URL` | host running Alertmanager | Where Alertmanager sends alerts. Must be an `https://` URL |
+| `ALERT_WEBHOOK_ALLOW_HTTP` | optional | Set `true` to allow an `http://` webhook URL in development |
+| `EDGE_NETWORK_SUBNET` | edge | Subnet of the private edge network. Compose requires it |
+| `EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS` | cells | Networks whose PROXY protocol headers a cell honors. Production Compose sets it from `EDGE_NETWORK_SUBNET` |

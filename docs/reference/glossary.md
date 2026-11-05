@@ -27,7 +27,7 @@ behalf of a user.
 **Cache key.** The value that decides whether two requests share one cached
 response. A URL purge and a cache lookup use the same key.
 
-**Cell.** One bounded OpenResty runtime on an edge host. An edge has up to 32
+**Cell.** One bounded OpenResty runtime on an edge host. An edge has eight
 cells. See [Edges, pools, and cells](../concepts/edges-and-cells.md).
 
 **CNAME.** A DNS record that points one name to another name.

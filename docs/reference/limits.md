@@ -12,7 +12,8 @@ resource and add bounded capacity instead.
 :::
 
 These limits are enforced by application validation or the shipped runtime.
-Platform settings may make a limit stricter within the documented bound.
+[Platform settings](platform-settings.md) can make some limits stricter within
+their documented bounds.
 
 ## API and bulk work
 
@@ -28,10 +29,10 @@ Platform settings may make a limit stricter within the documented bound.
 | URL purge | 100 URLs, 2,048 characters each, 128 KiB payload |
 | Cache key | 128 query arguments; none is cached beyond that |
 | Persisted URL purges per PoP | 50,000 keys, kept one year |
-| Outstanding purges | 100 per domain |
+| Outstanding purges (pending or running) | 1,000 per domain |
 | Security rules | 1,000 per domain, 500 per import |
 | Usage export | 10,000 rows |
-| TLS upload | 16 KiB leaf, 64 KiB chain, 16 KiB key |
+| TLS upload | 16 KiB leaf, 64 KiB chain, 16 KiB key. Keys: RSA 2048 to 4096 bits, or EC P-256 or P-384 |
 
 ## Queue lanes
 
@@ -45,7 +46,7 @@ Platform settings may make a limit stricter within the documented bound.
 | `purge` | 1 | 128 MiB | 3 | 120 s |
 | `bulk_maintenance` | 1 | 192 MiB | 2 | 300 s |
 
-Health marks a queue degraded above depth 1,000 or oldest age 900 seconds.
+Health marks a queue degraded when its depth is above 1,000 or its oldest job is older than 900 seconds.
 
 ## Security profiles
 
@@ -77,15 +78,39 @@ Manual profile values cannot exceed the standard ceiling.
 
 ## Standard cell resources
 
-| Cell | Memory | CPU | PID limit | Cache max |
-| --- | ---: | ---: | ---: | ---: |
-| Shared | 2 GiB | 2 | 256 | 192 MiB |
-| Quarantine | 512 MiB | 0.5 | 128 | separate 192 MiB volume |
-| Edge agent | 128 MiB | 0.25 | 64 | none |
+Compose sets these limits in `compose.prod.yml`. Every OpenResty cell uses the
+same limits.
 
-The OpenResty runtime uses 10 MiB general limit state, 32 MiB security state,
-10 MiB client-connection state, 10 MiB hostname-connection state, and 10 MiB
-request-rate state. Attacker-controlled keys remain length and lifetime bounded.
+| Container | Memory | CPU | PID limit |
+| --- | ---: | ---: | ---: |
+| OpenResty cell (each of the eight slots) | 512 MiB | 0.5 | 128 |
+| Edge agent | 256 MiB | 0.25 | 64 |
+
+Each cell caches on its own volume. Four cache areas bound the disk use of one
+cell:
+
+| Cache area | Maximum size | Key index memory |
+| --- | ---: | ---: |
+| `small` | 256 MiB | 8 MiB |
+| `standard` | 1 GiB | 16 MiB |
+| `large` | 4 GiB | 32 MiB |
+| `streaming` | 8 GiB | 32 MiB |
+
+The OpenResty runtime also reserves shared memory for limit state:
+
+| Shared state | Size |
+| --- | ---: |
+| Runtime limits | 10 MiB |
+| Security limits | 32 MiB |
+| Traffic limits | 16 MiB |
+| Cache limits | 16 MiB |
+| Cache purges | 16 MiB |
+| Domain limits | 8 MiB |
+| Connections per client address | 10 MiB |
+| Connections per hostname | 10 MiB |
+| Request rate per client address | 10 MiB |
+
+Attacker-controlled keys stay bounded in length and lifetime.
 
 ## Analytics and telemetry
 
@@ -93,8 +118,11 @@ request-rate state. Attacker-controlled keys remain length and lifetime bounded.
 | --- | --- |
 | Aggregate query range | 90 days |
 | Raw query range | 24 hours |
-| Vector sink batch | 1,000 events or 2 seconds |
-| Vector disk buffer | 1 GiB per ClickHouse sink |
+| Vector batch, request and DNS sinks | 1,000 events or 2 seconds |
+| Vector batch, security sink | 500 events or 1 second |
+| Vector disk buffer, request sink | 1 GiB |
+| Vector disk buffer, security and DNS sinks | 256 MiB each |
+| Vector buffer when full | Drops the newest events; serving never stops |
 | Vector dnstap frame | 102,400 bytes |
 | Vector dnstap connections | 32 |
 | Raw event TTL | 7 days |
@@ -103,6 +131,8 @@ request-rate state. Attacker-controlled keys remain length and lifetime bounded.
 
 ## Runtime health
 
-Edge capacity health scans at most 1,000 cells and marks pressure at 80% of a
-reported memory, cache, temporary-storage, or connection limit. The default
-fresh-heartbeat threshold is 45 seconds.
+Edge capacity health scans at most 1,000 cells. It marks a cell as under
+pressure at 80% of a reported memory, cache, temporary-storage, or connection
+limit. It also reports degraded when more than 1,000 cells exist, because the
+scan is then incomplete. The default fresh-heartbeat threshold is 45 seconds
+(`heartbeat_fresh_seconds` in [Platform settings](platform-settings.md)).

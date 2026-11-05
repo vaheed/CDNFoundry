@@ -11,43 +11,48 @@ bootstrap token. Never clone an agent state volume or reuse one edge identity
 on another host.
 :::
 
-Edge routes are rooted at `/edge/v1` and are not part of the customer API.
-They are served by the dedicated edge-control listener. Registration is
-bootstrap-token authenticated and rate limited; every later route requires a
-valid client certificate whose serial belongs to the enabled edge.
+Edge routes are rooted at `/edge/v1`. They are not part of the customer API.
+The dedicated edge-control listener serves them. Only `/register` works without
+a client certificate: it needs the one-time bootstrap token and is rate limited.
+Every other route needs a valid client certificate whose serial belongs to an
+enabled edge.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/register` | Exchange edge UUID, one-time token, version, and CSR for identity |
+| `POST` | `/register` | Exchange the edge UUID, one-time token, version, and CSR for an identity |
 | `POST` | `/identity/renew` | Exchange a CSR (common name = edge ID) for a renewed identity certificate. It becomes current on its first authenticated use |
-| `GET` | `/probes/targets` | List the other PoPs' endpoint addresses to probe on ports 80 and 443 |
-| `POST` | `/probes` | Report up to 128 probe results; results for unknown targets are ignored |
-| `POST` | `/heartbeat` | Report sequence, listener readiness, bounded gateway/cell capacity, origin health, and security |
-| `GET` | `/dns/changes?cursor=` | Fetch up to 200 zones that changed on the DNS primary after the cursor, oldest first. A zone that changes again moves to the end; a deleted zone is reported with `deleted: true` |
+| `GET` | `/probes/targets` | List the other PoPs' endpoint addresses to probe on ports 80 and 443 (at most 128) |
+| `POST` | `/probes` | Report up to 128 probe results. Results for unknown targets are ignored |
+| `POST` | `/heartbeat` | Report sequence, listener readiness, bounded gateway and cell capacity, origin health, and security |
+| `GET` | `/gateway/config` | Fetch the listener addresses to bind and the cells behind each one |
+| `GET` | `/control-addresses?checksum=` | Fetch the signed list of control-plane addresses. Returns only `unchanged` while the checksum matches |
+| `GET` | `/dns/changes?cursor=` | Fetch up to 200 zones that changed on the DNS primary after the cursor, oldest first. A zone that changes again moves to the end. A deleted zone is reported with `deleted: true` |
 | `GET` | `/dns/transfer` | Fetch how to pull zones: the primary's address and port, the catalog zone, the TSIG key name, and the TSIG secret sealed to this edge's identity key |
 | `GET` | `/origin-policy?checksum=` | Fetch the signed platform origin destination policy (blocked addresses and networks, private allowlist). Returns only `unchanged` while the checksum matches |
 | `GET` | `/config/manifest?cursor=` | Fetch up to 500 newer artifact descriptors |
 | `GET` | `/config/artifacts/{checksum}` | Fetch one signed encoded artifact |
-| `GET` | `/config/full` | Fetch a bounded signed gzip recovery snapshot |
-| `POST` | `/config/applied` | Acknowledge successful sequence activation |
-| `POST` | `/config/rejected` | Record that one domain's artifact was rejected. The reason is a lowercase identifier; an unknown reason is stored as reported and never refused |
-| `GET` | `/tasks` | Fetch up to 100 pending/retryable tasks |
+| `GET` | `/certificates/{certificate}/key` | Fetch a certificate private key sealed to this edge's identity key. The edge must host a domain that uses the certificate, or the route answers `404` |
+| `GET` | `/config/full` | Fetch a bounded, signed, gzip recovery snapshot |
+| `POST` | `/config/applied` | Acknowledge that a sequence is active |
+| `POST` | `/config/rejected` | Record that one domain's artifact was rejected. The reason is a lowercase identifier. An unknown reason is stored as reported and never refused |
+| `GET` | `/tasks` | Fetch up to 100 pending or retryable tasks |
 | `POST` | `/tasks/{task}/result` | Complete or fail an assigned task |
 
 ## Trust
 
-The Nginx edge-control listener permits a client certificate to be absent only
-for registration. It forwards certificate verification and serial values to
-Laravel over the internal FastCGI boundary. Later middleware verifies the
-certificate, serial, edge state, and identity expiry.
+The Nginx edge-control listener accepts a missing client certificate so that
+registration can work. It forwards the certificate verification result and
+serial to Laravel over the internal FastCGI boundary. Laravel middleware then
+checks the certificate, the serial, the edge state, and the identity expiry on
+every route except `/register`.
 
 The agent separately verifies the edge-control server against
 `EDGE_CONTROL_CA_CERTIFICATE`. Never use the identity CA key as a server key.
 
 ## Artifact contract
 
-Descriptors include sequence, kind, domain/revision identity, checksum,
-signature, schema version, and minimum/maximum agent version. Agent version
+Each descriptor holds the sequence, kind, domain and revision, checksum,
+signature, schema version, and minimum and maximum agent version. Agent version
 `1.2.1` accepts the current `1.x` compatibility envelope. It verifies:
 
 1. SHA-256 of canonical encoded payload;
@@ -69,9 +74,13 @@ The agent rejects expired or far-future deliveries, sequence mismatches, and
 incremental sequences that do not increase. For one domain it accepts only a
 strictly greater revision; an equal or lower revision is rejected as
 `artifact_revision_replay`. Deploy the updated control plane before the updated
-agent, since the agent requires the scoped signature. Signing-key rotation with
-an overlap window is not yet supported: the agent trusts the key it registered
-with.
+agent, since the agent requires the scoped signature. During a signing-key rotation, `/config/manifest` also returns
+a `key_rotation` object with the next public key and an endorsement signed by
+the current key. The agent accepts the next key only after it verifies that
+endorsement. See [Signing-key rotation](../../operations/signing-key-rotation.md).
+
+The control-address list uses the same delivery signature with the
+`control-addresses` scope.
 
 The platform origin destination policy is not part of any domain artifact. The
 agent fetches it from `/origin-policy` on every synchronization, verifies its
@@ -92,19 +101,19 @@ when the gateway is ready and its revision equals the agent's active sequence.
 
 ## Task contract
 
-Current tasks cover origin tests, cache purge, cell drain/undrain/restart, and
-emergency controls. The agent checks target ownership, sends token-protected
+Current tasks cover origin tests, DNS probes, cache purge, cell
+drain, undrain and restart, emergency controls, and runtime upgrades. The agent checks target ownership, sends token-protected
 internal control requests, persists drain/emergency state, and reports stable
-failure reasons such as `cell_not_found`, `control_request_failed`, or
-`invalid_cache_purge_task`, `cache_purge_persist_failed`, or
+failure reasons such as `cell_not_found`, `control_request_failed`,
+`invalid_cache_purge_task`, `cache_purge_persist_failed`, and
 `cache_purge_capacity_exceeded`. Cache purge tasks carry a `purge_id`, which the
 cells store as the URL generation.
 
 Task receipts are scoped to the authenticated edge and committed transactionally
 with their database effects. Concurrent reports serialize on the task and its
 operation or purge aggregate. A terminal task is immutable; later reports return
-`200` with `data.replayed=true`. A failed purge retries at most five times with
-backoff; duplicate failure reports during backoff return a replay receipt and
+`200` with `data.replayed=true`. A failed purge gets at most five attempts, with
+backoff between them; duplicate failure reports during backoff return a replay receipt and
 do not consume another attempt. A database failure rolls back the receipt and
 its effects so the agent can report it again.
 
