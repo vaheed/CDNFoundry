@@ -82,6 +82,7 @@ const guides = [
       { text: 'TLS', link: '/guides/tls' },
       { text: 'Cache and purge', link: '/guides/cache' },
       { text: 'Compression', link: '/guides/compression' },
+      { text: 'Respond to an incident', link: '/guides/incident-response' },
       { text: 'Security', link: '/guides/security' },
       { text: 'Managed WAF', link: '/guides/managed-waf' },
       { text: 'Analytics and usage', link: '/guides/analytics' }
@@ -94,6 +95,7 @@ const operate = [
     text: 'Deploy',
     items: [
       { text: 'Production deployment', link: '/deployment/' },
+      { text: 'Choose your installation', link: '/deployment/choose-installation' },
       { text: 'Production guide', link: '/deployment/production-guide' },
       { text: 'Sizing guide', link: '/deployment/sizing' },
       { text: 'Production quick start', link: '/deployment/production-quick-start' },
@@ -118,6 +120,8 @@ const operate = [
       { text: 'Scaling', link: '/operations/scaling' },
       { text: 'Incident runbooks', link: '/operations/runbooks' },
       { text: 'Monitoring', link: '/operations/monitoring' },
+      { text: 'How health is checked', link: '/operations/health-probes' },
+      { text: 'Usage and operations reports', link: '/operations/reports' },
       { text: 'Grafana dashboards', link: '/operations/grafana' },
       { text: 'Grafana by team', link: '/operations/grafana-by-team' },
       { text: 'Operational logging', link: '/operations/operational-logging' },
