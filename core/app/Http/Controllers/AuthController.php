@@ -6,6 +6,7 @@ use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Resources\UserResource;
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Support\ControlPlaneMetrics;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -26,6 +27,7 @@ class AuthController extends Controller
         // Check a hash even for an unknown address, so the response time does not reveal which accounts exist.
         $hash = $user?->password ?? self::unknownAccountHash();
         if (! Hash::check($request->string('password'), $hash) || $user === null) {
+            ControlPlaneMetrics::recordLogin(false, 'api');
             throw ValidationException::withMessages(['email' => ['The provided credentials are incorrect.']]);
         }
         if ($user->isDisabled()) {
@@ -37,6 +39,7 @@ class AuthController extends Controller
                 return response()->json(['message' => 'Enter the code from your authenticator app.', 'code' => 'otp_required', 'details' => (object) []], 401);
             }
             if (! $user->passesTwoStepChallenge($otp)) {
+                ControlPlaneMetrics::recordLogin(false, 'api');
                 throw ValidationException::withMessages(['otp' => ['The provided code is incorrect.']]);
             }
         }
@@ -47,6 +50,8 @@ class AuthController extends Controller
 
             return $created->plainTextToken;
         });
+
+        ControlPlaneMetrics::recordLogin(true, 'api');
 
         return response()->json(['data' => ['user' => UserResource::make($user), 'token' => $token]]);
     }

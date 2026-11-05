@@ -9,6 +9,7 @@ use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureHorizonAdmin;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\IdempotentRequest;
+use App\Http\Middleware\RecordRequestMetrics;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
@@ -29,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(AttachRequestContext::class);
+        $middleware->append(RecordRequestMetrics::class);
         $middleware->statefulApi();
         // Caddy terminates TLS in front of the control plane. Trust its forwarded
         // scheme and host so generated links (pagination, redirects) keep https.
