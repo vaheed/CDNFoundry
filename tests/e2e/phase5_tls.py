@@ -123,7 +123,9 @@ def verify_edge_https(hostname: str, fingerprint: str) -> None:
             else:
                 detail = (f" verification={last_error.verify_message}"
                           if isinstance(last_error, ssl.SSLCertVerificationError) else "")
-                raise AssertionError(f"verified edge HTTPS did not converge on edge {edge}: {type(last_error).__name__}{detail}")
+                routes = sorted({route["hostname"] for route in gateway.get("routes", [])}) if "gateway" in locals() else []
+                raise AssertionError(f"verified edge HTTPS did not converge on edge {edge}: {type(last_error).__name__}{detail}: {last_error}; "
+                                     f"expected {hostname}; gateway routes {routes[:12]}; listeners {list(gateway.get('listeners', []))[:8] if 'gateway' in locals() else []}")
 
 
 def main() -> None:
