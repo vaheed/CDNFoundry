@@ -1,13 +1,11 @@
 ---
 title: Feature guides
-description: Task-oriented guides for every implemented CDNFoundry feature area.
+description: "Find the guide for each CDNFoundry task: users, domains, DNS, proxy, edges, TLS, cache, security, and analytics."
 ---
 
 # Feature guides
 
-::: info Guides describe implemented behavior
-These pages document the current product contract.
-:::
+These guides show how to do each task in the panel and, where it exists, through the API. They describe the product as it works today. Start with [Domains](domains.md) if you are new.
 
 | Area | Guide |
 | --- | --- |

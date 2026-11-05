@@ -1,9 +1,18 @@
 ---
 title: Security and DDoS readiness
-description: Configure ordered rules, bounded profiles, readiness states, quarantine, and simple incident controls.
+description: Set ordered allow and block rules, choose a limit profile, and use the incident controls, with their bounds and recovery steps.
 ---
 
 # Security and DDoS readiness
+
+CDNFoundry gives each domain bounded application-layer controls: allow and block
+rules, rate and connection limits, and incident actions. This page shows how to
+use them and what each one does.
+
+::: warning Not volumetric scrubbing
+These controls do not absorb a flood that fills a host or an uplink. Such attacks
+need upstream transit controls or provider scrubbing.
+:::
 
 ```mermaid
 flowchart TD
@@ -25,88 +34,120 @@ flowchart TD
 | Layer | Purpose |
 | --- | --- |
 | Trusted-client parsing | Trust forwarded addresses only from configured proxies |
-| Ordered rules | Deterministic IP/CIDR/country/continent allow or block |
+| Ordered rules | Allow or block by IP, CIDR range, country, or continent |
 | Profiles | Fixed presets or bounded manual values |
 | Readiness | Remove stale, drained, failed, or overloaded targets |
-| Incident controls | Explicit domain, pool, cell, and edge actions |
+| Incident controls | Explicit actions for a domain, pool, cell, or edge |
 
-::: warning Not volumetric scrubbing
-Upstream transit controls and provider scrubbing remain necessary for attacks
-that saturate a host or uplink.
-:::
-
-CDNFoundry provides bounded application-layer controls. It does not claim to
-absorb volumetric traffic after a host or uplink is saturated.
+For application attack detection, see [Managed WAF](managed-waf.md).
 
 ## Ordered rules
 
-Each domain may have up to 1,000 rules. A bulk import accepts at most 500.
-Rules match `ip`, `cidr`, `country`, or `continent`, and take `allow` or `block`
-action. Lower numeric priority runs first; ID breaks ties. Disabled rules are
-ignored. An allow match terminates evaluation and therefore overrides later
-rules, not earlier ones.
+**You need:** update rights on the domain.
 
-Imports normalize every rule, reject duplicates, and can append or replace the
-existing set in one revision.
+<DocTabs :labels="['Domain panel', 'API']">
+<template #tab-1>
+
+Open the domain, then its security rules. Choose the create action to add a rule,
+or **Import rules** to add many.
+
+</template>
+<template #tab-2>
+
+```sh
+curl -X POST "$CDNF_URL/api/domains/$DOMAIN_ID/security/rules" \
+  -H "Authorization: Bearer $CDNF_TOKEN" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{"match_type": "cidr", "value": "203.0.113.0/24", "action": "block", "priority": 100}'
+```
+
+Bulk import is `POST .../security/rules/import`.
+
+</template>
+</DocTabs>
+
+**Expected result:** the rule is saved, the domain revision rises, and the edges
+receive a new signed revision.
+
+How rules work:
+
+- A rule matches `ip`, `cidr`, `country`, or `continent`, and takes `allow` or
+  `block`. It has an integer `priority` and an optional note (250 characters).
+- A lower priority number runs first. The rule ID breaks ties. Disabled rules are
+  ignored.
+- An allow match ends evaluation. It overrides later rules, not earlier ones.
+- A domain may have up to 1,000 rules. One import accepts at most 500.
+- An import normalizes every rule, rejects duplicates, and can append to or
+  replace the existing set in one revision.
 
 ## Profiles
 
-`standard`, `protected`, and `quarantine` provide immutable platform ceilings
-for request rate/burst, client and domain connections, TLS handshakes, body and
-header size, timeouts, keepalive, request duration, origin concurrency and
-retries, cache key length, and cache admission. `manual` permits values up to
-the standard ceiling; it cannot exceed platform capacity policy.
+A profile sets the ceilings for request rate and burst, client and domain
+connections, TLS handshakes, body and header size, timeouts, keepalive, request
+duration, origin concurrency and retries, cache key length, and cache admission.
+
+- `standard`, `protected`, and `quarantine` are fixed platform ceilings.
+- `manual` accepts values up to the standard ceiling. It cannot exceed platform
+  capacity policy.
+
+Choose **Security profile and limits** on the domain, or use
+`PATCH /api/domains/{domain}/security`. The exact ceilings are in
+[Limits](../reference/limits.md).
 
 TLS handshakes are limited in two places. The edge gateway sees the real client
-address, so it allows each client prefix (one IPv4 address or one IPv6 /64) at
-most the profile's per-second budget of new TLS connections per hostname; one
-client cannot spend the budget other clients of the domain need. The cell
-applies a separate, higher ceiling to the domain as a whole, 20 times that
-budget.
+address. It allows each client prefix (one IPv4 address or one IPv6 /64) at most
+the profile's per-second budget of new TLS connections per hostname. One client
+cannot spend the budget other clients of the domain need. The cell adds a
+separate, higher ceiling for the whole domain, 20 times that budget.
 
-The exact ceilings appear in [Limits](../reference/limits.md).
+## Security state
 
-## Readiness states
+A domain's security state is `normal`, `suspected`, `restricted`, `quarantined`,
+or `recovering`. Agent heartbeats carry a bounded set of noisy-domain summaries
+and reason codes. Automatic policy can restrict or quarantine a domain. Scheduled
+reconciliation expires controls and moves quiet domains through recovery.
 
-Domain security state is `normal`, `suspected`, `restricted`, `quarantined`, or
-`recovering`. Agent heartbeats carry a bounded set of noisy-domain summaries and
-reason codes. Automatic policy can restrict or quarantine, while scheduled
-reconciliation expires controls and advances quiet recovery.
+Quarantine uses the normal placement protocol: CDNFoundry delivers the domain to
+the quarantine pool, publishes its addresses, then drains the shared source.
 
-Target-first quarantine uses the normal placement protocol: deliver to the
-quarantine pool, publish its addresses, then drain the shared source.
+## Incident controls
 
-## Simple incident controls
+Each scope has only controls with clear runtime behavior. A cell enforces seven
+emergency actions and rejects any other name with `400`, so it never reports a
+protection that does nothing. The seven are `disable_request_bodies`,
+`allow_get_head_only`, `disable_origin_retries`, `serve_cache_only`,
+`serve_stale_only`, `return_maintenance_response`, and `disable_compression`.
 
-There is no generic emergency-action picker. Each scope has only controls with
-clear runtime behavior. A cell enforces seven emergency actions
-(`disable_request_bodies`, `allow_get_head_only`, `disable_origin_retries`,
-`serve_cache_only`, `serve_stale_only`, `return_maintenance_response`, and
-`disable_compression`) and rejects any other name with `400`, so a protection
-that does nothing is never reported as active:
+| Scope | Control | Who | Effect |
+| --- | --- | --- | --- |
+| Domain | **Enable Under Attack mode** | Administrator | Tightens request and connection limits for a time. It does not move the domain or change the WAF. |
+| Domain | **Quarantine domain** | Administrator | Deploys the domain to the quarantine pool, target first. |
+| Domain | **Start maintenance** | Domain owner | Returns the configured HTTP 503 for that domain only. |
+| Edge | Drain | Administrator | Stops new placement and traffic for that edge. |
+| Cell | Drain, Restart | Administrator | Removes one cell from readiness, or restarts it. |
+| Pool | Maintenance | Administrator | Returns HTTP 503 from the pool's cells until its required expiry. |
+| Pool | Withdraw | Administrator | Removes the pool from gateway and DNS publication. It does not control BGP. |
 
-| Scope | Control | Effect |
-| --- | --- | --- |
-| Domain | Under Attack mode | Temporarily tightens bounded request and connection limits without moving the domain or changing WAF |
-| Domain | Quarantine | Deploys the domain target-first to the quarantine pool |
-| Domain | Start maintenance | Returns the configured HTTP 503 only for that domain |
-| Edge | Drain | Stops new placement/traffic eligibility for that edge |
-| Cell | Drain / Restart | Removes one cell from readiness or restarts that cell |
-| Pool | Maintenance | Returns HTTP 503 from cells assigned to that pool until its required expiry |
-| Pool | Withdraw | Removes that pool from gateway/DNS publication; it does not control BGP |
+The domain actions for Under Attack mode and quarantine are
+`POST /api/admin/domains/{domain}/protect` and `.../quarantine`. Pool actions
+include `POST /api/admin/edge-pools/{pool}/maintenance` and `.../withdraw`.
 
-Web application firewall profiles are independent from Under Attack mode.
-WAF detects common application attacks continuously according to the domain's
-Off, Observe, Recommended, or High sensitivity choice. Under Attack mode is an
-administrator response to active abusive load. See [Managed WAF](managed-waf.md).
+The WAF level is independent from Under Attack mode. The WAF detects common
+application attacks all the time, at the domain's Off, Observe, Recommended, or
+High sensitivity choice. Under Attack mode is an administrator response to
+active abusive load.
 
-Use **Return to normal**, **End maintenance**, **Undrain**, **Restore**, or the
-matching inverse action to recover. Pool maintenance is persisted in
-PostgreSQL, delivered as durable per-edge tasks only to assigned cells, audited,
-and automatically expires. Domain maintenance is part of the normal signed
-domain revision and therefore retains the previous valid edge snapshot on a
-failed deployment.
+### Recover
 
-`quarantine_domain` was formerly exposed as a pool/edge flag but had no domain
-identity and could not perform a placement change. It is no longer selectable.
-Quarantine is now only the explicit domain action above.
+Use the inverse action: **Return to normal**, **End maintenance**, **Undrain**,
+or **Restore** (pools: `DELETE .../maintenance` and `POST .../restore`; domains:
+`POST .../return-to-normal`).
+
+Pool maintenance is stored in PostgreSQL, sent as durable per-edge tasks only to
+assigned cells, audited, and expires on its own. Domain maintenance is part of the
+normal signed domain revision. A failed deployment therefore keeps the previous
+valid edge snapshot.
+
+The old `quarantine_domain` pool and edge flag is gone. It had no domain identity
+and could not change placement. Quarantine is only the explicit domain action.

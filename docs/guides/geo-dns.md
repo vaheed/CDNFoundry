@@ -1,27 +1,21 @@
 ---
 title: Geo-DNS
-description: Configure, preview, deploy, and qualify deterministic country, continent, and default DNS answers.
+description: Return different DNS answers by country or continent, preview the result, and test it before production.
 ---
 
 # Geo-DNS
 
-Geo-DNS is a DNS record mode that returns operator-supplied answers according
-to the request's classified country or continent. PowerDNS evaluates a bounded
-Lua record locally from the active zone and memory-mapped GeoIP database. A DNS
-query never calls Laravel or an external GeoIP service.
+Geo-DNS is a DNS record mode. It returns answers that you supply, chosen by the country or continent of the client. PowerDNS (the DNS server) picks the answer locally from the active zone and a GeoIP database on disk. A DNS query never calls the control plane or an outside GeoIP service.
+
+**You need:** a domain with an active zone, and the answers you want per region.
 
 ::: danger Geo-DNS is not CDN edge routing
-Geo-DNS changes authoritative DNS answers only. It does not proxy HTTP, choose
-an OpenResty cell, redirect a browser, apply security policy, or test whether a
-target is healthy. Use service pools and pool endpoints for CDN edge placement.
-Never use geographic classification as authentication or an access-control
-boundary.
+Geo-DNS changes DNS answers only. It does not proxy HTTP, choose an OpenResty cell, redirect a browser, apply security policy, or check that a target is healthy. Use service pools and pool endpoints for CDN edge placement. Do not use geography for authentication or access control.
 :::
 
 ## Selection model
 
-Every Geo-DNS record has a required default answer set and optional country and
-continent overrides. Selection is deterministic:
+Every Geo-DNS record has a required default answer set. It can also have country and continent overrides. The same client location always gives the same answer:
 
 ```mermaid
 flowchart TD
@@ -46,20 +40,12 @@ For example, with country `IR`, continent `EU`, and default answer sets:
 | Unknown country and continent | Default answers | Classification is unavailable |
 | Country `US`, continent `NA`, with neither override | Default answers | No configured match exists |
 
-Unknown or invalid geography does not fail the DNS query merely because a
-classification is unavailable; it continues to the default set.
+If the location is unknown, the query still succeeds and gets the default set.
 
 ::: warning Resolver location and ECS
-Without EDNS Client Subnet (ECS), the authoritative server usually sees and
-classifies the recursive resolver, which may be far from the end user. When ECS
-is supplied, the shipped PowerDNS runtime processes it. Direct test clients can
-also submit ECS, so treat it only as an answer-selection hint. Previewing an IP
-does not prove what a real resolver sends on the public query path.
+EDNS Client Subnet (ECS) is a DNS option that carries part of the client's address. Without ECS, the server usually sees only the recursive resolver, which may be far from the user. When a query has ECS, PowerDNS uses it. Any test client can send ECS, so treat it as a hint only. Previewing an IP does not show what a real resolver sends.
 
-DNSdist, the only public DNS endpoint, forwards the ECS option a resolver sent and,
-when the query has none, adds the client network (`/24` for IPv4, `/56` for IPv6)
-before the query reaches PowerDNS. PowerDNS therefore never classifies DNSdist's
-own private address.
+DNSdist is the only public DNS endpoint. It forwards the ECS option a resolver sent. When the query has none, it adds the client network (`/24` for IPv4, `/56` for IPv6) before the query reaches PowerDNS. PowerDNS therefore never classifies the private address of DNSdist.
 :::
 
 ## Supported record types
@@ -79,9 +65,7 @@ ordinary record of that type.
 | `SRV` | Service target names | Priority, weight, and port |
 | `PTR` | Reverse target names | Reverse-zone ownership rules still apply |
 
-An `A` set cannot contain IPv6 values and an `AAAA` set cannot contain IPv4
-values. Relative DNS targets are normalized within the managed zone; fully
-qualified targets are stored with their canonical trailing dot.
+An `A` set cannot hold IPv6 values and an `AAAA` set cannot hold IPv4 values. The platform expands relative names inside the zone. It stores fully qualified names with a trailing dot.
 
 ## Limits and validation
 
@@ -100,16 +84,18 @@ its type at that owner; normal CNAME coexistence and zone-boundary rules still
 apply.
 
 ::: warning Default answers are mandatory
-The default set is the availability fallback for missing MMDB data, unknown
-addresses, resolvers without useful ECS, and countries or continents without
-an override. Do not use a placeholder or an address that is intentionally
-unreachable. Geo-DNS does not health-check or automatically remove targets.
+The default set is the fallback when the GeoIP (MMDB) data is missing, the address is unknown, the resolver sends no useful ECS, or no override matches. Do not use a placeholder or an unreachable address. Geo-DNS does not check target health and does not remove a failing target.
 :::
 
-## Configure in the panel
+## Configure
+
+<DocTabs :labels="['Panel', 'API']">
+<template #tab-1>
+
+<div class="steps">
 
 1. Open the domain in `/app` or the administrator domain resource.
-2. Open **DNS records** and choose **Create DNS record**.
+2. Open **DNS records** and choose **Add record**.
 3. Select a supported record type and set **Mode** to **Geo-DNS**.
 4. Enter one to eight **Default answers**.
 5. Add optional **Country overrides**. Choose the uppercase country code and
@@ -122,14 +108,16 @@ unreachable. Geo-DNS does not health-check or automatically remove targets.
 9. Use the row's **Preview** action with a known IPv4 and IPv6 address. Record
    the displayed country, continent, and selected answers.
 
-Editing the geographic configuration validates the complete candidate in a
-transaction, increments the domain revision only when it changed, records an
-audit event, and coalesces DNS reconciliation after commit. Invalid input does
-not change desired state.
+</div>
 
-## Configure through the API
+**Expected result:** the preview shows the country, the continent, and the answers you expect.
 
-Create the record through the ordinary DNS-record endpoint. This example
+The platform checks the whole candidate in one transaction. It raises the domain revision only if something changed, writes an audit entry, and queues one DNS reconciliation after commit. Invalid input changes nothing.
+
+</template>
+<template #tab-2>
+
+Create the record with the ordinary DNS-record endpoint. This example
 returns an Iran-specific address, a Europe address for other European
 countries, and the default everywhere else:
 
@@ -170,27 +158,21 @@ Preview request:
 {"ip":"2001:db8::1"}
 ```
 
-The response includes `ip`, nullable `country` and `continent`, classification
-`source` (`mmdb` or `unknown`), selected `targets`, and a reminder that runtime
-classification may use the resolver rather than the end user.
+The response includes `ip`, nullable `country` and `continent`, the classification
+`source` (`mmdb` or `unknown`), the selected `targets`, and a reminder that the live
+classification may use the resolver instead of the end user.
+
+</template>
+</DocTabs>
 
 ## Runtime data and failure behavior
 
-PowerDNS reads `/mmdb/GeoLite2-City.mmdb` in memory-mapped mode. The updater
-downloads a candidate, validates it with `mmdblookup`, optionally checks its
-configured SHA-256, and renames it atomically. A bad download or validation
-failure preserves the previous valid database.
+PowerDNS reads `/mmdb/GeoLite2-City.mmdb` from disk. The updater downloads a candidate, checks it with `mmdblookup`, optionally checks its configured SHA-256, and renames it into place in one step. If the download or the check fails, the previous valid database stays.
 
-The DNS candidate contains only normalized, bounded static answer sets and the
-selection program. PowerDNS data is derived from PostgreSQL desired state. A
-render, validation, API, or activation failure records the failed deployment
-and preserves the previous active RRsets; never edit the generated Lua record
-or PowerDNS database directly.
+The DNS candidate holds only checked, bounded answer sets and the selection program. PowerDNS data comes from the desired state in PostgreSQL. If rendering, validation, the API, or activation fails, the platform records a failed deployment and keeps the previous active records. Do not edit the generated Lua record or the PowerDNS database.
 
 ::: info TTL controls change visibility
-Resolvers can retain the previously selected answer until its TTL expires.
-After changing an override, first verify the authoritative answer directly,
-then account for recursive cache TTL before declaring deployment failure.
+Resolvers may keep the old answer until its TTL (time to live) ends. After you change an override, first query the authoritative server directly. Then wait for the resolver cache TTL before you call the deployment failed.
 :::
 
 ## Qualify before production

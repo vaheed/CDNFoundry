@@ -1,9 +1,16 @@
 ---
 title: Users and access
-description: Manage administrators, domain users, assignments, sessions, and API tokens.
+description: Create administrators and domain users, assign domains, disable accounts, set up two-step sign-in, and issue scoped API tokens.
 ---
 
 # Users and access
+
+CDNFoundry has two kinds of human user: administrators and domain users. This
+page shows how to create them, give domain users their domains, secure
+sign-in, and issue API tokens.
+
+**You need:** an administrator account for the user steps. Any user can manage
+their own profile and tokens.
 
 | Concern | Implemented boundary |
 | --- | --- |
@@ -43,22 +50,52 @@ system settings, DNS clusters, edges, pools, operations, backups, telemetry,
 audit logs, and every domain. An administrator cannot disable, demote, or delete
 their own account.
 
-Create the first administrator with `cdnf:admin:create`. Later administrators
-and users can be created under **Customers → Users** or through
-`POST /api/admin/users`.
+Create the first administrator on the command line. It takes `--name` and
+`--email` and asks for the rest:
+
+```sh
+php artisan cdnf:admin:create --name="Ada Admin" --email=ada@example.com
+```
+
+Create later administrators and users as follows.
+
+<DocTabs :labels="['Admin panel', 'API']">
+<template #tab-1>
+
+Open **Customers → Users**, choose the create action, fill the name, email,
+password, and type, and save.
+
+</template>
+<template #tab-2>
+
+```sh
+curl -X POST "$CDNF_URL/api/admin/users" \
+  -H "Authorization: Bearer $CDNF_TOKEN" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Sam User", "email": "sam@example.com", "password": "Correct-horse-42", "type": "user"}'
+```
+
+</template>
+</DocTabs>
+
+**Expected result:** the user appears in the list and can sign in.
 
 ## Domain users
 
 Domain users access `/app` and only domains in the assignment pivot table. They
 can create domains and manage assigned domains according to `DomainPolicy`.
-Administrators attach and detach users from the domain view or
-`/api/admin/domains/{domain}/users`.
+Administrators attach and detach users in the domain's users tab, or through
+`/api/admin/domains/{domain}/users` (`POST` to attach, `DELETE .../{user}` to
+detach).
 
 A user with domain assignments or active API tokens cannot be permanently
 deleted. Remove assignments and revoke tokens first.
 
 ## Disabled accounts
 
+In the panel, open the user and choose **Disable access** (or **Enable access**).
+In the API, use `POST /api/admin/users/{user}/disable` or `.../enable`.
 Disabling an account sets `disabled_at`, revokes all Sanctum tokens, blocks new
 login, and rejects later session/API requests through `account.active`.
 Re-enabling does not recreate tokens.

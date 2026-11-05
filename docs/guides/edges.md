@@ -1,11 +1,13 @@
 ---
 title: Edges and placement
-description: Create edge pools and hosts, enroll agents, manage cells, and move domains safely.
+description: Create pools and edges, enroll the edge agent, assign cells, and move domains between pools without downtime.
 ---
 
 # Edges and placement
 
 <Screenshot name="admin-edges" alt="The Edges list in the admin panel, showing each PoP with its status, location, heartbeat, and version drift." />
+
+An edge is one point of presence (PoP): a host that serves traffic through bounded cells (OpenResty containers). This page shows how an administrator creates pools and edges, enrolls the edge agent, and moves domains. **You need:** administrator access and a host installed by Fleet.
 
 | Concern | Durable/runtime boundary |
 | --- | --- |
@@ -42,7 +44,7 @@ identity, or rotate the edge and enroll again.
 
 ## Pools
 
-Administrators create `shared`, `quarantine`, or `dedicated` pools. Pool names
+Administrators create `shared`, `reserved`, `quarantine`, or `dedicated` pools. Pool names
 become stable runtime names and cannot change after cells are provisioned.
 Enabling a pool asynchronously provisions one cell per eligible edge in bounded
 batches. Disabling removes it from new placement decisions without inventing a
@@ -54,18 +56,15 @@ override that repeats the bounded cell shape with unique ports and volumes.
 
 ## Edge rows
 
-Create an edge with:
+Create an edge in the admin panel (**Edges**) or with `POST /api/admin/edges`. You give it:
 
-- unique name;
-- ISO country code and continent code.
+- a unique name;
+- an ISO country code and a continent code.
 
-Edges carry no host addresses. Fleet owns where a host is; the control plane
-only knows the public service endpoints of pools. The agent initiates control
-traffic outbound to `EDGE_CONTROL_URL`. Fleet can do all of this for you:
+Edges have no host addresses. Fleet knows where a host is. The control plane only knows the public service endpoints of pools. The agent opens control connections outbound to `EDGE_CONTROL_URL`. Every edge has eight cell slots, which the panel shows as fixed. Fleet can do the whole setup for you:
 `cdnfoundry-fleet bootstrap --node NAME --country DE --continent EU`.
 
-The create response exposes an edge UUID and bootstrap token once. Store them
-only long enough to enroll the agent.
+**Expected result:** the response shows an edge UUID and a bootstrap token once. Store them only until the agent enrolls. If you lose the token, rotate the identity (`POST /api/admin/edges/{edge}/rotate-identity`) to get a new one.
 
 ## Pool service endpoints
 
@@ -133,10 +132,7 @@ counting, keeps its own cursor, and catches up without blocking the pool.
 `cdnf:edge:promote-placements` walks every deploying placement each minute in
 chunks, so a backlog of stuck placements cannot hide newer ones.
 
-Automatic placement chooses only enabled, non-withdrawn pools of kind `shared`. Only an administrator action moves a domain to a `quarantine`, `reserved`, or `dedicated` pool, and the domain stays there until an administrator moves it. A proxied name is published
-in the zone even before its placement is active: it follows the default shared
-pool until the placement is promoted, so MX, TXT, and every other record
-resolve immediately after activation.
+Automatic placement chooses only enabled, non-withdrawn pools of kind `shared`. Only an administrator moves a domain to a `quarantine`, `reserved`, or `dedicated` pool, and it stays there until an administrator moves it again. A proxied name is published in the zone before its placement is active. It follows the default shared pool until the placement is promoted, so MX, TXT, and every other record resolve right after activation.
 
 ## Drain and movement
 
