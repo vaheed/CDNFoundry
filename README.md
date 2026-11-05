@@ -7,266 +7,45 @@
 [![Go 1.24+](https://img.shields.io/badge/Go-1.24%2B-00add8.svg)](edge-agent/go.mod)
 [![Documentation website](https://img.shields.io/badge/docs-VitePress-1c9a7d.svg)](https://vaheed.github.io/CDNFoundry/)
 
-> **Status: pre-production.** The 2.0 rebuild is under way on `dev`. Phase 1
-> (secret and tenant leaks, security bypasses) is complete on `dev`. The open
-> critical and high findings, such as control-plane faults that can withdraw
-> healthy PoPs from DNS, are listed in the [roadmap](docs/roadmap.md). Do not
-> treat the current release as production-ready until Phase 2 exits.
+> **Status: pre-production.** The 2.0 rebuild is under way on `dev`. The open
+> findings are in the [roadmap](docs/roadmap.md). Qualify it on your own
+> hardware with the [production qualification](docs/operations/production-qualification.md)
+> before you send customer traffic.
 
-CDNFoundry is an open-source, production-oriented **private CDN platform** for
-companies, hosting providers, and large ISPs that want to operate their own
-authoritative DNS, edge proxy, cache, TLS, security, and analytics
-infrastructure.
+CDNFoundry is free, open-source software for running your own CDN on your own
+servers. Authoritative DNS, HTTPS delivery, certificates, cache, and logs stay on
+infrastructure you control. It is for ISPs, hosting providers, enterprises, and
+anyone who must keep traffic and data on their own network.
 
-It combines a Laravel and Filament control plane with PowerDNS, DNSdist,
-OpenResty, a Go edge agent, Vector, ClickHouse, Prometheus, and bounded
-role-based Docker Compose deployments.
+## Main features
 
-## Who it is for
+- Authoritative DNS with Geo-DNS, served by DNSdist and PowerDNS.
+- HTTP and HTTPS from bounded OpenResty cells, with cache, purge, and compression.
+- Managed DNS-01 certificates or your own, with keys encrypted at rest.
+- Per-client limits, origin safety checks, and a managed WAF.
+- Logs, usage reports, and Grafana dashboards, from Vector and ClickHouse.
+- An administrator panel, a domain-user panel, and a token API.
+- A Fleet tool that installs and upgrades hosts over SSH.
 
-For hosting providers, ISPs and companies with Linux, Docker and DNS skills who
-want to run their own CDN. It is **not** for teams that want a managed service, a
-single-host install with no operations work, or volumetric DDoS scrubbing.
+## Screenshots
 
-## Qualification status
+<p>
+  <img src="docs/public/screenshots/light/admin-edges.png" alt="The Edges list in the admin panel" width="48%">
+  <img src="docs/public/screenshots/dark/admin-operations.png" alt="The Operations list in the admin panel, dark theme" width="48%">
+</p>
 
-Automated suites and non-UI real-runtime qualification run in CI on every change;
-images are built once, scanned, signed and published with SBOM and provenance.
-The browser suite (`tests/browser`) covers both panels. Customer traffic on
-physical edges, public IPv6, Anycast routing and load limits for your hardware
-must be qualified by you with the
-[production qualification](docs/operations/production-qualification.md) before
-you send customer traffic. See the
-[support statement](docs/operations/releases/v1.2.1.md#support-statement).
+## Quick start
 
-## Path to your first domain
+Follow the [quick start](https://vaheed.github.io/CDNFoundry/getting-started/) to serve a
+first domain. The [documentation](https://vaheed.github.io/CDNFoundry/) also covers
+production setup, guides for every feature, and the API and configuration reference.
 
-1. Read the [self-hosted design guide](https://vaheed.github.io/CDNFoundry/getting-started/private-cdn-design) and plan three hosts.
-2. Follow the [production quick start](docs/deployment/production-quick-start.md).
-3. Add your [first domain](docs/getting-started/first-domain.md) and run the acceptance checks.
+## Contribute
 
-To try it on one machine first, see [Local development](#local-development).
+Read [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md) first. Report
+security problems as described in [SECURITY.md](SECURITY.md). Follow the
+[code of conduct](CODE_OF_CONDUCT.md).
 
-Before deploying, read the [self-hosted private CDN design
-guide](https://vaheed.github.io/CDNFoundry/getting-started/private-cdn-design)
-to compare operational ownership, minimum topology, failure behavior, and the
-tradeoffs against a managed CDN.
+## License
 
-> [!IMPORTANT]
-> PostgreSQL owns desired state, but customer DNS and HTTP traffic never pass
-> through Laravel. Existing data planes continue from their last valid state
-> during a control-plane or telemetry outage.
-
-## Why CDNFoundry
-
-- **Private ownership:** run DNS, edge, certificates, cache, telemetry, and
-  operational data on infrastructure you control.
-- **Authoritative DNS:** DNSdist-only public ingress, private PowerDNS,
-  deterministic zones, Geo-DNS, import/export, reconciliation, and drift
-  visibility.
-- **Data-driven edge:** shared, quarantine, and exceptional dedicated pools use
-  bounded OpenResty cells instead of a process or server block per domain.
-- **Safe origins:** every proxied hostname has one explicit origin; unsafe
-  loopback, link-local, metadata, internal-service, and proxy-loop destinations
-  fail closed.
-- **TLS lifecycle:** managed DNS-01 issuance, encrypted custom certificates,
-  bounded renewal, validation, and last-valid certificate preservation.
-- **Deterministic cache:** one lookup/purge key, bounded objects, development
-  mode, stale policy, URL purge tasks, and epoch-based full purge.
-- **Application security:** ordered IP/CIDR/geography rules, bounded profiles,
-  target readiness, quarantine, and expiring emergency controls.
-- **Direct telemetry:** Vector sends DNS and edge events (query strings, cookies, and bodies removed) directly to
-  ClickHouse; analytics failure cannot block serving.
-- **Operational recovery:** explicit migrations, immutable images, health and
-  readiness, four queue lanes, optional Restic backup/restore, runbooks, and
-  canary upgrade guidance.
-- **Predictable mutation:** external effects are asynchronous, revisioned,
-  idempotent, coalesced, verified, and last-valid-state preserving.
-
-## Architecture
-
-```mermaid
-flowchart LR
-    subgraph Management["Management"]
-      People["Operators + domain users"] --> Control["Laravel control plane"]
-      Control --> State[("PostgreSQL")]
-      Control --> Queue[("Valkey")]
-      EdgeControl["edge-control"] --> Control
-    end
-    subgraph Runtime["Traffic runtime"]
-      Agent["Edge agent"] -->|"outbound mTLS"| EdgeControl
-      Agent -->|"atomic activation"| Edge["Bounded edge cells"]
-      Resolvers["Resolvers"] --> DNS["DNSdist → PowerDNS"]
-      Visitors["Visitors"] --> Edge --> Origins["Validated origins"]
-    end
-    subgraph Operations["Operations"]
-      DNS -. "events" .-> Observe["Telemetry + metrics"]
-      Edge -. "events" .-> Observe
-    end
-    Control -. "revisioned state" .-> DNS
-```
-
-| Plane | Source of truth | Runtime behavior |
-| --- | --- | --- |
-| Management | Laravel policies and PostgreSQL | Authorizes and records intent |
-| DNS | PostgreSQL desired records | DNSdist and PowerDNS answer independently |
-| Edge | Domain revisions and placements | Agents validate and atomically activate snapshots |
-| TLS/cache/security | Typed domain state | OpenResty applies data without per-domain reload |
-| Telemetry | Runtime events | Vector buffers and ClickHouse stores bounded analytics |
-
-Start with [CDN fundamentals](docs/concepts/cdn-fundamentals.md) and
-[How CDNFoundry works](docs/concepts/how-cdnfoundry-works.md), then read the
-[architecture overview](docs/architecture/index.md) and
-[data-flow diagrams](docs/architecture/data-flows.md) for component and failure
-boundaries.
-
-## Production deployment
-
-The minimum recommended topology is one control/telemetry host and two combined
-DNS/edge hosts in separate failure domains.
-
-> [!CAUTION]
-> Production uses immutable images, explicit Laravel and PowerDNS migrations,
-> private PKI, exact-source firewalls, and persistent named volumes. The
-> built-in encrypted off-host backup integration is optional but a tested
-> recovery method is strongly recommended. Do not promote the development stack.
-
-Follow the detailed [Production quick start](docs/deployment/production-quick-start.md).
-It covers bootstrap DNS, registrar glue, `.env.prod`, private certificates,
-control startup, DNS qualification, edge enrollment, the first customer domain,
-acceptance checks, IPv6, scaling, and rollback.
-
-## Local development
-
-Requirements are Docker Engine, Docker Compose, GNU Make, and enough capacity
-for the complete development topology.
-
-```sh
-make dev-control-up
-make dev-migrate
-make dev-up
-make dev-test
-```
-
-Create the first administrator interactively:
-
-```sh
-docker compose -f compose.dev.yml exec core \
-  php artisan cdnf:admin:create \
-  --name="Local Administrator" \
-  --email="admin@example.test"
-```
-
-Open:
-
-- administrator panel: <http://localhost:8080/admin>
-- domain-user panel: <http://localhost:8080/app>
-- Horizon: <http://localhost:8080/admin/horizon>
-- development mail: <http://localhost:8025>
-- PowerAdmin diagnostics: <http://localhost:9191>
-
-See [Installation](docs/getting-started/installation.md) and
-[Development](docs/development/index.md) before changing the stack.
-
-## Implemented feature map
-
-| Area | Capabilities |
-| --- | --- |
-| Identity | Administrators, assigned domain users, sessions, Sanctum tokens, audit, account disablement |
-| Domains | Normalization, delegation verification, activation, delayed deprovision, tombstones, reclaim cooldown |
-| DNS | A, AAAA, CNAME, MX, TXT, NS, CAA, SRV, reverse PTR, BIND import/export, Geo-DNS |
-| Edge | Geo-Unicast and Simple Anycast pools, eight bounded cell slots, host gateway ingress, enrollment, mTLS identity, signed artifacts, placement, drain, and fleet rollouts |
-| Proxy | Explicit safe primary/backup origins, host/SNI policy, bounded timeouts/retries, active-passive failover, WebSocket policy, and health tests |
-| TLS | Managed ACME DNS-01, custom uploads, renewal, reissue, validation, encrypted private keys |
-| Cache and delivery | Persistent bounded cache, canonical keys, TTL/admission/query policy, stale grace, development mode, URL/full purge, Gzip, and Brotli |
-| Security | Ordered rules, trusted-client parsing, profiles, managed OWASP CRS WAF, bounded exclusions, quarantine, and emergency controls |
-| Analytics | Raw events, aggregates, status/cache/origin/geography/compression/WAF views, stable usage exports |
-| Operations | Health, readiness, metrics, alerts, two Grafana command centers, bounded Loki logs, reconciliation, failed jobs, optional Restic backups, restore, and canary upgrades |
-
-## API
-
-The JSON API uses Sanctum bearer tokens, policy-aware nested binding, stable
-machine-readable errors, cursor pagination, UUID idempotency keys, and operation
-receipts for asynchronous work.
-
-- [API conventions](docs/reference/api/index.md)
-- [Generated endpoint catalog](docs/reference/api/endpoints.md)
-- [OpenAPI 3.1 contract](docs/public/openapi.json)
-- [Edge-agent protocol](docs/reference/api/edge-agent.md)
-
-## Documentation
-
-Browse the production [CDNFoundry documentation
-website](https://vaheed.github.io/CDNFoundry/) for full navigation, local
-search, rendered architecture diagrams, and light/dark modes. The Markdown
-links below also work directly on GitHub.
-
-| Audience | Start here |
-| --- | --- |
-| CDN learners | [CDN fundamentals](docs/concepts/cdn-fundamentals.md) |
-| Evaluators | [Product overview](docs/getting-started/index.md) |
-| New CDNFoundry users | [Using CDNFoundry](docs/getting-started/using-cdnfoundry.md) |
-| Architects | [Production reference architectures](docs/architecture/production-reference-architectures.md) |
-| Production operators | [Production best practices](docs/operations/production-best-practices.md) |
-| Administrators | [Operations](docs/operations/index.md) |
-| Domain users | [Feature guides](docs/guides/index.md) |
-| API clients | [API reference](docs/reference/api/index.md) |
-| Developers | [Development environment](docs/development/index.md) |
-| Security teams | [Security model](docs/security/index.md) |
-| Incident responders | [Troubleshooting](docs/troubleshooting/index.md) |
-
-Build and validate the documentation:
-
-```sh
-npm ci --prefix docs
-make docs-check
-```
-
-## Product tour
-
-CDNFoundry gives operators one focused control plane for service health,
-customer impact, traffic, cache efficiency, DNS, queues, and the changes that
-preceded an incident. Select any thumbnail to open the full-resolution view.
-
-<!-- markdownlint-disable MD033 -->
-<table>
-  <tr>
-    <td align="center">
-      <a href="docs/public/images/screencapture-admin.png">
-        <img src="docs/public/images/screencapture-admin.png" alt="Operations overview" height="320">
-      </a><br>
-      <strong>Operations overview</strong><br>
-      Health, impact, traffic, DNS, cache, queues, and timeline
-    </td>
-    <td align="center">
-      <a href="docs/public/images/screencapture-telemetry.png">
-        <img src="docs/public/images/screencapture-telemetry.png" alt="Telemetry investigation" height="320">
-      </a><br>
-      <strong>Telemetry investigation</strong><br>
-      Analytics, compression, security, logs, and finalized usage
-    </td>
-    <td align="center">
-      <a href="docs/public/images/screencapture-edges.png">
-        <img src="docs/public/images/screencapture-edges.png" alt="Edge and cell inventory" height="320">
-      </a><br>
-      <strong>Edge and cell inventory</strong><br>
-      Gateway state, revisions, assignments, resources, and ports
-    </td>
-  </tr>
-</table>
-<!-- markdownlint-enable MD033 -->
-
-## Safety and contribution
-
-Read [AGENTS.md](AGENTS.md) before modifying behavior. In particular:
-
-- never remove persistent development or production volumes;
-- never run destructive Laravel migration tests against PostgreSQL;
-- use the isolated SQLite test target;
-- keep DNS and HTTP request paths independent from Laravel;
-- do not introduce a default per-domain process, container, timer, cache
-  directory, or Nginx server block;
-- preserve previous valid runtime state when a candidate fails;
-
-See [Contributing](CONTRIBUTING.md), [Security](SECURITY.md),
-[Code of conduct](CODE_OF_CONDUCT.md), and [Apache-2.0 license](LICENSE).
+[Apache-2.0](LICENSE)
