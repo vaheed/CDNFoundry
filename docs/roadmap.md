@@ -1754,17 +1754,17 @@ with a few Linux servers can understand CDNFoundry and run it step by step.
       and the configuration reference from the code. None is written by hand.
 - [x] **FAQ and glossary.** CDN and DNS terms explained for operators new to
       running a CDN.
-- [ ] **README.** A short project page: one paragraph, the main features,
+- [x] **README.** A short project page: one paragraph, the main features,
       the screenshots, the quick start link, and the license.
 
 #### Presentation
 
 - [x] Restyle the VitePress site with the Phase 7 design tokens, so the docs
       and the product look like one product, in light and dark mode.
-- [ ] Add documentation components: cards and card grids, numbered steps,
+- [x] Add documentation components: cards and card grids, numbered steps,
       tabs (Admin panel / API / Fleet), callouts (note, tip, warning,
       danger), framed screenshots, and diagrams.
-- [ ] **Generated screenshots.** The Phase 7 browser suite captures the
+- [x] **Generated screenshots.** The Phase 7 browser suite captures the
       screenshots for the docs from a seeded demo installation, in light and
       dark mode, at every release. Change `scripts/ci/check_no_screenshots.py`
       to allow only the generated screenshot directory, so screenshots are
