@@ -157,6 +157,7 @@ const reference = [
       { text: 'DNS records', link: '/reference/dns-records' },
       { text: 'Limits', link: '/reference/limits' },
       { text: 'CLI and scheduler', link: '/reference/cli-and-scheduler' },
+      { text: 'Fleet CLI', link: '/reference/fleet-cli' },
       { text: 'Telemetry schema', link: '/reference/telemetry-schema' },
       { text: 'Glossary', link: '/reference/glossary' }
     ]
