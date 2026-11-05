@@ -94,9 +94,10 @@ certificate from the active node's Caddy, copies the shared secrets from the vau
 
 ## Signed release manifests
 
-Fleet deploys only qualified releases and never changes an image or a config file on a host outside a release. CI
-builds a manifest with `scripts/cdnfoundry-release-manifest` and signs it with an Ed25519 key kept in the
-`FLEET_RELEASE_SIGNING_KEY` secret. It lists every image digest, the sha256 of every static config the production
+Fleet deploys only qualified releases and never changes an image or a config file on a host outside a release. The
+CI pipeline publishes and scans the images but does not sign a manifest. The release owner builds and signs one with
+`scripts/cdnfoundry-release-manifest` and an Ed25519 key that stays outside CI, from the digests in the published
+release evidence. The manifest lists every image digest, the sha256 of every static config the production
 services mount, the environment image references CI built, the qualification profile (`full` or `security-fast-lane`),
 whether the release holds an irreversible migration, which images and configs belong to each role, and the known
 vulnerabilities from the Trivy scan.
