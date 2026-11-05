@@ -68,7 +68,7 @@ def build() -> dict:
                 "alert": f"SLOBurn{''.join(part[:1].upper() + part[1:] for part in name.split('_'))}{speed}",
                 "expr": f"slo:{name}:bad_ratio_rate{long} > {factor} * {budget} and slo:{name}:bad_ratio_rate{short} > {factor} * {budget}",
                 "for": "2m" if speed == "Fast" else "15m",
-                "labels": {"team": team, "severity": severity, "slo": name},
+                "labels": {"team": team, "severity": severity, "slo": name, "dashboard": "cdnf-slos"},
                 "annotations": {
                     "summary": f"{title} is burning its error budget {factor} times too fast over {long} and {short}",
                     "runbook_url": f"https://vaheed.github.io/CDNFoundry/operations/runbooks#{anchor}",

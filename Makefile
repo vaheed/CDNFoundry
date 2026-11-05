@@ -3,12 +3,12 @@ COMPOSE_TEST := $(COMPOSE_DEV) -f compose.test.yml
 COMPOSE_PROD := docker compose --env-file .env.prod -f compose.prod.yml
 COMPOSE_PROD_EXAMPLE := docker compose --env-file .env.prod.example -f compose.prod.yml
 
-.PHONY: backend-test contract-check dev-assets dev-control-up dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-clickhouse-migrate dev-pdns-migrate dev-test dev-e2e dev-waf-image dev-phase9-e2e dev-gateway-e2e dev-cache-e2e dev-compression-e2e dev-origin-failover-e2e dev-phase7-e2e dev-phase8-e2e dev-phase8-recovery-e2e dev-phase8-upgrade-e2e dev-phase8-throughput-e2e dev-phase8-mmdb-e2e dev-scale-e2e dev-grafana-smoke dev-operational-logs-smoke dev-production-qualification dev-logs prod-pull prod-migrate prod-clickhouse-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge prod-logs config-check openapi-check version-check check-no-screenshots docs-dev docs-build docs-check
+.PHONY: backend-test contract-check dev-assets dev-control-up dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-clickhouse-migrate dev-pdns-migrate dev-test dev-e2e dev-waf-image dev-phase9-e2e dev-gateway-e2e dev-cache-e2e dev-compression-e2e dev-origin-failover-e2e dev-phase7-e2e dev-phase8-e2e dev-phase8-recovery-e2e dev-phase8-upgrade-e2e dev-phase8-throughput-e2e dev-phase8-mmdb-e2e dev-scale-e2e dev-grafana-smoke dev-observability-seed dev-grafana-browser dev-operational-logs-smoke dev-production-qualification dev-logs prod-pull prod-migrate prod-clickhouse-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge prod-logs config-check openapi-check version-check check-no-screenshots docs-dev docs-build docs-check
 
 backend-test: dev-test
 
 contract-check: config-check openapi-check
-	python3 -m unittest tests/contract/test_edge_rejection_reasons.py tests/contract/test_cache_key_vectors.py tests/observability/test_grafana_contract.py tests/observability/test_operational_logging_contract.py
+	python3 -m unittest tests/contract/test_edge_rejection_reasons.py tests/contract/test_cache_key_vectors.py tests/observability/test_grafana_contract.py tests/observability/test_metrics_contract.py tests/observability/test_grafana_bootstrap.py tests/observability/test_operational_logging_contract.py
 
 fleet-test:
 	python3 -m pytest -q tests/fleet
@@ -116,6 +116,9 @@ dev-production-qualification:
 dev-grafana-smoke:
 	$(COMPOSE_DEV) up -d --build clickhouse prometheus grafana-control-db-provision grafana
 	python3 tests/e2e/grafana_observability.py
+
+dev-observability-seed:
+	python3 scripts/observability/seed.py --scenario $(or $(SCENARIO),normal)
 
 dev-operational-logs-smoke:
 	python3 tests/e2e/operational_logging.py
