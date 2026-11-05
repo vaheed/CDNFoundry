@@ -9,3 +9,5 @@ parameters:
         - routes
     tmpDir: storage/framework/phpstan
     treatPhpDocTypesAsCertain: false
+    squashedMigrationsPath:
+        - phpstan-schema
