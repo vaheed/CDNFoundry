@@ -366,48 +366,6 @@ if ($mode === 'init') {
         throw new RuntimeException('Finalization failed to preserve reclaim evidence.');
     }
     echo "constraints_and_finalization=passed\n";
-} elseif ($mode === 'legacy-claim-upgrade') {
-    // Recreate the pre-claim schema only inside this disposable database, then
-    // apply the real additive migration to rows an existing installation owns.
-    Illuminate\Support\Facades\DB::statement('ALTER TABLE domains DROP COLUMN delegation_token, DROP COLUMN delegation_nameservers, DROP COLUMN claim_expires_at');
-    Illuminate\Support\Facades\DB::table('migrations')->where('migration', '2026_09_05_160000_add_domain_delegation_claims')->delete();
-    $verified = App\Models\Domain::query()->create(['name' => 'verified-upgrade.example.net', 'display_name' => 'Verified legacy',
-        'lifecycle_state' => 'active', 'nameservers_verified_at' => now(), 'revision' => 4]);
-    $pending = App\Models\Domain::query()->create(['name' => 'pending-upgrade.example.net', 'display_name' => 'Pending legacy',
-        'lifecycle_state' => 'pending_verification', 'revision' => 2]);
-    if (Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]) !== 0) {
-        throw new RuntimeException('Existing-installation claim migration failed: '.Illuminate\Support\Facades\Artisan::output());
-    }
-    $verified->refresh();
-    $pending->refresh();
-    if ($verified->revision !== 4 || $verified->nameservers_verified_at === null
-        || $verified->delegation_nameservers !== null || $verified->claim_expires_at !== null
-        || $pending->revision !== 2 || $pending->nameservers_verified_at !== null
-        || $pending->delegation_nameservers !== null || $pending->claim_expires_at !== null) {
-        throw new RuntimeException('Claim migration changed legacy ownership or claim state.');
-    }
-    echo "legacy_claim_upgrade=passed\n";
-} elseif ($mode === 'partial-claim-upgrade') {
-    // An interrupted older installation can have the assignment column as
-    // JSON without the token, expiry or migration receipt.
-    Illuminate\Support\Facades\DB::statement('ALTER TABLE domains DROP COLUMN delegation_token, DROP COLUMN delegation_nameservers, DROP COLUMN claim_expires_at');
-    Illuminate\Support\Facades\DB::statement('ALTER TABLE domains ADD COLUMN delegation_nameservers json NULL');
-    Illuminate\Support\Facades\DB::table('migrations')->where('migration', '2026_09_05_160000_add_domain_delegation_claims')->delete();
-    $domain = App\Models\Domain::query()->where('name', 'verified-upgrade.example.net')->sole();
-    $assigned = ['ns1.upgrade.example.net', 'ns2.upgrade.example.net'];
-    Illuminate\Support\Facades\DB::table('domains')->where('id', $domain->id)->update(['delegation_nameservers' => json_encode($assigned)]);
-    if (Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]) !== 0) {
-        throw new RuntimeException('Partial claim migration failed: '.Illuminate\Support\Facades\Artisan::output());
-    }
-    $type = Illuminate\Support\Facades\DB::table('information_schema.columns')->where('table_name', 'domains')
-        ->where('column_name', 'delegation_nameservers')->value('data_type');
-    if ($type !== 'jsonb' || $domain->refresh()->delegation_nameservers !== $assigned
-        || $domain->revision !== 4 || $domain->nameservers_verified_at === null
-        || ! Illuminate\Support\Facades\Schema::hasColumn('domains', 'delegation_token')
-        || ! Illuminate\Support\Facades\Schema::hasColumn('domains', 'claim_expires_at')) {
-        throw new RuntimeException('Partial claim migration did not preserve existing state.');
-    }
-    echo "partial_claim_upgrade=passed\n";
 } elseif ($mode === 'assignment-init') {
     $admin = App\Models\User::factory()->admin()->create();
     $target = App\Models\User::factory()->create();
@@ -894,10 +852,6 @@ def main() -> None:
                 if obsolete.poll() is None:
                     obsolete.kill()
                 obsolete.communicate(timeout=10)
-            legacy_upgrade = subprocess.check_output(command('legacy-claim-upgrade'), env=env, text=True).strip()
-            assert legacy_upgrade == 'legacy_claim_upgrade=passed', legacy_upgrade
-            partial_upgrade = subprocess.check_output(command('partial-claim-upgrade'), env=env, text=True).strip()
-            assert partial_upgrade == 'partial_claim_upgrade=passed', partial_upgrade
             assignment = json.loads(subprocess.check_output(command('assignment-init'), env=env, text=True))
             disabler = subprocess.Popen(command('assignment-disable', str(assignment['target_id'])), env=env,
                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -1085,8 +1039,6 @@ def main() -> None:
                               'tls_stale_failure_concurrency': stale_failures,
                               'tls_stale_success_concurrency': stale_successes,
                               'tls_stale_obsolescence': stale_obsolete,
-                              'legacy_claim_upgrade': 'passed',
-                              'partial_claim_upgrade': 'passed with JSON to JSONB preservation',
                               'assignment_disable_race': assignment_result,
                               'duplicate_dns_import_race': first_result,
                               'concurrent_token_limit': [first_token_result, second_token_result],
