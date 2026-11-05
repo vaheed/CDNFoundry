@@ -178,8 +178,10 @@ Long actions run as one job at a time; the job page refreshes itself.
 ## First-run wizard
 
 The admin panel has a **First-run setup** page that walks through the CDN settings, one step per group. Every setting
-shows its default, each step has a reset, and **Keep all defaults** changes nothing. It disappears from the navigation
-once finished or skipped, and everything stays editable under **Platform settings**.
+shows its default, each step has a reset, and **Keep all defaults** changes nothing. It is offered only on a fresh
+install, while the administrator is the only user and nothing has been created or changed. Creating a user, domain, or
+edge, changing any setting, finishing, or skipping hides it for good, and everything stays editable under **Platform
+settings**.
 
 ## Qualification
 

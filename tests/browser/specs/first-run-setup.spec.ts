@@ -1,41 +1,17 @@
 import { expect, test } from '@playwright/test';
-import { adminPassword, expectAccessible, settle, signIn } from './helpers';
+import { adminPassword, settle, signIn } from './helpers';
 
-// The first-run wizard: one step per settings group, every setting beside its default, and a reset on every step.
-test('first-run wizard shows defaults, resets a step, and keeps every default without changing anything', async ({ page }) => {
+// The browser stack is seeded with domains, edges, and users, so it is not a fresh install:
+// the first-run wizard must be hidden from the administrator and refuse direct visits.
+// The wizard itself (defaults, reset, finish, skip) is covered on a pristine database by FirstRunSetupTest.
+test('first-run setup is not offered once the system has data', async ({ page }) => {
     const problems: string[] = [];
     page.on('pageerror', (e) => problems.push(e.message));
     await signIn(page, 'admin', 'admin@browser.test', adminPassword);
-    await page.goto('/admin/first-run-setup');
     await settle(page);
-    await expectAccessible(page);
-
-    const wizard = page.getByTestId('first-run-wizard');
-    await expect(wizard).toBeVisible();
-    await expect(wizard.getByText(/Default:/).first()).toBeVisible();
-
-    // Walk to a step that has a number field, change it, then reset the step: the default comes back.
-    for (let i = 0; i < 10 && (await wizard.locator('input[type=number]:visible, input[inputmode=numeric]:visible').count()) === 0; i++) {
-        await wizard.getByRole('button', { name: 'Next', exact: true }).click();
-        await settle(page);
-    }
-    const input = wizard.locator('input[type=number]:visible, input[inputmode=numeric]:visible').first();
-    const original = await input.inputValue();
-    await input.fill(original === '37' ? '38' : '37');
-    await wizard.getByRole('button', { name: 'Reset this step to defaults' }).click();
-    await expect(input).toHaveValue(original);
-    await expectAccessible(page);
-
-    // Walk forward one more step; it stays accessible.
-    for (let i = 0; i < 1; i++) {
-        await wizard.getByRole('button', { name: 'Next', exact: true }).click();
-        await settle(page);
-        await expectAccessible(page);
-    }
-
-    await page.getByRole('button', { name: 'Keep all defaults' }).click();
-    await page.getByRole('button', { name: 'Confirm' }).click();
-    await expect(page).toHaveURL(/\/admin\/platform-settings/);
     await expect(page.getByRole('link', { name: 'First-run setup' })).toHaveCount(0);
+
+    const response = await page.goto('/admin/first-run-setup');
+    expect(response?.status()).toBe(403);
     expect(problems).toEqual([]);
 });
