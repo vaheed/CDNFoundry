@@ -25,14 +25,14 @@
             </form>
             <div class="mt-3 flex flex-wrap gap-2">
                 <x-ui.status-pill tone="info">{{ $state['filters']['domain']?->name ?? 'All domains' }}</x-ui.status-pill>
-                @if ($state['filters']['edge'])<x-ui.status-pill tone="warning">Edge {{ $state['filters']['edge'] }} · detailed legacy tables are not edge-scoped</x-ui.status-pill>@endif
+                @if ($state['filters']['edge'])<x-ui.status-pill tone="warning" title="Detailed tables are not edge-scoped">Edge {{ $state['filters']['edge'] }}</x-ui.status-pill>@endif
                 @if ($state['filters']['view'])<x-ui.status-pill tone="info">{{ str($state['filters']['view'])->headline() }} focus</x-ui.status-pill>@endif
                 @if ($state['filters']['status_family'])<x-ui.status-pill tone="warning">HTTP {{ $state['filters']['status_family'] }} log focus</x-ui.status-pill>@endif
                 @foreach ($state['filters']['errors'] as $error)<x-ui.status-pill tone="danger">{{ $error }}</x-ui.status-pill>@endforeach
             </div>
         </x-filament::section>
 
-        <x-filament::section heading="Telemetry status" :description="strtoupper($state['filters']['range']) . ' complete-hour analytics · ' . $display->displayTimezone() . ' · finalized through ' . $display->formatTimestamp($state['meta']['finalized_until'] ?? null, 'Y-m-d H:i T')" icon="phosphor-pulse">
+        <x-filament::section heading="Telemetry status" :description="'Finalized through ' . $display->formatTimestamp($state['meta']['finalized_until'] ?? null, 'Y-m-d H:i T')" icon="phosphor-pulse">
             <div class="flex flex-wrap gap-3">
                 <x-ui.status-pill :tone="$state['available'] ? 'success' : 'danger'">ClickHouse {{ $state['available'] ? 'available' : 'unavailable' }}</x-ui.status-pill>
                 <x-ui.status-pill :tone="$state['buffer']['available'] ? 'success' : 'warning'">Vector metrics {{ $state['buffer']['available'] ? 'available' : 'unavailable' }}</x-ui.status-pill>
@@ -42,7 +42,7 @@
                 <x-ui.widget-state class="cdn-widget-state--compact mt-3" :state="$state['meta']['aggregate_state']" :description="'Latest complete traffic bucket: ' . $display->formatTimestamp($state['meta']['aggregate_source_timestamp'] ?? null)" />
             @endif
             @if ($state['meta']['partial'] ?? true)
-                <p class="cdn-row-meta mt-3">Normal: the latest {{ $state['meta']['finalization_delay_minutes'] ?? 15 }} minutes remain provisional so this page can include current traffic. This is not a delivery warning; finalized usage is listed separately below.</p>
+                <p class="cdn-row-meta mt-3">The latest {{ $state['meta']['finalization_delay_minutes'] ?? 15 }} minutes are provisional.</p>
             @endif
             @if (!$state['available'])
                 <x-ui.empty-state class="mt-4" title="Analytics unavailable" description="Traffic serving is independent and remains active." />
@@ -52,12 +52,12 @@
         @if ($state['available'])
             <div class="cdn-stat-grid">
                 @foreach ([
-                    ['label' => 'Requests', 'value' => number_format((int) ($summary['requests'] ?? 0)), 'description' => 'HTTP requests in the selected range', 'tone' => 'success'],
-                    ['label' => 'Bandwidth', 'value' => $formatBytes(((int) ($summary['bytes_in'] ?? 0)) + ((int) ($summary['bytes_out'] ?? 0))), 'description' => 'Inbound and outbound transfer', 'tone' => 'success'],
-                    ['label' => 'Cache hit ratio', 'value' => number_format(((float) ($summary['cache_ratio'] ?? 0)) * 100, 1) . '%', 'description' => number_format((int) ($summary['cache_hits'] ?? 0)) . ' requests served from cache', 'tone' => 'success'],
-                    ['label' => 'DNS queries', 'value' => number_format((int) ($summary['dns_queries'] ?? 0)), 'description' => 'Authoritative queries in the range', 'tone' => 'success'],
-                    ['label' => 'Origin errors', 'value' => number_format((int) ($summary['origin_errors'] ?? 0)), 'description' => 'Origin failures requiring review', 'tone' => ((int) ($summary['origin_errors'] ?? 0)) > 0 ? 'warning' : 'success'],
-                    ['label' => 'Security blocks', 'value' => number_format((int) ($summary['security_blocks'] ?? 0)), 'description' => 'Bounded protection decisions', 'tone' => 'warning'],
+                    ['label' => 'Requests', 'value' => number_format((int) ($summary['requests'] ?? 0)), 'description' => null, 'tone' => 'success'],
+                    ['label' => 'Bandwidth', 'value' => $formatBytes(((int) ($summary['bytes_in'] ?? 0)) + ((int) ($summary['bytes_out'] ?? 0))), 'description' => null, 'tone' => 'success'],
+                    ['label' => 'Cache hit ratio', 'value' => number_format(((float) ($summary['cache_ratio'] ?? 0)) * 100, 1) . '%', 'description' => number_format((int) ($summary['cache_hits'] ?? 0)) . ' cached', 'tone' => 'success'],
+                    ['label' => 'DNS queries', 'value' => number_format((int) ($summary['dns_queries'] ?? 0)), 'description' => null, 'tone' => 'success'],
+                    ['label' => 'Origin errors', 'value' => number_format((int) ($summary['origin_errors'] ?? 0)), 'description' => null, 'tone' => ((int) ($summary['origin_errors'] ?? 0)) > 0 ? 'warning' : 'success'],
+                    ['label' => 'Security blocks', 'value' => number_format((int) ($summary['security_blocks'] ?? 0)), 'description' => null, 'tone' => 'warning'],
                 ] as $stat)
                     <x-ui.stat-card :label="$stat['label']" :value="$stat['value']" :description="$stat['description']" :tone="$stat['tone']" />
                 @endforeach
@@ -102,7 +102,7 @@
                 </x-filament::section>
             </div>
 
-            <x-filament::section heading="Compression savings" :description="'Delivery by encoding from the latest ' . $state['meta']['raw_window_hours'] . ' hours. Identity means the response was sent without compression; Fallback explains why compression was skipped.'" icon="phosphor-arrows-in">
+            <x-filament::section heading="Compression savings" :description="'Latest ' . $state['meta']['raw_window_hours'] . ' hours'" icon="phosphor-arrows-in">
                 <x-ui.data-table class="[&_.cdn-data-table]:min-w-[48rem]">
                     <x-slot:header><tr><th class="text-left">Encoding / profile</th><th class="text-left">Fallback</th><th class="text-right">Requests</th><th class="text-right">Delivered</th><th class="text-right">Saved</th><th class="text-right">Savings</th></tr></x-slot:header>
                     @forelse ($state['compression']['items'] as $row)
@@ -148,7 +148,7 @@
                 @endif
             </x-filament::section>
 
-            <x-filament::section heading="Recent logs" :description="'Masked, bounded previews from the latest ' . $state['meta']['raw_window_hours'] . ' hours within this investigation. Five rows per stream until expanded.'" icon="phosphor-file-magnifying-glass">
+            <x-filament::section heading="Recent logs" :description="'Masked previews, latest ' . $state['meta']['raw_window_hours'] . ' hours'" icon="phosphor-file-magnifying-glass">
                 <div class="grid gap-5 xl:grid-cols-3">
                     @foreach ($state['logs'] as $stream => $logState)
                         <div class="min-w-0">
@@ -158,7 +158,9 @@
                                     <div class="cdn-activity-row">
                                         <div class="min-w-0">
                                             <div class="cdn-row-title">{{ $row['hostname'] ?? $row['edge_id'] ?? ('Domain #' . ($row['domain_id'] ?? 'unknown')) }}</div>
-                                            <div class="cdn-row-meta">{{ $display->formatTimestamp($row['occurred_at'] ?? null) }} · {{ $row['method'] ?? $row['event_type'] ?? 'event' }} {{ $row['path'] ?? '' }} · {{ $row['security_reason'] ?? $row['origin_error'] ?? $row['tls_error'] ?? ('HTTP ' . ($row['status'] ?? 'unknown')) }}</div>
+                                            <div class="cdn-row-meta truncate" title="{{ ($row['method'] ?? $row['event_type'] ?? 'event') . ' ' . ($row['path'] ?? '') }}">{{ $row['method'] ?? $row['event_type'] ?? 'event' }} {{ $row['path'] ?? '' }}</div>
+                                            <div class="cdn-row-meta">{{ $display->formatTimestamp($row['occurred_at'] ?? null) }}</div>
+                                            @if (isset($row['security_reason']) || isset($row['origin_error']) || isset($row['tls_error']))<div class="cdn-row-meta">{{ $row['security_reason'] ?? $row['origin_error'] ?? $row['tls_error'] }}</div>@endif
                                         </div>
                                         @if (isset($row['status']))<span class="cdn-status-pill" data-tone="{{ (int) $row['status'] >= 500 ? 'danger' : 'warning' }}">{{ $row['status'] }}</span>@endif
                                     </div>
@@ -208,10 +210,13 @@
                     @endforelse
                 </div>
                 @if (($state['buffer']['metrics']['vector_component_discarded_events_total'] ?? 0) > 0 || ($state['buffer']['metrics']['vector_component_errors_total'] ?? 0) > 0)
-                    <p class="cdn-row-meta mt-3">Discarded events are usually also counted as component errors. These totals are related lifetime counters and must not be added together; a zero current buffer means there is no queued delivery backlog.</p>
-                    @foreach ($state['buffer']['components'] as $component => $metrics)
-                        <div class="cdn-row-meta mt-1"><code>{{ $component }}</code>: {{ number_format($metrics['vector_component_discarded_events_total'] ?? 0) }} discarded · {{ number_format($metrics['vector_component_errors_total'] ?? 0) }} errors</div>
-                    @endforeach
+                    <p class="cdn-row-meta mt-3">Lifetime counters; do not add them together.</p>
+                    <x-ui.data-table caption="Vector components with discarded events or errors">
+                        <x-slot:header><tr><th>Component</th><th class="text-right">Discarded</th><th class="text-right">Errors</th></tr></x-slot:header>
+                        @foreach ($state['buffer']['components'] as $component => $metrics)
+                            <tr><td class="px-3 py-2"><code>{{ $component }}</code></td><td class="px-3 py-2 text-right tabular-nums">{{ number_format($metrics['vector_component_discarded_events_total'] ?? 0) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format($metrics['vector_component_errors_total'] ?? 0) }}</td></tr>
+                        @endforeach
+                    </x-ui.data-table>
                 @endif
             </x-filament::section>
 

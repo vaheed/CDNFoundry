@@ -216,12 +216,12 @@ class OpsDashboardTest extends TestCase
         Http::fake();
 
         $this->actingAs($user)->get('/app/analytics')->assertOk()
-            ->assertSee('Select an assigned domain')
+            ->assertSee('Select a domain')
             ->assertDontSee($private->name);
         Http::assertNothingSent();
 
         $this->actingAs($user)->get('/app/analytics?domain='.$private->id)->assertOk()
-            ->assertSee('Select an assigned domain')
+            ->assertSee('Select a domain')
             ->assertDontSee($private->name);
         Http::assertNothingSent();
     }

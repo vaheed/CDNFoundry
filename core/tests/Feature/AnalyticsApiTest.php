@@ -187,19 +187,18 @@ class AnalyticsApiTest extends TestCase
         ]);
 
         $this->actingAs($user)->get("/app/analytics?domain={$domain->id}")->assertOk()
-            ->assertSee($domain->name)->assertSee('Live window included')->assertSee('bytes')->assertSee('milliseconds')
+            ->assertSee($domain->name)->assertSee('Live window included')
             ->assertSee('Request and bandwidth timeseries')->assertSee('Compression savings (last hour)')->assertSee('DNS activity')->assertSee('Recent logs')->assertSee('Usage CSV export')
             ->assertDontSee("/api/domains/{$domain->id}/logs", false);
         $this->actingAs($admin)->get('/admin/telemetry')->assertOk()
             ->assertSee('Apply filters')->assertSee('All domains')->assertSee('All edges')->assertSee('24 hours')->assertDontSee('15 minutes (hourly source)')
             ->assertSeeHtml('class="cdn-filter-select"')
-            ->assertSee('Global traffic')->assertSee('Vector metrics available')->assertSee('complete-hour analytics')
+            ->assertSee('Global traffic')->assertSee('Vector metrics available')->assertSee('Finalized through')
             ->assertSee('Buffered data')->assertSee('42 B')->assertSee('Compression savings')->assertSee('Recent logs')
-            ->assertSee('Identity means the response was sent without compression')
             ->assertSee('Encoding / profile')->assertSee('Fallback')
-            ->assertSee('Five rows per stream until expanded')->assertSee('Edge requests')
+            ->assertSee('Edge requests')
             ->assertSee('Discarded events since start')->assertSee('Component errors since start')->assertSee('clickhouse_edge')
-            ->assertSee('must not be added together')->assertSee('Global usage CSV')
+            ->assertSee('do not add them together')->assertSee('Global usage CSV')
             ->assertDontSee('/api/admin/logs', false);
 
     }
