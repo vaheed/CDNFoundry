@@ -298,6 +298,18 @@ def start_edge_control(directory: pathlib.Path) -> pathlib.Path:
         "openssl", "x509", "-req", "-in", str(directory / "server.csr"), "-CA", str(directory / "ca.crt"),
         "-CAkey", str(directory / "ca.key"), "-CAcreateserial", "-days", "1", "-copy_extensions", "copy", "-out", str(directory / "server.crt"),
     ], check=True, capture_output=True, text=True, timeout=20)
+    # The control plane checks the shared proxy secret that the development stack generated, so this
+    # standalone edge-control takes the same file from the stack's PKI volume instead of inventing one.
+    volume = subprocess.run(
+        ["docker", "volume", "ls", "-q", "--filter", "label=com.docker.compose.project=cdnfoundry-dev",
+         "--filter", "label=com.docker.compose.volume=dev-pki"],
+        check=True, capture_output=True, text=True, timeout=20,
+    ).stdout.split()[0]
+    secret = subprocess.run(
+        ["docker", "run", "--rm", "-v", f"{volume}:/pki:ro", "nginx:1.30.3-alpine", "cat", "/pki/edge-proxy-secret.conf"],
+        check=True, capture_output=True, text=True, timeout=60,
+    ).stdout
+    (directory / "edge-proxy-secret.conf").write_text(secret)
     for path in directory.iterdir():
         path.chmod(0o644)
     subprocess.run([
@@ -308,6 +320,7 @@ def start_edge_control(directory: pathlib.Path) -> pathlib.Path:
         "-v", f"{directory / 'server.crt'}:/run/secrets/edge-control-server.crt:ro",
         "-v", f"{directory / 'server.key'}:/run/secrets/edge-control-server.key:ro",
         "-v", f"{directory / 'ca.crt'}:/run/secrets/edge-identity-ca.crt:ro",
+        "-v", f"{directory / 'edge-proxy-secret.conf'}:/run/secrets/edge-proxy-secret.conf:ro",
         "nginx:1.30.3-alpine",
     ], cwd=ROOT, check=True, capture_output=True, text=True, timeout=30)
     time.sleep(0.5)
