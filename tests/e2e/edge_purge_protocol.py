@@ -42,7 +42,7 @@ def main():
         (fixture / 'status-token').chmod(0o600)
         (fixture / 'cell.env').write_text('EDGE_STATUS_TOKEN=' + token + '\nEDGE_RUNTIME_FILE=/fixture/runtime.json\n')
         (fixture / 'cell.env').chmod(0o600)
-        (fixture / 'runtime.json').write_text(json.dumps({'schema_version': 1, 'sequence': 0, 'hosts': {}}))
+        (fixture / 'runtime.json').write_text(json.dumps({'schema_version': 1, 'generation_id': 'e2e-generation-0', 'sequence': 0, 'hosts': {}}))
         (fixture / 'runtime.json').chmod(0o644)
         configuration = (ROOT / 'docker/nginx/openresty.conf').read_text()
         (fixture / 'nginx.conf').write_text(configuration.replace('worker_processes auto;', 'worker_processes 1;'))

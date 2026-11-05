@@ -109,6 +109,7 @@ def isolated_last_valid_test() -> None:
         candidate = {
             "schema_version": 1,
             "revision": 17,
+            "generation_id": "e2e-generation-0000000017",
             "listeners": ["127.0.0.50:80", "127.0.0.50:443"],
             "routes": [{
                 "address": "127.0.0.50", "hostname": "last-valid.example.test",
@@ -196,7 +197,7 @@ def multi_cell_pool_test() -> None:
             state.mkdir()
             state.chmod(0o777)
             candidate = {
-                "schema_version": 1, "revision": 23,
+                "schema_version": 1, "revision": 23, "generation_id": "e2e-generation-0000000023",
                 "listeners": ["127.0.0.50:80", "127.0.0.50:443"],
                 "routes": [{
                     "address": "127.0.0.50", "hostname": f"domain-{slot}.example.test",
