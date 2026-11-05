@@ -87,6 +87,7 @@ def verify_edge_https(hostname: str, fingerprint: str) -> None:
         if len(control_addresses) != 1:
             raise AssertionError("Pebble has no unique control-network address")
         management = ssl.create_default_context(cafile=str(authority))
+        management.minimum_version = ssl.TLSVersion.TLSv1_2
         management.check_hostname = False  # Docker IP is not in Pebble's server certificate.
         with urllib.request.urlopen(f"https://{control_addresses[0]}:15000/roots/0",
                                     context=management, timeout=10) as response:
@@ -96,6 +97,7 @@ def verify_edge_https(hostname: str, fingerprint: str) -> None:
         issued_authority = pathlib.Path(directory) / "issued-root.pem"
         issued_authority.write_bytes(issued_root)
         context = ssl.create_default_context(cafile=str(issued_authority))
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
         for edge in ("a", "b"):
             deadline = time.monotonic() + 90
             last_error: Exception | None = None

@@ -83,7 +83,7 @@ def main() -> int:
         names = int(query("cdnf", "SELECT sum(length(top)) FROM (SELECT topKMerge(20)(names) AS top FROM cdnf.dns_top_names GROUP BY domain_id, zone, interval_start)"))
         assert names <= 60, f"the top-name sketch must stay bounded, got {names}"
         top = query("cdnf_reader", "SELECT arrayJoin(top) FROM (SELECT topKMerge(20)(names) AS top FROM cdnf.dns_top_names WHERE domain_id = 7 GROUP BY domain_id, zone, interval_start)")
-        assert "www.example.com" in top, "a name that is really asked must be among the busiest"
+        assert "www.example.com" in top.splitlines(), "a name that is really asked must be among the busiest"
 
         # A zone that leaves the next snapshot stops being matched.
         publish(first + 1, {"example.com": 7})

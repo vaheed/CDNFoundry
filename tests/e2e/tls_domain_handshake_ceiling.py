@@ -24,6 +24,7 @@ def docker(*args: str, timeout: int = 120) -> subprocess.CompletedProcess[str]:
 def handshake(address: str, client: str) -> bool:
     """One TLS handshake whose PROXY protocol header names `client` as the source."""
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
     try:
