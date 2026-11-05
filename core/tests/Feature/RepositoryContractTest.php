@@ -39,6 +39,15 @@ class RepositoryContractTest extends TestCase
         $this->assertFileDoesNotExist(base_path('../tests/e2e/phase1.mjs'));
     }
 
+    public function test_every_makefile_target_is_declared_phony(): void
+    {
+        $makefile = file_get_contents(base_path('../Makefile'));
+        preg_match('/^\.PHONY:(.*)$/m', $makefile, $phony);
+        preg_match_all('/^([A-Za-z0-9_-]+):/m', $makefile, $targets);
+
+        $this->assertSame([], array_values(array_diff($targets[1], preg_split('/\s+/', trim($phony[1])))));
+    }
+
     #[DataProvider('skillProvider')]
     public function test_required_project_skill_has_every_contract_section(string $skill): void
     {

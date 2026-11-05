@@ -5,7 +5,6 @@ namespace App\Filament\Admin\Widgets;
 use App\Filament\Admin\Resources\Edges\EdgeResource;
 use App\Filament\Admin\Widgets\Concerns\UsesOpsDashboardContext;
 use App\Ops\Data\OpsDashboardContext;
-use App\Ops\Services\MetricComparisonService;
 use App\Ops\Services\OpsDashboardService;
 use App\Ops\Support\MetricFormatter;
 use Filament\Widgets\Widget;
@@ -54,9 +53,7 @@ class OpsKpiOverview extends Widget
 
     private function item(string $label, string $value, float|int|null $current, float|int|null $previous, string $tone, string $url): array
     {
-        $change = app(MetricComparisonService::class)->compare($current, $previous);
-
-        return ['label' => $label, 'value' => $value, 'note' => app(MetricFormatter::class)->deltaPercent($change['percent']), 'tone' => $tone, 'url' => $url];
+        return ['label' => $label, 'value' => $value, 'note' => app(MetricFormatter::class)->change($current, $previous), 'tone' => $tone, 'url' => $url];
     }
 
     private function edgeItem(array $system): array

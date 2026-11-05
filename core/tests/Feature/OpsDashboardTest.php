@@ -14,7 +14,6 @@ use App\Models\Edge;
 use App\Models\Operation;
 use App\Models\User;
 use App\Ops\Data\OpsDashboardContext;
-use App\Ops\Services\MetricComparisonService;
 use App\Ops\Services\OpsDashboardService;
 use App\Ops\Support\MetricFormatter;
 use App\Support\PlatformSettings;
@@ -77,12 +76,12 @@ class OpsDashboardTest extends TestCase
 
     public function test_metric_comparisons_and_formatting_do_not_invent_a_zero_baseline(): void
     {
-        $service = app(MetricComparisonService::class);
+        $formatter = app(MetricFormatter::class);
 
-        $this->assertSame(['delta' => 5.0, 'percent' => null, 'direction' => 'up'], $service->compare(5, 0));
-        $this->assertSame('down', $service->compare(5, 10)['direction']);
-        $this->assertSame(-50.0, $service->compare(5, 10)['percent']);
-        $this->assertSame('No comparable baseline', app(MetricFormatter::class)->deltaPercent(null));
+        $this->assertSame('No comparable baseline', $formatter->change(5, 0));
+        $this->assertSame('No comparable baseline', $formatter->change(null, 3));
+        $this->assertSame('-50.0% vs previous period', $formatter->change(5, 10));
+        $this->assertSame('+25.0% vs previous period', $formatter->change(5, 4));
         $this->assertSame('1.0 KiB', app(MetricFormatter::class)->bytes(1024));
         $this->assertSame('12.5%', app(MetricFormatter::class)->percent(0.125));
         $this->assertSame('Unavailable', app(MetricFormatter::class)->milliseconds(null));
