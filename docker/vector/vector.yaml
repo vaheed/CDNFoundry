@@ -209,6 +209,9 @@ transforms:
         abort
       }
       question = .responseData.question[0]
+      # DNSdist answers an over-limit UDP client with a truncated reply; that is the response limit.
+      outcome = "answered"
+      if .responseData.header.tc == true { outcome = "response_limit" }
       . = {
         "occurred_at": .timestamp,
         "domain_id": 0,
@@ -220,8 +223,100 @@ transforms:
         "dns_cluster": to_string(.serverId) ?? "dnsdist",
         "country": "ZZ",
         "continent": "ZZ",
-        "outcome": if .responseData.header.tc == true { "response_limit" } else { "answered" }
+        "outcome": outcome
       }
+
+  # Live counters for Prometheus. Labels are only the collector's PoP and edge and fixed-value classes, so
+  # the series count is bounded by the fleet and not by domains, clients, or paths. Per-domain and
+  # per-client questions are answered from ClickHouse.
+  edge_metric_events:
+    type: remap
+    inputs: [safe_edge_events]
+    drop_on_error: true
+    source: |
+      status = to_int(.status) ?? 0
+      status_class = "none"
+      if status >= 100 && status < 200 { status_class = "1xx" } else if status >= 200 && status < 300 { status_class = "2xx" } else if status >= 300 && status < 400 { status_class = "3xx" } else if status >= 400 && status < 500 { status_class = "4xx" } else if status >= 500 && status < 600 { status_class = "5xx" }
+      cache = upcase(to_string(.cache_status) ?? "")
+      if !includes(["HIT", "MISS", "BYPASS", "EXPIRED", "STALE", "UPDATING", "REVALIDATED"], cache) { cache = "NONE" }
+      seconds = to_float(.request_time_ms) ?? 0.0
+      origin_seconds = null
+      if .origin_latency_ms != null { origin_seconds = (to_float(.origin_latency_ms) ?? 0.0) / 1000.0 }
+      . = {
+        "kind": .event_type,
+        "pop": .pop,
+        "edge": .edge_id,
+        "status_class": status_class,
+        "cache_status": cache,
+        "security_class": .security_class,
+        "tls_reason": .tls_error,
+        "bytes_sent": to_int(.bytes_sent) ?? 0,
+        "request_seconds": seconds / 1000.0,
+        "origin_seconds": origin_seconds,
+        "origin_failed": .origin_error != ""
+      }
+  edge_request_events:
+    type: filter
+    inputs: [edge_metric_events]
+    condition: .kind != "tls"
+  edge_origin_events:
+    type: filter
+    inputs: [edge_metric_events]
+    condition: .kind != "tls" && .origin_seconds != null
+  edge_origin_failure_events:
+    type: filter
+    inputs: [edge_metric_events]
+    condition: .kind != "tls" && .origin_failed == true
+  edge_security_events:
+    type: filter
+    inputs: [edge_metric_events]
+    condition: .kind != "tls" && .security_class != ""
+  edge_tls_events:
+    type: filter
+    inputs: [edge_metric_events]
+    condition: .kind == "tls"
+  edge_request_metrics:
+    type: log_to_metric
+    inputs: [edge_request_events]
+    metrics:
+      - { type: counter, field: kind, name: cdnf_edge_requests_total, tags: { pop: "{{pop}}", edge: "{{edge}}", status_class: "{{status_class}}", cache_status: "{{cache_status}}" } }
+      - { type: counter, field: bytes_sent, increment_by_value: true, name: cdnf_edge_bytes_sent_total, tags: { pop: "{{pop}}", edge: "{{edge}}" } }
+      - { type: histogram, field: request_seconds, name: cdnf_edge_request_duration_seconds, tags: { pop: "{{pop}}", edge: "{{edge}}" } }
+  edge_origin_metrics:
+    type: log_to_metric
+    inputs: [edge_origin_events]
+    metrics:
+      - { type: histogram, field: origin_seconds, name: cdnf_edge_origin_duration_seconds, tags: { pop: "{{pop}}", edge: "{{edge}}" } }
+  edge_origin_failure_metrics:
+    type: log_to_metric
+    inputs: [edge_origin_failure_events]
+    metrics:
+      - { type: counter, field: kind, name: cdnf_edge_origin_failures_total, tags: { pop: "{{pop}}", edge: "{{edge}}" } }
+  edge_security_metrics:
+    type: log_to_metric
+    inputs: [edge_security_events]
+    metrics:
+      - { type: counter, field: kind, name: cdnf_edge_security_events_total, tags: { pop: "{{pop}}", edge: "{{edge}}", class: "{{security_class}}" } }
+  edge_tls_metrics:
+    type: log_to_metric
+    inputs: [edge_tls_events]
+    metrics:
+      - { type: counter, field: kind, name: cdnf_edge_tls_failures_total, tags: { pop: "{{pop}}", edge: "{{edge}}", reason: "{{tls_reason}}" } }
+  dns_metric_events:
+    type: remap
+    inputs: [safe_dns_events]
+    drop_on_error: true
+    source: |
+      rcode = upcase(to_string(.rcode) ?? "")
+      if !includes(["NOERROR", "NXDOMAIN", "SERVFAIL", "REFUSED", "FORMERR", "NOTIMP"], rcode) { rcode = "OTHER" }
+      outcome = to_string(.outcome) ?? ""
+      if outcome != "response_limit" { outcome = "answered" }
+      . = { "kind": "dns", "pop": .pop, "rcode": rcode, "outcome": outcome }
+  dns_metrics:
+    type: log_to_metric
+    inputs: [dns_metric_events]
+    metrics:
+      - { type: counter, field: kind, name: cdnf_dns_queries_total, tags: { pop: "{{pop}}", rcode: "{{rcode}}", outcome: "{{outcome}}" } }
 
 sinks:
   clickhouse_edge:
@@ -259,8 +354,12 @@ sinks:
     request: { retry_initial_backoff_secs: 1, retry_max_duration_secs: 300, timeout_secs: 10 }
   prometheus:
     type: prometheus_exporter
-    inputs: [internal_metrics]
+    inputs: [internal_metrics, edge_request_metrics, edge_origin_metrics, edge_origin_failure_metrics, edge_security_metrics, edge_tls_metrics, dns_metrics]
     address: 0.0.0.0:9598
+    # Counters of a quiet PoP stay exported; they are bounded by the label sets above.
+    flush_period_secs: 3600
+    default_namespace: ""
+    buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
 
 tests:
   - name: drop_syslog_events_without_the_node_proof
@@ -347,3 +446,26 @@ tests:
               assert_eq!(.ip_version, "6")
               assert_eq!(.bytes_sent, 1234)
               assert!(.pop != "forged-pop")
+  - name: derive_bounded_live_metrics_from_an_edge_request
+    inputs:
+      - insert_at: edge_metric_events
+        type: log
+        log_fields:
+          event_type: request
+          pop: pop-a
+          edge_id: edge-1
+          status: 503
+          cache_status: miss
+          bytes_sent: 900
+          request_time_ms: 120
+          origin_error: "502"
+          security_class: ""
+          tls_error: ""
+    outputs:
+      - extract_from: edge_metric_events
+        conditions:
+          - type: vrl
+            source: |-
+              assert_eq!(.status_class, "5xx")
+              assert_eq!(.cache_status, "MISS")
+              assert_eq!(.origin_failed, true)
