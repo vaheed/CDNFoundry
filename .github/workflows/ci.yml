@@ -355,7 +355,7 @@ jobs:
           cp .env.dev.example .env.dev
           for side in a b; do
             if [ "${side}" = a ]; then country=DE; continent=EU; else country=US; continent=NA; fi
-            output="$(docker compose -f compose.dev.yml exec -T core php artisan tinker --execute="[\$edge, \$token] = app(App\\Actions\\CreateEdge::class)->handle(['name' => 'dev-pop-${side}', 'country_code' => '${country}', 'continent_code' => '${continent}'], null, null); echo json_encode(['edge_id' => \$edge->id, 'bootstrap_token' => \$token]);" | tail -n 1)"
+            output="$(docker compose -f compose.dev.yml exec -T core php artisan tinker --execute="[\$edge, \$token] = app(App\\Actions\\CreateEdge::class)->handle(['name' => 'dev-pop-${side}', 'country_code' => '${country}', 'continent_code' => '${continent}'], null, null); foreach ([1 => 'shared-default', 2 => 'quarantine-default'] as \$slot => \$pool) { app(App\\Actions\\AssignCellToPool::class)->handle(App\\Models\\EdgePool::query()->where('name', \$pool)->firstOrFail(), \$edge->cells()->where('slot', \$slot)->firstOrFail(), null, null); } echo json_encode(['edge_id' => \$edge->id, 'bootstrap_token' => \$token]);" | tail -n 1)"
             CDNF_ENROLLMENT="${output}" CDNF_SIDE="${side}" python3 - <<'PY'
           import json, os, re
           from pathlib import Path
