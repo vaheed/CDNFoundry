@@ -119,6 +119,53 @@ transforms:
       .waf_processing_us = to_int(.waf_processing_us) ?? 0
       .waf_body_limit = slice!(to_string(.waf_body_limit) ?? "none", 0, 16)
       .waf_exclusion_id = to_int(.waf_exclusion_id) ?? 0
+      # Timings arrive from nginx as seconds. A list ("0.001, 0.004") means retries, "-" means no
+      # sample; the last attempt is the one that served the response.
+      request_seconds = parse_float(to_string(.request_time) ?? "") ?? -1.0
+      .request_time_ms = 0
+      if request_seconds >= 0.0 && request_seconds <= 3600.0 { .request_time_ms = to_int(request_seconds * 1000.0) }
+      connect = parse_regex(to_string(.upstream_connect_time) ?? "", r'(?P<seconds>[0-9]+\.[0-9]+)$') ?? {}
+      connect_seconds = parse_float(to_string(connect.seconds)) ?? -1.0
+      .upstream_connect_ms = null
+      if connect_seconds >= 0.0 && connect_seconds <= 3600.0 { .upstream_connect_ms = to_int(connect_seconds * 1000.0) }
+      header = parse_regex(to_string(.upstream_header_time) ?? "", r'(?P<seconds>[0-9]+\.[0-9]+)$') ?? {}
+      header_seconds = parse_float(to_string(header.seconds)) ?? -1.0
+      .upstream_header_ms = null
+      if header_seconds >= 0.0 && header_seconds <= 3600.0 { .upstream_header_ms = to_int(header_seconds * 1000.0) }
+      del(.request_time); del(.upstream_connect_time); del(.upstream_header_time)
+      protocol = downcase(to_string(.server_protocol) ?? "")
+      .server_protocol = ""
+      if protocol == "http/2.0" { .server_protocol = "h2" } else if protocol == "http/3.0" { .server_protocol = "h3" } else if starts_with(protocol, "http/1") { .server_protocol = "http/1.1" }
+      .ssl_protocol = slice!(to_string(.ssl_protocol) ?? "", 0, 16)
+      .ssl_cipher = slice!(to_string(.ssl_cipher) ?? "", 0, 64)
+      .scheme = slice!(to_string(.scheme) ?? "", 0, 8)
+      if .scheme != "http" && .scheme != "https" { .scheme = "" }
+      .request_id = slice!(replace(to_string(.request_id) ?? "", r'[^0-9a-zA-Z-]', ""), 0, 64)
+      # Cells from before this field existed report body bytes only; use them rather than bill zero.
+      .bytes_sent = to_int(.bytes_sent) ?? 0
+      if .bytes_sent == 0 { .bytes_sent = .bytes_out }
+      .asn = to_int(.asn) ?? 0
+      if .asn < 0 || .asn > 4294967295 { .asn = 0 }
+      # The IP version is the client's, read from its address.
+      .ip_version = ""
+      if contains(.client_ip, ":") { .ip_version = "6" } else if .client_ip != "" { .ip_version = "4" }
+      # The PoP collector knows where it runs. Location is never read from the event.
+      .pop = slice!(get_env_var("CDNF_TELEMETRY_POP") ?? "unknown", 0, 64)
+      .region = slice!(get_env_var("CDNF_TELEMETRY_REGION") ?? "unknown", 0, 64)
+      # The fixed set of security classes. Any other reason a cell reports is a plain block.
+      .security_class = ""
+      if .security_action != "allow" || .event_type == "security" {
+        .security_class = "block"
+        if .security_reason == "cache_abuse_detected" { .security_class = "cache_abuse_detected" }
+        else if .security_reason == "edge_emergency_mode" { .security_class = "emergency_mode" }
+        else if .security_reason == "waf_body_limit" || .waf_body_limit == "exceeded" { .security_class = "waf_body_limit" }
+        else if starts_with(.security_reason, "waf") || .waf_action == "block" || .waf_action == "blocked" { .security_class = "waf" }
+      }
+      if .event_type == "tls" {
+        .tls_error = slice!(.tls_error, 0, 64)
+        .hostname = slice!(downcase(.hostname), 0, 253)
+        .status = 0
+      }
       del(.authorization); del(.cookie); del(.cookies); del(.request_body); del(.body); del(.query)
   billing_edge_events:
     type: filter
@@ -145,6 +192,13 @@ transforms:
       .country = slice!(upcase(to_string(.country) ?? "ZZ"), 0, 2)
       .continent = slice!(upcase(to_string(.continent) ?? "ZZ"), 0, 2)
       .outcome = slice!(to_string(.outcome) ?? "answered", 0, 32)
+      .asn = to_int(.asn) ?? 0
+      if .asn < 0 || .asn > 4294967295 { .asn = 0 }
+      .pop = slice!(get_env_var("CDNF_TELEMETRY_POP") ?? "unknown", 0, 64)
+      .region = slice!(get_env_var("CDNF_TELEMETRY_REGION") ?? "unknown", 0, 64)
+      # A response DNSdist truncated because a client went over its rate is the only limit it applies.
+      .security_class = ""
+      if .outcome == "response_limit" { .security_class = "dns_response_limit" }
       del(.authorization); del(.cookie); del(.request_body); del(.body)
   decoded_dns_dnstap:
     type: remap
@@ -166,7 +220,7 @@ transforms:
         "dns_cluster": to_string(.serverId) ?? "dnsdist",
         "country": "ZZ",
         "continent": "ZZ",
-        "outcome": "answered"
+        "outcome": if .responseData.header.tc == true { "response_limit" } else { "answered" }
       }
 
 sinks:
@@ -247,3 +301,49 @@ tests:
             source: |-
               assert_eq!(.security_action, "block")
               assert_eq!(.security_reason, "domain_rate_exceeded")
+  - name: classify_security_reasons_into_the_fixed_set
+    inputs:
+      - insert_at: safe_edge_events
+        type: log
+        log_fields:
+          domain_id: 1
+          security_action: block
+          security_reason: cache_abuse_detected
+      - insert_at: safe_edge_events
+        type: log
+        log_fields:
+          domain_id: 1
+          security_action: block
+          security_reason: edge_emergency_mode
+    outputs:
+      - extract_from: security_edge_events
+        conditions:
+          - type: vrl
+            source: |-
+              assert!(.security_class == "cache_abuse_detected" || .security_class == "emergency_mode")
+  - name: tag_pop_and_region_and_normalise_timings
+    inputs:
+      - insert_at: safe_edge_events
+        type: log
+        log_fields:
+          domain_id: 1
+          client_ip: 2001:db8::1
+          security_action: allow
+          request_time: "0.250"
+          upstream_connect_time: "0.001, 0.004"
+          upstream_header_time: "-"
+          server_protocol: HTTP/2.0
+          pop: forged-pop
+          bytes_sent: 1234
+    outputs:
+      - extract_from: billing_edge_events
+        conditions:
+          - type: vrl
+            source: |-
+              assert_eq!(.request_time_ms, 250)
+              assert_eq!(.upstream_connect_ms, 4)
+              assert_eq!(.upstream_header_ms, null)
+              assert_eq!(.server_protocol, "h2")
+              assert_eq!(.ip_version, "6")
+              assert_eq!(.bytes_sent, 1234)
+              assert!(.pop != "forged-pop")

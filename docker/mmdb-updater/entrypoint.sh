@@ -2,18 +2,25 @@
 set -Eeuo pipefail
 
 readonly MMDB_DIR="${MMDB_DIR:-/mmdb}"
-readonly MMDB_TARGET_FILE="${MMDB_TARGET_FILE:-GeoLite2-City.mmdb}"
+MMDB_TARGET_FILE="${MMDB_TARGET_FILE:-GeoLite2-City.mmdb}"
 readonly MMDB_PROVIDER="${MMDB_PROVIDER:-dbip-jsdelivr}"
-readonly MMDB_DOWNLOAD_URL="${MMDB_DOWNLOAD_URL:-}"
+MMDB_DOWNLOAD_URL="${MMDB_DOWNLOAD_URL:-}"
 readonly MMDB_DOWNLOAD_HEADER="${MMDB_DOWNLOAD_HEADER:-}"
-readonly MMDB_EXPECTED_SHA256="${MMDB_EXPECTED_SHA256:-}"
+MMDB_EXPECTED_SHA256="${MMDB_EXPECTED_SHA256:-}"
 # An HTTPS URL of a published SHA-256 (the first field of its first line is used).
-readonly MMDB_CHECKSUM_URL="${MMDB_CHECKSUM_URL:-}"
+MMDB_CHECKSUM_URL="${MMDB_CHECKSUM_URL:-}"
 # In production a download is activated only when a checksum vouches for it.
 readonly MMDB_REQUIRE_VERIFICATION="${MMDB_REQUIRE_VERIFICATION:-false}"
-readonly MMDB_FALLBACK_FILE="${MMDB_FALLBACK_FILE:-/opt/fallback/GeoLite2-City.mmdb}"
+MMDB_FALLBACK_FILE="${MMDB_FALLBACK_FILE:-/opt/fallback/GeoLite2-City.mmdb}"
 readonly MMDB_DOWNLOAD_RETRIES="${MMDB_DOWNLOAD_RETRIES:-5}"
 MMDB_DOWNLOAD_INTERVAL_SECONDS="${MMDB_DOWNLOAD_INTERVAL_SECONDS:-86400}"
+# The autonomous-system database is optional enrichment. It is updated the same way as the city
+# database, but a failure never stops the updater and is never reported as unhealthy.
+readonly MMDB_ASN_TARGET_FILE="${MMDB_ASN_TARGET_FILE:-GeoLite2-ASN.mmdb}"
+readonly MMDB_ASN_DOWNLOAD_URL="${MMDB_ASN_DOWNLOAD_URL:-}"
+readonly MMDB_ASN_EXPECTED_SHA256="${MMDB_ASN_EXPECTED_SHA256:-}"
+readonly MMDB_ASN_CHECKSUM_URL="${MMDB_ASN_CHECKSUM_URL:-}"
+ASN_MODE=false
 
 timestamp() { date -u +'%Y-%m-%dT%H:%M:%SZ'; }
 log() { printf '[%s] [mmdb-updater] %s\n' "$(timestamp)" "$*"; }
@@ -37,6 +44,14 @@ month() { date -u -d "$(date -u +%Y-%m-15) $1 month" +'%Y-%m'; }
 download_urls() {
     if [[ -n "$MMDB_DOWNLOAD_URL" ]]; then
         printf '%s\n' "$MMDB_DOWNLOAD_URL"
+        return
+    fi
+    if [[ "$ASN_MODE" == true ]]; then
+        case "$MMDB_PROVIDER" in
+            dbip-jsdelivr) printf '%s\n' 'https://cdn.jsdelivr.net/npm/dbip-asn-lite/dbip-asn-lite.mmdb.gz' ;;
+            dbip-official) printf 'https://download.db-ip.com/free/dbip-asn-lite-%s.mmdb.gz\n' "$(month 0)" "$(month -1)" ;;
+            *) return 1 ;;
+        esac
         return
     fi
 
@@ -150,7 +165,28 @@ if ! update_once; then
     fi
 fi
 
+update_asn() {
+    (
+        ASN_MODE=true
+        MMDB_TARGET_FILE="$MMDB_ASN_TARGET_FILE"
+        MMDB_DOWNLOAD_URL="$MMDB_ASN_DOWNLOAD_URL"
+        MMDB_EXPECTED_SHA256="$MMDB_ASN_EXPECTED_SHA256"
+        MMDB_CHECKSUM_URL="$MMDB_ASN_CHECKSUM_URL"
+        MMDB_FALLBACK_FILE="${MMDB_ASN_FALLBACK_FILE:-/opt/fallback/GeoLite2-ASN.mmdb}"
+        if ! update_once; then
+            log 'ASN update failed; preserving the existing ASN database'
+            if [[ ! -s "$MMDB_DIR/$MMDB_TARGET_FILE" && -s "$MMDB_FALLBACK_FILE" ]]; then
+                install -m 0644 "$MMDB_FALLBACK_FILE" "$MMDB_DIR/$MMDB_TARGET_FILE"
+                log 'installed the empty ASN fallback; events carry ASN 0 until an update succeeds'
+            fi
+        fi
+    ) || true
+}
+
+update_asn
+
 while true; do
     sleep "$MMDB_DOWNLOAD_INTERVAL_SECONDS"
     update_once || log 'update failed; preserving previous valid database'
+    update_asn
 done

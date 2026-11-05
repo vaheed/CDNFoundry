@@ -10,7 +10,7 @@ RUN apk add --no-cache --upgrade python3 bash coreutils 'curl>=8.22.0-r0' 'libcu
 COPY entrypoint.sh /usr/local/bin/mmdb-updater
 COPY build-fallback.py /tmp/build-fallback.py
 # A database that finds nothing, so DNS can start on a host with no route to a GeoIP source.
-RUN mkdir -p /opt/fallback && python3 /tmp/build-fallback.py /opt/fallback/GeoLite2-City.mmdb && rm /tmp/build-fallback.py && apk del --no-cache python3
+RUN mkdir -p /opt/fallback && python3 /tmp/build-fallback.py /opt/fallback/GeoLite2-City.mmdb && cp /opt/fallback/GeoLite2-City.mmdb /opt/fallback/GeoLite2-ASN.mmdb && rm /tmp/build-fallback.py && apk del --no-cache python3
 RUN chmod 0755 /usr/local/bin/mmdb-updater
 
 ENTRYPOINT ["/usr/local/bin/mmdb-updater"]

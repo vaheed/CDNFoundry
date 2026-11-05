@@ -20,6 +20,19 @@ local certificate_cache_order = {}
 local certificate_cache_limit = 512
 local cache_control_directives
 local geo_database
+local asn_database
+
+-- Proves to the local Vector that an access-log line came from this cell. Other
+-- containers on the cell network do not hold the node secret, so Vector drops
+-- any event they forge.
+local function telemetry_proof_value()
+    if telemetry_proof == nil then
+        local digest = resty_sha256:new()
+        digest:update("cdnf-telemetry-v1|" .. (os.getenv("EDGE_STATUS_TOKEN") or ""))
+        telemetry_proof = resty_string.to_hex(digest:final())
+    end
+    return telemetry_proof
+end
 
 local function security_reject(status, reason)
     local dictionary = ngx.shared.runtime_limits
@@ -186,6 +199,14 @@ function M.start()
             ngx.log(ngx.WARN, "GeoIP module unavailable: ", maxminddb)
         end
     end
+    local asn_path = os.getenv("GEOIP_ASN_DATABASE") or ""
+    if asn_path ~= "" then
+        local ok_module, maxminddb = pcall(require, "maxminddb")
+        if ok_module then
+            local ok_open, database = pcall(maxminddb.open, asn_path)
+            if ok_open then asn_database = database else ngx.log(ngx.WARN, "GeoIP ASN database unavailable: ", database) end
+        end
+    end
     local ok, err = ngx.timer.every(1, refresh)
     if not ok then ngx.log(ngx.ERR, "runtime refresh timer failed: ", err) end
     restart_generation = ngx.shared.runtime_limits:get("control:restart_generation") or 0
@@ -211,6 +232,39 @@ end
 -- handshake a cell sees only the gateway.
 local handshake_domain_multiplier = 20
 
+-- A failed handshake never reaches the access log, so the certificate selector reports it. The event
+-- travels the same authenticated syslog path as a request, carries the SNI and protocol, and is
+-- bounded per second so a handshake flood cannot flood telemetry.
+local tls_failure_budget_per_second = 20
+local tls_failure_reasons = {
+    unknown_sni = true, handshake_rate_exceeded = true, tls_disabled = true,
+    certificate_unavailable = true, certificate_expired = true, certificate_invalid = true,
+}
+
+local function report_tls_failure(reason, sni)
+    if not tls_failure_reasons[reason] then reason = "certificate_unavailable" end
+    local dictionary = ngx.shared.runtime_limits
+    dictionary:incr("capacity:tls_failures", 1, 0)
+    local second = ngx.time()
+    local seen = dictionary:incr("tls_failure_events:" .. second, 1, 0, 2)
+    if not seen or seen > tls_failure_budget_per_second then
+        dictionary:incr("capacity:tls_failures_suppressed", 1, 0)
+        return
+    end
+    local ssl = require "ngx.ssl"
+    local protocol = ssl.get_tls1_version_str and select(1, ssl.get_tls1_version_str()) or ""
+    local payload = cjson.encode({
+        occurred_at = ngx.utctime():gsub(" ", "T") .. "Z", event_type = "tls", tls_error = reason,
+        hostname = sni, ssl_protocol = protocol or "", domain_id = 0, status = 0,
+        security_action = "allow", telemetry_proof = telemetry_proof_value(),
+    })
+    local socket = ngx.socket.udp()
+    socket:settimeout(100)
+    local ok = socket:setpeername(os.getenv("EDGE_TELEMETRY_HOST") or "vector", 9000)
+    if ok then socket:send("<190>cdnfoundry_edge: " .. payload) end
+    socket:close()
+end
+
 function M.select_certificate()
     local ssl = require "ngx.ssl"
     local name = ssl.server_name()
@@ -218,6 +272,7 @@ function M.select_certificate()
     local config = state.hosts[name]
     if not config then
         ngx.shared.runtime_limits:incr("security:reason:unknown_sni", 1, 0)
+        report_tls_failure("unknown_sni", name)
         error("unknown TLS SNI")
     end
     local security = config.security or {}
@@ -226,17 +281,27 @@ function M.select_certificate()
     local budget = tonumber(limits.tls_handshakes_per_second) or 50
     local handshakes = ngx.shared.domain_limits:incr("security:tls:domain:" .. tostring(config.domain) .. ":" .. second, 1, 0, 2)
     if not handshakes or handshakes > budget * handshake_domain_multiplier then
+        report_tls_failure("handshake_rate_exceeded", name)
         error("tls_handshake_rate_exceeded")
     end
-    if not config.tls or config.tls.mode == "disabled" or not config.tls.certificate_id then error("TLS disabled or certificate unavailable") end
+    if not config.tls or config.tls.mode == "disabled" or not config.tls.certificate_id then
+        report_tls_failure("tls_disabled", name)
+        error("TLS disabled or certificate unavailable")
+    end
     local certificate = state.certificates[config.tls.certificate_id]
-    if not certificate then error("TLS certificate unavailable") end
-    if tonumber(certificate.expires_at) and tonumber(certificate.expires_at) <= ngx.time() then error("TLS certificate expired") end
+    if not certificate then report_tls_failure("certificate_unavailable", name); error("TLS certificate unavailable") end
+    if tonumber(certificate.expires_at) and tonumber(certificate.expires_at) <= ngx.time() then
+        report_tls_failure("certificate_expired", name)
+        error("TLS certificate expired")
+    end
     local cached = certificate_cache[certificate.id]
     if not cached then
         local cert_der, cert_err = ssl.cert_pem_to_der((certificate.certificate_pem or "") .. (certificate.chain_pem or ""))
         local key_der, key_err = ssl.priv_key_pem_to_der(certificate.private_key_pem or "")
-        if not cert_der or not key_der then error("invalid TLS bundle: " .. (cert_err or key_err or "unknown")) end
+        if not cert_der or not key_der then
+            report_tls_failure("certificate_invalid", name)
+            error("invalid TLS bundle: " .. (cert_err or key_err or "unknown"))
+        end
         cached = {certificate = cert_der, key = key_der}
         certificate_cache[certificate.id] = cached
         certificate_cache_order[#certificate_cache_order + 1] = certificate.id
@@ -326,6 +391,17 @@ local function geography(ip)
     local ok_country, country = pcall(result.get, result, "country", "iso_code")
     local ok_continent, continent = pcall(result.get, result, "continent", "code")
     return ok_country and country or "unknown", ok_continent and continent or "unknown"
+end
+
+-- The autonomous system number of a client, or 0 when the ASN database is absent or has no entry.
+local function autonomous_system(ip)
+    if not asn_database then return 0 end
+    local ok, result = pcall(asn_database.lookup, asn_database, ip)
+    if not ok or not result then return 0 end
+    local ok_number, number = pcall(result.get, result, "autonomous_system_number")
+    number = ok_number and tonumber(number) or 0
+    if number < 0 or number > 4294967295 then return 0 end
+    return math.floor(number)
 end
 
 local function rule_matches(rule, ip, country, continent)
@@ -508,18 +584,6 @@ local function request_body_safety(config)
     end
 end
 
--- Proves to the local Vector that an access-log line came from this cell. Other
--- containers on the cell network do not hold the node secret, so Vector drops
--- any event they forge.
-local function telemetry_proof_value()
-    if telemetry_proof == nil then
-        local digest = resty_sha256:new()
-        digest:update("cdnf-telemetry-v1|" .. (os.getenv("EDGE_STATUS_TOKEN") or ""))
-        telemetry_proof = resty_string.to_hex(digest:final())
-    end
-    return telemetry_proof
-end
-
 local function certificate_covers(host, names)
     for _, name in ipairs(names or {}) do
         name = tostring(name):lower()
@@ -589,6 +653,7 @@ function M.access()
     ngx.req.set_header("X-CDN-Client-Address", client)
     ngx.var.cdn_country = country or "ZZ"
     ngx.var.cdn_continent = continent or "ZZ"
+    ngx.var.cdn_asn = tostring(autonomous_system(client))
     for _, rule in ipairs(security.rules or {}) do
         if rule_matches(rule, client, country, continent) then
             if rule.action == "block" then return security_reject(403, "domain_restricted") end
