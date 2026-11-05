@@ -1175,18 +1175,20 @@ SOA/NS serial check on every DNS target (no zone was delegated), broken PostgreS
 real stack (HA needs a private network and a fourth server; backups need an S3 repository), the Watchdog delivery (no alert
 receiver), and guided major-version upgrades of PostgreSQL, ClickHouse, and Valkey. The gate stays open.
 
+**Closure check (2026-11-05).** Ticked above: the items backed by the three-server run in the status and by tests executed today: 213 Fleet engine tests (`make fleet-test`) and the Fleet browser suite, 23 of 23 in four projects. Left open because they have no evidence yet: the scripted quick start on fresh VMs (CLI and web), the security status and release-diff items, pre-pull, the workstation-independence check, guided major upgrades, the one-command start, and the exit items that need real zones, S3, or a fourth server.
+
 #### Fleet engine
 
-- [ ] **State in one local SQLite file.** It holds nodes, roles, addresses,
+- [x] **State in one local SQLite file.** It holds nodes, roles, addresses,
       SSH settings, rendered versions, and secrets. Secrets are encrypted at
       rest with an operator passphrase. The file and the secrets are never
       written to the repository.
-- [ ] **SSH transport.** A node is added with a host, an SSH port, a user, and
+- [x] **SSH transport.** A node is added with a host, an SSH port, a user, and
       a key. The engine uploads the node's bundle, installs the
       prerequisites, starts the right Compose profiles, and checks the
       result. It works with key authentication only, pins each host key on
       first use, and refuses a changed host key.
-- [ ] **Every action is plan, then apply.** The engine first shows what will
+- [x] **Every action is plan, then apply.** The engine first shows what will
       change on each node, then applies it. Actions are idempotent and
       resumable: an action interrupted by a dropped SSH connection can be
       run again safely. Each step is logged per node.
@@ -1195,11 +1197,11 @@ receiver), and guided major-version upgrades of PostgreSQL, ClickHouse, and Valk
       secrets, configuring monitoring, logs, and backups, running a backup
       now, restoring, and the Phase 6 HA commands (`add-standby`, `promote`,
       `demote`, `rejoin`, `remove-standby`).
-- [ ] **Safe restore.** Restore shows which backup it will use and what it
+- [x] **Safe restore.** Restore shows which backup it will use and what it
       will replace, and it requires a typed confirmation. It restores into a
       fresh control node by default. Overwriting a live control node needs a
       separate, explicit option.
-- [ ] **Fleet state is backed up too.** The engine backs up its own encrypted
+- [x] **Fleet state is backed up too.** The engine backs up its own encrypted
       state to the same off-host restic repository, and a new workstation can
       restore it in one step. Losing the workstation must never mean losing
       control of the fleet.
@@ -1241,7 +1243,7 @@ hand is a combination that no test has run.
 - [ ] **Pre-pull.** Fleet pulls every new image on every affected node and
       verifies its digest before it restarts anything. A slow or broken
       registry therefore never causes downtime.
-- [ ] **Rolling order.** Fleet upgrades one canary node first, then the rest
+- [x] **Rolling order.** Fleet upgrades one canary node first, then the rest
       one node at a time within each role:
   - **DNS hosts:** one at a time. Fleet never takes down a host while it is
     the only healthy nameserver for its address.
@@ -1252,14 +1254,14 @@ hand is a combination that no test has run.
   - **Control without a standby:** a short control pause. DNS and HTTP keep
     serving through it, because of Phase 2 fail-static.
   - **Telemetry and monitoring:** last. Serving never depends on them.
-- [ ] **Health gate after every node.** Containers healthy, DNS answering
+- [x] **Health gate after every node.** Containers healthy, DNS answering
       over UDP and TCP, the PoP serving HTTP and HTTPS and synced to the
       latest artifact, control answering `/api/health`, and no new alerts.
       If the gate fails, Fleet stops the roll, rolls that node back to the
       previous manifest, and reports the failed check. Nodes already
       upgraded stay on the new release only if the gate allows mixed
       versions; otherwise Fleet rolls them back too.
-- [ ] **Validated config changes.** Rendered configs are versioned in the
+- [x] **Validated config changes.** Rendered configs are versioned in the
       Fleet state. Fleet shows the diff, uploads the new config next to the
       active one, and validates it on the node before swapping: `nginx -t`
       for OpenResty and edge-control, `dnsdist --check-config`, `pdnsutil`
@@ -1269,7 +1271,7 @@ hand is a combination that no test has run.
       restarts only where it does not, runs the health gate, and restores
       the previous config on failure. A node never runs a config that did
       not pass its own validator.
-- [ ] **Rollback in one action.** Fleet keeps the previous manifest and
+- [x] **Rollback in one action.** Fleet keeps the previous manifest and
       config set on every node and can return any node, role, or the whole
       fleet to them. A rollback never reverses a database migration: a
       release whose migration cannot run with the previous code is marked
@@ -1282,7 +1284,7 @@ hand is a combination that no test has run.
       one at a time, a check after each step, and a stop for the operator
       before any step that cannot be undone. Minor versions with the same
       data format follow the normal rolling upgrade.
-- [ ] **Upgrade history.** Every upgrade, config change, and rollback is
+- [x] **Upgrade history.** Every upgrade, config change, and rollback is
       recorded with the operator, the source and target manifests, every
       node's result, and the health-gate output.
 
@@ -1291,12 +1293,12 @@ hand is a combination that no test has run.
 - [ ] **Starts with one command** on the workstation, for example
       `cdnfoundry-fleet web`. It binds to `127.0.0.1` only, refuses any other
       bind address, and asks for the state passphrase to unlock.
-- [ ] **Visual topology.** A diagram of the whole fleet: control (active and
+- [x] **Visual topology.** A diagram of the whole fleet: control (active and
       standby), DNS hosts, PoPs and their cells, and the telemetry host. It
       shows the links between them (edge to edge-control, DNS secondaries to
       their primaries, Vector to ClickHouse, backups to the restic
       repository), with a health color on every node and every link.
-- [ ] **One-click check of the whole stack.** One button runs the checks
+- [x] **One-click check of the whole stack.** One button runs the checks
       against every node over SSH and the API, and shows one report. The
       checks are: hosts reachable, containers healthy, versions equal to
       the release, certificates and edge identity expiry, PostgreSQL and
@@ -1305,7 +1307,7 @@ hand is a combination that no test has run.
       the `Watchdog` delivery. It is the same report as `cdnfoundry-fleet
       doctor`, and it covers every row of the daily checks table at the end
       of this roadmap.
-- [ ] **Easy node add.** A form takes the role, the host, the SSH port, the
+- [x] **Easy node add.** A form takes the role, the host, the SSH port, the
       user, and the key. It shows the plan, applies it with live progress,
       and ends with the node green on the topology. For a PoP, the node joins
       the default `shared` pool with default cells.
@@ -1313,7 +1315,7 @@ hand is a combination that no test has run.
       and live progress per node), config changes, rollback, backup now,
       restore, HA, secret rotation, and the action and upgrade history.
       Every page runs the same engine action as the CLI.
-- [ ] **Simple build, same look.** Python like the rest of Fleet,
+- [x] **Simple build, same look.** Python like the rest of Fleet,
       server-rendered pages, and no JavaScript build step. It uses the Phase 7
       design tokens (one shared CSS file) and the same patterns: sidebar,
       KPI strip, tables, slide-over panels, "Needs attention", and light and
@@ -1322,18 +1324,18 @@ hand is a combination that no test has run.
 
 #### Setup and panels
 
-- [ ] The installer is `cdnfoundry-fleet setup` (CLI or web). PKI, TSIG keys,
+- [x] The installer is `cdnfoundry-fleet setup` (CLI or web). PKI, TSIG keys,
       shared secrets, and bootstrap tokens are generated automatically. It
       sets up a single control node, and it offers `add-standby` (Phase 6) as
       an optional step, before or after the first domain.
-- [ ] A first-run wizard in the admin panel, for CDN settings only. All
+- [x] A first-run wizard in the admin panel, for CDN settings only. All
       settings have visible defaults and a reset action.
-- [ ] Remove the edge management address fields.
-- [ ] Amend `AGENTS.md` to state that the local fleet web is part of the Fleet
+- [x] Remove the edge management address fields.
+- [x] Amend `AGENTS.md` to state that the local fleet web is part of the Fleet
       tool and not a second dashboard or backend under its "multiple
       dashboards" and "second backend/frontend" rules, and to state the
       border between Fleet (infrastructure) and Filament (CDN).
-- [ ] Extend the Phase 7 browser suite to the local fleet web: every page and
+- [x] Extend the Phase 7 browser suite to the local fleet web: every page and
       action, at desktop and phone width.
 - [ ] Write a scripted quick start for the fleet web and the CLI, with the
       same steps in both. A scripted run on fresh virtual machines must reach
@@ -1379,6 +1381,8 @@ It builds on the alert receivers from Phase 2, the telemetry
 authentication and DNS tenant tagging from Phase 1, and the ClickHouse
 migration service from Phase 5. It extends the Playwright suite from Phase 6.
 
+**Closure check (2026-11-05).** 57 observability contract tests pass. The Grafana browser suite was run against the seeded development stack: 446 passed, 3 skipped, 121 failed (105 are one dashboards check, `dashboards.spec.ts:71`, where an expected element was not found; the rest are query text shown in panels, an unresolved link, and timeouts). The failures are not diagnosed, so the 9.8 items stay open. The PostgreSQL, Valkey, and cAdvisor exporters are not deployed (the scrape coverage file records the exemptions), and the probes have no vantage outside the PoP network, so those two 9.2 items stay open. The ASN item is ticked: the edge and DNS events carry `asn` (Vector pipeline) and the contract tests pass.
+
 #### 9.1 Telemetry data
 
 - [x] Extend `edge_json` with `request_time`, `upstream_connect_time`,
@@ -1392,7 +1396,7 @@ migration service from Phase 5. It extends the Playwright suite from Phase 6.
 - [x] Emit security events with a fixed reason set: `waf`, `block`,
       `cache_abuse_detected`, `emergency_mode`, `dns_response_limit`, and
       `waf_body_limit`. A contract test fails on an unknown reason.
-- [ ] Add ASN to edge and DNS events from the bundled GeoIP data.
+- [x] Add ASN to edge and DNS events from the bundled GeoIP data.
 - [x] Widen the hourly and daily rollups with `pop`, `region`, method,
       protocol, IP version, origin role, WAF action, security reason, and
       `quantilesTDigestState` for edge latency, origin latency, and TTFB.
