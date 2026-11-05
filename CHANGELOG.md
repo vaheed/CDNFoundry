@@ -5,9 +5,31 @@ All notable changes are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). The root `VERSION` file is the
 single source of truth; `make version-check` enforces it.
 
-## [Unreleased]
+## [2.0.0] - prepared 2026-11-05, not yet tagged
+
+v2.0.0 is a breaking release with no upgrade from 1.x. See the
+[release notes](docs/operations/releases/v2.0.0.md).
+
+### Breaking changes
+
+- No upgrade path or data migration from 1.x. Rebuild from scratch.
+- Migrations are squashed into a PostgreSQL and a SQLite baseline.
+- The edge agent requires `EDGE_RUNTIME_DIR` and has one activation path. Agents
+  accept artifacts for agent versions 2.0.0 to 2.99.0.
+- The platform zone goes to the hidden DNS primary, and
+  `platform_dns_settings.cluster_targets` is removed.
+- `EDGE_PROXY_SECRET` and `METRICS_TOKEN` are no longer read from the
+  environment; use `EDGE_PROXY_SECRET_FILE` and `METRICS_TOKEN_FILE`.
+- Every documented tunable is passed to the control plane through `.env.prod`.
 
 ### Added
+
+- Documentation rebuilt around tasks: six sections, a Fleet web guide, a Grafana
+  guide by team, panel tours, installation options, incident response, health
+  probes, reports, a glossary, a FAQ, and generated references for the Fleet
+  CLI, Grafana dashboards, and alerts.
+- Generated documentation screenshots, a design-token match with the product
+  theme, executable documentation blocks, and `llms.txt`.
 
 - Phase 6 (optional control-plane high availability): an optional warm standby
   control node with `cdnfoundry-fleet control add-standby`, `switchover`,

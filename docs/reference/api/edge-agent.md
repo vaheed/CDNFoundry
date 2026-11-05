@@ -53,7 +53,7 @@ The agent separately verifies the edge-control server against
 
 Each descriptor holds the sequence, kind, domain and revision, checksum,
 signature, schema version, and minimum and maximum agent version. Agent version
-`1.2.1` accepts the current `1.x` compatibility envelope. It verifies:
+`2.0.0` accepts the current `2.x` compatibility envelope (agent versions 2.0.0 to 2.99.0). It verifies:
 
 1. SHA-256 of canonical encoded payload;
 2. Ed25519 signature over the checksum;

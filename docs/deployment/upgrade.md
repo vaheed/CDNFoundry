@@ -9,8 +9,8 @@ This page shows how to move a running fleet to a new release, check it, and go b
 
 **You need:** a working fleet, the signed release manifest (or the exact image references) for the target release, and a verified off-host backup.
 
-::: danger v1.2.1 is a zero-state release
-There is no upgrade from 0.x, including 0.9.8 and 0.9.9. Deploy v1.2.1 from scratch with the [production quick start](production-quick-start.md). Do not point v1.2.1 images at a 0.x database or volumes. This page applies to updates within 1.2.x.
+::: danger v2.0.0 is a breaking release
+There is no upgrade from 1.x or 0.x. Deploy v2.0.0 from scratch with the [production quick start](production-quick-start.md). Do not point v2.0.0 images at a 1.x or 0.x database or volumes. This page applies to updates within 2.x.
 :::
 
 ::: danger Keep durable state

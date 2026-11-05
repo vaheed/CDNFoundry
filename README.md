@@ -7,41 +7,62 @@
 [![Go 1.24+](https://img.shields.io/badge/Go-1.24%2B-00add8.svg)](edge-agent/go.mod)
 [![Documentation website](https://img.shields.io/badge/docs-VitePress-1c9a7d.svg)](https://vaheed.github.io/CDNFoundry/)
 
-> **Status: pre-production.** The 2.0 rebuild is under way on `dev`. The open
-> findings are in the [roadmap](docs/roadmap.md). Qualify it on your own
-> hardware with the [production qualification](docs/operations/production-qualification.md)
-> before you send customer traffic.
+> **v2.0.0** is a breaking release with no upgrade from 1.x. Run it in production,
+> and [report any bug you find](https://github.com/vaheed/CDNFoundry/issues). Before
+> you send customer traffic, run the
+> [production qualification](https://vaheed.github.io/CDNFoundry/operations/production-qualification)
+> on your own hardware, as you would for any infrastructure. Read the
+> [release notes](https://vaheed.github.io/CDNFoundry/operations/releases/v2.0.0).
 
 CDNFoundry is free, open-source software for running your own CDN on your own
 servers. Authoritative DNS, HTTPS delivery, certificates, cache, and logs stay on
 infrastructure you control. It is for ISPs, hosting providers, enterprises, and
 anyone who must keep traffic and data on their own network.
 
-## Main features
+## What you get
 
-- Authoritative DNS with Geo-DNS, served by DNSdist and PowerDNS.
-- HTTP and HTTPS from bounded OpenResty cells, with cache, purge, and compression.
-- Managed DNS-01 certificates or your own, with keys encrypted at rest.
-- Per-client limits, origin safety checks, and a managed WAF.
-- Logs, usage reports, and Grafana dashboards, from Vector and ClickHouse.
-- An administrator panel, a domain-user panel, and a token API.
-- A Fleet tool that installs and upgrades hosts over SSH.
-
-## Screenshots
+| Tool | What it is for |
+| --- | --- |
+| **Admin panel** | Run the platform: pools, PoPs, DNS, users, settings, audit |
+| **Domain panel** | Customers manage their domains: DNS, origins, TLS, cache, security, analytics |
+| **API** | Everything the panels do, from scripts, with tokens |
+| **Fleet CLI and Fleet web** | Install, upgrade, back up, and roll back hosts over SSH, from the command line or a local web page |
+| **Grafana** | 35 dashboards in role-based folders for the NOC, SOC, platform admins, support, and business, with 77 alerts and runbooks |
+| **DNS and edge runtime** | DNSdist and PowerDNS for DNS, and bounded OpenResty cells for HTTP and HTTPS, with cache, purge, WAF, and compression |
 
 ![The Edges list in the admin panel](docs/public/screenshots/light/admin-edges.png)
 
-![The Operations list in the admin panel, dark theme](docs/public/screenshots/dark/admin-operations.png)
+![The Now dashboard in Grafana, shown with generated demo data](docs/public/screenshots/light/grafana-now.png)
 
-## Quick start
+## Pick your setup
 
-Follow the [quick start](https://vaheed.github.io/CDNFoundry/getting-started/) to serve a
-first domain. The [documentation](https://vaheed.github.io/CDNFoundry/) also covers
-production setup, guides for every feature, and the API and configuration reference.
+| You want | Servers | Start here |
+| --- | --- | --- |
+| To try it | 1 machine with Docker | [Installation](https://vaheed.github.io/CDNFoundry/getting-started/installation) |
+| A first real CDN | 3: one control node and two PoPs | [Production quick start](https://vaheed.github.io/CDNFoundry/deployment/production-quick-start) |
+| More regions and traffic | 3 to about 10, added one at a time | [Scaling](https://vaheed.github.io/CDNFoundry/operations/scaling) |
+| A control plane that survives a lost host | Any layout plus a standby | [High availability](https://vaheed.github.io/CDNFoundry/operations/control-plane-high-availability) |
+| A large or multi-region network | 15 or more | [Multi-region quick start](https://vaheed.github.io/CDNFoundry/deployment/production-quick-start-multi-region) |
 
-## Contribute
+There is no single-server production install. See
+[Choose your installation](https://vaheed.github.io/CDNFoundry/deployment/choose-installation)
+for all options, including installing by hand without Fleet.
 
-Read [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md) first. Report
+## Read the docs
+
+The [documentation](https://vaheed.github.io/CDNFoundry/) is organized by what you want to do.
+
+- **New here?** [What is in CDNFoundry](https://vaheed.github.io/CDNFoundry/getting-started/whats-in-the-box) and [Your path through the docs](https://vaheed.github.io/CDNFoundry/getting-started/journeys).
+- **Installing?** [Production guide](https://vaheed.github.io/CDNFoundry/deployment/production-guide).
+- **Using a domain?** [Domain panel tour](https://vaheed.github.io/CDNFoundry/guides/domain-panel).
+- **Running the platform?** [Admin panel tour](https://vaheed.github.io/CDNFoundry/guides/admin-panel), [Fleet web guide](https://vaheed.github.io/CDNFoundry/operations/fleet-web), [Grafana by team](https://vaheed.github.io/CDNFoundry/operations/grafana-by-team).
+- **Something broke?** [Troubleshoot by symptom](https://vaheed.github.io/CDNFoundry/troubleshooting/by-symptom) and the [alert reference](https://vaheed.github.io/CDNFoundry/reference/alerts).
+
+## Report a bug or contribute
+
+Found a bug or have a question? [Open an issue](https://github.com/vaheed/CDNFoundry/issues). Real use in production is the best test, so reports are welcome.
+
+To change the code, read [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md) first. Report
 security problems as described in [SECURITY.md](SECURITY.md). Follow the
 [code of conduct](CODE_OF_CONDUCT.md).
 

@@ -25,7 +25,7 @@ There are two web panels. Both use the same permission rules as the API.
 
 API clients sign in with Laravel Sanctum bearer tokens.
 
-See [What is in CDNFoundry](whats-in-the-box.md) for every tool and how to open it.
+See [What is in CDNFoundry](whats-in-the-box.md) for every tool and how to open it, and [Your path through the docs](journeys.md) for a reading order by role.
 
 ## Choose your path
 

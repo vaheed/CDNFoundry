@@ -9,6 +9,6 @@
 - **Security vulnerabilities:** do not open a public issue; follow
   [SECURITY.md](SECURITY.md).
 
-Supported: the latest 1.2.x release, deployed from scratch as documented. This
+Supported: the latest 2.x release, deployed from scratch as documented. This
 is community, best-effort support with no SLA. Never post secrets, customer
 data, tokens or private keys.

@@ -42,6 +42,7 @@ const getStarted = [
     text: 'Get started',
     items: [
       { text: 'Overview', link: '/getting-started/' },
+      { text: 'Your path through the docs', link: '/getting-started/journeys' },
       { text: 'Why CDNFoundry', link: '/getting-started/why-cdnfoundry' },
       { text: 'What is in CDNFoundry', link: '/getting-started/whats-in-the-box' },
       { text: 'Private CDN design guide', link: '/getting-started/private-cdn-design' },
@@ -141,6 +142,7 @@ const operate = [
       { text: 'Signing-key rotation', link: '/operations/signing-key-rotation' },
       { text: 'Software supply chain', link: '/operations/software-supply-chain' },
       { text: 'Production qualification', link: '/operations/production-qualification' },
+      { text: 'Release notes v2.0.0', link: '/operations/releases/v2.0.0' },
       { text: 'Release notes v1.2.1', link: '/operations/releases/v1.2.1' }
     ]
   },

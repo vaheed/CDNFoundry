@@ -32,6 +32,6 @@ private keys, CA keys, signing keys, backup credentials, and raw telemetry.
 ## What to expect
 
 The project sets no fixed response time. The repository's `SECURITY.md` lists
-version 1.2.x as the supported line. As an operator, run exact immutable releases,
+version 2.x as the supported line. As an operator, run exact immutable releases,
 and apply a security update soon after you qualify it. See
 [Software supply chain](../operations/software-supply-chain.md).

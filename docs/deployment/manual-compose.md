@@ -90,13 +90,13 @@ Check out the same immutable revision on all three hosts:
 ```bash
 git clone https://github.com/vaheed/CDNFoundry.git /opt/cdnfoundry
 cd /opt/cdnfoundry
-git checkout v1.2.1
+git checkout v2.0.0
 git rev-parse --verify HEAD
 docker version
 docker compose version
 ```
 
-Expect `git rev-parse` to print one 40-character commit. Replace `v1.2.1` with
+Expect `git rev-parse` to print one 40-character commit. Replace `v2.0.0` with
 the release you chose. If the GitHub container registry asks for a login, use a
 read-only package token with `docker login ghcr.io`.
 
@@ -276,7 +276,7 @@ exist on a host that starts the service that uses it.
 Set the same release and the same installation-wide secrets on all hosts:
 
 ```dotenv
-CDNF_RELEASE=v1.2.1
+CDNF_RELEASE=v2.0.0
 CDNF_CORE_IMAGE=ghcr.io/vaheed/cdnfoundry-core@sha256:REPLACE_FROM_RELEASE_MANIFEST
 CDNF_WEB_IMAGE=ghcr.io/vaheed/cdnfoundry-web@sha256:REPLACE_FROM_RELEASE_MANIFEST
 # Set all seven CDNF_*_IMAGE entries from release-manifest.json in the same way.
