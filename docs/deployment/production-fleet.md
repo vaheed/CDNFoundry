@@ -11,7 +11,7 @@ This page explains how a production fleet is built. Read it before you plan host
 
 A fleet is a set of hosts. Each host has one role: `control`, `dns`, `edge`, `dns-edge` (both), or `monitoring`. [Fleet](../operations/fleet-engine.md), the infrastructure tool, runs on your workstation. It keeps the plan, the secrets, and the certificate authorities in an encrypted vault. For each host it writes one private bundle that holds only what that role needs. Docker Compose runs the bundle on the host.
 
-- The control host runs the hidden PowerDNS primary (`pdns-primary`) with its own PostgreSQL (`pdns-db`). This database is separate from the control-plane application database.
+- The control host runs the hidden PowerDNS primary (`pdns-primary`) with its own PostgreSQL (`pdns-db`). It never uses the control-plane application's database.
 - Each `dns` or `dns-edge` host runs a PowerDNS secondary (`pdns-auth`) with a local SQLite store and no database service. It pulls its zones from the primary over TSIG-signed transfers (transfers signed with a shared key). See [DNS nodes](../operations/dns-nodes.md).
 - The control host has its own `PDNS_DB_PASSWORD` and `PDNS_API_KEY`. Each DNS host has its own `PDNS_API_KEY`.
 - A feature you turn off (monitoring, central logs, backups, IPv6) adds no variables or secrets to any bundle.

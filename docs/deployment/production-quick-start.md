@@ -127,7 +127,7 @@ python3 -m json.tool fleet.json >/dev/null
 
 ### 2.2 Publish the management DNS records
 
-Before you start the control bundle, create these records at the independent DNS provider that hosts `operator_domain`. Control, edge-control, telemetry, and Grafana share the control node in the starter topology. Each PoP name points to its own host.
+Before you start the control bundle, create these records at the independent DNS provider that hosts `operator_domain`. In the starter topology the first four names point to the control node, because control, edge-control, telemetry, and Grafana share it. Each PoP management name points to its own host: its own host.
 
 | Name | Record | Value |
 | --- | --- | --- |
@@ -247,7 +247,7 @@ docker compose --env-file .env.prod logs --since 10m --no-color caddy
 
 ### Create the first administrator
 
-Run this inside the control container. Choose the name and email. The command asks for the password twice and keeps it out of shell history:
+Run this inside the control container. Choose the name and email. The command prompts for the password twice without placing it in shell history:
 
 ```bash
 docker compose --env-file .env.prod exec core \
@@ -339,7 +339,7 @@ You now register the hidden DNS primary, set the platform nameserver identity, a
 1. Open **Infrastructure → System DNS identity**.
 2. Enter `example.net`, `ns1.example.net`, `ns2.example.net`, and their A glue addresses (AAAA is optional).
 3. Click **Validate and preview**. A **Review and save DNS identity** window opens with the normalized identity, the glue addresses, the hidden primary it is written to, and the timers.
-4. Nothing is saved yet. Review the window, then click the red **Save DNS identity and queue update** button.
+4. Nothing is saved yet. Review the window, then click the red _Save DNS identity and queue update_ button.
 
 </template>
 <template #tab-2>
@@ -391,7 +391,7 @@ sudo chmod 0600 .env.prod
 sudo docker compose --env-file .env.prod --profile edge up -d
 ```
 
-Repeat on `pop-2` with its own values. For later whole-host starts, run `sudo ./start.sh`. It reads `EDGE_ID` from Compose and includes the edge profile, with no rerender and no second transfer. An invalid UUID or configuration fails before migrations or activation. Existing PowerDNS containers and volumes stay in place.
+Repeat on `pop-2` with its own values. For later whole-host starts, run `sudo ./start.sh`. It reads `EDGE_ID` from Compose and includes the edge profile, with no rerender. No second bundle transfer is required. An invalid UUID or configuration fails before migrations or activation. Existing PowerDNS containers and volumes stay in place.
 
 **Check:** in **Infrastructure → Edges**, each edge shows a fresh heartbeat. If enrollment fails, run `docker compose --env-file .env.prod logs --tail=200 edge-agent`. Fix the connectivity, CA, clock, UUID, or token error, and run the same profile command again. After a heartbeat, the token is spent. Blank it in `.env.prod`. The saved identity keeps authenticating the agent.
 

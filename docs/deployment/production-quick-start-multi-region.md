@@ -42,8 +42,8 @@ customer data. You must be able to find and repair CDNFoundry even when it is
 down.
 :::
 
-The example file models one control node, four DNS nodes, ten edge nodes, and
-three monitoring nodes. "Multi-region" describes how the nodes are spread over
+The example file models one control node, four authoritative DNS nodes, ten edge nodes, and
+three monitoring-role nodes. "Multi-region" describes how the nodes are spread over
 failure domains. It is not a special runtime mode and not a size limit.
 
 ## 1. Check out a fixed source revision
@@ -73,11 +73,11 @@ location. The example addresses are documentation ranges and cannot serve
 traffic.
 
 Set `monitor_ipv4` and `log_ipv4` to private addresses if monitoring traffic must
-not use public paths. The example's control node already uses a remote
-PostgreSQL: its `extra_env` sets `DB_HOST`, `DB_PORT`, and `DB_SSLMODE`. Point
+not use public paths. The example's control node already uses a
+remote PostgreSQL: its `extra_env` sets `DB_HOST`, `DB_PORT`, and `DB_SSLMODE`. Point
 them at your database, or remove them to use the embedded one. For a remote
-database, set its password with `set-secret --secret control-db-password
---from-file FILE`. Never put the password in the JSON. See the
+database, set its password with `set-secret --from-file FILE
+--secret control-db-password`. Never put the password in the JSON. See the
 [Fleet operator guide](production-fleet-operator-guide.md#embedded-or-remote-control-postgresql).
 
 Validate without writing anything:
