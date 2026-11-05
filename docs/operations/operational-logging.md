@@ -1,40 +1,29 @@
 ---
 title: Operational logging
-description: Deploy, query, secure, and recover CDNFoundry's bounded Vector and Loki operational-log pipeline.
+description: Deploy the Vector and Loki operational-log pipeline, query logs in Grafana, and recover from delivery failures.
 ---
 
 # Operational logging
 
+This page shows how to deploy the operational-log collector, search logs in Grafana, and recover when delivery fails. Operational logs are the application and container logs of CDNFoundry services. They are not customer traffic logs.
+
+**You need:** a telemetry host that runs Loki, and shell access to each host that will send logs.
+
 ::: info Logging failure must not stop serving
-Collectors use bounded buffers and redaction. If Loki or a remote sink is
-unavailable, DNS and HTTP continue; old buffered events may eventually be
-dropped and cannot be reconstructed.
+Collectors use bounded buffers and redact secrets. If Loki or a remote sink is unavailable, DNS and HTTP keep working. Old buffered events may be dropped, and dropped events cannot be rebuilt.
 :::
 
-CDNFoundry sends application and container operational logs from one Vector
-collector per host to a single-binary Loki service. Grafana reads Loki directly.
-Laravel is never an ingestion proxy, and neither Loki nor Vector participates in
-DNS, HTTP, queue, reconciliation, or edge activation paths. A full buffer drops
-the newest log entry instead of applying backpressure to a service.
+## How it works
 
-HTTP access events remain in ClickHouse. DNS query events remain in ClickHouse.
-The operational collector explicitly removes the OpenResty `edge_json` request
-shape, common/combined Nginx access lines, and the dnstap-derived DNS query
-shape before Loki. This also prevents stale web or edge-control containers from
-leaking request paths or query strings into the operational store.
+One Vector collector on each host reads container logs and sends them to a single Loki service. Grafana reads Loki directly. Laravel never receives or forwards logs. Neither Loki nor Vector sits in the DNS, HTTP, queue, reconciliation, or edge activation path. When a buffer is full, the collector drops the newest log entry. It never slows a service.
+
+HTTP access events and DNS query events stay in ClickHouse. Before logs reach Loki, the collector removes three shapes: the OpenResty `edge_json` request shape, common and combined Nginx access lines, and the dnstap-derived DNS query shape. This also stops an old web or edge-control container from leaking request paths or query strings into Loki.
 
 ## Deployment
 
-Loki `3.7.2` and the per-host Vector `0.55.0` Debian collector are both pinned
-by upstream manifest digest. Development
-publishes `127.0.0.1:3100`, uses TSDB plus filesystem object storage, and retains
-seven days. Production starts Loki only in `telemetry`, publishes no host port,
-uses `loki-data`, and retains 14 days by default. The compactor applies retention.
-Filesystem storage is the bounded single-telemetry-host default; object storage
-is a future scaling option, not a deployment prerequisite.
+`compose.prod.yml` pins Loki and the per-host Vector collector by image digest. Development publishes Loki on `127.0.0.1:3100` and keeps logs for seven days. Production starts Loki only with the `telemetry` profile, publishes no host port, stores data in the `loki-data` volume, and keeps logs for 14 days by default (`LOKI_RETENTION_PERIOD=336h`). The Loki compactor applies retention. Loki stores data on the local filesystem of the single telemetry host.
 
-Start exactly one collector on every control, DNS, edge, and telemetry host by
-adding the `logs` profile to that host's normal role command:
+Start exactly one collector on every control, DNS, edge, and telemetry host. Add the `logs` profile to that host's normal role command:
 
 ```sh
 docker compose --env-file .env.prod \
@@ -42,14 +31,20 @@ docker compose --env-file .env.prod \
   --profile edge --profile logs up -d
 ```
 
-Set a stable `LOG_HOST`, `LOG_ROLE`, and globally unique `LOG_COLLECTOR_ID` in
-each host's environment copy. Set `LOKI_ENDPOINT` to the source-restricted
-telemetry gateway, for example `https://telemetry.ops.example.com:8444`. A
-collector colocated with telemetry may use private `http://loki:3100`. Do not run both
-the base collector and a second role-specific collector on one host.
+**Expected result:** `docker compose ps` lists `log-collector` and `docker-socket-proxy` as healthy.
 
-The default disk buffer is 2 GiB per production host and 256 MiB in development.
-`when_full: drop_newest`, ten retries, and bounded backoff make failure explicit.
+In each host's environment file, set:
+
+- `LOG_HOST`: a stable host name.
+- `LOG_ROLE`: the host role.
+- `LOG_COLLECTOR_ID`: an ID that is unique across all hosts.
+- `LOG_AUTH_TOKEN`: the shared token for the telemetry gateway.
+- `LOKI_ENDPOINT`: the source-restricted telemetry gateway, for example `https://telemetry.ops.example.com:8444`. A collector on the telemetry host itself may use the private `http://loki:3100`.
+
+Do not run the base collector and a second role-specific collector on one host.
+
+The default disk buffer (`LOG_BUFFER_BYTES`) is 2 GiB per production host and 256 MiB in development. The buffer drops the newest entry when full. The collector retries ten times with bounded backoff, so failure is explicit.
+
 When a Fleet node has `monitor_ipv4`, the collector binds metrics to that
 private address and Fleet adds `monitor_ipv4:9599` to the monitoring host's
 generated discovery file. Without `monitor_ipv4`, the collector binds the
@@ -59,23 +54,13 @@ private Compose target `log-collector:9599`, so NAT hairpin routing is not
 required. Set `monitor_ipv4` on every remote node when its advertised public
 address is not privately reachable from the monitoring host.
 
-The committed collector reads Docker container logs. Host journal ingestion is
-not mounted or configured by `compose.prod.yml`; if an operator adds it, that is
-deployment-owned customization and must retain the same redaction, label, and
-bounded-buffer contract. Container lifecycle events absent from Docker logs
-cannot be reconstructed by the committed collector.
+The collector reads Docker container logs only. `compose.prod.yml` does not configure host journal ingestion. If you add it yourself, keep the same redaction, labels, and bounded buffer. The collector cannot rebuild container lifecycle events that Docker logs do not contain.
 
-The Docker socket is a privileged host trust boundary even when mounted
-read-only. Only the collector gets `/var/run/docker.sock`; never expose it over
-TCP and never mount it into an application container. The collector drops all
-Linux capabilities, uses a read-only root filesystem, and has CPU, memory, PID,
-and disk-buffer bounds, but Docker API read access still reveals host container
-metadata and logs.
+The Docker socket is a privileged host boundary, even when mounted read-only. Only the `docker-socket-proxy` container mounts `/var/run/docker.sock`. It allows only container listing, logs, events, ping, and version, and refuses everything else, including POST and exec. The collector reaches it over an internal Compose network. Never expose the socket over TCP outside that network, and never mount it into an application container. The collector drops all Linux capabilities, uses a read-only root filesystem, and has CPU, memory, PID, and disk-buffer limits. Read access to the Docker API still shows host container metadata and logs.
 
 ## Envelope, labels, and redaction
 
-Vector parses JSON when possible and emits a common JSON envelope containing
-timestamp, normalized level, service, role, host, event, message, correlation
+Vector parses JSON when possible and emits a common JSON envelope with a timestamp, normalized level, service, role, host, event, message, correlation
 IDs, revision and cell identifiers, duration, and error code. Plain text is
 retained with `parse_error=true`; messages are capped at 16 KiB and stack traces
 at 64 KiB. Multiline exceptions are merged before normalization.

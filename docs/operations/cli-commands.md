@@ -11,8 +11,7 @@ environment file, host role, and database endpoint. Never paste secrets into
 command arguments or run maintenance commands against an assumed context.
 :::
 
-Run commands from the Laravel application directory, or through the repository's
-`core` Docker Compose service. List only CDNFoundry commands with:
+These are the Artisan commands CDNFoundry adds. Most run by themselves on the scheduler. You run the others by hand. Run commands from the Laravel application directory, or through the repository's `core` Docker Compose service. List only CDNFoundry commands with:
 
 ```sh
 php artisan list cdnf
@@ -63,7 +62,7 @@ docker compose -f compose.dev.yml run --rm core php artisan cdnf:api:openapi --c
 | --- | --- | --- |
 | `cdnf:backups:create {--wait}` | Creates backup and operation records, then queues an encrypted PostgreSQL Restic backup. `--wait` executes the job in the foreground and waits for repository acknowledgement. Fails if the repository is not configured. | Daily at 01:30 when configured |
 | `cdnf:backups:maintain {task}` | `prune` forgets snapshots beyond the retention window (14 daily, 8 weekly, 6 monthly by default) and reclaims their space; `check` runs `restic check` on the repository. Each queues an operation. Fails if the repository is not configured. | `prune` daily at 04:10, `check` Sundays at 05:00, when configured |
-| `cdnf:backups:restore {operation}` | Restores the backup approved by a successful restore-preflight operation. This is destructive, requires the explicit restore maintenance boundary, runs migrations, queues reconciliation, and leaves maintenance mode active if recovery fails. | No |
+| `cdnf:backups:restore {operation?} {--snapshot=}` | Restores a control backup. Give the UUID of a successful restore-preflight operation, or `--snapshot=<Restic snapshot ID>` to restore into an empty database on a fresh node (not both). Destructive. Refuses to run unless `BACKUP_RESTORE_ALLOWED=true` is set in that one container. Enters maintenance mode, runs migrations, queues reconciliation, and leaves maintenance mode active if recovery fails. | No |
 
 ```sh
 docker compose --env-file .env.prod -f compose.prod.yml exec core php artisan cdnf:backups:create --wait
@@ -82,9 +81,9 @@ runs them through `cdnfoundry-fleet control ...` (see
 | `cdnf:control:enforce` | Asks Horizon to terminate when this node has been replaced, so the restart fails the start guard. | Every minute |
 | `cdnf:control:observe` | On the active node, records whether the standby is streaming PostgreSQL, its replay lag, and whether the Valkey replica is linked. Skips on a single node. | Every minute |
 | `cdnf:control:status` | Prints `ha` (`none`, `ready`, or `degraded`), the reasons, the epoch, the address list, and the fencing state as JSON. | No |
-| `cdnf:edges:enroll {name} {--country=} {--continent=}` | Registers a PoP, assigns every cell slot to the default shared pool, and prints its edge ID and one-time bootstrap token as JSON. Fleet runs it when a PoP is added. | On PoP setup |
+| `cdnf:edges:enroll {name} {--country=} {--continent=} {--ipv4=} {--ipv6=}` | Registers a PoP, assigns every cell slot to the default shared pool, optionally adds its public service addresses, and prints its edge ID, pool ID, endpoint ID, and one-time bootstrap token as JSON. Needs valid country and continent codes and an enabled shared pool. Fleet runs it when a PoP is added. | On PoP setup |
 | `cdnf:control:fingerprints` | Prints a keyed fingerprint of each shared control secret as JSON. Never prints a value. | No |
-| `cdnf:control:manage {action}` | Changes high availability state in one transaction. `addresses --addresses=A,B` sets the ordered control addresses every edge dials; `record --name --role --address [--fingerprints --lag]` records a node report; `promote --name` increments the epoch and records the node as active; `remove-standby` drops the standby and its address. | No |
+| `cdnf:control:manage {action}` | Changes high availability state in one transaction. `addresses --addresses=A,B` sets the ordered control addresses every edge dials (at most two); `record --name --role --address [--fingerprints --lag --valkey-linked]` records a node report (`--role` is `active` or `standby`); `promote --name` increments the epoch and records the node as active; `remove-standby` drops the standby and its address. | No |
 
 ## DNS and domains
 
@@ -141,14 +140,14 @@ docker compose -f compose.dev.yml run --rm core php artisan cdnf:platform:settin
 | Command and syntax | Purpose and effects | Scheduled |
 | --- | --- | --- |
 | `cdnf:system:components` | Prints control plane component and queue health as JSON. `cdnfoundry-fleet doctor` reads it. | On demand |
-| `cdnf:tls:dispatch-maintenance {--limit=500}` | Cleans expired ACME challenges, advances a shared bounded domain sweep for managed-certificate maintenance, and publishes administrator expiry/failure alerts. Limit is clamped to 1–2,000; scan progress advances only after dispatch and resets after each fixed domain-ID range. | Hourly |
+| `cdnf:tls:dispatch-maintenance {--limit=500} {--orders-only}` | Cleans expired ACME challenges, advances a shared bounded domain sweep for managed-certificate maintenance, and publishes administrator expiry/failure alerts. `--orders-only` runs only the order and challenge part. Limit is clamped to 1–2,000; scan progress advances only after dispatch and resets after each fixed domain-ID range. | Hourly; with `--orders-only` every 5 minutes |
 
 ## Usage
 
 | Command and syntax | Purpose and effects | Scheduled |
 | --- | --- | --- |
 | `cdnf:usage:finalize` | Dispatches an idempotent rebuild for the most recently finalized UTC usage hour. It does not wait for ClickHouse aggregation. | Hourly at minute 20 |
-| `cdnf:reports:build {usage\|operations} [--period=]` | Builds the monthly usage report or weekly operations report from rollups as CSV and PDF, and records each file with its checksum. A period that has not finished is refused. | Usage on the 2nd at 03:40 UTC; operations Mondays at 06:00 UTC |
+| `cdnf:reports:build {kind} [--period=]` | `kind` is `usage` or `operations`. `--period` is `YYYY-MM` for usage and `YYYY-Www` for operations. Builds the monthly usage report or weekly operations report from rollups as CSV and PDF, and records each file with its checksum. A period that has not finished is refused. | Usage on the 2nd at 03:40 UTC; operations Mondays at 06:00 UTC |
 
 ## Scheduler
 
@@ -169,6 +168,7 @@ or internal non-command work, which is intentionally not renamed here.
 | `cdnf:edge:prune-revisions` | Daily at 02:30 | Remove expired derived revision history |
 | `cdnf:health:publish` | Every minute | Refresh the sanitized public status page snapshot |
 | `cdnf:tls:dispatch-maintenance` | Hourly | Maintain managed certificates and alerts |
+| `cdnf:tls:dispatch-maintenance --orders-only` | Every 5 minutes | Advance certificate orders and challenges |
 | `cdnf:security:reconcile-readiness` | Every minute | Advance bounded security recovery |
 | `cdnf:waf:expire-exclusions` | Every minute | Remove due WAF exclusions |
 | `cdnf:usage:finalize` | Hourly at minute 20 | Queue the finalized usage hour |

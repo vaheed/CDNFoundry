@@ -1,9 +1,13 @@
 ---
 title: Production qualification
-description: Run, record, and decide the final CDNFoundry production release qualification.
+description: Run the qualification runner, collect owner evidence from real infrastructure, rehearse failures, and decide whether a release passes.
 ---
 
 # Production qualification
+
+This page shows how to qualify a release before you run it in production. You run the automated checks, add evidence from real infrastructure, rehearse failures, and read the report's decision.
+
+**You need:** the persistent development stack running and migrated, a production-like test environment (see [Required environment](#required-environment)), and the release you want to qualify.
 
 ::: danger Qualification requires real infrastructure
 Compose validation and local tests cannot prove registrar delegation, external
@@ -11,20 +15,13 @@ routing, provider firewalls, NAT mappings, IPv6 reachability, real certificates,
 or multi-vantage behavior. Record live evidence before approving production.
 :::
 
-CDNFoundry is release-qualified only when one report records every automated,
-real-runtime, external-traffic, installer, load, and browser checkpoint as
-passed. A skipped applicable check blocks release. A failed check fails release.
-The runner never converts an absent external environment into a pass.
+A release is qualified only when one report records every automated, real-runtime, external-traffic, installer, load, and browser check as passed. A skipped check that applies blocks the release. A failed check fails it. The runner never turns a missing external environment into a pass.
 
 ## Control-plane high availability
 
-The report records `ha` (`none` or `ready`) and, for `none`, a warning that a single
-control node is supported but its loss stops the API, panels, and deployments until
-a restore. `ha: none` never fails or blocks a release. Pass `--ha ready` (or set
-`CDNF_QUALIFY_HA=ready`) for a topology that runs a standby. The `control-ha` check
-runs `tests/e2e/control_ha.py` against a real two-node stack: it adds a standby to a
-running installation, kills the active node, promotes, proves the refusal while the
-old node serves, rejoins it, switches over, and removes the standby.
+The report records `ha` as `none` or `ready`. For `none`, it adds a warning: a single control node is supported, but losing it stops the API, the panels, and deployments until you restore. `ha: none` never fails or blocks a release.
+
+For a topology that runs a standby, pass `--ha ready` or set `CDNF_QUALIFY_HA=ready`. The `control-ha` check then runs `tests/e2e/control_ha.py` against a real two-node stack. It adds a standby to a running installation, kills the active node, and promotes the standby. It proves the old node is refused while the other serves, rejoins it, switches over, and removes the standby.
 
 ## Required environment
 
@@ -116,9 +113,8 @@ attestation and its operator; it does not describe it as execution by the runner
 Structured evidence is an attributable operator assertion, not a cryptographic
 proof of execution. Review its accompanying artifacts before approving release.
 
-The report schema is now 2. It includes source identity, environment identity,
-source stability, command exit codes and evidence kind. Old nonempty evidence
-files must be replaced with the above records. Partial and early-stopped runs
+The report uses schema 2. It includes source identity, environment identity,
+source stability, command exit codes and evidence kind. Replace any old evidence file that is only nonempty with the records described above. Partial and early-stopped runs
 list every remaining check as `not_run`.
 
 Install the pinned Python test dependencies with
@@ -163,8 +159,7 @@ The JSON report uses only:
 
 Release notes must quote measured results from the report, state topology and
 hardware, distinguish local from public evidence, and list limitations. Do not
-claim volumetric DDoS scrubbing, general BGP management, HTTP/3, origin shield,
-or a warm standby. The current architecture provides bounded application-layer
+claim volumetric DDoS scrubbing, general BGP management, HTTP/3, or an origin shield. The current architecture provides bounded application-layer
 controls and continues serving only while the edge host, network, and upstream
 capacity remain available.
 

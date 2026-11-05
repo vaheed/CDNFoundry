@@ -5,10 +5,10 @@ description: Recover DNS, edge, origin, TLS, cache, telemetry, and security inci
 
 # Incident runbooks
 
+Use this page when something is failing. Find the section that matches the symptom, then follow its steps. Each alert in Grafana links to its section in [Alert runbooks](#alert-runbooks). Most runbooks tell you to open a screen in the admin panel, such as **Infrastructure → Edges**, or a Grafana dashboard.
+
 ::: danger Preserve the last valid state
-Do not delete agent identity, reset monotonic revisions, edit derived runtime
-files, remove zones manually, or erase named volumes during diagnosis. Capture
-evidence and repair desired state or the failed external boundary.
+During diagnosis, do not delete the agent identity, reset revisions, edit derived runtime files, remove zones by hand, or erase named volumes. Capture evidence. Then repair the desired state or the failed external dependency.
 :::
 
 ## Control node lost
@@ -23,7 +23,7 @@ run `control demote` on it, or confirm that it is powered off.
 
 ## Stale edge map or endpoint mismatch
 
-1. Open **Edge network → Edges**, record the edge, desired endpoint revision,
+1. Open **Infrastructure → Edges**. Record the edge, desired endpoint revision,
    gateway revision, last heartbeat, and candidate-rejection reason.
 2. Confirm the edge agent and gateway are healthy. Do not withdraw unrelated
    pools.
@@ -150,7 +150,7 @@ Never scan or delete a cache volume for a normal full purge.
 5. Confirm the bounded oldest-first buffers drain, new logs appear in Explore,
    and error/drop alerts clear. Events dropped after the 2 GiB buffer filled are
    irrecoverable; record the exact interval.
-6. Verify compactor retention succeeds and the 14-day boundary advances. The
+6. Verify compactor retention succeeds and the retention boundary advances (`LOKI_RETENTION_PERIOD`, 14 days in production). The
    standard control backup does not restore Loki.
 
 ## Security incident
@@ -172,7 +172,7 @@ Volumetric saturation requires upstream provider or network mitigation.
 
 ## Queue backlog
 
-1. Identify which of the four lanes is deep or old.
+1. Identify which queue lane is deep or old. The lanes are listed in [Limits](../reference/limits.md#queue-lanes).
 2. Inspect failed jobs and oldest operation types.
 3. Repair the dependency before retrying.
 4. Add workers only for that lane and within database/external API capacity.
@@ -180,7 +180,7 @@ Volumetric saturation requires upstream provider or network mitigation.
 
 ## Alert runbooks
 
-Every alert links here. Each section names the dashboard to open, the likely causes, and the first action. Dashboards are in Grafana under the folder shown in the alert.
+Every alert links here. Each section names the Grafana dashboard to open, the likely causes, and the first action. Grafana shows the dashboard folder in the alert.
 
 ## Watchdog stopped {#alerting-heartbeat}
 

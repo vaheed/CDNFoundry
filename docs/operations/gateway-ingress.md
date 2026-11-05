@@ -14,9 +14,10 @@ advertised addresses onto one local IP.
 :::
 
 The edge gateway is the only process that binds customer HTTP and HTTPS
-service addresses on a gateway-enabled edge. It performs a bounded lookup on
-destination address plus HTTP `Host` or TLS SNI, then proxies the untouched
-connection to an assigned OpenResty cell. It does not terminate customer TLS,
+service addresses on a gateway-enabled edge. A service address is the public IP that customers' DNS names
+resolve to. SNI is the host name a client sends at the start of a TLS handshake. The gateway looks up the
+destination address plus the HTTP `Host` header or TLS SNI in a bounded table. It then proxies the untouched
+connection to an assigned OpenResty cell (one bounded proxy and cache process). It does not terminate customer TLS,
 load certificates, cache content, run WAF rules, contact origins, or call the
 control plane.
 
@@ -125,7 +126,7 @@ through the gateway and reaches cells only on the private contract ports.
 Production uses host networking so sockets see the destination address. Grant
 only `NET_BIND_SERVICE`; drop all other capabilities. Restrict port `9105` to
 the edge agent and monitoring source. Set `EDGE_GATEWAY_MAX_CONNECTIONS` from
-the qualified host ceiling; invalid or out-of-range values use 8,192.
+the qualified host ceiling. It accepts 128 to 65,536. An invalid or out-of-range value falls back to 8,192.
 
 One source address may hold at most `EDGE_GATEWAY_MAX_CONNECTIONS_PER_ADDRESS`
 connections (256 by default; an IPv6 source counts per /64), so a single client

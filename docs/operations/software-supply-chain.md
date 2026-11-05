@@ -5,6 +5,8 @@ description: Verify CDNFoundry image digests, signatures, SBOMs, provenance, sca
 
 # Software supply-chain verification
 
+You will check that the CDNFoundry images you deploy are the ones CI built, signed, and scanned. You need the `release-evidence-<commit>` artifact from the CI run, a checkout of the same commit, and `cosign` and `jq`.
+
 Production images are built only after all test jobs succeed. The protected
 `production` environment grants the publishing job only `contents: read`,
 `packages: write`, and OIDC `id-token: write`. Publishing is permitted for
@@ -24,36 +26,13 @@ The release contains only the seven CDNFoundry-built images: `core`, `web`,
 Supply-chain verification, scanning, signing, and provenance cover these images
 only.
 
-Upstream software (Caddy, PostgreSQL, Vector, Prometheus, Alertmanager,
-node-exporter, Grafana, Loki, PowerDNS, and dnsdist) is not built, scanned, or
-signed by this project. Compose references each upstream image by its exact
-registry digest, for example `caddy:2.11-alpine@sha256:...`, and mounts the
-configuration files that CDNFoundry owns. Those upstream images are maintained
-by their publishers; upgrading one means changing its pinned digest in compose
-and qualifying it.
+Upstream software is not built, scanned, or signed by this project. This covers Caddy, PostgreSQL, Vector, Prometheus, Alertmanager, node-exporter, Grafana, Loki, ClickHouse, PowerDNS, and dnsdist. Compose references each upstream image by its readable tag and exact registry digest, for example `prom/prometheus:v3.13.3@sha256:...`. It mounts the configuration files that CDNFoundry owns. The publishers maintain those images. To upgrade one, change its pinned digest in Compose and qualify the result.
 
-PostgreSQL uses the official image and entrypoint with its data directory
-unchanged. Make a verified backup before upgrading an existing installation.
+PostgreSQL uses the official image and entrypoint with its data directory unchanged. Make a verified backup before you upgrade an existing installation.
 
-Vector uses the official `timberio/vector` image with the same configuration
-and persistent buffer volumes. Vector 0.58 disables environment interpolation by
-default, so the two operator-controlled services explicitly set
-`VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true` for their existing endpoint,
-authentication and metadata variables. These configuration files must remain
-operator-owned and read-only to workloads; do not load tenant-supplied configuration.
-HTTP JSON sources now use `decoding.codec: json`, replacing the removed `encoding`
-option. The journal writer used by tests
-is installed only in a disposable fixture container.
+Vector uses the official `timberio/vector` image. Vector 0.58 disables environment interpolation by default. The two operator-controlled Vector services set `VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true` for their endpoint, authentication, and metadata variables. Keep those configuration files operator-owned and read-only to workloads. Never load tenant-supplied configuration into Vector.
 
-Prometheus 3.13.3, Alertmanager 0.34.1 and node exporter 1.12.1 are rebuilt
-from pinned upstream commits with patched Go 1.26.8 and committed module locks.
-The server and companion tools are both replaced. Prometheus/Alertmanager retain
-the matching upstream UI asset archives, verified by checksum before embedding.
-
-PowerDNS 5.1.4 and DNSdist 2.1.2 are built from signature-verified upstream
-release archives with committed checksums. Their Alpine runtimes retain the
-existing configuration, service identities, secret permissions and DNS features
-used by this deployment. Both images are required in the verified manifest.
+Grafana loads the ClickHouse data source plugin from a pinned download. An init step in `compose.prod.yml` fetches `grafana-clickhouse-datasource` 4.21.3 and checks its SHA-256 before unpacking it.
 
 ## Verify a release
 
@@ -183,55 +162,20 @@ the CVE, affected component/digest, compensating control, owner, approval, and
 an expiry no later than 30 days. Exceptions are narrow reviewed policy changes;
 permanent wildcards and broad ignore files are forbidden. Keep scanner version and database freshness metadata with the reports.
 
-### Approved Tempo false-positive classification
+### Recorded exception: Tempo findings in Grafana
 
-Owner **vaheed** explicitly approved the following two classifications on
-**2026-09-19**, renewed on **2026-10-29** and expiring at **2026-11-28 UTC**. After expiry the scanner blocks
-these findings again. Scope is the Grafana backend at
-`usr/share/grafana/bin/grafana` and exactly
-`github.com/grafana/tempo@v1.5.1-0.20260427112133-525d1bab07e0`.
-The pinned Grafana 12.4.11 base digest is
-`sha256:3ea272e5cab64a4a62240c682e2c62433b25614d956d44c299a10cb6994f6f2e`;
-each derived release digest remains recorded in its scan metadata and signed
-release manifest. Other package versions, binary paths and findings do not match.
+`supply-chain/trivy-classifications.yaml` holds two owner-approved classifications for CVE-2026-21728 and CVE-2026-28377. The owner approved them on 2026-09-19 and renewed them on 2026-10-29. They expire on **2026-11-28**. After that date the scanner blocks these findings again.
+
+Each classification matches only the Grafana backend at `usr/share/grafana/bin/grafana` and exactly `github.com/grafana/tempo@v1.5.1-0.20260427112133-525d1bab07e0`. The scanner compares a Go pseudo-version with product 2.x versions, so it still reports both fixes as missing. Grafana links only the Tempo protobuf packages, not the affected server. The pinned source contains both fixes:
 
 | Finding | Evidence that the pinned source is fixed |
 | --- | --- |
-| CVE-2026-21728 | [Frontend configuration](https://github.com/grafana/tempo/blob/525d1bab07e0/modules/frontend/config.go) sets the search maximum to 256 × 1024; the pinned changelog includes the 2.10.2 fix. |
-| CVE-2026-28377 | [S3 configuration](https://github.com/grafana/tempo/blob/525d1bab07e0/tempodb/backend/s3/config.go) uses `flagext.Secret` for the customer encryption key; the pinned changelog includes the 2.10.3 fix. |
+| CVE-2026-21728 | [Frontend configuration](https://github.com/grafana/tempo/blob/525d1bab07e0/modules/frontend/config.go) sets the search maximum to 256 × 1024. The pinned changelog includes the 2.10.2 fix. |
+| CVE-2026-28377 | [S3 configuration](https://github.com/grafana/tempo/blob/525d1bab07e0/tempodb/backend/s3/config.go) uses `flagext.Secret` for the customer encryption key. The pinned changelog includes the 2.10.3 fix. |
 
-Grafana's resolved OSS backend dependency graph additionally contains only four
-Tempo protobuf packages (`pkg/tempopb` and its common/resource/trace subpackages),
-not the affected server packages. Module checksums were verified; the source
-checksum is `h1:kE5kdMnyPJmlNUdWhahfzqPYB3vM8DtAxgWymbB8nOA=`. The scanner compares
-the Go pseudo-version against product 2.x versions and still reports both fixes
-as missing. This approval accepts that classification evidence; it does not accept
-running an affected Tempo server or waive the remaining Grafana/plugin findings.
+This approval does not accept a running affected Tempo server, and it does not waive any other Grafana or plugin finding. Grafana is an upstream image that Compose pins by digest. The seven images this project builds do not ship it, so these classifications only matter if a scanned image contains that exact binary.
 
-The old unbounded kin-openapi ignore was removed: current Grafana uses 0.147.0,
-after [the upstream 0.144.0 fix](https://github.com/advisories/GHSA-r277-6w6q-xmqw).
-`python3 tests/e2e/trivy_classifications.py` exercises the actual pinned scanner:
-matching findings are classified, while different versions/paths/packages,
-unapproved findings, expiry and end-of-life OS still fail. No browser is involved.
-
-### Approved rebuilt ClickHouse plugin
-
-On **2026-09-19**, owner **vaheed** explicitly approved loading the rebuilt
-`grafana-clickhouse-datasource` plugin under the signed application image's trust
-boundary. Vendor plugin 4.21.3 still embeds Go 1.26.5 with eight High findings.
-The image instead compiles the same upstream source commit
-`551f9c4e32359f3844f659ce7ffd51fe7df77a07` with pinned Go 1.26.8, verifies module
-checksums, and retains the checksum-pinned vendor frontend assets and license.
-
-Rebuilding invalidates the vendor plugin manifest, so only that manifest is
-removed and `GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS` names only
-`grafana-clickhouse-datasource`. This deliberately replaces that plugin's vendor
-signature check with verification of the immutable CDNFoundry image. It does
-not permit arbitrary unsigned plugins or bypass image scan/signature gates.
-The production root filesystem and bundled plugin directory remain read-only;
-startup plugin downloads remain disabled. Verify the signed release manifest
-and image digest before deployment. Return to the vendor-signed distribution
-when a compatible, scan-qualified vendor build becomes available.
+`python3 tests/e2e/trivy_classifications.py` exercises the pinned scanner. Matching findings are classified. Different versions, paths, or packages, unapproved findings, an expired approval, and an end-of-life OS still fail.
 
 ## Updating dependencies and bases
 
@@ -279,29 +223,10 @@ release evidence controls.
 
 ## Release availability and identity
 
-The public release metadata inspected on 2026-09-05 listed `v0.9.7`, `v0.9.6`
-and `v0.9.5` with no attached assets. This does not establish that a signed
-manifest exists for this audit checkout. Obtain the artifact from the exact
-successful workflow run, inspect its source commit, and verify its bundle before
-using any digest. An example manifest or an invented digest is not deployable
-release evidence. Workflow artifact retrieval may require an authenticated
-GitHub session even for a public repository; no GitHub CLI is required.
+Obtain the evidence artifact from the exact successful workflow run. Inspect its source commit, and verify its bundle before you use any digest. An example manifest or an invented digest is not deployable release evidence. Retrieving a workflow artifact can need an authenticated GitHub session, even for a public repository. You do not need the GitHub CLI.
 
-Publishing is currently allowed only from push events on `main`, `dev`, or
-version tags, after the required jobs pass and the protected production
-publishing environment permits it. Match the exact workflow ref for the selected
-release when verifying image evidence. The verification commands use an exact
-`--certificate-identity` for the selected workflow ref. Provenance uses
-`slsaprovenance1`, matching the workflow's SLSA v1 predicate, not the older
-`slsaprovenance` predicate type.
+CI publishes only from push events on `main`, `dev`, or version tags (`v*`). It publishes after the required jobs pass and the protected `production` environment allows it. Match the exact workflow ref of the selected release when you verify image evidence. The verification commands use an exact `--certificate-identity` for that ref. Provenance uses `slsaprovenance1`, which matches the workflow's SLSA v1 predicate, not the older `slsaprovenance` type.
 
-## Gate managed images before publication
+## Scan before publication
 
-The Compose qualification job scans every locally built release image discovered
-from production Compose and role overrides before publication can start. This
-includes managed infrastructure images as well as the application images. The
-scan never pulls a replacement for a missing local build. A failed scan retains
-its full evidence, continues the inventory, and fails the job; no publishing job
-runs until all required jobs succeed. Retrieve `release-image-scans` for these
-reports. The publication job still scans the registry digests and retains the
-signed release evidence separately.
+The compose qualification job scans every release image built locally from the production Compose files and role overrides, before publication can start. It never pulls a replacement for a missing local build. A failed scan keeps its full evidence, continues the inventory, and then fails the job. No publishing job runs until all required jobs succeed. Download the `release-image-scans` artifact for these reports. The publication job also scans the registry digests and keeps the signed release evidence separately.

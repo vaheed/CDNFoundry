@@ -7,34 +7,29 @@ description: Architecture, data sources, refresh behavior, limits, and failure s
 
 <Screenshot name="admin-overview" alt="The administrator overview with platform health and recent operations." />
 
-The administrator operations overview is the existing `/admin` Filament page.
-It is not a second frontend or an additional observability backend. PostgreSQL
-remains authoritative for desired and operational state; ClickHouse, Vector,
-Redis/Horizon, and health probes provide derived read-only evidence. Dashboard
-failure never changes DNS, edge runtime, TLS, cache, or security state.
+The **Overview** page in the admin panel (`/admin`) shows platform health at a glance. It answers three
+questions: is the platform healthy, is traffic flowing, and what needs attention now.
 
-## Audited implementation plan
+It is a normal Filament page in the existing admin panel. It has no database of its own. PostgreSQL holds the
+authoritative state. ClickHouse hourly aggregates, Vector probes, Redis/Horizon queue data, and health checks
+add read-only evidence. If the page fails, DNS, edge runtime, TLS, cache, and security state do not change.
 
-1. Replace the dashboard-wide ten-second Livewire poll with independently
-   polling Filament widgets.
-2. Add a URL-persisted, server-validated investigation context for the bounded
-   quick ranges, previous-period comparison, domain, and edge.
-3. Add short-lived authorization-aware caches around focused health, traffic,
-   DNS, queue, edge, and operations snapshots. Identical administrator queries
-   share cache entries.
-4. Render ClickHouse hourly aggregates through Filament's bundled Chart.js
-   widget. Keep query construction in `AnalyticsStore` and dashboard
-   normalization outside Blade.
-5. Derive read-only operational conditions from existing component health,
-   failed operations, stale heartbeats, deployment state, and telemetry
-   freshness. Do not add an incident-management database in this iteration.
-6. Preserve the existing Telemetry and domain Analytics pages as detailed
-   drill-down destinations while passing the selected time/domain/edge context
-   in their URLs where supported.
-7. Cover context validation, comparison calculations, cache isolation,
-   authorization, outage/no-data/stale rendering, polling, and drill-down URLs
-   with isolated tests. Browser layout, keyboard, dark-mode, and responsive
-   qualification are covered by the browser suite in `tests/browser`.
+## What the page shows
+
+The page has four blocks: a service status banner, KPI tiles, a list of active conditions, and an operations
+timeline. A filter bar at the top sets the time range, domain, and edge. The selection is stored in the page URL.
+The server checks it, so a bad value falls back to the default.
+
+| Filter | Choices |
+| --- | --- |
+| **Time range** | **Last hour**, **Last 6 hours**, **Last 24 hours** (default), **Last 7 days** |
+| **Domain** | **All domains**, or one domain (search by name) |
+| **Edge** | **All edges**, or one edge (search by name) |
+| **Compare previous period** | On by default |
+
+An active condition is read-only and is derived from component health, failed operations, stale heartbeats,
+deployment state, and telemetry freshness. The page does not keep an incident database. The **Telemetry** page
+and the domain **Analytics** page stay the detailed drill-down destinations.
 
 ## Data and failure boundaries
 
@@ -44,57 +39,60 @@ failure never changes DNS, edge runtime, TLS, cache, or security state.
 | HTTP KPIs and charts | `cdnf.edge_hourly` | At most seven days and 168 hourly points per period | Explicit query-failed state |
 | DNS KPIs | `cdnf.dns_hourly` plus cluster desired state | At most seven days and 168 hourly points per period | Partial or unavailable state |
 | Edge health | PostgreSQL edge/cell state | Cursor-like table pagination; eager-loaded relationships | Last known state with stale heartbeat label |
-| Queue health | Redis and Horizon | Four configured bounded lanes | Unavailable lane, not zero |
+| Queue health | Redis and Horizon | Seven configured queues (`interactive`, `dns`, `edge`, `verification`, `tls`, `purge`, `bulk_maintenance`) | Unavailable lane, not zero |
 | Timeline | PostgreSQL operations and audit log | Latest bounded rows only | Independent empty/error state |
 
-The overview supports one hour, six hours, 24 hours, and seven days, with 24
-hours as the default. Every selection uses complete hourly aggregates, avoiding
-a short range that could imply raw-data precision the overview does not
-provide. Raw request logs remain a bounded drill-down source and are not
-scanned to calculate overview KPIs.
+Every range uses complete hourly aggregates. A short range therefore does not imply raw-data precision that the
+overview does not have. Raw request logs are a bounded drill-down source. The overview never scans them to
+calculate KPIs.
 
-The edge table's **Peak resource** is the highest reported utilization across
-memory, cache storage, temporary storage, and active connections for any cell
-on that edge. It is not customer traffic load. The badge names the limiting
-resource, and its tooltip shows the cell plus used and configured limit. At
-80% it warns and at 90% it becomes critical so an otherwise idle edge can still
-correctly report memory or storage pressure.
+The edge table's **Peak resource** column shows the highest reported use of memory, cache storage, temporary
+storage, or active connections on any cell of that edge. It is not customer traffic load. The badge names the
+limiting resource. Its tooltip shows the cell, the used amount, and the configured limit. The badge warns at 80%
+and turns critical at 90%, so an idle edge can still report memory or storage pressure.
 
-Dashboard investigation links preserve an actionable target. General runtime
-failures open Operations with the Failed filter already active; edge-capacity
-conditions open Edges; authoritative DNS conditions open DNS clusters.
+Investigation links open the right place. Runtime failures open **Operations** filtered to failed operations.
+Edge-capacity conditions open **Edges**. Authoritative DNS conditions open **DNS clusters**.
 
-Telemetry places the selected-range KPI summary before its charts. Aggregate
-tables may cover the full selected period, while raw Recent logs and compression
-previews use the selected duration capped at the latest 24 hours. This keeps a
-7-day investigation useful without permitting an unbounded raw-event scan.
+The **Telemetry** page shows the KPI summary for the selected range before its charts. Aggregate tables can
+cover the whole range. Raw recent logs and compression previews use the selected duration, capped at the latest
+24 hours. This keeps a 7-day investigation useful without scanning unbounded raw events.
 
-## Metrics intentionally not inferred
+## Metrics the page does not show
 
-The current aggregate schema does not contain edge p50/p95/p99 request latency,
-origin latency percentiles, DNS latency, queue throughput/retry counters, or a
-financial bandwidth-savings model. The operations overview shows the valid
-origin average-latency sample and available queue depths, and labels unsupported
-values as unavailable instead of estimating them.
+The current aggregate schema has no edge p50/p95/p99 request latency, no origin latency percentiles, no DNS
+latency, no queue throughput or retry counters, and no bandwidth-savings model. The page shows the valid origin
+average-latency sample and the available queue depths. It labels everything else as unavailable. It never
+estimates a value.
 
-## Refresh and cache budget
+## Refresh and cache
 
-- service condition and active conditions: 10 seconds;
-- edge and queue state: 10 seconds;
-- traffic, error, latency, and KPI aggregates: 15 seconds;
-- cache and DNS summaries: 30 seconds;
-- operations timeline: 10 seconds;
-- freshness evidence: 15 seconds.
+The server caches each section for a short time. The cache key includes the role scope and the normalized
+range, domain, and edge filters, so one administrator's filter never shows another's data.
 
-Cache keys include the role scope and normalized range/domain/edge filters.
-The target budget is under 500 ms for cached widget refreshes, under two seconds
-for a common uncached aggregate snapshot, no unbounded query, and no page-wide
-five-second refresh. Actual measurements must be recorded from a running stack;
-these targets are not claims of measured performance.
+| Section | Cache time |
+| --- | --- |
+| Service condition and active conditions (`system`) | 10 seconds |
+| Queue health (`queues`) | 10 seconds |
+| Operations timeline (`operations`) | 10 seconds |
+| Traffic, error, latency, and cache KPIs (`traffic`) | 15 seconds |
+| DNS summary (`dns`) | 30 seconds |
 
-On 2026-08-01, the running development stack measured the one-hour traffic
-snapshot at 388.18 ms after deleting only that snapshot's cache key and 1.56 ms
-on the immediate cache hit. The comparison-enabled cold snapshot issued two
-bounded ClickHouse aggregate queries and returned no matching traffic rows in
-that environment. This is a widget-service measurement, not an end-to-end page
-render or production benchmark; no reliable pre-change timing was captured.
+The edge health table refreshes every 10 seconds. The traffic and error charts refresh every 15 seconds. Each
+widget polls on its own, so the page never reloads as a whole. Data freshness is computed from the cached
+sections plus the latest edge heartbeat. It marks a heartbeat older than 90 seconds as delayed and older than
+300 seconds as stale.
+
+The design target is under 500 ms for a cached widget refresh and under two seconds for a common uncached
+aggregate snapshot. These are targets, not measured claims.
+
+One measurement exists. On 2026-08-01, on the development stack, the one-hour traffic snapshot took 388.18 ms
+after deleting only its cache key. The immediate cache hit took 1.56 ms. The cold snapshot ran two bounded
+ClickHouse aggregate queries and found no matching traffic rows. This measures the widget service only. It is
+not a page render time or a production benchmark.
+
+## Test coverage
+
+Isolated tests cover context validation, comparison math, cache isolation, authorization, and the outage,
+no-data, and stale states. The browser suite in `tests/browser` covers layout, keyboard use, dark mode, and
+responsive behavior.

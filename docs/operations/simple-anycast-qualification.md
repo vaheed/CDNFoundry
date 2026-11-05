@@ -11,9 +11,9 @@ The provider/operator must record route origin, path, multi-vantage traffic,
 failure-domain behavior, and restoration independently of CDNFoundry.
 :::
 
-Agent-owned implementation and qualification completed on 2026-07-28. The
-owner-operated BGP and external-vantage run remains mandatory; CDNFoundry does
-not have and must not gain the authority needed to execute it.
+This page records what automated qualification proved for Simple Anycast, and what only the network operator can prove. Read it before you approve a Simple Anycast pool for production.
+
+Automated implementation and qualification completed on 2026-07-28. The operator-run BGP and external-vantage test is still required. CDNFoundry does not control routers and must not gain the authority to run it.
 
 ## Implemented increment
 
@@ -33,7 +33,9 @@ not have and must not gain the authority needed to execute it.
 - Administrator forms explicitly state that CDNFoundry does not announce BGP,
   control routers, provide upstream scrubbing, or protect a saturated uplink.
 
-## Executed evidence
+## Recorded evidence
+
+The figures below are from the 2026-07-28 qualification run. Re-run the suites for a current result.
 
 | Gate | Evidence |
 | --- | --- |
@@ -51,9 +53,7 @@ real provider Anycast route from this environment.
 
 ## Remaining owner release gate
 
-Run the Edge pools, cells, gateway, and routing regression with two provider-approved POPs and at least three independent external vantage points.
-Record provider ticket/change IDs, route origin/path and collectors, actual
+Run the Simple Anycast checks with two provider-approved PoPs and at least three independent external vantage points.
+Record the provider ticket or change IDs, route origin/path and collectors, actual
 HTTP/HTTPS POP selection, route withdrawal/restoration convergence, load,
-uplink saturation, screenshots, revisions, and failures. Browser automation
-was not launched. Until that evidence passes, the implementation is
-agent-qualified but the Simple Anycast release decision remains **Blocked**.
+uplink saturation, screenshots, revisions, and failures. Until that evidence passes, the implementation is qualified by automated tests only, and the Simple Anycast release decision stays **Blocked**.

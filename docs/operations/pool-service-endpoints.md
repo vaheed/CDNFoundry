@@ -1,43 +1,43 @@
 ---
 title: Pool service endpoints and Geo-Unicast
-description: Operate revisioned public endpoint pairs backed by bounded cells.
+description: Create, withdraw, and troubleshoot the public IPv4 and IPv6 address of a service pool on an edge, and see when DNS publishes it.
 ---
 
 # Pool service endpoints and Geo-Unicast
 
+A **pool service endpoint** is the public address of one service pool on one edge. In Geo-Unicast routing, each point of presence (PoP) has its own address, and DNS answers each client with a nearby one. This page shows how to create an endpoint, when DNS publishes it, how to take it out of traffic, and what to check when it stays unready.
+
+**You need:** administrator access, an edge with at least one cell assigned to the pool (see [multi-cell pools](multi-cell-pools.md)), and a public IPv4 address, IPv6 address, or both, that this edge owns.
+
 ::: warning An endpoint is not ready when merely saved
-A new endpoint is published only after its pool and edge are enabled, its cells
-are ready, its gateway is ready, and the gateway acknowledged the endpoint
-revision. Do not publish endpoint addresses manually to bypass these gates.
+DNS publishes a new endpoint only after the pool and edge are enabled, the pool's cells are ready, the gateway is ready, and the gateway has acknowledged the endpoint revision. Do not put endpoint addresses into DNS by hand to skip these checks.
 :::
 
-For one pool-owned pair shared across explicitly attached POPs, use
-[Simple Anycast pools](simple-anycast.md).
+For one address pair that several PoPs share, use [Simple Anycast pools](simple-anycast.md) instead.
 
-An edge/pool endpoint owns one public IPv4 address, one public IPv6 address, or
-one of each. Several cells assigned to the same pool and edge are private gateway targets;
-they do not own additional public addresses.
+## What an endpoint is
 
-Endpoint addresses are advertised identities. A directly assigned address may
-bind as-is without `EDGE_GATEWAY_ADDRESS_MAP`. For NAT or a load balancer,
-allocate one distinct private local listener per advertised address, configure
-one-to-one forwarding, and record the pair in the host map. Invalid translations
-are rejected while the previous valid gateway map remains active.
+An endpoint holds one public IPv4 address, one public IPv6 address, or one of each. Several cells in the same pool and edge are private gateway targets. They do not get their own public addresses.
 
-Create endpoints under **Edge network → Edges → Pool endpoints** after assigning
-the pool's cells. Address ownership is globally unique and unsafe,
-duplicate, and empty pairs fail before desired state changes. Endpoint edits
-increment the endpoint revision and return it to `pending` until the gateway
-reports the active revision.
+Endpoint addresses are advertised identities. If the host owns the address directly, the gateway can bind it as it is, with no `EDGE_GATEWAY_ADDRESS_MAP`. Behind NAT or a load balancer, do three things:
 
-The first endpoint may be created while the edge has no customer domains. The
-agent activates an empty runtime for each assigned cell, then publishes the
-gateway listener generation.
+1. Pick one distinct private local listener address for each advertised address.
+2. Forward each advertised address to its listener, one to one.
+3. Record each pair in the host's `EDGE_GATEWAY_ADDRESS_MAP`.
 
-An endpoint with no non-drained cell assigned to its pool remains saved but is
-omitted from the gateway candidate. It cannot poison the edge's previous valid
-gateway generation and remains ineligible for DNS publication. Assign at least
-one cell on the same edge to the same pool before expecting a listener.
+The agent rejects an invalid translation. The previous valid gateway map stays active.
+
+## Create an endpoint
+
+Open **Infrastructure → Edges**, open the edge, and choose the **Pool endpoints** tab. Create the endpoint after you assign the pool's cells.
+
+**Expected result:** the endpoint appears with a pending gateway state and the reason `gateway_not_acknowledged`. After the agent activates the gateway map, the **Active revision** matches the **Desired revision** and the readiness reads `Ready`.
+
+Address ownership is globally unique. An unsafe address, a duplicate address, or an empty pair fails before any desired state changes. Each edit raises the endpoint revision and returns it to `pending` until the gateway reports that revision as active.
+
+You may create the first endpoint while the edge has no customer domains. The agent activates an empty runtime for each assigned cell, then publishes the gateway listener generation.
+
+An endpoint whose pool has no non-drained cell on that edge stays saved. The gateway candidate leaves it out, so it cannot damage the previous valid gateway generation, and DNS does not publish it. Assign at least one cell on the same edge to the same pool before you expect a listener.
 
 ## Publication and fallback
 
@@ -65,10 +65,10 @@ Operator actions still win: draining the last PoP removes it.
 ### External probes
 
 Every PoP's agent probes the HTTP (80) and TLS (443) listeners of every other
-PoP's own endpoint addresses every 15 seconds and reports the result over mTLS.
+PoP's own endpoint addresses about every 15 seconds and reports the result over mTLS.
 A PoP is withdrawn only when at least `edge_runtime.probe_min_vantage_points`
 (default 2) other PoPs reported within `edge_runtime.probe_result_max_age_seconds`
-(default 180) and more than half of them failed. A fleet with fewer than two
+(default 180 seconds) and more than half of them failed. A fleet with fewer than two
 other PoPs therefore never withdraws a PoP on probes. A probe checks that both
 listeners accept connections; it does not fetch customer content. Probes target
 the endpoint's own addresses, so for anycast pools set the endpoint address of

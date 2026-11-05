@@ -5,6 +5,8 @@ description: Add an optional warm standby control node, switch over, promote aft
 
 # Control-plane high availability
 
+This page shows how to add a warm standby control node, switch over, promote after a failure, rejoin the old node, and go back to one node. **You need** two hosts on a private network and the Fleet tool. The requirements are listed below.
+
 CDNFoundry stays serving when its control plane is down: DNS and HTTP use the last
 valid state on every node. High availability is about the control plane itself: the
 API, both panels, deployments, TLS issuance and renewal, purges, and edge sync.
@@ -116,7 +118,7 @@ the fingerprints to match. A node with a different signing key cannot become rea
 
 ## Add a standby
 
-Authorise the Fleet public key (`cdnfoundry-fleet public-key`) on the new host, put both control nodes on a private
+Authorize the Fleet public key (`cdnfoundry-fleet public-key`) on the new host, put both control nodes on a private
 network or VPN, then give Fleet the new host's address and nothing else:
 
 ```sh
@@ -226,7 +228,7 @@ the installation to `ha: none` with no edge or DNS error.
 
 | Alert | Meaning |
 | --- | --- |
-| `ControlNodeUnreachable` | One control node cannot be scraped by the other. The standby's own Alertmanager fires when the active node is lost. |
+| `ControlNodeUnreachable` | One control node cannot be scraped by the other for 2 minutes. The standby's own Alertmanager fires when the active node is lost. |
 | `ControlStandbyNotStreaming` | The active node sees no streaming replica for 5 minutes. |
 | `ControlReplicationLagHigh` | Replay lag over 10 seconds for 2 minutes. |
 | `ControlValkeyReplicationBroken` | The Valkey replica is not linked. |
