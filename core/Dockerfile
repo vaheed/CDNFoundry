@@ -58,6 +58,8 @@ ENTRYPOINT ["cdnf-entrypoint"]
 CMD ["php-fpm", "-F"]
 
 FROM php-base AS development
+# The browser suite runs on a file-backed SQLite database, whose schema Laravel loads with the sqlite3 tool.
+RUN apk add --no-cache sqlite
 RUN --mount=type=cache,target=/tmp/composer-cache \
     set -eu; \
     for attempt in 1 2 3 4 5; do \
