@@ -1740,10 +1740,10 @@ with a few Linux servers can understand CDNFoundry and run it step by step.
       ends with a check.
 - [ ] **Sizing guide.** Recommended host sizes for small, medium, and large
       fleets, taken from measured qualification results, not guesses.
-- [ ] **Feature guides.** One page per feature: domains, DNS, Geo-DNS,
+- [x] **Feature guides.** One page per feature: domains, DNS, Geo-DNS,
       proxy and origins, cache and purge, TLS, WAF, security, compression,
       analytics, users and tokens.
-- [ ] **Operations.** Upgrades and security updates, HA switchover and
+- [x] **Operations.** Upgrades and security updates, HA switchover and
       failover, backup and restore drills, monitoring and alerts, and one
       runbook per alert, each with symptoms, checks, and the fix.
 - [x] **Troubleshooting by symptom:** "the domain does not resolve", "the
