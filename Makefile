@@ -120,6 +120,9 @@ dev-grafana-smoke:
 dev-observability-seed:
 	python3 scripts/observability/seed.py --scenario $(or $(SCENARIO),normal)
 
+dev-grafana-browser:
+	tests/browser/run-grafana.sh $(ARGS)
+
 dev-operational-logs-smoke:
 	python3 tests/e2e/operational_logging.py
 
