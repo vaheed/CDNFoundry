@@ -173,7 +173,7 @@ class Lab:
                  "-e", f"EDGE_CONTROL_URL=https://edge-control.{OPERATOR}:8443", "-e", "EDGE_CONTROL_CA_CERTIFICATE=/run/secrets/edge-control-ca.crt",
                  "-e", f"EDGE_ID={self.edge_id}", "-e", f"EDGE_BOOTSTRAP_TOKEN={self.token}", "-e", "EDGE_STATE_DIR=/var/lib/cdnfoundry/agent",
                  "-e", f"EDGE_CELL_STATUS_URLS=http://127.0.0.1:{STATUS_PORT}/passive-failures", "-e", "EDGE_STATUS_TOKEN=ha-lab-status-token",
-                 "-e", "EDGE_CELL_ASSIGNMENTS={}", *(["-e", f"EDGE_CONTROL_ADDRESSES={seed}"] if seed else []),
+                 "-e", "EDGE_RUNTIME_DIR=/var/lib/cdnfoundry/agent/runtime", "-e", "EDGE_CELL_ASSIGNMENTS={}", *(["-e", f"EDGE_CONTROL_ADDRESSES={seed}"] if seed else []),
                  f"ghcr.io/vaheed/cdnfoundry-edge-agent:{RELEASE}")
 
     def agent_state(self) -> dict:
