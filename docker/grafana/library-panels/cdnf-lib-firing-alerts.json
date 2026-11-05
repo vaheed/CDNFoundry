@@ -1,0 +1,139 @@
+{
+  "model": {
+    "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+    },
+    "description": "Every firing alert with its team, severity, and start time. Open the dashboard column to see the cause at the time it started.",
+    "fieldConfig": {
+      "defaults": {
+        "color": {
+          "mode": "thresholds"
+        },
+        "custom": {
+          "align": "auto",
+          "cellOptions": {
+            "type": "auto"
+          },
+          "inspect": false
+        },
+        "mappings": [
+          {
+            "options": {
+              "match": "null+nan",
+              "result": {
+                "color": "text",
+                "text": "No data yet"
+              }
+            },
+            "type": "special"
+          }
+        ],
+        "noValue": "No traffic",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {
+              "color": "text",
+              "value": null
+            }
+          ]
+        },
+        "unit": "short"
+      },
+      "overrides": [
+        {
+          "matcher": {
+            "id": "byName",
+            "options": "Since"
+          },
+          "properties": [
+            {
+              "id": "unit",
+              "value": "dateTimeFromNow"
+            }
+          ]
+        },
+        {
+          "matcher": {
+            "id": "byName",
+            "options": "Dashboard"
+          },
+          "properties": [
+            {
+              "id": "links",
+              "value": [
+                {
+                  "title": "Open dashboard at the start time",
+                  "url": "/d/${__value.raw}?from=${__data.fields.Since}&to=now"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "options": {
+      "cellHeight": "sm",
+      "footer": {
+        "show": false
+      },
+      "showHeader": true,
+      "sortBy": [
+        {
+          "desc": true,
+          "displayName": "Since"
+        }
+      ]
+    },
+    "targets": [
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "expr": "ALERTS_FOR_STATE{alertname!=\"Watchdog\"} * 1000 and ignoring(alertstate) ALERTS{alertstate=\"firing\",alertname!=\"Watchdog\"}",
+        "format": "table",
+        "instant": true,
+        "legendFormat": "firing",
+        "range": false,
+        "refId": "A"
+      }
+    ],
+    "title": "Firing alerts",
+    "transformations": [
+      {
+        "id": "organize",
+        "options": {
+          "excludeByName": {
+            "Time": true,
+            "__name__": true,
+            "alertgroup": true,
+            "instance": true,
+            "job": true,
+            "slo": true
+          },
+          "indexByName": {
+            "Cause": 0,
+            "Dashboard": 5,
+            "PoP": 3,
+            "Severity": 2,
+            "Since": 4,
+            "Team": 1
+          },
+          "renameByName": {
+            "Value": "Since",
+            "alertname": "Cause",
+            "dashboard": "Dashboard",
+            "pop": "PoP",
+            "severity": "Severity",
+            "team": "Team"
+          }
+        }
+      }
+    ],
+    "type": "table"
+  },
+  "name": "Firing alerts",
+  "uid": "cdnf-lib-firing-alerts"
+}

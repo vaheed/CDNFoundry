@@ -1,0 +1,20 @@
+apiVersion: 1
+
+# Grafana-managed alerts are posted to the platform Alertmanager, which routes them by their `team` label.
+contactPoints:
+  - orgId: 1
+    name: cdnfoundry-alertmanager
+    receivers:
+      - uid: cdnfoundry-alertmanager
+        type: prometheus-alertmanager
+        settings:
+          url: http://alertmanager:9093
+        disableResolveMessage: false
+
+policies:
+  - orgId: 1
+    receiver: cdnfoundry-alertmanager
+    group_by: [alertname, team]
+    group_wait: 5s
+    group_interval: 1m
+    repeat_interval: 4h

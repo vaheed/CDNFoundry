@@ -5,6 +5,7 @@ deleteDatasources:
   - { name: ClickHouse, orgId: 1 }
   - { name: CDNFoundry control database, orgId: 1 }
   - { name: Loki, orgId: 1 }
+  - { name: Alertmanager, orgId: 1 }
 
 datasources:
   - name: Loki
@@ -16,6 +17,28 @@ datasources:
     jsonData:
       timeout: 30
       maxLines: 5000
+      # A value in a log line opens the dashboard that explains it.
+      derivedFields:
+        - name: request_id
+          matcherType: label
+          matcherRegex: request_id
+          url: '/d/cdnf-request-trace?var-request_id=${__value.raw}'
+          urlDisplayLabel: Request trace
+        - name: domain_id
+          matcherType: label
+          matcherRegex: domain_id
+          url: '/d/cdnf-domain-overview?var-domain=${__value.raw}'
+          urlDisplayLabel: Domain overview
+        - name: pop
+          matcherType: label
+          matcherRegex: host
+          url: '/d/cdnf-pop-detail?var-pop=${__value.raw}'
+          urlDisplayLabel: PoP detail
+        - name: edge
+          matcherType: label
+          matcherRegex: collector_id
+          url: '/d/cdnf-pop-detail?var-pop=${__value.raw}'
+          urlDisplayLabel: PoP detail
 
   - name: Prometheus
     uid: prometheus
@@ -63,3 +86,15 @@ datasources:
       connMaxLifetime: 300
     secureJsonData:
       password: ${GRAFANA_POSTGRES_PASSWORD}
+
+  # Grafana-managed alerts (the ClickHouse signals) go to the same Alertmanager as Prometheus alerts, so
+  # routing, inhibition, and receivers are defined once.
+  - name: Alertmanager
+    uid: alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://alertmanager:9093
+    editable: false
+    jsonData:
+      implementation: prometheus
+      handleGrafanaManagedAlerts: true

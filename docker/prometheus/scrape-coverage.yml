@@ -58,3 +58,5 @@ exempt:
     reason: A one-shot provisioner.
   loki-data-init:
     reason: A one-shot initializer.
+  grafana-bootstrap:
+    reason: A reconciliation job with no metrics. Its health check reports the last successful run.

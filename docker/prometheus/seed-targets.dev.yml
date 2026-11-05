@@ -1,0 +1,2 @@
+- targets: [seed-exporter:9108]
+  labels: { node: seed }

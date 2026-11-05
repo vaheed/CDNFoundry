@@ -1,0 +1,80 @@
+{
+  "model": {
+    "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+    },
+    "description": "Share of DNS answers that are SERVFAIL.",
+    "fieldConfig": {
+      "defaults": {
+        "color": {
+          "mode": "thresholds"
+        },
+        "decimals": 2,
+        "mappings": [
+          {
+            "options": {
+              "match": "null+nan",
+              "result": {
+                "color": "text",
+                "text": "No data yet"
+              }
+            },
+            "type": "special"
+          }
+        ],
+        "noValue": "\u2013",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {
+              "color": "green",
+              "value": null
+            },
+            {
+              "color": "orange",
+              "value": 1
+            },
+            {
+              "color": "red",
+              "value": 5
+            }
+          ]
+        },
+        "unit": "percent"
+      },
+      "overrides": []
+    },
+    "options": {
+      "colorMode": "value",
+      "graphMode": "none",
+      "justifyMode": "center",
+      "reduceOptions": {
+        "calcs": [
+          "lastNotNull"
+        ],
+        "fields": "",
+        "values": false
+      },
+      "textMode": "value",
+      "wideLayout": true
+    },
+    "targets": [
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "expr": "100 * sum(cdnf:dns_queries:rate5m{region=~\"$region\",pop=~\"$pop\",rcode=\"SERVFAIL\"}) / sum(cdnf:dns_queries:rate5m{region=~\"$region\",pop=~\"$pop\"})",
+        "instant": true,
+        "legendFormat": "servfail",
+        "range": false,
+        "refId": "A"
+      }
+    ],
+    "title": "SERVFAIL ratio",
+    "type": "stat"
+  },
+  "name": "SERVFAIL ratio",
+  "uid": "cdnf-lib-servfail-ratio"
+}

@@ -692,6 +692,7 @@ services:
       - ./docker/prometheus/traffic-alerts.yml:/etc/prometheus/traffic-alerts.yml:ro
       - ./docker/prometheus/security-alerts.yml:/etc/prometheus/security-alerts.yml:ro
       - ./docker/prometheus/slo-rules.yml:/etc/prometheus/slo-rules.yml:ro
+      - ./docker/prometheus/dashboard-rules.yml:/etc/prometheus/dashboard-rules.yml:ro
       - ${PROMETHEUS_PROBE_TARGETS_FILE}:/etc/prometheus/probe-targets.yml:ro
       - ${PROMETHEUS_VECTOR_TARGETS_FILE}:/etc/prometheus/vector-targets.yml:ro
       - ${PROMETHEUS_CONTROL_TARGETS_FILE}:/etc/prometheus/control-targets.yml:ro
@@ -769,7 +770,7 @@ services:
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_SECURITY_COOKIE_SECURE: ${GRAFANA_COOKIE_SECURE}
       GF_PATHS_PLUGINS: /var/lib/grafana/plugins
-      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/system-command-center.json
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/00-overview/cdnf-now.json
       GRAFANA_LOKI_URL: ${GRAFANA_LOKI_URL}
       GRAFANA_CLICKHOUSE_HOST: ${GRAFANA_CLICKHOUSE_HOST}
       GRAFANA_CLICKHOUSE_PORT: ${GRAFANA_CLICKHOUSE_PORT}
@@ -810,6 +811,36 @@ services:
       interval: 10s
       timeout: 3s
       retries: 20
+
+  grafana-bootstrap:
+    logging: *bounded-logging
+    <<: *hardened
+    mem_limit: 128m
+    image: python:3.13-alpine3.22@sha256:e81548ac35b07a3bd4805f275107592ef458b1e893c0e04d45aedaa19416cca5
+    profiles: [telemetry]
+    # Reconciles what file provisioning cannot hold: library panels, teams, folder permissions, team homes, and playlists.
+    command: [python3, /bootstrap/bootstrap.py]
+    environment:
+      GRAFANA_URL: http://grafana:3000
+      GRAFANA_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GRAFANA_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+    volumes:
+      - ./docker/grafana/bootstrap.py:/bootstrap/bootstrap.py:ro
+      - ./docker/grafana/access.json:/bootstrap/access.json:ro
+      - ./docker/grafana/library-panels:/bootstrap/library-panels:ro
+    depends_on:
+      grafana: { condition: service_healthy }
+    networks: [telemetry]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=4m
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python3, -c, "import os,sys;sys.exit(0 if os.path.exists('/tmp/bootstrap-ok') else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
 
   node-exporter:
     logging: *bounded-logging

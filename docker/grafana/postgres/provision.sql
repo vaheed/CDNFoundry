@@ -13,6 +13,16 @@ REVOKE ALL ON DATABASE cdnf FROM cdnf_grafana;
 GRANT CONNECT ON DATABASE cdnf TO cdnf_grafana;
 GRANT USAGE ON SCHEMA public TO cdnf_grafana;
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM cdnf_grafana;
-GRANT SELECT (id, name, display_name, deleted_at) ON TABLE domains TO cdnf_grafana;
+GRANT SELECT (id, name, display_name, deleted_at, created_at) ON TABLE domains TO cdnf_grafana;
 SELECT 'GRANT SELECT ON TABLE grafana_domain_operational_metadata TO cdnf_grafana'
 WHERE to_regclass('public.grafana_domain_operational_metadata') IS NOT NULL \gexec
+
+-- Operational views created by the application's migrations. They hide certificate material, artifact
+-- payloads, audit metadata, and full client addresses. A view the running version does not have yet is skipped.
+SELECT format('GRANT SELECT ON TABLE %I TO cdnf_grafana', view_name)
+FROM unnest(ARRAY[
+    'grafana_edges', 'grafana_edge_cells', 'grafana_edge_artifacts', 'grafana_cache_purges', 'grafana_fleet_rollouts',
+    'grafana_edge_tasks', 'grafana_placements', 'grafana_audit_events', 'grafana_tls_certificates', 'grafana_tls_orders',
+    'grafana_backups', 'grafana_emergency_modes', 'grafana_waf_exclusions', 'grafana_usage_rollups'
+]) AS view_name
+WHERE to_regclass(format('public.%I', view_name)) IS NOT NULL \gexec

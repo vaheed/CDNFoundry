@@ -1,0 +1,30 @@
+# Dashboards read these recorded series, so a 7-day or 30-day panel never scans raw counters. Every label
+# kept here is one of the bounded labels of the live edge counters.
+groups:
+  - name: cdnfoundry-dashboard-traffic
+    interval: 1m
+    rules:
+      - record: cdnf:edge_requests:rate5m
+        expr: sum by (region, pop, edge, status_class, cache_status) (rate(cdnf_edge_requests_total[5m]))
+      - record: cdnf:edge_bytes_sent:rate5m
+        expr: sum by (region, pop, edge) (rate(cdnf_edge_bytes_sent_total[5m]))
+      - record: cdnf:edge_latency_bucket:rate5m
+        expr: sum by (region, pop, edge, le) (rate(cdnf_edge_request_duration_seconds_bucket[5m]))
+      - record: cdnf:edge_origin_latency_bucket:rate5m
+        expr: sum by (region, pop, edge, le) (rate(cdnf_edge_origin_duration_seconds_bucket[5m]))
+      - record: cdnf:edge_origin_failures:rate5m
+        expr: sum by (region, pop, edge) (rate(cdnf_edge_origin_failures_total[5m]))
+      - record: cdnf:edge_security_events:rate5m
+        expr: sum by (region, pop, edge, class) (rate(cdnf_edge_security_events_total[5m]))
+      - record: cdnf:edge_tls_failures:rate5m
+        expr: sum by (region, pop, edge, reason) (rate(cdnf_edge_tls_failures_total[5m]))
+      - record: cdnf:dns_queries:rate5m
+        expr: sum by (region, pop, rcode, outcome) (rate(cdnf_dns_queries_total[5m]))
+      - record: cdnf:http_requests:rate5m
+        expr: sum by (route, status_class) (rate(cdnfoundry_http_requests_total[5m]))
+      - record: cdnf:http_latency_bucket:rate5m
+        expr: sum by (route, le) (rate(cdnfoundry_http_request_duration_seconds_bucket[5m]))
+      - record: cdnf:logins:rate5m
+        expr: sum by (result, surface) (rate(cdnfoundry_logins_total[5m]))
+      - record: cdnf:probe_success:avg5m
+        expr: avg by (job, pop, region, ip_version) (avg_over_time(probe_success[5m]))

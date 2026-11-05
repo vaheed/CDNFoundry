@@ -1,0 +1,78 @@
+{
+  "model": {
+    "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+    },
+    "description": "Requests per second across the selected PoPs.",
+    "fieldConfig": {
+      "defaults": {
+        "color": {
+          "mode": "thresholds"
+        },
+        "decimals": 1,
+        "links": [
+          {
+            "title": "Open details",
+            "url": "/d/cdnf-global-traffic"
+          }
+        ],
+        "mappings": [
+          {
+            "options": {
+              "match": "null+nan",
+              "result": {
+                "color": "text",
+                "text": "No data yet"
+              }
+            },
+            "type": "special"
+          }
+        ],
+        "noValue": "No traffic",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {
+              "color": "text",
+              "value": null
+            }
+          ]
+        },
+        "unit": "reqps"
+      },
+      "overrides": []
+    },
+    "options": {
+      "colorMode": "value",
+      "graphMode": "none",
+      "justifyMode": "center",
+      "reduceOptions": {
+        "calcs": [
+          "lastNotNull"
+        ],
+        "fields": "",
+        "values": false
+      },
+      "textMode": "value",
+      "wideLayout": true
+    },
+    "targets": [
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "expr": "sum(cdnf:edge_requests:rate5m{region=~\"$region\",pop=~\"$pop\",edge=~\"$edge\"})",
+        "instant": true,
+        "legendFormat": "requests",
+        "range": false,
+        "refId": "A"
+      }
+    ],
+    "title": "Requests",
+    "type": "stat"
+  },
+  "name": "Requests",
+  "uid": "cdnf-lib-traffic-requests"
+}

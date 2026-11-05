@@ -1,0 +1,82 @@
+{
+  "model": {
+    "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+    },
+    "description": "Share of requests served from cache.",
+    "fieldConfig": {
+      "defaults": {
+        "color": {
+          "mode": "thresholds"
+        },
+        "decimals": 1,
+        "links": [
+          {
+            "title": "Open details",
+            "url": "/d/cdnf-cache"
+          }
+        ],
+        "mappings": [
+          {
+            "options": {
+              "match": "null+nan",
+              "result": {
+                "color": "text",
+                "text": "No data yet"
+              }
+            },
+            "type": "special"
+          }
+        ],
+        "noValue": "\u2013",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {
+              "color": "orange",
+              "value": null
+            },
+            {
+              "color": "green",
+              "value": 60
+            }
+          ]
+        },
+        "unit": "percent"
+      },
+      "overrides": []
+    },
+    "options": {
+      "colorMode": "value",
+      "graphMode": "none",
+      "justifyMode": "center",
+      "reduceOptions": {
+        "calcs": [
+          "lastNotNull"
+        ],
+        "fields": "",
+        "values": false
+      },
+      "textMode": "value",
+      "wideLayout": true
+    },
+    "targets": [
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "expr": "100 * sum(cdnf:edge_requests:rate5m{region=~\"$region\",pop=~\"$pop\",edge=~\"$edge\",cache_status=\"HIT\"}) / sum(cdnf:edge_requests:rate5m{region=~\"$region\",pop=~\"$pop\",edge=~\"$edge\"})",
+        "instant": true,
+        "legendFormat": "hit",
+        "range": false,
+        "refId": "A"
+      }
+    ],
+    "title": "Cache hit",
+    "type": "stat"
+  },
+  "name": "Cache hit",
+  "uid": "cdnf-lib-traffic-cache-hit"
+}

@@ -15,7 +15,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-EXEMPT = {"origin-http", "origin-https", "alert-sink", "pebble", "poweradmin", "dev-pki", "vendor-init"}
+EXEMPT = {"origin-http", "origin-https", "alert-sink", "pebble", "poweradmin", "dev-pki", "vendor-init", "seed-exporter"}
 
 
 def repository(reference: str) -> str:

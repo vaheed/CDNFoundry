@@ -566,7 +566,7 @@ services:
     mem_limit: 1g
     image: prom/prometheus:v3.13.3@sha256:6976aa8a60fec930796ce5772b8d12da7a318a5daa8d40d69c5c7819a05eeed7
     # Retention is explicit: it matches the typed telemetry.prometheus_retention_days default.
-    command: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.path=/prometheus, --storage.tsdb.retention.time=30d, --web.enable-lifecycle]
+    command: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.path=/prometheus, --storage.tsdb.retention.time=30d, --web.enable-lifecycle, --web.enable-remote-write-receiver]
     ports: ["9090:9090"]
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
@@ -575,9 +575,11 @@ services:
       - ./docker/prometheus/traffic-alerts.yml:/etc/prometheus/traffic-alerts.yml:ro
       - ./docker/prometheus/security-alerts.yml:/etc/prometheus/security-alerts.yml:ro
       - ./docker/prometheus/slo-rules.yml:/etc/prometheus/slo-rules.yml:ro
+      - ./docker/prometheus/dashboard-rules.yml:/etc/prometheus/dashboard-rules.yml:ro
       - ./docker/prometheus/alerts.test.yml:/etc/prometheus/alerts.test.yml:ro
       - ./docker/prometheus/probe-targets.dev.yml:/etc/prometheus/probe-targets.yml:ro
       - ./docker/prometheus/vector-targets.dev.yml:/etc/prometheus/vector-targets.yml:ro
+      - ./docker/prometheus/seed-targets.dev.yml:/etc/prometheus/seed-targets.yml:ro
       - ./docker/prometheus/control-targets.dev.yml:/etc/prometheus/control-targets.yml:ro
       - ./docker/prometheus/node-targets.dev.yml:/etc/prometheus/node-targets.yml:ro
       - ./docker/prometheus/dns-targets.dev.yml:/etc/prometheus/dns-targets.yml:ro
@@ -637,7 +639,7 @@ services:
       GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_PATHS_PLUGINS: /var/lib/grafana/plugins
-      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/system-command-center.json
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/00-overview/cdnf-now.json
       GRAFANA_CLICKHOUSE_HOST: clickhouse
       GRAFANA_CLICKHOUSE_PORT: 9000
       GRAFANA_CLICKHOUSE_PROTOCOL: native
@@ -669,6 +671,64 @@ services:
       interval: 10s
       timeout: 3s
       retries: 20
+
+  grafana-bootstrap:
+    logging: *bounded-logging
+    <<: *hardened
+    mem_limit: 128m
+    image: python:3.13-alpine3.22@sha256:e81548ac35b07a3bd4805f275107592ef458b1e893c0e04d45aedaa19416cca5
+    # Reconciles what file provisioning cannot hold: library panels, teams, folder permissions, team homes, and playlists.
+    command: [python3, /bootstrap/bootstrap.py]
+    environment:
+      GRAFANA_URL: http://grafana:3000
+      GRAFANA_ADMIN_USER: admin
+      GRAFANA_ADMIN_PASSWORD: cdnf-grafana-dev-only
+      # Development and test stacks only: one viewer per team for the browser suite.
+      GRAFANA_TEST_USER_PASSWORD: cdnf-grafana-team-users-dev-only
+    volumes:
+      - ./docker/grafana/bootstrap.py:/bootstrap/bootstrap.py:ro
+      - ./docker/grafana/access.json:/bootstrap/access.json:ro
+      - ./docker/grafana/library-panels:/bootstrap/library-panels:ro
+    depends_on:
+      grafana: { condition: service_healthy }
+    networks: [telemetry]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=4m
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python3, -c, "import os,sys;sys.exit(0 if os.path.exists('/tmp/bootstrap-ok') else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  seed-exporter:
+    logging: *bounded-logging
+    <<: *hardened
+    mem_limit: 128m
+    image: python:3.13-alpine3.22@sha256:e81548ac35b07a3bd4805f275107592ef458b1e893c0e04d45aedaa19416cca5
+    profiles: [seed]
+    # Development only. Serves the seed model's fake PoPs to Prometheus and delivers their events to ClickHouse and Loki.
+    command: [python3, /seed/seed_exporter.py]
+    environment:
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: cdnf_ingest
+      CLICKHOUSE_PASSWORD: cdnf-ingest-dev-only
+      LOKI_URL: http://loki:3100
+    ports: ["127.0.0.1:9108:9108"]
+    volumes:
+      - ./scripts/observability:/seed:ro
+    networks: [telemetry]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=4m
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python3, -c, "import urllib.request;urllib.request.urlopen('http://127.0.0.1:9108/metrics',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
 
   node-exporter:
     logging: *bounded-logging

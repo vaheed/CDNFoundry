@@ -1,14 +1,84 @@
 apiVersion: 1
 
+# One provider per audience folder. The folder UID is fixed so permissions can refer to it.
 providers:
-  - name: CDNFoundry Operations
+  - name: "00 Overview"
     orgId: 1
-    folder: CDNFoundry Operations
-    folderUid: cdnf-operations
+    folder: "00 Overview"
+    folderUid: cdnf-folder-overview
     type: file
     disableDeletion: true
     allowUiUpdates: false
     updateIntervalSeconds: 30
     options:
-      path: /var/lib/grafana/dashboards
-      foldersFromFilesStructure: false
+      path: /var/lib/grafana/dashboards/00-overview
+  - name: "10 NOC"
+    orgId: 1
+    folder: "10 NOC"
+    folderUid: cdnf-folder-noc
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/10-noc
+  - name: "20 SOC"
+    orgId: 1
+    folder: "20 SOC"
+    folderUid: cdnf-folder-soc
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/20-soc
+  - name: "30 Platform Admin"
+    orgId: 1
+    folder: "30 Platform Admin"
+    folderUid: cdnf-folder-platform
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/30-platform-admin
+  - name: "40 On-call & SLO"
+    orgId: 1
+    folder: "40 On-call & SLO"
+    folderUid: cdnf-folder-oncall
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/40-on-call-slo
+  - name: "50 Domains"
+    orgId: 1
+    folder: "50 Domains"
+    folderUid: cdnf-folder-domains
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/50-domains
+  - name: "60 Business & Capacity"
+    orgId: 1
+    folder: "60 Business & Capacity"
+    folderUid: cdnf-folder-business
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/60-business-capacity
+  - name: "90 Samples"
+    orgId: 1
+    folder: "90 Samples"
+    folderUid: cdnf-folder-samples
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/90-samples
