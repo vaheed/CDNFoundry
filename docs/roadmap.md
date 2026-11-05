@@ -1746,7 +1746,7 @@ with a few Linux servers can understand CDNFoundry and run it step by step.
 - [ ] **Operations.** Upgrades and security updates, HA switchover and
       failover, backup and restore drills, monitoring and alerts, and one
       runbook per alert, each with symptoms, checks, and the fix.
-- [ ] **Troubleshooting by symptom:** "the domain does not resolve", "the
+- [x] **Troubleshooting by symptom:** "the domain does not resolve", "the
       certificate is not issued", "a PoP is not syncing", "the cache is not
       hit", and others. Each one gives the checks in order and the fix.
 - [ ] **Generated reference.** The API reference is generated from
