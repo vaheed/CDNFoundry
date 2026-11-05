@@ -128,24 +128,31 @@ def main() -> int:
     home_markup = page_markup.get(home.resolve(), "")
     shell_markers = {
         "VitePress navigation": 'class="VPNav"',
-        "Learn navigation": f'href="{SITE_BASE}concepts/cdn-fundamentals"',
+        "Get started navigation": f'href="{SITE_BASE}getting-started/"',
+        "Guides navigation": f'href="{SITE_BASE}guides/"',
+        "Deploy and operate navigation": f'href="{SITE_BASE}deployment/"',
+        "Reference navigation": f'href="{SITE_BASE}reference/"',
         "Architecture navigation": f'href="{SITE_BASE}architecture/"',
+        "Community navigation": f'href="{SITE_BASE}contributing/"',
+        "home card grid": 'class="cdnf-cards"',
         "local search": 'id="local-search"',
         "accessible appearance switch": 'class="VPSwitch VPSwitchAppearance"',
-        "diagram rendering container": 'class="cdnf-diagram"',
-        "server-rendered diagram fallback": 'class="cdnf-diagram-fallback"',
         "Google Search Console verification": (
             'name="google-site-verification" '
             'content="5Vy61YITiNmNEK2ePkuwEyAL34Lq2UQ6C7xXGXt05uI"'
         ),
         "canonical URL": f'<link rel="canonical" href="{PUBLIC_SITE_URL}/">',
         "Open Graph image dimensions": '<meta property="og:image:width" content="1200">',
-        "homepage product summary": "What CDNFoundry includes",
+        "homepage product summary": "What it does",
         "self-hosted CDN heading": "Self-hosted private CDN software",
     }
     for feature, marker in shell_markers.items():
         if marker not in home_markup:
             failures.append(f"index.html: missing {feature}")
+
+    llms = DIST / "llms.txt"
+    if not llms.is_file() or "/getting-started/" not in llms.read_text(encoding="utf-8"):
+        failures.append("llms.txt: missing or does not index the pages")
 
     sitemap_urls: set[str] = set()
     sitemap = DIST / "sitemap.xml"
