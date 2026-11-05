@@ -188,6 +188,7 @@ docs-build:
 docs-check:
 	python3 tests/docs/check_tokens.py
 	python3 scripts/ci/generate_fleet_cli_reference.py --check
+	python3 scripts/ci/generate_grafana_reference.py --check
 	python3 tests/docs/check_links.py
 	python3 tests/docs/run_test_blocks.py
 	npm --prefix docs run lint

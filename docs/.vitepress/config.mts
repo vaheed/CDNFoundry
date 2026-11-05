@@ -117,6 +117,7 @@ const operate = [
       { text: 'Incident runbooks', link: '/operations/runbooks' },
       { text: 'Monitoring', link: '/operations/monitoring' },
       { text: 'Grafana dashboards', link: '/operations/grafana' },
+      { text: 'Grafana by team', link: '/operations/grafana-by-team' },
       { text: 'Operational logging', link: '/operations/operational-logging' },
       { text: 'Laravel operations dashboard', link: '/operations/laravel-operations-dashboard' },
       { text: 'CLI commands', link: '/operations/cli-commands' },
@@ -163,6 +164,7 @@ const reference = [
       { text: 'CLI and scheduler', link: '/reference/cli-and-scheduler' },
       { text: 'Fleet CLI', link: '/reference/fleet-cli' },
       { text: 'Telemetry schema', link: '/reference/telemetry-schema' },
+      { text: 'Grafana dashboards', link: '/reference/grafana-dashboards' },
       { text: 'Glossary', link: '/reference/glossary' }
     ]
   },

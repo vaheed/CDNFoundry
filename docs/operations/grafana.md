@@ -18,6 +18,8 @@ panels, data sources, alert rules, folders, teams, and permissions. Edit the
 files, not the screens. A dashboard changed in the browser is replaced at the
 next provisioning pass.
 
+New to Grafana here? Read [Grafana by team](grafana-by-team.md) for where each team starts, and the [dashboards reference](../reference/grafana-dashboards.md) for every panel.
+
 ## Audiences
 
 | Folder | Team that sees it | Dashboards |

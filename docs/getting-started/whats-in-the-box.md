@@ -21,6 +21,7 @@ before you install anything.
 | **Fleet CLI** | Install, upgrade, back up, and roll back hosts | Infrastructure operators | `scripts/cdnfoundry-fleet` on your workstation |
 | **Fleet web** | The same Fleet actions, as a web page | Infrastructure operators | `cdnfoundry-fleet web`, then `http://127.0.0.1:8765` on your workstation |
 | **Grafana** | Watch traffic, security, hosts, and usage on dashboards | Operations, security, support, business | `http://127.0.0.1:3000` on the telemetry host, through your own authenticated proxy |
+| **Grafana by team** | Learn where your team starts | Operations, security, support, business | [Grafana by team](../operations/grafana-by-team.md) |
 | **Alertmanager** | Receive alerts for problems | On-call | Alerts go to the receiver you configure |
 | **Documentation** | Learn and look things up | Everyone | This site |
 
