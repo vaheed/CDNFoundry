@@ -10,10 +10,20 @@ sources:
     type: http_server
     address: 0.0.0.0:8686
     decoding: { codec: json }
+    auth:
+      strategy: custom
+      source: |
+        # Cells and DNS nodes present this node's secret; nothing else may post events.
+        .headers.authorization == "Basic " + encode_base64("cdnf:" + get_env_var!("EDGE_STATUS_TOKEN"))
   dns_events:
     type: http_server
     address: 0.0.0.0:8687
     decoding: { codec: json }
+    auth:
+      strategy: custom
+      source: |
+        # Cells and DNS nodes present this node's secret; nothing else may post events.
+        .headers.authorization == "Basic " + encode_base64("cdnf:" + get_env_var!("EDGE_STATUS_TOKEN"))
   dns_dnstap:
     type: dnstap
     address: 0.0.0.0:6000
@@ -32,6 +42,11 @@ transforms:
     source: |
       envelope = parse_regex!(to_string!(.message), r'(?P<payload>\{.*\})$')
       . = parse_json!(envelope.payload)
+      # Only this node's cells hold the node secret; drop lines other containers forge.
+      expected_proof = sha2!("cdnf-telemetry-v1|" + get_env_var!("EDGE_STATUS_TOKEN"), variant: "SHA-256")
+      presented_proof = string(.telemetry_proof) ?? ""
+      if presented_proof != expected_proof { abort }
+      del(.telemetry_proof)
   safe_edge_events:
     type: remap
     inputs: [edge_events, decoded_edge_syslog]
@@ -104,6 +119,53 @@ transforms:
       .waf_processing_us = to_int(.waf_processing_us) ?? 0
       .waf_body_limit = slice!(to_string(.waf_body_limit) ?? "none", 0, 16)
       .waf_exclusion_id = to_int(.waf_exclusion_id) ?? 0
+      # Timings arrive from nginx as seconds. A list ("0.001, 0.004") means retries, "-" means no
+      # sample; the last attempt is the one that served the response.
+      request_seconds = parse_float(to_string(.request_time) ?? "") ?? -1.0
+      .request_time_ms = 0
+      if request_seconds >= 0.0 && request_seconds <= 3600.0 { .request_time_ms = to_int(request_seconds * 1000.0) }
+      connect = parse_regex(to_string(.upstream_connect_time) ?? "", r'(?P<seconds>[0-9]+\.[0-9]+)$') ?? {}
+      connect_seconds = parse_float(to_string(connect.seconds)) ?? -1.0
+      .upstream_connect_ms = null
+      if connect_seconds >= 0.0 && connect_seconds <= 3600.0 { .upstream_connect_ms = to_int(connect_seconds * 1000.0) }
+      header = parse_regex(to_string(.upstream_header_time) ?? "", r'(?P<seconds>[0-9]+\.[0-9]+)$') ?? {}
+      header_seconds = parse_float(to_string(header.seconds)) ?? -1.0
+      .upstream_header_ms = null
+      if header_seconds >= 0.0 && header_seconds <= 3600.0 { .upstream_header_ms = to_int(header_seconds * 1000.0) }
+      del(.request_time); del(.upstream_connect_time); del(.upstream_header_time)
+      protocol = downcase(to_string(.server_protocol) ?? "")
+      .server_protocol = ""
+      if protocol == "http/2.0" { .server_protocol = "h2" } else if protocol == "http/3.0" { .server_protocol = "h3" } else if starts_with(protocol, "http/1") { .server_protocol = "http/1.1" }
+      .ssl_protocol = slice!(to_string(.ssl_protocol) ?? "", 0, 16)
+      .ssl_cipher = slice!(to_string(.ssl_cipher) ?? "", 0, 64)
+      .scheme = slice!(to_string(.scheme) ?? "", 0, 8)
+      if .scheme != "http" && .scheme != "https" { .scheme = "" }
+      .request_id = slice!(replace(to_string(.request_id) ?? "", r'[^0-9a-zA-Z-]', ""), 0, 64)
+      # Cells from before this field existed report body bytes only; use them rather than bill zero.
+      .bytes_sent = to_int(.bytes_sent) ?? 0
+      if .bytes_sent == 0 { .bytes_sent = .bytes_out }
+      .asn = to_int(.asn) ?? 0
+      if .asn < 0 || .asn > 4294967295 { .asn = 0 }
+      # The IP version is the client's, read from its address.
+      .ip_version = ""
+      if contains(.client_ip, ":") { .ip_version = "6" } else if .client_ip != "" { .ip_version = "4" }
+      # The PoP collector knows where it runs. Location is never read from the event.
+      .pop = slice!(get_env_var("CDNF_TELEMETRY_POP") ?? "unknown", 0, 64)
+      .region = slice!(get_env_var("CDNF_TELEMETRY_REGION") ?? "unknown", 0, 64)
+      # The fixed set of security classes. Any other reason a cell reports is a plain block.
+      .security_class = ""
+      if .security_action != "allow" || .event_type == "security" {
+        .security_class = "block"
+        if .security_reason == "cache_abuse_detected" { .security_class = "cache_abuse_detected" }
+        else if .security_reason == "edge_emergency_mode" { .security_class = "emergency_mode" }
+        else if .security_reason == "waf_body_limit" || .waf_body_limit == "exceeded" { .security_class = "waf_body_limit" }
+        else if starts_with(.security_reason, "waf") || .waf_action == "block" || .waf_action == "blocked" { .security_class = "waf" }
+      }
+      if .event_type == "tls" {
+        .tls_error = slice!(.tls_error, 0, 64)
+        .hostname = slice!(downcase(.hostname), 0, 253)
+        .status = 0
+      }
       del(.authorization); del(.cookie); del(.cookies); del(.request_body); del(.body); del(.query)
   billing_edge_events:
     type: filter
@@ -130,6 +192,13 @@ transforms:
       .country = slice!(upcase(to_string(.country) ?? "ZZ"), 0, 2)
       .continent = slice!(upcase(to_string(.continent) ?? "ZZ"), 0, 2)
       .outcome = slice!(to_string(.outcome) ?? "answered", 0, 32)
+      .asn = to_int(.asn) ?? 0
+      if .asn < 0 || .asn > 4294967295 { .asn = 0 }
+      .pop = slice!(get_env_var("CDNF_TELEMETRY_POP") ?? "unknown", 0, 64)
+      .region = slice!(get_env_var("CDNF_TELEMETRY_REGION") ?? "unknown", 0, 64)
+      # A response DNSdist truncated because a client went over its rate is the only limit it applies.
+      .security_class = ""
+      if .outcome == "response_limit" { .security_class = "dns_response_limit" }
       del(.authorization); del(.cookie); del(.request_body); del(.body)
   decoded_dns_dnstap:
     type: remap
@@ -140,6 +209,9 @@ transforms:
         abort
       }
       question = .responseData.question[0]
+      # DNSdist answers an over-limit UDP client with a truncated reply; that is the response limit.
+      outcome = "answered"
+      if .responseData.header.tc == true { outcome = "response_limit" }
       . = {
         "occurred_at": .timestamp,
         "domain_id": 0,
@@ -151,8 +223,101 @@ transforms:
         "dns_cluster": to_string(.serverId) ?? "dnsdist",
         "country": "ZZ",
         "continent": "ZZ",
-        "outcome": "answered"
+        "outcome": outcome
       }
+
+  # Live counters for Prometheus. Labels are only the collector's PoP and edge and fixed-value classes, so
+  # the series count is bounded by the fleet and not by domains, clients, or paths. Per-domain and
+  # per-client questions are answered from ClickHouse.
+  edge_metric_events:
+    type: remap
+    inputs: [safe_edge_events]
+    drop_on_error: true
+    source: |
+      status = to_int(.status) ?? 0
+      status_class = "none"
+      if status >= 100 && status < 200 { status_class = "1xx" } else if status >= 200 && status < 300 { status_class = "2xx" } else if status >= 300 && status < 400 { status_class = "3xx" } else if status >= 400 && status < 500 { status_class = "4xx" } else if status >= 500 && status < 600 { status_class = "5xx" }
+      cache = upcase(to_string(.cache_status) ?? "")
+      if !includes(["HIT", "MISS", "BYPASS", "EXPIRED", "STALE", "UPDATING", "REVALIDATED"], cache) { cache = "NONE" }
+      seconds = to_float(.request_time_ms) ?? 0.0
+      origin_seconds = null
+      if .origin_latency_ms != null { origin_seconds = (to_float(.origin_latency_ms) ?? 0.0) / 1000.0 }
+      . = {
+        "kind": .event_type,
+        "pop": .pop,
+        "region": .region,
+        "edge": .edge_id,
+        "status_class": status_class,
+        "cache_status": cache,
+        "security_class": .security_class,
+        "tls_reason": .tls_error,
+        "bytes_sent": to_int(.bytes_sent) ?? 0,
+        "request_seconds": seconds / 1000.0,
+        "origin_seconds": origin_seconds,
+        "origin_failed": .origin_error != ""
+      }
+  edge_request_events:
+    type: filter
+    inputs: [edge_metric_events]
+    condition: .kind != "tls"
+  edge_origin_events:
+    type: filter
+    inputs: [edge_metric_events]
+    condition: .kind != "tls" && .origin_seconds != null
+  edge_origin_failure_events:
+    type: filter
+    inputs: [edge_metric_events]
+    condition: .kind != "tls" && .origin_failed == true
+  edge_security_events:
+    type: filter
+    inputs: [edge_metric_events]
+    condition: .kind != "tls" && .security_class != ""
+  edge_tls_events:
+    type: filter
+    inputs: [edge_metric_events]
+    condition: .kind == "tls"
+  edge_request_metrics:
+    type: log_to_metric
+    inputs: [edge_request_events]
+    metrics:
+      - { type: counter, field: kind, name: cdnf_edge_requests_total, tags: { pop: "{{pop}}", region: "{{region}}", edge: "{{edge}}", status_class: "{{status_class}}", cache_status: "{{cache_status}}" } }
+      - { type: counter, field: bytes_sent, increment_by_value: true, name: cdnf_edge_bytes_sent_total, tags: { pop: "{{pop}}", region: "{{region}}", edge: "{{edge}}" } }
+      - { type: histogram, field: request_seconds, name: cdnf_edge_request_duration_seconds, tags: { pop: "{{pop}}", region: "{{region}}", edge: "{{edge}}" } }
+  edge_origin_metrics:
+    type: log_to_metric
+    inputs: [edge_origin_events]
+    metrics:
+      - { type: histogram, field: origin_seconds, name: cdnf_edge_origin_duration_seconds, tags: { pop: "{{pop}}", region: "{{region}}", edge: "{{edge}}" } }
+  edge_origin_failure_metrics:
+    type: log_to_metric
+    inputs: [edge_origin_failure_events]
+    metrics:
+      - { type: counter, field: kind, name: cdnf_edge_origin_failures_total, tags: { pop: "{{pop}}", region: "{{region}}", edge: "{{edge}}" } }
+  edge_security_metrics:
+    type: log_to_metric
+    inputs: [edge_security_events]
+    metrics:
+      - { type: counter, field: kind, name: cdnf_edge_security_events_total, tags: { pop: "{{pop}}", region: "{{region}}", edge: "{{edge}}", class: "{{security_class}}" } }
+  edge_tls_metrics:
+    type: log_to_metric
+    inputs: [edge_tls_events]
+    metrics:
+      - { type: counter, field: kind, name: cdnf_edge_tls_failures_total, tags: { pop: "{{pop}}", region: "{{region}}", edge: "{{edge}}", reason: "{{tls_reason}}" } }
+  dns_metric_events:
+    type: remap
+    inputs: [safe_dns_events]
+    drop_on_error: true
+    source: |
+      rcode = upcase(to_string(.rcode) ?? "")
+      if !includes(["NOERROR", "NXDOMAIN", "SERVFAIL", "REFUSED", "FORMERR", "NOTIMP"], rcode) { rcode = "OTHER" }
+      outcome = to_string(.outcome) ?? ""
+      if outcome != "response_limit" { outcome = "answered" }
+      . = { "kind": "dns", "pop": .pop, "region": .region, "rcode": rcode, "outcome": outcome }
+  dns_metrics:
+    type: log_to_metric
+    inputs: [dns_metric_events]
+    metrics:
+      - { type: counter, field: kind, name: cdnf_dns_queries_total, tags: { pop: "{{pop}}", region: "{{region}}", rcode: "{{rcode}}", outcome: "{{outcome}}" } }
 
 sinks:
   clickhouse_edge:
@@ -190,10 +355,21 @@ sinks:
     request: { retry_initial_backoff_secs: 1, retry_max_duration_secs: 300, timeout_secs: 10 }
   prometheus:
     type: prometheus_exporter
-    inputs: [internal_metrics]
+    inputs: [internal_metrics, edge_request_metrics, edge_origin_metrics, edge_origin_failure_metrics, edge_security_metrics, edge_tls_metrics, dns_metrics]
     address: 0.0.0.0:9598
+    # Counters of a quiet PoP stay exported; they are bounded by the label sets above.
+    flush_period_secs: 3600
+    default_namespace: ""
+    buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
 
 tests:
+  - name: drop_syslog_events_without_the_node_proof
+    inputs:
+      - insert_at: decoded_edge_syslog
+        type: log
+        log_fields:
+          message: '<190>cdnfoundry_edge: {"domain_id":7,"telemetry_proof":"forged"}'
+    no_outputs_from: [decoded_edge_syslog]
   - name: redact_referrer_query_before_billing_buffer
     inputs:
       - insert_at: safe_edge_events
@@ -225,3 +401,72 @@ tests:
             source: |-
               assert_eq!(.security_action, "block")
               assert_eq!(.security_reason, "domain_rate_exceeded")
+  - name: classify_security_reasons_into_the_fixed_set
+    inputs:
+      - insert_at: safe_edge_events
+        type: log
+        log_fields:
+          domain_id: 1
+          security_action: block
+          security_reason: cache_abuse_detected
+      - insert_at: safe_edge_events
+        type: log
+        log_fields:
+          domain_id: 1
+          security_action: block
+          security_reason: edge_emergency_mode
+    outputs:
+      - extract_from: security_edge_events
+        conditions:
+          - type: vrl
+            source: |-
+              assert!(.security_class == "cache_abuse_detected" || .security_class == "emergency_mode")
+  - name: tag_pop_and_region_and_normalise_timings
+    inputs:
+      - insert_at: safe_edge_events
+        type: log
+        log_fields:
+          domain_id: 1
+          client_ip: 2001:db8::1
+          security_action: allow
+          request_time: "0.250"
+          upstream_connect_time: "0.001, 0.004"
+          upstream_header_time: "-"
+          server_protocol: HTTP/2.0
+          pop: forged-pop
+          bytes_sent: 1234
+    outputs:
+      - extract_from: billing_edge_events
+        conditions:
+          - type: vrl
+            source: |-
+              assert_eq!(.request_time_ms, 250)
+              assert_eq!(.upstream_connect_ms, 4)
+              assert_eq!(.upstream_header_ms, null)
+              assert_eq!(.server_protocol, "h2")
+              assert_eq!(.ip_version, "6")
+              assert_eq!(.bytes_sent, 1234)
+              assert!(.pop != "forged-pop")
+  - name: derive_bounded_live_metrics_from_an_edge_request
+    inputs:
+      - insert_at: edge_metric_events
+        type: log
+        log_fields:
+          event_type: request
+          pop: pop-a
+          edge_id: edge-1
+          status: 503
+          cache_status: miss
+          bytes_sent: 900
+          request_time_ms: 120
+          origin_error: "502"
+          security_class: ""
+          tls_error: ""
+    outputs:
+      - extract_from: edge_metric_events
+        conditions:
+          - type: vrl
+            source: |-
+              assert_eq!(.status_class, "5xx")
+              assert_eq!(.cache_status, "MISS")
+              assert_eq!(.origin_failed, true)

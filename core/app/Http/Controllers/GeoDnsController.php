@@ -8,6 +8,7 @@ use App\Models\AuditLog;
 use App\Models\DnsCluster;
 use App\Models\DnsRecord;
 use App\Models\Domain;
+use App\Models\Operation;
 use App\Support\GeoDnsConfig;
 use App\Support\GeoIpClassifier;
 use Illuminate\Http\JsonResponse;
@@ -25,7 +26,7 @@ class GeoDnsController extends Controller
         return response()->json(['data' => $record->geo_config]);
     }
 
-    public function update(Request $request, Domain $domain, DnsRecord $record): DnsRecordResource
+    public function update(Request $request, Domain $domain, DnsRecord $record): JsonResponse
     {
         $this->authorizeRecord($domain, $record, 'update');
         abort_unless($record->mode === 'geo_dns', 404);
@@ -39,9 +40,9 @@ class GeoDnsController extends Controller
                 AuditLog::record($request->user(), 'dns.geo_updated', $current, ['domain_id' => $locked->id, 'revision' => $locked->revision], $request->ip());
             }
         });
-        $this->reconcile($domain);
+        $operation = $this->reconcile($domain, $request);
 
-        return DnsRecordResource::make($record->refresh());
+        return DnsRecordResource::make($record->refresh())->additional(['operation_id' => $operation?->id])->response()->setStatusCode($operation === null ? 200 : 202);
     }
 
     public function preview(Request $request, Domain $domain, DnsRecord $record, GeoIpClassifier $classifier): JsonResponse
@@ -64,10 +65,14 @@ class GeoDnsController extends Controller
         abort_unless($record->domain_id === $domain->id, 404);
     }
 
-    private function reconcile(Domain $domain): void
+    private function reconcile(Domain $domain, Request $request): ?Operation
     {
-        if ($domain->refresh()->lifecycle_state->value === 'active' && DnsCluster::query()->where('enabled', true)->exists()) {
-            ReconcileDnsZone::dispatch($domain->id)->afterCommit();
+        if ($domain->refresh()->lifecycle_state->value !== 'active' || ! DnsCluster::query()->where('enabled', true)->exists()) {
+            return null;
         }
+        $operation = Operation::coalesceDomain('dns.zone_reconcile', $domain->id, $request->user()->id);
+        ReconcileDnsZone::dispatch($domain->id)->afterCommit();
+
+        return $operation;
     }
 }

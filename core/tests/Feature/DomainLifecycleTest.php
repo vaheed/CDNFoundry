@@ -15,6 +15,7 @@ use App\Models\Operation;
 use App\Models\PlatformDnsSetting;
 use App\Models\User;
 use App\Support\DnsRecordData;
+use App\Support\NameserverPairs;
 use App\Support\NameserverResolver;
 use App\Support\PowerDnsClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -167,7 +168,6 @@ class DomainLifecycleTest extends TestCase
         $this->platformIdentity();
         [$user, $domain] = $this->ownedDomain();
         DnsCluster::query()->create([...$this->clusterData(), 'enabled' => false]);
-        $domain->initializeDelegationClaim();
         $operation = Operation::query()->create(['actor_id' => $user->id, 'type' => 'domain.nameservers_verify', 'status' => 'pending', 'input' => ['domain_id' => $domain->id, 'delegation_token' => $domain->delegation_token]]);
         $resolver = new class extends NameserverResolver
         {
@@ -267,6 +267,10 @@ class DomainLifecycleTest extends TestCase
         $user = User::factory()->create();
         $domain = Domain::query()->create(['name' => 'example.com', 'display_name' => 'example.com', 'lifecycle_state' => DomainLifecycleState::PendingVerification, 'revision' => 1]);
         $domain->users()->attach($user);
+        $pair = NameserverPairs::all()[0] ?? null;
+        if ($pair !== null) {
+            $domain->forceFill(['delegation_nameservers' => $pair, 'delegation_token' => bin2hex(random_bytes(16)), 'claim_expires_at' => now()->addDays(7)])->save();
+        }
 
         return [$user, $domain];
     }
@@ -287,7 +291,6 @@ class DomainLifecycleTest extends TestCase
             'nameservers' => [['hostname' => 'ns1.cdnf.test', 'ipv4' => '192.0.2.1', 'ipv6' => '2001:db8::1'], ['hostname' => 'ns2.cdnf.test', 'ipv4' => '192.0.2.2', 'ipv6' => '2001:db8::2']],
             'soa_primary' => 'ns1.cdnf.test', 'soa_mailbox' => 'hostmaster.cdnf.test', 'soa_refresh' => 3600,
             'soa_retry' => 600, 'soa_expire' => 604800, 'soa_minimum_ttl' => 300, 'default_ttl' => 300,
-            'cluster_targets' => ['pdns.test'],
         ]);
     }
 }

@@ -7,6 +7,7 @@ use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
 use App\Models\CachePurge;
 use App\Models\Domain;
+use App\Models\Operation;
 use App\Support\CachePolicy;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -43,7 +44,7 @@ class CacheController extends Controller
         });
         ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
 
-        return response()->json(['data' => $this->state($domain->refresh())], 202);
+        return $this->queued($request, $domain);
     }
 
     public function enableDevelopmentMode(Request $request, Domain $domain): JsonResponse
@@ -57,7 +58,7 @@ class CacheController extends Controller
         });
         ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
 
-        return response()->json(['data' => $this->state($domain->refresh())], 202);
+        return $this->queued($request, $domain);
     }
 
     public function disableDevelopmentMode(Request $request, Domain $domain): JsonResponse
@@ -70,7 +71,7 @@ class CacheController extends Controller
         });
         ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
 
-        return response()->json(['data' => $this->state($domain->refresh())], 202);
+        return $this->queued($request, $domain);
     }
 
     public function purge(Request $request, Domain $domain): JsonResponse
@@ -80,14 +81,16 @@ class CacheController extends Controller
         abort_if(strlen($request->getContent()) > 128 * 1024, 413, 'The purge payload exceeds 128 KiB.');
         $purge = DispatchCachePurge::execute($domain, $data['type'], $data['urls'] ?? [], $request->user(), $request->ip());
 
-        return response()->json(['data' => $this->purgeData($purge)], 202);
+        return response()->json(['data' => $this->purgeData($purge), 'operation_id' => $purge->operation_id], 202);
     }
 
     public function purges(Domain $domain): JsonResponse
     {
         Gate::authorize('view', $domain);
 
-        return response()->json(['data' => CachePurge::query()->where('domain_id', $domain->id)->latest('created_at')->cursorPaginate(50)]);
+        $page = CachePurge::query()->where('domain_id', $domain->id)->latest('created_at')->cursorPaginate(50);
+
+        return response()->json(['data' => $page->getCollection()->map(fn (CachePurge $purge): array => $this->purgeData($purge))->all(), 'next_cursor' => $page->nextCursor()?->encode()]);
     }
 
     public function purgeStatus(Domain $domain, CachePurge $purge): JsonResponse
@@ -103,6 +106,13 @@ class CacheController extends Controller
         return CachePolicy::defaults();
     }
 
+    private function queued(Request $request, Domain $domain): JsonResponse
+    {
+        $operation = Operation::coalesceDomain('edge.domain_reconcile', $domain->id, $request->user()->id);
+
+        return response()->json(['data' => [...$this->state($domain->refresh()), 'operation_id' => $operation->id, 'status' => $operation->status]], 202);
+    }
+
     private function state(Domain $domain): array
     {
         return ['settings' => CachePolicy::normalize($domain->cache_settings), 'cache_epoch' => $domain->cache_epoch, 'development_mode_until' => $domain->cache_development_mode_until?->isFuture() ? $domain->cache_development_mode_until->toIso8601String() : null];
@@ -112,7 +122,7 @@ class CacheController extends Controller
     {
         $tasks = $purge->tasks()->get(['edge_id', 'status', 'result', 'finished_at']);
 
-        return [...$purge->only(['id', 'domain_id', 'type', 'cache_epoch', 'status', 'created_at']), 'url_count' => count($purge->cache_keys ?? []), 'edges' => $tasks];
+        return [...$purge->only(['id', 'domain_id', 'type', 'cache_epoch', 'status', 'created_at']), 'operation_id' => $purge->operation_id, 'url_count' => count($purge->cache_keys ?? []), 'edges' => $tasks];
     }
 
     private function rules(): array

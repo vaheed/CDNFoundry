@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from . import control_cli
+from .vault import Vault, VaultError
 from .common import FleetError, StateError, ValidationError, load_json, utc_now
 from .render import Renderer
 from .state import (
@@ -21,6 +23,11 @@ from .state import (
     ROLES,
 )
 
+DEFAULT_VAULT = Path.home() / ".config" / "cdnfoundry-fleet" / "fleet.db"
+PASSPHRASE_ENV = "CDNF_FLEET_PASSPHRASE"
+PASSPHRASE_FILE_ENV = "CDNF_FLEET_PASSPHRASE_FILE"
+
+ENGINE_COMMANDS = {"set-release", "public-key", "node-ssh", "trust-release-key", "bootstrap", "upgrade", "apply-config", "rollback", "security", "backup-now", "restore", "vault-backup"}
 EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_VALIDATION = 3
@@ -28,7 +35,7 @@ EXIT_STATE = 4
 EXIT_RENDER = 5
 EXIT_EXTERNAL = 6
 
-SETUP_GLOBAL_FIELDS = {"operator_domain", "platform_domain", "release", "acme_email", "ipv6"}
+SETUP_GLOBAL_FIELDS = {"operator_domain", "platform_domain", "release", "acme_email", "alert_webhook_url", "ipv6"}
 SETUP_TOP_LEVEL_FIELDS = {"preset", "global", "nodes", "features"} | SETUP_GLOBAL_FIELDS
 SETUP_FEATURE_FIELDS = {
     "monitoring": {"mode", "host"},
@@ -75,21 +82,29 @@ def _common_parser(*, suppressed_defaults: bool) -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     default = argparse.SUPPRESS if suppressed_defaults else None
     common.add_argument(
+        "--vault",
+        default=default if suppressed_defaults else str(DEFAULT_VAULT),
+        help="encrypted SQLite fleet state (default: %(default)s)" if not suppressed_defaults else argparse.SUPPRESS,
+    )
+    common.add_argument(
         "--state-dir",
-        default=default if suppressed_defaults else "/var/lib/cdnfoundry-fleet",
+        default=default,
+        help="unencrypted state directory for development and tests only; replaces the vault" if not suppressed_defaults else argparse.SUPPRESS,
     )
     common.add_argument(
         "--output-dir",
-        default=default if suppressed_defaults else "/var/lib/cdnfoundry-fleet/bundles",
+        default=default if suppressed_defaults else str(DEFAULT_VAULT.parent / "bundles"),
+        help="Directory for the rendered host bundles",
     )
     common.add_argument(
         "--repo-root",
         default=default if suppressed_defaults else str(Path(__file__).resolve().parents[2]),
+        help="Repository checkout that holds the Compose files",
     )
-    common.add_argument("--config", default=default)
-    common.add_argument("--non-interactive", action="store_true", default=default if suppressed_defaults else False)
-    common.add_argument("--dry-run", action="store_true", default=default if suppressed_defaults else False)
-    common.add_argument("--yes", action="store_true", default=default if suppressed_defaults else False)
+    common.add_argument("--config", default=default, help="Fleet configuration file to read")
+    common.add_argument("--non-interactive", action="store_true", default=default if suppressed_defaults else False, help="Never prompt; fail when an answer is missing")
+    common.add_argument("--dry-run", action="store_true", default=default if suppressed_defaults else False, help="Show what would change and change nothing")
+    common.add_argument("--yes", action="store_true", default=default if suppressed_defaults else False, help="Answer yes to confirmations")
     return common
 
 
@@ -104,34 +119,35 @@ def parser() -> argparse.ArgumentParser:
         parents=[command_common],
         help="interactive or config-driven full fleet setup, validation, and rendering",
     )
-    setup.add_argument("--operator-domain")
-    setup.add_argument("--platform-domain")
-    setup.add_argument("--release")
-    setup.add_argument("--acme-email")
-    setup.add_argument("--dual-stack", action="store_true")
+    setup.add_argument("--operator-domain", help="Domain for the control panel and API, for example ops.example.com")
+    setup.add_argument("--platform-domain", help="Domain that holds the platform nameserver names")
+    setup.add_argument("--release", help="Release manifest version to deploy to this node")
+    setup.add_argument("--acme-email", help="Contact address for the certificate authority account")
+    setup.add_argument("--dual-stack", action="store_true", help="Plan IPv4 and IPv6 on every node")
     setup.add_argument(
         "--preset",
         choices=("control-only", "control-monitoring", "dedicated-monitoring", "custom"),
+        help="Starting layout for the fleet",
     )
-    setup.add_argument("--control-name", default="control-1")
-    setup.add_argument("--control-hostname")
-    setup.add_argument("--control-ipv4")
-    setup.add_argument("--control-region", default="global")
-    setup.add_argument("--control-location", default="primary")
-    setup.add_argument("--no-render", action="store_true")
+    setup.add_argument("--control-name", default="control-1", help="Name of the first control node")
+    setup.add_argument("--control-hostname", help="Public host name of the first control node")
+    setup.add_argument("--control-ipv4", help="Public IPv4 address of the first control node")
+    setup.add_argument("--control-region", default="global", help="Region label of the first control node")
+    setup.add_argument("--control-location", default="primary", help="Location label of the first control node")
+    setup.add_argument("--no-render", action="store_true", help="Save the plan without rendering the host bundles")
 
-    init = sub.add_parser("init", parents=[command_common])
-    init.add_argument("--operator-domain")
-    init.add_argument("--platform-domain")
-    init.add_argument("--release")
-    init.add_argument("--acme-email", default="")
-    init.add_argument("--dual-stack", action="store_true")
+    init = sub.add_parser("init", parents=[command_common], help="Create the fleet state and nothing else")
+    init.add_argument("--operator-domain", help="Domain for the control panel and API, for example ops.example.com")
+    init.add_argument("--platform-domain", help="Domain that holds the platform nameserver names")
+    init.add_argument("--release", help="Release manifest version to deploy to this node")
+    init.add_argument("--acme-email", default="", help="Contact address for the certificate authority account")
+    init.add_argument("--dual-stack", action="store_true", help="Plan IPv4 and IPv6 on every node")
 
-    add = sub.add_parser("add-node", parents=[command_common])
+    add = sub.add_parser("add-node", parents=[command_common], help="Add a host to the plan")
     _node_arguments(add, require_name=True)
 
-    update = sub.add_parser("update-node", parents=[command_common])
-    update.add_argument("--node", required=True)
+    update = sub.add_parser("update-node", parents=[command_common], help="Change a host in the plan")
+    update.add_argument("--node", required=True, help="Node name")
     _node_arguments(update, require_name=False, optional=True, include_node=False)
 
     edge_registration = sub.add_parser(
@@ -139,74 +155,119 @@ def parser() -> argparse.ArgumentParser:
         parents=[command_common],
         help="store a control-plane-created edge UUID and one-time bootstrap token",
     )
-    edge_registration.add_argument("--node", required=True)
-    edge_registration.add_argument("--edge-id", required=True)
+    edge_registration.add_argument("--node", required=True, help="Node name")
+    edge_registration.add_argument("--edge-id", required=True, help="Edge identifier shown in the admin panel")
     token_source = edge_registration.add_mutually_exclusive_group(required=True)
-    token_source.add_argument("--bootstrap-token-file")
-    token_source.add_argument("--bootstrap-token-stdin", action="store_true")
+    token_source.add_argument("--bootstrap-token-file", help="File that holds the one-time enrollment token")
+    token_source.add_argument("--bootstrap-token-stdin", action="store_true", help="Read the one-time enrollment token from standard input")
 
     clear_edge_token = sub.add_parser(
         "clear-edge-bootstrap-token",
         parents=[command_common],
         help="remove the one-time bootstrap token after successful mTLS enrollment",
     )
-    clear_edge_token.add_argument("--node", required=True)
+    clear_edge_token.add_argument("--node", required=True, help="Node name")
 
     set_secret = sub.add_parser(
         "set-secret",
         parents=[command_common],
         help="replace a supported secret from a protected file without exposing it in argv",
     )
-    set_secret.add_argument("--secret", required=True)
-    set_secret.add_argument("--node")
-    set_secret.add_argument("--from-file", required=True)
+    set_secret.add_argument("--secret", required=True, help="Name of the secret")
+    set_secret.add_argument("--node", help="Node name")
+    set_secret.add_argument("--from-file", required=True, help="Read the secret value from this file")
 
-    remove = sub.add_parser("remove-node", parents=[command_common])
-    remove.add_argument("--node", required=True)
+    remove = sub.add_parser("remove-node", parents=[command_common], help="Remove a host from the plan")
+    remove.add_argument("--node", required=True, help="Node name")
 
-    sub.add_parser("list-nodes", parents=[command_common])
-    status = sub.add_parser("status", parents=[command_common])
-    status.add_argument("--json", action="store_true")
-    doctor = sub.add_parser("doctor", parents=[command_common])
-    doctor.add_argument("--json", action="store_true")
+    sub.add_parser("list-nodes", parents=[command_common], help="List the hosts in the plan")
+    status = sub.add_parser("status", parents=[command_common], help="Show the fleet and the state of each feature")
+    status.add_argument("--json", action="store_true", help="Print the result as JSON")
+    doctor = sub.add_parser("doctor", parents=[command_common], help="Check the repository and the local tools")
+    doctor.add_argument("--json", action="store_true", help="Print the result as JSON")
 
-    mon = sub.add_parser("configure-monitoring", parents=[command_common])
-    mon.add_argument("--mode", choices=sorted(MONITORING_MODES), required=True)
-    mon.add_argument("--host")
+    mon = sub.add_parser("configure-monitoring", parents=[command_common], help="Set up monitoring")
+    mon.add_argument("--mode", choices=sorted(MONITORING_MODES), required=True, help="How the feature is set up")
+    mon.add_argument("--host", help="Host name or address")
 
-    logs = sub.add_parser("configure-logs", parents=[command_common])
-    logs.add_argument("--mode", choices=sorted(LOG_MODES), required=True)
-    logs.add_argument("--host")
-    logs.add_argument("--endpoint")
+    logs = sub.add_parser("configure-logs", parents=[command_common], help="Set up central logs")
+    logs.add_argument("--mode", choices=sorted(LOG_MODES), required=True, help="How the feature is set up")
+    logs.add_argument("--host", help="Host name or address")
+    logs.add_argument("--endpoint", help="Endpoint URL")
 
-    backups = sub.add_parser("configure-backups", parents=[command_common])
-    backups.add_argument("--mode", choices=sorted(BACKUP_MODES), required=True)
-    backups.add_argument("--repository")
-    backups.add_argument("--region", default="us-east-1")
+    backups = sub.add_parser("configure-backups", parents=[command_common], help="Set up backup settings")
+    backups.add_argument("--mode", choices=sorted(BACKUP_MODES), required=True, help="How the feature is set up")
+    backups.add_argument("--repository", help="Backup repository location")
+    backups.add_argument("--region", default="us-east-1", help="Region label")
 
-    render = sub.add_parser("render", parents=[command_common])
-    render.add_argument("--node")
+    render = sub.add_parser("render", parents=[command_common], help="Generate the host bundles")
+    render.add_argument("--node", help="Node name")
 
-    validate = sub.add_parser("validate", parents=[command_common])
-    validate.add_argument("--node")
+    validate = sub.add_parser("validate", parents=[command_common], help="Check that the bundles render, and replace nothing")
+    validate.add_argument("--node", help="Node name")
 
-    sub.add_parser("show-start-order", parents=[command_common])
+    sub.add_parser("show-start-order", parents=[command_common], help="Show the order in which to start the hosts")
 
-    adopt = sub.add_parser("adopt-existing", parents=[command_common])
-    adopt.add_argument("--node", required=True)
-    adopt.add_argument("--role", choices=sorted(ROLES), required=True)
-    adopt.add_argument("--env-file", required=True)
-    adopt.add_argument("--region", required=True)
-    adopt.add_argument("--location", required=True)
-    adopt.add_argument("--hostname")
-    adopt.add_argument("--public-ipv4", required=True)
-    adopt.add_argument("--public-ipv6")
-    adopt.add_argument("--bind-ipv4", default="0.0.0.0")
+    adopt = sub.add_parser("adopt-existing", parents=[command_common], help="Import the credentials of an existing host")
+    adopt.add_argument("--node", required=True, help="Node name")
+    adopt.add_argument("--role", choices=sorted(ROLES), required=True, help="Node role")
+    adopt.add_argument("--env-file", required=True, help="Existing .env file to adopt")
+    adopt.add_argument("--region", required=True, help="Region label")
+    adopt.add_argument("--location", required=True, help="Location label")
+    adopt.add_argument("--hostname", help="Public host name of the node")
+    adopt.add_argument("--public-ipv4", required=True, help="Public IPv4 address")
+    adopt.add_argument("--public-ipv6", help="Public IPv6 address")
+    adopt.add_argument("--bind-ipv4", default="0.0.0.0", help="IPv4 address the services bind to")
 
-    rotate = sub.add_parser("rotate-secret", parents=[command_common])
-    rotate.add_argument("--node")
-    rotate.add_argument("--secret", required=True)
-    rotate.add_argument("--phase", choices=("prepare", "commit", "abort"), default="prepare")
+    rotate = sub.add_parser("rotate-secret", parents=[command_common], help="Rotate a supported secret")
+    rotate.add_argument("--node", help="Node name")
+    rotate.add_argument("--secret", required=True, help="Name of the secret")
+    rotate.add_argument("--phase", choices=("prepare", "commit", "abort"), default="prepare", help="Rotation phase to run")
+
+    sub.add_parser("public-key", parents=[command_common], help="print the Fleet SSH public key; add it to root's authorized_keys on every node")
+    nssh = sub.add_parser("node-ssh", parents=[command_common], help="record how to reach a node over SSH and pin its host key (the node must already authorise the Fleet public key)")
+    nssh.add_argument("--node", required=True, help="Node name")
+    nssh.add_argument("--host", required=True, help="Host name or address")
+    nssh.add_argument("--ssh-port", type=int, default=22, help="SSH port of the node")
+    nssh.add_argument("--ssh-user", default="root", help="SSH user for the node")
+    trust = sub.add_parser("trust-release-key", parents=[command_common], help="trust the Ed25519 public key that signs release manifests")
+    trust.add_argument("--key-file", required=True, help="File that holds the release public key")
+    sr = sub.add_parser("set-release", parents=[command_common], help="adopt a signed release manifest for the first install (deploys nothing)")
+    sr.add_argument("--manifest", required=True, help="Signed release manifest file")
+    sr.add_argument("--key-file", help="verify with this key instead of the trusted one")
+    boot = sub.add_parser("bootstrap", parents=[command_common], help="install prerequisites on a node, deploy its bundle, and start it")
+    boot.add_argument("--node", required=True, help="Node name")
+    boot.add_argument("--plan-only", action="store_true", help="Show the plan and change nothing")
+    boot.add_argument("--country", help="ISO country code of a PoP (Geo-DNS placement)")
+    boot.add_argument("--continent", help="continent code of a PoP (Geo-DNS placement)")
+    up = sub.add_parser("upgrade", parents=[command_common], help="show, then apply, a rolling upgrade to a signed release manifest")
+    up.add_argument("--manifest", required=True, help="Signed release manifest file")
+    up.add_argument("--key-file", help="verify with this key instead of the trusted one")
+    up.add_argument("--plan-only", action="store_true", help="Show the plan and change nothing")
+    cfg = sub.add_parser("apply-config", parents=[command_common], help="deploy re-rendered configs to the nodes whose bundle changed")
+    cfg.add_argument("--plan-only", action="store_true", help="Show the plan and change nothing")
+    rb = sub.add_parser("rollback", parents=[command_common], help="return nodes to the previous release and config")
+    rb.add_argument("--node", action="append", help="repeatable; default is the whole fleet")
+    sec = sub.add_parser("security", parents=[command_common], help="known vulnerabilities in the running release")
+    sec.add_argument("--available-manifest", help="a newer signed manifest to check for fixes")
+    sec.add_argument("--json", action="store_true", help="Print the result as JSON")
+    bk = sub.add_parser("backup-now", parents=[command_common], help="start a control backup on the active control node and wait")
+    rs = sub.add_parser("restore", parents=[command_common], help="restore a control backup into a control node")
+    rs.add_argument("--node", required=True, help="Node name")
+    rs.add_argument("--snapshot", required=True, help="Backup snapshot to restore")
+    rs.add_argument("--operation", help="preflight operation UUID, needed with --overwrite-live")
+    rs.add_argument("--confirm", help="type RESTORE <snapshot> to proceed")
+    rs.add_argument("--overwrite-live", action="store_true", help="allow restoring over a control node that holds data")
+    vb = sub.add_parser("vault-backup", parents=[command_common], help="back up the encrypted vault to the off-host restic repository")
+    vr = sub.add_parser("vault-restore", parents=[command_common], help="restore the vault on a new workstation")
+    vr.add_argument("--snapshot", default="latest", help="Backup snapshot to restore")
+    vr.add_argument("--repository", required=True, help="Backup repository location")
+    vr.add_argument("--password-file", required=True, help="File that holds the backup repository password")
+    web = sub.add_parser("web", parents=[command_common], help="local fleet web on 127.0.0.1")
+    web.add_argument("--host", default="127.0.0.1", help="Host name or address")
+    web.add_argument("--port", type=int, default=8765, help="TCP port to listen on")
+
+    control_cli.add_parser(sub, command_common)
 
     return root
 
@@ -219,23 +280,23 @@ def _node_arguments(
     include_node: bool = True,
 ) -> None:
     if include_node:
-        target.add_argument("--node", required=require_name)
-    target.add_argument("--role", choices=sorted(ROLES), required=require_name)
-    target.add_argument("--region", required=require_name)
-    target.add_argument("--location", required=require_name)
-    target.add_argument("--hostname")
-    target.add_argument("--public-ipv4", required=require_name)
-    target.add_argument("--public-ipv6")
-    target.add_argument("--bind-ipv4", default=None if optional else "0.0.0.0")
-    target.add_argument("--bind-ipv6")
-    target.add_argument("--monitor-ipv4")
-    target.add_argument("--monitor-ipv6")
-    target.add_argument("--log-ipv4")
-    target.add_argument("--log-ipv6")
-    target.add_argument("--release")
-    target.add_argument("--extra-env", action="append", default=[])
-    target.add_argument("--disabled", action="store_true", default=None if optional else False)
-    target.add_argument("--draining", action="store_true", default=None if optional else False)
+        target.add_argument("--node", required=require_name, help="Node name")
+    target.add_argument("--role", choices=sorted(ROLES), required=require_name, help="Node role")
+    target.add_argument("--region", required=require_name, help="Region label")
+    target.add_argument("--location", required=require_name, help="Location label")
+    target.add_argument("--hostname", help="Public host name of the node")
+    target.add_argument("--public-ipv4", required=require_name, help="Public IPv4 address")
+    target.add_argument("--public-ipv6", help="Public IPv6 address")
+    target.add_argument("--bind-ipv4", default=None if optional else "0.0.0.0", help="IPv4 address the services bind to")
+    target.add_argument("--bind-ipv6", help="IPv6 address the services bind to")
+    target.add_argument("--monitor-ipv4", help="IPv4 address the monitoring role reaches this node on")
+    target.add_argument("--monitor-ipv6", help="IPv6 address the monitoring role reaches this node on")
+    target.add_argument("--log-ipv4", help="IPv4 address the log collector reaches this node on")
+    target.add_argument("--log-ipv6", help="IPv6 address the log collector reaches this node on")
+    target.add_argument("--release", help="Release manifest version to deploy to this node")
+    target.add_argument("--extra-env", action="append", default=[], help="Extra KEY=VALUE environment setting for this node; repeat for more")
+    target.add_argument("--disabled", action="store_true", default=None if optional else False, help="Keep the node in the plan but deploy nothing to it")
+    target.add_argument("--draining", action="store_true", default=None if optional else False, help="Mark the node as draining so it receives no new traffic")
 
 
 def _config(args: argparse.Namespace) -> dict[str, Any]:
@@ -437,6 +498,7 @@ def _setup(args: argparse.Namespace, store: FleetState, output_dir: Path, config
                 "platform_domain": platform,
                 "release": release,
                 "acme_email": args.acme_email or global_cfg.get("acme_email", ""),
+                "alert_webhook_url": global_cfg.get("alert_webhook_url", ""),
                 "ipv6": args.dual_stack or global_cfg.get("ipv6", False),
             }
         )
@@ -615,6 +677,12 @@ def _doctor(args: argparse.Namespace, store: FleetState) -> int:
             checks.append({"check": "fleet-state", "ok": False, "detail": str(exc)})
     else:
         checks.append({"check": "fleet-state", "ok": True, "detail": "not initialized yet"})
+    if store.exists() and not args.dry_run:
+        from .engine import FleetEngine
+
+        engine = FleetEngine(store.state_dir, root, Path(args.output_dir))
+        for c in engine.doctor():
+            checks.append({"check": f"{c.node}: {c.name}", "ok": c.ok, "detail": c.detail})
     ok = all(item["ok"] for item in checks if item.get("required_for_render", True))
     if args.json:
         print(json.dumps({"ok": ok, "checks": checks}, indent=2))
@@ -633,8 +701,30 @@ def execute(args: argparse.Namespace) -> int:
 
     if args.command == "doctor":
         return _doctor(args, store)
+    if args.command == "control":
+        with store.locked(exclusive=getattr(args, "control_action", "") not in {"status"}):
+            if args.control_action in {"add-standby", "refresh-ingress"} and not args.dry_run:
+                from .engine import FleetEngine, ha_action
 
-    with store.locked(exclusive=args.command not in {"list-nodes", "show-start-order", "status"}):
+                engine = FleetEngine(state_dir, Path(args.repo_root), output_dir, say=lambda m: print(m, flush=True))
+                options = {k: v for k, v in vars(args).items() if k in {"name", "ssh_port", "ssh_user", "replication_address", "active_replication_address",
+                                                                       "ingress_certificate", "ingress_key", "public_ipv6", "region", "bind_ipv4", "bind_ipv6"}}
+                if args.control_action == "add-standby":
+                    options |= {"host": args.host, "edge_wait": args.edge_timeout}
+                print(json.dumps(ha_action(engine, args.control_action, **options), indent=2))
+                return EXIT_OK
+            runner = None
+            if (state_dir / "ssh" / "targets.json").exists() and args.ssh_command == " ".join(control_cli.DEFAULT_SSH):
+                from .engine import VaultRunner
+                from .ssh import SshTransport, load_targets
+
+                runner = VaultRunner(SshTransport(state_dir), load_targets(state_dir), args.deploy_dir)
+            print(json.dumps(control_cli.execute(args, store, output_dir, runner=runner), indent=2))
+        return EXIT_OK
+
+    with store.locked(exclusive=args.command not in {"list-nodes", "show-start-order", "status", "security"}):
+        if args.command in ENGINE_COMMANDS:
+            return _engine_command(args, store, output_dir)
         if args.command == "setup":
             return _setup(args, store, output_dir, config)
         if args.command == "init":
@@ -654,6 +744,7 @@ def execute(args: argparse.Namespace) -> int:
                     "platform_domain": platform,
                     "release": release,
                     "acme_email": args.acme_email or values.get("acme_email", ""),
+                    "alert_webhook_url": values.get("alert_webhook_url", ""),
                     "ipv6": args.dual_stack or bool(values.get("ipv6", False)),
                 }
             )
@@ -807,8 +898,8 @@ def execute(args: argparse.Namespace) -> int:
                 if args.node not in state["nodes"]:
                     raise ValidationError(f"Unknown node: {args.node}")
                 if args.secret == "pdns-db-password":
-                    if state["nodes"][args.node]["role"] not in {"dns", "dns-edge"}:
-                        raise ValidationError("pdns-db-password is valid only for DNS-capable nodes")
+                    if state["nodes"][args.node]["role"] != "control":
+                        raise ValidationError("pdns-db-password is valid only for the control node, which runs the DNS primary")
                     if args.phase == "prepare":
                         _confirm(args, f"Prepare a local PowerDNS PostgreSQL password rotation for {args.node}")
                         store.prepare_secret_rotation(args.secret, node=args.node)
@@ -881,6 +972,9 @@ def secret_env_names() -> set[str]:
         "PDNS_API_KEY",
         "EDGE_STATUS_TOKEN",
         "CLICKHOUSE_PASSWORD",
+        "CLICKHOUSE_INGEST_PASSWORD",
+        "CLICKHOUSE_READER_PASSWORD",
+        "CLICKHOUSE_ZONES_PASSWORD",
         "GRAFANA_ADMIN_PASSWORD",
         "GRAFANA_CLICKHOUSE_PASSWORD",
         "GRAFANA_POSTGRES_PASSWORD",
@@ -894,6 +988,9 @@ def import_secret_env(store: FleetState, node: str, role: str, env: dict[str, st
         "CONTROL_DB_PASSWORD": "control-db-password",
         "REDIS_PASSWORD": "valkey-password",
         "CLICKHOUSE_PASSWORD": "clickhouse-password",
+        "CLICKHOUSE_INGEST_PASSWORD": "clickhouse-ingest-password",
+        "CLICKHOUSE_READER_PASSWORD": "clickhouse-reader-password",
+        "CLICKHOUSE_ZONES_PASSWORD": "clickhouse-zones-password",
         "GRAFANA_ADMIN_PASSWORD": "grafana-admin-password",
         "GRAFANA_CLICKHOUSE_PASSWORD": "grafana-clickhouse-password",
         "GRAFANA_POSTGRES_PASSWORD": "grafana-postgres-password",
@@ -917,6 +1014,161 @@ def import_secret_env(store: FleetState, node: str, role: str, env: dict[str, st
             atomic_write(path, env[key] + "\n", 0o600)
 
 
+def _passphrase(*, confirm: bool) -> str:
+    import getpass
+    import os
+
+    if os.environ.get(PASSPHRASE_ENV):
+        return os.environ[PASSPHRASE_ENV]
+    if os.environ.get(PASSPHRASE_FILE_ENV):
+        return Path(os.environ[PASSPHRASE_FILE_ENV]).read_text(encoding="utf-8").rstrip("\r\n")
+    if not sys.stdin.isatty():
+        raise StateError(f"Set {PASSPHRASE_ENV} or {PASSPHRASE_FILE_ENV} to unlock the fleet vault")
+    value = getpass.getpass("Fleet vault passphrase: ")
+    if confirm and getpass.getpass("Repeat passphrase: ") != value:
+        raise ValidationError("The passphrases do not match")
+    return value
+
+
+def _vault_restore(args: argparse.Namespace, vault_path: Path) -> int:
+    from .vault_backup import restic_env, restore_vault
+
+    password = Path(args.password_file).read_text(encoding="utf-8").rstrip("\r\n")
+    restore_vault(vault_path, restic_env(args.repository, password), args.snapshot)
+    Vault(vault_path, _passphrase(confirm=False)).unlock()
+    print(json.dumps({"status": "restored", "vault": str(vault_path)}))
+    return EXIT_OK
+
+
+def _engine_command(args: argparse.Namespace, store: FleetState, output_dir: Path) -> int:
+    from .engine import ControlActions, FleetEngine
+
+    engine = FleetEngine(store.state_dir, Path(args.repo_root), output_dir, say=lambda m: print(m, flush=True))
+
+    def outcome(out: Any) -> int:
+        print(json.dumps({"ok": out.ok, "failed": out.failed, "detail": out.detail, "rolled_back": out.rolled_back, "steps_done": len(out.done)}))
+        return EXIT_OK if out.ok else EXIT_EXTERNAL
+
+    if args.command == "public-key":
+        print(engine.public_key())
+    elif args.command == "node-ssh":
+        marker = engine.set_node_ssh(args.node, args.host, args.ssh_port, args.ssh_user)
+        print(json.dumps({"status": "stored", "node": args.node, "host_key_pinned": marker}))
+    elif args.command == "trust-release-key":
+        engine.trust_release_key(Path(args.key_file).read_text(encoding="utf-8"))
+        print(json.dumps({"status": "trusted"}))
+    elif args.command == "set-release":
+        manifest = engine.set_release(json.loads(Path(args.manifest).read_text(encoding="utf-8")), key_pem=Path(args.key_file).read_text(encoding="utf-8") if args.key_file else None)
+        print(json.dumps({"status": "release-set", "release": manifest["release"], "profile": manifest["profile"]}))
+    elif args.command == "bootstrap":
+        plan = engine.bootstrap_plan(args.node)
+        print("\n".join(plan.describe()))
+        if args.plan_only:
+            return EXIT_OK
+        _confirm(args, f"Install and start {args.node}")
+        return outcome(engine.bootstrap(args.node, country=args.country, continent=args.continent))
+    elif args.command == "upgrade":
+        document = json.loads(Path(args.manifest).read_text(encoding="utf-8"))
+        key = Path(args.key_file).read_text(encoding="utf-8") if args.key_file else None
+        plan, manifest, diff = engine.upgrade_plan(document, key_pem=key)
+        print(f"Profile: {manifest['profile']}; irreversible migration: {'yes' if diff.migrations else 'no'}")
+        for name, (old, new) in diff.images.items():
+            print(f"  image {name}: {old or 'new'} -> {new or 'removed'}")
+        for path in diff.configs:
+            print(f"  config {path} changes")
+        print("\n".join(plan.describe()))
+        if diff.empty:
+            print("Nothing changes between the running release and the target.")
+        if args.plan_only or not plan.steps:
+            return EXIT_OK
+        _confirm(args, f"Upgrade the fleet to {manifest['release']}")
+        return outcome(engine.upgrade(document, key_pem=key))
+    elif args.command == "apply-config":
+        plan, _ = engine.config_plan()
+        print("\n".join(plan.describe()))
+        if args.plan_only or not plan.steps:
+            return EXIT_OK
+        _confirm(args, "Deploy the changed configs")
+        return outcome(engine.apply_config())
+    elif args.command == "rollback":
+        _confirm(args, "Return " + (", ".join(args.node) if args.node else "the whole fleet") + " to the previous release")
+        rolled = engine.rollback(args.node)
+        print(json.dumps({"status": "rolled-back", "nodes": rolled}))
+    elif args.command == "security":
+        available = json.loads(Path(args.available_manifest).read_text(encoding="utf-8"))["manifest"] if args.available_manifest else None
+        from .security import classify
+
+        rows = classify(engine.release_manifest(), Path(args.repo_root), available)
+        if args.json:
+            print(json.dumps(rows, indent=2))
+        else:
+            for r in rows:
+                print(f"{r['severity']:9} {r['id']}  {r['image']}  {r['detail']}")
+            print(f"{len(rows)} finding(s)")
+    elif args.command == "backup-now":
+        print(ControlActions(engine).backup_now())
+    elif args.command == "restore":
+        control = ControlActions(engine)
+        plan = control.restore_plan(args.node, args.snapshot, args.overwrite_live)
+        print(f"Restore snapshot {plan['snapshot']} into {plan['node']}; this replaces {plan['replaces']}.")
+        print(control.restore(args.node, args.snapshot, args.confirm, overwrite_live=args.overwrite_live, operation=args.operation))
+    elif args.command == "vault-backup":
+        from .vault_backup import backup_vault, restic_env
+
+        state = store.load()
+        feature = state["features"]["backups"]
+        if feature["mode"] == "disabled" or not feature.get("repository"):
+            raise ValidationError("Configure backups first: the vault goes to the same restic repository")
+        env = restic_env(feature["repository"], store.read_secret("backup-password"), store.read_secret("backup-access-key"), store.read_secret("backup-secret-key"), feature.get("region"))
+        print(json.dumps({"status": "backed-up", "snapshot": backup_vault(Path(args.vault), env)}))
+    return EXIT_OK
+
+
+def run(args: argparse.Namespace) -> int:
+    """Run one command against the vault, or against --state-dir when given."""
+    if args.command == "web" and args.host != "127.0.0.1":
+        raise ValidationError("The fleet web binds to 127.0.0.1 only")
+    if args.command != "web" and (args.state_dir or args.dry_run or (args.command == "doctor" and not Path(args.vault).exists())):
+        args.state_dir = args.state_dir or "/nonexistent-dry-run-state"
+        return execute(args)
+    vault_path = Path(args.vault)
+    if args.command == "web":
+        from .web import FleetWeb, make_server, require_loopback
+
+        require_loopback(args.host)
+        vault = Vault(vault_path, _passphrase(confirm=False))
+        vault.unlock()
+        server = make_server(FleetWeb(vault, Path(args.repo_root), Path(args.output_dir)), args.host, args.port)
+        print(f"Fleet web on http://{args.host}:{args.port}/ (Ctrl+C to stop)")
+        try:
+            server.serve_forever()
+        finally:
+            server.server_close()
+        return EXIT_OK
+    if args.command == "vault-restore":
+        return _vault_restore(args, vault_path)
+    vault = Vault(vault_path, "")
+    creating = not vault.exists()
+    vault = Vault(vault_path, _passphrase(confirm=creating))
+    if creating:
+        if args.command not in {"setup", "init"}:
+            raise StateError(f"No fleet vault at {vault_path}; run setup first")
+        vault.create()
+    with vault.session() as work:
+        args.state_dir = str(work)
+        code = execute(args)
+        # A failed engine action keeps its journal and state so the same command can resume.
+        if code not in (EXIT_OK, EXIT_EXTERNAL):
+            raise _Unsealed(code)
+    vault.record("command", args.command if code == EXIT_OK else f"{args.command} (failed)")
+    return code
+
+
+class _Unsealed(Exception):
+    def __init__(self, code: int) -> None:
+        self.code = code
+
+
 def main(argv: list[str] | None = None) -> int:
     try:
         effective = list(sys.argv[1:] if argv is None else argv)
@@ -926,7 +1178,9 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 parser().print_help()
                 return EXIT_OK
-        return execute(parser().parse_args(effective))
+        return run(parser().parse_args(effective))
+    except _Unsealed as exc:
+        return exc.code
     except ValidationError as exc:
         print(f"validation error: {exc}", file=sys.stderr)
         return EXIT_VALIDATION

@@ -9,13 +9,18 @@
     },
     "MD033": {
       "allowed_elements": [
-        "Badge"
+        "Badge",
+        "Card",
+        "CardGrid",
+        "DocTabs",
+        "Screenshot",
+        "template",
+        "div"
       ]
     },
     "MD041": false
   },
   "ignores": [
-    "legacy/**",
     "node_modules/**",
     ".vitepress/cache/**",
     ".vitepress/dist/**"

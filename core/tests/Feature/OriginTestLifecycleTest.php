@@ -8,6 +8,7 @@ use App\Http\Controllers\EdgeAgentController;
 use App\Jobs\DispatchOriginTest;
 use App\Models\DnsRecord;
 use App\Models\Domain;
+use App\Models\DomainEdgeCell;
 use App\Models\Edge;
 use App\Models\EdgeTask;
 use App\Models\Operation;
@@ -103,6 +104,7 @@ class OriginTestLifecycleTest extends TestCase
         [$owner, $domain, $record, $edge] = $this->fixture();
         $secondEdge = Edge::query()->create(['name' => 'second-probe-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'enabled' => true,
             'registered_at' => now(), 'last_heartbeat_at' => now()]);
+        $this->place($domain, $secondEdge);
         $operation = $this->operation($owner, $domain, $record);
         (new DispatchOriginTest($operation->id))->handle();
         $request = Request::create('/edge/v1/tasks', 'GET');
@@ -113,8 +115,8 @@ class OriginTestLifecycleTest extends TestCase
         $this->report($edge, $task);
         $this->assertSame(1, $operation->refresh()->result['completed']);
         $edge->update(['enabled' => false]);
-        Edge::query()->create(['name' => 'newly-available-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'enabled' => true,
-            'registered_at' => now(), 'last_heartbeat_at' => now()]);
+        $this->place($domain, Edge::query()->create(['name' => 'newly-available-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'enabled' => true,
+            'registered_at' => now(), 'last_heartbeat_at' => now()]));
         (new DispatchOriginTest($operation->id))->handle();
         $this->assertSame(2, EdgeTask::query()->count());
         $this->assertSame(1, $operation->refresh()->result['completed']);
@@ -200,6 +202,11 @@ class OriginTestLifecycleTest extends TestCase
         Queue::assertNotPushed(DispatchOriginTest::class);
     }
 
+    private function place(Domain $domain, Edge $edge): void
+    {
+        DomainEdgeCell::query()->create(['domain_id' => $domain->id, 'edge_id' => $edge->id, 'desired_revision' => 1, 'state' => 'active']);
+    }
+
     private function fixture(): array
     {
         Queue::fake();
@@ -211,6 +218,7 @@ class OriginTestLifecycleTest extends TestCase
             'content_hash' => hash('sha256', '8.8.8.8'), 'ttl' => 60, 'origin' => $this->origin('8.8.8.8')]);
         $edge = Edge::query()->create(['name' => 'probe-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'enabled' => true,
             'registered_at' => now(), 'last_heartbeat_at' => now()]);
+        $this->place($domain, $edge);
 
         return [$owner, $domain, $record, $edge];
     }

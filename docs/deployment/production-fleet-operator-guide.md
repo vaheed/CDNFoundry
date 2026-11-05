@@ -1,15 +1,13 @@
 ---
 title: Production fleet operator guide
-description: Complete lifecycle guide for CDNFoundry production fleets including setup, monitoring, DNS, edge nodes, validation, bundle transfer, operation, upgrades, recovery, and troubleshooting.
+description: Run a CDNFoundry production fleet with Fleet. Set up the plan, render and validate host bundles, deploy, enroll edges, upgrade, recover, and troubleshoot.
 ---
 
 # Production fleet operator guide
 
-To remove an optional node address, set its field to JSON `null` in the setup
-node object or the `update-node` configuration's `node` object. Omitting a field
-leaves its current value unchanged. Render and validate the replacement bundles,
-then use the normal rollout procedure; editing Fleet state alone does not change
-running listeners or external DNS. Retain the previous configuration for rollback.
+This guide shows how to run a fleet with the Fleet CLI (`scripts/cdnfoundry-fleet`). You will create a plan, render one bundle per host, check the bundles, deploy them, and keep the fleet up to date. For the design behind these steps, see the [Fleet reference](production-fleet.md). For every option, see the [Fleet CLI reference](../reference/fleet-cli.md) and the [configuration reference](production-fleet-config-reference.md).
+
+**You need:** a workstation with Python 3, PyYAML, and OpenSSL, a checkout of CDNFoundry at an exact release, and root SSH access to your hosts. Docker Engine with Compose v2 is needed on the hosts, not on the workstation.
 
 ```mermaid
 flowchart LR
@@ -24,300 +22,226 @@ flowchart LR
   end
 ```
 
-Each bundle is a security boundary. Never use a shared `env_file`: database, PowerDNS, bootstrap, identity, backup, and telemetry credentials are emitted only when that node's filtered services require them. Never copy a bundle, `.env.prod`, `pki/`, or `secrets/` directory between nodes.
+Each bundle is a security boundary. It holds only the services, files, and secrets that its host needs. Never copy a bundle, `.env.prod`, `pki/`, or `secrets/` from one node to another. Never add a shared `env_file` to a Compose service: it would give every container every credential.
 
-Work from an immutable checkout. For a fresh operator host:
+## Start from an exact release
+
+Do not run production from a moving branch. Check out a release tag or commit:
 
 ```bash
 git clone https://github.com/vaheed/CDNFoundry.git cdnfoundry
 cd cdnfoundry
-git checkout v1.2.1
+git checkout --detach RELEASE_TAG_OR_COMMIT
 git rev-parse --verify HEAD
 ```
 
-Replace the example tag with the exact release or commit selected for the fleet.
-For deployment, copy the nine verified digest references from
-`release-manifest.json` into the corresponding `CDNF_*_IMAGE` keys in each
-node's `extra_env`; the renderer otherwise emits commit-tag references for
-offline validation and pre-publication testing. Never operate production from a
-moving branch or deploy unverified tag references.
+Expected: the last command prints the commit you chose.
 
-This guide covers the full lifecycle of a CDNFoundry production fleet: first-time setup, control plus monitoring, additional DNS and edge nodes, validation, bundle transfer, operation, upgrades, recovery, and troubleshooting.
+Images must be pinned by digest. There are two ways to set them:
 
-## What the generator creates
+- With a signed release manifest, run `trust-release-key` and `set-release` (see [Deploy with Fleet](#deploy-with-fleet)). Fleet then writes the `CDNF_*_IMAGE` values for you.
+- By hand, copy the verified digests into each node's `extra_env`, as in [Software supply chain](../operations/software-supply-chain.md#populate-fleet-image-references).
 
-The generator runs from a trusted checkout of the CDNFoundry repository and writes two protected outputs:
+Without digests, `render` still works for offline checks, but a bundle's `validate.sh` rejects any image that is not pinned by digest.
 
-- **Fleet state**: topology, feature modes, immutable release identifiers, credentials, certificate authorities, node certificates, and state history.
-- **Node bundles**: one minimal directory per host containing filtered Compose services, `.env.prod`, only the referenced runtime files, node-specific PKI, generated monitoring/logging files, validation/start scripts, and a node README.
+## Where Fleet keeps its files
 
-Remote nodes do not need a repository clone. They receive only their own bundle.
+Fleet keeps its state in one encrypted file, the vault. The default is `~/.config/cdnfoundry-fleet/fleet.db`. The default bundle directory is `~/.config/cdnfoundry-fleet/bundles`. Change them with `--vault` and `--output-dir`.
 
-## Docker log retention on existing hosts
+The first command that creates the vault asks for a passphrase of at least 12 characters. There is no recovery without it. In a script, set `CDNF_FLEET_PASSPHRASE` or `CDNF_FLEET_PASSPHRASE_FILE`. See [Fleet engine, vault, and local web](../operations/fleet-engine.md#the-vault).
 
-Every service in the production Compose source uses Docker `json-file` logging
-with 10 MB per file and three files. Fleet renders this policy into each node
-bundle. Docker applies changed logging options when it creates a container; an
-existing container keeps its old options until it is recreated. After rendering
-and validating a new bundle, use the normal canary and wave rollout so Compose
-recreates changed containers one host at a time. Check the effective options on
-each host with `docker inspect CONTAINER` and inspect its `HostConfig.LogConfig`
-field.
-Check free disk space before the rollout. Retain any required log evidence
-outside Docker first; recreation removes that container's old JSON log history.
-Do not run `docker compose down --volumes` or prune named volumes. If a wave
-fails, restore the previous bundle and repeat the normal rollback procedure.
+`--state-dir DIR` replaces the vault with a plain, unencrypted directory. It is for development and tests only. The quick starts use it to keep their commands short. In production, leave it out.
 
-## Fastest supported setup
+Everything Fleet creates holds secrets. State directories use mode `0700`, and state, secrets, environment files, and keys use mode `0600`.
 
-From the repository root, run:
+## What Fleet creates
 
-```bash
-./scripts/generate-production-env.sh
-```
+Fleet writes two things:
 
-The wizard now performs the complete workflow instead of only initializing state. It asks for the global domains and release, offers a visible topology menu, adds hosts, validates the fleet, and renders bundles.
+- **Fleet state**: the topology, feature modes, release identifiers, credentials, certificate authorities, node certificates, and a history of earlier states.
+- **Node bundles**: one directory per host. It holds the generated Compose manifest (only that role's services), `.env.prod`, only the runtime files those services mount, the node's `pki/` and `secrets/`, generated monitoring and logging files, `validate.sh`, `start.sh`, `stop.sh`, and a `README.md`.
 
-The default local paths are:
+Hosts do not need a repository clone. Each one receives only its bundle.
 
-```text
-State:   ./.cdnfoundry-fleet
-Bundles: ./build/fleet-bundles
-```
+## Set up a fleet
 
-Override them without editing the script:
+Use `setup`. It creates the state if it does not exist, adds nodes, validates the plan, and renders bundles.
+
+<DocTabs :labels="['Fleet CLI (interactive)', 'Fleet CLI (config file)']">
+<template #tab-1>
+
+Run `setup` in a terminal with no options:
 
 ```bash
-CDNFOUNDRY_FLEET_STATE_DIR=/var/lib/cdnfoundry-fleet \
-CDNFOUNDRY_FLEET_OUTPUT_DIR=/var/lib/cdnfoundry-fleet/bundles \
-  sudo -E ./scripts/generate-production-env.sh
+./scripts/cdnfoundry-fleet setup
 ```
 
-## Control plus monitoring
+Expected: Fleet asks for the vault passphrase, the operator domain, the platform domain, and the release. It then offers a topology menu (control plus monitoring, control only, dedicated monitoring, or custom), and asks for the control node and optional DNS or edge nodes. It ends with `Fleet validation passed` and the list of bundles.
 
-Choose **Control + monitoring on the same host** in the wizard. This sets monitoring mode to `colocated`, selects both the `control` and `telemetry` profiles for the control node, and creates exporter targets for every enabled host.
+Without a terminal, `setup` fails with a message to use `--non-interactive --config FILE`.
 
-Equivalent non-interactive command:
+</template>
+<template #tab-2>
+
+Copy an example from `deploy/production/examples/` and edit it ([schema](production-fleet-config-reference.md#setup-config-schema)):
 
 ```bash
-./scripts/cdnfoundry-fleet \
-  --state-dir ./.cdnfoundry-fleet \
-  --output-dir ./build/fleet-bundles \
-  --repo-root "$PWD" \
-  setup \
-  --operator-domain ops.example.com \
-  --platform-domain example.net \
-  --release v1.2.1 \
-  --preset control-monitoring \
-  --control-ipv4 192.0.2.10 \
-  --non-interactive
+install -m 0600 deploy/production/examples/starter-fleet.json ./fleet.json
+./scripts/cdnfoundry-fleet --config fleet.json --non-interactive --dry-run setup
+./scripts/cdnfoundry-fleet --config fleet.json --non-interactive setup
 ```
 
-To enable it on an existing fleet:
+Expected: the dry run prints lines that start with `Dry run, not persisted:` and a JSON status of `validated`, and writes nothing. The real run prints `Fleet validation passed (N node(s)).`, lists the bundles, and ends with a JSON status of `configured`.
+
+A one-host check without a file:
 
 ```bash
-./scripts/cdnfoundry-fleet --state-dir ./.cdnfoundry-fleet \
-  configure-monitoring --mode colocated --non-interactive
-
-./scripts/cdnfoundry-fleet \
-  --state-dir ./.cdnfoundry-fleet \
-  --output-dir ./build/fleet-bundles \
-  --repo-root "$PWD" render
+./scripts/cdnfoundry-fleet --non-interactive setup \
+  --operator-domain ops.example.com --platform-domain example.net \
+  --release RELEASE_TAG_OR_COMMIT --preset control-monitoring \
+  --control-ipv4 192.0.2.10
 ```
 
-Verify the selected mode and services:
+</template>
+</DocTabs>
+
+You can repeat `setup`. It updates the nodes named in the file and adds the missing ones. Secrets stay the same. If you change an existing global value (operator domain, platform domain, release, ACME email, IPv6 mode), `setup` refuses. Use `update-node --release` for a planned release change.
+
+### Control plus monitoring
+
+The preset `control-monitoring` sets monitoring to `colocated`. The control node then runs the `control` and `telemetry` profiles, and Prometheus targets cover every enabled host. To turn it on for an existing fleet:
 
 ```bash
-./scripts/cdnfoundry-fleet \
-  --state-dir ./.cdnfoundry-fleet \
-  --output-dir ./build/fleet-bundles status
-
-grep -E '^(  )?(grafana|prometheus|clickhouse|loki|node-exporter):' \
-  build/fleet-bundles/control-1/compose.yml
+./scripts/cdnfoundry-fleet configure-monitoring --mode colocated --non-interactive
+./scripts/cdnfoundry-fleet render
+./scripts/cdnfoundry-fleet status
 ```
 
-## Config-driven setup
+Expected: `status` prints `Monitoring: colocated`. The control bundle's Compose manifest now lists `grafana`, `prometheus`, `clickhouse`, `loki`, and `node-exporter`.
 
-For repeatable automation, use a JSON file:
-
-```json
-{
-  "preset": "control-monitoring",
-  "global": {
-    "operator_domain": "ops.example.com",
-    "platform_domain": "example.net",
-    "release": "v1.2.1",
-    "acme_email": "operations@example.com",
-    "ipv6": false
-  },
-  "nodes": [
-    {
-      "name": "control-1",
-      "role": "control",
-      "region": "global",
-      "location": "ashburn",
-      "hostname": "control.ops.example.com",
-      "public_ipv4": "192.0.2.10",
-      "bind_ipv4": "0.0.0.0"
-    },
-    {
-      "name": "dns-frankfurt",
-      "role": "dns",
-      "region": "europe",
-      "location": "frankfurt",
-      "public_ipv4": "192.0.2.20",
-      "bind_ipv4": "0.0.0.0"
-    },
-    {
-      "name": "edge-frankfurt",
-      "role": "edge",
-      "region": "europe",
-      "location": "frankfurt",
-      "public_ipv4": "192.0.2.30",
-      "bind_ipv4": "0.0.0.0"
-    }
-  ],
-  "features": {
-    "monitoring": {"mode": "colocated", "host": null},
-    "logs": {"mode": "disabled", "host": null, "endpoint": null},
-    "backups": {"mode": "disabled", "repository": null, "region": "us-east-1"}
-  }
-}
-```
-
-Run:
-
-```bash
-./scripts/generate-production-env.sh \
-  --config ./fleet-production.json \
-  --non-interactive
-```
-
-The setup command is idempotent for named nodes in the config: existing nodes are updated and missing nodes are added. Secrets remain stable unless an explicit rotation command is used.
-
-## CLI map
+## Command map
 
 | Goal | Command |
 | --- | --- |
-| Full wizard/config setup | `setup` |
-| Initialize state only | `init` |
-| Add or change a host | `add-node`, `update-node` |
-| Store manual edge UUID/token | `configure-edge-registration` |
-| Remove one-time edge token | `clear-edge-bootstrap-token` |
-| Replace a protected secret from file | `set-secret` |
-| See fleet and feature modes | `status` |
-| Machine-readable inventory | `status --json`, `list-nodes` |
-| Check repository and tools | `doctor` |
-| Set monitoring | `configure-monitoring` |
-| Set centralized logs | `configure-logs` |
-| Set backup metadata | `configure-backups` |
-| Test rendering without replacing bundles | `validate` |
-| Generate node bundles | `render` |
-| Show deployment sequence | `show-start-order` |
-| Import existing credentials | `adopt-existing` |
-| Rotate a supported secret | `rotate-secret` |
+| Create the plan and bundles in one step | `setup` |
+| Create the state only | `init` |
+| Add, change, or remove a host | `add-node`, `update-node`, `remove-node` |
+| Import credentials from an old `.env` file | `adopt-existing` |
+| Set monitoring, central logs, or backups | `configure-monitoring`, `configure-logs`, `configure-backups` |
+| Store an edge ID and bootstrap token by hand | `configure-edge-registration`, `clear-edge-bootstrap-token` |
+| Replace or rotate a secret | `set-secret`, `rotate-secret` |
+| Show the plan | `status`, `status --json`, `list-nodes`, `show-start-order` |
+| Check the workstation and the nodes | `doctor` |
+| Check or generate bundles | `validate`, `render` |
+| Record how to reach a node | `public-key`, `node-ssh` |
+| Trust and adopt a signed release | `trust-release-key`, `set-release` |
+| Install and start a node | `bootstrap` |
+| Change release or config on running nodes | `upgrade`, `apply-config`, `rollback` |
+| Look for known vulnerabilities | `security` |
+| Back up and restore | `backup-now`, `restore`, `vault-backup`, `vault-restore` |
+| Standby control node | `control add-standby`, `switchover`, `demote`, `promote`, `rejoin`, `remove-standby`, `refresh-ingress`, `status`, `check` |
+| Local web page on 127.0.0.1 | `web` |
 
-Every command has command-specific help:
+Every command has help, for example `./scripts/cdnfoundry-fleet render --help`.
 
-```bash
-./scripts/cdnfoundry-fleet setup --help
-./scripts/cdnfoundry-fleet configure-monitoring --help
-./scripts/cdnfoundry-fleet render --help
-```
+## Check your tools
 
-## Preflight checks
-
-Run before setup or after updating the repository:
+Run this before setup and after you update the checkout:
 
 ```bash
-./scripts/cdnfoundry-fleet --repo-root "$PWD" doctor
+./scripts/cdnfoundry-fleet doctor
 ```
 
-`doctor` verifies the production Compose file, deployment assets, Python, OpenSSL, and existing fleet state. Docker is reported separately because rendering can occur on a generator machine without starting containers, but Docker Compose is required on deployment hosts and for the final host-side validation.
+Expected: lines that start with `OK`, then `Doctor result: ready`. `doctor` checks that `compose.prod.yml`, Python, and OpenSSL are present, and that the state is valid. Docker is reported but not required on the workstation. When a vault exists, `doctor` also connects to each node over SSH and checks it. Any failed check gives exit code 3.
 
 ## Node roles
 
 ### Control
 
-Runs the application control plane, Valkey, migrations, and the edge-control TLS endpoint. By default it also runs embedded PostgreSQL. When node `extra_env` contains a non-`control-db` `DB_HOST` or a non-empty `DB_URL`, the generated bundle removes embedded `control-db` and points the application at the operator-managed database. In colocated monitoring mode it also runs the telemetry stack.
+Runs the Laravel application (`core`, `web`, `horizon`, `scheduler`), Caddy, Valkey, the migrations, and the `edge-control` mTLS endpoint. It also runs the hidden PowerDNS primary with its own `pdns-db`. By default it runs an embedded PostgreSQL (`control-db`). With colocated monitoring it also runs the telemetry stack.
 
 ### DNS
 
-Runs node-local PostgreSQL, PowerDNS authoritative service, DNSdist, and required geo/MMDB support. Its database password and API key are unique to that node.
+Runs the PowerDNS secondary (`pdns-auth`) with a local SQLite store and no database service, DNSdist, and the GeoIP updater. Its API key is unique to the node. It pulls zones from the control host's primary.
 
 ### Edge
 
-Runs the edge agent/runtime and gateway services. It receives the edge server CA, a node TLS certificate, and the generated edge-control URL.
+Runs the edge agent, the gateway, and the OpenResty cells. It receives the edge server CA, a node certificate, and the `edge-control` URL.
 
 ### DNS-edge
 
-Combines the DNS and edge service sets on one host. It still uses its own local PowerDNS PostgreSQL database.
+Runs the DNS and edge services on one host.
 
 ### Monitoring
 
-Runs a dedicated telemetry stack when monitoring mode is `dedicated`. It does not start a second control database. Configure the control node with an externally reachable `DB_HOST`, or set `GRAFANA_POSTGRES_HOST` explicitly on the monitoring node. Rendering fails closed without that endpoint. The generated bundle retains the bounded provisioning helper so the read-only Grafana role and sanitized views exist before Grafana starts.
+Runs the telemetry stack when monitoring mode is `dedicated`. It does not run a control database. The control node needs an externally reachable `DB_HOST`, or you set `GRAFANA_POSTGRES_HOST` on the monitoring node. Without one, `render` fails. The bundle keeps the helper that creates the read-only Grafana role and its views before Grafana starts.
 
 ## PKI layout
 
-The generator follows the production repository’s two-CA model:
+Fleet uses two certificate authorities. See [Certificate trust](production-fleet.md#certificate-trust) for what each one signs.
 
-- `edge-identity-ca`: used by the control plane for edge identity issuance and verification.
-- `edge-server-ca`: signs edge-control, edge runtime, and DNS API TLS certificates.
+CA private keys stay in the vault. Every bundle receives the edge server CA certificate and its own node certificate. Key delivery depends on the role:
 
-CA private keys stay in the protected fleet state directory. Every node bundle receives the edge server CA certificate and its own public certificate. Control and DNS-only bundles receive their node private key; edge and combined DNS/edge bundles require that key from external secret storage on host tmpfs. Only the control bundle receives the edge identity CA private key because the control service requires it. The transferred control key begins root-only; the generated control `start.sh` must run as root and changes only this key to owner `root`, numeric group `82`, mode `0640`, allowing the immutable image's PHP-FPM worker to read it without making it public.
+- Control and DNS-only bundles include their node private key.
+- Edge and DNS-edge bundles do not. The edge listener key, the edge recovery key, and (on DNS-edge) the node key live in `/dev/shm/cdnfoundry`, which is memory, owned by UID 10101 with mode `0400`. Host swap must be off. Memory does not survive a reboot, so the files must be restored after every boot.
+- Only the control bundle includes the edge identity CA private key.
 
-DNS activation also requires root: `start.sh` restricts the credential-bearing
-`docker/pdns/pdns.conf` to `root:82`, mode `0640`, and the generated PowerDNS
-service receives that supplementary reader group. Keep the bundle directory
-mode `0700`. Use the [staged password rotation procedure](production-fleet.md#per-node-dns-database-lifecycle)
-for existing databases; rerendering alone does not rotate a stored credential.
+When you use `bootstrap`, Fleet issues these files, keeps them in the vault, turns swap off, and writes them again on every deploy. If you deploy by hand, run `scripts/issue-edge-listener-material.sh` (see the [starter quick start](production-quick-start.md)) and copy the files yourself. The recovery key is stable: store it with your backups, because losing it loses the encrypted edge state on that host. Do not reuse the node key as the edge listener key.
 
-Important generated environment paths include:
+Activation needs root on the host. `start.sh` fixes file permissions for the container readers:
+
+- Control: `pki/edge-identity-ca.key` and `docker/pdns/primary.conf` become owner `root`, group `82`, mode `0640`, so the application's PHP-FPM worker and PowerDNS can read them. `secrets/metrics-token` and `secrets/edge-proxy-secret.conf` get the same ownership and mode, and `secrets/valkey.conf` gets group `1000`.
+- DNS: `docker/pdns/pdns.conf` gets owner `root`, group `82`, mode `0640`.
+
+Keep each bundle directory at mode `0700`. Re-rendering does not rotate a stored credential. To rotate the PowerDNS database password, see [Rotate the PowerDNS database password](production-fleet.md#rotate-the-powerdns-database-password).
+
+Key environment paths in a bundle:
 
 ```text
 EDGE_IDENTITY_CA_CERTIFICATE=./pki/edge-identity-ca.crt
 EDGE_IDENTITY_CA_PRIVATE_KEY=./pki/edge-identity-ca.key
-PDNS_CA_CERTIFICATE=./pki/edge-server-ca.crt
 EDGE_CONTROL_SERVER_CERTIFICATE=./pki/node.crt
 EDGE_CONTROL_SERVER_PRIVATE_KEY=./pki/node.key
 EDGE_CONTROL_CA_CERTIFICATE=./pki/edge-server-ca.crt
 EDGE_RUNTIME_TLS_CERTIFICATE=/dev/shm/cdnfoundry/edge-runtime.crt
 EDGE_RUNTIME_TLS_PRIVATE_KEY=/dev/shm/cdnfoundry/edge-runtime.key
 EDGE_STATE_ENCRYPTION_KEY_FILE=/dev/shm/cdnfoundry/edge-state-encryption.key
-DNS_API_SERVER_CERTIFICATE=./pki/node.crt
-DNS_API_SERVER_PRIVATE_KEY=/dev/shm/cdnfoundry/node.key
 ```
 
-Before starting an edge bundle, provision a dedicated bootstrap listener key
-and its matching certificate from external secret storage. Put the key and a
-stable, random 32-byte edge recovery key (64 hex characters) in the generated
-host tmpfs paths, owned by UID 10101 with mode `0400`. Disable host swap and
-restore both keys after every host boot.
-On combined DNS/edge hosts, provision the node certificate's matching key at
-`/dev/shm/cdnfoundry/node.key` from external secret storage. The generated
-bundle excludes this key. Do not reuse it as the edge listener key. The edge
-agent stores encrypted recovery state in
-`edge-agent-state`; cells and agent reject disk-backed active key mounts.
+The edge recovery key is 32 random bytes written as 64 hex characters. The agent keeps encrypted recovery state in the `edge-agent-state` volume. The cells and the agent reject a disk-backed key mount.
 
 ## Edge registration and mTLS enrollment
 
-Fleet prepares the host bundle but is not part of control-plane enrollment. An
-edge display name may differ from its Fleet, Terraform, Ansible, or server name.
-Prepare and transfer each host bundle once. A combined `dns-edge` bundle starts
-DNS normally before an edge identity exists.
+An edge in the control plane and a node in Fleet are two records. Their names can differ. The edge ID and one-time token link them.
 
-To enroll an edge:
+<DocTabs :labels="['Fleet CLI', 'Admin panel']">
+<template #tab-1>
 
-1. In **Infrastructure → Edges**, create the edge and copy the two-line
-   environment block from the one-time modal.
-2. On the matching prepared host, replace the empty values in `.env.prod`:
+`bootstrap` enrolls the edge for you. It creates the edge, assigns it to the default `shared` pool, creates its service endpoint from the node's public addresses, and gives the host its edge ID and token.
+
+```bash
+./scripts/cdnfoundry-fleet bootstrap --node edge-frankfurt --country DE --continent EU
+```
+
+Expected: Fleet prints the plan and asks for confirmation. After the health gate passes, the edge appears under **Infrastructure → Edges**. See [Fleet engine](../operations/fleet-engine.md#adding-a-node).
+
+For hand-run automation, `configure-edge-registration --node NODE --edge-id UUID --bootstrap-token-file FILE` stores the pair in the vault, and `clear-edge-bootstrap-token --node NODE` removes the token afterward. Render and deploy the node to apply them.
+
+</template>
+<template #tab-2>
+
+<div class="steps">
+
+1. In **Infrastructure → Edges**, create the edge. Copy the two lines from the one-time **Enroll this edge** window. The window cannot be opened again.
+
+2. On the prepared host, put the two values in `.env.prod`:
 
    ```dotenv
    EDGE_ID=11111111-2222-3333-4444-555555555555
    EDGE_BOOTSTRAP_TOKEN=the-one-time-token
    ```
 
-3. Keep `.env.prod` mode `0600`, then start the edge profile explicitly:
+3. Keep the file at mode `0600`, then start the edge profile:
 
    ```bash
    cd /opt/cdnfoundry
@@ -325,115 +249,125 @@ To enroll an edge:
    sudo docker compose --env-file .env.prod --profile edge up -d
    ```
 
-For future whole-host starts, the operator may add `--profile edge` to the
-generated `start.sh` Compose `up` command. The script itself remains a fixed,
-transparent startup wrapper: it does not inspect enrollment state, wait for
-registration, edit `.env.prod`, or restart services. No Fleet command, bundle
-rerender, or second transfer is required.
+</div>
 
-After a fresh heartbeat, the bootstrap token is spent and cannot enroll again.
-Blank it in `.env.prod` during normal secret hygiene. An immediate second
-restart is not required for correct operation.
+Expected: after the first heartbeat, the edge shows as registered in the panel. The token is then spent. Blank it in `.env.prod`.
 
-The agent creates its private key locally and persists the issued identity in
-`edge-agent-state`. Never copy or delete that volume. Directly assigned public
-service addresses need no `EDGE_GATEWAY_ADDRESS_MAP`; the gateway binds them
-directly. Configure the map once as advanced host state only for NAT or a load
-balancer, mapping every advertised address to its distinct private listener.
-Set `EDGE_GATEWAY_REQUIRE_ADDRESS_MAP=true` only where local policy requires
-explicit coverage.
+The generated `start.sh` reads `EDGE_ID` through Compose. If `EDGE_ID` is set, it starts the edge profile too. If it is empty, it starts only the other profiles and prints that enrollment is pending. It never edits `.env.prod`.
 
-Fleet automation may still use `configure-edge-registration` and
-`clear-edge-bootstrap-token`, but those commands are Fleet-specific and are not
-shown by the administrator panel.
+</template>
+</DocTabs>
+
+The agent creates its private key on the host and keeps the issued identity in the `edge-agent-state` volume. Never copy or delete that volume.
+
+A directly assigned public address needs no `EDGE_GATEWAY_ADDRESS_MAP`. For NAT or a load balancer, set the map once in the node's `extra_env`, from each advertised address to its own private listener. Set `EDGE_GATEWAY_REQUIRE_ADDRESS_MAP=true` only if you want every address mapped explicitly. See [Services and ports](../reference/services-and-ports.md).
 
 ## Rotate an edge identity
 
-Use rotation when an agent identity or its persistent state is lost or
-suspected compromised. This is an immediate revocation, not an overlapping
-certificate renewal. Open the edge under **Infrastructure → Edges**, choose
-**Rotate identity**, read the impact statement, and confirm only when the
-matching edge host is available.
+Rotate when an agent's identity or its saved state is lost or may be stolen. Rotation revokes the old certificate at once. It is not a renewal with overlap.
 
-The current certificate stops authenticating as soon as rotation is confirmed.
-The gateway and cells retain their last valid runtime, but agent heartbeat and
-configuration delivery pause until reenrollment. The replacement modal shows
-the same two environment values as initial enrollment. Replace them in the
-host's `.env.prod` and run the explicit `--profile edge up -d` command above.
-Compose recreates the agent when its environment changes. The agent keeps the
-previous local identity until the replacement certificate is issued, then
-atomically replaces it. Blank the spent replacement token afterward.
-DNS, `edge-gateway`, cells, and their last-valid runtime remain in place. If the
-modal is left before its token is saved, rotate again and use only the newest
-replacement token.
+<div class="steps">
+
+1. Open the edge under **Infrastructure → Edges** and choose **Rotate identity**. Read the warning, tick the confirmation, and choose **Revoke identity and issue token**. Do this only when you can reach the edge host.
+
+2. Copy the new two lines from the window that follows.
+
+3. Replace `EDGE_ID` and `EDGE_BOOTSTRAP_TOKEN` in the host's `.env.prod`, then start the edge profile again:
+
+   ```bash
+   sudo docker compose --env-file .env.prod --profile edge up -d
+   ```
+
+</div>
+
+Expected: Compose recreates the agent. It keeps the old identity until the new certificate is issued, then replaces it. The edge shows as registered again.
+
+Until then the agent cannot send heartbeats or receive configuration. DNS, the gateway, and the cells keep serving their last valid state. If you leave the window before you save the token, rotate again and use only the newest token. Blank the spent token afterward.
 
 ## Embedded or remote control PostgreSQL
 
-Embedded mode is the default. The control bundle contains `control-db`, and `start.sh` waits for `control-db` and `redis` before running the migration.
+Embedded PostgreSQL is the default. The control bundle includes `control-db`, and `start.sh` waits for `control-db` and Valkey before it runs the migration.
 
-For remote mode, set the control node's optional Compose overrides and replace the generated database password with the real remote credential from a protected file:
+For an external database, set connection values on the control node and replace the generated password with the real one from a protected file:
 
 ```bash
-sudo ./scripts/cdnfoundry-fleet \
-  --state-dir /var/lib/cdnfoundry-fleet \
-  update-node --node control-1 \
+./scripts/cdnfoundry-fleet update-node --node control-1 \
   --extra-env DB_HOST=postgres.internal.example \
   --extra-env DB_PORT=5432 \
   --extra-env DB_SSLMODE=verify-full \
   --non-interactive
 
-sudo ./scripts/cdnfoundry-fleet \
-  --state-dir /var/lib/cdnfoundry-fleet \
-  set-secret --secret control-db-password \
-  --from-file /root/cdnfoundry-postgres-password \
-  --non-interactive
+./scripts/cdnfoundry-fleet set-secret --secret control-db-password \
+  --from-file /root/cdnfoundry-postgres-password --non-interactive
 ```
 
-A non-empty `DB_URL` also selects remote mode. Do not place a password-bearing URL in version control or shell history.
+A non-empty `DB_URL` also selects remote mode. Keep a URL that holds a password out of version control and shell history.
 
-In remote mode the renderer removes `control-db`, its volume, and every dependency on it. The generated start helper waits only for local Valkey before migration. When telemetry is colocated and `DB_HOST` is supplied, Grafana's control-database provisioning and datasource defaults inherit the same host, port, and SSL mode unless explicitly overridden.
+In remote mode, the renderer drops `control-db`, its volume, and everything that depends on it. `start.sh` waits only for Valkey. If telemetry runs on the control host and you set `DB_HOST`, Grafana's database provisioning and data source use the same host, port, and SSL mode unless you set them yourself.
 
-Before rendering, ensure the external service has:
+Before you render, make sure the external service has:
 
-- database and application role expected by the project;
-- TLS and certificate hostname verification where supported;
-- exact-source network allowlists;
-- capacity and connection limits for web, Horizon, scheduler, migrations, and Grafana provisioning;
-- backups/PITR and an isolated restore test.
+- the database and the application role the project expects;
+- TLS, with hostname verification where supported;
+- network rules that allow only the exact sources;
+- room for connections from the web app, Horizon, the scheduler, migrations, and Grafana provisioning;
+- backups with point-in-time recovery and a tested restore.
 
-## Validation and rendering
-
-Use both steps in CI or before a production rollout:
+## Validate and render
 
 ```bash
-./scripts/cdnfoundry-fleet \
-  --state-dir ./.cdnfoundry-fleet \
-  --output-dir ./build/fleet-bundles \
-  --repo-root "$PWD" validate
-
-./scripts/cdnfoundry-fleet \
-  --state-dir ./.cdnfoundry-fleet \
-  --output-dir ./build/fleet-bundles \
-  --repo-root "$PWD" render
+./scripts/cdnfoundry-fleet validate
+./scripts/cdnfoundry-fleet render
 ```
 
-Validation renders into a temporary directory and leaves active bundles unchanged. Rendering builds each node in a temporary directory, then atomically replaces the active bundle while retaining `.previous`.
+Expected: `validate` prints `{"status": "valid"}` and replaces nothing. `render` prints `{"status": "rendered", ...}` with the bundle paths.
 
-Fleet validates generated configuration; it does not verify public DNS/TLS,
-registrar delegation, account access or customer traffic. Follow the
-[starter quick start](production-quick-start.md) for the ordered browser and API
-onboarding paths. Keep any tested host-local resolver/bridge Compose overrides
-in protected inventory; Fleet does not import them into its state. Merge them
-into the candidate bundle and validate before replacement. The quick start
-documents diagnosis, targeted activation and preservation of those overrides.
+`validate` renders into a temporary directory. `render` builds a full new generation, then swaps it into place and keeps the previous one. Add `--node NAME` to either command to work on one host.
 
-## Bundle transfer and activation
+Fleet checks generated configuration only. It does not check public DNS, TLS, registrar delegation, account access, or customer traffic. Follow the [starter quick start](production-quick-start.md) for that. Keep host-local Compose overrides (for example a resolver workaround) in your own inventory, because Fleet does not import them. Merge them into a new bundle and validate before you swap it in.
 
-Archive one node from the generator host:
+## Deploy with Fleet
+
+Fleet can install, start, upgrade, and roll back nodes over SSH. It uses one key for the whole fleet.
+
+<div class="steps">
+
+1. Print the Fleet public key and add it to `/root/.ssh/authorized_keys` on every host.
+
+   ```bash
+   ./scripts/cdnfoundry-fleet public-key
+   ```
+
+2. Record how to reach each node. This also pins the host key.
+
+   ```bash
+   ./scripts/cdnfoundry-fleet node-ssh --node edge-frankfurt --host 203.0.113.30
+   ```
+
+3. Trust the release signing key and adopt a signed manifest.
+
+   ```bash
+   ./scripts/cdnfoundry-fleet trust-release-key --key-file release-signing.pub
+   ./scripts/cdnfoundry-fleet set-release --manifest release.json
+   ```
+
+4. Install and start a node. Fleet shows a plan and asks you to confirm.
+
+   ```bash
+   ./scripts/cdnfoundry-fleet bootstrap --node edge-frankfurt --country DE --continent EU
+   ```
+
+</div>
+
+Expected: Fleet installs the prerequisites, pulls and checks the images, uploads and validates the bundle, starts it with `start.sh`, and runs the health gate. If the run fails, run the same command again. It continues after the last finished step. See [Fleet engine](../operations/fleet-engine.md) for upgrades, `apply-config`, and `rollback`.
+
+## Transfer a bundle by hand
+
+Use this when you do not use `bootstrap`, for example for a host Fleet cannot reach. Archive one node on the workstation:
 
 ```bash
 tar --numeric-owner --owner=0 --group=0 \
-  -C build/fleet-bundles \
+  -C ~/.config/cdnfoundry-fleet/bundles \
   -czf /tmp/edge-frankfurt.tar.gz edge-frankfurt
 ```
 
@@ -456,147 +390,112 @@ cd /opt/cdnfoundry
 sudo ./start.sh
 ```
 
-Never transfer the entire fleet state or another node’s bundle. Do not replace the generated control activation with a direct `docker compose up`: the activation applies the restricted PHP-worker access required for `pki/edge-identity-ca.key`. If `core` reports that the key is not readable, rerun `sudo ./start.sh` and verify `stat -c '%u:%g %a %n' pki/edge-identity-ca.key` reports `0:82 640`.
+Expected: `validate.sh` ends without an error. `start.sh` ends with a `docker compose ps` table in which every long-running service is `healthy` or `running`.
 
-`validate.sh` runs the pinned Caddy image's adapter against each Caddyfile present in the bundle. Treat any adapter error as a failed bundle and do not activate it. The validation container is short-lived and does not start dependencies; Docker may create the bundle's declared network or empty named-volume metadata while preparing the container.
+Never copy the whole vault or another node's bundle. Do not replace `start.sh` with a plain `docker compose up` on the control host, because `start.sh` sets the file permissions that the application needs. If `core` says it cannot read `pki/edge-identity-ca.key`, run `sudo ./start.sh` again, then check that `stat -c '%u:%g %a %n' pki/edge-identity-ca.key` prints `0:82 640`.
 
-If `log-collector` exits with code `78` and reports that `LOG_AUTH_TOKEN` is missing, do not put the token directly in the rendered Compose manifest. Verify that `.env.prod` contains a non-empty `LOG_AUTH_TOKEN` and that the rendered `log-collector.environment` maps `LOG_AUTH_TOKEN` from Compose interpolation, then rerender and transfer the corrected node bundle. Recreate only `log-collector`; its bounded `operational-vector-data` volume preserves buffered logs.
+`validate.sh` runs the pinned Caddy image's checker on each Caddyfile in the bundle, and rejects any image that is not pinned by digest. Treat any error as a failed bundle and do not activate it. The check container is short-lived and starts no dependencies. Docker can still create the bundle's network or empty volume metadata.
 
-### Remote metrics reachability
+If `log-collector` exits with code `78` and says `LOG_AUTH_TOKEN` is missing, check that `.env.prod` has a non-empty `LOG_AUTH_TOKEN` and that the rendered `log-collector.environment` takes it from Compose interpolation. Do not put the token into the Compose file. Render again, upload the corrected bundle, and recreate only `log-collector`. Its `operational-vector-data` volume keeps the buffered logs.
 
-Monitoring bundles attach Prometheus to the existing private service networks
-and the outbound `egress` network. The private networks stay internal and no
-Prometheus port is published. Without outbound access the local datasource can
-be healthy while every remote PoP scrape fails. After activation inspect the
-Prometheus `up` query: all expected remote node, DNSdist, gateway and collector
-targets must be present and up. Datasource health alone is insufficient.
+## Docker log retention on existing hosts
 
-For an already deployed bundle generated before this correction, merge a
-`prometheus` service entry into the protected host-local Compose override,
-retaining its existing networks and adding `egress`. Validate Compose and
-recreate only Prometheus. Keep its volume and image digest. For the starter
-control bundle the complete network list is `telemetry`, `control`,
-`dns-private`, `egress`. Other role layouts must retain their own existing
-networks. Continue restricting metrics listeners to the monitoring source;
-do not open remote metrics publicly to work around an outbound routing failure.
-New Fleet renders include this attachment automatically.
+Every production service uses Docker `json-file` logging with 10 MB per file and three files. Fleet puts this in each bundle. Docker applies new logging options only when it creates a container, so an existing container keeps its old options until it is recreated.
+
+After you render and validate a new bundle, roll it out one host at a time (see [Fleet engine](../operations/fleet-engine.md#upgrades)). To check a host, inspect `HostConfig.LogConfig` in `docker inspect CONTAINER`.
+
+Before you start, check free disk space. Copy any log evidence you need off the host, because recreating a container removes its old JSON log. Do not run `docker compose down --volumes` or prune named volumes. If a wave fails, roll back.
+
+## Remote metrics reachability
+
+A monitoring bundle attaches Prometheus to the private service networks and to the outbound `egress` network. The private networks stay internal, and Fleet publishes no Prometheus port. Without outbound access, the local data source can look healthy while every remote scrape fails.
+
+After activation, run the Prometheus query `up`. Every expected remote node, DNSdist, gateway, and collector target must be present and equal to 1. A healthy data source alone proves nothing.
+
+If a bundle was rendered before this attachment existed, add a `prometheus` entry to the host-local Compose override that keeps its existing networks and adds `egress`. For the starter control bundle the networks are `telemetry`, `control`, `dns-private`, and `egress`. Other layouts keep their own networks. Validate Compose, then recreate only Prometheus, and keep its volume and image digest. New renders include this already.
+
+Keep metrics listeners limited to the monitoring source. Do not open them to the Internet to work around a routing problem.
 
 ## Updating the fleet
 
 Add a host:
 
 ```bash
-./scripts/cdnfoundry-fleet --state-dir ./.cdnfoundry-fleet add-node \
+./scripts/cdnfoundry-fleet add-node \
   --node edge-tokyo --role edge --region asia --location tokyo \
   --public-ipv4 192.0.2.80 --non-interactive
 ```
 
-Change a release or address:
+Change a release or an address:
 
 ```bash
-./scripts/cdnfoundry-fleet --state-dir ./.cdnfoundry-fleet update-node \
-  --node edge-tokyo --release v1.2.1 --public-ipv4 192.0.2.81 \
+./scripts/cdnfoundry-fleet update-node \
+  --node edge-tokyo --release RELEASE_TAG_OR_COMMIT --public-ipv4 192.0.2.81 \
   --non-interactive
 ```
 
-Render only that host:
+To clear an optional address, set it to JSON `null` in the node object of a `--config` file for `setup` or `update-node`. Leaving a field out keeps its value. Editing state alone does not change running listeners or external DNS: render, validate, and roll out the new bundle, and keep the old config for rollback.
+
+Then render only that host:
 
 ```bash
-./scripts/cdnfoundry-fleet \
-  --state-dir ./.cdnfoundry-fleet \
-  --output-dir ./build/fleet-bundles \
-  --repo-root "$PWD" validate --node edge-tokyo
-
-./scripts/cdnfoundry-fleet \
-  --state-dir ./.cdnfoundry-fleet \
-  --output-dir ./build/fleet-bundles \
-  --repo-root "$PWD" render --node edge-tokyo
+./scripts/cdnfoundry-fleet validate --node edge-tokyo
+./scripts/cdnfoundry-fleet render --node edge-tokyo
 ```
 
-A changed hostname or public IP automatically causes that node certificate to be reissued with updated SANs.
+Expected: a changed hostname or public address makes Fleet issue a new certificate for that node, with the new names.
+
+## Render and recovery guarantees
+
+Setup checks the full plan before it saves any node. `render` builds a complete new generation, flushes it to disk, and swaps it in with Linux `renameat2` exchange. If any node fails to render, every active bundle stays as it was. `<output-dir>.previous` holds the full previous generation, and each node also keeps a `NODE.previous` directory. A render writes only local files. Deploying to a host is a separate step.
+
+Use a Linux filesystem that supports same-filesystem rename and directory flush. If the exchange is not supported, Fleet stops with an error and does not move the active bundle. If archiving fails after the swap, keep the `.candidate-*` directory that Fleet names: it holds the previous generation. Do not delete recovery files while you diagnose an interrupted render.
+
+Fleet will not create a CA when only the key or the certificate exists. Restore the matching pair from backup. A reused CA or node certificate must verify, match its key, and have at least 24 hours left. Otherwise you must plan a PKI recovery. Fleet never silently replaces trust. Keep the CA keys, the application encryption key, the artifact signing key, and the TLS material together with your database backup.
+
+Fleet keeps literal dollar signs, quotes, and backslashes in generated environment values through Compose and `adopt-existing`. `status --json` shows `extra_env` values and feature endpoints and repositories as `<redacted>`, because they can hold credentials. Read the vault locally if you need an exact value, and keep it out of logs and tickets. A dry run creates no lock file and changes no permissions.
 
 ## Troubleshooting
 
-### The script prints only initialization output
+### Setup prints only initialization output
 
-Use the full wrapper or `setup`, not the low-level `init` command:
+You ran `init`, which creates the state and secrets but adds no nodes and renders nothing. Run `setup` instead.
 
-```bash
-./scripts/generate-production-env.sh
-# or
-./scripts/cdnfoundry-fleet setup --help
-```
+### No questions appear
 
-`init` deliberately creates only protected state and secrets. It does not add nodes or render bundles.
-
-### No interactive questions appear
-
-Interactive mode needs a real terminal. In CI, a pipe, or a non-TTY shell, provide all values with `--non-interactive --config FILE`. The CLI now returns a clear validation error instead of silently waiting on unavailable input.
+Interactive mode needs a terminal. In CI or a pipe, give every value with `--non-interactive --config FILE`. Fleet also needs the vault passphrase from `CDNF_FLEET_PASSPHRASE` or `CDNF_FLEET_PASSPHRASE_FILE`.
 
 ### I cannot find control plus monitoring
 
-Run the setup wizard and choose **Control + monitoring on the same host**, or configure it explicitly:
-
-```bash
-./scripts/cdnfoundry-fleet --state-dir ./.cdnfoundry-fleet \
-  configure-monitoring --mode colocated --non-interactive
-```
-
-Confirm with `status`.
+Choose **Control + monitoring on the same host** in the wizard, or run `configure-monitoring --mode colocated --non-interactive` and confirm it with `status`.
 
 ### State already exists
 
-The full setup command reuses existing state. It does not rotate secrets. To inspect it:
-
-```bash
-./scripts/cdnfoundry-fleet --state-dir ./.cdnfoundry-fleet status
-```
+`setup` reuses existing state and never rotates secrets. Look at it with `status`.
 
 ### A required variable is missing
 
-The renderer derives required variables from the final filtered Compose file. Add project-specific values to a node’s `extra_env` only when the repository introduces a new required variable that the generator does not yet know. Do not place secrets in version-controlled config files.
+The renderer derives the needed variables from the final, filtered Compose file. Add a value to a node's `extra_env` only when the repository adds a new required variable that Fleet does not know. Keep secrets out of version-controlled config files.
 
 ### Compose input contains `!reset` or `!override`
 
-The Fleet loader supports both Docker Compose tags. Older generator versions used `yaml.safe_load` directly and failed on Compose inputs containing them.
+Fleet reads both Docker Compose tags.
 
-### Docker is unavailable on the generator machine
+### Docker is not on the workstation
 
-You can still generate bundles and run Python-level validation. Run each bundle’s `validate.sh` on a host with Docker Compose v2 before activation.
+You can still render and run the Python checks. Run each bundle's `validate.sh` on a host that has Docker Compose v2 before you activate it.
 
-## Related documents
+### Another Fleet process is running
+
+Fleet holds a lock while a command runs. Wait for the other command, or find and stop it. Do not delete the lock file while it runs.
+
+### Exit codes
+
+`0` is success. `2` is a usage error. `3` is an invalid plan, config, or a failed `doctor` check. `4` is missing, locked, or inconsistent state. `5` is a Compose, PKI, file, or render failure. `6` is an action that failed on a node. `130` means you interrupted it.
+
+## Related pages
 
 - [Production quick start: three nodes](production-quick-start.md)
 - [Production quick start: multi-region fleet](production-quick-start-multi-region.md)
 - [Production fleet reference](production-fleet.md)
 - [Fleet configuration reference](production-fleet-config-reference.md)
-
-## Atomic render and recovery guarantees
-
-Setup validates the complete candidate topology before persisting its nodes.
-Rendering prepares and fsyncs a complete fleet generation before activating it
-with Linux `renameat2` exchange. A later-node render failure leaves every active
-bundle unchanged. The output directory remains addressable during replacement;
-`<output-dir>.previous` retains the complete previous generation, and per-node
-`.previous` directories remain available for existing operator workflows.
-This is local bundle publication; remote host activation remains a separate
-rollout operation and requires its own acknowledgements.
-
-Use the supported Linux filesystem with same-filesystem rename and directory
-fsync. An unsupported atomic exchange fails with an actionable error instead
-of moving away the active bundle. If archival fails after exchange, retain the
-reported `.candidate-*` sibling directory: it contains the previous generation.
-Do not remove recovery material while diagnosing an interrupted render.
-
-Fleet refuses to regenerate a CA when only its key or certificate survives.
-Restore the matching pair from backup. Reused CA and node certificates must
-verify, match their keys and remain valid for at least 24 hours. Expired or
-mismatched material requires an explicit, coordinated PKI recovery; a render
-must not silently replace trust. Keep the CA keys, application encryption key,
-artifact signing key and TLS material with the database backup.
-
-Generated environment values preserve literal dollar signs, quotes and
-backslashes through Compose and Fleet adoption. JSON status redacts `extra_env`
-values and feature endpoints/repositories because they may contain credentials.
-Read protected state locally when an exact value is needed; do not copy it into
-logs or tickets. Dry runs do not create lock files or change state permissions.

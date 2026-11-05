@@ -62,11 +62,11 @@ class TlsController extends Controller
     {
         Gate::authorize('update', $domain);
         $data = $request->validate([
-            'certificate' => ['required', 'string', 'max:16384'], 'chain' => ['required', 'string', 'max:65536'],
+            'certificate' => ['required', 'string', 'max:16384'], 'chain' => ['nullable', 'string', 'max:65536'],
             'private_key' => ['required', 'string', 'max:16384'],
         ]);
         $expectedRevision = (int) $domain->revision;
-        $validated = UploadedCertificate::validate($domain, $data['certificate'], $data['chain'], $data['private_key']);
+        $validated = UploadedCertificate::validate($domain, $data['certificate'], $data['chain'] ?? '', $data['private_key']);
         $certificate = DB::transaction(function () use ($domain, $validated, $request, $expectedRevision): TlsCertificate {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             abort_unless((int) $locked->revision === $expectedRevision, 409, 'The domain changed while validating the certificate. Reload and retry the upload.');

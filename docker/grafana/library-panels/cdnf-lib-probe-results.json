@@ -1,0 +1,146 @@
+{
+  "model": {
+    "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+    },
+    "description": "The latest result of every synthetic probe, per PoP and IP version. 1 is up, 0 is down.",
+    "fieldConfig": {
+      "defaults": {
+        "color": {
+          "mode": "thresholds"
+        },
+        "custom": {
+          "align": "auto",
+          "cellOptions": {
+            "type": "auto"
+          },
+          "inspect": false
+        },
+        "mappings": [
+          {
+            "options": {
+              "match": "null+nan",
+              "result": {
+                "color": "text",
+                "text": "No data yet"
+              }
+            },
+            "type": "special"
+          }
+        ],
+        "noValue": "\u2013",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {
+              "color": "text",
+              "value": null
+            }
+          ]
+        },
+        "unit": "short"
+      },
+      "overrides": [
+        {
+          "matcher": {
+            "id": "byName",
+            "options": "Up"
+          },
+          "properties": [
+            {
+              "id": "thresholds",
+              "value": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            {
+              "id": "custom.cellOptions",
+              "value": {
+                "type": "color-background"
+              }
+            }
+          ]
+        },
+        {
+          "matcher": {
+            "id": "byName",
+            "options": "PoP"
+          },
+          "properties": [
+            {
+              "id": "links",
+              "value": [
+                {
+                  "title": "Open PoP detail",
+                  "url": "/d/cdnf-pop-detail?var-pop=${__value.raw}"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "options": {
+      "cellHeight": "sm",
+      "footer": {
+        "show": false
+      },
+      "showHeader": true,
+      "sortBy": [
+        {
+          "desc": true,
+          "displayName": "Value"
+        }
+      ]
+    },
+    "targets": [
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "expr": "probe_success{job=~\"blackbox-.*\"}",
+        "format": "table",
+        "instant": true,
+        "legendFormat": "probe",
+        "range": false,
+        "refId": "A"
+      }
+    ],
+    "title": "Probe results",
+    "transformations": [
+      {
+        "id": "organize",
+        "options": {
+          "excludeByName": {
+            "Time": true,
+            "__name__": true,
+            "instance": true,
+            "probe": true
+          },
+          "renameByName": {
+            "Value": "Up",
+            "ip_version": "IP",
+            "job": "Probe",
+            "pop": "PoP",
+            "region": "Region"
+          }
+        }
+      }
+    ],
+    "type": "table"
+  },
+  "name": "Probe results",
+  "uid": "cdnf-lib-probe-results"
+}

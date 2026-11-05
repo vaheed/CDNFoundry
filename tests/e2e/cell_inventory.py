@@ -49,7 +49,7 @@ def main() -> None:
             started.append(vector)
 
             for slot, name in enumerate(names, 1):
-                runtime = {"schema_version": 1, "sequence": 1, "hosts": {}, "certificates": {}}
+                runtime = {"schema_version": 1, "sequence": 1, "generation_id": "e2e-generation-1", "hosts": {}, "certificates": {}}
                 runtime_path = work / f"cell-{slot:02d}.json"
                 runtime_path.write_text(json.dumps(runtime), encoding="utf-8")
                 run(

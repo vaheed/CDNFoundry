@@ -8,6 +8,7 @@ use App\Models\Domain;
 use App\Models\Operation;
 use App\Models\SecurityRule;
 use App\Support\FilamentHelp;
+use App\Support\GeoVocabulary;
 use App\Support\SecurityConfig;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
@@ -19,10 +20,11 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
-use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -30,7 +32,16 @@ class SecurityRulesRelationManager extends RelationManager
 {
     protected static string $relationship = 'securityRules';
 
+    public static function getBadge(Model $ownerRecord, string $pageClass): ?string
+    {
+        return number_format($ownerRecord->securityRules()->count());
+    }
+
     protected static ?string $title = 'Security allow/block rules';
+
+    private const TYPES = ['ip' => 'IP address', 'cidr' => 'CIDR network', 'country' => 'Country', 'continent' => 'Continent'];
+
+    private const ACTIONS = ['allow' => 'Allow', 'block' => 'Block'];
 
     public function form(Schema $schema): Schema
     {
@@ -40,12 +51,16 @@ class SecurityRulesRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table->columns([
-            TextColumn::make('priority')->label(FilamentHelp::label('Priority', 'Enabled rules are evaluated by ascending priority and then stable ID. First match wins; the default is allow.'))->sortable(), TextColumn::make('match_type')->label('Type')->badge(),
-            TextColumn::make('value')->searchable(), TextColumn::make('action')->badge(),
-            IconColumn::make('enabled')->boolean(), TextColumn::make('note')->limit(60)->placeholder('None'),
+            TextColumn::make('priority')->label(FilamentHelp::label('Priority', 'Enabled rules are evaluated by ascending priority and then stable ID. First match wins; the default is allow.'))->sortable(), TextColumn::make('match_type')->label('Type')->badge()->color('gray')->formatStateUsing(fn (string $state): string => self::TYPES[$state] ?? $state),
+            TextColumn::make('value')->searchable(), TextColumn::make('action')->badge()
+                ->formatStateUsing(fn (string $state): string => self::ACTIONS[$state] ?? $state)
+                ->color(fn (string $state): string => $state === 'block' ? 'danger' : 'success'),
+            TextColumn::make('enabled')->label('State')->badge()
+                ->formatStateUsing(fn (bool $state): string => $state ? 'Enabled' : 'Disabled')
+                ->color(fn (bool $state): string => $state ? 'success' : 'gray'), TextColumn::make('note')->limit(60)->placeholder('None'),
         ])->headerActions([
             CreateAction::make()->createAnother(false)->using(fn (array $data): SecurityRule => $this->createRule($data)),
-            Action::make('importPreview')->label('Import rules')->icon('heroicon-o-arrow-up-tray')->requiresConfirmation()
+            Action::make('importPreview')->label('Import rules')->icon('phosphor-upload-simple')->requiresConfirmation()
                 ->modalHeading('Preview and commit security-rule import')
                 ->modalDescription('Review every normalized row below. Confirming writes the whole bounded import in one desired revision.')
                 ->schema([
@@ -60,12 +75,28 @@ class SecurityRulesRelationManager extends RelationManager
 
     private function ruleFields(): array
     {
+        $isText = fn (Get $get): bool => in_array($get('match_type'), ['ip', 'cidr', null, ''], true);
+
         return [
-            Select::make('match_type')->label('Type')->options(['ip' => 'IP address', 'cidr' => 'CIDR network', 'country' => 'Country', 'continent' => 'Continent'])->required()->live(),
-            TextInput::make('value')->label(FilamentHelp::label('Value', 'IPv4/IPv6, CIDR, ISO country code, or continent code according to the selected type.'))->required()->maxLength(128),
-            Select::make('action')->options(['allow' => 'Allow', 'block' => 'Block'])->required(),
-            TextInput::make('priority')->numeric()->default(100)->minValue(-1000000)->maxValue(1000000)->required(),
-            Toggle::make('enabled')->default(true), TextInput::make('note')->maxLength(250),
+            Select::make('match_type')->label('Type')->options(self::TYPES)->required()->live()->placeholder('Choose what to match'),
+            TextInput::make('value')->label('Value')->required()->maxLength(128)->visible($isText)
+                ->placeholder(fn (Get $get): string => $get('match_type') === 'cidr' ? '203.0.113.0/24 or 2001:db8::/32' : '203.0.113.10 or 2001:db8::10')
+                ->helperText(fn (Get $get): string => match ($get('match_type')) {
+                    'cidr' => 'A network in CIDR notation: the address, a slash, and the prefix length.',
+                    'ip' => 'One IPv4 or IPv6 address.',
+                    default => 'Choose a type first.',
+                }),
+            Select::make('value')->label('Country')->options(GeoVocabulary::countryOptions())->searchable()->required()
+                ->placeholder('Search by name or code')->visible(fn (Get $get): bool => $get('match_type') === 'country')
+                ->helperText('Matched with the visitor address\'s country.'),
+            Select::make('value')->label('Continent')->options(GeoVocabulary::continentOptions())->required()
+                ->placeholder('Choose a continent')->visible(fn (Get $get): bool => $get('match_type') === 'continent'),
+            Select::make('action')->options(self::ACTIONS)->required()->placeholder('Choose allow or block')
+                ->helperText('Block returns 403 to the visitor. Allow stops checking later rules.'),
+            TextInput::make('priority')->numeric()->default(100)->minValue(-1000000)->maxValue(1000000)->required()
+                ->helperText('Lower numbers are checked first. The first rule that matches wins.'),
+            Toggle::make('enabled')->default(true),
+            TextInput::make('note')->maxLength(250)->placeholder('Why this rule exists (optional)'),
         ];
     }
 

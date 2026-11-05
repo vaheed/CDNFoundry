@@ -73,9 +73,9 @@ func TestLoadInitialFallsBackFromAnInvalidCandidate(t *testing.T) {
 
 func TestValidateAcceptsBoundedDualStackRoutes(t *testing.T) {
 	candidate := config{
-		SchemaVersion: 1,
-		Revision:      7,
-		Listeners:     []string{"192.0.2.10:80", "192.0.2.10:443", "[2001:db8::10]:443"},
+		SchemaVersion: 1, GenerationID: "generation-0000000000001",
+		Revision:  7,
+		Listeners: []string{"192.0.2.10:80", "192.0.2.10:443", "[2001:db8::10]:443"},
 		Routes: []route{{
 			Address: "192.0.2.10", Hostname: "www.example.test",
 			HTTP: "cell-a:8081", HTTPS: "cell-a:8444",
@@ -91,11 +91,11 @@ func TestValidateAcceptsBoundedDualStackRoutes(t *testing.T) {
 }
 
 func TestValidateAcceptsAnEmptyFailClosedCandidate(t *testing.T) {
-	table, err := validate(config{SchemaVersion: 1, Revision: 0})
+	table, err := validate(config{SchemaVersion: 1, Revision: 0, GenerationID: "generation-00000000000000"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if table.revision != 0 || len(table.routes) != 0 || table.generationID != "legacy-00000000000000000000" {
+	if table.revision != 0 || len(table.routes) != 0 || table.generationID != "generation-00000000000000" {
 		t.Fatalf("unexpected empty routing table: %#v", table)
 	}
 }
@@ -117,7 +117,7 @@ func TestValidateAcceptsListenersBeforeTheFirstHostnameRoute(t *testing.T) {
 
 func TestValidateRejectsDuplicateAndInvalidCandidates(t *testing.T) {
 	base := config{
-		SchemaVersion: 1, Revision: 1, Listeners: []string{"192.0.2.10:80", "192.0.2.10:443"},
+		SchemaVersion: 1, GenerationID: "generation-0000000000001", Revision: 1, Listeners: []string{"192.0.2.10:80", "192.0.2.10:443"},
 		Routes: []route{{Address: "192.0.2.10", Hostname: "www.example.test", HTTP: "cell-a:8081"}},
 	}
 	tests := []config{
@@ -220,5 +220,34 @@ func TestProxyProtocolPreservesIPv4AndIPv6Identity(t *testing.T) {
 		if len(header) != item.length || header[13] != item.family {
 			t.Fatalf("unexpected PROXY protocol header for %s: %x", item.source, header)
 		}
+	}
+}
+
+func TestReadHTTPKeepsBytesBufferedAfterTheHeaders(t *testing.T) {
+	server, client := net.Pipe()
+	request := "POST /upload HTTP/1.1\r\nHost: www.example.test\r\nContent-Length: 11\r\n\r\nhello world"
+	go func() { _, _ = client.Write([]byte(request)); _ = client.Close() }()
+	defer server.Close()
+
+	host, prefix, err := readHTTP(server)
+
+	if err != nil || host != "www.example.test" {
+		t.Fatalf("request failed: host=%q err=%v", host, err)
+	}
+	if string(prefix) != request {
+		t.Fatalf("the body that arrived with the headers was dropped: %q", prefix)
+	}
+}
+
+func TestReadHTTPKeepsAPipelinedRequest(t *testing.T) {
+	server, client := net.Pipe()
+	request := "GET /a HTTP/1.1\r\nHost: www.example.test\r\n\r\nGET /b HTTP/1.1\r\nHost: www.example.test\r\n\r\n"
+	go func() { _, _ = client.Write([]byte(request)); _ = client.Close() }()
+	defer server.Close()
+
+	_, prefix, err := readHTTP(server)
+
+	if err != nil || string(prefix) != request {
+		t.Fatalf("pipelined bytes were lost: err=%v prefix=%q", err, prefix)
 	}
 }

@@ -14,9 +14,10 @@ advertised addresses onto one local IP.
 :::
 
 The edge gateway is the only process that binds customer HTTP and HTTPS
-service addresses on a gateway-enabled edge. It performs a bounded lookup on
-destination address plus HTTP `Host` or TLS SNI, then proxies the untouched
-connection to an assigned OpenResty cell. It does not terminate customer TLS,
+service addresses on a gateway-enabled edge. A service address is the public IP that customers' DNS names
+resolve to. SNI is the host name a client sends at the start of a TLS handshake. The gateway looks up the
+destination address plus the HTTP `Host` header or TLS SNI in a bounded table. It then proxies the untouched
+connection to an assigned OpenResty cell (one bounded proxy and cache process). It does not terminate customer TLS,
 load certificates, cache content, run WAF rules, contact origins, or call the
 control plane.
 
@@ -105,6 +106,18 @@ protocol routes, or a size over 32 MiB.
 
 The gateway sends PROXY protocol version 2 to private cell ports `8081` and `8444`.
 This is the trusted client-identity contract for HTTP and encrypted HTTPS.
+Cells honor the PROXY header only from the networks in
+`EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS` (production Compose passes the fixed `edge`
+network, `EDGE_NETWORK_SUBNET`, default `172.29.250.0/24`); a header from any
+other peer is ignored and that peer keeps its own address. With the variable
+empty, no peer is trusted. The client address then reaches the origin in
+`X-Forwarded-For` and `Forwarded` (IPv6 quoted and bracketed), set only by the
+cell from that address. A client-supplied `X-Forwarded-For`, `Forwarded`, or
+internal `X-CDN-Client-Address` header never reaches the origin. A domain that
+sits behind its own trusted proxies lists them as `trusted_proxy_cidrs`; only
+then is `X-Forwarded-For` read, from the right, stopping at the first address
+that is not a trusted proxy. The gateway forwards every byte it buffered after
+the HTTP headers, so POST bodies on port 80 are not delayed.
 Cell ports `8080` and `8443` are not published. All customer traffic is forced
 through the gateway and reaches cells only on the private contract ports.
 
@@ -113,7 +126,17 @@ through the gateway and reaches cells only on the private contract ports.
 Production uses host networking so sockets see the destination address. Grant
 only `NET_BIND_SERVICE`; drop all other capabilities. Restrict port `9105` to
 the edge agent and monitoring source. Set `EDGE_GATEWAY_MAX_CONNECTIONS` from
-the qualified host ceiling; invalid or out-of-range values use 8,192.
+the qualified host ceiling. It accepts 128 to 65,536. An invalid or out-of-range value falls back to 8,192.
+
+One source address may hold at most `EDGE_GATEWAY_MAX_CONNECTIONS_PER_ADDRESS`
+connections (256 by default; an IPv6 source counts per /64), so a single client
+cannot take every slot. A refused connection is closed at once and counted as
+rejected. After the preface, each relayed direction is closed when no byte moves
+for `EDGE_GATEWAY_IDLE_TIMEOUT_SECONDS` (120 s), and when one side half-closes
+the other direction survives only while it keeps moving data within
+`EDGE_GATEWAY_HALF_CLOSE_TIMEOUT_SECONDS` (30 s). Clients behind one shared
+address, such as a carrier-grade NAT, share that address's limit; raise it for
+such traffic rather than the global bound.
 The immutable image remains non-root and applies `cap_net_bind_service` only to
 the gateway executable so the Compose capability is effective after `exec`.
 Never replace this boundary with a privileged or root container.

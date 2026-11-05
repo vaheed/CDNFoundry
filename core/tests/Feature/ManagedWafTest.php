@@ -40,12 +40,25 @@ class ManagedWafTest extends TestCase
         }
     }
 
-    public function test_fixed_profiles_are_revisioned_authorized_and_idempotent(): void
+    public function test_profile_change_is_refused_with_409_when_no_waf_capable_pool_exists(): void
     {
         Queue::fake();
         [$owner, $domain] = $this->ownedDomain();
+
+        $this->actingAs($owner)->patchJson("/api/domains/{$domain->id}/waf", ['profile' => 'balanced'])
+            ->assertConflict()->assertJsonPath('code', 'waf_capable_pool_unavailable');
+        $this->assertSame('off', $domain->fresh()->waf_profile);
+        $this->assertSame(1, $domain->fresh()->revision);
+        $this->actingAs($owner)->patchJson("/api/domains/{$domain->id}/waf", ['profile' => 'off'])->assertAccepted();
+    }
+
+    public function test_fixed_profiles_are_revisioned_authorized_and_idempotent(): void
+    {
+        Queue::fake();
+        EdgePool::query()->where('kind', 'shared')->update(['waf_capable' => true, 'waf_runtime_version' => 'sha256:test']);
+        [$owner, $domain] = $this->ownedDomain();
         $stranger = User::factory()->create();
-        $this->actingAs($stranger)->getJson("/api/domains/{$domain->id}/waf")->assertForbidden();
+        $this->actingAs($stranger)->getJson("/api/domains/{$domain->id}/waf")->assertNotFound();
         $this->actingAs($owner)->getJson("/api/domains/{$domain->id}/waf")
             ->assertOk()->assertJsonPath('data.name', 'off');
 
@@ -63,32 +76,22 @@ class ManagedWafTest extends TestCase
         Queue::assertPushed(ReconcileEdgeDomain::class);
     }
 
-    public function test_exclusions_are_literal_owned_audited_expiring_and_bounded(): void
+    public function test_new_exclusions_are_refused_and_stored_exclusions_never_reach_the_edge(): void
     {
         Queue::fake();
         [$owner, $domain] = $this->ownedDomain();
-        $this->actingAs($owner)->postJson("/api/domains/{$domain->id}/waf/exclusions", [
+        $response = $this->actingAs($owner)->postJson("/api/domains/{$domain->id}/waf/exclusions", [
             'dimension' => 'path', 'value' => '/checkout', 'reason' => 'Approved false positive for checkout',
             'expires_at' => now()->addDays(7)->toIso8601String(),
-        ])->assertAccepted()->assertJsonPath('data.exclusion.owner_id', $owner->id);
-        $this->actingAs($owner)->postJson("/api/domains/{$domain->id}/waf/exclusions", [
-            'dimension' => 'path', 'value' => '/checkout/*', 'reason' => 'Unsafe wildcard request',
-            'expires_at' => now()->addDays(7)->toIso8601String(),
-        ])->assertUnprocessable()->assertJsonValidationErrors('value');
-        $this->actingAs($owner)->postJson("/api/domains/{$domain->id}/waf/exclusions", [
-            'dimension' => 'rule', 'value' => 'SQL injection', 'reason' => 'Missing bounded rule identifier',
-            'expires_at' => now()->addDays(7)->toIso8601String(),
-        ])->assertUnprocessable()->assertJsonValidationErrors('rule_id');
-        $this->actingAs($owner)->postJson("/api/domains/{$domain->id}/waf/exclusions", [
-            'dimension' => 'rule', 'value' => 'SQL injection', 'rule_id' => 942100,
-            'reason' => 'Arbitrary configuration is forbidden',
-            'expires_at' => now()->addDays(31)->toIso8601String(), 'secrule' => 'SecRuleEngine Off',
-        ])->assertUnprocessable()->assertJsonValidationErrors(['expires_at', 'secrule']);
+        ])->assertConflict()->assertJsonPath('code', 'waf_exclusions_unavailable');
+        $this->assertSame(0, $domain->wafExclusions()->count());
+        $this->assertSame($domain->revision, $domain->refresh()->revision);
 
-        $compiled = ManagedWaf::compile($domain->refresh());
-        $this->assertCount(1, $compiled['exclusions']);
-        $this->assertSame('/checkout', $compiled['exclusions'][0]['value']);
-        $this->assertDatabaseHas('audit_logs', ['action' => 'waf.exclusion_created']);
+        $domain->wafExclusions()->create([
+            'dimension' => 'rule', 'value' => 'SQL injection', 'rule_id' => 942100, 'reason' => 'Stored before the exclusion freeze',
+            'expires_at' => now()->addDays(7), 'owner_id' => $owner->id,
+        ]);
+        $this->assertSame([], ManagedWaf::compile($domain->refresh())['exclusions']);
     }
 
     public function test_pool_capability_accepts_all_managed_profiles_without_canary_state(): void

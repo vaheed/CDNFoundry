@@ -25,6 +25,7 @@ class CreateEdge extends CreateRecord
         $data['country_code'] = strtoupper($data['country_code']);
         $data['continent_code'] = strtoupper($data['continent_code']);
         $data['bootstrap_token_hash'] = hash('sha256', $this->bootstrapToken);
+        $data['bootstrap_expires_at'] = now()->addHours(Edge::BOOTSTRAP_TOKEN_HOURS);
         $edge = DB::transaction(function () use ($data): Edge {
             $edge = Edge::query()->create($data);
             for ($slot = 1; $slot <= $edge->cell_slot_count; $slot++) {

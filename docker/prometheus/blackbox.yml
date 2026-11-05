@@ -1,0 +1,32 @@
+# Synthetic probes run from the monitoring host, which is outside every PoP network. Targets are IP
+# literals, so each PoP and nameserver is probed over IPv4 and over IPv6 separately.
+modules:
+  http_up:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+      no_follow_redirects: true
+      # A proxy that does not know the probe's Host answers 4xx; any answer below 500 proves the PoP serves.
+      valid_status_codes: [200, 204, 301, 302, 304, 400, 401, 403, 404, 405, 421, 426, 429]
+      fail_if_not_ssl: false
+  tcp_connect:
+    prober: tcp
+    timeout: 5s
+  dns_udp:
+    prober: dns
+    timeout: 5s
+    dns:
+      transport_protocol: udp
+      query_name: probe.cdnfoundry.invalid
+      query_type: A
+      # An authoritative server refuses names outside its zones; REFUSED and NXDOMAIN prove it answers.
+      valid_rcodes: [NOERROR, NXDOMAIN, REFUSED]
+  dns_tcp:
+    prober: dns
+    timeout: 5s
+    dns:
+      transport_protocol: tcp
+      query_name: probe.cdnfoundry.invalid
+      query_type: A
+      valid_rcodes: [NOERROR, NXDOMAIN, REFUSED]

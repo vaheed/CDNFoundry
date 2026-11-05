@@ -25,6 +25,27 @@ class NameserverResolver
         if ($this->validatedRecords($domain, 'DS', allowNegative: true) !== []) {
             throw new RuntimeException('Remove the previous provider DS record before activating this unsigned zone.');
         }
+
+        return $this->parentDelegation($domain);
+    }
+
+    /**
+     * The delegation the parent authorities publish now, without the unsigned-zone DS check. Used to
+     * choose a pair that differs from it. Throws when the parent set cannot be established or the
+     * parents disagree; the caller never guesses.
+     *
+     * @return list<string>
+     */
+    public function delegation(string $domain): array
+    {
+        $this->deadline = microtime(true) + 45;
+
+        return $this->parentDelegation(DomainName::normalize($domain));
+    }
+
+    /** @return list<string> */
+    private function parentDelegation(string $domain): array
+    {
         $labels = explode('.', $domain);
         $parents = [];
         while (count($labels) > 1) {

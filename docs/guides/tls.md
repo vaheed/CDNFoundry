@@ -1,15 +1,22 @@
 ---
 title: TLS certificates
-description: Operate managed DNS-01 issuance, custom certificate upload, renewal, and failure recovery.
+description: Choose managed or custom certificates for a domain, upload your own, renew or reissue, and recover from failures.
 ---
 
 # TLS certificates
 
-| Mode | Private-key owner | Validation |
+A TLS certificate lets visitors reach your site over HTTPS. Each domain uses one
+of three modes. This page shows how to choose one, upload a certificate, renew,
+and recover when issuance fails.
+
+**You need:** a domain with verified nameservers. Managed certificates also need
+at least one proxied hostname.
+
+| Mode | Private-key owner | How it is validated |
 | --- | --- | --- |
-| Managed | Control plane, encrypted | ACME DNS-01 after an eligible proxied hostname |
-| Custom | Uploaded then encrypted | Key match, chain, names, expiry, and size |
-| Disabled | No domain certificate | Explicit policy |
+| `managed` | The control plane, encrypted | ACME DNS-01 (see below) after a hostname becomes proxied |
+| `custom` | You upload it, then CDNFoundry encrypts it | Key match, chain, names, expiry, and size |
+| `disabled` | No domain certificate | Explicit choice |
 
 ```mermaid
 stateDiagram-v2
@@ -24,33 +31,63 @@ stateDiagram-v2
     LastValid --> Renewing: bounded retry
 ```
 
+ACME is the protocol certificate authorities (CAs) use to issue certificates
+automatically. DNS-01 proves control of a name with a temporary DNS TXT record.
+
+## Choose a mode
+
+<DocTabs :labels="['Domain panel', 'API']">
+<template #tab-1>
+
+Open the domain and choose **TLS mode**. Select **Managed**, **Custom**, or
+**Disabled**, and save.
+
+</template>
+<template #tab-2>
+
+```sh
+curl -X PATCH "$CDNF_URL/api/domains/$DOMAIN_ID/tls" \
+  -H "Authorization: Bearer $CDNF_TOKEN" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{"mode": "managed"}'
+```
+
+</template>
+</DocTabs>
+
+**Expected result:** the mode and domain revision are saved and the edges get a
+new revision. `GET /api/domains/{domain}/tls/status` shows the latest order.
+
+**If it fails:** custom mode needs a current, active, unexpired custom
+certificate when the domain is locked for the change. If it was removed or
+expired while the request waited, the API returns `409` with code `conflict` and
+the panel shows a **Mode** validation error. Upload a valid certificate, then try
+again. A rejected change keeps the saved mode, certificate, and revision.
+
 ::: danger Private-key handling
 Never log or expose certificate keys. Recovery needs the original application
-encryption key, the edge recovery key, and externally retained TLS material.
+encryption key, the edge recovery key, and externally kept TLS material.
 :::
 
-Production edge runtime generations, including active certificate keys, live
-in the shared 512 MiB `edge-runtime-memory` tmpfs volume. Each successful activation
-also writes an AES-GCM encrypted recovery snapshot to `edge-agent-state`.
-The agent's own enrollment key is encrypted in that volume with the same
-externally supplied recovery key.
-After an edge restart, the agent verifies and restores that snapshot before
-contacting the control plane; a failed rotation preserves the current tmpfs
-generation and its last valid encrypted snapshot. The recovery key is a
-32-byte random value supplied from external secret storage into host tmpfs as
-64 hex characters in a `0400` file. The bootstrap listener key must also be
-supplied on host tmpfs. Cells and agent reject disk-backed mounts and active
-host swap. A missing or changed recovery key requires a control-plane rebuild
-of the edge snapshot; retain it with recovery material.
+## How edges hold keys
 
-A domain TLS mode is `managed`, `custom`, or `disabled`.
+In production, edge runtime generations, including active certificate keys, live
+in the shared 512 MiB `edge-runtime-memory` tmpfs volume. Each successful
+activation also writes an AES-GCM encrypted recovery snapshot to
+`edge-agent-state`. The agent's own enrollment key is encrypted in that volume
+with the same externally supplied recovery key.
 
-Selecting custom mode requires a current, active, unexpired custom certificate
-when the domain transaction acquires its lock. If the certificate was removed
-or expired while the request waited, the API returns `409` / `conflict` and the
-panel shows a **Mode** validation error. Reload and upload a valid certificate
-before retrying. The rejected selection preserves the saved mode, certificate
-and revision.
+After an edge restart, the agent verifies and restores the snapshot before it
+contacts the control plane. A failed rotation keeps the current tmpfs generation
+and its last valid encrypted snapshot.
+
+The recovery key is a 32-byte random value. Supply it from external secret
+storage into host tmpfs as 64 hex characters in a `0400` file. The bootstrap
+listener key must also be on host tmpfs. Cells and the agent refuse disk-backed
+mounts and active host swap. If the recovery key is missing or changed, the
+control plane must rebuild the edge snapshot. Keep the key with your recovery
+material.
 
 ## Managed certificates
 
@@ -63,6 +100,11 @@ Managed issuance requires all of the following:
 - healthy authoritative DNS reconciliation.
 
 DNS-only and unverified domains do not create ACME orders.
+
+The ACME client reuses the `Replay-Nonce` returned with each response, waits at
+least the `Retry-After` an ACME server sends when polling an order or
+authorization or answering `429` or `503` (bounded to one hour), and registers
+its account once under a lock even when several workers start together.
 
 The certificate-name compiler creates bounded name sets. The usual set includes
 the apex and wildcard; deep hostnames that a wildcard cannot cover use a
@@ -84,7 +126,8 @@ its private DNSdist endpoint through `ACME_DNS_PROBE_SERVER`. DNSdist has no
 packet cache in the supported configuration, so no stale cache entry needs
 flushing. A missing or non-authoritative answer delays the order; it does not
 replace an active certificate. The issuer stores the
-encrypted private key and certificate, publishes a new edge revision, and
+encrypted private key and certificate, publishes a new edge revision that
+references the certificate by id (edges fetch the key separately), and
 cleans challenge records. New orders are globally bounded per hour and initial
 work is jittered.
 
@@ -146,13 +189,33 @@ challenge cleanup, revision, DNS reconciliation operation and issuance receipt
 commit together. A receipt write failure rolls them back for retry; delayed
 obsolescence preserves an already completed outcome.
 
-## Manual managed actions
+## Renew or reissue by hand
+
+<DocTabs :labels="['Domain panel', 'API']">
+<template #tab-1>
+
+Choose **Renew managed certificate** or **Reissue managed certificate** on the
+domain.
+
+</template>
+<template #tab-2>
+
+```sh
+curl -X POST "$CDNF_URL/api/domains/$DOMAIN_ID/tls/renew" \
+  -H "Authorization: Bearer $CDNF_TOKEN" \
+  -H "Idempotency-Key: $(uuidgen)"
+```
+
+Use `.../tls/reissue` to force a new order.
+
+</template>
+</DocTabs>
 
 - **Renew** creates work only when renewal is due.
 - **Reissue** forces a new managed order.
 - `GET .../tls/status` includes the latest order without private material.
 
-Both actions return `202` and an operation UUID.
+**Expected result:** both actions return `202` and an operation UUID.
 
 Each action's operation reports completion of its planning job. Renewal may
 reuse valid coverage and return an empty `queued_order_ids` list. A pending
@@ -164,13 +227,44 @@ acknowledgements and verified HTTPS separately.
 
 ## Custom certificates
 
-Upload a leaf certificate, issuing chain, and private key in PEM. Bounds are
-16 KiB for leaf and key and 64 KiB for chain. Validation confirms:
+Upload a leaf certificate, its intermediate certificates, and the private key in
+PEM. The chain is optional when a trusted root issued the leaf directly. Limits
+are 16 KiB for the leaf and the key, and 64 KiB for the chain.
+
+<DocTabs :labels="['Domain panel', 'API']">
+<template #tab-1>
+
+Choose **Upload custom certificate**. Fill **Leaf certificate PEM**,
+**Intermediate certificates PEM**, and **Private key PEM**, and save. To go back
+to managed mode, choose **Remove custom certificate**.
+
+</template>
+<template #tab-2>
+
+```sh
+curl -X POST "$CDNF_URL/api/domains/$DOMAIN_ID/tls/upload" \
+  -H "Authorization: Bearer $CDNF_TOKEN" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d @certificate.json
+```
+
+`certificate.json` holds `certificate`, `chain` (optional), and `private_key`.
+Remove the custom certificate with `DELETE .../tls/custom-certificate`.
+
+</template>
+</DocTabs>
+
+**Expected result:** the reply holds only metadata and a fingerprint, never the
+key. The edges get a new revision.
+
+Validation confirms:
 
 - the key matches the leaf;
 - accepted key algorithm and size;
-- an ordered chain of at most ten issuing/root certificates ends at its
-  self-signed root and verifies for TLS server authentication;
+- the leaf verifies for TLS server authentication against the platform trust
+  store, with at most ten uploaded certificates used only as untrusted
+  intermediates;
 - CA constraints, signing key usage, path length, server purpose, name
   constraints and critical extensions permit the leaf;
 - chain keys and non-root signatures satisfy OpenSSL authentication level 2
@@ -179,8 +273,8 @@ Upload a leaf certificate, issuing chain, and private key in PEM. Bounds are
 - the leaf, issuers and root are currently valid;
 - names cover every required proxied hostname.
 
-Private keys are encrypted before persistence and never returned. The response
-contains only metadata and fingerprint. Removing the active custom certificate
+CDNFoundry encrypts private keys before saving them and never returns them.
+Removing the active custom certificate
 returns the domain to managed mode and queues managed issuance.
 
 Only normalized public certificate blocks are stored in the issuing-chain
@@ -195,10 +289,14 @@ returns `409` with code `conflict`; the panel shows a validation error on
 covering its current proxied hostnames. The conflicting upload leaves the
 active certificate and other request's committed revision intact.
 
-The supplied root is the explicit trust anchor for validation, so a valid
-private CA is supported. This does not install that CA into visitors' trust
-stores or prove public-browser trust. Supply the appropriate chain for your
-clients. Validation performs no remote CA or revocation lookup.
+A root the customer supplies is never trusted. A self-signed certificate, or a
+chain whose root the platform does not trust, is rejected with a `chain` error,
+and a root included in the upload is dropped from the stored chain. The platform
+trusts the operating system roots of the control-plane image. An operator who
+runs a private PKI sets `TLS_UPLOAD_TRUST_FILE` to a PEM bundle of the roots to
+trust instead; see [Configuration](../reference/configuration.md). This does
+not install any CA into visitors' trust stores or prove public-browser trust.
+Validation performs no remote CA or revocation lookup.
 The control-plane image includes the pinned OpenSSL command-line verifier.
 It checks public certificate PEM locally with a five-second timeout; private
 keys never enter its input or command arguments. Custom non-container PHP
@@ -214,7 +312,7 @@ required backups under restricted access; this update does not erase historical
 rows, snapshots or backups. Existing invalid chains require a valid replacement;
 the update does not silently deactivate currently serving certificates.
 
-## Failure behaviour
+## If issuance fails
 
 An ACME failure records the order error, cleans unusable challenge state, and
 preserves any valid active certificate and edge artifact. Do not delete a valid

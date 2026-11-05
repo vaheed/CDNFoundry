@@ -1,0 +1,62 @@
+# Every production Compose service is either scraped by a Prometheus job or exempt with its reason.
+# tests/observability/test_metrics_contract.py fails when a service is in neither list, when a job named
+# here is not in prometheus.yml, or when an exemption names a service that no longer exists.
+scraped:
+  alertmanager: alertmanager
+  blackbox: blackbox
+  cell-01: vector-pop
+  cell-02: vector-pop
+  cell-03: vector-pop
+  cell-04: vector-pop
+  cell-05: vector-pop
+  cell-06: vector-pop
+  cell-07: vector-pop
+  cell-08: vector-pop
+  clickhouse: clickhouse
+  core: cdnfoundry-control
+  dnsdist: dnsdist
+  edge-gateway: edge-gateway
+  grafana: grafana
+  horizon: cdnfoundry-control
+  log-collector: operational-log-collector
+  loki: loki
+  node-exporter: node
+  prometheus: prometheus
+  scheduler: cdnfoundry-control
+  vector: vector
+  web: cdnfoundry-control
+exempt:
+  cache:
+    reason: No Valkey exporter is deployed yet. The cache lane is covered by cdnfoundry_component_health and the queue gauges.
+  redis:
+    reason: No Valkey exporter is deployed yet. Queue depth and age are exported by the control plane as cdnfoundry_queue_depth.
+  control-db:
+    reason: No PostgreSQL exporter is deployed yet. Availability is cdnfoundry_component_health{component="control_database"}.
+  pdns-db:
+    reason: No PostgreSQL exporter is deployed yet. PowerDNS health is the DNSdist backend status and the DNS deployment gauges.
+  pdns-auth:
+    reason: Private to its node and not published. DNSdist backend status and the DNS probes cover it.
+  pdns-primary:
+    reason: Private to the control network and not published. The DNS deployment gauges and probes cover it.
+  caddy:
+    reason: The Caddy admin API is off by design, so it has no metrics endpoint. Requests are counted as cdnfoundry_http_requests_total.
+  telemetry-gateway:
+    reason: The Caddy admin API is off by design. Delivery is measured by the Vector sink counters.
+  edge-agent:
+    reason: Reports through the control plane as cdnfoundry_edge_* heartbeat and runtime gauges.
+  edge-control:
+    reason: Reports through the control plane as cdnfoundry_edge_* gauges; it has no metrics endpoint of its own.
+  docker-socket-proxy:
+    reason: A read-only proxy with no metrics. The log collector that uses it is scraped.
+  mmdb-updater:
+    reason: A batch updater. Database freshness is cdnfoundry_component_health{component="mmdb"}.
+  edge-gateway-state-init:
+    reason: A one-shot initializer.
+  grafana-plugins-init:
+    reason: A one-shot initializer.
+  grafana-control-db-provision:
+    reason: A one-shot provisioner.
+  loki-data-init:
+    reason: A one-shot initializer.
+  grafana-bootstrap:
+    reason: A reconciliation job with no metrics. Its health check reports the last successful run.

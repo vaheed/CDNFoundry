@@ -2,12 +2,16 @@ local cjson = require "cjson.safe"
 local resolver = require "resty.dns.resolver"
 local balancer = require "ngx.balancer"
 local bit = require "bit"
+local cache_target = require "cache_key"
 local ffi = require "ffi"
 ffi.cdef[[
 int kill(int pid, int sig);
 int inet_pton(int af, const char *src, void *dst);
 ]]
+local resty_sha256 = require "resty.sha256"
+local resty_string = require "resty.string"
 local M = {}
+local telemetry_proof
 local state = { hosts = {}, certificates = {}, sequence = 0, generation_id = "bootstrap" }
 local path = os.getenv("EDGE_RUNTIME_FILE") or "/var/lib/cdnfoundry/runtime/active.json"
 local restart_generation = 0
@@ -16,6 +20,19 @@ local certificate_cache_order = {}
 local certificate_cache_limit = 512
 local cache_control_directives
 local geo_database
+local asn_database
+
+-- Proves to the local Vector that an access-log line came from this cell. Other
+-- containers on the cell network do not hold the node secret, so Vector drops
+-- any event they forge.
+local function telemetry_proof_value()
+    if telemetry_proof == nil then
+        local digest = resty_sha256:new()
+        digest:update("cdnf-telemetry-v1|" .. (os.getenv("EDGE_STATUS_TOKEN") or ""))
+        telemetry_proof = resty_string.to_hex(digest:final())
+    end
+    return telemetry_proof
+end
 
 local function security_reject(status, reason)
     local dictionary = ngx.shared.runtime_limits
@@ -93,10 +110,16 @@ local hard_origin_networks = compile_networks({
     "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4",
     "::/128", "::1/128", "::ffff:0:0/96", "64:ff9b::/96", "64:ff9b:1::/48",
     "fe80::/10", "fec0::/10", "ff00::/8", "2001:db8::/32",
+    -- Transition ranges embed an IPv4 address that would bypass the IPv4 rules.
+    "::/96", "2002::/16", "2001::/23", "100::/64",
 })
 local private_origin_networks = compile_networks({
     "10.0.0.0/8", "100.64.0.0/10", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7",
 })
+
+-- The only ports an origin may use. Mirrors OriginData::ALLOWED_PORTS in the control plane.
+local allowed_origin_ports = {}
+for _, port in ipairs({80, 443, 2052, 2053, 2082, 2083, 2086, 2087, 2095, 2096, 8000, 8008, 8080, 8081, 8088, 8443, 8444, 8880, 8888, 9000, 9443}) do allowed_origin_ports[port] = true end
 
 local function blocked(ip, networks, blocked_networks, denied)
     local packed = packed_address(ip)
@@ -120,9 +143,6 @@ local function load()
     local raw = file:read("*a"); file:close()
     if #raw > 64 * 1024 * 1024 then return nil, "runtime state exceeds limit" end
     local decoded = cjson.decode(raw)
-    if decoded and decoded.generation_id == nil and type(decoded.sequence) == "number" then
-        decoded.generation_id = "legacy-" .. tostring(decoded.sequence)
-    end
     if not decoded or decoded.schema_version ~= 1 or type(decoded.hosts) ~= "table"
         or type(decoded.generation_id) ~= "string" or #decoded.generation_id > 64 then
         return nil, "invalid runtime state"
@@ -137,10 +157,31 @@ local function load()
     return true
 end
 
+-- The agent writes a stamp (the SHA-256 of the runtime file) beside every runtime file, after the
+-- file itself. Polling that few-byte stamp costs almost nothing; the state, which can be tens of
+-- megabytes, is decoded only when the stamp changes. Without a stamp the file is loaded every tick.
+local stamp_path = path:gsub("%.json$", ".stamp")
+local loaded_stamp
+
+local function read_stamp()
+    local file = io.open(stamp_path, "rb")
+    if not file then return nil end
+    local stamp = file:read(64)
+    file:close()
+    return stamp
+end
+
 local function refresh(premature)
     if premature then return end
+    local stamp = read_stamp()
+    if stamp ~= nil and stamp == loaded_stamp then return end
     local ok, err = load()
-    if not ok then ngx.log(ngx.WARN, err) end
+    if not ok then
+        ngx.log(ngx.WARN, err)
+        return
+    end
+    loaded_stamp = stamp
+    ngx.log(ngx.NOTICE, "runtime state loaded generation=", state.generation_id, " sequence=", tostring(state.sequence))
 end
 
 function M.start()
@@ -153,6 +194,14 @@ function M.start()
             if ok_open then geo_database = database else ngx.log(ngx.WARN, "GeoIP database unavailable: ", database) end
         else
             ngx.log(ngx.WARN, "GeoIP module unavailable: ", maxminddb)
+        end
+    end
+    local asn_path = os.getenv("GEOIP_ASN_DATABASE") or ""
+    if asn_path ~= "" then
+        local ok_module, maxminddb = pcall(require, "maxminddb")
+        if ok_module then
+            local ok_open, database = pcall(maxminddb.open, asn_path)
+            if ok_open then asn_database = database else ngx.log(ngx.WARN, "GeoIP ASN database unavailable: ", database) end
         end
     end
     local ok, err = ngx.timer.every(1, refresh)
@@ -175,6 +224,44 @@ function M.start()
     if not ok then ngx.log(ngx.ERR, "runtime restart timer failed: ", err) end
 end
 
+-- The domain-wide handshake ceiling is this many times the per-client budget. The per-client
+-- budget itself is enforced by the gateway, which sees the real client address; during the TLS
+-- handshake a cell sees only the gateway.
+local handshake_domain_multiplier = 20
+
+-- A failed handshake never reaches the access log, so the certificate selector reports it. The event
+-- travels the same authenticated syslog path as a request, carries the SNI and protocol, and is
+-- bounded per second so a handshake flood cannot flood telemetry.
+local tls_failure_budget_per_second = 20
+local tls_failure_reasons = {
+    unknown_sni = true, handshake_rate_exceeded = true, tls_disabled = true,
+    certificate_unavailable = true, certificate_expired = true, certificate_invalid = true,
+}
+
+local function report_tls_failure(reason, sni)
+    if not tls_failure_reasons[reason] then reason = "certificate_unavailable" end
+    local dictionary = ngx.shared.runtime_limits
+    dictionary:incr("capacity:tls_failures", 1, 0)
+    local second = ngx.time()
+    local seen = dictionary:incr("tls_failure_events:" .. second, 1, 0, 2)
+    if not seen or seen > tls_failure_budget_per_second then
+        dictionary:incr("capacity:tls_failures_suppressed", 1, 0)
+        return
+    end
+    local ssl = require "ngx.ssl"
+    local protocol = ssl.get_tls1_version_str and select(1, ssl.get_tls1_version_str()) or ""
+    local payload = cjson.encode({
+        occurred_at = ngx.utctime():gsub(" ", "T") .. "Z", event_type = "tls", tls_error = reason,
+        hostname = sni, ssl_protocol = protocol or "", domain_id = 0, status = 0,
+        security_action = "allow", telemetry_proof = telemetry_proof_value(),
+    })
+    local socket = ngx.socket.udp()
+    socket:settimeout(100)
+    local ok = socket:setpeername(os.getenv("EDGE_TELEMETRY_HOST") or "vector", 9000)
+    if ok then socket:send("<190>cdnfoundry_edge: " .. payload) end
+    socket:close()
+end
+
 function M.select_certificate()
     local ssl = require "ngx.ssl"
     local name = ssl.server_name()
@@ -182,24 +269,36 @@ function M.select_certificate()
     local config = state.hosts[name]
     if not config then
         ngx.shared.runtime_limits:incr("security:reason:unknown_sni", 1, 0)
+        report_tls_failure("unknown_sni", name)
         error("unknown TLS SNI")
     end
     local security = config.security or {}
     local limits = security.limits or {}
     local second = ngx.time()
-    local handshakes = ngx.shared.runtime_limits:incr("security:tls:" .. tostring(config.domain) .. ":" .. second, 1, 0, 2)
-    if handshakes and handshakes > (tonumber(limits.tls_handshakes_per_second) or 50) then
+    local budget = tonumber(limits.tls_handshakes_per_second) or 50
+    local handshakes = ngx.shared.domain_limits:incr("security:tls:domain:" .. tostring(config.domain) .. ":" .. second, 1, 0, 2)
+    if not handshakes or handshakes > budget * handshake_domain_multiplier then
+        report_tls_failure("handshake_rate_exceeded", name)
         error("tls_handshake_rate_exceeded")
     end
-    if not config.tls or config.tls.mode == "disabled" or not config.tls.certificate_id then error("TLS disabled or certificate unavailable") end
+    if not config.tls or config.tls.mode == "disabled" or not config.tls.certificate_id then
+        report_tls_failure("tls_disabled", name)
+        error("TLS disabled or certificate unavailable")
+    end
     local certificate = state.certificates[config.tls.certificate_id]
-    if not certificate then error("TLS certificate unavailable") end
-    if tonumber(certificate.expires_at) and tonumber(certificate.expires_at) <= ngx.time() then error("TLS certificate expired") end
+    if not certificate then report_tls_failure("certificate_unavailable", name); error("TLS certificate unavailable") end
+    if tonumber(certificate.expires_at) and tonumber(certificate.expires_at) <= ngx.time() then
+        report_tls_failure("certificate_expired", name)
+        error("TLS certificate expired")
+    end
     local cached = certificate_cache[certificate.id]
     if not cached then
         local cert_der, cert_err = ssl.cert_pem_to_der((certificate.certificate_pem or "") .. (certificate.chain_pem or ""))
         local key_der, key_err = ssl.priv_key_pem_to_der(certificate.private_key_pem or "")
-        if not cert_der or not key_der then error("invalid TLS bundle: " .. (cert_err or key_err or "unknown")) end
+        if not cert_der or not key_der then
+            report_tls_failure("certificate_invalid", name)
+            error("invalid TLS bundle: " .. (cert_err or key_err or "unknown"))
+        end
         cached = {certificate = cert_der, key = key_der}
         certificate_cache[certificate.id] = cached
         certificate_cache_order[#certificate_cache_order + 1] = certificate.id
@@ -261,15 +360,25 @@ local function reject(status)
     return security_reject(status, "malformed_request")
 end
 
+-- The connection address is already the PROXY-protocol address when the peer is
+-- the gateway (nginx trusts PROXY headers only from the gateway's networks).
+-- X-Forwarded-For is read only when that address is a configured trusted proxy,
+-- walking from the right and stopping at the first address that is not one.
 local function client_address(security)
     local remote = ngx.var.remote_addr or ""
-    if allowed(remote, security.trusted_proxy_cidrs) then
-        local forwarded = (ngx.var.http_x_forwarded_for or ""):match("^%s*([^,%s]+)")
-        if forwarded and (#forwarded <= 45) and (ipv4_number(forwarded) or forwarded:find(":", 1, true)) then
-            return forwarded
-        end
+    local trusted = security.trusted_proxy_cidrs
+    if type(trusted) ~= "table" or #trusted == 0 or not allowed(remote, trusted) then return remote end
+    local entries = {}
+    for entry in (ngx.var.http_x_forwarded_for or ""):gmatch("[^,]+") do
+        entries[#entries + 1] = entry:match("^%s*(.-)%s*$")
+        if #entries > 32 then return remote end
     end
-    return remote
+    for index = #entries, 1, -1 do
+        local entry = entries[index]
+        if not packed_address(entry) then return remote end
+        if not allowed(entry, trusted) then return entry end
+    end
+    return entries[1] or remote
 end
 
 local function geography(ip)
@@ -279,6 +388,17 @@ local function geography(ip)
     local ok_country, country = pcall(result.get, result, "country", "iso_code")
     local ok_continent, continent = pcall(result.get, result, "continent", "code")
     return ok_country and country or "unknown", ok_continent and continent or "unknown"
+end
+
+-- The autonomous system number of a client, or 0 when the ASN database is absent or has no entry.
+local function autonomous_system(ip)
+    if not asn_database then return 0 end
+    local ok, result = pcall(asn_database.lookup, asn_database, ip)
+    if not ok or not result then return 0 end
+    local ok_number, number = pcall(result.get, result, "autonomous_system_number")
+    number = ok_number and tonumber(number) or 0
+    if number < 0 or number > 4294967295 then return 0 end
+    return math.floor(number)
 end
 
 local function rule_matches(rule, ip, country, continent)
@@ -335,34 +455,21 @@ local function request_header_size()
     return size
 end
 
+local PURGE_TTL_SECONDS = 31536000
+
+-- Returns the cache key, its edge TTL, and the resource base. A request whose
+-- target has no canonical form returns an unusable key with a zero TTL and a
+-- reason, so it is never cached.
 local function request_cache_key(domain, host, cache)
-    local request_uri = ngx.var.uri or "/"
     local query_policy = cache.query_policy or (cache.include_query_string == false and "ignore_all" or "include_all")
-    local selected = {}
-    for _, name in ipairs(cache.query_parameters or {}) do selected[name] = true end
-    local args = ngx.req.get_uri_args(128)
-    local names = {}
-    for name, _ in pairs(args) do
-        if query_policy == "include_all" or (query_policy == "include_selected" and selected[name])
-            or (query_policy == "ignore_selected" and not selected[name]) then names[#names + 1] = name end
-    end
-    table.sort(names)
-    local encoded = {}
-    for _, name in ipairs(names) do
-        local value = args[name]
-        local values = type(value) == "table" and value or {value}
-        table.sort(values, function(a, b) return tostring(a) < tostring(b) end)
-        for _, item in ipairs(values) do
-            encoded[#encoded + 1] = ngx.escape_uri(name) .. "=" .. ngx.escape_uri(item == true and "" or tostring(item))
-        end
-    end
-    if #encoded > 0 then request_uri = request_uri .. "?" .. table.concat(encoded, "&") end
-    local base = (ngx.var.scheme or "http") .. "|" .. host .. "|" .. request_uri
+    local target, reason = cache_target.target(ngx.var.request_uri or "", query_policy, cache.query_parameters)
+    if not target then return "uncacheable|" .. tostring(reason), 0, "uncacheable", reason end
+    local base = (ngx.var.scheme or "http") .. "|" .. host .. "|" .. target
     local dictionary = ngx.shared.runtime_limits
     local configured_epoch = tonumber(cache.epoch) or 1
     local runtime_epoch = tonumber(dictionary:get("cache:epoch:" .. domain)) or 0
     local epoch = math.max(configured_epoch, runtime_epoch)
-    local generation = dictionary:get("cache:url:" .. ngx.md5(base)) or 0
+    local generation = ngx.shared.cache_purges:get("u:" .. ngx.md5(base)) or 0
     local ttl = math.max(0, math.min(31536000, tonumber(cache.edge_ttl_seconds) or 0))
     local policy_query_parameters = {}
     for _, name in ipairs(cache.query_parameters or {}) do policy_query_parameters[#policy_query_parameters + 1] = name end
@@ -451,30 +558,8 @@ function M.prepare_waf()
     ngx.req.set_header("X-CDNF-Internal-WAF-Mode", mode)
     ngx.req.set_header("X-CDNF-Internal-WAF-Threshold", tostring(threshold))
     ngx.req.set_header("X-CDNF-Internal-WAF-Paranoia", tostring(paranoia))
-    local uri = ngx.var.uri or "/"
-    local args = ngx.req.get_uri_args(100)
-    local cookies = ngx.req.get_headers()["cookie"] or ""
-    local cookie_names = {}
-    for item in cookies:gmatch("[^;]+") do
-        local name = item:match("^%s*([^=%s]+)")
-        if name then cookie_names[name] = true end
-    end
-    local selected = 0
-    for _, exclusion in ipairs(waf.exclusions or {}) do
-        local rule_id = tonumber(exclusion.rule_id)
-        local matched = exclusion.dimension == "rule"
-            or (exclusion.dimension == "path" and exclusion.value == uri)
-            or (exclusion.dimension == "parameter" and args[exclusion.value] ~= nil)
-            or (exclusion.dimension == "cookie" and cookie_names[exclusion.value] == true)
-        if selected == 0 and rule_id and rule_id >= 900000 and rule_id <= 999999
-            and (tonumber(exclusion.expires_at) or 0) > ngx.time() and matched then
-            selected = tonumber(exclusion.id) or 0
-            mode = "monitor"
-            ngx.var.cdn_waf_action = "excluded"
-            ngx.var.cdn_waf_exclusion_id = tostring(selected)
-            ngx.req.set_header("X-CDNF-Internal-WAF-Mode", mode)
-        end
-    end
+    -- Exclusions are not honored: switching a whole request to monitor mode let
+    -- an attacker bypass CRS by adding a literal name. See docs/guides/managed-waf.md.
 end
 
 local function request_body_safety(config)
@@ -496,13 +581,42 @@ local function request_body_safety(config)
     end
 end
 
+local function certificate_covers(host, names)
+    for _, name in ipairs(names or {}) do
+        name = tostring(name):lower()
+        if name == host then return true end
+        local suffix = name:match("^%*(%..+)$")
+        if suffix and host:sub(-#suffix) == suffix and not host:sub(1, #host - #suffix):find(".", 1, true)
+            and #host > #suffix then
+            return true
+        end
+    end
+    return false
+end
+
+-- The certificate is chosen by SNI and the tenant by Host. A TLS request may
+-- only address a Host that the certificate selected for its SNI covers.
+local function tls_host_matches_sni(host)
+    if ngx.var.https ~= "on" then return true end
+    local sni = (ngx.var.ssl_server_name or ""):lower():gsub("%.$", "")
+    if sni == "" then return false end
+    if sni == host then return true end
+    local sni_config = state.hosts[sni]
+    local certificate_id = sni_config and sni_config.tls and sni_config.tls.certificate_id
+    local certificate = certificate_id and state.certificates[certificate_id]
+    return certificate ~= nil and certificate_covers(host, certificate.names)
+end
+
 function M.access()
+    ngx.req.clear_header("X-CDN-Client-Address")
+    ngx.var.cdn_telemetry_proof = telemetry_proof_value()
     local dictionary = ngx.shared.runtime_limits
     dictionary:incr("capacity:requests:" .. ngx.time(), 1, 0, 2)
     if dictionary:get("control:drained") == true then return security_reject(503, "edge_emergency_mode") end
     local host = (ngx.var.host or ""):lower():gsub("%.$", "")
     local config = state.hosts[host]
     if not config then return security_reject(421, "unknown_host") end
+    if not tls_host_matches_sni(host) then return security_reject(421, "sni_host_mismatch") end
     ngx.var.cdn_original_host = host
     ngx.var.cdn_domain_id = tostring(config.domain_id or 0)
     ngx.var.cdn_edge_id = os.getenv("EDGE_CELL_NAME") or "unknown"
@@ -527,12 +641,16 @@ function M.access()
     if request_header_size() > (tonumber(limits.maximum_header_size) or 32768) then return security_reject(431, "header_too_large") end
     local size = body_size()
     if emergency.disable_request_bodies and size > 0 then return security_reject(413, "edge_emergency_mode") end
-    if size > (tonumber(limits.maximum_request_body_size) or 16777216) then return security_reject(413, "body_too_large") end
+    if size > (tonumber(limits.maximum_request_body_size) or 8388608) then return security_reject(413, "body_too_large") end
     local client = client_address(security)
     local country, continent = geography(client)
     ngx.var.cdn_client_ip = client
+    -- One internal header carries the address to the origin hop; nothing from
+    -- the client is ever trusted in its place.
+    ngx.req.set_header("X-CDN-Client-Address", client)
     ngx.var.cdn_country = country or "ZZ"
     ngx.var.cdn_continent = continent or "ZZ"
+    ngx.var.cdn_asn = tostring(autonomous_system(client))
     for _, rule in ipairs(security.rules or {}) do
         if rule_matches(rule, client, country, continent) then
             if rule.action == "block" then return security_reject(403, "domain_restricted") end
@@ -591,7 +709,8 @@ function M.access()
     end
     local cache = config.cache or {}
     prepare_compression(config, emergency)
-    local cache_key, cache_ttl, cache_resource = request_cache_key(config.domain, host, cache)
+    local cache_key, cache_ttl, cache_resource, key_reason = request_cache_key(config.domain, host, cache)
+    if key_reason == "too_many_query_arguments" then ngx.var.cdn_security_reason = "cache_abuse_detected" end
     local development_until = tonumber(cache.development_mode_until) or 0
     local cacheable = cache.enabled == true and cache_ttl > 0
         and (ngx.req.get_method() == "GET" or ngx.req.get_method() == "HEAD")
@@ -636,6 +755,7 @@ function M.access()
 end
 
 function M.invalid_method()
+    ngx.var.cdn_telemetry_proof = telemetry_proof_value()
     return security_reject(405, ngx.var.cdn_security_reason ~= "" and ngx.var.cdn_security_reason or "invalid_method")
 end
 
@@ -691,6 +811,11 @@ function M.origin_access()
     ngx.ctx.origin_failure_threshold = tonumber(limits.origin_failure_threshold) or 10
     ngx.ctx.origin_recovery_timeout = tonumber(limits.origin_recovery_timeout) or 30
     dictionary:incr("capacity:origin_connections", 1, 0)
+    if not allowed_origin_ports[tonumber(origin.port)] then
+        ngx.log(ngx.WARN, "origin rejected: port not allowed")
+        ngx.header["X-CDNF-Error"] = "blocked_destination"
+        return ngx.exit(502)
+    end
     local address, err = resolve(origin.host, origin.private_allowlist, origin.blocked_networks, origin.blocked_addresses, origin.response_timeout_ms)
     if not address then
         ngx.log(ngx.WARN, "origin rejected: ", err)
@@ -811,7 +936,8 @@ function M.balance()
     local origin = config and config.origin
     if origin and ngx.var.cdn_origin_role == "backup" then origin = origin.backup end
     local peer = (ngx.var.origin_address or ""):gsub("^%[", ""):gsub("%]$", "")
-    if not origin or blocked(peer, origin.private_allowlist, origin.blocked_networks, origin.blocked_addresses) then
+    if not origin or not allowed_origin_ports[tonumber(ngx.var.origin_port)]
+        or blocked(peer, origin.private_allowlist, origin.blocked_networks, origin.blocked_addresses) then
         error("blocked_destination")
     end
     local tls_name = ngx.var.origin_sni
@@ -1038,6 +1164,7 @@ function M.passive_failures()
         cell = {
             name = os.getenv("EDGE_CELL_NAME") or "unknown",
             status = drained and "drained" or "ready",
+            purges_restored = ngx.shared.cache_purges:get("purge:restored") == true,
 			capacity = {
 				assigned_domain_count = assigned,
 				active_revision = state.sequence,
@@ -1072,21 +1199,22 @@ function M.control()
     if #raw == 0 or #raw > 128 * 1024 then return ngx.exit(400) end
     local command = cjson.decode(raw)
     if type(command) ~= "table" or type(command.task_id) ~= "string" or #command.task_id > 64
-        or (command.action ~= "drain" and command.action ~= "undrain" and command.action ~= "restart" and command.action ~= "cache_purge" and command.action ~= "emergency_mode") then
+        or (command.action ~= "drain" and command.action ~= "undrain" and command.action ~= "restart" and command.action ~= "cache_purge" and command.action ~= "cache_purges_restored" and command.action ~= "emergency_mode") then
         return ngx.exit(400)
     end
     if command.action == "emergency_mode" then
         if type(command.active) ~= "boolean" or type(command.actions) ~= "table" or #command.actions > 12
             or (command.expires_at ~= nil and (type(command.expires_at) ~= "number" or command.expires_at <= ngx.time())) then return ngx.exit(400) end
-        local supported = {reject_unknown_hosts=true,disable_request_bodies=true,allow_get_head_only=true,reduce_keepalive=true,
-            reduce_origin_concurrency=true,disable_origin_retries=true,serve_cache_only=true,serve_stale_only=true,
-            return_maintenance_response=true,quarantine_domain=true,withdraw_service_ip_from_dns=true,disable_compression=true}
+        -- Only actions the cell enforces are accepted; the others are rejected, never ignored.
+        local supported = {disable_request_bodies=true,allow_get_head_only=true,disable_origin_retries=true,
+            serve_cache_only=true,serve_stale_only=true,return_maintenance_response=true,disable_compression=true}
         for _, action in ipairs(command.actions) do if not supported[action] then return ngx.exit(400) end end
     end
     if command.action == "cache_purge" then
         if type(command.domain) ~= "string" or #command.domain == 0 or #command.domain > 253
             or (command.type ~= "all" and command.type ~= "urls")
             or type(command.cache_epoch) ~= "number" or command.cache_epoch < 1
+            or type(command.purge_id) ~= "number" or command.purge_id < 1 or command.purge_id % 1 ~= 0
             or type(command.cache_keys) ~= "table" or #command.cache_keys > 100
             or (command.type == "all" and #command.cache_keys ~= 0)
             or (command.type == "urls" and #command.cache_keys == 0) then
@@ -1110,6 +1238,8 @@ function M.control()
             if not already_drained then dictionary:set("control:restart_resume_at", ngx.now() + 2) end
             dictionary:set("control:last_restart_at", ngx.time())
             dictionary:incr("control:restart_generation", 1, 0)
+        elseif command.action == "cache_purges_restored" then
+            ngx.shared.cache_purges:set("purge:restored", true)
         elseif command.action == "emergency_mode" then
             if command.active then
                 dictionary:set("emergency:active", cjson.encode(command.actions))
@@ -1118,13 +1248,23 @@ function M.control()
                 dictionary:delete("emergency:active")
                 dictionary:delete("emergency:expires_at")
             end
-        elseif command.type == "all" then
+        elseif command.action == "cache_purge" and command.type == "all" then
             local epoch_key = "cache:epoch:" .. command.domain
             local current = dictionary:get(epoch_key) or 0
             if command.cache_epoch > current then dictionary:set(epoch_key, command.cache_epoch) end
         else
+            -- Purge generations live in their own dictionary so rate-limit counters can
+            -- never evict them, and are set to an absolute purge id so the agent can
+            -- replay them after a restart without double counting. A full dictionary
+            -- is reported, never silently evicted.
+            local purges = ngx.shared.cache_purges
             for _, key in ipairs(command.cache_keys) do
-                dictionary:incr("cache:url:" .. ngx.md5(key), 1, 0)
+                local name = "u:" .. ngx.md5(key)
+                local current = purges:get(name) or 0
+                if command.purge_id > current then
+                    local ok = purges:safe_set(name, command.purge_id, PURGE_TTL_SECONDS)
+                    if not ok then return ngx.exit(507) end
+                end
             end
         end
         dictionary:set("control:last_task_id", command.task_id)

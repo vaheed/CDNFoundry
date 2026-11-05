@@ -11,7 +11,6 @@ use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
 use App\Models\EdgeArtifact;
 use App\Models\EdgePool;
-use App\Models\EdgePoolEndpoint;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
 use App\Support\ArtifactSigner;
@@ -19,6 +18,7 @@ use App\Support\CachePolicy;
 use App\Support\CompressionPolicy;
 use App\Support\ManagedCertificateNames;
 use App\Support\ManagedWaf;
+use App\Support\OriginPolicy;
 use App\Support\PlatformSettings;
 use App\Support\SecurityConfig;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
@@ -37,7 +37,7 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
 
     public function __construct(public int $domainId)
     {
-        $this->onQueue('runtime');
+        $this->onQueue('edge');
     }
 
     public function uniqueId(): string
@@ -61,9 +61,13 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             DomainEdgeCell::query()->where('domain_id', $domain->id)->delete();
         } else {
             $requiresWaf = $domain->waf_profile !== 'off';
-            $pools = EdgePool::query()->where('enabled', true)
+            $current = DomainEdgePlacement::query()->where('domain_id', $domain->id)->first();
+            $currentPoolId = $current?->target_pool_id ?? $current?->active_pool_id;
+            // Automatic placement uses shared pools only. A non-shared pool is kept only
+            // when an administrator action already placed the domain there.
+            $pools = EdgePool::query()->where('enabled', true)->where('withdrawn', false)
                 ->when($requiresWaf, fn ($query) => $query->where('waf_capable', true))
-                ->orderByRaw("CASE kind WHEN 'reserved' THEN 0 WHEN 'dedicated' THEN 1 WHEN 'quarantine' THEN 2 ELSE 3 END")
+                ->where(fn ($query) => $query->where('kind', 'shared')->when($currentPoolId !== null, fn ($q) => $q->orWhere('id', $currentPoolId)))
                 ->orderBy('id')->get();
             if ($pools->isEmpty()) {
                 throw new \RuntimeException($requiresWaf
@@ -84,7 +88,9 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
                 $preferredId = $placement->target_pool_id ?? $placement->active_pool_id;
                 $target = $preferredId !== null && $eligibleIds->contains($preferredId)
                     ? $pools->firstWhere('id', $preferredId)
-                    : $pools[abs(crc32($domain->name)) % $pools->count()];
+                    : ($pools->where('kind', 'shared')->values()->isNotEmpty()
+                        ? $pools->where('kind', 'shared')->values()[abs(crc32($domain->name)) % $pools->where('kind', 'shared')->count()]
+                        : $pools[0]);
                 $revisionIsActive = $placement->desired_revision === $revision && $currentDomain->active_edge_revision === $revision;
                 $alreadyActive = $placement->state === 'active' && $placement->active_pool_id === $target->id && $revisionIsActive;
                 $alreadyDraining = $placement->state === 'draining' && $placement->target_pool_id === $target->id && $revisionIsActive;
@@ -117,10 +123,6 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             PlanDomainEdgeCells::execute($domain, $placement, $targetPool);
         }
 
-        $blockedAddresses = Edge::query()->pluck('management_ipv4')->merge(Edge::query()->pluck('management_ipv6'))
-            ->merge(EdgePoolEndpoint::query()->pluck('ipv4'))->merge(EdgePoolEndpoint::query()->pluck('ipv6'))
-            ->merge(EdgePool::query()->pluck('anycast_ipv4'))->merge(EdgePool::query()->pluck('anycast_ipv6'))
-            ->filter()->merge(app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_addresses'))->unique()->values()->all();
         $proxySettings = is_array($domain->proxy_settings) ? $domain->proxy_settings : self::defaults();
         $proxySettings['enabled'] = $domain->lifecycle_state === DomainLifecycleState::Active
             && ($proxySettings['enabled'] ?? true);
@@ -129,8 +131,8 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             : $domain->tlsCertificates->where('kind', 'managed')->where('status', 'active')->filter(fn ($certificate) => $certificate->expires_at->isFuture()));
         $certificatePayload = fn ($certificate): array => [
             'id' => $certificate->id, 'certificate_pem' => $certificate->certificate_pem,
-            'chain_pem' => $certificate->chain_pem, 'private_key_pem' => $certificate->private_key_ciphertext,
-            'expires_at' => $certificate->expires_at->timestamp, 'names' => $certificate->names,
+            'chain_pem' => $certificate->chain_pem,
+            'expires_at' => $certificate->expires_at->timestamp, 'names' => OriginPolicy::sortedSet($certificate->names),
         ];
         $snapshot = [
             'schema_version' => 1, 'domain_id' => $domain->id, 'domain' => $domain->name,
@@ -152,21 +154,11 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
                 'mode' => $domain->tls_mode,
                 'certificate' => $domain->activeTlsCertificate !== null && $domain->activeTlsCertificate->expires_at->isFuture()
                     ? $certificatePayload($domain->activeTlsCertificate) : null,
-                'certificates' => $tlsCertificates->map($certificatePayload)->values()->all(),
+                'certificates' => $tlsCertificates->sortBy('id')->map($certificatePayload)->values()->all(),
             ],
             'pools' => $poolNames,
-            'hostnames' => $records->map(function ($record) use ($blockedAddresses, $tlsCertificates): array {
+            'hostnames' => $records->map(function ($record) use ($tlsCertificates): array {
                 $origin = $record->origin;
-                $safety = [
-                    'private_allowlist' => app(PlatformSettings::class)->get('origin_safety', 'private_origin_allowlist'),
-                    'blocked_networks' => app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_networks'),
-                    'blocked_addresses' => $blockedAddresses,
-                ];
-                $origin = [...$origin, ...$safety];
-                if (is_array($origin['backup'] ?? null)) {
-                    $origin['backup'] = [...$origin['backup'], ...$safety];
-                }
-
                 $certificate = $tlsCertificates->first(fn ($candidate): bool => ManagedCertificateNames::coveredBy($record->name, $candidate->names));
 
                 return [

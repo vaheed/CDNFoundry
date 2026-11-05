@@ -1,17 +1,16 @@
 ---
 title: Contributing
-description: Contribute to CDNFoundry within its architecture, scope, safety, and qualification contracts.
+description: "Where to start before changing CDNFoundry: the product contract in AGENTS.md, the key invariants, and the rules for code and documentation changes."
 ---
 
 # Contributing
 
 ::: info Start with the product contract
-Read `AGENTS.md` before implementation. A locally elegant
-change is still invalid when it breaks bounded resources, asynchronous effects,
+Read `AGENTS.md` in the repository root before you change anything. A change that
+looks clean is still invalid when it breaks bounded resources, asynchronous effects,
 last-valid rollback, authorization, or the one-monolith architecture.
 :::
 
-Read `AGENTS.md` before changing behaviour.
 The key invariants are:
 
 - one Laravel modular monolith owns management;
@@ -21,9 +20,12 @@ The key invariants are:
 - no default per-domain process, container, timer, cache directory, or server block;
 - real non-browser runtime qualification lives under `tests/e2e`.
 
-Keep changes small and production named. Do not introduce lifecycle labels such
-as phase numbers into production filenames or classes. Normal CRUD belongs in
-controllers and Eloquent; add abstractions only for real external boundaries or
-genuinely reusable policy.
+Keep changes small and use production names. Do not put lifecycle labels such as
+phase numbers into production filenames or classes. Normal CRUD belongs in
+controllers and Eloquent. Add an abstraction only for a real external boundary or
+a reusable policy.
 
-See [Documentation contributions](documentation.md).
+For setup, start with [Developer setup](../development/index.md). For a map of
+the repository, see [Project layout](../development/project-layout.md).
+
+To change the documentation, see [Documentation contributions](documentation.md).

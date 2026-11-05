@@ -1,0 +1,86 @@
+{
+  "model": {
+    "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+    },
+    "description": "95th percentile time to serve a request.",
+    "fieldConfig": {
+      "defaults": {
+        "color": {
+          "mode": "thresholds"
+        },
+        "decimals": 0,
+        "links": [
+          {
+            "title": "Open details",
+            "url": "/d/cdnf-edge-latency"
+          }
+        ],
+        "mappings": [
+          {
+            "options": {
+              "match": "null+nan",
+              "result": {
+                "color": "text",
+                "text": "No data yet"
+              }
+            },
+            "type": "special"
+          }
+        ],
+        "noValue": "\u2013",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {
+              "color": "green",
+              "value": null
+            },
+            {
+              "color": "orange",
+              "value": 300
+            },
+            {
+              "color": "red",
+              "value": 800
+            }
+          ]
+        },
+        "unit": "ms"
+      },
+      "overrides": []
+    },
+    "options": {
+      "colorMode": "value",
+      "graphMode": "none",
+      "justifyMode": "center",
+      "reduceOptions": {
+        "calcs": [
+          "lastNotNull"
+        ],
+        "fields": "",
+        "values": false
+      },
+      "textMode": "value",
+      "wideLayout": true
+    },
+    "targets": [
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "expr": "1000 * histogram_quantile(0.95, sum by (le) (cdnf:edge_latency_bucket:rate5m{region=~\"$region\",pop=~\"$pop\",edge=~\"$edge\"}))",
+        "instant": true,
+        "legendFormat": "p95",
+        "range": false,
+        "refId": "A"
+      }
+    ],
+    "title": "Edge p95",
+    "type": "stat"
+  },
+  "name": "Edge p95",
+  "uid": "cdnf-lib-traffic-edge-p95"
+}

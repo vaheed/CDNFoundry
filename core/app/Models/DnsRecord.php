@@ -37,6 +37,8 @@ class DnsRecord extends Model
         $authorize($this->domain()->firstOrFail());
         abort_unless($this->mode === 'proxied', 409, 'The DNS record is not proxied.');
         abort_unless(in_array($role, ['primary', 'backup'], true) && count($edgeIds) <= 20, 422);
+        // Probing from an edge that does not serve the domain would let a user aim any edge at an address.
+        abort_unless(array_diff($edgeIds, $this->domain()->firstOrFail()->placementEdgeIds()) === [], 422, 'Origin tests can run only on edges in the domain placement.');
         $origin = $role === 'backup' ? ($this->origin['backup'] ?? null) : $this->origin;
         abort_unless(is_array($origin), 422, 'The selected origin does not exist.');
         $checksum = hash('sha256', ArtifactSigner::encode($origin));

@@ -1,0 +1,13 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+    - phpstan-baseline.neon
+
+parameters:
+    level: 5
+    paths:
+        - app
+        - routes
+    tmpDir: storage/framework/phpstan
+    treatPhpDocTypesAsCertain: false
+    squashedMigrationsPath:
+        - phpstan-schema

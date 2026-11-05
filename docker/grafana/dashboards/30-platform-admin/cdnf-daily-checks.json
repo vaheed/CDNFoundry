@@ -1,0 +1,741 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": {
+          "type": "postgres",
+          "uid": "control-db"
+        },
+        "enable": true,
+        "iconColor": "blue",
+        "name": "Fleet rollouts",
+        "target": {
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT created_at AS time, 'Fleet rollout ' || status AS text, 'rollout' AS tags FROM grafana_fleet_rollouts WHERE $__timeFilter(created_at) ORDER BY created_at LIMIT 200",
+          "refId": "Anno"
+        }
+      },
+      {
+        "datasource": {
+          "type": "postgres",
+          "uid": "control-db"
+        },
+        "enable": true,
+        "iconColor": "purple",
+        "name": "Artifact publishes",
+        "target": {
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT date_trunc('minute', created_at) AS time, 'Edge artifact published: ' || kind AS text, 'artifact' AS tags FROM grafana_edge_artifacts WHERE $__timeFilter(created_at) GROUP BY 1, kind ORDER BY 1 LIMIT 200",
+          "refId": "Anno"
+        }
+      },
+      {
+        "datasource": {
+          "type": "postgres",
+          "uid": "control-db"
+        },
+        "enable": true,
+        "iconColor": "orange",
+        "name": "Purges",
+        "target": {
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT created_at AS time, 'Cache purge ' || type AS text, 'purge' AS tags FROM grafana_cache_purges WHERE $__timeFilter(created_at) ORDER BY created_at LIMIT 200",
+          "refId": "Anno"
+        }
+      },
+      {
+        "datasource": {
+          "type": "postgres",
+          "uid": "control-db"
+        },
+        "enable": true,
+        "iconColor": "yellow",
+        "name": "Settings changes",
+        "target": {
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT created_at AS time, action AS text, 'settings' AS tags FROM grafana_audit_events WHERE $__timeFilter(created_at) AND (action LIKE 'settings.%' OR action LIKE 'platform.%') ORDER BY created_at LIMIT 200",
+          "refId": "Anno"
+        }
+      },
+      {
+        "datasource": {
+          "type": "postgres",
+          "uid": "control-db"
+        },
+        "enable": true,
+        "iconColor": "red",
+        "name": "Emergency mode",
+        "target": {
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT created_at AS time, 'Emergency mode on for ' || target_type AS text, 'emergency' AS tags FROM grafana_emergency_modes WHERE $__timeFilter(created_at) ORDER BY created_at LIMIT 200",
+          "refId": "Anno"
+        }
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "enable": true,
+        "expr": "ALERTS{alertstate=\"firing\",severity=\"critical\"}",
+        "iconColor": "dark-red",
+        "name": "Critical alerts",
+        "step": "60s",
+        "tagKeys": "team,alertname",
+        "textFormat": "{{summary}}",
+        "titleFormat": "{{alertname}}"
+      }
+    ]
+  },
+  "description": "Every daily check the platform makes visible, each with its pass or fail state.",
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "arrow-up",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Parent: Now",
+      "type": "link",
+      "url": "/d/cdnf-now"
+    },
+    {
+      "asDropdown": true,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [
+        "cdnf-platform"
+      ],
+      "targetBlank": false,
+      "title": "Siblings",
+      "type": "dashboards",
+      "url": ""
+    },
+    {
+      "asDropdown": false,
+      "icon": "doc",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": true,
+      "title": "Runbook",
+      "type": "link",
+      "url": "https://vaheed.github.io/CDNFoundry/operations/runbooks#component-unhealthy"
+    }
+  ],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Every daily check as pass or fail. A red tile is a failed check; open its runbook from the Now dashboard.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "text": "fail"
+                },
+                "1": {
+                  "color": "green",
+                  "text": "pass"
+                }
+              },
+              "type": "value"
+            },
+            {
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "text",
+                  "text": "No data yet"
+                }
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "No traffic",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {
+          "titleSize": 14,
+          "valueSize": 22
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((max(cdnfoundry_edge_gateway_active_revision) - min(cdnfoundry_edge_gateway_active_revision) <= bool 5) or vector(0)) or vector(0)",
+          "instant": true,
+          "legendFormat": "PoPs hold the latest artifact",
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((cdnfoundry_dns_deployments_drifted == bool 0)) or vector(0)",
+          "instant": true,
+          "legendFormat": "DNS serials match desired",
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((sum(cdnfoundry_pool_dns_fail_static) == bool 0)) or vector(0)",
+          "instant": true,
+          "legendFormat": "No pool address set shrank",
+          "range": false,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((min(cdnfoundry_edge_identity_expires_seconds) > bool 30 * 86400) or vector(1)) or vector(0)",
+          "instant": true,
+          "legendFormat": "No edge identity near expiry",
+          "range": false,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(cdnfoundry_component_health{component=\"edge_placements\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "No placement stuck deploying",
+          "range": false,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((max(cdnfoundry_queue_oldest_job_age_seconds) < bool 900) or vector(1)) or vector(0)",
+          "instant": true,
+          "legendFormat": "Queue latency under bound",
+          "range": false,
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((sum(increase(alertmanager_notifications_total{integration=\"webhook\"}[1h])) > bool 0)) or vector(0)",
+          "instant": true,
+          "legendFormat": "Watchdog delivered within the hour",
+          "range": false,
+          "refId": "G"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((cdnfoundry_tls_certificates_expiring == bool 0)) or vector(0)",
+          "instant": true,
+          "legendFormat": "No certificate near expiry unrenewed",
+          "range": false,
+          "refId": "H"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(cdnfoundry_component_health{component=\"backups\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "Backup fresh and checks pass",
+          "range": false,
+          "refId": "I"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((sum(increase(vector_component_discarded_events_total{intentional!=\"true\"}[1h])) == bool 0) * (sum(increase(vector_component_errors_total{component_id=~\"clickhouse_.*\"}[1h])) == bool 0)) or vector(0)",
+          "instant": true,
+          "legendFormat": "Vector drops nothing, ClickHouse accepts",
+          "range": false,
+          "refId": "J"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((cdnfoundry_control_ha_state{state=\"degraded\"} == bool 0) or vector(1)) or vector(0)",
+          "instant": true,
+          "legendFormat": "Control HA state not degraded",
+          "range": false,
+          "refId": "K"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(((cdnfoundry_control_valkey_replica_linked == bool 1) or vector(1)) * ((cdnfoundry_control_fingerprint_mismatch == bool 0) or vector(1))) or vector(0)",
+          "instant": true,
+          "legendFormat": "Valkey linked, secrets match",
+          "range": false,
+          "refId": "L"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((cdnfoundry_control_edges_missing_addresses == bool 0)) or vector(0)",
+          "instant": true,
+          "legendFormat": "PoPs hold the control addresses",
+          "range": false,
+          "refId": "M"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(cdnfoundry_component_health{component=\"control_ha\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "Services run on the primary node",
+          "range": false,
+          "refId": "N"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((min(up{job=\"node\",role=\"control\"}) == bool 1) or vector(1)) or vector(0)",
+          "instant": true,
+          "legendFormat": "Standby watched, dead-man alarm delivered",
+          "range": false,
+          "refId": "O"
+        }
+      ],
+      "title": "Daily checks",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Daily checks that fail now.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "text",
+                  "text": "No data yet"
+                }
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "No traffic",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count((((max(cdnfoundry_edge_gateway_active_revision) - min(cdnfoundry_edge_gateway_active_revision) <= bool 5) or vector(0)) or ((cdnfoundry_dns_deployments_drifted == bool 0)) or ((sum(cdnfoundry_pool_dns_fail_static) == bool 0)) or ((min(cdnfoundry_edge_identity_expires_seconds) > bool 30 * 86400) or vector(1)) or (cdnfoundry_component_health{component=\"edge_placements\"}) or ((max(cdnfoundry_queue_oldest_job_age_seconds) < bool 900) or vector(1)) or ((sum(increase(alertmanager_notifications_total{integration=\"webhook\"}[1h])) > bool 0)) or ((cdnfoundry_tls_certificates_expiring == bool 0)) or (cdnfoundry_component_health{component=\"backups\"}) or ((sum(increase(vector_component_discarded_events_total{intentional!=\"true\"}[1h])) == bool 0) * (sum(increase(vector_component_errors_total{component_id=~\"clickhouse_.*\"}[1h])) == bool 0)) or ((cdnfoundry_control_ha_state{state=\"degraded\"} == bool 0) or vector(1)) or (((cdnfoundry_control_valkey_replica_linked == bool 1) or vector(1)) * ((cdnfoundry_control_fingerprint_mismatch == bool 0) or vector(1))) or ((cdnfoundry_control_edges_missing_addresses == bool 0)) or (cdnfoundry_component_health{component=\"control_ha\"}) or ((min(up{job=\"node\",role=\"control\"}) == bool 1) or vector(1))) == 0) or vector(0)",
+          "instant": true,
+          "legendFormat": "failing",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Checks failing",
+      "type": "stat"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 42,
+  "tags": [
+    "cdnfoundry",
+    "cdnf-platform"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Environment",
+        "multi": true,
+        "name": "environment",
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          {
+            "selected": false,
+            "text": "production",
+            "value": "production"
+          },
+          {
+            "selected": false,
+            "text": "staging",
+            "value": "staging"
+          },
+          {
+            "selected": false,
+            "text": "development",
+            "value": "development"
+          }
+        ],
+        "query": "production,staging,development",
+        "skipUrlSync": false,
+        "type": "custom"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(cdnf:edge_requests:rate5m, region)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Region",
+        "multi": true,
+        "name": "region",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(cdnf:edge_requests:rate5m, region)",
+          "refId": "var-region"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(cdnf:edge_requests:rate5m{region=~\"$region\"}, pop)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "PoP",
+        "multi": true,
+        "name": "pop",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(cdnf:edge_requests:rate5m{region=~\"$region\"}, pop)",
+          "refId": "var-pop"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(cdnf:edge_requests:rate5m{pop=~\"$pop\"}, edge)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Edge",
+        "multi": true,
+        "name": "edge",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(cdnf:edge_requests:rate5m{pop=~\"$pop\"}, edge)",
+          "refId": "var-edge"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(cdnfoundry_cell_runtime_state, pool)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Pool",
+        "multi": true,
+        "name": "pool",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(cdnfoundry_cell_runtime_state, pool)",
+          "refId": "var-pool"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "postgres",
+          "uid": "control-db"
+        },
+        "definition": "SELECT id AS __value, name AS __text FROM domains WHERE deleted_at IS NULL ORDER BY name LIMIT 10000",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Domain",
+        "multi": true,
+        "name": "domain",
+        "options": [],
+        "query": "SELECT id AS __value, name AS __text FROM domains WHERE deleted_at IS NULL ORDER BY name LIMIT 10000",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "definition": "SELECT DISTINCT hostname FROM cdnf.edge_traffic_hourly WHERE interval_start > now() - INTERVAL 7 DAY AND hostname != '' ORDER BY hostname LIMIT 2000",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Hostname",
+        "multi": true,
+        "name": "hostname",
+        "options": [],
+        "query": "SELECT DISTINCT hostname FROM cdnf.edge_traffic_hourly WHERE interval_start > now() - INTERVAL 7 DAY AND hostname != '' ORDER BY hostname LIMIT 2000",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {
+    "hidden": false,
+    "refresh_intervals": [
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m"
+    ]
+  },
+  "timezone": "browser",
+  "title": "Daily checks",
+  "uid": "cdnf-daily-checks",
+  "version": 1,
+  "weekStart": "monday"
+}

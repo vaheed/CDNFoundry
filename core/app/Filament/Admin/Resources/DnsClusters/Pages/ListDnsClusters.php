@@ -18,8 +18,8 @@ class ListDnsClusters extends ListRecords
         return [
             Action::make('reconcileAllZones')
                 ->label('Reconcile all zones')
-                ->icon('heroicon-o-arrow-path')
-                ->color('warning')
+                ->icon('phosphor-arrows-clockwise')
+                ->color('gray')
                 ->requiresConfirmation()
                 ->action(function (): void {
                     $response = app(DnsOperationController::class)->reconcile(request());

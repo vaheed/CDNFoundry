@@ -98,8 +98,11 @@ return [
 
     'waits' => [
         'redis:interactive' => 15,
-        'redis:runtime' => 30,
-        'redis:certificate_purge' => 30,
+        'redis:dns' => 30,
+        'redis:edge' => 30,
+        'redis:verification' => 60,
+        'redis:tls' => 60,
+        'redis:purge' => 30,
         'redis:bulk_maintenance' => 120,
     ],
 
@@ -212,23 +215,32 @@ return [
             'timeout' => 60,
             'nice' => 0,
         ],
-        'runtime' => ['connection' => 'redis', 'queue' => ['runtime'], 'balance' => 'simple', 'maxProcesses' => 1, 'memory' => 128, 'tries' => 3, 'timeout' => 120],
-        'certificate-purge' => ['connection' => 'redis', 'queue' => ['certificate_purge'], 'balance' => 'simple', 'maxProcesses' => 1, 'memory' => 128, 'tries' => 3, 'timeout' => 120],
+        'dns' => ['connection' => 'redis', 'queue' => ['dns'], 'balance' => 'simple', 'maxProcesses' => 1, 'memory' => 128, 'tries' => 3, 'timeout' => 120],
+        'edge' => ['connection' => 'redis', 'queue' => ['edge'], 'balance' => 'simple', 'maxProcesses' => 1, 'memory' => 128, 'tries' => 3, 'timeout' => 120],
+        'verification' => ['connection' => 'redis', 'queue' => ['verification'], 'balance' => 'simple', 'maxProcesses' => 1, 'memory' => 128, 'tries' => 3, 'timeout' => 120],
+        'tls' => ['connection' => 'redis', 'queue' => ['tls'], 'balance' => 'simple', 'maxProcesses' => 1, 'memory' => 128, 'tries' => 3, 'timeout' => 120],
+        'purge' => ['connection' => 'redis', 'queue' => ['purge'], 'balance' => 'simple', 'maxProcesses' => 1, 'memory' => 128, 'tries' => 3, 'timeout' => 120],
         'bulk-maintenance' => ['connection' => 'redis', 'queue' => ['bulk_maintenance'], 'balance' => 'simple', 'maxProcesses' => 1, 'memory' => 192, 'tries' => 2, 'timeout' => 300],
     ],
 
     'environments' => [
         'production' => [
             'interactive' => ['maxProcesses' => 4],
-            'runtime' => ['maxProcesses' => 3],
-            'certificate-purge' => ['maxProcesses' => 2],
+            'dns' => ['maxProcesses' => 2],
+            'edge' => ['maxProcesses' => 3],
+            'verification' => ['maxProcesses' => 2],
+            'tls' => ['maxProcesses' => 2],
+            'purge' => ['maxProcesses' => 1],
             'bulk-maintenance' => ['maxProcesses' => 1],
         ],
 
         'local' => [
             'interactive' => ['maxProcesses' => 1],
-            'runtime' => ['maxProcesses' => 1],
-            'certificate-purge' => ['maxProcesses' => 1],
+            'dns' => ['maxProcesses' => 1],
+            'edge' => ['maxProcesses' => 1],
+            'verification' => ['maxProcesses' => 1],
+            'tls' => ['maxProcesses' => 1],
+            'purge' => ['maxProcesses' => 1],
             'bulk-maintenance' => ['maxProcesses' => 1],
         ],
     ],

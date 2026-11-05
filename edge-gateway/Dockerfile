@@ -1,7 +1,7 @@
 FROM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS build
 ENV GOMAXPROCS=2 GOFLAGS=-p=2
 WORKDIR /src
-COPY go.mod main.go main_test.go scale_test.go ./
+COPY go.mod *.go ./
 ARG RELEASE_VERSION=development
 RUN CGO_ENABLED=0 go test ./... && \
     VERSION_FLAG=$(printf '%s' "${RELEASE_VERSION#v}" | grep -E '^[0-9]+[.][0-9]+[.][0-9]+$' | sed 's/^/-X main.version=/' || true) && \

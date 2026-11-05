@@ -1,0 +1,1172 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": {
+          "type": "postgres",
+          "uid": "control-db"
+        },
+        "enable": true,
+        "iconColor": "blue",
+        "name": "Fleet rollouts",
+        "target": {
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT created_at AS time, 'Fleet rollout ' || status AS text, 'rollout' AS tags FROM grafana_fleet_rollouts WHERE $__timeFilter(created_at) ORDER BY created_at LIMIT 200",
+          "refId": "Anno"
+        }
+      },
+      {
+        "datasource": {
+          "type": "postgres",
+          "uid": "control-db"
+        },
+        "enable": true,
+        "iconColor": "purple",
+        "name": "Artifact publishes",
+        "target": {
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT date_trunc('minute', created_at) AS time, 'Edge artifact published: ' || kind AS text, 'artifact' AS tags FROM grafana_edge_artifacts WHERE $__timeFilter(created_at) GROUP BY 1, kind ORDER BY 1 LIMIT 200",
+          "refId": "Anno"
+        }
+      },
+      {
+        "datasource": {
+          "type": "postgres",
+          "uid": "control-db"
+        },
+        "enable": true,
+        "iconColor": "orange",
+        "name": "Purges",
+        "target": {
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT created_at AS time, 'Cache purge ' || type AS text, 'purge' AS tags FROM grafana_cache_purges WHERE $__timeFilter(created_at) ORDER BY created_at LIMIT 200",
+          "refId": "Anno"
+        }
+      },
+      {
+        "datasource": {
+          "type": "postgres",
+          "uid": "control-db"
+        },
+        "enable": true,
+        "iconColor": "yellow",
+        "name": "Settings changes",
+        "target": {
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT created_at AS time, action AS text, 'settings' AS tags FROM grafana_audit_events WHERE $__timeFilter(created_at) AND (action LIKE 'settings.%' OR action LIKE 'platform.%') ORDER BY created_at LIMIT 200",
+          "refId": "Anno"
+        }
+      },
+      {
+        "datasource": {
+          "type": "postgres",
+          "uid": "control-db"
+        },
+        "enable": true,
+        "iconColor": "red",
+        "name": "Emergency mode",
+        "target": {
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT created_at AS time, 'Emergency mode on for ' || target_type AS text, 'emergency' AS tags FROM grafana_emergency_modes WHERE $__timeFilter(created_at) ORDER BY created_at LIMIT 200",
+          "refId": "Anno"
+        }
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "enable": true,
+        "expr": "ALERTS{alertstate=\"firing\",severity=\"critical\"}",
+        "iconColor": "dark-red",
+        "name": "Critical alerts",
+        "step": "60s",
+        "tagKeys": "team,alertname",
+        "textFormat": "{{summary}}",
+        "titleFormat": "{{alertname}}"
+      }
+    ]
+  },
+  "description": "Actions, rules, scores, processing time, body-limit hits, exclusions in use, and the top rules by domain.",
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "arrow-up",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Parent: Now",
+      "type": "link",
+      "url": "/d/cdnf-now"
+    },
+    {
+      "asDropdown": true,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [
+        "cdnf-soc"
+      ],
+      "targetBlank": false,
+      "title": "Siblings",
+      "type": "dashboards",
+      "url": ""
+    },
+    {
+      "asDropdown": false,
+      "icon": "doc",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": true,
+      "title": "Runbook",
+      "type": "link",
+      "url": "https://vaheed.github.io/CDNFoundry/operations/runbooks#waf-block-spike"
+    }
+  ],
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Requests the WAF inspected and matched.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "text",
+                  "text": "No data yet"
+                }
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "No traffic",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "table",
+          "rawSql": "SELECT sumIf(requests, waf_action != 'off') AS actions FROM cdnf.edge_traffic_1m WHERE interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) UNION ALL SELECT sumIf(requests, waf_action != 'off') AS actions FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) UNION ALL SELECT sumIf(requests, waf_action != 'off') AS actions FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain)",
+          "refId": "A"
+        }
+      ],
+      "title": "WAF actions",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Requests refused because their body exceeded the WAF inspection limit.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "text",
+                  "text": "No data yet"
+                }
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "No traffic",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "table",
+          "rawSql": "SELECT sumIf(requests, security_class = 'waf_body_limit') AS hits FROM cdnf.edge_traffic_1m WHERE interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) UNION ALL SELECT sumIf(requests, security_class = 'waf_body_limit') AS hits FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) UNION ALL SELECT sumIf(requests, security_class = 'waf_body_limit') AS hits FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain)",
+          "refId": "A"
+        }
+      ],
+      "title": "Body-limit hits",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "control-db"
+      },
+      "description": "WAF exclusions that have not expired.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "text",
+                  "text": "No data yet"
+                }
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "No traffic",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "control-db"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) AS exclusions FROM grafana_waf_exclusions WHERE expires_at > now()",
+          "refId": "A"
+        }
+      ],
+      "title": "Exclusions in use",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "95th percentile WAF processing time per request.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2,
+          "mappings": [
+            {
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "text",
+                  "text": "No data yet"
+                }
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "\u2013",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 300
+              },
+              {
+                "color": "red",
+                "value": 800
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "table",
+          "rawSql": "SELECT quantile(0.95)(waf_processing_us) / 1000 AS ms FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) AND occurred_at > now() - INTERVAL 7 DAY AND event_type != 'tls' AND waf_action != 'off'",
+          "refId": "A"
+        }
+      ],
+      "title": "Processing time p95",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Requests by WAF action.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [
+            {
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "text",
+                  "text": "No data yet"
+                }
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "No traffic",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 0,
+          "queryType": "timeSeries",
+          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, waf_action, sum(requests) AS requests FROM cdnf.edge_traffic_1m WHERE interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND waf_action != 'off' GROUP BY time, waf_action UNION ALL SELECT $__timeInterval(interval_start) AS time, waf_action, sum(requests) AS requests FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND waf_action != 'off' GROUP BY time, waf_action UNION ALL SELECT $__timeInterval(interval_start) AS time, waf_action, sum(requests) AS requests FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND waf_action != 'off' GROUP BY time, waf_action) ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "title": "WAF actions",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Average and 95th percentile WAF processing time.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [
+            {
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "text",
+                  "text": "No data yet"
+                }
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "\u2013",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 0,
+          "queryType": "timeSeries",
+          "rawSql": "SELECT $__timeInterval(occurred_at) AS time, avg(waf_processing_us) / 1000 AS average, quantile(0.95)(waf_processing_us) / 1000 AS p95 FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) AND occurred_at > now() - INTERVAL 7 DAY AND event_type != 'tls' AND waf_action != 'off' GROUP BY time ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "title": "WAF processing time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "The WAF rules matched most often in the last 7 days. Select a rule to list its requests below.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [
+            {
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "text",
+                  "text": "No data yet"
+                }
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "\u2013",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "rule"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Show requests for this rule",
+                    "url": "/d/cdnf-waf?${__url_time_range}&var-rule_id=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "id": 7,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "table",
+          "rawSql": "SELECT waf_rule_id AS rule, count() AS matches, round(avg(waf_score), 1) AS average_score FROM cdnf.edge_events WHERE occurred_at > now() - INTERVAL 7 DAY AND event_type != 'tls' AND waf_rule_id != 0 GROUP BY waf_rule_id ORDER BY matches DESC LIMIT 15",
+          "refId": "A"
+        }
+      ],
+      "title": "Top rules",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Which hostnames trigger each rule.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [
+            {
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "text",
+                  "text": "No data yet"
+                }
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "\u2013",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "id": 8,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "table",
+          "rawSql": "SELECT hostname, waf_rule_id AS rule, count() AS matches FROM cdnf.edge_events WHERE occurred_at > now() - INTERVAL 7 DAY AND event_type != 'tls' AND waf_rule_id != 0 GROUP BY hostname, waf_rule_id ORDER BY matches DESC LIMIT 15",
+          "refId": "A"
+        }
+      ],
+      "title": "Top rules by domain",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Requests that matched the rule in the WAF rule field above. Choose a rule from the top rules table.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [
+            {
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "text",
+                  "text": "No data yet"
+                }
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "\u2013",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "request_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Trace this request",
+                    "url": "/d/cdnf-request-trace?var-request_id=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "id": 9,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "table",
+          "rawSql": "SELECT occurred_at AS time, request_id, hostname, path, status, waf_score, waf_action FROM cdnf.edge_events WHERE occurred_at > now() - INTERVAL 7 DAY AND event_type != 'tls' AND waf_rule_id = toUInt32OrZero('${rule_id}') AND waf_rule_id != 0 ORDER BY occurred_at DESC LIMIT 100",
+          "refId": "A"
+        }
+      ],
+      "title": "Requests for the selected rule",
+      "type": "table"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 42,
+  "tags": [
+    "cdnfoundry",
+    "cdnf-soc"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Environment",
+        "multi": true,
+        "name": "environment",
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          {
+            "selected": false,
+            "text": "production",
+            "value": "production"
+          },
+          {
+            "selected": false,
+            "text": "staging",
+            "value": "staging"
+          },
+          {
+            "selected": false,
+            "text": "development",
+            "value": "development"
+          }
+        ],
+        "query": "production,staging,development",
+        "skipUrlSync": false,
+        "type": "custom"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(cdnf:edge_requests:rate5m, region)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Region",
+        "multi": true,
+        "name": "region",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(cdnf:edge_requests:rate5m, region)",
+          "refId": "var-region"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(cdnf:edge_requests:rate5m{region=~\"$region\"}, pop)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "PoP",
+        "multi": true,
+        "name": "pop",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(cdnf:edge_requests:rate5m{region=~\"$region\"}, pop)",
+          "refId": "var-pop"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(cdnf:edge_requests:rate5m{pop=~\"$pop\"}, edge)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Edge",
+        "multi": true,
+        "name": "edge",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(cdnf:edge_requests:rate5m{pop=~\"$pop\"}, edge)",
+          "refId": "var-edge"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(cdnfoundry_cell_runtime_state, pool)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Pool",
+        "multi": true,
+        "name": "pool",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(cdnfoundry_cell_runtime_state, pool)",
+          "refId": "var-pool"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "postgres",
+          "uid": "control-db"
+        },
+        "definition": "SELECT id AS __value, name AS __text FROM domains WHERE deleted_at IS NULL ORDER BY name LIMIT 10000",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Domain",
+        "multi": true,
+        "name": "domain",
+        "options": [],
+        "query": "SELECT id AS __value, name AS __text FROM domains WHERE deleted_at IS NULL ORDER BY name LIMIT 10000",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "definition": "SELECT DISTINCT hostname FROM cdnf.edge_traffic_hourly WHERE interval_start > now() - INTERVAL 7 DAY AND hostname != '' ORDER BY hostname LIMIT 2000",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Hostname",
+        "multi": true,
+        "name": "hostname",
+        "options": [],
+        "query": "SELECT DISTINCT hostname FROM cdnf.edge_traffic_hourly WHERE interval_start > now() - INTERVAL 7 DAY AND hostname != '' ORDER BY hostname LIMIT 2000",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "0",
+          "value": "0"
+        },
+        "hide": 0,
+        "label": "WAF rule",
+        "name": "rule_id",
+        "options": [
+          {
+            "selected": true,
+            "text": "0",
+            "value": "0"
+          }
+        ],
+        "query": "0",
+        "skipUrlSync": false,
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {
+    "hidden": false,
+    "refresh_intervals": [
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m"
+    ]
+  },
+  "timezone": "browser",
+  "title": "WAF",
+  "uid": "cdnf-waf",
+  "version": 1,
+  "weekStart": "monday"
+}

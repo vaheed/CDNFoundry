@@ -8,6 +8,8 @@ use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
+use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Support\HtmlString;
 
 class ListEdges extends ListRecords
 {
@@ -18,8 +20,8 @@ class ListEdges extends ListRecords
         return [
             Action::make('reconcileAllDomains')
                 ->label('Reconcile all domains')
-                ->icon('heroicon-o-arrow-path')
-                ->color('warning')
+                ->icon('phosphor-arrows-clockwise')
+                ->color('gray')
                 ->requiresConfirmation()
                 ->action(function (): void {
                     $response = app(EdgeOperationsController::class)->reconcile(request());
@@ -29,5 +31,10 @@ class ListEdges extends ListRecords
                 }),
             CreateAction::make(),
         ];
+    }
+
+    public function getSubheading(): string|Htmlable|null
+    {
+        return new HtmlString('<span class="cdn-live" data-testid="live-indicator">Polling active</span>');
     }
 }

@@ -39,17 +39,27 @@ func TestVerifyAndCompatibility(t *testing.T) {
 		t.Fatal("tampered payload accepted")
 	}
 	expiresAt := time.Now().Add(5 * time.Minute).Unix()
-	delivery := hex.EncodeToString(ed25519.Sign(private, []byte(checksum+"|2|"+strconv.FormatInt(expiresAt, 10))))
-	if err := verifyDelivery(checksum, 2, expiresAt, delivery, hex.EncodeToString(public)); err != nil {
+	delivery := hex.EncodeToString(ed25519.Sign(private, []byte(deliveryScope("domain", 7, 2)+"|"+checksum+"|2|"+strconv.FormatInt(expiresAt, 10))))
+	scope := deliveryScope("domain", 7, 2)
+	if err := verifyDelivery(scope, checksum, 2, expiresAt, delivery, hex.EncodeToString(public)); err != nil {
 		t.Fatal(err)
 	}
-	if err := verifyDelivery(checksum, 1, expiresAt, delivery, hex.EncodeToString(public)); err == nil {
+	if err := verifyDelivery(scope, checksum, 1, expiresAt, delivery, hex.EncodeToString(public)); err == nil {
 		t.Fatal("replayed sequence accepted")
 	}
-	if err := verifyDelivery(checksum, 2, time.Now().Add(-time.Second).Unix(), delivery, hex.EncodeToString(public)); err == nil {
+	// Kind, domain id and revision are signed: relabeling a signed payload is rejected.
+	for name, other := range map[string]string{
+		"kind": deliveryScope("tombstone", 7, 2), "domain": deliveryScope("domain", 8, 2),
+		"revision": deliveryScope("domain", 7, 3), "snapshot": snapshotDeliveryScope,
+	} {
+		if err := verifyDelivery(other, checksum, 2, expiresAt, delivery, hex.EncodeToString(public)); err == nil {
+			t.Fatalf("a delivery signed for another %s was accepted", name)
+		}
+	}
+	if err := verifyDelivery(scope, checksum, 2, time.Now().Add(-time.Second).Unix(), delivery, hex.EncodeToString(public)); err == nil {
 		t.Fatal("expired delivery accepted")
 	}
-	if !compatible("1.0.0", "1.99.99") || compatible("1.0.0", "1.0.99") {
+	if !compatible("2.0.0", "2.99.99") || compatible("2.1.0", "2.99.99") {
 		t.Fatal("compatibility bounds are incorrect")
 	}
 }
@@ -102,7 +112,7 @@ func TestControlRequestsRejectPlaintextAndRedirects(t *testing.T) {
 }
 
 func TestVersionCommand(t *testing.T) {
-	if version != "1.2.1" {
+	if version != "2.0.0" {
 		t.Fatalf("unexpected release version %q", version)
 	}
 }
@@ -199,7 +209,7 @@ func TestAcknowledgementBufferRetriesAfterRecovery(t *testing.T) {
 
 func TestActivationPreservesPreviousAndRestartState(t *testing.T) {
 	dir := t.TempDir()
-	c := &client{dir: dir, runtimeDir: filepath.Join(dir, "runtime")}
+	c := &client{dir: dir, runtimeDir: filepath.Join(dir, "runtime"), cellAssignments: map[string]string{"cell-01": "shared-default"}}
 	first := state{Sequence: 4, Domains: map[string]json.RawMessage{"1": runtimeDomain(4)}}
 	second := state{Sequence: 5, Domains: map[string]json.RawMessage{"1": runtimeDomain(5)}}
 	if err := c.activate(first); err != nil {
@@ -208,31 +218,41 @@ func TestActivationPreservesPreviousAndRestartState(t *testing.T) {
 	if err := c.activate(second); err != nil {
 		t.Fatal(err)
 	}
-	active, err := loadState(filepath.Join(dir, "runtime", "current", "state.json"))
-	if err != nil || active.Sequence != 5 {
+	// A restarted agent reads the durable state back, not the in-memory copy.
+	restarted := &client{dir: dir, runtimeDir: c.runtimeDir}
+	active, err := restarted.loadStoredState()
+	if err != nil || active.Sequence != 5 || !bytes.Contains(active.Domains["1"], []byte(`"revision":5`)) {
 		t.Fatalf("active state not restart-safe: %v", err)
 	}
-	previous, err := loadState(filepath.Join(dir, "runtime", "previous", "state.json"))
-	if err != nil || previous.Sequence != 4 {
-		t.Fatalf("previous state not preserved: %v", err)
+	var previousCell struct {
+		Sequence uint64 `json:"sequence"`
+	}
+	previousBytes, err := os.ReadFile(filepath.Join(dir, "runtime", "previous", "cell-01.json"))
+	if err != nil || json.Unmarshal(previousBytes, &previousCell) != nil || previousCell.Sequence != 4 {
+		t.Fatalf("previous runtime generation not preserved: %v %s", err, previousBytes)
 	}
 	if err := c.activate(state{Sequence: 6}); err == nil {
 		t.Fatal("invalid candidate activated")
 	}
-	active, _ = loadState(filepath.Join(dir, "runtime", "current", "state.json"))
+	active, _ = c.loadStoredState()
 	if active.Sequence != 5 {
 		t.Fatal("invalid candidate replaced active state")
 	}
-	var poolRuntime struct {
+	var cellRuntime struct {
 		Hosts map[string]any `json:"hosts"`
 	}
-	poolBytes, err := os.ReadFile(filepath.Join(dir, "runtime", "current", "shared-default.json"))
-	if err != nil || json.Unmarshal(poolBytes, &poolRuntime) != nil || poolRuntime.Hosts["www.example.test"] == nil {
-		t.Fatal("placement-aware pool runtime was not published")
+	cellBytes, err := os.ReadFile(filepath.Join(dir, "runtime", "current", "cell-01.json"))
+	if err != nil || json.Unmarshal(cellBytes, &cellRuntime) != nil || cellRuntime.Hosts["www.example.test"] == nil {
+		t.Fatal("placement-aware cell runtime was not published")
 	}
-	poolInfo, err := os.Stat(filepath.Join(dir, "runtime", "current", "shared-default.json"))
-	if err != nil || poolInfo.Mode().Perm() != 0600 {
+	cellInfo, err := os.Stat(filepath.Join(dir, "runtime", "current", "cell-01.json"))
+	if err != nil || cellInfo.Mode().Perm() != 0600 {
 		t.Fatalf("runtime snapshot containing TLS keys must be mode 0600: %v", err)
+	}
+	for _, redundant := range []string{"active.json", "state.json", "shared-default.json"} {
+		if _, err := os.Stat(filepath.Join(dir, "runtime", "current", redundant)); err == nil {
+			t.Fatalf("%s duplicates data and must not be published in a generation", redundant)
+		}
 	}
 }
 
@@ -350,8 +370,8 @@ func generationFixture(value string) func(string, string) error {
 }
 
 func TestRuntimeAssignsSupplementalCertificatesPerHostname(t *testing.T) {
-	domain := json.RawMessage(`{"schema_version":1,"domain":"example.test","revision":1,"pools":["shared-default"],"settings":{"enabled":true},"cache":{},"tls":{"mode":"managed","certificates":[{"id":"base","certificate_pem":"base-cert","private_key_pem":"base-key"},{"id":"deep","certificate_pem":"deep-cert","private_key_pem":"deep-key"}]},"hostnames":[{"hostname":"www.example.test","tls_certificate_id":"base","origin":{"host":"origin.example"}},{"hostname":"a.b.example.test","tls_certificate_id":"deep","origin":{"host":"origin.example"}}]}`)
-	_, pools, err := compileRuntime(state{Sequence: 1, Domains: map[string]json.RawMessage{"1": domain}})
+	domain := json.RawMessage(`{"schema_version":1,"domain":"example.test","revision":1,"pools":["shared-default"],"settings":{"enabled":true},"cache":{},"tls":{"mode":"managed","certificates":[{"id":"base","certificate_pem":"base-cert"},{"id":"deep","certificate_pem":"deep-cert"}]},"hostnames":[{"hostname":"www.example.test","tls_certificate_id":"base","origin":{"host":"origin.example"}},{"hostname":"a.b.example.test","tls_certificate_id":"deep","origin":{"host":"origin.example"}}]}`)
+	_, pools, err := compileRuntime(state{Sequence: 1, Domains: map[string]json.RawMessage{"1": domain}}, map[string]string{"base": "base-key", "deep": "deep-key"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +390,7 @@ func TestRuntimeAssignsSupplementalCertificatesPerHostname(t *testing.T) {
 
 func TestRuntimePreservesWAFAndCompressionForAssignedCell(t *testing.T) {
 	domain := json.RawMessage(`{"schema_version":1,"domain":"example.test","domain_id":1,"revision":7,"cells":["cell-01"],"settings":{"enabled":true},"cache":{},"compression":{"profile_name":"standard","gzip":true},"security":{},"waf":{"name":"balanced","blocking":true,"inbound_threshold":5},"tls":{"mode":"managed"},"hostnames":[{"hostname":"example.test","origin":{"host":"origin.example"}}]}`)
-	active, cells, err := compileRuntime(state{Sequence: 7, Domains: map[string]json.RawMessage{"1": domain}})
+	active, cells, err := compileRuntime(state{Sequence: 7, Domains: map[string]json.RawMessage{"1": domain}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -384,12 +404,12 @@ func TestRuntimePreservesWAFAndCompressionForAssignedCell(t *testing.T) {
 
 func TestRuntimeTargetsOnlySelectedCellsWithinOnePool(t *testing.T) {
 	domain := json.RawMessage(`{"schema_version":1,"domain":"example.test","domain_id":7,"revision":2,"pools":["shared-default"],"cells":["cell-02"],"settings":{"enabled":true},"cache":{},"tls":{"mode":"disabled"},"hostnames":[{"hostname":"www.example.test","origin":{"host":"origin.example"}}]}`)
-	_, runtimes, err := compileRuntime(state{Sequence: 9, Domains: map[string]json.RawMessage{"7": domain}})
+	_, runtimes, err := compileRuntime(state{Sequence: 9, Domains: map[string]json.RawMessage{"7": domain}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	c := &client{runtimeDir: t.TempDir(), cellAssignments: map[string]string{"cell-01": "shared-default", "cell-02": "shared-default", "cell-03": "shared-default"}}
-	if err := c.writeCellRuntimes(9, runtimes); err != nil {
+	if err := c.writeCellRuntimesAt(c.runtimeDir, 9, runtimes); err != nil {
 		t.Fatal(err)
 	}
 	for _, cell := range []string{"cell-01", "cell-02", "cell-03"} {
@@ -578,7 +598,7 @@ func TestFreshFullSnapshotThenIncrementalArtifact(t *testing.T) {
 	}
 	publicHex := hex.EncodeToString(public)
 	fullPayload, fullChecksum, fullSignature := signedGzipJSON(t, private, map[string]any{
-		"schema_version": 1, "minimum_agent_version": "1.0.0", "maximum_agent_version": "1.99.0",
+		"schema_version": 1, "minimum_agent_version": "2.0.0", "maximum_agent_version": "2.99.0",
 		"artifacts": []map[string]any{{"sequence": 4, "domain_id": 1, "kind": "domain", "payload": json.RawMessage(runtimeDomain(4))}},
 	})
 	incrementalPayload := []byte(runtimeDomain(5))
@@ -586,18 +606,20 @@ func TestFreshFullSnapshotThenIncrementalArtifact(t *testing.T) {
 	incrementalChecksumHex := hex.EncodeToString(incrementalChecksum[:])
 	incrementalSignature := hex.EncodeToString(ed25519.Sign(private, []byte(incrementalChecksumHex)))
 	expiresAt := time.Now().Add(5 * time.Minute).Unix()
-	fullDeliverySignature := hex.EncodeToString(ed25519.Sign(private, []byte(fullChecksum+"|4|"+strconv.FormatInt(expiresAt, 10))))
-	incrementalDeliverySignature := hex.EncodeToString(ed25519.Sign(private, []byte(incrementalChecksumHex+"|5|"+strconv.FormatInt(expiresAt, 10))))
+	fullDeliverySignature := hex.EncodeToString(ed25519.Sign(private, []byte(snapshotDeliveryScope+"|"+fullChecksum+"|4|"+strconv.FormatInt(expiresAt, 10))))
+	incrementalDeliverySignature := hex.EncodeToString(ed25519.Sign(private, []byte(deliveryScope("domain", 1, 5)+"|"+incrementalChecksumHex+"|5|"+strconv.FormatInt(expiresAt, 10))))
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case r.URL.Path == "/edge/v1/origin-policy":
+			serveOriginPolicy(w, r, private, testOriginPolicy)
 		case r.URL.Path == "/edge/v1/config/full":
 			_ = json.NewEncoder(w).Encode(map[string]any{"encoded_snapshot": fullPayload, "checksum": fullChecksum, "signature": fullSignature, "signing_public_key": publicHex, "sequence": 4, "expires_at": expiresAt, "delivery_signature": fullDeliverySignature})
 		case r.URL.Path == "/edge/v1/config/manifest":
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{
 				"sequence": 5, "kind": "domain", "domain_id": 1, "revision": 5, "checksum": incrementalChecksumHex,
 				"signature": incrementalSignature, "schema_version": 1,
-				"minimum_agent_version": "1.0.0", "maximum_agent_version": "1.99.0",
+				"minimum_agent_version": "2.0.0", "maximum_agent_version": "2.99.0",
 			}}})
 		case strings.HasPrefix(r.URL.Path, "/edge/v1/config/artifacts/"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"encoded_payload": base64.StdEncoding.EncodeToString(incrementalPayload), "data": map[string]any{"sequence": 5}, "expires_at": expiresAt, "delivery_signature": incrementalDeliverySignature})
@@ -611,14 +633,14 @@ func TestFreshFullSnapshotThenIncrementalArtifact(t *testing.T) {
 	if err := c.full(); err != nil {
 		t.Fatal(err)
 	}
-	active, err := loadState(filepath.Join(dir, "runtime", "current", "state.json"))
+	active, err := c.loadStoredState()
 	if err != nil || active.Sequence != 4 || len(active.Domains) != 1 {
 		t.Fatalf("fresh full snapshot was not activated: %#v, %v", active, err)
 	}
 	if err := c.sync(); err != nil {
 		t.Fatal(err)
 	}
-	active, err = loadState(filepath.Join(dir, "runtime", "current", "state.json"))
+	active, err = c.loadStoredState()
 	if err != nil || active.Sequence != 5 || !bytes.Contains(active.Domains["1"], []byte(`"revision":5`)) {
 		t.Fatalf("incremental artifact was not activated: %#v, %v", active, err)
 	}
@@ -631,11 +653,11 @@ func TestFreshEmptyFullSnapshotActivatesBootstrapGeneration(t *testing.T) {
 	}
 	publicHex := hex.EncodeToString(public)
 	fullPayload, fullChecksum, fullSignature := signedGzipJSON(t, private, map[string]any{
-		"schema_version": 1, "minimum_agent_version": "1.0.0", "maximum_agent_version": "1.99.0",
+		"schema_version": 1, "minimum_agent_version": "2.0.0", "maximum_agent_version": "2.99.0",
 		"artifacts": []map[string]any{},
 	})
 	expiresAt := time.Now().Add(5 * time.Minute).Unix()
-	deliverySignature := hex.EncodeToString(ed25519.Sign(private, []byte(fullChecksum+"|0|"+strconv.FormatInt(expiresAt, 10))))
+	deliverySignature := hex.EncodeToString(ed25519.Sign(private, []byte(snapshotDeliveryScope+"|"+fullChecksum+"|0|"+strconv.FormatInt(expiresAt, 10))))
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -658,7 +680,7 @@ func TestFreshEmptyFullSnapshotActivatesBootstrapGeneration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	active, err := loadState(filepath.Join(runtimeDir, "current", "state.json"))
+	active, err := c.loadStoredState()
 	if err != nil || active.Sequence != 0 || len(active.Domains) != 0 {
 		t.Fatalf("empty bootstrap snapshot was not activated: %#v, %v", active, err)
 	}
@@ -677,8 +699,9 @@ func TestFreshEmptyFullSnapshotActivatesBootstrapGeneration(t *testing.T) {
 	if sequence, ok := cellRuntime["sequence"].(float64); !ok || sequence != 0 {
 		t.Fatalf("empty cell runtime has the wrong bootstrap sequence: %#v", cellRuntime)
 	}
-	if cellRuntime["generation_id"] != manifest.GenerationID {
-		t.Fatalf("empty cell runtime is outside the bootstrap generation: %#v", cellRuntime)
+	stamp, err := os.ReadFile(filepath.Join(runtimeDir, "current", "cell-01.stamp"))
+	if err != nil || strings.TrimSpace(string(stamp)) != cellRuntime["generation_id"] || len(strings.TrimSpace(string(stamp))) != 64 {
+		t.Fatalf("empty cell runtime identity is not its content stamp: %#v %q %v", cellRuntime, stamp, err)
 	}
 }
 
@@ -727,8 +750,9 @@ func TestFirstGatewayEndpointRebuildsAnEmptyBootstrapGeneration(t *testing.T) {
 	if err != nil || json.Unmarshal(cellBody, &cellRuntime) != nil {
 		t.Fatalf("first endpoint cell runtime is invalid: %v", err)
 	}
-	if cellRuntime["generation_id"] != active.GenerationID {
-		t.Fatalf("first endpoint cell runtime is outside the active generation: %#v", cellRuntime)
+	stamp, err := os.ReadFile(filepath.Join(runtimeDir, "current", "cell-01.stamp"))
+	if err != nil || strings.TrimSpace(string(stamp)) != cellRuntime["generation_id"] {
+		t.Fatalf("first endpoint cell runtime identity is not its content stamp: %#v %v", cellRuntime, err)
 	}
 }
 
@@ -784,7 +808,7 @@ func TestFirstArtifactReplacesAnEqualGatewayGenerationRevision(t *testing.T) {
 	if err != nil || active.Revision != 1 || active.GenerationID == gatewayOnly.GenerationID {
 		t.Fatalf("equal source revisions did not publish the domain generation: %#v, %v", active, err)
 	}
-	stateOnDisk, err := loadState(filepath.Join(runtimeDir, "current", "state.json"))
+	stateOnDisk, err := c.loadStoredState()
 	if err != nil || stateOnDisk.Sequence != 1 || len(stateOnDisk.Domains) != 1 {
 		t.Fatalf("first domain artifact was not activated: %#v, %v", stateOnDisk, err)
 	}
@@ -816,6 +840,7 @@ func TestOriginTaskUsesApprovedAddressAndCanonicalHost(t *testing.T) {
 	task.Payload.Origin.Scheme = "http"
 	task.Payload.Origin.HostHeader = "origin.example"
 	task.Payload.Origin.Port = portNumber
+	allowOriginPortForTest(t, portNumber)
 	task.Payload.Origin.ConnectTimeoutMS = 1000
 	task.Payload.Origin.ResponseTimeoutMS = 1000
 	result := runOriginTest(task)
@@ -1027,10 +1052,10 @@ func TestCachePurgeFansOutToEveryAuthenticatedCell(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":{"accepted":true}}`))
 	}))
 	defer server.Close()
-	c := &client{http: server.Client(), statusToken: "status-secret", statusURLs: []string{server.URL + "/passive-failures", server.URL + "/passive-failures"}}
+	c := &client{http: server.Client(), statusToken: "status-secret", statusURLs: []string{server.URL + "/passive-failures", server.URL + "/passive-failures"}, dir: t.TempDir()}
 	var task edgeTask
 	task.ID, task.Type = "purge-1", "cache_purge"
-	task.Payload.Domain, task.Payload.PurgeType, task.Payload.CacheEpoch = "example.test", "urls", 4
+	task.Payload.Domain, task.Payload.PurgeType, task.Payload.CacheEpoch, task.Payload.PurgeID = "example.test", "urls", 4, 11
 	task.Payload.CacheKeys = []string{"https|example.test|/app.css?a=1"}
 	result, status := c.runCachePurge(task)
 	if status != "succeeded" || result["status"] != "completed" || result["applied_cells"] != 2 || calls != 2 {
@@ -1054,10 +1079,10 @@ func TestFullCachePurgeSendsAnEmptyArrayToCells(t *testing.T) {
 			}))
 			defer server.Close()
 			var task edgeTask
-			if err := json.Unmarshal([]byte(`{"id":"full-purge","type":"cache_purge","payload":{"domain":"example.test","type":"all","cache_epoch":4,"cache_keys":`+input+`}}`), &task); err != nil {
+			if err := json.Unmarshal([]byte(`{"id":"full-purge","type":"cache_purge","payload":{"domain":"example.test","type":"all","cache_epoch":4,"purge_id":12,"cache_keys":`+input+`}}`), &task); err != nil {
 				t.Fatal(err)
 			}
-			c := &client{http: server.Client(), statusToken: "status-secret", statusURLs: []string{server.URL + "/passive-failures", server.URL + "/passive-failures"}}
+			c := &client{http: server.Client(), statusToken: "status-secret", statusURLs: []string{server.URL + "/passive-failures", server.URL + "/passive-failures"}, dir: t.TempDir()}
 			result, status := c.runCachePurge(task)
 			if status != "succeeded" || result["applied_cells"] != 2 || calls != 2 {
 				t.Fatalf("full purge failed: status=%s result=%#v calls=%d", status, result, calls)
@@ -1075,10 +1100,10 @@ func TestFullCachePurgeAgainstRunningCell(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := &client{http: &http.Client{Timeout: 5 * time.Second}, statusToken: strings.TrimSpace(string(token)), statusURLs: []string{endpoint + "/passive-failures"}}
+	c := &client{http: &http.Client{Timeout: 5 * time.Second}, statusToken: strings.TrimSpace(string(token)), statusURLs: []string{endpoint + "/passive-failures"}, dir: t.TempDir()}
 	for _, input := range []string{`null`, `[]`} {
 		var task edgeTask
-		if err := json.Unmarshal([]byte(`{"id":"full-`+input+`","type":"cache_purge","payload":{"domain":"purge-qualification.invalid","type":"all","cache_epoch":4,"cache_keys":`+input+`}}`), &task); err != nil {
+		if err := json.Unmarshal([]byte(`{"id":"full-`+input+`","type":"cache_purge","payload":{"domain":"purge-qualification.invalid","type":"all","cache_epoch":4,"purge_id":13,"cache_keys":`+input+`}}`), &task); err != nil {
 			t.Fatal(err)
 		}
 		result, status := c.runCachePurge(task)
@@ -1094,7 +1119,7 @@ func TestWriteCellRuntimesKeepsStableSlotsAndEmptyUnassignedState(t *testing.T) 
 	pools := map[string]map[string]any{
 		"shared-default": {"schema_version": 1, "sequence": uint64(9), "hosts": map[string]any{"www.example.test": map[string]any{}}},
 	}
-	if err := c.writeCellRuntimes(9, pools); err != nil {
+	if err := c.writeCellRuntimesAt(c.runtimeDir, 9, pools); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"cell-01", "cell-02"} {

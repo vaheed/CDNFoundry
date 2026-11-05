@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Gate;
 
 class DomainLifecycleController extends Controller
 {
-    public function status(Domain $domain): JsonResponse
+    public function status(Request $request, Domain $domain): JsonResponse
     {
         Gate::authorize('view', $domain);
 
@@ -29,7 +29,8 @@ class DomainLifecycleController extends Controller
             'nameservers_verified' => $domain->nameservers_verified_at !== null,
             'deployment' => [
                 'desired_revision' => $domain->revision,
-                'targets' => $domain->dnsDeployments()->select(['dns_cluster_id', 'desired_revision', 'deployed_revision', 'status', 'last_error', 'deployed_at', 'tombstone', 'deprovisioned_at'])->orderBy('dns_cluster_id')->get(),
+                'targets' => $domain->dnsDeployments()->select(['dns_cluster_id', 'desired_revision', 'deployed_revision', 'status', 'last_error', 'deployed_at', 'tombstone', 'deprovisioned_at'])->orderBy('dns_cluster_id')->get()
+                    ->map(fn ($deployment): array => $request->user()->isAdmin() ? $deployment->toArray() : $deployment->makeHidden('last_error')->toArray())->all(),
             ],
         ]]);
     }

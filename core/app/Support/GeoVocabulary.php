@@ -14,6 +14,27 @@ final class GeoVocabulary
         return explode(',', self::COUNTRIES);
     }
 
+    private const CONTINENT_NAMES = ['AF' => 'Africa', 'AN' => 'Antarctica', 'AS' => 'Asia', 'EU' => 'Europe', 'NA' => 'North America', 'OC' => 'Oceania', 'SA' => 'South America'];
+
+    /** @return array<string, string> code => "Name (CODE)", sorted by name, for form selects */
+    public static function countryOptions(): array
+    {
+        $options = [];
+        foreach (self::countries() as $code) {
+            $name = class_exists(\Locale::class) ? \Locale::getDisplayRegion('-'.$code, 'en') : $code;
+            $options[$code] = ($name !== '' && $name !== $code ? $name : $code).' ('.$code.')';
+        }
+        asort($options, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return $options;
+    }
+
+    /** @return array<string, string> code => "Name (CODE)", for form selects */
+    public static function continentOptions(): array
+    {
+        return array_map(fn (string $code): string => self::CONTINENT_NAMES[$code].' ('.$code.')', array_combine(self::CONTINENTS, self::CONTINENTS));
+    }
+
     public static function isCountry(?string $code): bool
     {
         return is_string($code) && in_array(strtoupper($code), self::countries(), true);

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	mathrand "math/rand/v2"
 	"net"
 	"net/http"
 	"net/netip"
@@ -35,7 +36,7 @@ import (
 	"time"
 )
 
-var version = "1.2.1"
+var version = "2.0.0"
 
 const (
 	generationMismatchGrace       = 15 * time.Second
@@ -47,6 +48,9 @@ var logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level:
 type identity struct {
 	EdgeID, Certificate, PrivateKey, PublicKey string
 	BootstrapTokenHash                         string `json:",omitempty"`
+	// AcceptedPublicKeys holds signing keys a trusted key endorsed during a rotation and that have
+	// not yet signed a delivery.
+	AcceptedPublicKeys []string `json:",omitempty"`
 }
 type state struct {
 	Sequence uint64                     `json:"sequence"`
@@ -76,6 +80,7 @@ type client struct {
 	gatewayRevision                    uint64
 	gatewayStatusURL                   string
 	derivedEnsured                     bool
+	keyUnassigned                      map[string]time.Time
 	statusURLs                         []string
 	cellAssignments                    map[string]string
 	cellTargets                        map[string]cellTarget
@@ -83,8 +88,23 @@ type client struct {
 	gatewayAddressMap                  map[string]string
 	gatewayAddressMapRequired          bool
 	http                               *http.Client
+	lifetime                           context.Context
+	originPolicy                       originPolicy
+	originPolicyChecksum               string
+	originPolicyLoaded                 bool
+	storedDigests                      map[string]string
+	dns                                dnsState
+	dnsAPIURL, dnsAPIKey               string
+	dnsHTTP                            *http.Client
+	dnsReport                          map[string]any
+	lastBackup                         time.Time
 	id                                 identity
 	generationMismatches               generationMismatchTracker
+	renewalRetryAt                     time.Time
+	controlRoute                       controlState
+	controlLoaded                      bool
+	controlDialed                      string
+	seedAddresses                      []string
 }
 type manifest struct {
 	Sequence                              uint64  `json:"sequence"`
@@ -98,14 +118,25 @@ func main() {
 		fmt.Println(version)
 		return
 	}
+	if len(os.Args) == 2 && os.Args[1] == "--healthcheck" {
+		os.Exit(healthcheck(env("EDGE_STATE_DIR", "/var/lib/cdnfoundry/agent")))
+	}
 	c := &client{
 		base: strings.TrimRight(required("EDGE_CONTROL_URL"), "/"), dir: env("EDGE_STATE_DIR", "/var/lib/cdnfoundry/agent"),
-		runtimeDir: env("EDGE_RUNTIME_DIR", ""), statusToken: env("EDGE_STATUS_TOKEN", ""),
+		runtimeDir: required("EDGE_RUNTIME_DIR"), statusToken: env("EDGE_STATUS_TOKEN", ""),
 		gatewayBindings:  env("EDGE_GATEWAY_BINDINGS", ""),
 		gatewayStatusURL: env("EDGE_GATEWAY_STATUS_URL", ""),
 		statusURLs:       splitNonempty(env("EDGE_CELL_STATUS_URLS", "")), http: &http.Client{Timeout: 15 * time.Second},
+		dnsAPIURL: env("EDGE_DNS_API_URL", ""), dnsAPIKey: env("EDGE_DNS_API_KEY", ""), dnsHTTP: &http.Client{Timeout: 10 * time.Second},
 	}
 	c.gatewayBindingsConfigured = c.gatewayBindings != ""
+	if seed := splitNonempty(env("EDGE_CONTROL_ADDRESSES", "")); len(seed) > 0 {
+		addresses, err := parseControlAddresses(seed)
+		if err != nil {
+			fatal(errors.New("EDGE_CONTROL_ADDRESSES: " + err.Error()))
+		}
+		c.seedAddresses = addresses
+	}
 	if err := json.Unmarshal([]byte(env("EDGE_CELL_ASSIGNMENTS", "{}")), &c.cellAssignments); err != nil || len(c.cellAssignments) > 32 {
 		fatal(errors.New("EDGE_CELL_ASSIGNMENTS must be an object with at most 32 slots"))
 	}
@@ -155,9 +186,6 @@ func main() {
 		fatal(err)
 	}
 	if len(c.backupKey) > 0 {
-		if c.runtimeDir == "" {
-			fatal(errors.New("encrypted edge recovery requires a runtime directory"))
-		}
 		var filesystem syscall.Statfs_t
 		if err := syscall.Statfs(c.runtimeDir, &filesystem); err != nil || filesystem.Type != tmpfsMagic {
 			fatal(errors.New("active edge runtime must be on tmpfs"))
@@ -175,11 +203,26 @@ func main() {
 	logger.Info("edge agent started", "event", "service_started", "edge_id", c.id.EdgeID, "version", version)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
+	c.lifetime = ctx
 	once := env("EDGE_ONCE", "false") == "true"
+	if !once {
+		go c.probeLoop(ctx)
+	}
 	var lastFailure string
 	var lastFailureAt time.Time
+	failures := 0
 	for {
+		// Liveness is the loop itself. An unreachable control plane must not
+		// restart the agent, but a hung loop must.
+		touchLiveness(c.dir)
+		if err := c.renewIdentityIfDue(time.Now()); err != nil {
+			logger.Error("edge identity renewal failed", "event", "edge_identity_renewal_failed", "edge_id", c.id.EdgeID, "error_code", "edge_identity_renewal_failed", "error", err.Error())
+		}
+		failed := false
+		// The DNS node is brought up to date first, so this synchronization's heartbeat reports it.
+		c.dnsReport = c.syncDNS()
 		if err := c.sync(); err != nil {
+			failed = true
 			if err.Error() != lastFailure || time.Since(lastFailureAt) >= time.Minute {
 				logger.Error("edge synchronization failed", "event", "edge_sync_failed", "edge_id", c.id.EdgeID, "error_code", "edge_sync_failed", "error", err.Error())
 				lastFailure, lastFailureAt = err.Error(), time.Now()
@@ -189,17 +232,23 @@ func main() {
 			lastFailure = ""
 		}
 		if err := c.processTasks(); err != nil {
+			failed = true
 			logger.Error("edge task polling failed", "event", "edge_task_poll_failed", "edge_id", c.id.EdgeID, "error_code", "edge_task_poll_failed", "error", err.Error())
 		}
 		if once {
 			logger.Info("edge agent stopped", "event", "service_stopped", "edge_id", c.id.EdgeID)
 			return
 		}
+		if failed {
+			failures++
+		} else {
+			failures = 0
+		}
 		select {
 		case <-ctx.Done():
 			logger.Info("edge agent stopped", "event", "service_stopped", "edge_id", c.id.EdgeID)
 			return
-		case <-time.After(5 * time.Second):
+		case <-time.After(nextInterval(failures, mathrand.Float64)):
 		}
 	}
 }
@@ -226,7 +275,7 @@ func (c *client) configureServerTrust(path string) error {
 }
 
 func (c *client) ensureDerivedRuntime(current state) error {
-	if c.runtimeDir == "" || c.derivedEnsured {
+	if c.derivedEnsured {
 		return nil
 	}
 
@@ -242,8 +291,11 @@ type edgeTask struct {
 		Allowlist          []string          `json:"private_allowlist"`
 		BlockedNetworks    []string          `json:"blocked_networks"`
 		Domain             string            `json:"domain"`
+		ProbeAddress       string            `json:"address"`
+		ProbeZone          string            `json:"zone"`
 		PurgeType          string            `json:"type"`
 		CacheEpoch         uint64            `json:"cache_epoch"`
+		PurgeID            uint64            `json:"purge_id"`
 		CacheKeys          []string          `json:"cache_keys"`
 		CellNames          []string          `json:"cell_names"`
 		EmergencyActive    bool              `json:"active"`
@@ -300,6 +352,8 @@ func (c *client) processTasks() error {
 			result, status = c.runCachePurge(task)
 		} else if task.Type == "emergency_mode" {
 			result, status = c.runEmergencyMode(task)
+		} else if task.Type == "dns_probe" {
+			result, status = runDNSProbe(task)
 		}
 		if err := c.request("POST", "/edge/v1/tasks/"+task.ID+"/result", map[string]any{"status": status, "result": result}, &map[string]any{}, true); err != nil {
 			return err
@@ -385,7 +439,7 @@ func containsString(values []string, expected string) bool {
 }
 
 func (c *client) runCachePurge(task edgeTask) (map[string]any, string) {
-	if task.Payload.Domain == "" || (task.Payload.PurgeType != "all" && task.Payload.PurgeType != "urls") || task.Payload.CacheEpoch == 0 || len(task.Payload.CacheKeys) > 100 {
+	if task.Payload.Domain == "" || (task.Payload.PurgeType != "all" && task.Payload.PurgeType != "urls") || task.Payload.CacheEpoch == 0 || task.Payload.PurgeID == 0 || len(task.Payload.CacheKeys) > 100 {
 		return map[string]any{"status": "failed", "failure_reason": "invalid_cache_purge_task"}, "failed"
 	}
 	if task.Payload.PurgeType == "all" && len(task.Payload.CacheKeys) != 0 || task.Payload.PurgeType == "urls" && len(task.Payload.CacheKeys) == 0 {
@@ -399,7 +453,17 @@ func (c *client) runCachePurge(task edgeTask) (map[string]any, string) {
 	}
 	command := map[string]any{
 		"task_id": task.ID, "action": "cache_purge", "domain": task.Payload.Domain,
-		"type": task.Payload.PurgeType, "cache_epoch": task.Payload.CacheEpoch, "cache_keys": keys,
+		"type": task.Payload.PurgeType, "cache_epoch": task.Payload.CacheEpoch, "purge_id": task.Payload.PurgeID, "cache_keys": keys,
+	}
+	if err := c.persistPurge(persistedPurge{
+		PurgeID: task.Payload.PurgeID, Domain: task.Payload.Domain, Type: task.Payload.PurgeType,
+		Epoch: task.Payload.CacheEpoch, Keys: keys, At: time.Now().Unix(),
+	}); err != nil {
+		reason := "cache_purge_persist_failed"
+		if errors.Is(err, errPurgeCapacity) {
+			reason = "cache_purge_capacity_exceeded"
+		}
+		return map[string]any{"status": "failed", "failure_reason": reason}, "failed"
 	}
 	applied := 0
 	for _, endpoint := range c.statusURLs {
@@ -544,6 +608,10 @@ func runOriginTest(task edgeTask) (result map[string]any) {
 		approved[ip] = true
 	}
 	origin := task.Payload.Origin
+	if !allowedOriginPorts[origin.Port] {
+		result["failure_reason"] = "blocked_destination"
+		return result
+	}
 	connectTimeout := boundedDuration(origin.ConnectTimeoutMS, 100, 10000)
 	responseTimeout := boundedDuration(origin.ResponseTimeoutMS, 500, 60000)
 	ctx, cancel := context.WithTimeout(context.Background(), responseTimeout)
@@ -651,6 +719,10 @@ func first(values ...string) string {
 	return ""
 }
 
+// allowedOriginPorts is the only set of ports an origin may use. It mirrors
+// OriginData::ALLOWED_PORTS in the control plane and allowed_origin_ports in runtime.lua.
+var allowedOriginPorts = map[int]bool{80: true, 443: true, 2052: true, 2053: true, 2082: true, 2083: true, 2086: true, 2087: true, 2095: true, 2096: true, 8000: true, 8008: true, 8080: true, 8081: true, 8088: true, 8443: true, 8444: true, 8880: true, 8888: true, 9000: true, 9443: true}
+
 func blockedIP(address string, allowlist, blockedNetworks []string) bool {
 	parsed, err := netip.ParseAddr(address)
 	if err != nil || parsed.Is4In6() || parsed.Zone() != "" {
@@ -669,6 +741,8 @@ func blockedIP(address string, allowlist, blockedNetworks []string) bool {
 			"0.0.0.0/8", "192.0.0.0/24", "192.0.2.0/24", "192.88.99.0/24", "198.18.0.0/15",
 			"198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4",
 			"64:ff9b::/96", "64:ff9b:1::/48", "2001:db8::/32",
+			// Transition ranges embed an IPv4 address that would bypass the IPv4 rules.
+			"::/96", "2002::/16", "2001::/23", "100::/64",
 		})
 	}
 	for _, cidr := range allowlist {
@@ -786,6 +860,11 @@ func (c *client) configureMutualTLS() error {
 		transport.TLSClientConfig = transport.TLSClientConfig.Clone()
 	}
 	transport.TLSClientConfig.Certificates = []tls.Certificate{certificate}
+	transport.DialContext = dialControl(&net.Dialer{Timeout: controlDialTimeout, KeepAlive: 30 * time.Second})
+	if previous, ok := c.http.Transport.(*http.Transport); ok {
+		// Connections opened with the previous certificate must not outlive it.
+		previous.CloseIdleConnections()
+	}
 	c.http.Transport = transport
 	return nil
 }
@@ -797,7 +876,12 @@ func (c *client) sync() error {
 			return err
 		}
 	}
-	current, err := loadState(c.activeStatePath())
+	c.syncControlAddresses()
+	policyChanged, err := c.syncOriginPolicy()
+	if err != nil {
+		return err
+	}
+	current, err := c.loadStoredState()
 	if errors.Is(err, os.ErrNotExist) {
 		return c.full()
 	}
@@ -807,100 +891,63 @@ func (c *client) sync() error {
 	if err := c.ensureDerivedRuntime(current); err != nil {
 		return err
 	}
+	if policyChanged {
+		// Only the agent recompiles; no domain artifact changes when the policy does.
+		if err := c.activate(current); err != nil {
+			return err
+		}
+	}
 	var response struct {
-		Data []struct {
-			Sequence            uint64  `json:"sequence"`
-			Kind                string  `json:"kind"`
-			DomainID            *uint64 `json:"domain_id"`
-			Revision            uint64  `json:"revision"`
-			Checksum, Signature string
-			SchemaVersion       int    `json:"schema_version"`
-			Minimum             string `json:"minimum_agent_version"`
-			Maximum             string `json:"maximum_agent_version"`
-		} `json:"data"`
+		Data        []manifestItem `json:"data"`
+		KeyRotation *struct {
+			PublicKey   string `json:"public_key"`
+			Endorsement string `json:"endorsement"`
+		} `json:"key_rotation"`
 	}
 	if err := c.request("GET", "/edge/v1/config/manifest?cursor="+strconv.FormatUint(current.Sequence, 10), nil, &response, true); err != nil {
 		return err
+	}
+	if response.KeyRotation != nil {
+		if err := c.noteRotation(response.KeyRotation.PublicKey, response.KeyRotation.Endorsement); err != nil {
+			logger.Error("signing key rotation notice rejected", "event", "signing_key_rotation_rejected", "edge_id", c.id.EdgeID, "error", err.Error())
+		}
 	}
 	if len(response.Data) == 0 {
 		return c.heartbeat(current.Sequence)
 	}
 	logger.Info("runtime candidate received", "event", "runtime_candidate_received", "edge_id", c.id.EdgeID, "revision_id", response.Data[len(response.Data)-1].Sequence)
-	candidate := state{Sequence: current.Sequence, Domains: clone(current.Domains)}
+	last := current.Sequence
+	var prepared []preparedArtifact
+	var rejections []rejection
 	for _, item := range response.Data {
-		if item.Sequence <= candidate.Sequence || item.DomainID == nil || (item.Kind != "domain" && item.Kind != "tombstone") || item.SchemaVersion != 1 || !compatible(item.Minimum, item.Maximum) {
-			logger.Warn("runtime candidate rejected; previous valid state preserved", "event", "runtime_candidate_rejected", "edge_id", c.id.EdgeID, "revision_id", item.Sequence, "error_code", "incompatible_artifact")
-			c.queueAck(ack{Sequence: item.Sequence, Rejected: true, Reason: "incompatible_artifact"})
-			return nil
+		if item.Sequence > last {
+			last = item.Sequence
 		}
-		var artifact struct {
-			Encoded           string `json:"encoded_payload"`
-			ExpiresAt         int64  `json:"expires_at"`
-			DeliverySignature string `json:"delivery_signature"`
-			Data              struct {
-				Sequence uint64 `json:"sequence"`
-			} `json:"data"`
-		}
-		if err := c.request("GET", "/edge/v1/config/artifacts/"+item.Checksum, nil, &artifact, true); err != nil {
+		artifact, rejected, err := c.prepareArtifact(item, current.Sequence)
+		if err != nil {
 			return err
 		}
-		payload, err := verify(artifact.Encoded, item.Checksum, item.Signature, c.id.PublicKey)
-		if err == nil && artifact.Data.Sequence != item.Sequence {
-			err = errors.New("artifact sequence mismatch")
+		if rejected != nil {
+			rejections = append(rejections, *rejected)
+			continue
 		}
-		if err == nil {
-			err = verifyDelivery(item.Checksum, item.Sequence, artifact.ExpiresAt, artifact.DeliverySignature, c.id.PublicKey)
-		}
-		if err != nil {
-			logger.Warn("runtime candidate rejected; previous valid state preserved", "event", "runtime_candidate_rejected", "edge_id", c.id.EdgeID, "revision_id", item.Sequence, "error_code", "signature_or_checksum_invalid")
-			c.queueAck(ack{Sequence: item.Sequence, Rejected: true, Reason: "signature_or_checksum_invalid", Details: err.Error()})
-			return nil
-		}
-		if item.DomainID != nil {
-			key := strconv.FormatUint(*item.DomainID, 10)
-			var metadata struct {
-				SchemaVersion int    `json:"schema_version"`
-				DomainID      uint64 `json:"domain_id"`
-				Revision      uint64 `json:"revision"`
-			}
-			if err := json.Unmarshal(payload, &metadata); err != nil || metadata.Revision != item.Revision ||
-				(item.Kind == "domain" && (metadata.SchemaVersion != 1 || metadata.DomainID != *item.DomainID)) {
-				c.queueAck(ack{Sequence: item.Sequence, Rejected: true, Reason: "invalid_artifact_schema"})
-				return nil
-			}
-			if previous := candidate.Domains[key]; previous != nil {
-				var active struct {
-					Revision uint64 `json:"revision"`
-				}
-				if json.Unmarshal(previous, &active) != nil || metadata.Revision < active.Revision {
-					c.queueAck(ack{Sequence: item.Sequence, Rejected: true, Reason: "artifact_revision_replay"})
-					return nil
-				}
-			}
-			if item.Kind == "tombstone" {
-				delete(candidate.Domains, key)
-			} else {
-				candidate.Domains[key] = payload
-			}
-		}
-		candidate.Sequence = item.Sequence
+		prepared = append(prepared, artifact)
 	}
-	if err := c.activate(candidate); err != nil {
-		logger.Error("runtime candidate rejected; previous valid state preserved", "event", "runtime_activation_failed", "edge_id", c.id.EdgeID, "revision_id", candidate.Sequence, "error_code", "candidate_validation_failed", "error", err.Error())
-		c.queueAck(ack{Sequence: candidate.Sequence, Rejected: true, Reason: "candidate_validation_failed", Details: err.Error()})
-		return nil
+	applied, more, err := c.applyArtifacts(current, prepared, last)
+	if err != nil {
+		return err
 	}
-	c.queueAck(ack{Sequence: candidate.Sequence})
-	logger.Info("runtime candidate activated", "event", "runtime_candidate_activated", "edge_id", c.id.EdgeID, "revision_id", candidate.Sequence)
+	rejections = append(rejections, more...)
+	sortRejections(rejections)
+	// Rejections are queued before the applied sequence so the control plane
+	// marks those domains failed before it counts the sequence as applied.
+	for _, item := range rejections {
+		c.queueAck(ack{Sequence: item.Sequence, Rejected: true, Reason: item.Reason, Details: item.Details})
+	}
+	c.queueAck(ack{Sequence: applied.Sequence})
+	logger.Info("runtime candidate activated", "event", "runtime_candidate_activated", "edge_id", c.id.EdgeID, "revision_id", applied.Sequence, "rejected_artifacts", len(rejections))
 	_ = c.flushAcks()
-	return c.heartbeat(candidate.Sequence)
-}
-
-func (c *client) activeStatePath() string {
-	if c.runtimeDir != "" {
-		return filepath.Join(c.runtimeDir, "current", "state.json")
-	}
-	return filepath.Join(c.dir, "active", "state.json")
+	return c.heartbeat(applied.Sequence)
 }
 
 func (c *client) refreshGatewayBindings() error {
@@ -1077,14 +1124,8 @@ func (c *client) full() error {
 	json.Unmarshal(raw["sequence"], &response.Sequence)
 	json.Unmarshal(raw["expires_at"], &response.ExpiresAt)
 	json.Unmarshal(raw["delivery_signature"], &response.DeliverySignature)
-	if c.id.PublicKey != response.Public {
-		return errors.New("full snapshot signing key changed")
-	}
-	payload, err := verify(response.Encoded, response.Checksum, response.Signature, c.id.PublicKey)
+	payload, err := c.verifySigned(response.Encoded, response.Checksum, response.Signature, snapshotDeliveryScope, response.Sequence, response.ExpiresAt, response.DeliverySignature)
 	if err != nil {
-		return err
-	}
-	if err := verifyDelivery(response.Checksum, response.Sequence, response.ExpiresAt, response.DeliverySignature, c.id.PublicKey); err != nil {
 		return err
 	}
 	reader, err := gzip.NewReader(bytes.NewReader(payload))
@@ -1119,20 +1160,46 @@ func (c *client) full() error {
 	if snapshot.SchemaVersion != 1 || !compatible(snapshot.Minimum, snapshot.Maximum) {
 		return errors.New("full snapshot is incompatible")
 	}
-	next := state{Domains: map[string]json.RawMessage{}}
+	var prepared []preparedArtifact
+	var rejections []rejection
+	var last uint64
 	for _, a := range snapshot.Artifacts {
-		if a.Sequence > next.Sequence {
-			next.Sequence = a.Sequence
+		if a.Sequence > last {
+			last = a.Sequence
 		}
-		if a.DomainID != nil && a.Kind != "tombstone" {
-			next.Domains[strconv.FormatUint(*a.DomainID, 10)] = a.Payload
+		if a.DomainID == nil || a.Kind == "tombstone" {
+			continue
 		}
+		key := strconv.FormatUint(*a.DomainID, 10)
+		// One domain that cannot compile must not stop a new PoP from serving
+		// every other domain.
+		if _, _, err := compileRuntime(state{Sequence: a.Sequence, Domains: map[string]json.RawMessage{key: a.Payload}}, nil); err != nil {
+			logger.Warn("snapshot artifact rejected; the domain is skipped", "event", "runtime_candidate_rejected", "edge_id", c.id.EdgeID, "revision_id", a.Sequence, "error_code", reasonCandidateValidation)
+			rejections = append(rejections, rejection{Sequence: a.Sequence, Reason: reasonCandidateValidation, Details: err.Error()})
+			continue
+		}
+		prepared = append(prepared, preparedArtifact{Sequence: a.Sequence, Kind: "domain", DomainKey: key, Payload: a.Payload})
 	}
-	if next.Sequence != response.Sequence {
+	if last != response.Sequence {
 		return errors.New("full snapshot sequence mismatch")
 	}
-	if err := c.activate(next); err != nil {
-		return err
+	next := state{Sequence: last, Domains: map[string]json.RawMessage{}}
+	if len(prepared) == 0 {
+		// An empty snapshot still activates the bootstrap generation.
+		if err := c.activate(next); err != nil {
+			return err
+		}
+	} else {
+		applied, more, err := c.applyArtifacts(state{Domains: map[string]json.RawMessage{}}, prepared, last)
+		if err != nil {
+			return err
+		}
+		next = applied
+		rejections = append(rejections, more...)
+	}
+	sortRejections(rejections)
+	for _, item := range rejections {
+		c.queueAck(ack{Sequence: item.Sequence, Rejected: true, Reason: item.Reason, Details: item.Details})
 	}
 	c.queueAck(ack{Sequence: next.Sequence})
 	return c.flushAcks()
@@ -1142,126 +1209,72 @@ func (c *client) activate(s state) error {
 	if s.Domains == nil || len(s.Domains) > 100000 {
 		return errors.New("invalid domain count")
 	}
-	if c.runtimeDir != "" {
-		logger.Info("runtime generation activation started", "event", "runtime_generation_activation_started", "edge_id", c.id.EdgeID, "revision_id", s.Sequence)
-		manifest, err := replaceGeneration(c.runtimeDir, c.gatewayActiveRevision(s.Sequence), func(candidate, generationID string) error {
-			if err := atomicJSON(filepath.Join(candidate, "state.json"), s); err != nil {
-				return err
-			}
-			runtime, pools, err := compileRuntime(s)
-			if err != nil {
-				return err
-			}
-			runtime["generation_id"] = generationID
-			for _, poolRuntime := range pools {
-				poolRuntime["generation_id"] = generationID
-			}
-			if err := atomicJSON(filepath.Join(candidate, "active.json"), runtime); err != nil {
-				return err
-			}
-			for name, poolRuntime := range pools {
-				if !validPoolName(name) {
-					return errors.New("invalid runtime pool name")
-				}
-				if err := atomicJSON(filepath.Join(candidate, name+".json"), poolRuntime); err != nil {
-					return err
-				}
-			}
-			if err := c.writeCellRuntimesAt(candidate, s.Sequence, generationID, pools); err != nil {
-				return err
-			}
-			if c.gatewayBindings != "" {
-				gateway, err := compileGateway(c.gatewayActiveRevision(s.Sequence), pools, c.gatewayBindings)
-				if err != nil {
-					return err
-				}
-				gateway["generation_id"] = generationID
-				if err := atomicJSON(filepath.Join(candidate, "gateway.json"), gateway); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-		if err := c.saveBackup(s); err != nil {
-			return err
-		}
-		c.derivedEnsured = true
-		logger.Info("runtime generation activation succeeded", "event", "runtime_generation_activation_succeeded", "edge_id", c.id.EdgeID, "generation_id", manifest.GenerationID, "revision_id", manifest.Revision)
-		return nil
-	}
-	candidate := filepath.Join(c.dir, "candidate")
-	os.RemoveAll(candidate)
-	if err := os.MkdirAll(candidate, 0700); err != nil {
-		return err
-	}
-	if err := atomicJSON(filepath.Join(candidate, "state.json"), s); err != nil {
-		return err
-	}
-	runtime, pools, err := compileRuntime(s)
+	keys, err := c.certificateKeys(s)
 	if err != nil {
 		return err
 	}
-	active, previous := filepath.Join(c.dir, "active"), filepath.Join(c.dir, "previous")
-	os.RemoveAll(previous)
-	if _, err := os.Stat(active); err == nil {
-		if err := os.Rename(active, previous); err != nil {
-			return err
-		}
-	}
-	if err := os.Rename(candidate, active); err != nil {
-		if _, e := os.Stat(previous); e == nil {
-			_ = os.Rename(previous, active)
-		}
+	if err := c.activateWithKeys(s, keys); err != nil {
 		return err
 	}
-	if c.runtimeDir != "" {
-		if err := os.MkdirAll(c.runtimeDir, 0755); err != nil {
-			return c.rollbackActive(active, previous, err)
+	c.pruneCertificateKeys(keys)
+	return nil
+}
+
+func (c *client) activateWithKeys(s state, keys map[string]string) error {
+	logger.Info("runtime generation activation started", "event", "runtime_generation_activation_started", "edge_id", c.id.EdgeID, "revision_id", s.Sequence)
+	manifest, err := replaceGeneration(c.runtimeDir, c.gatewayActiveRevision(s.Sequence), func(candidate, generationID string) error {
+		runtime, pools, err := compileRuntime(s, keys)
+		if err != nil {
+			return candidateError{err}
 		}
-		if err := atomicJSON(filepath.Join(c.runtimeDir, "active.json"), runtime); err != nil {
-			return c.rollbackActive(active, previous, err)
-		}
-		existing, _ := filepath.Glob(filepath.Join(c.runtimeDir, "*.json"))
-		for _, file := range existing {
-			name := strings.TrimSuffix(filepath.Base(file), ".json")
-			if name != "active" {
-				if _, present := pools[name]; !present {
-					pools[name] = map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": map[string]any{}}
-				}
-			}
-		}
-		for name, poolRuntime := range pools {
+		applyOriginPolicy(runtime, c.originPolicy)
+		for name := range pools {
 			if !validPoolName(name) {
-				return c.rollbackActive(active, previous, errors.New("invalid runtime pool name"))
-			}
-			if err := atomicJSON(filepath.Join(c.runtimeDir, name+".json"), poolRuntime); err != nil {
-				return c.rollbackActive(active, previous, err)
+				return errors.New("invalid runtime pool name")
 			}
 		}
-		if err := c.writeCellRuntimes(s.Sequence, pools); err != nil {
-			return c.rollbackActive(active, previous, err)
+		// A generation always holds at least this small summary, so an empty PoP still has a
+		// verifiable, publishable generation.
+		if err := atomicJSON(filepath.Join(candidate, "summary.json"), map[string]any{
+			"schema_version": 1, "generation_id": generationID, "sequence": s.Sequence, "domain_count": len(s.Domains),
+		}); err != nil {
+			return err
+		}
+		if err := c.writeCellRuntimesAt(candidate, s.Sequence, pools); err != nil {
+			return err
 		}
 		if c.gatewayBindings != "" {
 			gateway, err := compileGateway(c.gatewayActiveRevision(s.Sequence), pools, c.gatewayBindings)
 			if err != nil {
-				return c.rollbackActive(active, previous, err)
+				return err
 			}
-			if err := atomicJSON(filepath.Join(c.runtimeDir, "gateway.json"), gateway); err != nil {
-				return c.rollbackActive(active, previous, err)
+			gateway["generation_id"] = generationID
+			if err := atomicJSON(filepath.Join(candidate, "gateway.json"), gateway); err != nil {
+				return err
 			}
 		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
+	// The compiled runtime is published; now the durable state follows it. A crash in between
+	// leaves the state behind the runtime, and the agent catches up from its older sequence.
+	if _, err := c.persistState(s); err != nil {
+		return err
+	}
+	if c.lastBackup.IsZero() || time.Since(c.lastBackup) >= backupInterval {
+		if err := c.saveBackup(s); err != nil {
+			return err
+		}
+		c.lastBackup = time.Now()
+	}
+	c.derivedEnsured = true
+	logger.Info("runtime generation activation succeeded", "event", "runtime_generation_activation_succeeded", "edge_id", c.id.EdgeID, "generation_id", manifest.GenerationID, "revision_id", manifest.Revision)
 	return nil
 }
 
-func (c *client) writeCellRuntimes(sequence uint64, pools map[string]map[string]any) error {
-	return c.writeCellRuntimesAt(c.runtimeDir, sequence, "", pools)
-}
-
-func (c *client) writeCellRuntimesAt(directory string, sequence uint64, generationID string, pools map[string]map[string]any) error {
+func (c *client) writeCellRuntimesAt(directory string, sequence uint64, pools map[string]map[string]any) error {
 	for cellName, poolName := range c.resolvedCellAssignments(pools) {
 		runtime := pools[cellName]
 		if runtime == nil {
@@ -1270,15 +1283,54 @@ func (c *client) writeCellRuntimesAt(directory string, sequence uint64, generati
 		if runtime == nil {
 			runtime = map[string]any{"schema_version": 1, "sequence": sequence, "hosts": map[string]any{}, "certificates": map[string]any{}}
 		}
-		if generationID != "" {
-			runtime["generation_id"] = generationID
-		}
 		pools[cellName] = runtime
-		if err := atomicJSON(filepath.Join(directory, cellName+".json"), runtime); err != nil {
+		if err := c.writeCellRuntime(directory, cellName, sequence, runtime); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// writeCellRuntime writes one cell's runtime file and its stamp. The stamp is the cell's content
+// identity: a digest of the runtime with its sequence and identity blanked, so it changes only when
+// what the cell serves changes. The file carries that identity as its generation_id, and the
+// sequence at which the content last changed. When the previous generation holds the same content,
+// its file is hardlinked instead of written again, so a change confined to one pool's domains
+// rewrites only the cells that serve that pool, and the other cells do not even reload.
+func (c *client) writeCellRuntime(directory, cellName string, sequence uint64, runtime map[string]any) error {
+	delete(runtime, "generation_id")
+	runtime["sequence"] = uint64(0)
+	base, err := json.Marshal(runtime)
+	if err != nil {
+		return err
+	}
+	identity := digest(base)
+	file := filepath.Join(directory, cellName+".json")
+	if directory != c.runtimeDir {
+		previous := filepath.Join(c.runtimeDir, "current", cellName+".json")
+		if stamp, err := os.ReadFile(runtimeStampPath(previous)); err == nil && strings.TrimSpace(string(stamp)) == identity {
+			if os.Link(previous, file) == nil && os.Link(runtimeStampPath(previous), runtimeStampPath(file)) == nil {
+				var carried struct {
+					Sequence uint64 `json:"sequence"`
+				}
+				if body, err := os.ReadFile(file); err == nil && json.Unmarshal(body, &carried) == nil {
+					runtime["sequence"], runtime["generation_id"] = carried.Sequence, identity
+				}
+				return nil
+			}
+			_ = os.Remove(file)
+			_ = os.Remove(runtimeStampPath(file))
+		}
+	}
+	runtime["generation_id"], runtime["sequence"] = identity, sequence
+	body, err := json.Marshal(runtime)
+	if err != nil {
+		return err
+	}
+	if err := writeAtomic(file, body); err != nil {
+		return err
+	}
+	return writeAtomic(runtimeStampPath(file), []byte(identity+"\n"))
 }
 
 func (c *client) resolvedCellAssignments(pools map[string]map[string]any) map[string]string {
@@ -1318,18 +1370,11 @@ func validCellName(name string) bool {
 	return err == nil && slot >= 1 && slot <= 32 && fmt.Sprintf("cell-%02d", slot) == name
 }
 
-func (c *client) rollbackActive(active, previous string, cause error) error {
-	os.RemoveAll(active)
-	if _, err := os.Stat(previous); err == nil {
-		_ = os.Rename(previous, active)
-	}
-	return cause
-}
-
-func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) {
+func compileRuntime(s state, keys map[string]string) (map[string]any, map[string]map[string]any, error) {
 	hosts := map[string]any{}
 	poolHosts := map[string]map[string]any{}
 	certificates := map[string]any{}
+	unassigned := map[string]bool{}
 	poolCertificates := map[string]map[string]any{}
 	cellHosts := map[string]map[string]any{}
 	cellCertificates := map[string]map[string]any{}
@@ -1389,19 +1434,31 @@ func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) 
 					return nil, nil, errors.New("invalid runtime certificate")
 				}
 				id, _ := certificate["id"].(string)
-				if id == "" || certificate["certificate_pem"] == nil || certificate["private_key_pem"] == nil {
+				if id == "" || certificate["certificate_pem"] == nil {
 					return nil, nil, errors.New("invalid runtime certificate")
 				}
+				key, available := keys[id]
+				if !available {
+					unassigned[id] = true
+					continue
+				}
+				certificate["private_key_pem"] = key
 				certificates[id] = certificate
 			}
 		}
 		if certificate, ok := domain.TLS["certificate"].(map[string]any); ok && certificate != nil {
 			certificateID, _ = certificate["id"].(string)
-			if certificateID == "" || certificate["certificate_pem"] == nil || certificate["private_key_pem"] == nil {
+			if certificateID == "" || certificate["certificate_pem"] == nil {
 				return nil, nil, errors.New("invalid runtime certificate")
 			}
-			certificates[certificateID] = certificate
-			tlsReference["certificate_id"] = certificateID
+			if key, available := keys[certificateID]; available {
+				certificate["private_key_pem"] = key
+				certificates[certificateID] = certificate
+				tlsReference["certificate_id"] = certificateID
+			} else {
+				unassigned[certificateID] = true
+				certificateID = ""
+			}
 		}
 		for _, host := range domain.Hostnames {
 			name := strings.ToLower(strings.TrimSuffix(host.Hostname, "."))
@@ -1412,6 +1469,9 @@ func compileRuntime(s state) (map[string]any, map[string]map[string]any, error) 
 			hostCertificateID := host.TLSCertificateID
 			if hostCertificateID == "" {
 				hostCertificateID = certificateID
+			}
+			if hostCertificateID != "" && unassigned[hostCertificateID] {
+				hostCertificateID = ""
 			}
 			if hostCertificateID != "" {
 				if certificates[hostCertificateID] == nil {
@@ -1566,6 +1626,7 @@ func compileGateway(sequence uint64, pools map[string]map[string]any, raw string
 				routeSet[key] = true
 				routes = append(routes, map[string]any{
 					"address": address.String(), "hostname": name, "http": target.http, "https": target.https, "cell": target.name,
+					"tls_handshakes_per_second": tlsHandshakeBudget(target.hosts[name]),
 				})
 			}
 		}
@@ -1578,22 +1639,52 @@ func compileGateway(sequence uint64, pools map[string]map[string]any, raw string
 	return map[string]any{"schema_version": 1, "revision": sequence, "listeners": listeners, "routes": routes}, nil
 }
 
+// tlsHandshakeBudget is the host's per-client TLS handshake budget per second, from its security
+// limits. The gateway enforces it per client prefix.
+func tlsHandshakeBudget(host any) int {
+	entry, _ := host.(map[string]any)
+	security, _ := entry["security"].(map[string]any)
+	limits, _ := security["limits"].(map[string]any)
+	if value, ok := limits["tls_handshakes_per_second"].(float64); ok && value >= 1 && value <= 1000 {
+		return int(value)
+	}
+	return defaultTLSHandshakeBudget
+}
+
+const defaultTLSHandshakeBudget = 50
+
+// expectedCellIdentity is the identity a cell should have loaded: the stamp of its file in the
+// current generation, or the generation's own identity when the cell has no file there.
+func (c *client) expectedCellIdentity(cell map[string]any, generation string) string {
+	name, _ := cell["name"].(string)
+	if !validCellName(name) {
+		return generation
+	}
+	if stamp, err := os.ReadFile(runtimeStampPath(filepath.Join(c.runtimeDir, "current", name+".json"))); err == nil {
+		if identity := strings.TrimSpace(string(stamp)); identity != "" {
+			return identity
+		}
+	}
+	return generation
+}
+
 func (c *client) heartbeat(sequence uint64) error {
 	cells, failures, security := c.runtimeStatus()
 	listenerReady := false
 	expectedGeneration := ""
-	if c.runtimeDir != "" {
-		if manifest, err := readGenerationPointer(c.runtimeDir, "current"); err == nil {
-			expectedGeneration = manifest.GenerationID
-		}
+	if manifest, err := readGenerationPointer(c.runtimeDir, "current"); err == nil {
+		expectedGeneration = manifest.GenerationID
 	}
 	mismatchedGenerations := map[string]int{}
 	for _, cell := range cells {
 		capacity, _ := cell["capacity"].(map[string]any)
 		generation, _ := capacity["active_generation"].(string)
-		if cell["status"] == "ready" && (expectedGeneration == "" || generation == expectedGeneration) {
+		// A cell's identity is its content digest, which stays the same across generations that do not
+		// change what it serves, so each cell is compared with its own expected identity.
+		expected := c.expectedCellIdentity(cell, expectedGeneration)
+		if cell["status"] == "ready" && (expected == "" || generation == expected) {
 			listenerReady = true
-		} else if expectedGeneration != "" && generation != expectedGeneration {
+		} else if expected != "" && generation != expected {
 			if generation == "" {
 				generation = "unknown"
 			}
@@ -1613,6 +1704,15 @@ func (c *client) heartbeat(sequence uint64) error {
 	}
 	if versions := runtimeVersions(); len(versions) == 4 {
 		payload["runtime_versions"] = versions
+	}
+	if c.controlRoute.Checksum != "" {
+		payload["control_addresses_checksum"] = c.controlRoute.Checksum
+	}
+	if c.dnsReport != nil {
+		payload["dns"] = c.dnsReport
+	}
+	if _, notAfter, err := c.identityValidity(); err == nil {
+		payload["identity_expires_at"] = notAfter.Unix()
 	}
 	return c.request("POST", "/edge/v1/heartbeat", payload, &map[string]any{}, true)
 }
@@ -1724,6 +1824,9 @@ func (c *client) runtimeStatus() ([]map[string]any, []map[string]any, []map[stri
 		if !ok {
 			continue
 		}
+		if restored, reported := decoded.Cell["purges_restored"].(bool); reported && !restored {
+			c.restorePurges(endpoint)
+		}
 		if decoded.Cell != nil && len(cells) < 32 {
 			name, _ := decoded.Cell["name"].(string)
 			if desiredDrained, configured := controls[name]; configured {
@@ -1830,6 +1933,13 @@ func (c *client) flushAcks() error {
 			body = map[string]any{"sequence": a.Sequence, "reason": a.Reason, "details": a.Details}
 		}
 		if e = c.request("POST", path, body, &map[string]any{}, true); e != nil {
+			// An acknowledgement the control plane refuses for good must not
+			// hold back every later one.
+			var status *httpStatusError
+			if errors.As(e, &status) && status.permanent() {
+				logger.Warn("edge acknowledgement refused and dropped", "event", "edge_ack_dropped", "edge_id", c.id.EdgeID, "revision_id", a.Sequence, "error_code", "edge_ack_refused", "error", e.Error())
+				continue
+			}
 			_ = atomicJSON(p, q[i:])
 			return e
 		}
@@ -1846,31 +1956,72 @@ func (c *client) requestLimit(method, path string, body any, out any, auth bool,
 	if err != nil || base.Scheme != "https" || base.Hostname() == "" || base.User != nil || base.RawQuery != "" || base.ForceQuery || base.Fragment != "" || base.Path != "" {
 		return errors.New("EDGE_CONTROL_URL must be an HTTPS origin without credentials, path, query, or fragment")
 	}
-	var r io.Reader
+	var encodedBody []byte
 	if body != nil {
-		b, err := json.Marshal(body)
-		if err != nil {
+		if encodedBody, err = json.Marshal(body); err != nil {
 			return err
 		}
-		r = bytes.NewReader(b)
 	}
-	req, e := http.NewRequest(method, c.base+path, r)
+	// Never forward registration bodies or mTLS identities through redirects.
+	// Copy the client so cell/status transports retain their separate behavior. The deadline
+	// comes from the request context, sized to what the request may transfer.
+	control := *c.http
+	control.Timeout = 0
+	control.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+	var failure error
+	for _, address := range c.controlCandidates() {
+		if address != c.controlDialed {
+			// A pooled connection to another node must not carry this attempt.
+			if transport, ok := c.http.Transport.(*http.Transport); ok {
+				transport.CloseIdleConnections()
+			}
+			c.controlDialed = address
+		}
+		err := c.attemptControlRequest(&control, method, path, encodedBody, out, responseLimit, address)
+		if err == nil {
+			c.noteControlAddressWorked(address)
+			return nil
+		}
+		var status *httpStatusError
+		if errors.As(err, &status) && status.Code < 500 {
+			// A definite answer from a live active node, such as a refusal, is not an address problem.
+			c.noteControlAddressWorked(address)
+			return err
+		}
+		failure = err
+		if address != "" {
+			logger.Warn("control address failed; trying the next", "event", "control_address_failed", "edge_id", c.id.EdgeID, "address", address, "error", err.Error())
+		}
+	}
+	return failure
+}
+
+func (c *client) attemptControlRequest(control *http.Client, method, path string, encodedBody []byte, out any, responseLimit int64, address string) error {
+	var r io.Reader
+	if encodedBody != nil {
+		r = bytes.NewReader(encodedBody)
+	}
+	ctx, cancel := c.requestContext(requestTimeout(responseLimit))
+	defer cancel()
+	if address != "" {
+		ctx = context.WithValue(ctx, dialOverrideKey{}, address)
+	}
+	req, e := http.NewRequestWithContext(ctx, method, c.base+path, r)
 	if e != nil {
 		return e
 	}
 	req.Header.Set("Content-Type", "application/json")
-	// Never forward registration bodies or mTLS identities through redirects.
-	// Copy the client so cell/status transports retain their separate behavior.
-	control := *c.http
-	control.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
 	res, e := control.Do(req)
 	if e != nil {
 		return e
 	}
 	defer res.Body.Close()
+	if err := c.controlResponseVerdict(res); err != nil {
+		return &httpStatusError{Status: res.Status, Code: max(res.StatusCode, 503), Body: err.Error()}
+	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
-		return fmt.Errorf("%s: %s", res.Status, string(b))
+		return &httpStatusError{Status: res.Status, Code: res.StatusCode, Body: string(b)}
 	}
 	return json.NewDecoder(io.LimitReader(res.Body, responseLimit)).Decode(out)
 }
@@ -1899,7 +2050,18 @@ func verify(encoded, checksum, signature, public string) (json.RawMessage, error
 	}
 	return b, nil
 }
-func verifyDelivery(checksum string, sequence uint64, expiresAt int64, signature, public string) error {
+
+// deliveryScope is the part of a delivery's signed message that says what is being delivered.
+// An artifact's kind, domain and revision are signed with its checksum, so a replayed or
+// rewritten manifest entry cannot relabel a signed payload, and a snapshot signature can never
+// stand in for an artifact signature.
+func deliveryScope(kind string, domainID uint64, revision uint64) string {
+	return "artifact:" + kind + ":" + strconv.FormatUint(domainID, 10) + ":" + strconv.FormatUint(revision, 10)
+}
+
+const snapshotDeliveryScope = "snapshot"
+
+func verifyDelivery(scope, checksum string, sequence uint64, expiresAt int64, signature, public string) error {
 	now := time.Now().Unix()
 	if expiresAt <= now || expiresAt > now+600 {
 		return errors.New("artifact delivery expired or outside clock bound")
@@ -1912,7 +2074,7 @@ func verifyDelivery(checksum string, sequence uint64, expiresAt int64, signature
 	if err != nil || len(sig) != ed25519.SignatureSize {
 		return errors.New("invalid delivery signature")
 	}
-	message := checksum + "|" + strconv.FormatUint(sequence, 10) + "|" + strconv.FormatInt(expiresAt, 10)
+	message := scope + "|" + checksum + "|" + strconv.FormatUint(sequence, 10) + "|" + strconv.FormatInt(expiresAt, 10)
 	if !ed25519.Verify(pk, []byte(message), sig) {
 		return errors.New("delivery signature mismatch")
 	}
@@ -1933,25 +2095,36 @@ func semver(v string) int {
 	}
 	return n
 }
-func loadState(p string) (state, error) {
-	var s state
-	b, e := os.ReadFile(p)
-	if e != nil {
-		return s, e
-	}
-	e = json.Unmarshal(b, &s)
-	return s, e
+
+func runtimeStampPath(p string) string {
+	return strings.TrimSuffix(p, ".json") + ".stamp"
 }
+
+// replaceFile swaps a file for new content that has reached the disk: the content is synced before
+// the rename and the directory after it, so a power loss leaves the old file or the new one, never a
+// renamed empty file.
+func replaceFile(p string, b []byte, mode os.FileMode) error {
+	tmp := p + ".tmp"
+	_ = os.Remove(tmp)
+	if e := durableWrite(tmp, b, mode); e != nil {
+		return e
+	}
+	if e := os.Rename(tmp, p); e != nil {
+		return e
+	}
+	return syncDirectory(filepath.Dir(p))
+}
+
+func writeAtomic(p string, b []byte) error {
+	return replaceFile(p, b, 0600)
+}
+
 func atomicJSON(p string, v any) error {
 	b, e := json.Marshal(v)
 	if e != nil {
 		return e
 	}
-	tmp := p + ".tmp"
-	if e = os.WriteFile(tmp, b, 0600); e != nil {
-		return e
-	}
-	return os.Rename(tmp, p)
+	return replaceFile(p, b, 0600)
 }
 func clone(in map[string]json.RawMessage) map[string]json.RawMessage {
 	out := map[string]json.RawMessage{}

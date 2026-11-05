@@ -3,17 +3,23 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
+import socket
 import json
 from pathlib import Path
 import subprocess
 import tempfile
 import time
+import urllib.error
 import urllib.request
 import uuid
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+NODE_TOKEN = 'qualification-node-token'
+AUTHORIZATION = 'Basic ' + base64.b64encode(('cdnf:' + NODE_TOKEN).encode()).decode()
 
 
 def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -41,8 +47,8 @@ def main() -> None:
         (root / 'result').mkdir()
         try:
             run('docker', 'run', '-d', '--name', name, '--network', 'bridge', '--read-only',
-                '--memory', '256m', '--tmpfs', '/tmp:rw,size=32m', '-p', '127.0.0.1::8686', '-p', '127.0.0.1::8687',
-                '-e', 'CDNF_TELEMETRY_EDGE_ID='+args.edge_id,
+                '--memory', '256m', '--tmpfs', '/tmp:rw,size=32m', '-p', '127.0.0.1::8686', '-p', '127.0.0.1::8687', '-p', '127.0.0.1::9000/udp',
+                '-e', 'CDNF_TELEMETRY_EDGE_ID='+args.edge_id, '-e', 'EDGE_STATUS_TOKEN='+NODE_TOKEN,
                 '-v', f'{root}/vector.yaml:/etc/vector/vector.yaml:ro', '-v', f'{root}/result:/result', image)
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
             for kind, port, event in [('edge', '8686', {'domain_id': 42, 'hostname': 'qualification.test', 'status': 200,
@@ -53,7 +59,7 @@ def main() -> None:
                 for _ in range(40):
                     try:
                         request = urllib.request.Request('http://127.0.0.1:'+hostport, data=json.dumps(event).encode(),
-                                                         headers={'Content-Type': 'application/json'})
+                                                         headers={'Content-Type': 'application/json', 'Authorization': AUTHORIZATION})
                         with opener.open(request, timeout=2) as response:
                             assert response.status == 200
                         break
@@ -75,6 +81,32 @@ def main() -> None:
                 else:
                     assert rows[0]['qname'] == 'www.qualification.test'
             hostport = run('docker', 'port', name, '8686/tcp').stdout.strip().rsplit(':', 1)[1]
+            for forged in ({}, {'Authorization': 'Basic ' + base64.b64encode(b'cdnf:wrong').decode()}):
+                request = urllib.request.Request('http://127.0.0.1:'+hostport, data=json.dumps({'domain_id': 99, 'hostname': 'forged.test'}).encode(),
+                                                 headers={'Content-Type': 'application/json', **forged})
+                try:
+                    opener.open(request, timeout=3)
+                except urllib.error.HTTPError as error:
+                    assert error.code == 401, error.code
+                else:
+                    raise AssertionError('Vector accepted an unauthenticated telemetry event')
+            time.sleep(1)
+            assert '"forged.test"' not in (root/'result/edge.json').read_text()
+            # Access-log lines reach Vector over UDP syslog: only the cell holding the
+            # node secret can prove a line is genuine, and forged lines are dropped.
+            proof = hashlib.sha256(('cdnf-telemetry-v1|' + NODE_TOKEN).encode()).hexdigest()
+            udp_port = int(run('docker', 'port', name, '9000/udp').stdout.strip().rsplit(':', 1)[1])
+            sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            for label, value in (('syslog-forged', 'forged'), ('syslog-genuine', proof)):
+                line = json.dumps({'domain_id': 42, 'hostname': label + '.test', 'path': '/' + label, 'telemetry_proof': value})
+                sender.sendto(('<190>cdnfoundry_edge: ' + line).encode(), ('127.0.0.1', udp_port))
+            for _ in range(40):
+                if 'syslog-genuine.test' in (root/'result/edge.json').read_text():
+                    break
+                time.sleep(0.25)
+            written = (root/'result/edge.json').read_text()
+            assert 'syslog-genuine.test' in written and 'telemetry_proof' not in written
+            assert 'syslog-forged.test' not in written, 'Vector accepted a forged syslog event'
             cases = [
                 ('success', '200', None, '0.125', '', 125),
                 ('redirect', '302', None, '0.020', '', 20),
@@ -94,7 +126,7 @@ def main() -> None:
                 if response_time is not None:
                     event['origin_response_time'] = response_time
                 request = urllib.request.Request('http://127.0.0.1:'+hostport, data=json.dumps(event).encode(),
-                                                 headers={'Content-Type': 'application/json'})
+                                                 headers={'Content-Type': 'application/json', 'Authorization': AUTHORIZATION})
                 with opener.open(request, timeout=3) as response:
                     assert response.status == 200
             for _ in range(40):

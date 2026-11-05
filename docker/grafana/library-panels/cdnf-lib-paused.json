@@ -1,0 +1,75 @@
+{
+  "model": {
+    "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+    },
+    "description": "Fleet rollouts paused on a safety threshold.",
+    "fieldConfig": {
+      "defaults": {
+        "color": {
+          "mode": "thresholds"
+        },
+        "mappings": [
+          {
+            "options": {
+              "match": "null+nan",
+              "result": {
+                "color": "text",
+                "text": "No data yet"
+              }
+            },
+            "type": "special"
+          }
+        ],
+        "noValue": "No traffic",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {
+              "color": "green",
+              "value": null
+            },
+            {
+              "color": "orange",
+              "value": 1
+            }
+          ]
+        },
+        "unit": "short"
+      },
+      "overrides": []
+    },
+    "options": {
+      "colorMode": "value",
+      "graphMode": "none",
+      "justifyMode": "center",
+      "reduceOptions": {
+        "calcs": [
+          "lastNotNull"
+        ],
+        "fields": "",
+        "values": false
+      },
+      "textMode": "value",
+      "wideLayout": true
+    },
+    "targets": [
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "expr": "cdnfoundry_fleet_rollouts_paused",
+        "instant": true,
+        "legendFormat": "paused",
+        "range": false,
+        "refId": "A"
+      }
+    ],
+    "title": "Paused",
+    "type": "stat"
+  },
+  "name": "Paused",
+  "uid": "cdnf-lib-paused"
+}

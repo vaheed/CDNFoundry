@@ -10,6 +10,9 @@ final class NetworkAddress
         '198.51.100.0/24', '203.0.113.0/24', '224.0.0.0/4', '240.0.0.0/4',
         '::/128', '::1/128', '::ffff:0:0/96', '64:ff9b::/96', '64:ff9b:1::/48', 'fc00::/7', 'fe80::/10', 'fec0::/10', 'ff00::/8',
         '2001:db8::/32',
+        // Transition ranges embed an IPv4 address that would bypass the IPv4 rules: IPv4-compatible,
+        // 6to4, Teredo (inside the IETF protocol block), and the discard prefix.
+        '::/96', '2002::/16', '2001::/23', '100::/64',
     ];
 
     private const PRIVATE_NETWORKS = ['10.0.0.0/8', '100.64.0.0/10', '172.16.0.0/12', '192.168.0.0/16', 'fc00::/7'];

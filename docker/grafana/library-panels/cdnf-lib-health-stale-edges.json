@@ -1,0 +1,81 @@
+{
+  "model": {
+    "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+    },
+    "description": "Enabled edges whose heartbeat is older than the freshness limit.",
+    "fieldConfig": {
+      "defaults": {
+        "color": {
+          "mode": "thresholds"
+        },
+        "links": [
+          {
+            "title": "Open details",
+            "url": "/d/cdnf-pop-fleet"
+          }
+        ],
+        "mappings": [
+          {
+            "options": {
+              "match": "null+nan",
+              "result": {
+                "color": "text",
+                "text": "No data yet"
+              }
+            },
+            "type": "special"
+          }
+        ],
+        "noValue": "No traffic",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {
+              "color": "green",
+              "value": null
+            },
+            {
+              "color": "orange",
+              "value": 1
+            }
+          ]
+        },
+        "unit": "short"
+      },
+      "overrides": []
+    },
+    "options": {
+      "colorMode": "value",
+      "graphMode": "none",
+      "justifyMode": "center",
+      "reduceOptions": {
+        "calcs": [
+          "lastNotNull"
+        ],
+        "fields": "",
+        "values": false
+      },
+      "textMode": "value",
+      "wideLayout": true
+    },
+    "targets": [
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "expr": "cdnfoundry_edges_stale",
+        "instant": true,
+        "legendFormat": "stale",
+        "range": false,
+        "refId": "A"
+      }
+    ],
+    "title": "Stale",
+    "type": "stat"
+  },
+  "name": "Stale",
+  "uid": "cdnf-lib-health-stale-edges"
+}

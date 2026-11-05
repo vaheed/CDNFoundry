@@ -1,0 +1,164 @@
+import { generateKeyPairSync } from 'node:crypto';
+import { expect, test, type Page } from '@playwright/test';
+import { expectAccessible } from '../specs/helpers';
+
+/*
+ * The local fleet web: every page loads, is accessible, fits the width, and every action behaves. Nothing reaches a real
+ * host: the fixture's nodes point at a closed local port, so checks fail fast the way an outage would.
+ */
+
+const pages = [
+    ['overview', '/'], ['nodes', '/nodes'], ['security', '/security'], ['upgrade', '/upgrade'], ['config', '/config'],
+    ['rollback', '/rollback'], ['backups', '/backups'], ['ha', '/ha'], ['secrets', '/secrets'], ['history', '/history'],
+    ['node-detail', '/nodes/pop-tehran-a'],
+] as const;
+
+function collect(page: Page): string[] {
+    const problems: string[] = [];
+    page.on('pageerror', (e) => problems.push(`script error: ${e.message}`));
+    page.on('console', (m) => m.type() === 'error' && problems.push(`console: ${m.text()}`));
+    page.on('response', (r) => r.status() >= 500 && problems.push(`${r.url()} returned ${r.status()}`));
+    return problems;
+}
+
+async function noHorizontalOverflow(page: Page): Promise<void> {
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow, 'the page scrolls sideways').toBeLessThanOrEqual(0);
+}
+
+for (const [name, path] of pages) {
+    test(`page ${name}`, async ({ page }) => {
+        const problems = collect(page);
+        const response = await page.goto(path);
+        expect(response?.status()).toBe(200);
+        await expect(page.locator('h1')).toHaveCount(1);
+        await expect(page.locator('main')).toBeVisible();
+        await expectAccessible(page);
+        await noHorizontalOverflow(page);
+        await expect(page).toHaveScreenshot(`${name}.png`, { fullPage: true });
+        expect(problems).toEqual([]);
+    });
+}
+
+test('navigation reaches every page and marks the current one', async ({ page }) => {
+    await page.goto('/');
+    for (const [label, path] of [['Nodes', '/nodes'], ['Security', '/security'], ['Upgrade', '/upgrade'], ['Config', '/config'], ['Rollback', '/rollback'],
+        ['Backups', '/backups'], ['HA', '/ha'], ['Secrets', '/secrets'], ['History', '/history'], ['Overview', '/']] as const) {
+        await page.getByRole('navigation', { name: 'Fleet' }).getByRole('link', { name: label, exact: true }).click();
+        await expect(page).toHaveURL(new RegExp(`${path === '/' ? '/$' : path}$`));
+        await expect(page.locator('nav a[aria-current=page]')).toHaveText(label);
+    }
+});
+
+test('keyboard users can tab to the navigation with a visible focus ring', async ({ page }) => {
+    await page.goto('/');
+    await page.keyboard.press('Tab');
+    const outline = await page.evaluate(() => getComputedStyle(document.activeElement as Element).outlineStyle);
+    expect(outline).not.toBe('none');
+});
+
+test('overview draws the topology with an accessible name and every seeded node', async ({ page }) => {
+    await page.goto('/');
+    const svg = page.getByRole('img', { name: /Fleet topology/ });
+    await expect(svg).toBeVisible();
+    await expect(svg).toHaveAttribute('aria-label', /control-1 \(control\)/);
+    await expect(svg).toHaveAttribute('aria-label', /pop-frankfurt-with-a-very-long-point-of-presence-name \(edge\)/);
+});
+
+test('run check starts a job, shows its progress page, and ends with the unreachable nodes under needs attention', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText('Nothing has been checked in this session')).toBeVisible();
+    await page.getByRole('button', { name: 'Run check of the whole stack' }).click();
+    await expect(page).toHaveURL(/\/jobs\//);
+    await expect(page.getByText('Finished')).toBeVisible({ timeout: 30_000 });
+    await expectAccessible(page);
+    await page.goto('/');
+    await expect(page.getByText(/control-1: Host reachable/)).toBeVisible();
+    await expect(page.getByText('Healthy at last check')).toBeVisible();
+    await expect(page.locator('.attention li').first()).toBeVisible();
+});
+
+test('adding a node whose host cannot be reached reports the error and keeps the form usable', async ({ page }) => {
+    await page.goto('/nodes');
+    const form = page.locator('form[action="/nodes/add"]');
+    await form.getByLabel('Name').fill('pop-new');
+    await form.getByLabel('Role').selectOption('edge');
+    await form.getByLabel('Public IPv4').fill('127.0.0.1');
+    await form.getByLabel('SSH port').fill('1');
+    await form.getByRole('button', { name: 'Add node and show plan' }).click();
+    await expect(page.getByRole('alert')).toContainText(/host key|Could not read/i);
+    await expectAccessible(page);
+});
+
+test('the nodes page shows the one Fleet public key to copy to a host before adding it, and never a private key', async ({ page }) => {
+    await page.goto('/nodes');
+    const key = page.getByLabel('Fleet SSH public key');
+    await expect(key).toContainText(/^ssh-ed25519 \S+ cdnfoundry-fleet$/);
+    await expect(page.getByText('before you add it here')).toBeVisible();
+    await expect(page.getByLabel('SSH private key')).toHaveCount(0);
+    expect(await page.content()).not.toContain('PRIVATE KEY');
+    await expectAccessible(page);
+});
+
+test('node page shows the plan with the PoP enrollment step and asks for its location', async ({ page }) => {
+    await page.goto('/nodes/pop-tehran-a');
+    await expect(page.getByRole('listitem').filter({ hasText: 'enroll' })).toBeVisible();
+    await expect(page.getByLabel('Country code')).toHaveValue('US');
+    await expect(page.getByRole('button', { name: 'Install and start this node' })).toBeEnabled();
+});
+
+test('destructive actions cannot be submitted without their typed confirmation', async ({ page }) => {
+    await page.goto('/secrets');
+    const field = page.getByLabel(/Type ROTATE to confirm/);
+    await field.fill('yes');
+    await page.getByRole('button', { name: 'Rotate and deploy' }).click();
+    await expect(page).toHaveURL(/\/secrets$/);
+    expect(await field.evaluate((el: HTMLInputElement) => el.validity.patternMismatch)).toBe(true);
+    await page.goto('/ha');
+    await expect(page.getByText('ha: none')).toBeVisible();
+});
+
+test('restore refuses a wrong confirmation with a readable error', async ({ page }) => {
+    await page.goto('/backups');
+    const form = page.locator('form[action="/backups/restore"]');
+    await form.getByLabel('Snapshot ID', { exact: true }).fill('a'.repeat(64));
+    await form.getByLabel(/Type RESTORE/).fill('RESTORE');
+    // The pattern needs the phrase and a snapshot ID, so the browser blocks a bare word before it is sent.
+    await form.getByRole('button', { name: 'Restore' }).click();
+    await expect(page).toHaveURL(/\/backups$/);
+    expect(await form.getByLabel(/Type RESTORE/).evaluate((el: HTMLInputElement) => el.validity.patternMismatch)).toBe(true);
+    // A well-formed phrase for a different snapshot passes the browser; the server wants the exact snapshot it was given.
+    await form.getByLabel('Snapshot ID', { exact: true }).fill('a'.repeat(64));
+    await form.getByLabel(/Type RESTORE/).fill('RESTORE ' + 'b'.repeat(64));
+    await form.getByRole('button', { name: 'Restore' }).click();
+    await expect(page.getByRole('alert')).toContainText('Type exactly: RESTORE ' + 'a'.repeat(64));
+    await expectAccessible(page);
+});
+
+test('upgrade asks for a release key first, then refuses an unsigned manifest', async ({ page }) => {
+    const { publicKey } = generateKeyPairSync('ed25519');
+    await page.goto('/upgrade');
+    await expect(page.getByText('No release signing key is trusted yet')).toBeVisible();
+    await page.getByLabel('Release public key (PEM)').fill(publicKey.export({ type: 'spki', format: 'pem' }).toString());
+    await page.getByRole('button', { name: 'Trust this key' }).click();
+    await expect(page.getByText('Release key trusted')).toBeVisible();
+    await page.getByLabel('Signed release manifest (JSON)').fill('{"manifest": {"release": "v9"}}');
+    await page.getByRole('button', { name: 'Use this release for the first install' }).click();
+    await expect(page.getByRole('alert')).toContainText('not signed');
+    await expectAccessible(page);
+});
+
+test('history lists the seeded action with its operator', async ({ page }) => {
+    await page.goto('/history');
+    await expect(page.getByRole('cell', { name: /fixture: Seed the browser fixture/ })).toBeVisible();
+});
+
+test('a link or button on every page leads somewhere that exists', async ({ page, request }) => {
+    for (const [, path] of pages) {
+        await page.goto(path);
+        const hrefs = await page.locator('main a[href]').evaluateAll((links) => links.map((l) => (l as HTMLAnchorElement).getAttribute('href') ?? ''));
+        for (const href of hrefs.filter((h) => h.startsWith('/'))) {
+            expect((await request.get(href)).status(), `${path} links to ${href}`).toBe(200);
+        }
+    }
+});

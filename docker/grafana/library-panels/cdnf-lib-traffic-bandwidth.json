@@ -1,0 +1,72 @@
+{
+  "model": {
+    "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+    },
+    "description": "Bits per second sent to clients, headers included.",
+    "fieldConfig": {
+      "defaults": {
+        "color": {
+          "mode": "thresholds"
+        },
+        "decimals": 1,
+        "mappings": [
+          {
+            "options": {
+              "match": "null+nan",
+              "result": {
+                "color": "text",
+                "text": "No data yet"
+              }
+            },
+            "type": "special"
+          }
+        ],
+        "noValue": "No traffic",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {
+              "color": "text",
+              "value": null
+            }
+          ]
+        },
+        "unit": "bps"
+      },
+      "overrides": []
+    },
+    "options": {
+      "colorMode": "value",
+      "graphMode": "none",
+      "justifyMode": "center",
+      "reduceOptions": {
+        "calcs": [
+          "lastNotNull"
+        ],
+        "fields": "",
+        "values": false
+      },
+      "textMode": "value",
+      "wideLayout": true
+    },
+    "targets": [
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "expr": "8 * sum(cdnf:edge_bytes_sent:rate5m{region=~\"$region\",pop=~\"$pop\",edge=~\"$edge\"})",
+        "instant": true,
+        "legendFormat": "bandwidth",
+        "range": false,
+        "refId": "A"
+      }
+    ],
+    "title": "Bandwidth",
+    "type": "stat"
+  },
+  "name": "Bandwidth",
+  "uid": "cdnf-lib-traffic-bandwidth"
+}

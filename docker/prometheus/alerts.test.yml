@@ -1,35 +1,264 @@
 rule_files:
-  - telemetry-alerts.yml
+- telemetry-alerts.yml
+- control-ha-alerts.yml
+- traffic-alerts.yml
+- security-alerts.yml
+- slo-rules.yml
+- dashboard-rules.yml
 evaluation_interval: 1m
 tests:
-  - interval: 1m
-    input_series:
-      - series: 'node_timex_sync_status{instance="test-host"}'
-        values: '0 0 0 0'
-      - series: 'node_timex_offset_seconds{instance="test-host"}'
-        values: '6 6 6 6'
-      - series: 'up{job="dnsdist",instance="dns-host"}'
-        values: '0 0 0 0'
-      - series: 'dnsdist_server_status{instance="dns-host",server="pdns-auth"}'
-        values: '0 0 0 0'
-    alert_rule_test:
-      - eval_time: 3m
-        alertname: HostClockUnsynchronized
-        exp_alerts:
-          - exp_labels: { severity: critical, instance: test-host }
-            exp_annotations: { summary: A CDNFoundry host clock is not synchronized }
-      - eval_time: 3m
-        alertname: HostClockDrift
-        exp_alerts:
-          - exp_labels: { severity: critical, instance: test-host }
-            exp_annotations: { summary: A CDNFoundry host clock offset exceeds five seconds }
-      - eval_time: 3m
-        alertname: DNSDistUnavailable
-        exp_alerts:
-          - exp_labels: { severity: critical, job: dnsdist, instance: dns-host }
-            exp_annotations: { summary: DNSdist authoritative ingress is unavailable }
-      - eval_time: 3m
-        alertname: DNSDistBackendUnavailable
-        exp_alerts:
-          - exp_labels: { severity: critical, instance: dns-host, server: pdns-auth }
-            exp_annotations: { summary: DNSdist has marked an authoritative backend unavailable }
+- interval: 1m
+  input_series:
+  - series: node_timex_sync_status{instance="test-host"}
+    values: 0 0 0 0
+  - series: node_timex_offset_seconds{instance="test-host"}
+    values: 6 6 6 6
+  - series: up{job="dnsdist",instance="dns-host"}
+    values: 0 0 0 0
+  - series: dnsdist_server_status{instance="dns-host",server="pdns-auth"}
+    values: 0 0 0 0
+  alert_rule_test:
+  - eval_time: 3m
+    alertname: HostClockUnsynchronized
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        instance: test-host
+        team: platform
+        dashboard: cdnf-hosts-containers
+      exp_annotations:
+        summary: A CDNFoundry host clock is not synchronized
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#host-clock
+        dashboard_url: /d/cdnf-hosts-containers
+  - eval_time: 3m
+    alertname: HostClockDrift
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        instance: test-host
+        team: platform
+        dashboard: cdnf-hosts-containers
+      exp_annotations:
+        summary: A CDNFoundry host clock offset exceeds five seconds
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#host-clock
+        dashboard_url: /d/cdnf-hosts-containers
+  - eval_time: 3m
+    alertname: DNSDistUnavailable
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        job: dnsdist
+        instance: dns-host
+        team: noc
+        dashboard: cdnf-dns-authoritative
+      exp_annotations:
+        summary: DNSdist authoritative ingress is unavailable
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#dns-cluster-failure
+        dashboard_url: /d/cdnf-dns-authoritative
+  - eval_time: 3m
+    alertname: DNSDistBackendUnavailable
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        instance: dns-host
+        server: pdns-auth
+        team: noc
+        dashboard: cdnf-dns-authoritative
+      exp_annotations:
+        summary: DNSdist has marked an authoritative backend unavailable
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#dns-cluster-failure
+        dashboard_url: /d/cdnf-dns-authoritative
+- interval: 1m
+  input_series:
+  - series: up{job="node",role="control",node="control-1",instance="active"}
+    values: 0 0 0 0
+  - series: up{job="node",role="control",node="control-2",instance="standby"}
+    values: 1 1 1 1
+  - series: cdnfoundry_control_replication_lag_seconds
+    values: 12 12 12 12
+  - series: cdnfoundry_control_valkey_replica_linked
+    values: 0 0 0 0 0 0 0
+  - series: cdnfoundry_control_fingerprint_mismatch
+    values: 1 1 1 1 1 1 1
+  - series: cdnfoundry_control_standby_unreachable
+    values: 1 1 1 1 1 1 1
+  - series: cdnfoundry_control_edges_missing_addresses
+    values: 2+0x20
+  alert_rule_test:
+  - eval_time: 3m
+    alertname: ControlNodeUnreachable
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        job: node
+        role: control
+        node: control-1
+        instance: active
+        team: platform
+        dashboard: cdnf-control-plane
+      exp_annotations:
+        summary: A control node is unreachable from the node that watches it
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-node-lost
+        dashboard_url: /d/cdnf-control-plane
+  - eval_time: 3m
+    alertname: ControlReplicationLagHigh
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        team: platform
+        dashboard: cdnf-data-stores
+      exp_annotations:
+        summary: Control database replication lag exceeds ten seconds
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-node-lost
+        dashboard_url: /d/cdnf-data-stores
+  - eval_time: 6m
+    alertname: ControlValkeyReplicationBroken
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        team: platform
+        dashboard: cdnf-data-stores
+      exp_annotations:
+        summary: The Valkey replica is not linked to the active node
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-node-lost
+        dashboard_url: /d/cdnf-data-stores
+  - eval_time: 6m
+    alertname: ControlSecretFingerprintMismatch
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        team: platform
+        dashboard: cdnf-control-plane
+      exp_annotations:
+        summary: The control nodes do not hold the same shared secrets
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-node-lost
+        dashboard_url: /d/cdnf-control-plane
+  - eval_time: 6m
+    alertname: ControlStandbyNotStreaming
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        team: platform
+        dashboard: cdnf-data-stores
+      exp_annotations:
+        summary: The standby control node is not streaming PostgreSQL from the active node
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-node-lost
+        dashboard_url: /d/cdnf-data-stores
+  - eval_time: 16m
+    alertname: EdgeMissingControlAddresses
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        team: platform
+        dashboard: cdnf-pop-fleet
+      exp_annotations:
+        summary: At least one PoP has not reported the current control address list
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-node-lost
+        dashboard_url: /d/cdnf-pop-fleet
+- interval: 1m
+  input_series:
+  - series: cdnfoundry_operations_failed_recent
+    values: 0 2 2 2 0 0 0
+  alert_rule_test:
+  - eval_time: 3m
+    alertname: CDNFoundryFailedOperations
+    exp_alerts:
+    - exp_labels:
+        team: platform
+        severity: warning
+        dashboard: cdnf-control-plane
+      exp_annotations:
+        summary: CDNFoundry has failed operations requiring inspection
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#failed-operations
+        dashboard_url: /d/cdnf-control-plane
+  - eval_time: 6m
+    alertname: CDNFoundryFailedOperations
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: cdnf_edge_requests_total{pop="pop-a",edge="e1",status_class="2xx",cache_status="MISS"}
+    values: 0+60x15
+  - series: cdnf_edge_requests_total{pop="pop-a",edge="e1",status_class="5xx",cache_status="MISS"}
+    values: 0+30x15
+  - series: cdnf_edge_requests_total{pop="pop-b",edge="e2",status_class="2xx",cache_status="HIT"}
+    values: 0+120x15
+  alert_rule_test:
+  - eval_time: 12m
+    alertname: EdgeGlobal5xxRatioHigh
+    exp_alerts:
+    - exp_labels:
+        team: noc
+        severity: critical
+        dashboard: cdnf-global-traffic
+      exp_annotations:
+        summary: More than 5 percent of edge responses are 5xx across all PoPs
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#edge-5xx-ratio-high
+        dashboard_url: /d/cdnf-global-traffic
+  - eval_time: 12m
+    alertname: EdgePop5xxRatioHigh
+    exp_alerts:
+    - exp_labels:
+        team: noc
+        severity: warning
+        pop: pop-a
+        dashboard: cdnf-pop-detail
+      exp_annotations:
+        summary: More than 10 percent of one PoP's responses are 5xx
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#edge-5xx-ratio-high
+        dashboard_url: /d/cdnf-pop-detail
+- interval: 1m
+  input_series:
+  - series: cdnf_edge_requests_total{pop="pop-a",edge="e1",status_class="2xx",cache_status="HIT"}
+    values: 0+60x30 1800x30
+  - series: cdnf_edge_requests_total{pop="pop-b",edge="e2",status_class="2xx",cache_status="HIT"}
+    values: 0+120x60
+  alert_rule_test:
+  - eval_time: 55m
+    alertname: PopTrafficDropped
+    exp_alerts:
+    - exp_labels:
+        team: noc
+        severity: critical
+        pop: pop-a
+        dashboard: cdnf-pop-fleet
+      exp_annotations:
+        summary: A PoP that served traffic half an hour ago serves none while other PoPs do
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#pop-traffic-dropped
+        dashboard_url: /d/cdnf-pop-fleet
+- interval: 1m
+  input_series:
+  - series: cdnf_edge_requests_total{pop="pop-a",edge="e1",status_class="5xx",cache_status="MISS"}
+    values: 0+10x240
+  - series: cdnf_edge_requests_total{pop="pop-a",edge="e1",status_class="2xx",cache_status="MISS"}
+    values: 0+90x240
+  alert_rule_test:
+  - eval_time: 200m
+    alertname: SLOBurnEdge5xxFast
+    exp_alerts:
+    - exp_labels:
+        team: noc
+        severity: critical
+        slo: edge_5xx
+        dashboard: cdnf-slos
+      exp_annotations:
+        summary: Edge 5xx ratio is burning its error budget 14.4 times too fast over 1h and 5m
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#edge-5xx-burn
+        dashboard_url: /d/cdnf-slos?var-slo=edge_5xx
+- interval: 1m
+  input_series:
+  - series: cdnfoundry_emergency_modes_active
+    values: 1 1 1 1
+  - series: cdnfoundry_logins_total{result="failure",surface="admin"}
+    values: 0+10x10
+  alert_rule_test:
+  - eval_time: 3m
+    alertname: EmergencyModeEnabled
+    exp_alerts:
+    - exp_labels:
+        team: soc
+        severity: critical
+        dashboard: cdnf-security-overview
+      exp_annotations:
+        summary: Emergency mode is switched on for a domain, pool, or the platform
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#emergency-mode
+        dashboard_url: /d/cdnf-security-overview

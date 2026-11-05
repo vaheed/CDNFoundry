@@ -128,16 +128,13 @@ if [[ $role == control ]]; then
         backup_secret_key=
         backup_region=us-east-1
     fi
-    ask_secret clickhouse_password 'Shared telemetry ingestion password (store it in your password manager)'
+    ask_secret clickhouse_ingest_password 'Shared telemetry ingestion password for Vector on edge and DNS nodes (store it in your password manager)'
     clickhouse_url=http://clickhouse:8123
     loki_endpoint=http://loki:3100
     log_role=control
     log_host=control-01
     log_collector_id=control-01
     log_source_allowlist="$advertised_ipv4 $edge_allowlist"
-    dns_api_hostname="dns-api-placeholder.$ops_domain"
-    dns_api_cert=/etc/cdnfoundry/pki/dns-api.crt
-    dns_api_key=/etc/cdnfoundry/pki/dns-api.key
 else
     edge_allowlist=$advertised_ipv4
     restic_repository=
@@ -145,22 +142,19 @@ else
     backup_access_key=
     backup_secret_key=
     backup_region=us-east-1
-    ask dns_api_name 'DNS API host label (for example dns-api-1)' dns-api-1
-    dns_api_hostname="$dns_api_name.$ops_domain"
-    dns_api_cert="/etc/cdnfoundry/pki/$dns_api_name.crt"
-    dns_api_key="/etc/cdnfoundry/pki/$dns_api_name.key"
-    ask_secret clickhouse_password 'Shared telemetry ingestion password from the password manager'
+    ask node_label 'Node label used in logs (for example pop-1)' pop-1
+    ask_secret clickhouse_ingest_password 'Shared telemetry ingestion password from the password manager'
     clickhouse_url="https://telemetry.$ops_domain:8444"
     loki_endpoint="https://telemetry.$ops_domain:8444"
     log_role=dns-edge
-    log_host=$dns_api_name
-    log_collector_id=$dns_api_name
+    log_host=$node_label
+    log_collector_id=$node_label
     log_source_allowlist=
 fi
 
 ask_secret log_auth_token 'Shared Loki bearer token from the password manager'
 
-for value in "$clickhouse_password" "$backup_secret_key" "$log_auth_token"; do
+for value in "$clickhouse_ingest_password" "$backup_secret_key" "$log_auth_token"; do
     [[ -z $value ]] || valid_simple "$value" || { printf 'Secret contains characters unsupported by the environment-file format.\n' >&2; exit 2; }
 done
 
@@ -173,6 +167,9 @@ pdns_api_key=$(random_secret)
 edge_status_token=$(random_secret)
 grafana_admin_password=$(random_secret)
 grafana_clickhouse_password=$(random_secret)
+clickhouse_password=$(random_secret)
+clickhouse_reader_password=$(random_secret)
+clickhouse_zones_password=$(random_secret)
 grafana_postgres_password=$(random_secret)
 
 umask 077
@@ -197,6 +194,9 @@ awk -v app_key="$app_key" \
     -v pdns_db_password="$pdns_db_password" \
     -v pdns_api_key="$pdns_api_key" \
     -v clickhouse_password="$clickhouse_password" \
+    -v clickhouse_ingest_password="$clickhouse_ingest_password" \
+    -v clickhouse_reader_password="$clickhouse_reader_password" \
+    -v clickhouse_zones_password="$clickhouse_zones_password" \
     -v clickhouse_url="$clickhouse_url" \
     -v grafana_admin_password="$grafana_admin_password" \
     -v grafana_clickhouse_password="$grafana_clickhouse_password" \
@@ -213,9 +213,6 @@ awk -v app_key="$app_key" \
     -v edge_control_url="https://edge-control.$ops_domain:8443" \
     -v edge_control_bind="$host_bind_ipv4:8443" \
     -v edge_status_token="$edge_status_token" \
-    -v dns_api_hostname="$dns_api_hostname" \
-    -v dns_api_cert="$dns_api_cert" \
-    -v dns_api_key="$dns_api_key" \
     -v dns_bind_v4="$host_bind_ipv4" \
     '
     BEGIN {
@@ -234,6 +231,7 @@ awk -v app_key="$app_key" \
       values["ACME_CONTACT_EMAIL"]=acme_email
       values["PDNS_DB_PASSWORD"]=pdns_db_password; values["PDNS_API_KEY"]=pdns_api_key
       values["DNS_BIND_V4"]=dns_bind_v4; values["CLICKHOUSE_PASSWORD"]=clickhouse_password
+      values["CLICKHOUSE_INGEST_PASSWORD"]=clickhouse_ingest_password; values["CLICKHOUSE_READER_PASSWORD"]=clickhouse_reader_password; values["CLICKHOUSE_ZONES_PASSWORD"]=clickhouse_zones_password
       values["CLICKHOUSE_URL"]=clickhouse_url
       values["GRAFANA_ADMIN_PASSWORD"]=grafana_admin_password
       values["GRAFANA_CLICKHOUSE_PASSWORD"]=grafana_clickhouse_password
@@ -251,9 +249,6 @@ awk -v app_key="$app_key" \
       values["CDNF_MMDB_UPDATER_IMAGE"]="ghcr.io/vaheed/cdnfoundry-mmdb-updater:" release
       values["HOST_BIND_IPV6"]=host_bind_ipv6; values["EDGE_CONTROL_URL"]=edge_control_url
       values["EDGE_CONTROL_BIND"]=edge_control_bind; values["EDGE_STATUS_TOKEN"]=edge_status_token
-      values["DNS_API_HOSTNAME"]=dns_api_hostname
-      values["DNS_API_SERVER_CERTIFICATE"]=dns_api_cert
-      values["DNS_API_SERVER_PRIVATE_KEY"]=dns_api_key
     }
     /^[A-Z][A-Z0-9_]*=/ {
       key=$0; sub(/=.*/, "", key)

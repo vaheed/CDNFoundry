@@ -126,6 +126,7 @@ func originProbeServer(t *testing.T, encrypted bool) (edgeTask, *atomic.Int32) {
 	task.Payload.Origin.HostHeader = "origin.example"
 	task.Payload.Origin.Scheme = scheme
 	task.Payload.Origin.Port = listener.Addr().(*net.TCPAddr).Port
+	allowOriginPortForTest(t, task.Payload.Origin.Port)
 	task.Payload.Origin.ConnectTimeoutMS = 1000
 	task.Payload.Origin.ResponseTimeoutMS = 2000
 	return task, requests
@@ -234,6 +235,7 @@ func TestOriginProbeVerifiedTLS(t *testing.T) {
 	task.Payload.Origin.Scheme = "https"
 	task.Payload.Origin.VerifyTLS = true
 	task.Payload.Origin.Port = listener.Addr().(*net.TCPAddr).Port
+	allowOriginPortForTest(t, task.Payload.Origin.Port)
 	task.Payload.Origin.ConnectTimeoutMS = 1000
 	task.Payload.Origin.ResponseTimeoutMS = 2000
 	payload, err := json.Marshal(task)
@@ -256,6 +258,7 @@ func TestOriginProbeVerifiedTLSChild(t *testing.T) {
 	if err := json.Unmarshal([]byte(payload), &task); err != nil {
 		t.Fatal(err)
 	}
+	allowOriginPortForTest(t, task.Payload.Origin.Port)
 	result := runOriginTest(task)
 	if result["status"] != "healthy" || result["tls_result"] != "verified" {
 		t.Fatalf("trusted TLS failed: %#v", result)
@@ -301,6 +304,7 @@ func TestOriginProbeIPv6(t *testing.T) {
 		task.Payload.Origin.HostHeader = "origin.example"
 		task.Payload.Origin.Scheme = "http"
 		task.Payload.Origin.Port = listener.Addr().(*net.TCPAddr).Port
+		allowOriginPortForTest(t, task.Payload.Origin.Port)
 		task.Payload.Origin.ConnectTimeoutMS = 1000
 		task.Payload.Origin.ResponseTimeoutMS = 2000
 		result := runOriginTest(task)
@@ -320,4 +324,11 @@ func TestOriginProbeDoesNotReportUnverifiedTLSAsVerified(t *testing.T) {
 	if result["status"] != "healthy" || result["tls_result"] != "unverified" || requests.Load() != 1 {
 		t.Fatalf("insecure TLS diagnostic was misreported: %#v", result)
 	}
+}
+
+// The fixtures listen on ephemeral ports, which the production port set rightly refuses.
+func allowOriginPortForTest(t *testing.T, port int) {
+	t.Helper()
+	allowedOriginPorts[port] = true
+	t.Cleanup(func() { delete(allowedOriginPorts, port) })
 }

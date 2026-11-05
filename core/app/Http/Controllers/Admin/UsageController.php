@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\UsageController as DomainUsageController;
 use App\Jobs\BuildUsageRollups;
+use App\Models\AuditLog;
 use App\Models\Operation;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -51,6 +52,7 @@ class UsageController extends Controller
         $to = CarbonImmutable::parse($data['to'])->utc();
         abort_if($from >= $to || abs($to->diffInDays($from)) > 31 || ! $from->isStartOfHour() || ! $to->isStartOfHour(), 422, 'Rebuild ranges must use complete UTC hours and span at most 31 days.');
         $operation = Operation::query()->create(['actor_id' => $request->user()->id, 'type' => 'usage.rebuild', 'status' => 'pending', 'input' => ['domain_id' => $data['domain_id'] ?? null, 'from' => $from->toIso8601String(), 'to' => $to->toIso8601String()]]);
+        AuditLog::record($request->user(), 'usage.rebuild_requested', null, ['operation_id' => $operation->id, 'from' => $from->toIso8601String(), 'to' => $to->toIso8601String(), 'domain_id' => $data['domain_id'] ?? null], $request->ip());
         BuildUsageRollups::dispatch($from->toIso8601String(), $to->toIso8601String(), $data['domain_id'] ?? null, $operation->id)->afterCommit();
 
         return response()->json(['data' => ['operation_id' => $operation->id, 'status' => 'pending']], 202);

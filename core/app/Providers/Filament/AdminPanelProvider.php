@@ -7,6 +7,7 @@ use App\Filament\Domain\Resources\Domains\DomainResource;
 use App\Filament\Shared\Pages\ApiTokens;
 use App\Filament\Shared\Pages\EditProfile;
 use App\Support\GrafanaExploreUrl;
+use Filament\Auth\MultiFactor\App\AppAuthentication;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -14,7 +15,6 @@ use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Navigation\NavigationItem;
 use Filament\Panel;
 use Filament\PanelProvider;
-use Filament\Support\Colors\Color;
 use Filament\Widgets\AccountWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -27,23 +27,21 @@ class AdminPanelProvider extends PanelProvider
 {
     public function panel(Panel $panel): Panel
     {
-        return $panel
+        return PanelDesign::apply($panel)
             ->id('admin')
             ->path('admin')
             ->login()
             ->brandName('CDNFoundry Administration')
             ->favicon(asset('favicon.svg'))
             ->profile(EditProfile::class)
-            ->viteTheme('resources/css/filament/shared/theme.css')
+            ->multiFactorAuthentication([AppAuthentication::make()->recoverable()])
             ->readOnlyRelationManagersOnResourceViewPagesByDefault(false)
-            ->colors(['primary' => Color::Blue])
-            ->sidebarCollapsibleOnDesktop()
             ->databaseNotifications()
             ->navigationGroups(['Observe', 'Operate', 'Infrastructure', 'Customers', 'Governance', 'Account'])
             ->navigationItems([
                 NavigationItem::make('Live Logs')
                     ->group('Observe')
-                    ->icon('heroicon-o-document-magnifying-glass')
+                    ->icon('phosphor-file-magnifying-glass')
                     ->sort(100)
                     ->url(fn (): ?string => app(GrafanaExploreUrl::class)->configuredOperationalLogs(), shouldOpenInNewTab: true)
                     ->visible(fn (): bool => filled(app(GrafanaExploreUrl::class)->configuredOperationalLogs())),

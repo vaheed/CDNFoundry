@@ -3,12 +3,12 @@
 namespace Tests\Feature;
 
 use App\Enums\DomainLifecycleState;
+use App\Filament\Admin\Pages\PlatformSettings;
 use App\Jobs\ReconcileAllEdgeDomains;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\Domain;
 use App\Models\SystemSetting;
 use App\Models\User;
-use App\Support\PlatformSettings;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Schema;
@@ -64,7 +64,7 @@ class SystemSettingsTest extends TestCase
     public function test_platform_form_and_filament_components_share_the_saved_timezone(): void
     {
         $admin = User::factory()->admin()->create();
-        Livewire::actingAs($admin)->test(\App\Filament\Admin\Pages\PlatformSettings::class)
+        Livewire::actingAs($admin)->test(PlatformSettings::class)
             ->fillForm(['display.timezone' => 'Asia/Tehran'])
             ->call('save')->assertHasNoFormErrors();
         $this->assertSame('Asia/Tehran', FilamentTimezone::get());
@@ -74,15 +74,6 @@ class SystemSettingsTest extends TestCase
         $this->assertSame('2026-09-20 15:30 +03:30', $entry->formatState('2026-09-20 12:00:00'));
         $this->assertSame('Asia/Tehran', DateTimePicker::make('from')->getTimezone());
         $this->assertSame('UTC', config('app.timezone'));
-    }
-
-    public function test_display_migration_preserves_existing_operator_preference(): void
-    {
-        app(PlatformSettings::class)->update('display', ['timezone' => 'Asia/Tehran']);
-        $migration = require database_path('migrations/2026_09_20_170000_add_display_timezone_setting.php');
-        $migration->up();
-        $migration->down();
-        $this->assertSame('Asia/Tehran', SystemSetting::query()->findOrFail('display')->values['timezone']);
     }
 
     public function test_dns_lifecycle_update_is_typed_audited_and_reads_from_postgresql(): void

@@ -80,8 +80,8 @@ class DnsRecordApiTest extends TestCase
         [$other, $otherDomain] = $this->ownedDomain('example.net');
         $record = $domain->dnsRecords()->create($this->record('A', '@', '192.0.2.10', $domain));
 
-        $this->actingAs($other)->getJson("/api/domains/{$domain->id}/dns/records")->assertForbidden();
-        $this->actingAs($owner)->getJson("/api/domains/{$otherDomain->id}/dns/records/{$record->id}")->assertForbidden();
+        $this->actingAs($other)->getJson("/api/domains/{$domain->id}/dns/records")->assertNotFound();
+        $this->actingAs($owner)->getJson("/api/domains/{$otherDomain->id}/dns/records/{$record->id}")->assertNotFound();
         $this->actingAs($owner)->getJson("/api/domains/{$domain->id}/dns/records/{$record->id}")->assertOk();
     }
 
@@ -121,6 +121,21 @@ class DnsRecordApiTest extends TestCase
         $revision = $domain->refresh()->revision;
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records/bulk", ['actions' => $invalid])->assertUnprocessable();
         $this->assertDatabaseHas('dns_records', ['id' => $existing->id]);
+        $this->assertSame($revision, $domain->refresh()->revision);
+    }
+
+    public function test_bulk_bounds_the_distinct_origin_hostnames_it_may_resolve_before_taking_the_lock(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $origin = fn (string $host): array => ['host' => $host, 'port' => 80, 'scheme' => 'http', 'host_header' => 'origin.example', 'verify_tls' => false, 'connect_timeout_ms' => 1000, 'response_timeout_ms' => 5000, 'retry_count' => 0];
+        $actions = [];
+        for ($index = 0; $index < 51; $index++) {
+            $actions[] = ['action' => 'create', 'record' => ['type' => 'A', 'name' => "h{$index}", 'ttl' => 60, 'mode' => 'proxied', 'origin' => $origin("origin-{$index}.invalid")]];
+        }
+        $revision = $domain->revision;
+
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/dns/records/bulk", ['actions' => $actions])
+            ->assertUnprocessable()->assertJsonValidationErrors('actions');
         $this->assertSame($revision, $domain->refresh()->revision);
     }
 

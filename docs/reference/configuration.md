@@ -11,13 +11,16 @@ the owning host administrators. Share individual cross-host values through a
 protected channel, never by copying the whole file.
 :::
 
-Use `.env.prod.example` as the production key inventory. Create `.env.prod` with
-`scripts/generate-production-env.sh` or copy the template, keep it mode `0600`,
-and never commit it. A variable is required only on hosts running its owning
-profile.
+`.env.prod.example` lists every production key. Create `.env.prod` with
+`scripts/generate-production-env.sh`, or copy the template. Keep it mode `0600`
+and never commit it. A host needs a variable only when it runs the profile that
+owns it. The **Required** column names that profile, for example `control`,
+`edge agent`, or `telemetry`. Fleet writes these files for you in a managed
+fleet, see the [Fleet CLI reference](fleet-cli.md).
 
-Runtime product policy is not an environment variable. Manage it through
-[Platform settings](platform-settings.md).
+Product policy, such as retention, rate limits, and proxy defaults, is not an
+environment variable. Change it in [Platform settings](platform-settings.md).
+Limits that the software enforces are listed in the [limits reference](limits.md).
 
 ## Control plane
 
@@ -25,18 +28,23 @@ Runtime product policy is not an environment variable. Manage it through
 | --- | --- | --- |
 | `APP_KEY` | control | Laravel encryption key; required, retained with backups |
 | `EDGE_ARTIFACT_SIGNING_KEY` | control | Independent high-entropy Ed25519 signing seed |
+| `EDGE_ARTIFACT_SIGNING_NEXT_KEY` | control | Empty except during [signing-key rotation](../operations/signing-key-rotation.md): the next seed, advertised to agents before it is used |
 | `APP_URL` | control | Canonical public control-panel URL |
 | `SESSION_SECURE_COOKIE` | HTTPS control | Secure-cookie flag; production default `true` |
 | `CONTROL_BIND` | control | Host publication for web; default `127.0.0.1:8080` |
 | `CONTROL_HOSTNAME` | control | Public browser/API hostname in independent management DNS |
 | `TELEMETRY_HOSTNAME` | control/telemetry | Public telemetry-ingest hostname in independent management DNS |
-| `CONTROL_PUBLIC_IPV4_ALLOWLIST` | DNS API gateway | Exact control/worker sources allowed to call PowerDNS |
-| `CONTROL_PUBLIC_IPV6_ALLOWLIST` | DNS API gateway | Optional IPv6 control/worker sources allowed to call PowerDNS |
+| `CONTROL_PUBLIC_IPV4_ALLOWLIST` | gateways | Exact control/worker sources allowed through the control and telemetry gateways |
+| `CONTROL_PUBLIC_IPV6_ALLOWLIST` | gateways | Optional IPv6 control/worker sources for the same gateways |
 | `EDGE_PUBLIC_IPV6_ALLOWLIST` | telemetry gateway | Optional IPv6 edge sources allowed to submit telemetry |
 | `LOG_SOURCE_IPV6_ALLOWLIST` | telemetry gateway | Optional IPv6 node sources allowed to submit operational logs |
 | `EDGE_PUBLIC_IPV4_ALLOWLIST` | telemetry gateway | Exact edge/Vector ingestion sources |
 | `CONTROL_DB_PASSWORD` | local control DB | PostgreSQL password for database `cdnf` |
 | `REDIS_PASSWORD` | local Valkey | Required Valkey password |
+| `VALKEY_CONFIG_FILE` | local Valkey | Configuration file holding `requirepass`, mounted at `/run/secrets/valkey.conf`; the fleet generator writes it (and adds `masterauth` and `replicaof` on a standby) |
+| `REDIS_CACHE_HOST` | control | Host of the separate eviction-enabled cache Valkey; default `cache` |
+| `REDIS_CACHE_PORT` | control | Port of the cache Valkey; default `6379` |
+| `REDIS_CACHE_URL` | control | Full URL of an external cache Valkey; empty uses the host and port |
 | `DB_URL` | external DB | Full PostgreSQL URL; empty uses individual DB fields |
 | `DB_HOST` | control | Default `control-db` |
 | `DB_PORT` | control | Default `5432` |
@@ -44,12 +52,16 @@ Runtime product policy is not an environment variable. Manage it through
 | `REDIS_URL` | external Valkey | Full URL; empty uses host and port |
 | `REDIS_HOST` | control | Default `redis` |
 | `REDIS_PORT` | control | Default `6379` |
+| `EDGE_IDENTITY_VALIDITY_DAYS` | optional control | Lifetime of an edge identity certificate in days, 2 to 3650; default `365`. Agents renew at two thirds of it |
+| `EDGE_PROXY_SECRET_FILE` | control | File holding one nginx line, `fastcgi_param HTTP_X_EDGE_PROXY_SECRET "<64 hex>";` (root:`www-data` mode `0640`). edge-control's nginx includes it and PHP reads the secret from it; the fleet installer writes it as `secrets/edge-proxy-secret.conf` |
+| `FPM_NETWORK_SUBNET` | control | Subnet of the private network shared by core, `web`, and `edge-control`. PHP-FPM listens only on core's address there |
+| `TRUSTED_PROXIES` | control | Comma-separated addresses or CIDRs whose forwarded headers Laravel trusts; default is loopback and the private ranges |
 | `METRICS_TOKEN_FILE` | control/telemetry | Absolute root:`www-data` mode-`0640` bearer-token file shared with Prometheus group `82` |
 
 The Compose file fixes `APP_ENV=production`, `APP_DEBUG=false`,
 `DB_CONNECTION=pgsql`, database/user `cdnf`, `CACHE_STORE=redis`,
 `SESSION_DRIVER=redis`, `QUEUE_CONNECTION=redis`, `REDIS_CLIENT=predis`,
-`CLICKHOUSE_DATABASE=cdnf`, `CLICKHOUSE_USER=cdnf`, and
+`CLICKHOUSE_DATABASE=cdnf`, `CLICKHOUSE_USER=cdnf_reader`, and
 `GEOIP_DATABASE=/mmdb/GeoLite2-City.mmdb`.
 
 ## Backup (optional)
@@ -67,6 +79,9 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `BACKUP_ACCESS_KEY_ID` | configured S3 backup | Bucket/prefix-scoped access key |
 | `BACKUP_SECRET_ACCESS_KEY` | configured S3 backup | Bucket/prefix-scoped secret |
 | `BACKUP_DEFAULT_REGION` | S3 repository | Default `us-east-1` |
+| `BACKUP_KEEP_DAILY` | configured backup | Daily snapshots kept by the prune; default 14 |
+| `BACKUP_KEEP_WEEKLY` | configured backup | Weekly snapshots kept by the prune; default 8 |
+| `BACKUP_KEEP_MONTHLY` | configured backup | Monthly snapshots kept by the prune; default 6 |
 | `BACKUP_RESTORE_ALLOWED` | restore executor | Must be true in explicit maintenance context; default false |
 
 ## Managed TLS
@@ -77,11 +92,12 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `ACME_CONTACT_EMAIL` | control | ACME account contact |
 | `ACME_DIRECTORY_URL` | control | Let's Encrypt production directory by default |
 | `ACME_ORDER_BUDGET_PER_HOUR` | control | New-order ceiling; default `20` |
+| `TLS_UPLOAD_TRUST_FILE` | control | Optional PEM bundle of root certificates that replaces the system store when validating uploaded certificate chains. Leave empty to trust the operating system roots; set it for a private PKI. `compose.prod.yml` passes the variable to the containers but does not mount a file. Add a read-only mount of the bundle with a Compose override, and set the variable to the path inside the container. |
 | `ACME_VERIFY_TLS` | optional | Verify ACME directory TLS; default true, false only for local Pebble |
 | `ACME_RENEW_BEFORE_DAYS` | optional | Renewal window; default `30` |
 | `ACME_DNS_TTL` | optional | Challenge TTL; default `30` seconds |
 | `ACME_DNS_PROBE_SERVER` | optional | Direct DNSdist probe hostname for test or private installations; production defaults to each enabled cluster's nameservers |
-| `ACME_CHALLENGE_LIFETIME_MINUTES` | optional | Challenge expiry; default `120` |
+| `ACME_CHALLENGE_LIFETIME_MINUTES` | optional | Challenge expiry; default `30` |
 | `ACME_INITIAL_JITTER_SECONDS` | optional | Initial spread; default `300` |
 | `TLS_EXPIRY_ALERT_DAYS` | optional | Administrator expiry warning; default `14` |
 
@@ -95,10 +111,9 @@ object storage; other Restic backends need their own credential/mount wiring.
 
 | Variable | Required | Meaning and default |
 | --- | --- | --- |
-| `PDNS_DB_PASSWORD` | DNS | PowerDNS PostgreSQL password |
-| `PDNS_API_KEY` | DNS | Private PowerDNS API credential |
+| `PDNS_DB_PASSWORD` | control | PowerDNS PostgreSQL password for the primary |
+| `PDNS_API_KEY` | control, DNS | PowerDNS API credential: the primary's on the control host, the local node's on each DNS node |
 | `DNS_BIND_V4` | DNS | DNSdist IPv4 publication; default `0.0.0.0` |
-| `PDNS_CA_CERTIFICATE` | control worker | Trust anchor for HTTPS PowerDNS API gateways |
 | `EDGE_GATEWAY_BINDINGS` | edge agent | Optional rollout override. When absent, the agent fetches the bounded, revisioned edge/pool endpoint candidate over mTLS; when set, this static JSON remains authoritative. |
 | `EDGE_CELL_TARGETS` | edge agent | Optional development-only JSON map from stable cell names to private container HTTP/HTTPS endpoints; production host-network cells use control-plane loopback targets |
 | `EDGE_GATEWAY_ADDRESSES` | edge agent | Optional development-only JSON array of at most two gateway listener IPs; never set in production |
@@ -106,30 +121,39 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `EDGE_GATEWAY_REQUIRE_ADDRESS_MAP` | production edge agent | Set `true` only when local policy requires every fetched endpoint to have an explicit translation before activation. Default `false`. |
 | `EDGE_GATEWAY_STATUS_URL` | edge agent | Gateway metrics URL used for heartbeat readiness |
 | `EDGE_GATEWAY_METRICS_ADDRESS` | edge gateway | Restricted metrics listener; production default `0.0.0.0:9105` |
+| `GATEWAY_METRICS_ADDRESS` | edge gateway container | The listener address the container receives from `EDGE_GATEWAY_METRICS_ADDRESS`; the Compose health check calls its `/healthz` |
 | `EDGE_GATEWAY_MAX_CONNECTIONS` | edge gateway | Global accepted-connection bound, `128`–`65536` (default `8192`) |
-| `DNS_API_HOSTNAME` | DNS | DNS API TLS hostname in independent management DNS |
-| `DNS_API_SERVER_CERTIFICATE` | DNS | Absolute server certificate path |
-| `DNS_API_SERVER_PRIVATE_KEY` | DNS | Absolute mode-`0600` key path |
+| `EDGE_GATEWAY_MAX_CONNECTIONS_PER_ADDRESS` | edge gateway | Connections one source address may hold (an IPv6 source counts per /64), `1`–`65536` (default `256`) |
+| `EDGE_GATEWAY_IDLE_TIMEOUT_SECONDS` | edge gateway | A relayed connection direction with no byte for this long is closed, `5`–`3600` (default `120`) |
+| `EDGE_GATEWAY_HALF_CLOSE_TIMEOUT_SECONDS` | edge gateway | After one side half-closes, the other direction is closed when it is idle this long, `1`–`600` (default `30`) |
+| `EDGE_DNS_API_URL` | edge agent | Local PowerDNS API of a DNS node on this host, such as `http://pdns-auth:8081`; empty on a PoP with no DNS node |
+| `EDGE_DNS_API_KEY` | edge agent | The local node's `PDNS_API_KEY`; empty with no DNS node |
 
 ## Telemetry and GeoIP
 
 | Variable | Required | Meaning and default |
 | --- | --- | --- |
-| `CLICKHOUSE_PASSWORD` | telemetry/control query | ClickHouse password |
+| `CLICKHOUSE_PASSWORD` | telemetry | Password of the ClickHouse administrator `cdnf`. Only the ClickHouse container uses it, for schema and migrations |
+| `CLICKHOUSE_INGEST_PASSWORD` | telemetry/edge/DNS | Password of `cdnf_ingest`, the insert-only account Vector uses. It can insert into `edge_events` and `dns_events` and nothing else |
+| `CLICKHOUSE_USER` | internal | Account a service logs in to ClickHouse as. Compose fixes `cdnf_reader` for Laravel and `cdnf_ingest` for Vector. Do not set it |
+| `CLICKHOUSE_READER_PASSWORD` | control query | Password of `cdnf_reader`, the read-only account Laravel uses, with server-side limits on time, rows, and memory |
+| `CLICKHOUSE_ZONES_PASSWORD` | telemetry/control | Password of `cdnf_zones`, the account Laravel publishes the served-zone list with. It can insert into `served_zones` and nothing else; with it unset, no zones are published and DNS rollups use one unattributed bucket |
 | `CLICKHOUSE_URL` | telemetry/control query | Local `http://clickhouse:8123` or verified external endpoint |
 | `CLICKHOUSE_DATABASE` | internal/default | Database queried by Laravel; Compose fixes `cdnf` |
 | `GEOIP_DATABASE` | edge runtime | MMDB file path; Compose fixes `/mmdb/GeoLite2-City.mmdb` |
 | `PROMETHEUS_URL` | optional control | Default `http://prometheus:9090` |
 | `VECTOR_METRICS_URL` | optional control | Vector metrics probe URL when overridden |
-| `METRICS_TOKEN` | optional control | Direct metrics bearer token fallback; prefer `METRICS_TOKEN_FILE` |
 | `MMDB_STALE_HOURS` | optional control | Health threshold; default `48` |
-| `MMDB_PROVIDER` | updater | `dbip-jsdelivr` default, `dbip-official`, `ip66`, or `generic` |
+| `MMDB_PROVIDER` | updater | `dbip-jsdelivr` (default), `dbip-official`, `ip66`, or `generic`. `generic` needs `MMDB_DOWNLOAD_URL` |
 | `MMDB_TARGET_FILE` | updater | Default `GeoLite2-City.mmdb` |
 | `MMDB_DOWNLOAD_INTERVAL_SECONDS` | updater | Default `86400`, clamped to at least 300 |
 | `MMDB_DOWNLOAD_RETRIES` | updater | Default `5` |
-| `MMDB_EXPECTED_SHA256` | updater | Optional lowercase candidate checksum |
-| `MMDB_DOWNLOAD_URL` | custom updater | HTTPS artifact URL |
-| `MMDB_DOWNLOAD_HEADER` | custom updater | Optional authorization header; treat as secret |
+| `MMDB_EXPECTED_SHA256` | updater | Lowercase SHA-256 the download must match |
+| `MMDB_CHECKSUM_URL` | updater | HTTPS URL of a published SHA-256 (first field of the first line) the download must match |
+| `MMDB_REQUIRE_VERIFICATION` | updater | Production sets `true`: a download is activated only when one of the two checksums vouches for it. Otherwise the previous database, or the bundled empty fallback on a first start, stays in use |
+| `MMDB_DOWNLOAD_URL` | generic provider | HTTPS artifact URL; when set, it overrides the provider's URL |
+| `MMDB_DOWNLOAD_HEADER` | generic provider | Optional authorization header; treat as secret |
+| `MMDB_ASN_DOWNLOAD_URL`, `MMDB_ASN_EXPECTED_SHA256`, `MMDB_ASN_CHECKSUM_URL` | updater | Optional source and checksum of the autonomous-system database that edge cells use to add an ASN to each event. Empty uses the provider's ASN file when the provider has one; a failure leaves ASN at 0 and never stops the updater |
 
 Grafana telemetry variables are:
 
@@ -149,6 +173,10 @@ Grafana telemetry variables are:
 | `GRAFANA_POSTGRES_SSLMODE` | telemetry | Default `disable` for embedded private PostgreSQL; set `require` or `verify-full` for external endpoints |
 | `GRAFANA_POSTGRES_PROVISION_HOST`, `GRAFANA_POSTGRES_PROVISION_PORT` | local account provisioning | Privileged endpoint; external operators may apply the SQL separately |
 | `PROMETHEUS_EDGE_TARGETS_FILE` | telemetry | Private file_sd target file; production default is empty |
+| `PROMETHEUS_PROBE_TARGETS_FILE` | telemetry | Generated file_sd targets for the synthetic probes: every PoP and nameserver address, IPv4 and IPv6 |
+| `PROMETHEUS_VECTOR_TARGETS_FILE` | telemetry | Generated file_sd targets for the live-counter endpoint of each PoP and DNS collector |
+| `VECTOR_METRICS_BIND` | all | Where the collector publishes its live counters; generated bundles use `monitor_ipv4` or `bind_ipv4` |
+| `CDNF_TELEMETRY_POP`, `CDNF_TELEMETRY_REGION` | all | The PoP and region the collector stamps on every event it collects. Fleet renders them from the node name and region; the event itself never sets them |
 | `PROMETHEUS_LOG_TARGETS_FILE` | telemetry | Private file_sd targets for remote collector metrics; production default is empty |
 | `PROMETHEUS_CONTROL_TARGETS_FILE` | telemetry | Generated file_sd targets for authenticated control-plane metrics |
 | `PROMETHEUS_NODE_TARGETS_FILE` | telemetry | Generated file_sd targets for node-exporter metrics on every fleet host |
@@ -157,7 +185,7 @@ Grafana telemetry variables are:
 | `GRAFANA_HOSTNAME` | control/telemetry | Public Grafana hostname in the independently hosted operator DNS zone |
 | `GRAFANA_LOKI_URL` | telemetry | Private Grafana-to-Loki endpoint; default `http://loki:3100` |
 | `LOKI_RETENTION_PERIOD` | telemetry | Loki retention; production default `336h` |
-| `LOKI_MAX_QUERY_LENGTH` | telemetry | Maximum query range; production default `336h` |
+| `LOKI_MAX_QUERY_LENGTH` | telemetry | Maximum query range; production default `744h`, so a dashboard set to 30 days can query logs. Retention stays `LOKI_RETENTION_PERIOD` |
 | `LOKI_ENDPOINT` | logs | Collector push endpoint; use the source-restricted HTTPS telemetry gateway off-host |
 | `LOG_ROLE` | logs | Stable host role: `control`, `dns`, `edge`, or `telemetry` |
 | `LOG_HOST` | logs | Stable deployment host name |
@@ -167,9 +195,30 @@ Grafana telemetry variables are:
 | `LOG_METRICS_BIND` | logs | Host metrics publication; generated bundles use `monitor_ipv4` or the local `bind_ipv4`, never an advertised NAT-only address |
 | `LOG_SOURCE_IPV4_ALLOWLIST` | telemetry gateway | Exact non-edge host sources allowed to push logs |
 
-Vector receives `CLICKHOUSE_ENDPOINT`, `CLICKHOUSE_USER`, and
-`CLICKHOUSE_PASSWORD` from Compose. `MMDB_DIR` is an internal updater override
-whose default is `/mmdb`.
+Vector logs in as `cdnf_ingest` with `CLICKHOUSE_INGEST_PASSWORD`. A
+compromised edge or DNS node can therefore write events but cannot read or drop
+telemetry. There is one ingest password per fleet, not one per node.
+
+`MMDB_DIR` is an internal override of the updater's output directory. Its default
+is `/mmdb`.
+
+### Moving an existing ClickHouse volume to the split accounts
+
+A new volume gets the accounts and the rollup views from the shipped schema. An
+existing volume needs two steps, both run once as the `cdnf` administrator:
+
+1. Restart ClickHouse with `CLICKHOUSE_INGEST_PASSWORD`,
+   `CLICKHOUSE_READER_PASSWORD`, and `CLICKHOUSE_ZONES_PASSWORD` set and
+   `docker/clickhouse/users.d/telemetry.xml` mounted, as in `compose.prod.yml`.
+   This creates `cdnf_ingest`, `cdnf_reader`, `cdnf_zones`, and the internal
+   dictionary account.
+2. Run `docker/clickhouse/migrations/2026_10_30_materialized_view_definer.sql`.
+   Until then the insert-only account cannot update the hourly and daily rollup
+   views, and Vector logs `Not enough privileges` and keeps events in its disk
+   buffer.
+
+Then point Vector and Laravel at the new accounts. The old shared login stays
+valid for the administrator only.
 
 Laravel containers fix `LOG_CHANNEL=stderr`, `LOG_STACK=stderr`, and the
 allowlisting JSON formatter. Changing these back to a private file would bypass
@@ -189,8 +238,6 @@ the supported host collector.
 | `CDNF_MMDB_UPDATER_IMAGE` | production hosts using GeoIP | Immutable MMDB updater image reference from the release manifest |
 | `HOST_BIND_IPV4` | generated multi-host bundle | Local listener address; default `0.0.0.0`, independent of public/NAT DNS addresses |
 | `HOST_BIND_IPV6` | generated dual-stack bundle | Local IPv6 listener; default `::`; publish only after end-to-end IPv6 qualification |
-| `EDGE_QUARANTINE_HTTP_BIND` | edge | Quarantine HTTP, default `127.0.0.1:18080` |
-| `EDGE_QUARANTINE_HTTPS_BIND` | edge | Quarantine HTTPS, default `127.0.0.1:18443` |
 | `EDGE_RUNTIME_TLS_CERTIFICATE` | edge | Bootstrap listener certificate path |
 | `EDGE_RUNTIME_TLS_PRIVATE_KEY` | edge | Bootstrap listener key path on host tmpfs; production cells reject disk-backed paths |
 | `EDGE_STATE_ENCRYPTION_KEY_FILE` | edge agent | Host tmpfs path containing 32 random bytes as 64 hex characters; restores encrypted last-valid edge state without control-plane access |
@@ -200,6 +247,10 @@ the supported host collector.
 | Variable | Required | Meaning and default |
 | --- | --- | --- |
 | `EDGE_CONTROL_URL` | edge agent | Public mutual-TLS control URL |
+| `EDGE_CONTROL_ADDRESSES` | edge agent | Optional comma-separated seed of at most two control IP addresses, dialed in order under the `EDGE_CONTROL_URL` hostname. Control's signed address list replaces it. Empty uses the hostname's DNS answer |
+| `CONTROL_NODE_NAME` | control, two-node only | This node's name as recorded in `control_plane_state.active_node`; empty on a single node |
+| `CONTROL_PEER_ADDRESSES` | control, two-node only | The other control node's public addresses, asked for `/control-state` under the control hostname before this node starts; empty on a single node |
+| `CONTROL_REPLICATION_BIND` | control, two-node only | This node's private address that publishes PostgreSQL (5432, 5433) and Valkey (6379) replication |
 | `EDGE_CONTROL_BIND` | control | Listener publication, default `0.0.0.0:8443` |
 | `EDGE_CONTROL_SERVER_CERTIFICATE` | control | Edge-control server certificate path |
 | `EDGE_CONTROL_SERVER_PRIVATE_KEY` | control | Edge-control private key path |
@@ -216,7 +267,7 @@ The edge-agent binary also accepts these internal variables:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `EDGE_STATE_DIR` | `/var/lib/cdnfoundry/agent` | Persistent identity, state, controls, acknowledgements |
-| `EDGE_RUNTIME_DIR` | empty | Active and previous compiled runtime directories |
+| `EDGE_RUNTIME_DIR` | required | Active and previous compiled runtime directories |
 | `EDGE_CELL_STATUS_URLS` | empty | Comma-separated internal cell endpoints |
 | `EDGE_CELL_ASSIGNMENTS` | `{}` | JSON object mapping at most 32 stable `cell-NN` names to a pool name or an empty unassigned value |
 | `EDGE_RUNTIME_VERSIONS` | `{}` | JSON object containing the four immutable gateway, agent, normal-cell, and WAF-cell image digests reported after a fixed installer upgrade |
@@ -322,3 +373,13 @@ child process; they are not deployment settings.
 `TestFullCachePurgeAgainstRunningCell`. The Python protocol runner supplies an
 isolated loopback cell endpoint and a temporary synthetic token file. Never point
 this fixture at a staging or production cell. These are not deployment settings.
+
+## Other keys
+
+| Variable | Required | Meaning and default |
+| --- | --- | --- |
+| `REDIS_QUEUE_RETRY_AFTER` | control | Seconds before a queued job that is still reserved is delivered again; default `3900`. It must stay above every Horizon worker timeout and every job `$timeout`. The longest is the control backup at 3700 seconds. A lower value delivers a running job a second time. `make config-check` runs `QueueTimingContractTest` to enforce this. When a worker dies without cleanup, the job is redelivered after this interval, and the scheduled repair jobs cover the gap |
+| `ALERT_WEBHOOK_URL` | host running Alertmanager | Where Alertmanager sends alerts. Must be an `https://` URL |
+| `ALERT_WEBHOOK_ALLOW_HTTP` | optional | Set `true` to allow an `http://` webhook URL in development |
+| `EDGE_NETWORK_SUBNET` | edge | Subnet of the private edge network. Compose requires it |
+| `EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS` | cells | Networks whose PROXY protocol headers a cell honors. Production Compose sets it from `EDGE_NETWORK_SUBNET` |

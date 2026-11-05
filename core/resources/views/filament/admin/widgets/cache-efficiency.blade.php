@@ -1,5 +1,5 @@
 <x-filament-widgets::widget>
-    <x-filament::section heading="Cache efficiency" description="Request outcomes and bytes served from cache for the shared investigation period." icon="heroicon-o-circle-stack">
+    <x-filament::section heading="Cache efficiency" description="Request outcomes and bytes served from cache for the shared investigation period." icon="phosphor-database">
         <div wire:poll.30s>
             @if (!($state['available'] ?? false) || ($state['state'] ?? null) === 'no_data')
                 <x-ui.widget-state :state="$state['state'] ?? 'unavailable'" :description="$state['error'] ?? 'No cache outcomes match this context.'" />

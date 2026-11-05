@@ -13,6 +13,25 @@ class FleetRollout extends Model
 
     protected $guarded = [];
 
+    protected static function booted(): void
+    {
+        // The rollout's operation mirrors its progress: paused and rolling back are still unfinished.
+        static::saved(function (self $rollout): void {
+            if ($rollout->operation_id === null || ! $rollout->wasChanged('status')) {
+                return;
+            }
+            $status = match ($rollout->status) {
+                'succeeded', 'rolled_back' => 'succeeded',
+                'failed' => 'failed',
+                default => 'running',
+            };
+            Operation::query()->whereKey($rollout->operation_id)->update([
+                'status' => $status, 'error' => $status === 'failed' ? 'The rollout failed.' : null,
+                'finished_at' => $status === 'running' ? null : now(),
+            ]);
+        });
+    }
+
     public function release(): BelongsTo
     {
         return $this->belongsTo(FleetRelease::class, 'fleet_release_id');

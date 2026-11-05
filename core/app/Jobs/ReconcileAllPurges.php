@@ -21,7 +21,7 @@ class ReconcileAllPurges implements ShouldBeUniqueUntilProcessing, ShouldQueue
 
     public function __construct(public string $operationId)
     {
-        $this->onQueue('bulk_maintenance');
+        $this->onQueue('purge');
     }
 
     public function uniqueId(): string

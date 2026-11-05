@@ -129,8 +129,8 @@ class MultiCellPlacementTest extends TestCase
         Queue::fake();
         $pool = EdgePool::query()->create(['name' => 'minimum-per-edge', 'kind' => 'reserved', 'enabled' => true, 'minimum_ready_cells' => 2]);
         $admin = User::factory()->admin()->create();
-        $first = Edge::query()->create(['name' => 'minimum-first', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.80']);
-        $second = Edge::query()->create(['name' => 'minimum-second', 'country_code' => 'DE', 'continent_code' => 'EU', 'management_ipv4' => '203.0.113.90']);
+        $first = Edge::query()->create(['name' => 'minimum-first', 'country_code' => 'IR', 'continent_code' => 'AS']);
+        $second = Edge::query()->create(['name' => 'minimum-second', 'country_code' => 'DE', 'continent_code' => 'EU']);
         foreach ([[$first, 80], [$second, 90]] as [$edge, $base]) {
             for ($slot = 1; $slot <= 3; $slot++) {
                 $edge->cells()->create(['slot' => $slot, 'edge_pool_id' => $pool->id, 'status' => 'assigned']);
@@ -167,8 +167,8 @@ class MultiCellPlacementTest extends TestCase
         Queue::fake();
         $source = EdgePool::query()->where('kind', 'shared')->firstOrFail();
         $target = EdgePool::query()->create(['name' => 'partial-target', 'kind' => 'reserved', 'enabled' => true]);
-        $first = Edge::query()->create(['name' => 'target-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.40']);
-        $second = Edge::query()->create(['name' => 'source-only-edge', 'country_code' => 'DE', 'continent_code' => 'EU', 'management_ipv4' => '203.0.113.50']);
+        $first = Edge::query()->create(['name' => 'target-edge', 'country_code' => 'IR', 'continent_code' => 'AS']);
+        $second = Edge::query()->create(['name' => 'source-only-edge', 'country_code' => 'DE', 'continent_code' => 'EU']);
         foreach ([$first, $second] as $edge) {
             $edge->cells()->create(['slot' => 1, 'edge_pool_id' => $source->id, 'status' => 'assigned']);
             $source->endpoints()->create(['edge_id' => $edge->id, 'ipv4' => $edge->is($first) ? '8.8.8.8' : '8.8.4.4']);
@@ -225,7 +225,7 @@ class MultiCellPlacementTest extends TestCase
     {
         $pool = $kind === 'shared' ? EdgePool::query()->where('kind', 'shared')->firstOrFail()
             : EdgePool::query()->create(['name' => $kind.'-test', 'kind' => $kind, 'enabled' => true, ...$policy]);
-        $edge = Edge::query()->create(['name' => $kind.'-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.10', 'cell_slot_count' => 8]);
+        $edge = Edge::query()->create(['name' => $kind.'-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'cell_slot_count' => 8]);
         for ($slot = 1; $slot <= 8; $slot++) {
             $edge->cells()->create([
                 'slot' => $slot, 'edge_pool_id' => $slot <= $count ? $pool->id : null,

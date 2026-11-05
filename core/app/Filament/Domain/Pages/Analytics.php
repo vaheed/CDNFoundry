@@ -15,7 +15,7 @@ use Throwable;
 
 class Analytics extends Page
 {
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-chart-bar-square';
+    protected static string|\BackedEnum|null $navigationIcon = 'phosphor-chart-bar';
 
     protected static ?string $navigationLabel = 'Analytics and logs';
 
@@ -30,7 +30,7 @@ class Analytics extends Page
         return [
             Action::make('selectDomain')
                 ->label($this->selectedDomain() === null ? 'Select domain' : 'Switch domain')
-                ->icon('heroicon-o-magnifying-glass')
+                ->icon('phosphor-magnifying-glass')
                 ->schema([
                     Select::make('domain_id')->label('Assigned domain')->required()->searchable()->native(false)
                         ->getSearchResultsUsing(fn (string $search): array => $this->domainQuery()->where('name', 'like', '%'.$search.'%')->orderBy('name')->limit(50)->pluck('name', 'domains.id')->all())

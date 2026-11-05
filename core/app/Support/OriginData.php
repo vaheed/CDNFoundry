@@ -3,9 +3,9 @@
 namespace App\Support;
 
 use App\Models\DnsCluster;
-use App\Models\Edge;
 use App\Models\EdgePoolEndpoint;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 final class OriginData
@@ -56,11 +56,17 @@ final class OriginData
         return $origin;
     }
 
+    /**
+     * The only ports an origin may use. Mirrored by `allowed_origin_ports` in runtime.lua and
+     * `allowedOriginPorts` in the edge agent; a test keeps the three equal.
+     */
+    public const ALLOWED_PORTS = [80, 443, 2052, 2053, 2082, 2083, 2086, 2087, 2095, 2096, 8000, 8008, 8080, 8081, 8088, 8443, 8444, 8880, 8888, 9000, 9443];
+
     private static function validateEndpoint(array $input): array
     {
         $validator = Validator::make($input, [
             'host' => ['required', 'string', 'max:253'],
-            'port' => ['required', 'integer', 'between:1,65535'],
+            'port' => ['required', 'integer', Rule::in(self::ALLOWED_PORTS)],
             'scheme' => ['required', 'in:http,https'],
             'host_header' => ['required', 'string', 'max:253'],
             'sni' => ['nullable', 'string', 'max:253'],
@@ -111,9 +117,47 @@ final class OriginData
         ];
     }
 
+    /** @var array<string, list<string>|ValidationException>|null */
+    private static ?array $resolutions = null;
+
+    /**
+     * Resolve and validate origin hostnames before the caller takes a database lock, and answer the
+     * same lookups from memory until releaseResolutions(). Failures are remembered too, so a bad
+     * hostname costs one lookup instead of one per use. Literal addresses need no lookup.
+     *
+     * @param  list<string>  $hosts
+     */
+    public static function prepareResolutions(array $hosts): void
+    {
+        self::$resolutions ??= [];
+        foreach ($hosts as $host) {
+            $host = strtolower(trim($host, '[]'));
+            if (isset(self::$resolutions[$host]) || filter_var($host, FILTER_VALIDATE_IP)) {
+                continue;
+            }
+            try {
+                self::$resolutions[$host] = self::resolveAndValidate($host);
+            } catch (ValidationException $exception) {
+                self::$resolutions[$host] = $exception;
+            }
+        }
+    }
+
+    public static function releaseResolutions(): void
+    {
+        self::$resolutions = null;
+    }
+
     /** @return list<string> */
     public static function resolveAndValidate(string $host): array
     {
+        $prepared = self::$resolutions[strtolower(trim($host, '[]'))] ?? null;
+        if ($prepared instanceof ValidationException) {
+            throw $prepared;
+        }
+        if (is_array($prepared)) {
+            return $prepared;
+        }
         $addresses = filter_var($host, FILTER_VALIDATE_IP) ? [$host] : self::resolve($host);
         if ($addresses === []) {
             throw ValidationException::withMessages(['host' => 'The origin hostname did not resolve.']);
@@ -152,8 +196,7 @@ final class OriginData
         if (! filter_var($address, FILTER_VALIDATE_IP)) {
             return true;
         }
-        if (Edge::query()->where('management_ipv4', $address)->orWhere('management_ipv6', $address)->exists()
-            || EdgePoolEndpoint::query()->where('ipv4', $address)->orWhere('ipv6', $address)->exists()
+        if (EdgePoolEndpoint::query()->where('ipv4', $address)->orWhere('ipv6', $address)->exists()
             || in_array($address, self::platformNodeAddresses(), true)
             || collect(app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_addresses'))
                 ->contains(fn (string $denied): bool => NetworkAddress::inCidr($address, $denied))) {

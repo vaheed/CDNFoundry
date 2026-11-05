@@ -6,6 +6,7 @@ use App\Enums\DomainLifecycleState;
 use App\Filament\Admin\Pages\Telemetry;
 use App\Jobs\BuildUsageRollups;
 use App\Models\Domain;
+use App\Models\Operation;
 use App\Models\UsageRollup;
 use App\Models\User;
 use App\Support\AnalyticsStore;
@@ -13,6 +14,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class AnalyticsApiTest extends TestCase
@@ -30,6 +32,24 @@ class AnalyticsApiTest extends TestCase
         $this->assertSame(12, $page->trafficLimit);
     }
 
+    public function test_dns_scope_excludes_nested_domains_and_history_before_the_current_owner(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        Domain::query()->create(['name' => 'shop.'.$domain->name, 'display_name' => 'Nested', 'revision' => 1]);
+        Http::fake(['*' => Http::response('')]);
+
+        $this->actingAs($user)->getJson("/api/domains/{$domain->id}/analytics/dns")->assertOk();
+
+        Http::assertSent(function ($request) use ($domain): bool {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+            return str_contains($request->body(), 'arrayExists(child -> zone = child')
+                && str_contains($request->body(), '>= toStartOfHour({owned_since:DateTime64})')
+                && $query['param_excluded_zones'] === "['shop.{$domain->name}']"
+                && ($query['param_owned_since'] ?? '') === $domain->created_at->clone()->utc()->format('Y-m-d H:i:s.u');
+        });
+    }
+
     public function test_domain_analytics_are_scoped_bounded_and_label_partial_data(): void
     {
         [$user, $domain] = $this->ownedDomain();
@@ -38,7 +58,7 @@ class AnalyticsApiTest extends TestCase
             json_encode(['requests' => 10, 'bytes_in' => 120, 'bytes_out' => 900, 'cache_hits' => 8, 'origin_errors' => 1, 'tls_failures' => 0, 'security_blocks' => 2]),
         ]))->push(json_encode(['dns_queries' => 14]));
 
-        $this->actingAs($stranger)->getJson("/api/domains/{$domain->id}/analytics/summary")->assertForbidden();
+        $this->actingAs($stranger)->getJson("/api/domains/{$domain->id}/analytics/summary")->assertNotFound();
         $response = $this->actingAs($user)->getJson("/api/domains/{$domain->id}/analytics/summary")
             ->assertOk()->assertJsonPath('data.requests', 10)->assertJsonPath('data.dns_queries', 14)
             ->assertJsonPath('data.cache_ratio', 0.8)->assertJsonPath('meta.units.bandwidth', 'bytes')
@@ -140,6 +160,14 @@ class AnalyticsApiTest extends TestCase
         $this->actingAs($admin)->withHeaders($headers)->postJson('/api/admin/usage/rebuild', $payload)->assertAccepted()
             ->assertJsonPath('data.operation_id', $first->json('data.operation_id'));
         Queue::assertPushed(BuildUsageRollups::class, 1);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'usage.rebuild_requested', 'actor_id' => $admin->id]);
+
+        // A failed rebuild can be retried with its original range.
+        $operation = Operation::query()->findOrFail($first->json('data.operation_id'));
+        $operation->update(['status' => 'failed', 'error' => 'ClickHouse unavailable']);
+        $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())->postJson("/api/admin/operations/{$operation->id}/retry")->assertAccepted();
+        Queue::assertPushed(BuildUsageRollups::class, 2);
+        $this->assertSame('pending', $operation->refresh()->status);
 
         $this->actingAs($admin)->withHeaders(['Idempotency-Key' => 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'])->postJson('/api/admin/usage/rebuild', ['from' => '2026-07-20T08:30:00Z', 'to' => '2026-07-20T10:00:00Z'])
             ->assertUnprocessable();
@@ -159,19 +187,18 @@ class AnalyticsApiTest extends TestCase
         ]);
 
         $this->actingAs($user)->get("/app/analytics?domain={$domain->id}")->assertOk()
-            ->assertSee($domain->name)->assertSee('Live window included')->assertSee('bytes')->assertSee('milliseconds')
+            ->assertSee($domain->name)->assertSee('Live window included')
             ->assertSee('Request and bandwidth timeseries')->assertSee('Compression savings (last hour)')->assertSee('DNS activity')->assertSee('Recent logs')->assertSee('Usage CSV export')
             ->assertDontSee("/api/domains/{$domain->id}/logs", false);
         $this->actingAs($admin)->get('/admin/telemetry')->assertOk()
             ->assertSee('Apply filters')->assertSee('All domains')->assertSee('All edges')->assertSee('24 hours')->assertDontSee('15 minutes (hourly source)')
             ->assertSeeHtml('class="cdn-filter-select"')
-            ->assertSee('Global traffic')->assertSee('Vector metrics available')->assertSee('complete-hour analytics')
+            ->assertSee('Global traffic')->assertSee('Vector metrics available')->assertSee('Finalized through')
             ->assertSee('Buffered data')->assertSee('42 B')->assertSee('Compression savings')->assertSee('Recent logs')
-            ->assertSee('Identity means the response was sent without compression')
             ->assertSee('Encoding / profile')->assertSee('Fallback')
-            ->assertSee('Five rows per stream until expanded')->assertSee('Edge requests')
+            ->assertSee('Edge requests')
             ->assertSee('Discarded events since start')->assertSee('Component errors since start')->assertSee('clickhouse_edge')
-            ->assertSee('must not be added together')->assertSee('Global usage CSV')
+            ->assertSee('do not add them together')->assertSee('Global usage CSV')
             ->assertDontSee('/api/admin/logs', false);
 
     }

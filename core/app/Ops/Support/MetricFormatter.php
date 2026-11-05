@@ -32,12 +32,15 @@ final class MetricFormatter
         return $value === null ? 'Unavailable' : number_format((float) $value, 1).' ms';
     }
 
-    public function deltaPercent(?float $value): string
+    /** Change against the previous period, as a sentence. A missing or zero baseline is never invented. */
+    public function change(float|int|null $current, float|int|null $previous): string
     {
-        if ($value === null) {
+        if ($current === null || $previous === null || (float) $previous === 0.0) {
             return 'No comparable baseline';
         }
 
-        return ($value > 0 ? '+' : '').number_format($value, 1).'% vs previous period';
+        $percent = (((float) $current - (float) $previous) / abs((float) $previous)) * 100;
+
+        return ($percent > 0 ? '+' : '').number_format($percent, 1).'% vs previous period';
     }
 }

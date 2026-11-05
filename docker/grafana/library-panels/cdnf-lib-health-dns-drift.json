@@ -1,0 +1,81 @@
+{
+  "model": {
+    "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+    },
+    "description": "DNS deployments that have not reached their desired revision.",
+    "fieldConfig": {
+      "defaults": {
+        "color": {
+          "mode": "thresholds"
+        },
+        "links": [
+          {
+            "title": "Open details",
+            "url": "/d/cdnf-dns-authoritative"
+          }
+        ],
+        "mappings": [
+          {
+            "options": {
+              "match": "null+nan",
+              "result": {
+                "color": "text",
+                "text": "No data yet"
+              }
+            },
+            "type": "special"
+          }
+        ],
+        "noValue": "No traffic",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {
+              "color": "green",
+              "value": null
+            },
+            {
+              "color": "orange",
+              "value": 1
+            }
+          ]
+        },
+        "unit": "short"
+      },
+      "overrides": []
+    },
+    "options": {
+      "colorMode": "value",
+      "graphMode": "none",
+      "justifyMode": "center",
+      "reduceOptions": {
+        "calcs": [
+          "lastNotNull"
+        ],
+        "fields": "",
+        "values": false
+      },
+      "textMode": "value",
+      "wideLayout": true
+    },
+    "targets": [
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "expr": "cdnfoundry_dns_deployments_drifted",
+        "instant": true,
+        "legendFormat": "drift",
+        "range": false,
+        "refId": "A"
+      }
+    ],
+    "title": "DNS drift",
+    "type": "stat"
+  },
+  "name": "DNS drift",
+  "uid": "cdnf-lib-health-dns-drift"
+}

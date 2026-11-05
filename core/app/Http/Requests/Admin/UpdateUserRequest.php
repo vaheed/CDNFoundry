@@ -19,7 +19,7 @@ class UpdateUserRequest extends FormRequest
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'email' => ['sometimes', 'required', 'email:rfc', 'max:255', Rule::unique('users')->ignore($this->route('user'))],
-            'password' => ['sometimes', 'required', Password::min(12)->letters()->mixedCase()->numbers()],
+            'password' => ['sometimes', 'required', Password::defaults()],
             'type' => ['sometimes', 'required', Rule::enum(UserType::class)],
         ];
     }

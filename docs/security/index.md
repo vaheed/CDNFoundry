@@ -1,13 +1,17 @@
 ---
 title: Security model
-description: Understand CDNFoundry trust boundaries, secret handling, authorization, and runtime protection.
+description: How CDNFoundry separates identities, secrets, and trust zones, who can do what, and how private keys are stored and delivered to edges.
 ---
 
 # Security model
 
-CDNFoundry separates management identities, edge identities, runtime status
-tokens, artifact signing, service TLS, database credentials, backup credentials,
-and metrics access.
+This page explains who and what is trusted in a CDNFoundry deployment, and where
+each secret lives. Read it before you plan access, backups, or key rotation. To
+lock down a host, go to [Deployment hardening](hardening.md).
+
+CDNFoundry keeps these identities and secrets apart: management users, edge
+identities, runtime status tokens, artifact signing, service TLS, database
+credentials, backup credentials, and metrics access.
 
 ```mermaid
 flowchart LR
@@ -28,42 +32,58 @@ flowchart LR
     end
 ```
 
-Human and API authorization is policy based:
+## Who can do what
 
-- active administrators may use `/admin` and administrator API routes;
-- active domain users may use `/app` and only assigned domains;
-- disabled users lose API tokens and are rejected on later session requests;
-- edge agents enroll once and then use short-lived client certificates;
-- `/metrics` requires a separate bearer token and is not a user API.
+- An active administrator can use `/admin` and the administrator API routes.
+- An active domain user can use `/app` and only the domains assigned to them.
+- A disabled user loses their API tokens, and later session requests are rejected.
+- An edge agent enrolls once, then uses short-lived client certificates.
+- `/metrics` needs its own bearer token. It is not a user API.
 
-Grafana has a separate administrator credential and never receives Laravel,
+Browser sessions and API tokens go through the same policies. See
+[Users and access](../guides/users-and-access.md).
+
+## Grafana access
+
+Grafana has its own administrator credential. It never receives Laravel,
 Vector-ingestion, or database-write credentials. Its ClickHouse account is
-read-only with query bounds; its PostgreSQL account can read only domain
-inventory columns and the sanitized operational view. Port 3000 remains on
-loopback and requires a deployment-owned authenticated HTTPS proxy or trusted
-tunnel for remote operator access.
+read-only with query limits. Its PostgreSQL account reads only domain inventory
+columns and the sanitized operational view. Port 3000 listens on loopback. For
+remote access, put an authenticated HTTPS proxy or a trusted tunnel in front of it.
 
-Private keys are never returned by status APIs. Sanctum hashes API tokens.
-Custom and managed TLS private keys are encrypted with the application
-encryption key. DNS cluster API keys are encrypted and not echoed after storage.
+## Private keys
+
+- Status APIs never return private keys.
+- Sanctum stores only a hash of each API token.
+- CDNFoundry encrypts custom and managed TLS private keys with the application
+  encryption key (`APP_KEY`).
+- PostgreSQL holds a private key only in `tls_certificates`. Edge revisions and edge
+  artifacts carry a certificate ID, never key material.
+- An edge fetches the key it needs from `GET /edge/v1/certificates/{id}/key` over
+  mutual TLS. Control seals the key to that edge's identity key (ECDH P-256,
+  HKDF-SHA256, AES-256-GCM, bound to the edge ID and certificate ID). Control answers
+  404 unless the domain is assigned to that edge.
+- The agent caches the key in its state directory at mode `0600`. It removes keys
+  that no active domain uses.
+- DNS cluster API keys are stored encrypted and are never shown again.
 
 ## Secret classes
 
-| Secret | Owner | Rotation consequence |
+| Secret | Owner | Consequence of rotation |
 | --- | --- | --- |
-| `APP_KEY` | control recovery system | Required to decrypt stored application secrets |
-| Artifact signing key | control | Must remain compatible with agent verification |
-| Edge identity CA key | control only | Replacement requires an agent re-enrollment plan |
-| Edge server CA key | protected PKI | Reissue control/runtime/DNS API server identities |
+| `APP_KEY` | control recovery system | Needed to decrypt stored application secrets |
+| Artifact signing key | control | Must stay compatible with agent verification |
+| Edge identity CA key | control only | Replacing it needs an agent re-enrollment plan |
+| Edge server CA key | protected PKI | Reissue the control, runtime, and DNS API server identities |
 | Agent private key | one edge identity volume | Rotate only that edge identity |
-| Edge status token | one edge host | Update agent and cells together |
-| PowerDNS API key | one DNS target | Update gateway and encrypted cluster credential |
-| Metrics token | protected file | Update metrics client and mounted file |
-| Restic password | recovery system | Required for existing backups |
+| Edge status token | one edge host | Update the agent and cells together |
+| PowerDNS API key | one DNS target | Update the gateway and the encrypted cluster credential |
+| Metrics token | protected file | Update the metrics client and the mounted file |
+| Restic password | recovery system | Needed to open existing backups |
 
 ::: danger Never log secrets
-Use fingerprints, checksums, operation IDs, and redacted setting names in
-diagnostics. Never paste environments, tokens, private keys, or customer data.
+In diagnostics, use fingerprints, checksums, operation IDs, and setting names with
+values redacted. Never paste environments, tokens, private keys, or customer data.
 :::
 
 Continue with [Deployment hardening](hardening.md) and

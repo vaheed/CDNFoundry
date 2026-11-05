@@ -13,7 +13,9 @@ use App\Models\Edge;
 use App\Models\EdgeCell;
 use App\Models\EdgePool;
 use App\Models\EmergencyMode;
+use App\Models\Operation;
 use App\Models\User;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -24,6 +26,36 @@ use Tests\TestCase;
 class OperationsApiTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_every_member_can_poll_a_coalesced_operation_and_outsiders_cannot(): void
+    {
+        Queue::fake();
+        $first = User::factory()->create();
+        $second = User::factory()->create();
+        $outsider = User::factory()->create();
+        $domain = Domain::query()->create(['name' => 'shared-ops.example', 'display_name' => 'Shared', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain->users()->attach([$first->id, $second->id]);
+
+        $started = Operation::coalesceDomain('edge.domain_reconcile', $domain->id, $first->id);
+        $joined = Operation::coalesceDomain('edge.domain_reconcile', $domain->id, $second->id);
+
+        $this->assertTrue($started->is($joined));
+        $this->assertSame($domain->id, $started->domain_id);
+        $this->actingAs($first)->getJson("/api/operations/{$started->id}")->assertOk();
+        $this->actingAs($second)->getJson("/api/operations/{$started->id}")->assertOk();
+        $this->actingAs($outsider)->getJson("/api/operations/{$started->id}")->assertForbidden();
+        $global = Operation::query()->create(['actor_id' => $first->id, 'type' => 'dns.global_reconcile', 'status' => 'pending', 'input' => []]);
+        $this->actingAs($first)->getJson("/api/operations/{$global->id}")->assertForbidden();
+    }
+
+    public function test_the_database_refuses_a_second_unfinished_coalesced_operation_for_a_domain(): void
+    {
+        $domain = Domain::query()->create(['name' => 'unique-ops.example', 'display_name' => 'Unique', 'revision' => 1, 'lifecycle_state' => 'active']);
+        Operation::query()->create(['type' => 'dns.zone_reconcile', 'status' => 'running', 'input' => ['domain_id' => $domain->id]]);
+
+        $this->expectException(UniqueConstraintViolationException::class);
+        Operation::query()->create(['type' => 'dns.zone_reconcile', 'status' => 'pending', 'input' => ['domain_id' => $domain->id]]);
+    }
 
     public function test_component_health_is_admin_only_and_uses_stable_states(): void
     {
@@ -37,7 +69,7 @@ class OperationsApiTest extends TestCase
         foreach (['queue_workers', 'mmdb', 'edge_listeners', 'edge_cells', 'service_pools', 'edge_configuration', 'edge_placements', 'edge_capacity', 'emergency_modes', 'dns_deployments', 'purges'] as $component) {
             $this->assertContains($response->json("data.components.{$component}.status"), ['healthy', 'degraded', 'unavailable']);
         }
-        $this->assertSame(['interactive', 'runtime', 'certificate_purge', 'bulk_maintenance'], array_keys($response->json('data.queues')));
+        $this->assertSame(['interactive', 'dns', 'edge', 'verification', 'tls', 'purge', 'bulk_maintenance'], array_keys($response->json('data.queues')));
     }
 
     public function test_component_health_detects_runtime_drift_pressure_and_stale_mmdb(): void
@@ -53,7 +85,7 @@ class OperationsApiTest extends TestCase
             $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
             $edge = Edge::query()->create([
                 'id' => (string) Str::uuid(), 'name' => 'health-edge', 'country_code' => 'US', 'continent_code' => 'NA',
-                'management_ipv4' => '192.0.2.80', 'management_ipv6' => '2001:db8::80', 'enabled' => true, 'drained' => false,
+                'enabled' => true, 'drained' => false,
                 'registered_at' => now(), 'last_heartbeat_at' => now(), 'agent_version' => '1.1.0',
                 'capacity' => ['listener_ready' => false, 'last_rejection' => ['reason' => 'candidate_validation_failed']],
             ]);
@@ -102,7 +134,7 @@ class OperationsApiTest extends TestCase
     {
         $admin = User::factory()->admin()->create();
         DB::table('failed_jobs')->insert([
-            'uuid' => (string) Str::uuid(), 'connection' => 'redis', 'queue' => 'runtime',
+            'uuid' => (string) Str::uuid(), 'connection' => 'redis', 'queue' => 'edge',
             'payload' => json_encode(['displayName' => 'App\\Jobs\\Example', 'data' => ['command' => 'sensitive serialized body']], JSON_THROW_ON_ERROR),
             'exception' => "RuntimeException: safe summary\nstack with internals", 'failed_at' => now(),
         ]);
@@ -133,7 +165,7 @@ class OperationsApiTest extends TestCase
         config(['services.metrics.token' => 'metrics-test-token']);
         $edge = Edge::query()->create([
             'id' => (string) Str::uuid(), 'name' => 'metrics-edge', 'country_code' => 'US', 'continent_code' => 'NA',
-            'management_ipv4' => '192.0.2.90', 'enabled' => true, 'drained' => false,
+            'enabled' => true, 'drained' => false,
             'last_heartbeat_at' => now(), 'capacity' => ['gateway' => [
                 'ready' => true, 'active_revision' => 7, 'routes' => 12, 'listeners' => 2,
                 'connections_active' => 3, 'connections_accepted' => 10, 'connections_rejected' => 1,
@@ -143,8 +175,8 @@ class OperationsApiTest extends TestCase
         $this->get('/metrics')->assertNotFound();
         $response = $this->withToken('metrics-test-token')->get('/metrics')->assertOk()->assertHeader('content-type', 'text/plain; version=0.0.4; charset=utf-8');
         $response->assertSee('cdnfoundry_component_health')
-            ->assertSee('cdnfoundry_edge_gateway_activations_total{edge="'.$edge->id.'"} 4', false)
-            ->assertSee('cdnfoundry_edge_gateway_connections_accepted_total{edge="'.$edge->id.'"} 10', false)
+            ->assertSee('cdnfoundry_edge_gateway_activations_total{edge="'.$edge->id.'",pop="metrics-edge"} 4', false)
+            ->assertSee('cdnfoundry_edge_gateway_connections_accepted_total{edge="'.$edge->id.'",pop="metrics-edge"} 10', false)
             ->assertDontSee((string) config('app.key'));
     }
 

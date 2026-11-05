@@ -4,9 +4,12 @@ namespace Tests\Feature;
 
 use App\Filament\Admin\Pages\SystemDnsIdentity;
 use App\Jobs\ApplyPlatformDnsSettings;
+use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\DnsCluster;
 use App\Models\Edge;
 use App\Models\EdgePool;
+use App\Models\EdgeTask;
+use App\Models\NameserverAddressProbe;
 use App\Models\Operation;
 use App\Models\PlatformDnsDeployment;
 use App\Models\PlatformDnsSetting;
@@ -28,6 +31,7 @@ class SystemIdentityApiTest extends TestCase
 
     public function test_admin_validates_and_applies_typed_dns_identity_through_an_operation(): void
     {
+        $this->answeringIpv6('2001:4860:4860::8888', '2606:4700:4700::1111');
         Queue::fake();
         $admin = User::factory()->admin()->create();
         $payload = $this->validPayload();
@@ -62,6 +66,7 @@ class SystemIdentityApiTest extends TestCase
 
     public function test_admin_can_confirm_dns_identity_after_filament_rehydrates_integer_fields(): void
     {
+        $this->answeringIpv6('2001:4860:4860::8888', '2606:4700:4700::1111');
         Queue::fake();
         $admin = User::factory()->admin()->create();
         DnsCluster::query()->create([
@@ -75,6 +80,10 @@ class SystemIdentityApiTest extends TestCase
                 : $value];
         })->all();
 
+        $payload['customer_pairs'] = [[
+            'first_hostname' => 'ns1.cdnf.test', 'first_ipv4' => '8.8.8.8', 'first_ipv6' => null,
+            'second_hostname' => 'ns2.cdnf.test', 'second_ipv4' => '8.8.4.4', 'second_ipv6' => null,
+        ]];
         $component = Livewire::actingAs($admin)
             ->test(SystemDnsIdentity::class)
             ->fillForm($payload)
@@ -82,7 +91,7 @@ class SystemIdentityApiTest extends TestCase
             ->assertActionMounted('confirmDnsIdentity')
             ->assertMountedActionModalSee([
                 'Review and save DNS identity',
-                'Validated — nothing has been saved yet',
+                'Validated. Nothing has been saved yet',
                 'cdnf.test',
                 'proxy.cdnf.test',
                 'ns1.cdnf.test',
@@ -128,13 +137,53 @@ class SystemIdentityApiTest extends TestCase
         $this->assertSame(['A', 'AAAA', 'NS', 'SOA'], collect($deployment->active_rrsets)->pluck('type')->unique()->sort()->values()->all());
         $this->assertSame('succeeded', $operation->refresh()->status);
         $this->assertSame(1, $operation->result['targets']);
+
+        // A later revision with unchanged content keeps the zone and serial but is still acknowledged.
+        $serial = PlatformDnsSetting::query()->find(1)->soa_serial;
+        PlatformDnsSetting::query()->find(1)->update(['revision' => 5]);
+        (new ReconcilePlatformDnsIdentity)->handle(app(PowerDnsClient::class));
+        $this->assertSame(5, $deployment->refresh()->deployed_revision);
+        $this->assertSame($serial, PlatformDnsSetting::query()->find(1)->soa_serial);
     }
 
-    public function test_platform_identity_fails_when_no_healthy_cluster_matches_the_configured_targets(): void
+    public function test_the_platform_zone_serial_changes_exactly_when_the_content_changes(): void
+    {
+        $settings = PlatformDnsSetting::query()->create(['id' => 1, ...$this->validPayload(), 'revision' => 1]);
+        $serial = fn (PlatformDnsSetting $current): int => (int) explode(' ', collect(PlatformDnsZone::render($current))->firstWhere('type', 'SOA')['records'][0]['content'])[2];
+
+        $first = PlatformDnsZone::advanceSerial($settings);
+        $this->assertGreaterThan(0, $first->soa_serial);
+        $this->assertSame($first->soa_serial, $serial($first));
+
+        // The every-minute render with unchanged content, even after revision bumps, keeps the serial.
+        $first->update(['revision' => 7]);
+        $this->assertSame($first->soa_serial, PlatformDnsZone::advanceSerial($first->refresh())->soa_serial);
+
+        // A real content change advances it by exactly one.
+        $first->update(['nameservers' => [
+            ['hostname' => 'ns1.cdnf.test', 'ipv4' => '8.8.4.4', 'ipv6' => '2001:4860:4860::8888'],
+            ['hostname' => 'ns2.cdnf.test', 'ipv4' => '1.1.1.1', 'ipv6' => '2606:4700:4700::1111'],
+        ]]);
+        $changed = PlatformDnsZone::advanceSerial($first->refresh());
+        $this->assertSame($first->soa_serial + 1, $changed->soa_serial);
+        $this->assertSame($changed->soa_serial, PlatformDnsZone::advanceSerial($changed->refresh())->soa_serial);
+    }
+
+    public function test_dns_identity_rejects_cluster_targets_because_zones_go_to_the_hidden_primary(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', [...$this->validPayload(), 'cluster_targets' => ['pdns-auth:8081']])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('cluster_targets');
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $this->validPayload())->assertJsonMissingValidationErrors('cluster_targets');
+    }
+
+    public function test_platform_identity_fails_when_no_dns_primary_is_enabled_and_healthy(): void
     {
         $admin = User::factory()->admin()->create();
         DnsCluster::query()->create([
-            'name' => 'dns-local', 'location' => 'test', 'enabled' => true, 'last_health_status' => 'healthy',
+            'name' => 'dns-local', 'location' => 'test', 'enabled' => true, 'last_health_status' => 'unhealthy',
             'api_url' => 'https://dns-api.example.test:8444', 'api_key' => 'private-test-key', 'server_id' => 'localhost',
             'nameservers' => [['hostname' => 'ns1.cdnf.test'], ['hostname' => 'ns2.cdnf.test']],
         ]);
@@ -143,14 +192,14 @@ class SystemIdentityApiTest extends TestCase
             'input' => ['settings_id' => 1, 'revision' => 1],
         ]);
         PlatformDnsSetting::query()->create([
-            'id' => 1, ...$this->validPayload(), 'cluster_targets' => ['tehran'], 'revision' => 1,
+            'id' => 1, ...$this->validPayload(), 'revision' => 1,
         ]);
 
         try {
             (new ApplyPlatformDnsSettings($operation->id))->handle(app(PowerDnsClient::class));
-            $this->fail('Expected reconciliation without a matching cluster to fail.');
+            $this->fail('Expected reconciliation without a healthy DNS primary to fail.');
         } catch (RuntimeException $exception) {
-            $this->assertStringContainsString('No enabled, healthy DNS cluster matches', $exception->getMessage());
+            $this->assertStringContainsString('No enabled, healthy DNS primary is registered', $exception->getMessage());
         }
 
         $this->assertSame('failed', $operation->refresh()->status);
@@ -199,6 +248,7 @@ class SystemIdentityApiTest extends TestCase
 
     public function test_dns_identity_update_requires_confirmation_bound_to_the_exact_preview(): void
     {
+        $this->answeringIpv6('2001:4860:4860::8888', '2606:4700:4700::1111');
         $admin = User::factory()->admin()->create();
         $payload = $this->validPayload();
         $token = $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)
@@ -215,12 +265,12 @@ class SystemIdentityApiTest extends TestCase
         $settings = PlatformDnsSetting::query()->create(['id' => 1, ...$this->validPayload(), 'revision' => 1]);
         $ready = Edge::query()->create([
             'name' => 'ready-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
-            'management_ipv4' => '203.0.113.40', 'management_ipv6' => '2001:db8::40', 'registered_at' => now(),
+            'registered_at' => now(),
             'last_heartbeat_at' => now(), 'capacity' => ['listener_ready' => true],
         ]);
         $unready = Edge::query()->create([
             'name' => 'unready-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
-            'management_ipv4' => '203.0.113.41', 'management_ipv6' => '2001:db8::41', 'registered_at' => now(),
+            'registered_at' => now(),
             'last_heartbeat_at' => now(), 'capacity' => ['listener_ready' => false],
         ]);
         $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
@@ -252,7 +302,7 @@ class SystemIdentityApiTest extends TestCase
         $settings = PlatformDnsSetting::query()->create(['id' => 1, ...$this->validPayload(), 'revision' => 1]);
         $edge = Edge::query()->create([
             'name' => 'ipv4-only-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
-            'management_ipv4' => '203.0.113.50', 'management_ipv6' => null, 'registered_at' => now(),
+            'registered_at' => now(),
             'last_heartbeat_at' => now(), 'capacity' => ['listener_ready' => true],
         ]);
         $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
@@ -290,6 +340,66 @@ class SystemIdentityApiTest extends TestCase
         });
     }
 
+    public function test_a_new_ipv6_nameserver_address_is_saved_only_after_an_edge_sees_it_answer(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        $edge = Edge::query()->create(['name' => 'prober', 'country_code' => 'DE', 'continent_code' => 'EU', 'enabled' => true, 'registered_at' => now(), 'last_heartbeat_at' => now()]);
+        $payload = $this->validPayload();
+
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)->assertUnprocessable()
+            ->assertJsonValidationErrors(['nameservers.0.ipv6', 'nameservers.1.ipv6']);
+        $tasks = EdgeTask::query()->where('type', 'dns_probe')->get();
+        $this->assertCount(2, $tasks);
+        $this->assertSame(['address' => '2001:4860:4860::8888', 'zone' => 'cdnf.test', 'probe_id' => $tasks[0]->payload['probe_id']], $tasks[0]->payload);
+
+        // Asking again while the probe is open does not pile up more tasks.
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)->assertUnprocessable();
+        $this->assertSame(2, EdgeTask::query()->where('type', 'dns_probe')->count());
+
+        foreach ($tasks as $task) {
+            $task->update(['status' => 'succeeded', 'edge_id' => $edge->id]);
+            NameserverAddressProbe::recordResult($task);
+        }
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)->assertOk()->assertJsonPath('data.valid', true);
+    }
+
+    public function test_an_ipv6_address_nothing_answers_on_stays_blocked_and_an_old_answer_expires(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        $payload = $this->validPayload();
+        $response = $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)->assertUnprocessable();
+        $this->assertStringContainsString('no registered edge', $response->json('errors')['nameservers.0.ipv6'][0]);
+        $this->assertSame('failed', NameserverAddressProbe::query()->where('address', '2001:4860:4860::8888')->value('status'));
+
+        $this->answeringIpv6('2001:4860:4860::8888', '2606:4700:4700::1111');
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)->assertOk();
+        $this->travel(NameserverAddressProbe::ANSWER_VALID_HOURS + 1)->hours();
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)->assertUnprocessable();
+    }
+
+    public function test_addresses_already_saved_are_not_probed_again_and_ipv4_only_needs_no_probe(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        PlatformDnsSetting::query()->create(['id' => 1, ...$this->validPayload(), 'revision' => 1]);
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $this->validPayload())->assertJsonMissingValidationErrors('cluster_targets');
+        $this->assertSame(0, NameserverAddressProbe::query()->count());
+
+        $payload = $this->validPayload();
+        $payload['nameservers'] = collect($payload['nameservers'])->map(fn (array $nameserver): array => [...$nameserver, 'ipv6' => null])->all();
+        $payload['customer_nameserver_pairs'] = [$payload['nameservers']];
+        $this->actingAs($admin)->postJson('/api/admin/system/settings/dns/validate', $payload)->assertOk();
+    }
+
+    private function answeringIpv6(string ...$addresses): void
+    {
+        foreach ($addresses as $address) {
+            NameserverAddressProbe::query()->updateOrCreate(['address' => NameserverAddressProbe::canonical($address)], ['zone' => 'cdnf.test', 'status' => 'answering', 'requested_at' => now(), 'answered_at' => now()]);
+        }
+    }
+
     private function validPayload(): array
     {
         return [
@@ -306,7 +416,6 @@ class SystemIdentityApiTest extends TestCase
             'soa_expire' => 1209600,
             'soa_minimum_ttl' => 300,
             'default_ttl' => 300,
-            'cluster_targets' => ['pdns-auth:8081'],
         ];
     }
 }

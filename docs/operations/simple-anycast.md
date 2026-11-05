@@ -5,15 +5,16 @@ description: Operate pool-owned service pairs without giving CDNFoundry control 
 
 # Simple Anycast pools
 
+You will set up a service pool that uses one public IPv4 address, and optionally one IPv6 address, on several edges (PoPs). You need an address pair that your network operator or provider has approved, and at least one enrolled edge with free cell slots. Anycast means several locations share one IP address. The network routes each client to a nearby location.
+
 Simple Anycast lets an approved service pool use one public IPv4 address and
 optional IPv6 address across several explicitly attached edges or POPs. The
 pool owns the pair in PostgreSQL. Each edge endpoint is only a participation,
 readiness, revision, and withdrawal record; it does not duplicate the pair.
 
 ::: danger CDNFoundry is not a BGP controller
-CDNFoundry maps the advertised service identities to operator-provisioned local
-gateway addresses and publishes the service identities in authoritative DNS.
-It never installs FRR or BIRD, stores router credentials,
+CDNFoundry maps the advertised service addresses to local gateway addresses that you provision. It publishes the service addresses in authoritative DNS.
+CDNFoundry never installs FRR or BIRD, stores router credentials,
 runs arbitrary network commands, announces a prefix, or withdraws a BGP route.
 The network operator or provider must approve the prefix and independently
 advertise, steer, withdraw, restore, monitor, and record routing changes.
@@ -21,8 +22,7 @@ advertise, steer, withdraw, restore, monitor, and record routing changes.
 
 ## Provision a pool
 
-The model is deliberately one-to-one: **one distinct Anycast IPv4/optional
-IPv6 pair equals one service pool**. Two different address pairs require two
+One distinct Anycast IPv4 and optional IPv6 pair equals one service pool. Two different address pairs require two
 pools. Choose `shared` for normal CDN traffic. `reserved`, `dedicated`, and
 `quarantine` change workload isolation only; they do not change Anycast routing,
 select edges, or reserve cells automatically.
@@ -33,7 +33,9 @@ chosen number of those slots. More than eight pools may exist, but an eight-slot
 edge can participate in at most eight pools when each uses one cell. Pools that
 do not participate on that edge consume zero slots there.
 
-1. In **Edge network → Service pools**, create a bounded pool and select
+<div class="steps">
+
+1. In **Infrastructure → Service pools**, create a bounded pool and select
    **Simple Anycast**. Creation only saves the disabled pool and address pair.
 2. Enter the approved public IPv4 address and, when routed, IPv6 address. At
    least one family is required. Private, special-purpose, management, existing
@@ -55,6 +57,8 @@ do not participate on that edge consume zero slots there.
    real HTTP/HTTPS traffic from independent external vantage points before
    assigning production domains.
 
+</div>
+
 Routing mode cannot change while a pool is enabled or has endpoints. Withdraw
 and remove endpoint participation first. Pool address edits increment endpoint
 candidates and return them to `pending` until gateways acknowledge the new
@@ -69,7 +73,7 @@ To delete a pool, disable it, move away every domain, and unassign every cell.
 For Geo-Unicast, also withdraw and remove its manual endpoints. The guarded
 **Delete** action then removes the empty pool.
 
-## Signals and failure behavior
+## Check status and failure behavior
 
 `ready` means every attached endpoint is locally ready. `degraded` means at
 least one is ready and at least one attached POP is not. `withdrawn` means the

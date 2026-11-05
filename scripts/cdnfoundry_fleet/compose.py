@@ -134,8 +134,13 @@ def select_services(
     # Tool containers are role-specific and remain behind the tools profile.
     if role == "control" and "migrate" in services:
         selected.add("migrate")
-    if role in {"dns", "dns-edge"} and "pdns-migrate" in services:
+    # The PowerDNS database belongs to the control node's hidden primary; DNS nodes keep none.
+    if role == "control" and "pdns-migrate" in services:
         selected.add("pdns-migrate")
+
+    # ClickHouse's schema migration runs wherever ClickHouse does.
+    if "clickhouse" in selected and "clickhouse-migrate" in services:
+        selected.add("clickhouse-migrate")
 
     # Every monitored production host exports node metrics; only the monitoring host runs the full stack.
     if monitoring_enabled and "node-exporter" in services:

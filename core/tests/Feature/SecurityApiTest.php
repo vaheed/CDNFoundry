@@ -26,7 +26,7 @@ class SecurityApiTest extends TestCase
         Queue::fake();
         [$user, $domain] = $this->ownedDomain();
         $stranger = User::factory()->create();
-        $this->actingAs($stranger)->getJson("/api/domains/{$domain->id}/security")->assertForbidden();
+        $this->actingAs($stranger)->getJson("/api/domains/{$domain->id}/security")->assertNotFound();
         $this->actingAs($user)->getJson("/api/domains/{$domain->id}/security")
             ->assertOk()->assertJsonPath('data.profile', 'standard')->assertJsonPath('data.platform_ceilings.requests_per_second', 100);
 
@@ -164,7 +164,7 @@ class SecurityApiTest extends TestCase
     public function test_pool_maintenance_is_bounded_async_idempotent_and_expires(): void
     {
         $admin = User::factory()->admin()->create();
-        $edge = Edge::query()->create(['name' => 'security-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.10', 'enabled' => true]);
+        $edge = Edge::query()->create(['name' => 'security-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'enabled' => true]);
         $shared = EdgePool::query()->where('kind', 'shared')->firstOrFail();
         $cell = $edge->cells()->create(['slot' => 1, 'edge_pool_id' => $shared->id, 'status' => 'ready']);
         $headers = ['Idempotency-Key' => (string) Str::uuid()];

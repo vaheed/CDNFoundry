@@ -40,7 +40,7 @@ class TelemetryBrowserExportTest extends TestCase
         $domainUrl = route('app.analytics.usage.csv', $domain, false).'?'.$range;
         $adminUrl = route('admin.telemetry.usage.csv', [], false).'?'.$range;
         $this->get($domainUrl)->assertRedirect('/');
-        $this->actingAs($stranger)->get($domainUrl)->assertForbidden();
+        $this->actingAs($stranger)->get($domainUrl)->assertNotFound();
         $domainResponse = $this->actingAs($user)->get($domainUrl)->assertOk()
             ->assertHeader('content-type', 'text/csv; charset=UTF-8');
         $this->assertStringContainsString("usage-domain-{$domain->id}.csv", $domainResponse->headers->get('content-disposition'));

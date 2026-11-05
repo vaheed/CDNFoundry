@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import pathlib
 import re
+import subprocess
 import sys
 import urllib.parse
 import unicodedata
@@ -42,7 +43,6 @@ REQUIRED_PAGES = {
     "development/index.md",
     "contributing/index.md",
     "roadmap.md",
-    "manual-browser-qualification.md",
 }
 LINK = re.compile(
     r"(?<!!)\[[^\]]*\]\((?:<([^>]+)>|([^\s)]+))(?:\s+['\"][^'\"]*['\"])?\)"
@@ -77,7 +77,7 @@ def maintained_documents() -> list[pathlib.Path]:
     documents = [
         path
         for path in DOCS_ROOT.rglob("*.md")
-        if not {"legacy", "node_modules", ".vitepress"}.intersection(
+        if not {"node_modules", ".vitepress"}.intersection(
             path.relative_to(DOCS_ROOT).parts
         )
     ]
@@ -121,7 +121,8 @@ def heading_ids(document: pathlib.Path) -> tuple[set[str], list[tuple[int, str]]
         match = HEADING.match(line)
         if not match:
             continue
-        identifier = slug(match.group(2))
+        explicit = re.search(r"\s*\{#([A-Za-z0-9_-]+)\}\s*$", match.group(2))
+        identifier = explicit.group(1) if explicit else slug(match.group(2))
         if identifier in ids:
             duplicates.append((number, identifier))
         ids.add(identifier)
@@ -290,6 +291,36 @@ def validate_implementation_references(
         if f"`{key}`" not in configuration:
             failures.append(
                 f"docs/reference/configuration.md: missing implementation environment key {key}"
+            )
+
+    documented_keys = set(re.findall(r"(?m)^\|\s*`([A-Z][A-Z0-9_]+)`", configuration))
+    for example in (ROOT / ".env.dev.example", ROOT / ".env.prod.example"):
+        documented_keys.update(
+            re.findall(r"(?m)^([A-Z][A-Z0-9_]*)=", example.read_text(encoding="utf-8"))
+        )
+    excluded = {"docs", "tests", "node_modules", "vendor", ".git"}
+    wiring_sources = []
+    for tracked in subprocess.run(
+        ["git", "ls-files"], cwd=ROOT, check=True, capture_output=True, text=True
+    ).stdout.split():
+        path = ROOT / tracked
+        if (
+            tracked.split("/")[0] in excluded
+            or tracked.startswith("core/tests/")
+            or tracked in {".env.dev.example", ".env.prod.example"}
+            or path.suffix in {".md", ".png", ".json", ".lock", ".mmdb", ".jpg", ".svg"}
+            or not path.is_file()
+        ):
+            continue
+        try:
+            wiring_sources.append(path.read_text(encoding="utf-8"))
+        except UnicodeDecodeError:
+            continue
+    wired = "\n".join(wiring_sources)
+    for key in sorted(documented_keys):
+        if not re.search(rf"\b{key}\b", wired):
+            failures.append(
+                f"documentation: environment key {key} is documented but no code, Compose file, or script reads it"
             )
 
     return len(used_targets), len(referenced_paths), len(environment_keys)

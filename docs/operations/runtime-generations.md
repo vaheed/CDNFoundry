@@ -5,36 +5,52 @@ description: Durable publication, validation, recovery, retention, and rollback 
 
 # Atomic edge runtime generations
 
-The edge agent publishes the gateway and every cell runtime as one immutable
-generation. Laravel still owns desired state and signed artifacts; this local
-layout is derived and can be rebuilt.
+This page explains how an edge agent stores and switches the configuration its gateway and cells serve, and what you do if that storage breaks. You do not need to act in normal operation.
+
+The edge agent publishes the gateway and every cell runtime (an OpenResty cell is one bounded web-serving process group on the edge) as one immutable generation. The control plane (Laravel) still owns desired state and signed artifacts. This local layout is derived and can be rebuilt.
 
 ## On-disk format
 
-`EDGE_RUNTIME_DIR` must be one local Linux filesystem that supports atomic
-rename, symbolic links, and directory `fsync`:
+`EDGE_RUNTIME_DIR` must be on one local Linux filesystem that supports atomic rename, symbolic links, and directory `fsync`. The layout is:
 
 ```text
 runtime/
   generations/
     <revision>-<random-id>/
       manifest.json
-      state.json
+      summary.json
       gateway.json
-      active.json
-      <pool>.json
-      cell-01.json ... cell-32.json
+      cell-01.json ... cell-32.json, cell-01.stamp ... cell-32.stamp
   current -> generations/<active-generation>
   previous -> generations/<rollback-generation>
+agent state (EDGE_STATE_DIR)/
+  state/
+    meta.json                 the applied sequence
+    domains/<domain-id>.json  one verified artifact payload per domain
 ```
 
-Readers use only paths below `current`. The manifest records schema version,
-generation ID, revision, UTC creation time, the exact expected file list, byte
-size and SHA-256 for every file, and an aggregate SHA-256 over the ordered file
-metadata. Missing, extra, symlinked, corrupt, or digest-mismatched files make a
-generation invalid. Published generation directories are never edited.
+A generation holds only compiled runtime: one file per cell (up to 32 cells), the gateway map, and a small summary. The desired state the agent keeps for restart and recovery is not inside it. That state is one file per domain.
 
-## Activation state machine
+A change to one domain rewrites that domain's file and the runtime file of the one cell that serves it. Every other domain file is untouched. Every other cell file is carried over from the previous generation as a hardlink, not rewritten.
+
+Each cell file has a matching `.stamp` file. The stamp is the cell's content identity: a SHA-256 of what the cell serves. The cell file carries it as its `generation_id`, with the sequence at which the content last changed.
+
+A cell polls only its few-byte stamp. It decodes its state, which can be tens of megabytes, only when the stamp changes. An idle cell, or a cell whose content did not change, costs almost no CPU however many domains it serves. A cell that finds no stamp loads the file on every tick.
+
+The agent writes the encrypted recovery snapshot at most once a minute. After a restore it catches up from its stored sequence. A restored state can be older than the last change by at most the time since the last snapshot.
+
+Readers use only paths below `current`. The manifest records:
+
+- the schema version, generation ID, revision, and UTC creation time;
+- the exact expected file list;
+- the byte size and SHA-256 of every file;
+- an aggregate SHA-256 over the ordered file metadata.
+
+A missing, extra, symlinked, corrupt, or digest-mismatched file makes the generation invalid. Nobody edits a published generation directory.
+
+## Activation steps
+
+<div class="steps">
 
 1. The agent downloads and verifies signed control-plane artifacts and compiles
    every gateway, pool, and cell file in a same-filesystem candidate directory.
@@ -49,12 +65,13 @@ generation invalid. Published generation directories are never edited.
    in-memory configuration on any read or validation error, and report the
    loaded generation and revision.
 6. The agent acknowledges success only after durable publication and pointer
-   replacement. Heartbeat readiness remains false if the gateway or a cell
-   reports a different generation.
+   replacement. Heartbeat readiness remains false if the gateway reports a different
+   generation, or a cell reports an identity other than the stamp of its file in
+   the current generation.
 
-Duplicate publication of the active revision is idempotent. A lower revision
-is rejected. Publication keeps five recent generations plus the active and
-rollback generations; cleanup never removes either protected target.
+</div>
+
+Publishing the active revision again changes nothing. The agent rejects a lower revision. Publication keeps five recent generations plus the active and rollback generations. Cleanup never removes either protected target.
 
 ## Crash and power-loss guarantee
 
@@ -78,7 +95,9 @@ Normal rollback verifies every manifest entry and digest, then swaps the
 complete `current` and `previous` generation pointers. It never reconstructs
 files individually. Repeating a completed activation is safe.
 
-If automatic recovery cannot find a valid pointer:
+If automatic recovery cannot find a valid pointer, follow these steps.
+
+<div class="steps">
 
 1. Stop the edge agent but leave gateway and cells running on their in-memory
    last-valid state.
@@ -89,6 +108,8 @@ If automatic recovery cannot find a valid pointer:
    synchronize the runtime filesystem, and restart the agent.
 5. Confirm gateway and all assigned cell status responses show the same
    generation ID and revision before restoring public readiness.
+
+</div>
 
 Structured events distinguish activation start/success/failure, candidate
 validation failure, recovery, reader mismatch, cleanup, and rollback. They

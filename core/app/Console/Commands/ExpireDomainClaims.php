@@ -20,15 +20,13 @@ class ExpireDomainClaims extends Command
     {
         Domain::query()->whereNull('nameservers_verified_at')
             ->whereIn('lifecycle_state', [DomainLifecycleState::PendingVerification, DomainLifecycleState::Disabled])
-            ->where(function ($query): void {
-                $query->where('claim_expires_at', '<=', now())
-                    ->orWhere(fn ($legacy) => $legacy->whereNull('claim_expires_at')->where('created_at', '<=', now()->subDays(7)));
-            })->orderBy('id')->limit(500)->pluck('id')->each(function (int $id): void {
+            ->where('claim_expires_at', '<=', now())
+            ->orderBy('id')->limit(500)->pluck('id')->each(function (int $id): void {
                 DB::transaction(function () use ($id): void {
                     $domain = Domain::query()->lockForUpdate()->find($id);
                     if ($domain === null || $domain->nameservers_verified_at !== null
                         || ! in_array($domain->lifecycle_state, [DomainLifecycleState::PendingVerification, DomainLifecycleState::Disabled], true)
-                        || ($domain->claim_expires_at ?? $domain->created_at->addDays(7))->isFuture()) {
+                        || $domain->claim_expires_at === null || $domain->claim_expires_at->isFuture()) {
                         return;
                     }
                     $domain->forceFill(['lifecycle_state' => DomainLifecycleState::Deprovisioning,

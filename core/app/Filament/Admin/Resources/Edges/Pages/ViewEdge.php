@@ -37,10 +37,21 @@ class ViewEdge extends ViewRecord
         }
     }
 
+    /** Overview and the related tables share one tab row at the top, as on the domain page. */
+    public function hasCombinedRelationManagerTabsWithContent(): bool
+    {
+        return true;
+    }
+
+    public function getContentTabLabel(): ?string
+    {
+        return 'Overview';
+    }
+
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('showEnrollment')
+            Action::make('showEnrollment')->icon('phosphor-terminal-window')
                 ->label('Enrollment instructions')
                 ->visible(fn (): bool => filled($this->bootstrapToken))
                 ->modalHeading('Enroll this edge')
@@ -80,7 +91,7 @@ class ViewEdge extends ViewRecord
     {
         return Action::make('rotateIdentity')
             ->label('Rotate identity')
-            ->icon('heroicon-o-arrow-path')
+            ->icon('phosphor-arrows-clockwise')
             ->color('danger')
             ->modalHeading('Rotate this edge identity?')
             ->modalDescription('The current mTLS certificate is revoked immediately. Existing runtime traffic can continue with its last valid configuration, but heartbeats and configuration updates stop until the agent enrolls again.')
@@ -103,6 +114,11 @@ class ViewEdge extends ViewRecord
                         'identity_certificate' => null,
                         'identity_certificate_serial' => null,
                         'identity_certificate_expires_at' => null,
+                        'pending_identity_certificate' => null,
+                        'pending_identity_certificate_serial' => null,
+                        'pending_identity_certificate_expires_at' => null,
+                        'pending_identity_csr_hash' => null,
+                        'reported_identity_expires_at' => null,
                         'identity_revoked_at' => now(),
                         'bootstrap_token_hash' => hash('sha256', $token),
                         'bootstrap_consumed_at' => null,
@@ -119,8 +135,8 @@ class ViewEdge extends ViewRecord
                 ]);
             })
             ->registerModalActions([
-                Action::make('showRotatedIdentity')
-                    ->modalHeading('Identity rotated — re-enroll this edge now')
+                Action::make('showRotatedIdentity')->icon('phosphor-key')
+                    ->modalHeading('Identity rotated. Re-enroll this edge now')
                     ->modalDescription('The old certificate is revoked. Complete these steps before leaving this modal; the replacement token is shown only once.')
                     ->modalContent(function (array $arguments) {
                         return view('filament.admin.resources.edges.enrollment-instructions', [

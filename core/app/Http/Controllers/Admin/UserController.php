@@ -43,6 +43,9 @@ class UserController extends Controller
     {
         abort_if($user->is($request->user()) && $request->input('type') === 'user', 422, 'You cannot remove your own administrator access.');
         $user->update($request->validated());
+        if ($request->filled('password')) {
+            $user->tokens()->delete();
+        }
         AuditLog::record($request->user(), 'user.updated', $user, ['fields' => array_keys($request->validated())], $request->ip());
 
         return UserResource::make($user->refresh());

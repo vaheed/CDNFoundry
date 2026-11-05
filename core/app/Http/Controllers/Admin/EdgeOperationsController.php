@@ -70,17 +70,20 @@ class EdgeOperationsController extends Controller
                 $cell->update(['drained' => $action === 'drain', ...($action === 'undrain' ? ['status' => $cell->edge_pool_id === null ? 'unassigned' : 'assigned'] : [])]);
             }
             $task = EdgeTask::query()->where('edge_id', $cell->edge_id)->where('type', 'cell_'.$action)
-                ->where('status', 'pending')->where('payload->cell_id', $cell->id)->first()
-                ?? EdgeTask::query()->create(['id' => (string) Str::uuid(), 'edge_id' => $cell->edge_id, 'type' => 'cell_'.$action, 'status' => 'pending', 'payload' => ['cell_id' => $cell->id, 'cell_name' => $cell->name]]);
+                ->where('status', 'pending')->where('payload->cell_id', $cell->id)->first();
+            if ($task === null) {
+                $operation = Operation::receipt('edge.cell_'.$action, ['cell_id' => $cell->id, 'edge_id' => $cell->edge_id], $request->user()->id);
+                $task = EdgeTask::query()->create(['id' => (string) Str::uuid(), 'edge_id' => $cell->edge_id, 'type' => 'cell_'.$action, 'status' => 'pending', 'payload' => ['cell_id' => $cell->id, 'cell_name' => $cell->name, 'operation_id' => $operation->id]]);
+            }
             AuditLog::record($request->user(), 'edge.cell_'.$action, $cell, ['task_id' => $task->id], $request->ip());
 
             return $task;
         });
         if ($action !== 'restart') {
-            ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
+            ReconcilePlatformDnsIdentity::dispatchForRoutingChange($request->user()->id);
         }
 
-        return response()->json(['data' => ['task_id' => $task->id, 'status' => 'pending']], 202);
+        return response()->json(['data' => ['task_id' => $task->id, 'status' => 'pending', 'operation_id' => $task->payload['operation_id'] ?? null]], 202);
     }
 
     public function drainCell(Request $request, EdgeCell $cell): JsonResponse

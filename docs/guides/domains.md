@@ -1,164 +1,218 @@
 ---
-title: Domain lifecycle
-description: Create, verify, activate, disable, deprovision, and re-create domains safely.
+title: Domains
+description: Add a domain, point its nameservers at CDNFoundry, activate it, and retire it, with the checks and fixes for each step.
 ---
 
-# Domain lifecycle
+# Domains
 
-| Concern | Implemented boundary |
-| --- | --- |
-| Durable owner | PostgreSQL domain, deployment, and tombstone rows |
-| External work | NS verification, DNS reconciliation, edge deployment |
-| Completion | Operation plus target-specific acknowledgement |
-| Failure | Preserve last-valid runtime and expose the failed target |
-| Retirement | Delayed deprovision, acknowledged tombstones, reclaim cooldown |
+<Screenshot name="app-domains" alt="The Domains list in the domain panel, showing the domains assigned to the signed-in user." />
+
+A domain is the unit you own and manage: its DNS records, proxied hostnames,
+certificates, and settings all belong to it. This page shows how to add one,
+prove you control it, turn it on, and remove it.
+
+**You need:** a domain name, and access to the registrar (or the parent zone, for
+a subdomain) where its nameservers are set.
+
+## The steps
 
 ```mermaid
-sequenceDiagram
-    box User boundary
-      participant User
-    end
-    box Control plane
-      participant CP as Control plane
-    end
-    box Runtime and DNS
-      participant PublicDNS as Public DNS
-      participant Targets as DNS and edge targets
-    end
-    User->>CP: Create domain
-    CP-->>User: pending_verification + revision
-    CP->>Targets: Publish initial SOA/NS zone
-    Targets-->>CP: Per-target acknowledgement
-    CP->>PublicDNS: Resolve exact NS set
-    PublicDNS-->>CP: Delegation result
-    User->>CP: Retry verification if propagation was incomplete
-    User->>CP: Activate
-    CP->>Targets: Reconcile desired revision
-    Targets-->>CP: Per-target acknowledgement
+flowchart LR
+    A["Create"] --> B["Pending verification"]
+    B -->|"Set the two nameservers at your registrar"| C["Verified"]
+    C -->|"Activate"| D["Active"]
+    D -->|"Disable"| E["Disabled"]
+    E -->|"Delete"| F["Retiring, then free to reclaim"]
 ```
 
-::: warning Form save is not runtime activation
-Inspect domain status, the operation receipt, and DNS/edge deployment state
-before declaring a lifecycle change complete.
+Saving a change is not the same as the change being live. After each step, open
+the domain's operation and check that DNS and the PoPs report the new revision.
+See [Revisions and operations](../concepts/revisions-and-operations.md).
+
+## 1. Create the domain
+
+<DocTabs :labels="['Panel', 'API']">
+<template #tab-1>
+
+Open **Domains**, choose **Add domain**, enter the name, and save.
+
+</template>
+<template #tab-2>
+
+```sh
+curl -X POST "$CDNF_URL/api/domains" \
+  -H "Authorization: Bearer $CDNF_TOKEN" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "example.com"}'
+```
+
+The reply is `202 Accepted` with an operation ID.
+
+</template>
+</DocTabs>
+
+**Expected result:** the domain appears as *Pending verification*, you are its
+owner, and it needs no origin or certificate yet.
+
+The name is normalized as an internationalized name (IDNA, so `münchen.de`
+becomes its Punycode form) and checked against the Public Suffix List.
+Platform and management names are reserved. Delegated subdomains and reverse
+zones are allowed.
+
+**If it fails:** a name that is already active or disabled for another user is a
+duplicate. You can still claim it, as described in
+[Competing claims](#competing-claims-and-takeover).
+
+## 2. Set the nameservers
+
+A worker gives your claim a pair of nameservers from the platform's pool. They
+appear as **Assigned nameservers** on the domain page, and as
+`assigned_nameservers` in the API. At the registrar, or in the parent zone for a
+subdomain, set exactly those two names and no others.
+
+<DocTabs :labels="['Panel', 'API']">
+<template #tab-1>
+
+Open the domain, copy the two assigned nameservers, and set them at your
+registrar. Then choose **Verify nameservers**.
+
+</template>
+<template #tab-2>
+
+```sh
+curl "$CDNF_URL/api/domains/$DOMAIN_ID/status" -H "Authorization: Bearer $CDNF_TOKEN"
+curl -X POST "$CDNF_URL/api/domains/$DOMAIN_ID/verify-nameservers" \
+  -H "Authorization: Bearer $CDNF_TOKEN" -H "Idempotency-Key: $(uuidgen)"
+```
+
+</template>
+</DocTabs>
+
+**Expected result:** the claim status becomes `owner` and the domain is
+*Verified*. The status can be:
+
+| `claim_status` | Meaning |
+| --- | --- |
+| `awaiting_assignment` | No nameserver pair is assigned yet |
+| `pending_delegation` | Waiting for you to set the nameservers |
+| `owner` | Verified, you own the name |
+| `expired` | The seven-day claim ran out |
+| `superseded` | Another claim took the name |
+
+There is no TXT challenge and no random label. The nameserver names are ordinary
+hostnames with A and AAAA records.
+
+**If it does not verify:**
+
+1. Ask the parent zone directly, for example
+   `dig NS example.com @<a parent nameserver>`. It must return exactly your two names.
+2. Remove old DS records left from a previous DNS provider. CDNFoundry zones are not signed.
+3. Wait for propagation, then verify again. Partial propagation never verifies.
+
+Pending zones serve only SOA and NS records. A pending subdomain of a zone that
+CDNFoundry already hosts is not published, so it cannot hide the parent's records.
+
+### Limits
+
+- One claim per name for each user, and at most 20 unverified claims per user.
+- An unverified claim expires after seven days, even if you disable it. A
+  verified owner never expires.
+- The scheduler retires at most 500 expired claims a minute.
+- One verification attempt has a 45-second DNS budget and a 60-second timeout.
+
+## 3. Activate
+
+<DocTabs :labels="['Panel', 'API']">
+<template #tab-1>
+
+Open the verified domain and choose **Activate**.
+
+</template>
+<template #tab-2>
+
+```sh
+curl -X POST "$CDNF_URL/api/domains/$DOMAIN_ID/activate" \
+  -H "Authorization: Bearer $CDNF_TOKEN" -H "Idempotency-Key: $(uuidgen)"
+```
+
+</template>
+</DocTabs>
+
+**Expected result:** the domain is *Active*. DNS and PoP work continues in the
+background.
+
+**Check it worked:** query each authoritative server over UDP and TCP and compare
+the SOA serials: `dig @<DNS host> example.com SOA`.
+
+**If it fails:** activation needs verified nameservers and at least one enabled,
+healthy DNS cluster. Fix those, then activate again.
+
+## Disable and delete
+
+**Disable** keeps the last valid DNS and edge state for the window set by
+`dns_lifecycle.deprovision_delay_days`. After that, the scheduler removes the
+zone in bounded steps and retires the domain.
+
+**Delete** starts retirement in the background. It does not remove the row at
+once. Each PoP must acknowledge its tombstone first, and the name then stays
+reserved for `domain_reclaim_cooldown_days` before anyone can reclaim it.
+
+::: warning Never remove runtime files by hand
+Do not delete PowerDNS zones, edge files, or cache directories to retire a
+domain. Use disable and delete.
 :::
 
-## Create
+## Competing claims and takeover
 
-`POST /api/domains` and the domain create form accept `name`. The API has a
-separate display-label update. Names are normalized consistently using UTS #46
-IDNA and a pinned complete Public Suffix List (ICANN and PRIVATE sections),
-including wildcard and exception rules. Delegated subdomains and reverse zones
-remain supported; platform and management namespaces are reserved. API and
-Filament creation share a transaction and PostgreSQL name lock with finalization.
-The active-name unique index remains the final duplicate guard.
+Asking first does not give you a name. Delegating it does.
 
-Creation:
+- Anyone can claim a name that another user holds. The new claim gets its own
+  nameserver pair, so a delegation left by the old owner can never verify it.
+- While the claim is pending, the holder keeps full access and keeps serving. The
+  holder never learns who asked. The applicant sees only their own claim, and
+  the claim publishes no zone.
+- A claim verifies only when the parent delegation equals its pair exactly. Only
+  whoever controls the registrar can set that.
+- When it verifies, the claimant takes the name in one locked step. The previous
+  holder loses access. Their records, origins, and certificates do not move to
+  the new owner. The audit log records `domain.taken_over`.
+- A claim that expired, was cancelled, failed, or was superseded never changes
+  ownership.
 
-- assigns the creating domain user;
-- starts at `pending_verification`;
-- creates the initial revision;
-- queues initial DNS reconciliation and then public nameserver verification;
-- does not require an origin or certificate.
+If no free pair is left, verification fails with `nameserver_pairs_unavailable`.
+Ask an administrator to add a pair or retire a stale claim.
 
-## Verify
+## For administrators
 
-Creation assigns a random nameserver prefix, a seven-day pending-claim deadline
-and the creating user's assignment. Read **Assigned nameservers** on the domain
-page or `assigned_nameservers` in the API response. At the registrar (or parent
-zone for delegated children), set exactly these names. There is no customer TXT
-challenge. The assignment resolves to the existing bounded DNS hosts through
-platform wildcard A/AAAA records; no per-domain DNS process is created.
+### Nameserver pairs
 
-The worker uses BIND `delv` with its root trust anchor to validate parent discovery
-and DS absence, then bounded nonrecursive `dig` queries to parent authorities.
-Every parent must return the same exact delegation. Child-zone answers, shared
-platform nameservers, stale previous assignments, DNSSEC failures and partial
-propagation cannot activate a new claim. The unsigned runtime requires removing
-stale DS records from a previous provider. The worker has a 45-second DNS budget,
-a 60-second job timeout, at most 16 parent authorities and four addresses per
-parent, and a 64-KiB process-output limit. DNS errors remain visible failures;
-retry after correcting DNS or propagation.
+Set the pool under **System DNS identity → Customer
+nameserver pairs**, or with `customer_nameserver_pairs` in the identity API. Use
+one to eight pairs. Each pair is two different hostnames inside the platform
+domain, with a public IPv4 address and optionally an IPv6 address. Offer at
+least two pairs, because every competing claim needs a pair different from the
+current delegation. A pair is reserved only when it is not the current
+delegation, no other live claim holds it, and every enabled DNS cluster already
+publishes it.
 
-Pending zones serve only SOA/NS bootstrap records. A pending child of an already
-managed zone is not published, so it cannot shadow the parent's DNS records.
-Verification completes before that child is activated. ACME DNS-01 remains
-separate and is used only for eligible proxied hostnames after verification.
+### Disputes
 
-Requests coalesce through the same API/Filament verification boundary. Completion
-rechecks the actor, assignment, operation, claim and lifecycle under database
-locks. Disabled, deprovisioning, expired, cancelled or revoked work cannot activate.
-The explicit administrator force-verification route remains audited; it is an
-operator override, not evidence that public delegation was checked.
+Add a pair, expire stale claims with `cdnf:domains:expire-claims`,
+or delete a claim. An administrator cannot move ownership, except with the
+audited force-verify action. Force-verify is an override. It is not evidence
+that public delegation was checked.
 
-Each domain user may hold at most 20 unverified claims, including disabled or
-retiring claims. Administrator bulk operations remain separately authorized.
-An unverified claim expires after seven days even if the applicant disables it. The scheduler retires at most
-500 expired claims per minute through normal asynchronous deprovisioning and
-reclaim cooldown. Verified owners never expire on this deadline. For disputes,
-an administrator must inspect independent registrar/parent evidence and audit
-any deliberate assignment or override; a competing applicant cannot replace a
-verified configuration. Do not bypass cooldown or delete tombstones to recover
-a claim. Following retirement and cooldown, create a fresh claim with different
-nameservers. Repeated squatting or disputed registrar evidence requires operator
-review; automatic ownership transfer is not supported.
+### Backups
 
-## Activate
+Keep the `delegation_nameservers` and `delegation_token` columns and
+`platform_dns_settings.customer_nameserver_pairs` in your backups. Before you
+onboard customers, deploy the platform zone and confirm every DNS host answers
+for each pair hostname.
 
-Activation requires verified nameservers and changes lifecycle state to
-`active`. DNS and edge work remain asynchronous. Use the domain status, DNS
-deployment, and edge deployment endpoints to confirm acknowledgement.
+### Public Suffix List
 
-## Disable
-
-Disable stops new desired changes from representing an active customer service,
-but retains last-valid runtime state for the `dns_lifecycle.deprovision_delay_days`
-window. The scheduler then dispatches bounded DNS deprovisioning and final
-domain retirement.
-
-## Delete and reclaim
-
-`DELETE /api/domains/{domain}` starts asynchronous retirement; it is not an
-immediate row removal. Edge tombstones must be acknowledged before finalization.
-The name is then held in `domain_name_tombstones` for
-`domain_reclaim_cooldown_days`.
-
-Never delete PowerDNS zones, edge files, or cache directories as a substitute
-for this lifecycle.
-
-## Operational proof
-
-After activation, query every authoritative target over UDP and TCP and compare
-SOA serials. Before retirement, confirm tombstones are acknowledged and the
-cooldown is visible. Repair or deliberately withdraw a failed target instead
-of deleting durable state.
-
-## Upgrade and recovery for claim assignments
-
-Before upgrading, drain or stop old runtime workers so older verification code
-cannot process pending claims. Apply the additive
-`2026_09_05_160000_add_domain_delegation_claims` migration explicitly, deploy the
-new control/worker image (including `bind-tools`), and resume workers. Reconcile
-platform identity and verify wildcard nameserver A/AAAA answers on every DNS
-host before onboarding new customers. Existing verified zones retain their
-nameservers and assignments. Existing pending claims receive a fresh assignment
-when **Verify nameservers** is requested again; old unverified claims older than
-seven days retire under the expiry rule.
-If an older installation already has `delegation_nameservers` as JSON but lacks
-the migration receipt, the migration preserves its values, converts the column
-to JSONB, and adds only missing claim fields. The conversion bounds lock wait
-to five seconds and execution to 30 seconds; a timeout leaves the transaction
-unapplied for a later explicit retry. Check migration status before resuming
-workers.
-
-The new nullable columns are recovery evidence. Preserve them in backups and
-retain platform wildcard records during rollback. Do not roll back to code that
-accepts shared delegation for new claims; use a forward fix and suspend new
-claim verification if necessary. No migration is automatically applied by web
-requests or image startup. Production/public registrar qualification remains a
-separate gate recorded in the [production qualification](../operations/production-qualification.md).
-
-The packaged PSL snapshot and its upstream commit/checksum are in
-`core/resources/data/public_suffix_list.*`. Update both from the official
-[Public Suffix List](https://publicsuffix.org/list/), retain its MPL notice, and
-run normalization regressions before release; workers never download it at
-request time.
+A snapshot ships in `core/resources/data/public_suffix_list.*`.
+Workers never download it at request time. To update it, replace both files from the
+official [Public Suffix List](https://publicsuffix.org/list/), keep its MPL notice,
+and run the normalization tests before release.

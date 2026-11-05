@@ -1,9 +1,13 @@
 ---
 title: Edges and placement
-description: Create edge pools and hosts, enroll agents, manage cells, and move domains safely.
+description: Create pools and edges, enroll the edge agent, assign cells, and move domains between pools without downtime.
 ---
 
 # Edges and placement
+
+<Screenshot name="admin-edges" alt="The Edges list in the admin panel, showing each PoP with its status, location, heartbeat, and version drift." />
+
+An edge is one point of presence (PoP): a host that serves traffic through bounded cells (OpenResty containers). This page shows how an administrator creates pools and edges, enrolls the edge agent, and moves domains. **You need:** administrator access and a host installed by Fleet.
 
 | Concern | Durable/runtime boundary |
 | --- | --- |
@@ -40,7 +44,7 @@ identity, or rotate the edge and enroll again.
 
 ## Pools
 
-Administrators create `shared`, `quarantine`, or `dedicated` pools. Pool names
+Administrators create `shared`, `reserved`, `quarantine`, or `dedicated` pools. Pool names
 become stable runtime names and cannot change after cells are provisioned.
 Enabling a pool asynchronously provisions one cell per eligible edge in bounded
 batches. Disabling removes it from new placement decisions without inventing a
@@ -52,19 +56,15 @@ override that repeats the bounded cell shape with unique ports and volumes.
 
 ## Edge rows
 
-Create an edge with:
+Create an edge in the admin panel (**Edges**) or with `POST /api/admin/edges`. You give it:
 
-- unique name;
-- ISO country code and continent code;
-- optional unique management IPv4;
-- optional unique management IPv6.
+- a unique name;
+- an ISO country code and a continent code.
 
-Management addresses may be private. They are operator inventory and are not
-used by the edge-control connection or bound by the customer gateway. The
-agent initiates control traffic outbound to `EDGE_CONTROL_URL`.
+Edges have no host addresses. Fleet knows where a host is. The control plane only knows the public service endpoints of pools. The agent opens control connections outbound to `EDGE_CONTROL_URL`. Every edge has eight cell slots, which the panel shows as fixed. Fleet can do the whole setup for you:
+`cdnfoundry-fleet bootstrap --node NAME --country DE --continent EU`.
 
-The create response exposes an edge UUID and bootstrap token once. Store them
-only long enough to enroll the agent.
+**Expected result:** the response shows an edge UUID and a bootstrap token once. Store them only until the agent enrolls. If you lose the token, rotate the identity (`POST /api/admin/edges/{edge}/rotate-identity`) to get a new one.
 
 ## Pool service endpoints
 
@@ -107,6 +107,33 @@ Start the role explicitly with
 not inspect enrollment state or edit `.env.prod`. Always keep the agent state
 volume.
 
+## Identity renewal
+
+Edge identity certificates last `EDGE_IDENTITY_VALIDITY_DAYS` (default 365). At
+two thirds of that lifetime the agent generates a new key, asks
+`POST /edge/v1/identity/renew` over mTLS for a certificate, and authenticates
+once with it. Until then control accepts both the old and the new certificate;
+the first successful use makes the new one current and the old one invalid. The
+agent stores the new identity only after that proof, resumes an unfinished
+renewal after a restart, and retries a failed one every 10 minutes. The
+heartbeat reports the expiry of the certificate in use, and
+`EdgeIdentityCertificateExpiring` fires 30 days before it if renewal keeps
+failing. A PoP whose certificate has already expired needs a new bootstrap
+token.
+
+## Promotion by quorum
+
+A new placement is promoted when the healthy participating PoPs have
+acknowledged it. `edge_runtime.promotion_quorum_percent` (default 100) is the
+share of healthy participants that must acknowledge, and at least one always
+must. A participant that has not acknowledged within
+`edge_runtime.promotion_grace_seconds` (default 120) is lagging: it stops
+counting, keeps its own cursor, and catches up without blocking the pool.
+`cdnf:edge:promote-placements` walks every deploying placement each minute in
+chunks, so a backlog of stuck placements cannot hide newer ones.
+
+Automatic placement chooses only enabled, non-withdrawn pools of kind `shared`. Only an administrator moves a domain to a `quarantine`, `reserved`, or `dedicated` pool, and it stays there until an administrator moves it again. A proxied name is published in the zone before its placement is active. It follows the default shared pool until the placement is promoted, so MX, TXT, and every other record resolve right after activation.
+
 ## Drain and movement
 
 Draining an edge or cell makes it ineligible for new publication and queues the
@@ -115,6 +142,26 @@ acknowledges the current revision there, updates DNS, waits
 `edge_runtime.placement_drain_seconds`, then completes source drain.
 
 Never delete the active source before the target is ready.
+
+## A bad artifact affects one domain
+
+The agent verifies and applies artifacts per domain. An artifact that fails
+verification, schema checks, replay checks, or compilation is rejected and
+skipped: the domain keeps its previous state, the cursor moves past it, and the
+agent reports the rejection for that domain only. Every other domain in the
+same batch still updates. If a batch fails only when its artifacts are combined
+(for example two domains claim one hostname), the agent halves the batch until
+the conflicting artifact stands alone and rejects only that one.
+
+A failure that is not about the artifact (a full disk, an unreachable control
+plane, a missing certificate key) rejects nothing. The sync fails, keeps the
+previous state, and retries. The same rules apply to a full recovery snapshot,
+so a new PoP serves every domain that compiles. Rejections are sent before the
+applied sequence. The control plane marks that domain's placement failed, shows
+the latest rejection on the edge, and clears it when the domain's next artifact
+is acknowledged. The reason list is one file shared by the agent and the control
+plane (`rejection_reasons.json`), and a refused acknowledgement is dropped
+instead of holding back the later ones.
 
 ## Recovery
 

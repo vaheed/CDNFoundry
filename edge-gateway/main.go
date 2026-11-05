@@ -24,7 +24,7 @@ import (
 	"time"
 )
 
-var version = "1.2.1"
+var version = "2.0.0"
 
 var logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
@@ -41,12 +41,15 @@ type route struct {
 	Hostname string `json:"hostname"`
 	HTTP     string `json:"http"`
 	HTTPS    string `json:"https"`
+	// TLSHandshakesPerSecond is the per-client-prefix budget of new TLS connections for this host.
+	TLSHandshakesPerSecond int `json:"tls_handshakes_per_second"`
 }
 
 type routingTable struct {
 	revision     uint64
 	generationID string
 	routes       map[string]string
+	tlsBudgets   map[string]int
 }
 
 type gateway struct {
@@ -68,6 +71,11 @@ type gateway struct {
 	listeners                   map[string]net.Listener
 	listen                      func(network, address string) (net.Listener, error)
 	slots                       chan struct{}
+	perSource                   *sourceLimiter
+	handshakes                  *handshakeLimiter
+	clock                       func() time.Time
+	idleTimeout                 time.Duration
+	halfCloseTimeout            time.Duration
 }
 
 func main() {
@@ -81,6 +89,11 @@ func main() {
 		metrics:    env("GATEWAY_METRICS_ADDRESS", "127.0.0.1:9105"),
 		listeners:  map[string]net.Listener{},
 		slots:      make(chan struct{}, boundedIntegerEnv("GATEWAY_MAX_CONNECTIONS", 8192, 128, 65536)),
+		// One source may hold only a fraction of the slots, and a silent connection frees its slot.
+		handshakes:       newHandshakeLimiter(),
+		perSource:        newSourceLimiter(boundedIntegerEnv("GATEWAY_MAX_CONNECTIONS_PER_ADDRESS", 256, 1, 65536)),
+		idleTimeout:      time.Duration(boundedIntegerEnv("GATEWAY_IDLE_TIMEOUT_SECONDS", 120, 5, 3600)) * time.Second,
+		halfCloseTimeout: time.Duration(boundedIntegerEnv("GATEWAY_HALF_CLOSE_TIMEOUT_SECONDS", 30, 1, 600)) * time.Second,
 	}
 	if err := os.MkdirAll(g.stateDir, 0700); err != nil {
 		fatal(err)
@@ -235,11 +248,18 @@ func validate(candidate config) (*routingTable, error) {
 		listeners[raw] = true
 	}
 	routes := make(map[string]string, len(candidate.Routes)*2)
+	tlsBudgets := make(map[string]int, len(candidate.Routes))
 	for _, item := range candidate.Routes {
 		ip := net.ParseIP(item.Address)
 		host := canonicalHostname(item.Hostname)
 		if ip == nil || host == "" {
 			return nil, errors.New("invalid gateway route identity")
+		}
+		if item.TLSHandshakesPerSecond < 0 || item.TLSHandshakesPerSecond > 1000 {
+			return nil, errors.New("invalid gateway TLS handshake budget")
+		}
+		if item.TLSHandshakesPerSecond > 0 {
+			tlsBudgets[host] = item.TLSHandshakesPerSecond
 		}
 		for protocol, target := range map[string]string{"http": item.HTTP, "https": item.HTTPS} {
 			if target == "" {
@@ -267,13 +287,10 @@ func validate(candidate config) (*routingTable, error) {
 			routes[key] = target
 		}
 	}
-	if candidate.GenerationID == "" {
-		candidate.GenerationID = fmt.Sprintf("legacy-%020d", candidate.Revision)
-	}
 	if len(candidate.GenerationID) < 22 || len(candidate.GenerationID) > 64 {
 		return nil, errors.New("invalid gateway generation identity")
 	}
-	return &routingTable{revision: candidate.Revision, generationID: candidate.GenerationID, routes: routes}, nil
+	return &routingTable{revision: candidate.Revision, generationID: candidate.GenerationID, routes: routes, tlsBudgets: tlsBudgets}, nil
 }
 
 func (g *gateway) prepareListeners(desired []string) (func(), func(), error) {
@@ -346,10 +363,25 @@ func (g *gateway) accept(address string, listener net.Listener) {
 				continue
 			}
 		}
+		var source string
+		if g.perSource != nil {
+			source = sourceKey(connection.RemoteAddr())
+			if !g.perSource.acquire(source) {
+				g.rejected.Add(1)
+				if g.slots != nil {
+					<-g.slots
+				}
+				_ = connection.Close()
+				continue
+			}
+		}
 		g.active.Add(1)
 		go func() {
 			if g.slots != nil {
 				defer func() { <-g.slots }()
+			}
+			if g.perSource != nil {
+				defer g.perSource.release(source)
 			}
 			defer g.active.Add(-1)
 			defer connection.Close()
@@ -387,6 +419,20 @@ func (g *gateway) handle(listener string, client net.Conn) error {
 		g.rejected.Add(1)
 		return errors.New("unknown gateway route")
 	}
+	if protocol == "https" && g.handshakes != nil {
+		budget := table.tlsBudgets[name]
+		if budget == 0 {
+			budget = defaultTLSHandshakeBudget
+		}
+		now := time.Now
+		if g.clock != nil {
+			now = g.clock
+		}
+		if !g.handshakes.allow(sourceKey(client.RemoteAddr())+"|"+name, budget, now()) {
+			g.rejected.Add(1)
+			return errors.New("TLS handshake budget exceeded")
+		}
+	}
 	upstream, err := net.DialTimeout("tcp", target, 3*time.Second)
 	if err != nil {
 		g.errors.Add(1)
@@ -405,13 +451,14 @@ func (g *gateway) handle(listener string, client net.Conn) error {
 	g.accepted.Add(1)
 	_ = client.SetDeadline(time.Time{})
 	_ = upstream.SetDeadline(time.Time{})
-	done := make(chan struct{}, 1)
-	go func() { _, _ = io.Copy(upstream, client); _ = upstream.(*net.TCPConn).CloseWrite(); done <- struct{}{} }()
-	_, _ = io.Copy(client, upstream)
-	if tcp, ok := client.(*net.TCPConn); ok {
-		_ = tcp.CloseWrite()
+	idle, halfClose := g.idleTimeout, g.halfCloseTimeout
+	if idle <= 0 {
+		idle = 2 * time.Minute
 	}
-	<-done
+	if halfClose <= 0 {
+		halfClose = 30 * time.Second
+	}
+	relay(client, upstream, idle, halfClose)
 	return nil
 }
 
@@ -436,6 +483,10 @@ func readHTTP(connection net.Conn) (string, []byte, error) {
 			if host == "" {
 				return "", nil, errors.New("missing Host")
 			}
+			// The reader may already hold the start of the body or a pipelined
+			// request. Forward those bytes too, or the connection stalls.
+			buffered, _ := reader.Peek(reader.Buffered())
+			buffer.Write(buffered)
 			return host, buffer.Bytes(), nil
 		}
 		name, value, found := strings.Cut(strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r"), ":")
@@ -629,12 +680,34 @@ func (g *gateway) close() {
 	}
 }
 
+// atomicWrite replaces a file with content that has reached the disk: it syncs the content before
+// the rename and the directory after it, so a power loss leaves the old state or the new, never an
+// empty file.
 func atomicWrite(path string, data []byte) error {
 	temp := path + ".tmp"
-	if err := os.WriteFile(temp, data, 0600); err != nil {
+	_ = os.Remove(temp)
+	file, err := os.OpenFile(temp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
 		return err
 	}
-	return os.Rename(temp, path)
+	if _, err = file.Write(data); err == nil {
+		err = file.Sync()
+	}
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	if err := os.Rename(temp, path); err != nil {
+		return err
+	}
+	directory, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	return directory.Sync()
 }
 
 func boolNumber(value bool) uint64 {

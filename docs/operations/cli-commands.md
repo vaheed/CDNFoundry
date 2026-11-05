@@ -11,8 +11,7 @@ environment file, host role, and database endpoint. Never paste secrets into
 command arguments or run maintenance commands against an assumed context.
 :::
 
-Run commands from the Laravel application directory, or through the repository's
-`core` Docker Compose service. List only CDNFoundry commands with:
+These are the Artisan commands CDNFoundry adds. Most run by themselves on the scheduler. You run the others by hand. Run commands from the Laravel application directory, or through the repository's `core` Docker Compose service. List only CDNFoundry commands with:
 
 ```sh
 php artisan list cdnf
@@ -62,18 +61,37 @@ docker compose -f compose.dev.yml run --rm core php artisan cdnf:api:openapi --c
 | Command and syntax | Purpose and effects | Scheduled |
 | --- | --- | --- |
 | `cdnf:backups:create {--wait}` | Creates backup and operation records, then queues an encrypted PostgreSQL Restic backup. `--wait` executes the job in the foreground and waits for repository acknowledgement. Fails if the repository is not configured. | Daily at 01:30 when configured |
-| `cdnf:backups:restore {operation}` | Restores the backup approved by a successful restore-preflight operation. This is destructive, requires the explicit restore maintenance boundary, runs migrations, queues reconciliation, and leaves maintenance mode active if recovery fails. | No |
+| `cdnf:backups:maintain {task}` | `prune` forgets snapshots beyond the retention window (14 daily, 8 weekly, 6 monthly by default) and reclaims their space; `check` runs `restic check` on the repository. Each queues an operation. Fails if the repository is not configured. | `prune` daily at 04:10, `check` Sundays at 05:00, when configured |
+| `cdnf:backups:restore {operation?} {--snapshot=}` | Restores a control backup. Give the UUID of a successful restore-preflight operation, or `--snapshot=<Restic snapshot ID>` to restore into an empty database on a fresh node (not both). Destructive. Refuses to run unless `BACKUP_RESTORE_ALLOWED=true` is set in that one container. Enters maintenance mode, runs migrations, queues reconciliation, and leaves maintenance mode active if recovery fails. | No |
 
 ```sh
 docker compose --env-file .env.prod -f compose.prod.yml exec core php artisan cdnf:backups:create --wait
 docker compose --env-file .env.prod -f compose.prod.yml exec core php artisan cdnf:backups:restore 6f9619ff-8b86-d011-b42d-00c04fc964ff
 ```
 
+## Control plane high availability
+
+These commands serve the optional two-node control plane. The operator normally
+runs them through `cdnfoundry-fleet control ...` (see
+[Control-plane high availability](./control-plane-high-availability.md)), not by hand.
+
+| Command and syntax | Purpose and effects | Scheduled |
+| --- | --- | --- |
+| `cdnf:control:guard` | Exits non-zero unless this node may run application services: PostgreSQL is the writable primary, this node is the recorded active node, and no reachable peer reports a higher epoch. The `horizon` and `scheduler` containers run it before starting. | At container start |
+| `cdnf:control:enforce` | Asks Horizon to terminate when this node has been replaced, so the restart fails the start guard. | Every minute |
+| `cdnf:control:observe` | On the active node, records whether the standby is streaming PostgreSQL, its replay lag, and whether the Valkey replica is linked. Skips on a single node. | Every minute |
+| `cdnf:control:status` | Prints `ha` (`none`, `ready`, or `degraded`), the reasons, the epoch, the address list, and the fencing state as JSON. | No |
+| `cdnf:edges:enroll {name} {--country=} {--continent=} {--ipv4=} {--ipv6=}` | Registers a PoP, assigns every cell slot to the default shared pool, optionally adds its public service addresses, and prints its edge ID, pool ID, endpoint ID, and one-time bootstrap token as JSON. Needs valid country and continent codes and an enabled shared pool. Fleet runs it when a PoP is added. | On PoP setup |
+| `cdnf:control:fingerprints` | Prints a keyed fingerprint of each shared control secret as JSON. Never prints a value. | No |
+| `cdnf:control:manage {action}` | Changes high availability state in one transaction. `addresses --addresses=A,B` sets the ordered control addresses every edge dials (at most two); `record --name --role --address [--fingerprints --lag --valkey-linked]` records a node report (`--role` is `active` or `standby`); `promote --name` increments the epoch and records the node as active; `remove-standby` drops the standby and its address. | No |
+
 ## DNS and domains
 
 | Command and syntax | Purpose and effects | Scheduled |
 | --- | --- | --- |
 | `cdnf:dns:deprovision-due` | Dispatches at most 1,000 due DNS-zone deprovision jobs in chunks of 100. It does not wait for PowerDNS changes. | Every minute |
+| `cdnf:dns:repair-drift` | Checks up to `--limit` (default 100, at most 1,000) DNS deployments, oldest check first. It compares the zone each DNS target serves with the deployed record sets, and the deployed record sets with the current desired state, and queues one coalesced reconcile for every difference or failed deployment. An unreachable target is not drift. | Every 5 minutes |
+| `cdnf:analytics:publish-zones` | Publishes the served zones (name and domain id of every active or pending-verification domain) to ClickHouse as one snapshot, so DNS telemetry rolls up by zone. It writes only when the list changed, and at least every 12 hours; `--force` writes anyway. It does nothing when `CLICKHOUSE_ZONES_PASSWORD` is unset. | Every minute |
 | `cdnf:domains:expire-claims` | Retires at most 500 unverified claims older than seven days; runtime deletion remains asynchronous. | Every minute |
 | `cdnf:domains:finalize-deprovisioning {--limit=100}` | Dispatches finalization for due retired domains after runtime tombstones are safe. The effective limit is clamped to 1–1,000. | Every minute |
 
@@ -84,6 +102,8 @@ docker compose --env-file .env.prod -f compose.prod.yml exec core php artisan cd
 | `cdnf:edge:complete-placement-drains {--limit=100}` | Promotes ready target pools after DNS drain, advances desired revisions, records audit events, and queues edge reconciliation. Limit is clamped to 1–1,000. | Every minute |
 | `cdnf:edge:dispatch-origin-checks {--limit=100}` | Dispatches a jittered, bounded batch of explicitly enabled origin checks. Limit is clamped to 1–500 and at most five checks are selected per domain. | Every minute |
 | `cdnf:edge:prune-revisions {--limit=1000}` | Permanently removes expired derived edge revisions and artifacts while retaining active and rollback-protected state. Limit is clamped to 1–10,000. | Daily at 02:30 |
+| `cdnf:scheduler:check {--max-age=150}` | Exits non-zero unless the scheduler recorded its heartbeat within the allowed seconds. Used as the scheduler container health check. | Every 30 seconds by Compose |
+| `cdnf:edge:promote-placements {--chunk=100} {--chunks=50}` | Promotes deploying placements whose healthy PoPs have acknowledged (the quorum), paging through every deploying placement in chunks. A PoP that has not acknowledged within the promotion grace window stops counting and catches up on its own. | Every minute |
 | `cdnf:edge:reconcile-stale-placements {--limit=100}` | Requeues interrupted stale placement deployments so they converge. Limit is clamped to 1–1,000. | Every minute |
 
 ```sh
@@ -119,35 +139,47 @@ docker compose -f compose.dev.yml run --rm core php artisan cdnf:platform:settin
 
 | Command and syntax | Purpose and effects | Scheduled |
 | --- | --- | --- |
-| `cdnf:tls:dispatch-maintenance {--limit=500}` | Cleans expired ACME challenges, advances a shared bounded domain sweep for managed-certificate maintenance, and publishes administrator expiry/failure alerts. Limit is clamped to 1–2,000; scan progress advances only after dispatch and resets after each fixed domain-ID range. | Hourly |
+| `cdnf:system:components` | Prints control plane component and queue health as JSON. `cdnfoundry-fleet doctor` reads it. | On demand |
+| `cdnf:tls:dispatch-maintenance {--limit=500} {--orders-only}` | Cleans expired ACME challenges, advances a shared bounded domain sweep for managed-certificate maintenance, and publishes administrator expiry/failure alerts. `--orders-only` runs only the order and challenge part. Limit is clamped to 1–2,000; scan progress advances only after dispatch and resets after each fixed domain-ID range. | Hourly; with `--orders-only` every 5 minutes |
 
 ## Usage
 
 | Command and syntax | Purpose and effects | Scheduled |
 | --- | --- | --- |
 | `cdnf:usage:finalize` | Dispatches an idempotent rebuild for the most recently finalized UTC usage hour. It does not wait for ClickHouse aggregation. | Hourly at minute 20 |
+| `cdnf:reports:build {kind} [--period=]` | `kind` is `usage` or `operations`. `--period` is `YYYY-MM` for usage and `YYYY-Www` for operations. Builds the monthly usage report or weekly operations report from rollups as CSV and PDF, and records each file with its checksum. A period that has not finished is refused. | Usage on the 2nd at 03:40 UTC; operations Mondays at 06:00 UTC |
 
 ## Scheduler
 
-All command schedules use overlap prevention. The scheduler also runs framework
+All command schedules use overlap prevention. Every scheduled task also runs only on the writable active control node (`onOneServer` plus the fence check), so a standby or a returning old node repeats nothing. The scheduler also runs framework
 or internal non-command work, which is intentionally not renamed here.
 
 | Scheduled command | Frequency | Purpose |
 | --- | --- | --- |
 | `cdnf:dns:deprovision-due` | Every minute | Queue due DNS removals |
+| `cdnf:dns:repair-drift` | Every 5 minutes | Repair DNS zones that differ from desired state |
+| `cdnf:analytics:publish-zones` | Every minute | Keep the served-zone list that DNS rollups use current |
 | `cdnf:domains:expire-claims` | Every minute | Deprovision at most 500 expired unverified claims; preserve verified ownership. |
 | `cdnf:domains:finalize-deprovisioning` | Every minute | Finalize safe domain retirement |
 | `cdnf:edge:complete-placement-drains` | Every minute | Complete ready placement drains |
+| `cdnf:edge:promote-placements` | Every minute | Promote placements by quorum |
 | `cdnf:edge:reconcile-stale-placements` | Every minute | Retry stale placements |
 | `cdnf:edge:dispatch-origin-checks` | Every minute | Queue due opt-in origin checks |
 | `cdnf:edge:prune-revisions` | Daily at 02:30 | Remove expired derived revision history |
 | `cdnf:health:publish` | Every minute | Refresh the sanitized public status page snapshot |
 | `cdnf:tls:dispatch-maintenance` | Hourly | Maintain managed certificates and alerts |
+| `cdnf:tls:dispatch-maintenance --orders-only` | Every 5 minutes | Advance certificate orders and challenges |
 | `cdnf:security:reconcile-readiness` | Every minute | Advance bounded security recovery |
 | `cdnf:waf:expire-exclusions` | Every minute | Remove due WAF exclusions |
 | `cdnf:usage:finalize` | Hourly at minute 20 | Queue the finalized usage hour |
+| `cdnf:reports:build usage` | Monthly on the 2nd at 03:40 | Build last month's usage report |
+| `cdnf:reports:build operations` | Mondays at 06:00 | Build last week's operations report |
 | `cdnf:audit:prune` | Daily at 03:10 | Delete one expired audit batch |
 | `cdnf:backups:create` | Daily at 01:30 when configured | Queue the control-plane backup |
+| `cdnf:backups:maintain prune` | Daily at 04:10 when configured | Apply backup retention |
+| `cdnf:backups:maintain check` | Sundays at 05:00 when configured | Verify the backup repository |
+| `cdnf:control:enforce` | Every minute | Stop Horizon on a node that a promotion replaced |
+| `cdnf:control:observe` | Every minute | Record standby replication lag and Valkey link |
 
 Laravel's `horizon:snapshot` runs every five minutes and `model:prune` runs
 hourly. They remain unchanged because they are not CDNFoundry-owned commands.

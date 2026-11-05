@@ -38,6 +38,33 @@ class ResticBackupRepository
         $this->run(['restic', 'forget', $snapshotId]);
     }
 
+    /** Keep a bounded history and reclaim the space of everything older. */
+    public function prune(): void
+    {
+        $this->run(['restic', 'forget', '--prune', '--tag', 'cdnfoundry-control', '--group-by', 'tags',
+            '--keep-daily', (string) config('services.backups.keep_daily'),
+            '--keep-weekly', (string) config('services.backups.keep_weekly'),
+            '--keep-monthly', (string) config('services.backups.keep_monthly')], 3600);
+        $this->run(['restic', 'forget', '--prune', '--tag', 'cdnfoundry-rollups', '--group-by', 'tags',
+            '--keep-daily', (string) config('services.backups.keep_daily'),
+            '--keep-weekly', (string) config('services.backups.keep_weekly'),
+            '--keep-monthly', (string) config('services.backups.keep_monthly')], 3600);
+    }
+
+    /** Whether a usage rollup snapshot exists beside the control backups. Rollups are optional, so absence is not an error. */
+    public function rollupSnapshotExists(): bool
+    {
+        $rows = json_decode($this->run(['restic', 'snapshots', '--tag', 'cdnfoundry-rollups', '--latest', '1', '--json']), true);
+
+        return is_array($rows) && $rows !== [];
+    }
+
+    /** Verify the repository structure, so corruption is found before a restore needs the data. */
+    public function check(): void
+    {
+        $this->run(['restic', 'check'], 3600);
+    }
+
     public function restore(string $snapshotId): void
     {
         $this->assertSnapshot($snapshotId);

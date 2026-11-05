@@ -21,25 +21,18 @@
     @endphp
 
     <div class="cdn-dashboard">
-        <x-filament::section heading="Domain scope" description="Every query is limited to one assigned domain. Use the searchable header switcher; metrics are not loaded until a domain is selected." icon="heroicon-o-shield-check">
-            @if ($state['domain'])
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                    <div><div class="cdn-row-title">{{ $state['domain']->display_name ?: $state['domain']->name }}</div><div class="cdn-row-meta">{{ $state['domain']->name }} · authorized domain #{{ $state['domain']->id }}</div></div>
-                    <x-ui.status-pill tone="info">Selected domain</x-ui.status-pill>
-                </div>
-            @else
-                <x-ui.empty-state title="Select an assigned domain" description="Use Select domain above to search your authorized domains. No telemetry query runs before selection." />
-            @endif
-        </x-filament::section>
+        @unless ($state['domain'])
+            <x-ui.empty-state title="Select a domain" description="Use Select domain above to load its analytics." />
+        @endunless
 
         @if ($state['domain'])
-            <x-filament::section :heading="'Analytics for ' . $state['domain']->name" :description="$display->formatTimestamp($state['meta']['from'] ?? null) . ' through ' . $display->formatTimestamp($state['meta']['to'] ?? null) . ' · ' . $display->displayTimezone() . ' · bytes · milliseconds · no sampling'" icon="heroicon-o-chart-bar-square">
+            <x-filament::section :heading="'Analytics for ' . $state['domain']->name" :description="$display->formatTimestamp($state['meta']['from'] ?? null) . ' to ' . $display->formatTimestamp($state['meta']['to'] ?? null)" icon="phosphor-chart-bar">
                 <div class="flex flex-wrap gap-3">
                     <x-ui.status-pill :tone="$state['available'] ? 'success' : 'danger'">ClickHouse {{ $state['available'] ? 'available' : 'unavailable' }}</x-ui.status-pill>
                     <x-ui.status-pill :tone="($state['meta']['partial'] ?? true) ? 'info' : 'success'">{{ ($state['meta']['partial'] ?? true) ? 'Live window included' : 'Fully finalized range' }}</x-ui.status-pill>
                 </div>
                 @if ($state['meta']['partial'] ?? true)
-                    <p class="cdn-row-meta mt-3">The latest {{ $state['meta']['finalization_delay_minutes'] ?? 15 }} minutes are provisional so current traffic is visible. Finalized usage remains separate below.</p>
+                    <p class="cdn-row-meta mt-3">The latest {{ $state['meta']['finalization_delay_minutes'] ?? 15 }} minutes are provisional.</p>
                 @endif
                 @if (!$state['available'])
                     <x-ui.empty-state class="mt-4" title="Analytics unavailable" description="DNS and edge serving continue normally; finalized PostgreSQL usage remains available below." />
@@ -52,12 +45,12 @@
                 @endphp
                 <div class="cdn-stat-grid">
                     @foreach ([
-                        ['label' => 'Requests', 'value' => number_format((int) ($summary['requests'] ?? 0)), 'description' => 'HTTP requests in the last 24 hours', 'tone' => 'success'],
-                        ['label' => 'Bandwidth', 'value' => $formatBytes(((int) ($summary['bytes_in'] ?? 0)) + ((int) ($summary['bytes_out'] ?? 0))), 'description' => 'Inbound and outbound transfer', 'tone' => 'success'],
-                        ['label' => 'Cache hit ratio', 'value' => number_format(((float) ($summary['cache_ratio'] ?? 0)) * 100, 1) . '%', 'description' => number_format((int) ($summary['cache_hits'] ?? 0)) . ' cached requests', 'tone' => 'success'],
-                        ['label' => 'DNS queries', 'value' => number_format((int) ($summary['dns_queries'] ?? 0)), 'description' => 'Authoritative queries', 'tone' => 'success'],
-                        ['label' => 'Origin errors', 'value' => number_format((int) ($summary['origin_errors'] ?? 0)), 'description' => 'Origin failures', 'tone' => ((int) ($summary['origin_errors'] ?? 0)) > 0 ? 'warning' : 'success'],
-                        ['label' => 'Security blocks', 'value' => number_format((int) ($summary['security_blocks'] ?? 0)), 'description' => 'Protection decisions', 'tone' => 'warning'],
+                        ['label' => 'Requests', 'value' => number_format((int) ($summary['requests'] ?? 0)), 'description' => null, 'tone' => 'success'],
+                        ['label' => 'Bandwidth', 'value' => $formatBytes(((int) ($summary['bytes_in'] ?? 0)) + ((int) ($summary['bytes_out'] ?? 0))), 'description' => null, 'tone' => 'success'],
+                        ['label' => 'Cache hit ratio', 'value' => number_format(((float) ($summary['cache_ratio'] ?? 0)) * 100, 1) . '%', 'description' => number_format((int) ($summary['cache_hits'] ?? 0)) . ' cached', 'tone' => 'success'],
+                        ['label' => 'DNS queries', 'value' => number_format((int) ($summary['dns_queries'] ?? 0)), 'description' => null, 'tone' => 'success'],
+                        ['label' => 'Origin errors', 'value' => number_format((int) ($summary['origin_errors'] ?? 0)), 'description' => null, 'tone' => ((int) ($summary['origin_errors'] ?? 0)) > 0 ? 'warning' : 'success'],
+                        ['label' => 'Security blocks', 'value' => number_format((int) ($summary['security_blocks'] ?? 0)), 'description' => null, 'tone' => 'warning'],
                     ] as $stat)
                         <x-ui.stat-card :label="$stat['label']" :value="$stat['value']" :description="$stat['description']" :tone="$stat['tone']" />
                     @endforeach
@@ -75,10 +68,10 @@
                                         if ($dimension === 'country') $title = ($row['country'] ?? 'ZZ') . ' · ' . ($row['continent'] ?? 'Unknown');
                                         if ($dimension === 'qtype') $title = ($row['qtype'] ?? 'Unknown') . ' · ' . ($row['rcode'] ?? 'Unknown');
                                         if ($dimension === 'encoding') $title = strtoupper($row['encoding'] ?? 'identity') . ' · ' . str($row['profile'] ?? 'off')->replace('_', ' ')->headline();
-                                        $metrics = collect($row)->except(array_filter([$dimension, 'continent', 'rcode']))->map(fn ($value, $key) => str($key)->replace('_', ' ')->headline() . ': ' . $formatMetric($key, $value))->implode(' · ');
+                                        $metrics = collect($row)->except(array_filter([$dimension, 'continent', 'rcode']))->map(fn ($value, $key) => ['label' => str($key)->replace('_', ' ')->headline()->toString(), 'value' => $formatMetric($key, $value)]);
                                     @endphp
                                     <div class="cdn-activity-row">
-                                        <div class="min-w-0"><div class="cdn-row-title">{{ $title }}</div><div class="cdn-row-meta">{{ $metrics ?: 'No activity' }}</div></div>
+                                        <div class="min-w-0"><div class="cdn-row-title">{{ $title }}</div>@forelse ($metrics as $metric)<div class="cdn-row-meta">{{ $metric['label'] }} <span class="tabular-nums">{{ $metric['value'] }}</span></div>@empty<div class="cdn-row-meta">No activity</div>@endforelse</div>
                                     </div>
                                 @empty
                                     <x-ui.empty-state title="No data" description="No activity was recorded for this view and time range." />
@@ -88,7 +81,7 @@
                     @endforeach
                 </div>
 
-                <x-filament::section heading="Recent logs" description="Masked, bounded previews from the last hour. Up to 10 rows per stream." icon="heroicon-o-document-magnifying-glass">
+                <x-filament::section heading="Recent logs" description="Masked previews, last hour" icon="phosphor-file-magnifying-glass">
                     <div class="grid gap-5 lg:grid-cols-2">
                         @foreach ($state['logs'] as $stream => $rows)
                             <div class="min-w-0">
@@ -98,7 +91,9 @@
                                         <div class="cdn-activity-row">
                                             <div class="min-w-0">
                                                 <div class="cdn-row-title">{{ $row['qname'] ?? (($row['method'] ?? $row['event_type'] ?? 'event') . ' ' . ($row['path'] ?? $row['hostname'] ?? '')) }}</div>
-                                                <div class="cdn-row-meta">{{ $display->formatTimestamp($row['occurred_at'] ?? null) }} · {{ $row['client_ip'] ?? 'unknown client' }} · {{ $row['rcode'] ?? $row['security_reason'] ?? $row['origin_error'] ?? ('HTTP ' . ($row['status'] ?? '—')) }}</div>
+                                                <div class="cdn-row-meta">{{ $display->formatTimestamp($row['occurred_at'] ?? null) }}</div>
+                                                <div class="cdn-row-meta"><span class="cdn-mono">{{ $row['client_ip'] ?? 'unknown client' }}</span></div>
+                                                @if (isset($row['rcode']) || isset($row['security_reason']) || isset($row['origin_error']))<div class="cdn-row-meta">{{ $row['rcode'] ?? $row['security_reason'] ?? $row['origin_error'] }}</div>@endif
                                             </div>
                                             @if (isset($row['status']))<span class="cdn-status-pill" data-tone="{{ (int) $row['status'] >= 500 ? 'danger' : 'success' }}">{{ $row['status'] }}</span>@endif
                                         </div>
@@ -112,9 +107,9 @@
                 </x-filament::section>
             @endif
 
-            <x-filament::section heading="Finalized usage" description="Stable PostgreSQL rollups for reconciliation. Latest 5 finalized intervals." icon="heroicon-o-document-chart-bar">
+            <x-filament::section heading="Finalized usage" description="Latest 5 intervals" icon="phosphor-receipt">
                 <div class="mb-4">
-                    <x-filament::button tag="a" icon="heroicon-o-arrow-down-tray" :href="route('app.analytics.usage.csv', $state['domain'])">Usage CSV export</x-filament::button>
+                    <x-filament::button tag="a" icon="phosphor-download-simple" :href="route('app.analytics.usage.csv', $state['domain'])">Usage CSV export</x-filament::button>
                 </div>
                 <x-ui.data-table caption="Finalized domain usage intervals">
                     <x-slot:header><tr><th>Interval ({{ $display->displayTimezone() }})</th><th class="text-right">Requests</th><th class="text-right">Transfer</th><th class="text-right">DNS</th><th>State</th></tr></x-slot:header>

@@ -7,25 +7,25 @@ keywords: build private CDN, private CDN for ISP, self-hosted CDN, on-premises C
 # How to build a self-hosted private CDN
 
 A self-hosted private CDN runs its control plane, authoritative DNS, edge
-proxies, cache, TLS lifecycle, and telemetry on infrastructure you operate. It
-is not just a reverse proxy installed in several locations: it is a control
-system for traffic placement, origin safety, cache consistency, security,
-upgrades, and recovery.
+proxies, cache, TLS handling, and telemetry on servers you operate. It is more
+than a reverse proxy installed in several places. It also has to decide where
+traffic goes, keep origins safe, keep caches consistent, apply security rules,
+and survive upgrades and failures.
 
-CDNFoundry provides those pieces as one bounded platform for organizations that
-operate their own servers or points of presence. This guide explains the design
-decisions before installation.
+CDNFoundry provides these parts as one platform for organizations that run their
+own servers or points of presence (PoPs, locations with edge hosts). This page
+explains the design choices before you install. Terms are in the
+[glossary](../reference/glossary.md).
 
 ::: info Who this is for
-Use this architecture when a private company, hosting provider, university,
-government network, or ISP needs control of DNS and edge infrastructure. It is
-not a replacement for upstream volumetric DDoS scrubbing or global transit.
+Use this design when a company, hosting provider, university, government
+network, or ISP needs to control its own DNS and edge servers. It does not
+replace upstream DDoS scrubbing or global transit.
 :::
 
 ## Self-hosted CDN or managed CDN?
 
-The choice is primarily about operational ownership, not a checklist of proxy
-features.
+The choice is about who operates the system, not about proxy features.
 
 | Requirement | Self-hosted private CDN | Managed CDN |
 | --- | --- | --- |
@@ -36,18 +36,17 @@ features.
 | Failure response | Your runbooks, spares, and transit | Provider service levels and support |
 | Upstream DDoS capacity | Requires separate network or scrubbing arrangements | Often available as a provider service |
 
-Self-hosting fits organizations that already operate network capacity, need
-specific regional placement or data control, and can own DNS, TLS, upgrades,
-monitoring, and incident response. A managed CDN is usually the better choice
-when the goal is broad global reach without operating an authoritative DNS and
-edge fleet.
+Self-hosting fits you if you already run network capacity, need control over
+where traffic is served and where data stays, and can handle DNS, TLS, upgrades,
+monitoring, and incidents yourself. A managed CDN is usually better if you want
+broad global reach without running DNS and edge servers.
 
 ## Start with failure behavior
 
-The first design question is not “how many requests per second?” It is “what
-happens when each dependency fails?”
+Do not start with requests per second. Start with this question: what happens
+when each part fails?
 
-| Dependency failure | Required private-CDN behavior |
+| What fails | What should happen |
 | --- | --- |
 | Management application | Existing DNS and HTTP continue |
 | Control database | Existing runtime continues; new changes pause |
@@ -59,8 +58,9 @@ happens when each dependency fails?”
 | Telemetry database | Serving continues; analytics becomes partial |
 | One point of presence | DNS placement withdraws only failed capacity |
 
-CDNFoundry implements this by separating desired state from runtime state and
-keeping management outside customer request paths.
+CDNFoundry meets these goals in two ways. It keeps what you asked for (desired
+state) apart from what runs. It also keeps management out of the path of customer
+requests.
 
 ```mermaid
 flowchart TB
@@ -83,20 +83,21 @@ flowchart TB
 
 ### 1. A control plane
 
-The control plane authenticates users, enforces permissions, validates bounded
-configuration, records audit history, increments revisions, and dispatches
-external work. CDNFoundry uses one Laravel modular monolith and two Filament
-panels instead of distributing ordinary CRUD across microservices.
+The control plane signs users in, checks permissions, validates settings,
+records an audit history, increments revisions, and queues work for DNS and
+edges. CDNFoundry builds it as one Laravel application with two Filament panels.
+It does not split ordinary create-and-edit screens into microservices.
 
-PostgreSQL owns desired state. Valkey owns sessions, application cache, and
-queue transport. Horizon separates interactive, runtime, certificate/purge,
-and bulk-maintenance work so a large job cannot consume every worker.
+PostgreSQL stores desired state. Valkey stores sessions, the application cache,
+and the job queue. Horizon runs separate queues (`interactive`, `dns`, `edge`,
+`verification`, `tls`, `purge`, and `bulk_maintenance`). A large job in one queue
+cannot use up every worker.
 
 ### 2. Authoritative DNS
 
-The CDN must control answers for customer hostnames. DNSdist is the only public
-authoritative endpoint. Private PowerDNS servers answer from a derived database
-that reconciliation can rebuild.
+The CDN must control the DNS answers for customer hostnames. DNSdist is the only
+public DNS endpoint. Private PowerDNS servers answer from a database that
+CDNFoundry can rebuild at any time.
 
 DNS is responsible for:
 
@@ -107,14 +108,14 @@ DNS is responsible for:
 - monotonic SOA serials;
 - removal of failed, drained, stale, or overloaded capacity.
 
-Every production platform needs at least two authoritative servers in separate
-failure domains and must test both UDP and TCP externally.
+A production platform needs at least two DNS servers in separate failure domains
+(places that do not fail together). Test both UDP and TCP from outside.
 
 ### 3. Bounded edge runtimes
 
-An edge should not create a new process, container, server block, cache
-directory, reload, or timer for every domain. CDNFoundry runs shared,
-data-driven OpenResty cells with explicit CPU, memory, and PID ceilings.
+An edge must not add a process, container, server block, cache directory,
+reload, or timer for each domain. CDNFoundry runs shared OpenResty cells instead.
+Each cell reads its domains from data and has fixed CPU, memory, and process limits.
 
 The Go edge agent:
 
@@ -126,15 +127,15 @@ The Go edge agent:
 - retains previous valid state;
 - reports acknowledgement, listener readiness, and capacity.
 
-Quarantine uses a separately bounded cell. Exceptional dedicated pools are a
-placement class, not the default tenant architecture.
+A domain that needs isolation can move to a quarantine cell with its own limits.
+A dedicated pool is possible but exceptional. It is not the default.
 
 ### 4. Origin and cache policy
 
-Every proxied hostname needs one explicit origin. Validate at write time and
-again before connection because DNS can change after configuration.
+Every proxied hostname has exactly one origin. CDNFoundry checks it when you save
+it and again before each connection, because DNS can change in between.
 
-Reject:
+CDNFoundry rejects:
 
 - loopback and unspecified addresses;
 - link-local and multicast ranges;
@@ -143,18 +144,18 @@ Reject:
 - edge listeners and the platform proxy hostname;
 - any resolution that creates a proxy loop.
 
-Bound connect/response timeouts, retries, header size, body handling,
-concurrency, object admission, and temporary storage. Use one deterministic
-cache key for lookup and URL purge. Implement full purge as an epoch increment,
-not a directory scan.
+CDNFoundry limits connect and response timeouts, retries, header size, body
+handling, concurrency, which objects enter the cache, and temporary storage.
+Cache lookup and URL purge use the same cache key. A full purge raises a counter
+(the cache epoch) instead of scanning the disk.
 
 ### 5. Certificate and security lifecycle
 
-Managed certificates should start only when an active, delegated domain first
-gains an eligible proxied hostname. CDNFoundry uses DNS-01 so issuance is not
-coupled to a particular HTTP edge.
+Managed certificates start only when an active, delegated domain first gets an
+eligible proxied hostname. A DNS-only domain gets none. CDNFoundry proves control
+of the name with DNS-01, so issuance does not depend on one HTTP edge.
 
-Custom certificates require:
+An uploaded certificate must have:
 
 - matching public/private key;
 - valid chain;
@@ -163,21 +164,21 @@ Custom certificates require:
 - bounded PEM sizes;
 - encrypted private-key storage.
 
-Application security evaluates trusted client addresses, ordered allow/block
-rules, bounded profiles, method/request limits, and persisted emergency state.
-These features contain application load; they cannot protect a saturated
-uplink.
+Application security covers trusted client addresses, ordered allow and block
+rules, limit profiles, method and request limits, and an emergency state that
+survives restarts. These controls limit load on the application. They cannot
+protect an uplink that is already full.
 
 ### 6. Independent telemetry and recovery
 
-Vector receives OpenResty events and DNSdist dnstap, removes sensitive fields,
-bounds values, and writes ClickHouse. Laravel queries bounded time ranges but
-does not receive raw traffic. The telemetry role also runs Prometheus,
-Alertmanager, and loopback-only Grafana. Grafana's two command centers read
-Prometheus, bounded ClickHouse tables, and a sanitized PostgreSQL operational
-view with separate read-only credentials.
+Vector receives OpenResty events and DNSdist dnstap data, removes sensitive
+fields, limits value sizes, and writes to ClickHouse. Laravel queries limited time
+ranges and never receives raw traffic. The telemetry role also runs Prometheus,
+Alertmanager, and Grafana, which listens on the loopback address only. Grafana
+reads Prometheus, limited ClickHouse tables, and a sanitized PostgreSQL view, each
+with separate read-only credentials. See [Grafana dashboards](../operations/grafana.md).
 
-Recovery requires more than database rows:
+Recovery needs more than the database:
 
 - PostgreSQL backup;
 - original Laravel encryption key;
@@ -187,8 +188,8 @@ Recovery requires more than database rows:
 - externally retained customer TLS material;
 - documented immutable image versions.
 
-PowerDNS data and edge snapshots are derived. Rebuild them through
-reconciliation rather than promoting drift to source-of-truth state.
+PowerDNS data and edge snapshots are derived. Rebuild them by reconciling from
+PostgreSQL. Do not treat a manual change on a runtime as the source of truth.
 
 ## Minimum production topology
 
@@ -216,8 +217,9 @@ flowchart LR
       NS2["DNSdist + PowerDNS"]
       Edge2["OpenResty + agent"]
     end
-    Workers -->|"restricted DNS API"| NS1
-    Workers -->|"restricted DNS API"| NS2
+    Workers -->|"private API"| Primary["Hidden PowerDNS primary"]
+    Primary -->|"signed transfers"| NS1
+    Primary -->|"signed transfers"| NS2
     Edge1 -->|"edge agent: outbound mTLS"| EdgeControl
     Edge2 -->|"edge agent: outbound mTLS"| EdgeControl
     EdgeControl --> Workers
@@ -227,19 +229,19 @@ flowchart LR
     Edge2 -.-> Telemetry
 ```
 
-Grafana remains off public listeners. Remote operators reach it only through a
-deployment-owned authenticated HTTPS proxy or trusted tunnel; its failure does
-not enter serving, ingestion, or reconciliation paths.
+Grafana does not listen on public addresses. Remote operators reach it through
+an authenticated HTTPS proxy or a trusted tunnel that you provide. If Grafana
+fails, serving, ingestion, and reconciliation continue.
 
-This is a reliability minimum, not a scale maximum. Larger ISPs can separate
-DNS, edge, telemetry, control workers, PostgreSQL, and Valkey using the shipped
-role profiles, generated bundles, and external endpoints.
+This is the smallest reliable layout, not a size limit. A larger ISP can split
+DNS, edge, telemetry, control workers, PostgreSQL, and Valkey onto separate hosts
+with the shipped role profiles, generated bundles, and external endpoints.
 
 ## Capacity planning for an ISP
 
-Measure each plane independently:
+Measure each part on its own:
 
-| Plane | Primary measurements |
+| Part | What to measure |
 | --- | --- |
 | DNS | UDP/TCP QPS, response latency, packet loss, backend health, zone count |
 | Edge | requests/s, concurrent connections, TLS handshakes, bandwidth, CPU |
@@ -248,18 +250,19 @@ Measure each plane independently:
 | Control | mutation rate, queue age, worker utilization, reconciliation duration |
 | Telemetry | events/s, buffer use, insert latency, retention bytes, query latency |
 
-Scale by adding the constrained unit. Do not add control-plane complexity to
-solve an edge bandwidth problem.
+Add capacity where the limit is. Do not add control-plane servers to fix an
+edge bandwidth problem.
 
 ::: warning Validate real traffic
-Published CPU and memory values are safety limits, not performance guarantees.
-Qualify your hardware, kernel, NICs, storage, transit, origin behavior, request
-mix, TLS rate, and IPv4/IPv6 paths before committing capacity.
+The CPU and memory values in the documentation are safety limits. They are not
+performance promises. Test your own hardware, network cards, storage, transit,
+origins, request mix, TLS rate, and IPv4 and IPv6 paths before you commit to a
+capacity.
 :::
 
 ## Build or adopt
 
-Building all of these capabilities independently requires:
+If you build all of this yourself, you need:
 
 - a domain/user/permission model;
 - DNS record validation and a safe authoritative deployment mechanism;
@@ -271,40 +274,36 @@ Building all of these capabilities independently requires:
 - bounded telemetry schemas and queries;
 - backups, migrations, health, alerts, and incident runbooks.
 
-CDNFoundry is useful when that architecture matches your requirements and
-Docker Compose is an acceptable operational model. It deliberately does not
-include Kubernetes requirements, billing, reseller hierarchies, GraphQL,
-plugin runtimes, private-origin tunnels, or automatic global traffic
-orchestration.
+CDNFoundry fits when this design matches your needs and Docker Compose is an
+acceptable way for you to operate. It does not include Kubernetes, billing,
+reseller hierarchies, GraphQL, a plugin system, private-origin tunnels, or
+automatic traffic steering between regions.
 
 ## Common evaluation questions
 
 ### Is a reverse proxy enough to build a CDN?
 
-No. A reverse proxy can cache and forward requests, but a production CDN also
-needs traffic placement, authoritative DNS, certificate lifecycle, safe origin
-policy, configuration distribution, rollback, telemetry, capacity management,
-and failure recovery.
+No. A reverse proxy can cache and forward requests. A production CDN also needs
+traffic placement, authoritative DNS, certificate handling, safe origin rules,
+configuration delivery, rollback, telemetry, capacity management, and recovery.
 
 ### Can a self-hosted CDN run on one server?
 
-One server can support development or a controlled evaluation, but it is not a
-production failure-isolated CDN. The minimum documented production fleet uses
-one control and telemetry node plus two DNS and edge nodes in separate failure
+One server is fine for development or a trial. It is not a production CDN,
+because one failure stops everything. The smallest documented production fleet
+has one control and telemetry node and two DNS and edge nodes in separate failure
 domains.
 
 ### Does self-hosted mean the origin can be private?
 
-Not in the current CDNFoundry feature set. Proxied origins must resolve to
-allowed public destinations; private-origin tunnels are intentionally outside
-the verified product boundary.
+Not today. A proxied origin must resolve to an allowed public address.
+CDNFoundry has no private-origin tunnels.
 
 ### Is a self-hosted CDN always cheaper?
 
-No. Compare servers, transit, storage, certificates, monitoring, on-call work,
-spares, upgrades, and incident response against managed-CDN pricing. Private
-CDN ownership is valuable when control or placement requirements justify that
-operational cost.
+Not always. Compare the cost of servers, transit, storage, certificates,
+monitoring, on-call work, spares, upgrades, and incident response with managed-CDN
+prices. Self-hosting pays off when you need the control or the placement.
 
 ## Evaluation checklist
 
@@ -316,7 +315,7 @@ operational cost.
 - [ ] Docker Compose matches your deployment and upgrade practices.
 - [ ] You can store encryption, signing, PKI, and backup secrets externally.
 - [ ] You can test UDP/TCP DNS, IPv4/IPv6, HTTPS, origin, cache, and failure behavior.
-- [ ] You understand that application limits are not upstream DDoS scrubbing.
+- [ ] You understand that the application limits do not replace upstream DDoS scrubbing.
 
 ## Continue
 

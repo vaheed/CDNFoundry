@@ -1,5 +1,5 @@
 <x-filament-widgets::widget>
-    <x-filament::section heading="DNS health" description="Authoritative response outcomes plus desired cluster health. DNS latency is not collected in the current aggregate schema." icon="heroicon-o-globe-alt">
+    <x-filament::section heading="DNS health" description="Authoritative response outcomes plus desired cluster health. DNS latency is not collected in the current aggregate schema." icon="phosphor-globe">
         <div wire:poll.30s>
             @if (!($state['available'] ?? false))
                 <x-ui.widget-state :state="$state['state'] ?? 'unavailable'" :description="$state['error'] ?? 'No DNS aggregates match this context.'" />

@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
+from . import ha
 from .common import (
     StateError,
     ValidationError,
@@ -46,7 +47,11 @@ GLOBAL_SECRET_NAMES = {
     "grafana-clickhouse-password",
     "grafana-postgres-password",
     "clickhouse-password",
+    "clickhouse-ingest-password",
+    "clickhouse-reader-password",
+    "clickhouse-zones-password",
     "metrics-token",
+    "edge-proxy-secret",
     "telemetry-token",
     "backup-password",
     "backup-access-key",
@@ -54,12 +59,23 @@ GLOBAL_SECRET_NAMES = {
     "log-auth-token",
 }
 
+# Created only when a standby control node is added; a single-node fleet does not hold them.
+OPTIONAL_GLOBAL_SECRET_NAMES = {"control-replication-password"}
+
 NODE_SECRET_NAMES = {
     "pdns-db-password",
     "pdns-api-key",
     "edge-status-token",
     "edge-bootstrap-token",
 }
+
+
+def validate_alert_webhook(value: Any) -> str:
+    """Empty is allowed in state; Alertmanager refuses to start until a notifier is set."""
+    text = str(value or "")
+    if text and not text.startswith("https://"):
+        raise ValidationError("global.alert_webhook_url must be an https:// URL")
+    return text
 
 
 class FleetState:
@@ -114,6 +130,7 @@ class FleetState:
                 "platform_domain": validate_hostname(global_cfg["platform_domain"]),
                 "release": validate_release(global_cfg["release"]),
                 "acme_email": str(global_cfg.get("acme_email", "")),
+                "alert_webhook_url": validate_alert_webhook(global_cfg.get("alert_webhook_url", "")),
                 "ipv6": validate_bool(global_cfg.get("ipv6", False), "global.ipv6"),
             },
             "features": {
@@ -134,8 +151,15 @@ class FleetState:
         if not self.dry_run:
             self._prepare_dirs()
             self._ensure_global_secrets()
+            self._ensure_fleet_ssh_key()
             self._write(state, backup=False)
         return state
+
+    def _ensure_fleet_ssh_key(self) -> None:
+        """The single SSH key pair Fleet uses to reach every node, created with the fleet."""
+        from .ssh import SshTransport
+
+        SshTransport(self.state_dir).ensure_fleet_key()
 
     def _prepare_dirs(self) -> None:
         for directory in (self.state_dir, self.secrets_dir, self.pki_dir, self.backup_dir):
@@ -223,6 +247,7 @@ class FleetState:
             if require_secrets:
                 self._validate_node_secrets(node)
 
+        ha.validate(state)
         if monitoring.get("mode") == "dedicated":
             host = monitoring.get("host")
             if host not in names or state["nodes"][host]["role"] != "monitoring":
@@ -236,10 +261,14 @@ class FleetState:
                     raise ValidationError(f"Missing global secret: {secret}")
                 ensure_mode(path, 0o600)
             validate_laravel_app_key(self.read_secret("app-key"))
+            if ha.enabled(state) and not self.secret_path("control-replication-password").exists():
+                raise ValidationError("Missing global secret: control-replication-password")
 
     def _validate_node_secrets(self, node: dict[str, Any]) -> None:
         required: set[str] = set()
         if node["role"] in {"dns", "dns-edge"}:
+            required |= {"pdns-api-key"}
+        if node["role"] == "control":
             required |= {"pdns-db-password", "pdns-api-key"}
         if node["role"] in {"edge", "dns-edge"}:
             required |= {"edge-status-token"}
@@ -255,12 +284,14 @@ class FleetState:
         except Exception:
             return "disabled"
 
-    def add_node(self, state: dict[str, Any], node: dict[str, Any]) -> dict[str, Any]:
+    def add_node(self, state: dict[str, Any], node: dict[str, Any], *, top_level: dict[str, Any] | None = None) -> dict[str, Any]:
+        """`top_level` sets other state sections in the same validated write, such as the `ha` section a standby needs."""
         name = validate_node_name(node["name"])
         if name in state["nodes"]:
             raise ValidationError(f"Node already exists: {name}")
         clean = self._normalize_node(state, node)
         candidate = copy.deepcopy(state)
+        candidate.update(copy.deepcopy(top_level or {}))
         candidate["nodes"][name] = clean
         self.validate(candidate, require_secrets=False)
         if not self.dry_run:
@@ -383,7 +414,7 @@ class FleetState:
         if node:
             if name not in NODE_SECRET_NAMES:
                 raise ValidationError(f"Unsupported node secret: {name}")
-        elif name not in GLOBAL_SECRET_NAMES:
+        elif name not in GLOBAL_SECRET_NAMES | OPTIONAL_GLOBAL_SECRET_NAMES:
             raise ValidationError(f"Unsupported global secret: {name}")
         path = self.secret_path(name, node=node)
         if path.exists():
@@ -412,7 +443,7 @@ class FleetState:
             if name not in NODE_SECRET_NAMES:
                 raise ValidationError(f"Unsupported node secret: {name}")
             validate_node_name(node)
-        elif name not in GLOBAL_SECRET_NAMES:
+        elif name not in GLOBAL_SECRET_NAMES | OPTIONAL_GLOBAL_SECRET_NAMES:
             raise ValidationError(f"Unsupported global secret: {name}")
         clean = value.rstrip("\r\n")
         if not clean:
@@ -497,10 +528,12 @@ class FleetState:
 
     def _ensure_node_secrets(self, node: dict[str, Any]) -> None:
         if node["role"] in {"dns", "dns-edge"}:
+            self.ensure_secret("pdns-api-key", node=node["name"])
+        if node["role"] == "control":
             self.ensure_secret("pdns-db-password", node=node["name"])
             self.ensure_secret("pdns-api-key", node=node["name"])
-        if node["role"] in {"edge", "dns-edge"}:
-            self.ensure_secret("edge-status-token", node=node["name"])
+        # Vector runs on every role and its compose file interpolates the token, even on a host that scrapes no edge.
+        self.ensure_secret("edge-status-token", node=node["name"])
 
 
 class StateTransaction:

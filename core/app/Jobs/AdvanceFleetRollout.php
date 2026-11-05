@@ -18,7 +18,7 @@ class AdvanceFleetRollout implements ShouldQueue
 
     public function __construct(public string $rolloutId)
     {
-        $this->onQueue('runtime');
+        $this->onQueue('edge');
     }
 
     public function handle(): void

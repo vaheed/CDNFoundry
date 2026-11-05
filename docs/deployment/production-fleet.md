@@ -1,21 +1,21 @@
 ---
 title: Production fleet reference
-description: Understand the design rules, topology, certificate trust, startup order, upgrade behavior, and secret distribution for CDNFoundry production fleets.
+description: How a CDNFoundry production fleet fits together, which service runs on which host, how certificates and secrets are shared, and how to start, roll back, and troubleshoot it.
 ---
 
 # Production fleet reference
 
-For the complete command workflow and interactive setup, see [Production fleet operator guide](production-fleet-operator-guide.md).
+This page explains how a production fleet is built. Read it before you plan hosts, open firewall ports, or rotate a secret. For the commands, see the [Fleet operator guide](production-fleet-operator-guide.md). For every option and JSON field, see the [Fleet configuration reference](production-fleet-config-reference.md).
 
-## Design rules
+## How the fleet is built
 
-- The Python generator runs only on the control-plane machine.
-- A remote host receives one private role-specific bundle and runs Docker Compose locally.
-- Each DNS or combined DNS/edge host has its own local PostgreSQL (`pdns-db`) and its own PowerDNS services.
-- A DNS host never uses the control-plane application's PostgreSQL database.
-- Each DNS host has a separate stable `PDNS_DB_PASSWORD` and `PDNS_API_KEY`.
-- Optional monitoring, logging, backups, and IPv6 do not create cross-role variable or secret requirements when disabled.
-- Existing DNS and HTTP serving nodes preserve their last valid runtime state during control-plane or regional failures.
+A fleet is a set of hosts. Each host has one role: `control`, `dns`, `edge`, `dns-edge` (both), or `monitoring`. [Fleet](../operations/fleet-engine.md), the infrastructure tool, runs on your workstation. It keeps the plan, the secrets, and the certificate authorities in an encrypted vault. For each host it writes one private bundle that holds only what that role needs. Docker Compose runs the bundle on the host.
+
+- The control host runs the hidden PowerDNS primary (`pdns-primary`) with its own PostgreSQL (`pdns-db`). It never uses the control-plane application's database.
+- Each `dns` or `dns-edge` host runs a PowerDNS secondary (`pdns-auth`) with a local SQLite store and no database service. It pulls its zones from the primary over TSIG-signed transfers (transfers signed with a shared key). See [DNS nodes](../operations/dns-nodes.md).
+- The control host has its own `PDNS_DB_PASSWORD` and `PDNS_API_KEY`. Each DNS host has its own `PDNS_API_KEY`.
+- A feature you turn off (monitoring, central logs, backups, IPv6) adds no variables or secrets to any bundle.
+- A DNS or edge host keeps serving its last valid state when the control plane or a region is down.
 
 ## Global topology
 
@@ -25,13 +25,13 @@ flowchart TB
       CONTROL["Control plane"] --> PG[("PostgreSQL")]
       CONTROL --> V[("Valkey")]
       EDGE_CONTROL["edge-control"] --> CONTROL
-      CONTROL -->|"revisions"| DNS_API["Restricted DNS APIs"]
+      CONTROL -->|"zones"| PRIMARY["Hidden PowerDNS primary"]
       TELEMETRY["Telemetry + Grafana"]
     end
     subgraph Runtime["Regional runtime"]
       Agents["Edge agents"] -->|"outbound mTLS"| EDGE_CONTROL
       Agents --> CELLS["Gateway + bounded cells"] --> Origins["Validated origins"]
-      DNS_API --> PDNS["Private PowerDNS"]
+      PRIMARY -->|"signed transfers"| PDNS["PowerDNS secondary"]
       DNSDIST["DNSdist"] --> PDNS
     end
     Resolvers["Resolvers"] --> DNSDIST
@@ -41,10 +41,7 @@ flowchart TB
 ```
 
 ::: danger Keep management DNS independent
-The operator-zone records shown above must be published by an independent
-external DNS provider. CDNFoundry PowerDNS is private derived runtime state for
-platform and customer zones; using it for management names creates a bootstrap
-and recovery dependency.
+Publish the names under your operator domain (`control`, `edge-control`, `telemetry`, `grafana`, and each node name) at an independent external DNS provider. CDNFoundry's PowerDNS holds derived state for the platform zone and customer zones. If it also served your management names, you could not reach the control plane to repair it.
 :::
 
 ## DNS and geo-routing flow
@@ -67,7 +64,7 @@ flowchart TD
     end
 ```
 
-A and AAAA health are evaluated independently. Health state uses configurable consecutive-failure and consecutive-success thresholds to reduce flapping. DNS TTL creates eventual consistency; global changes are not instantaneous.
+ECS (EDNS Client Subnet) lets a resolver pass the client's network to the authoritative server. When it is missing or invalid, the answer uses the resolver address. A and AAAA health are judged separately. DNS TTLs make global changes eventual, not instant. See [Geo-DNS](../guides/geo-dns.md) for the settings.
 
 ## Edge request flow
 
@@ -123,7 +120,7 @@ flowchart LR
     end
 ```
 
-Vector uses authenticated transport configuration, bounded disk buffering, retries, health checks, role labels, and basic secret filtering. Every required host receives a unique log credential. Disabling centralized logs removes Vector and its credentials from bundles.
+Prometheus scrapes every enabled host. Each host's log collector (a Vector instance) sends logs to Loki with a bounded disk buffer and retries. Fleet creates one log token for the whole fleet and puts it in every bundle that runs a collector. If you turn central logs off, the collector and the token leave the bundles. See [Monitoring](../operations/monitoring.md) and [Operational logging](../operations/operational-logging.md).
 
 ## Certificate trust
 
@@ -138,13 +135,17 @@ flowchart TB
     end
     subgraph Servers["Server certificates"]
       SCA --> CC["edge-control"]
-      SCA --> DC["DNS APIs"]
       SCA --> EC["Edge runtime"]
       SCA --> MC["Monitoring"]
     end
 ```
 
-The generator follows the production repository's two-CA contract. The edge identity CA is used by the control plane for edge identities. The edge server CA signs edge-control, edge runtime, and DNS API TLS certificates. The server CA private key stays in protected fleet state; each node receives only its own keypair and the server CA certificate. The control bundle additionally receives the edge identity CA material required by the control service. Certificate SANs are regenerated when a node hostname or service address changes.
+Fleet creates two certificate authorities (CAs), each valid for 10 years:
+
+- The **edge identity CA** signs edge-agent identities. Only the control bundle receives its private key, because the control service issues the identities.
+- The **edge server CA** signs one certificate for every node. That certificate is valid for 825 days. Each node gets its own certificate, and the server CA certificate. The server CA private key stays in the vault.
+
+Fleet reissues a node certificate when the node's hostname, public addresses, or (on control) the `edge-control` name change. Fleet refuses to start if only one half of a CA pair exists, if a reused pair does not match, or if it expires in less than 24 hours. Restore the matching pair from backup. See [Certificates](certificates.md).
 
 ## Fleet startup order
 
@@ -157,7 +158,7 @@ flowchart TD
       M --> CDB["PostgreSQL + Valkey"] --> CM["Migrations"] --> CS["Control services"]
     end
     subgraph Runtime["Traffic hosts"]
-      CS --> DDB["DNS databases"] --> DM["DNS migrations"] --> DS["PowerDNS + DNSdist"]
+      CS --> DS["PowerDNS secondary + DNSdist"]
       DS --> ES["Edge gateways + cells"]
     end
     subgraph Observe["After runtime"]
@@ -165,83 +166,99 @@ flowchart TD
     end
 ```
 
-The generated `STARTUP-ORDER.md` lists actual configured nodes in this order.
-This is service startup order, not permission to create dependent desired
-state early. After DNS services and restricted APIs are healthy, register and
-test DNS clusters, enable them, and only then apply platform DNS identity. A
-combined `dns-edge` node starts its DNS profile before edge inventory exists;
-its edge profile starts only after one-time registration data is configured.
+Run `show-start-order` to list your own nodes in this order. Fleet also writes `STARTUP-ORDER.md` in the bundle directory. The control host starts `control-db` and Valkey, runs the application migration, starts `pdns-db`, then runs the PowerDNS migration. A DNS host has no database to migrate.
+
+This is service order only. It does not mean you can create dependent settings early. After the DNS services are healthy, register and test the DNS clusters in the panel, enable them, and only then apply the platform DNS identity.
+
+A `dns-edge` host starts DNS first. Its edge services start only after you set its `EDGE_ID` (see [Enroll an edge by hand](production-fleet-operator-guide.md#edge-registration-and-mtls-enrollment)). When Fleet runs `bootstrap`, it enrolls the edge for you.
 
 ## Upgrade, rollback, and regional failure
 
 ```mermaid
 flowchart TD
     subgraph Deploy["Release deployment"]
-      R["Render bundle"] --> V["Validate"] --> T["Transfer"] --> P["Start"] --> H{"Healthy?"}
-      H -->|Yes| K["Retain previous bundle"]
-      H -->|No| B["Restore previous bundle"] --> S["Restart without deleting volumes"]
+      R["Render bundle"] --> V["Validate on the node"] --> T["Upload next to active"] --> P["Swap and start"] --> H{"Healthy?"}
+      H -->|Yes| K["Keep previous bundle as rollback target"]
+      H -->|No| B["Return node to previous bundle"] --> S["Restart without deleting volumes"]
     end
     subgraph Traffic["Independent traffic fallback"]
       RF["Regional failure"] --> HF["Health filter"] --> RR["Regional fallback"] --> GF["Global fallback"]
     end
 ```
 
-Never use `docker compose down -v` during rollback or credential recovery.
+`upgrade`, `apply-config`, and `rollback` do this, one node at a time. See [Fleet engine](../operations/fleet-engine.md#upgrades) for the plan, the health gate, and what a rollback cannot undo.
+
+::: danger Never delete volumes
+Do not run `docker compose down -v` or prune named volumes during a rollback or a credential recovery. Volumes hold the databases, the edge identity, and the logs.
+:::
 
 ## Fleet state and secret distribution
 
-Protected control-plane state records global configuration, nodes, addresses, feature modes, release identifiers, secret references, bundle generation, and last successful validation/render timestamps. Writes are atomic and protected by a non-blocking file lock. The previous valid state is retained in bounded history.
+The vault records global settings, nodes, addresses, feature modes, release identifiers, secrets, certificate authorities, and the last validation and render times. Fleet takes a lock before it changes the state, so two commands cannot write at once. Fleet keeps the 20 most recent previous states.
 
-Global application secrets are distributed only when the rendered role's Compose file references them. Node-scoped secrets include:
+Fleet puts a secret in a bundle only when a service in that bundle uses it. Node secrets are:
 
-| Node capability | Secrets |
+| Node role | Secrets |
 | --- | --- |
-| DNS | `pdns-db-password`, `pdns-api-key` |
-| Edge | `edge-status-token` |
-| Monitoring enabled | Shared `metrics-token`; node-exporter is restricted by the private monitoring network and host firewall |
-| Centralized logs enabled | `log-auth-token` |
+| `control` | `pdns-db-password`, `pdns-api-key` |
+| `dns`, `dns-edge` | `pdns-api-key` |
+| `edge`, `dns-edge` | `edge-status-token`, and the one-time `edge-bootstrap-token` while an edge is enrolling |
 
-A DNS node's database password is not shared with any other DNS node or the control plane.
+Global secrets (application key, artifact signing key, database, Valkey, ClickHouse, Grafana, metrics, telemetry, log, and backup credentials) are shared by the nodes whose services need them. Only the control host has a PowerDNS database password.
 
-## Per-node DNS database lifecycle
+## Primary database lifecycle
 
-On each DNS-capable host:
+The control host runs the PowerDNS database. These steps happen on its first start and on every later start:
 
-1. `pdns-db` starts from that host's persistent PostgreSQL volume.
-2. The activation workflow idempotently ensures the pinned base PowerDNS
-   schema and synchronizes the local `pdns` role password to the active bundle.
-   This repairs an interrupted first initialization without deleting data.
-3. `pdns-migrate` applies maintained runtime migrations using the same
-   node-specific stored credential.
-4. `pdns-auth` connects to hostname `pdns-db`, database `pdns`, user `pdns`, and that same credential.
-5. Health checks and future migrations use the same stable value.
-6. A normal render does not generate a new password.
+1. `pdns-db` starts from the host's persistent PostgreSQL volume.
+2. The start script runs `ensure-pdns-runtime.sh` inside `pdns-db`. It creates the pinned PowerDNS schema if it is missing and sets the `pdns` role password to the one in the bundle. This repairs an interrupted first start without deleting data.
+3. `pdns-migrate` applies the maintained PowerDNS runtime migrations.
+4. `pdns-primary` connects to host `pdns-db`, database `pdns`, user `pdns`, with that password.
+5. A normal render never creates a new password.
 
-For an existing installation, use `adopt-existing` with the existing `.env.prod`; the importer stores `PDNS_DB_PASSWORD` under that node without printing it. The source database volume is not deleted.
+DNS hosts keep a local SQLite store that the primary rebuilds, so they need none of this.
 
-Password rotation is staged. `--phase prepare` creates a pending credential while the active one stays unchanged. The rendered `reconcile-pdns-password.sh` changes only the selected DNS host's local PostgreSQL role, rendered PowerDNS configuration, and local environment, then recreates and health-checks `pdns-auth`. `--phase commit` makes the pending credential active in protected fleet state. `--phase abort` removes an unreconciled pending value.
+For an existing installation, run `adopt-existing --env-file .env.prod` with the existing environment file. Fleet stores `PDNS_DB_PASSWORD` for that node without printing it. It does not delete the old volume.
 
-Run the generated reconciliation script as root (`sudo ./reconcile-pdns-password.sh`).
-It locks out concurrent rotations, validates and stages both configuration files
-before changing PostgreSQL, and retains a private `.env.prod.before-pdns-rotation`
-backup. PowerDNS configuration remains `root:82`, mode `0640`; the generated
-service grants its non-root process supplementary group `82`.
-Rotation recreates only `pdns-auth` with `--no-deps`; the database container and
-its existing volume stay in place even though `.env.prod` changes.
+### Rotate the PowerDNS database password
 
-If interrupted after the database password changes, preserve the pending file
-and rerun the same command. It accepts the already-applied pending credential
-and repairs both consumers before recreating PowerDNS. If activation fails,
-repair service health and retry with that same pending file. Do not abort or
-restore an old bundle after the credential has been applied: that can leave
-database and application passwords inconsistent. Commit only after PowerDNS is
-healthy, then render from the committed Fleet state. Keep the before-rotation
-backup protected until recovery is verified; archive it outside the next bundle
-before starting another rotation. No PostgreSQL volume is deleted.
+Rotation has three phases and runs on the control node:
+
+<div class="steps">
+
+1. Prepare a pending password. The active one does not change.
+
+   ```sh
+   cdnfoundry-fleet rotate-secret --node control-1 --secret pdns-db-password --phase prepare
+   ```
+
+   Expected: JSON with `"status": "prepare"`.
+
+2. Render the control bundle, upload it, and on the control host run the reconcile script as root.
+
+   ```sh
+   sudo ./reconcile-pdns-password.sh
+   ```
+
+   Expected: `Local PostgreSQL, PowerDNS configuration, and .env.prod now use the pending password.`
+
+3. Commit the rotation, then render again.
+
+   ```sh
+   cdnfoundry-fleet rotate-secret --node control-1 --secret pdns-db-password --phase commit
+   ```
+
+   Expected: JSON with `"status": "commit"`.
+
+</div>
+
+The script takes a lock, so two rotations cannot run together. It stages `.env.prod` and `docker/pdns/primary.conf` before it changes PostgreSQL. It keeps a private copy of the old environment file as `.env.prod.before-pdns-rotation`. It then recreates only `pdns-primary`, with `--no-deps`, and leaves `pdns-db` and its volume alone. The PowerDNS configuration stays `root:82`, mode `0640`.
+
+If the script stops half way, keep the pending file and run the same script again. It accepts a password that was already applied. If the new service does not become healthy, fix its health and run the script again. Do not abort the rotation or restore an old bundle after the database password has changed, because the database and the application would then disagree. Commit only after PowerDNS is healthy. Move the before-rotation backup out of the bundle before the next rotation. Use `--phase abort` only to remove a pending value that no host has applied.
 
 ## Geo-routing policy
 
-The generated policy records this decision pipeline:
+Live Geo-DNS answers come from the platform's DNS settings and the edge health data, as described in [Geo-DNS](../guides/geo-dns.md). Fleet also writes a record of the intended decision order to `generated/geo-routing-policy.json` in the monitoring host's bundle. No runtime service reads that file. It lists every edge with its region, addresses, draining state, and health thresholds, and this order:
 
 ```text
 valid ECS client subnet
@@ -251,114 +268,112 @@ valid ECS client subnet
 → preferred healthy edge IP
 ```
 
-Policy implementations consuming the generated file must support country, ASN, region, and network overrides; deterministic choice; ordered regional/global fallback; draining; stale health; compatibility filters; and separate A/AAAA health. A recommended starting point is three consecutive failures before removal and two consecutive successes before re-entry, with a 90-second stale threshold. Tune these values to probe interval and DNS TTL.
+The default health thresholds in that file are three failures before removal, two successes before return, and 90 seconds before health data counts as stale. Tune them to your probe interval and DNS TTL.
 
-## MMDB behavior
+## MMDB (GeoIP database) behavior
 
-MMDB is required only on roles whose selected services actually consume it. A role-specific bundle copies only Compose-referenced runtime files and retains only referenced volumes. A production Compose definition that mounts an MMDB volume must also select a working updater or another documented population mechanism for that same role; an unpopulated MMDB mount is a validation defect and must not be deployed. Roles that do not consume MMDB should have no MMDB environment variable, mount, volume, or dependency.
+The MMDB files hold the GeoIP data used for country and ASN answers. The `mmdb-updater` service runs in the `dns` and `edge` profiles and fills the `mmdb` volume. By default it downloads the `dbip-jsdelivr` database once a day. A bundle contains only the Compose files, volumes, and variables that its role uses, so a control or monitoring host has no MMDB settings.
 
-Before deployment, inspect the rendered role with:
+To check a rendered bundle on the control machine:
 
 ```bash
-# Run on the control-plane machine against a rendered bundle.
-cd /var/lib/cdnfoundry-fleet/bundles/NODE_NAME
+# Run on the workstation against a rendered bundle.
+cd ~/.config/cdnfoundry-fleet/bundles/NODE_NAME
 grep -Rni -- 'mmdb\|geoip' ./*.yml .env.prod generated 2>/dev/null || true
 ```
 
-Then verify on the **target host** that the populated persistent data exists and the consuming service reports successful database loading.
+Expected: matches only for `dns`, `edge`, and `dns-edge` nodes. Then check on the target host that the `mmdb` volume holds a database and that the consuming service reports a successful load.
 
 ## Monitoring modes
 
-- `disabled`: no full monitoring stack, no node exporter service, and no monitoring credentials in role bundles.
-- `colocated`: monitoring data services run on the control host; generated file discovery covers all enabled production hosts.
-- `dedicated`: monitoring data services run on a monitoring-role host; generated file discovery covers control, DNSdist, edge gateways, log collectors, and node exporters. An externally reachable control PostgreSQL endpoint is mandatory so the read-only Grafana role and views can be provisioned deterministically.
+- `disabled`: no monitoring stack, no node exporter, no monitoring credentials in any bundle.
+- `colocated`: the monitoring services run on the control host. Prometheus targets cover every enabled host.
+- `dedicated`: the monitoring services run on the monitoring-role host you name. The control host must have an externally reachable PostgreSQL endpoint, so Fleet can set up the read-only Grafana role. Rendering fails without it.
 
-Prometheus targets are regenerated automatically when nodes are added, updated, disabled, or removed.
+Fleet regenerates the Prometheus target files when you add, change, disable, or remove a node. Render the monitoring host again to apply them.
 
 ## Backup modes
 
-- `disabled`: no backup-specific credentials or placeholder variables are required.
-- `control`: protect the fleet state, CA, application database, and control state.
-- `all-stateful`: additionally protect every DNS host's local PostgreSQL state and enabled observability stores.
+- `disabled`: no backup settings or credentials.
+- `control`: set up backups of the control plane (application database and control state).
+- `all-stateful`: accepted as a setting name. Fleet currently writes the same backup settings for it as for `control`.
 
-Backups must be encrypted, tested by restore, stored outside the host, and protected independently from normal fleet credentials. Do not back up transient bundles instead of authoritative state and data volumes.
+Backups must be encrypted, stored off the host, and tested by a restore. Back up the vault too, with `vault-backup`. See [Backup and recovery](../operations/backup-and-recovery.md).
 
 ## IPv4 and dual stack
 
-Initialize with `--dual-stack`, then provide each node's `--public-ipv6` and, where needed, `--bind-ipv6`. Firewalls, authoritative glue, health probes, monitoring, and routing policy must be configured separately for IPv4 and IPv6. An edge may be healthy for A and unhealthy for AAAA without being removed from both families.
+To plan IPv6, run `setup --dual-stack` (or `"ipv6": true` in the JSON), then give each node `public_ipv6` and, if needed, `bind_ipv6`. With `bind_ipv6` set, Fleet publishes IPv6 next to IPv4 for these services:
+
+- DNS: `dnsdist` and the primary's transfer port 5300;
+- control ingress: `caddy` (80, 443, and 8444) and `edge-control` (8443, so a PoP with only IPv6 can still enroll and sync);
+- `telemetry-gateway` and `edge-gateway`.
+
+The Docker daemon on the host must have IPv6 enabled.
+
+A new IPv6 nameserver address is not saved until it answers. In the admin panel, open **Infrastructure → System DNS identity**. Through the API, use `PATCH /api/admin/system/settings/dns` (or check first with `POST /api/admin/system/settings/dns/validate`). When you enter a new IPv6 address, the control plane asks up to three registered edges with a fresh heartbeat to send a SOA query for the platform zone to that address over IPv6. The first save fails with a message on the address. Save again after the probe answers. An answer counts for 24 hours. Addresses you saved earlier are not probed again.
+
+On a new installation, save IPv4 first, because the zone must be served before an address can answer for it. Set up firewalls, glue records, health probes, monitoring, and routing for each address family separately. An edge can be healthy for A and unhealthy for AAAA without leaving both.
 
 ## Hardware sizing
 
-These are planning baselines; measure actual query rate, request rate, cache working set, log volume, retention, and database growth.
-
-| Deployment | Control | Each DNS host | Each edge host | Monitoring |
-| --- | --- | --- | --- | --- |
-| Small | 4 vCPU, 8 GB RAM, 100 GB SSD | 2 vCPU, 4 GB, 40 GB SSD | 4 vCPU, 8 GB, cache-sized NVMe | Colocated or 4 vCPU, 8 GB |
-| Medium | 8 vCPU, 16–32 GB, 250 GB SSD | 4 vCPU, 8 GB, 100 GB SSD | 8–16 vCPU, 16–32 GB, NVMe | 8 vCPU, 32 GB, 500 GB+ SSD |
-| Multi-region baseline | 16+ vCPU, 64 GB, redundant NVMe | 8 vCPU, 16 GB, redundant SSD | 16–32+ vCPU, 64–128 GB, high-endurance NVMe | 16+ vCPU, 64–128 GB, storage sized to retention |
+CDNFoundry publishes no throughput numbers, because capacity depends on your hardware and traffic. Use the [sizing guide](sizing.md) for starting layouts, the limits the software sets, and a method to measure your own hosts.
 
 ## Firewall requirements
 
 | Destination | Port | Allowed sources |
 | --- | --- | --- |
-| DNSdist on DNS hosts | UDP/TCP 53 | Internet |
-| Edge HTTP/TLS | TCP 80/443 | Internet or configured customer networks |
-| Control UI/API | TCP 80/443 | Intended operator/public sources |
-| Edge control runtime | TCP 8443 | Configured edge source addresses only |
-| DNS API | TCP 8444 | Control-plane source addresses only |
-| Node exporter | TCP 9100 | Monitoring host/private monitoring network only |
-| PostgreSQL, Valkey, ClickHouse, Loki internal ports | service-specific | Local Docker network or exact private peers only; never Internet |
-| SSH | TCP 22 or chosen port | Administrative bastions/VPN only |
+| DNSdist on DNS hosts | UDP and TCP 53 | Internet |
+| Edge HTTP and HTTPS | TCP 80 and 443 | Internet or your customer networks |
+| Control panel and API | TCP 80 and 443 | Your operators and the public sources you choose |
+| Edge control (mTLS) | TCP 8443 | Edge node addresses only |
+| DNS primary transfers | TCP and UDP 5300 | DNS node addresses only |
+| Node exporter | TCP 9100 | Monitoring host or private monitoring network only |
+| PostgreSQL, Valkey, ClickHouse, Loki ports | service-specific | Local Docker network or exact private peers only, never the Internet |
+| SSH | TCP 22 or your port | Administrative bastions or VPN only |
 
-Publish authoritative NS and glue records for every unicast DNS host. Allow both UDP and TCP 53. Keep reverse-path filtering and provider anti-spoofing compatible with the selected unicast design.
+Publish NS and glue records for every unicast DNS host, and allow both UDP and TCP on port 53. The full listener list is in [Services and ports](../reference/services-and-ports.md).
 
 ## Multi-region reference topology
 
-The example contains four authoritative unicast DNS hosts and ten unicast edge hosts. The locations are an example, not generator constants.
-
-DNS: Ashburn, Frankfurt, Singapore, São Paulo.
-
-Edges: Ashburn, Los Angeles, São Paulo, Frankfurt, Johannesburg, Dubai, Mumbai, Singapore, Tokyo, Sydney.
-
-Copy and edit the JSON topology on the **control-plane machine**:
+The shipped example `deploy/production/examples/multi-region-fleet.json` has one control node, three monitoring nodes, four DNS nodes, and ten edge nodes, with dedicated monitoring and central logs on `monitoring-1`. Its locations are placeholders (`site-a` and so on). Copy it and edit it on your workstation:
 
 ```bash
 install -m 0600 deploy/production/examples/multi-region-fleet.json ./fleet.json
-sudo ./scripts/cdnfoundry-fleet --config fleet.json --non-interactive setup
+./scripts/cdnfoundry-fleet --config fleet.json --non-interactive --dry-run setup
 ```
 
-Replace documentation IP addresses before production use.
+Expected: lines starting with `Dry run, not persisted:` and a JSON status of `validated`. Replace the documentation IP addresses before a real setup. See the [multi-region quick start](production-quick-start-multi-region.md).
 
 ## Troubleshooting
 
 ### PowerDNS cannot authenticate
 
-On the affected **DNS host**, confirm `pdns-db` and `pdns-auth` are in the same bundle and that PowerDNS points to `pdns-db`:
+On the control host, confirm that `pdns-db` and `pdns-primary` are in the same bundle and that PowerDNS points to `pdns-db`.
 
 ```bash
 cd /opt/cdnfoundry
-docker compose --env-file .env.prod config | grep -A12 -E 'pdns-db:|pdns-auth:'
+docker compose --env-file .env.prod config | grep -A12 -E 'pdns-db:|pdns-primary:'
 docker compose --env-file .env.prod ps
-docker compose --env-file .env.prod logs --since 15m pdns-db pdns-auth
+docker compose --env-file .env.prod logs --since 15m pdns-db pdns-primary
 ```
 
-Do not print the password. Compare only a local hash when necessary. Use `adopt-existing` for a previously deployed value or the staged rotation procedure. Do not delete the database volume.
+Do not print the password. Use `adopt-existing` to import a password that is already deployed, or use the rotation above. Do not delete the database volume.
 
-### Compose requests another role's variables
+### Compose asks for another role's variables
 
-Render and inspect the selected node again. The node's generated Compose manifest should contain only services for its role and enabled features; `.env.prod` contains only variables referenced by that filtered Compose plus generated role configuration.
+Render the node again and inspect it. The node's generated Compose manifest holds only the services for its role and enabled features. `.env.prod` holds only the variables that file uses.
 
 ### A bundle render fails
 
-The destination remains unchanged until the temporary bundle is complete. Correct the error, run `validate`, and render again. The previous state JSON and `.previous` node bundle remain available.
+The active bundle stays unchanged until the new one is complete. Fix the error, run `validate`, and render again. The previous bundle stays in `NODE.previous`.
 
-### A node is removed but remains in monitoring
+### A removed node still shows in monitoring
 
-Render the monitoring host after state modification. Prometheus target files are generated from current enabled nodes.
+Render the monitoring host again. Prometheus targets come from the current enabled nodes.
 
-### Generator reports another process
+### Fleet reports another process
 
-A control-plane generation process already holds the fleet lock. Find and finish that process; do not delete the lock file while it is active.
+Another Fleet command holds the state lock. Wait for it to finish. Do not delete the lock file while it runs.
 
 ## Deployment runbooks
 

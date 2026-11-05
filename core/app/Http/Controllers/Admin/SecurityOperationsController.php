@@ -80,9 +80,9 @@ class SecurityOperationsController extends Controller
             $pool->update(['withdrawn' => true, 'revision' => $pool->revision + 1]);
             AuditLog::record($request->user(), 'edge.pool_withdrawn', $pool, ['revision' => $pool->revision], $request->ip());
         });
-        ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
+        $operation = ReconcilePlatformDnsIdentity::dispatchForRoutingChange($request->user()->id);
 
-        return response()->json(['data' => ['pool_id' => $pool->id, 'withdrawn' => true]], 202);
+        return response()->json(['data' => ['pool_id' => $pool->id, 'withdrawn' => true, 'operation_id' => $operation?->id]], 202);
     }
 
     public function restore(Request $request, EdgePool $pool): JsonResponse
@@ -92,9 +92,9 @@ class SecurityOperationsController extends Controller
             $pool->update(['withdrawn' => false, 'revision' => $pool->revision + 1]);
             AuditLog::record($request->user(), 'edge.pool_restored', $pool, ['revision' => $pool->revision], $request->ip());
         });
-        ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
+        $operation = ReconcilePlatformDnsIdentity::dispatchForRoutingChange($request->user()->id);
 
-        return response()->json(['data' => ['pool_id' => $pool->id, 'withdrawn' => false]], 202);
+        return response()->json(['data' => ['pool_id' => $pool->id, 'withdrawn' => false, 'operation_id' => $operation?->id]], 202);
     }
 
     private function state(Request $request, Domain $domain, string $state, ?EdgePool $pool = null): JsonResponse

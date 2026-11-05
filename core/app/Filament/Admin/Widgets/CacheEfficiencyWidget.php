@@ -3,7 +3,6 @@
 namespace App\Filament\Admin\Widgets;
 
 use App\Filament\Admin\Widgets\Concerns\UsesOpsDashboardContext;
-use App\Ops\Services\MetricComparisonService;
 use App\Ops\Services\OpsDashboardService;
 use App\Ops\Support\MetricFormatter;
 use Filament\Widgets\Widget;
@@ -24,14 +23,13 @@ class CacheEfficiencyWidget extends Widget
         $summary = $state['summary'] ?? [];
         $previous = $state['previous_summary'] ?? [];
         $formatter = app(MetricFormatter::class);
-        $change = app(MetricComparisonService::class)->compare($summary['cache_ratio'] ?? null, $previous['cache_ratio'] ?? null);
 
         return [
             'state' => $state,
             'summary' => $summary,
             'ratio' => $formatter->percent($summary['cache_ratio'] ?? null),
             'cacheBytes' => $formatter->bytes($summary['cache_bytes_out'] ?? null),
-            'comparison' => $formatter->deltaPercent($change['percent']),
+            'comparison' => $formatter->change($summary['cache_ratio'] ?? null, $previous['cache_ratio'] ?? null),
             'telemetryUrl' => $this->telemetryUrl(['view' => 'cache']),
         ];
     }

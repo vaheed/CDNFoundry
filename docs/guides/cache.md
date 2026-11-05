@@ -1,18 +1,22 @@
 ---
 title: Cache and purge
-description: Configure deterministic cache policy, development mode, URL purge, full purge, and retries.
+description: Set cache rules for a domain, bypass the cache while developing, purge URLs or everything, and check that a purge reached the edges.
 ---
 
 # Cache and purge
 
-| Concern | Contract |
+This page shows how to set the cache rules of a domain, bypass the cache for a short time, and purge cached content. **You need:** a proxied hostname on the domain. See [Proxy and origins](proxy-and-origins.md).
+
+A cache keeps copies of origin responses on the edge. A hit is served from the copy. A miss goes to your origin. A purge removes copies.
+
+| Concern | How it works |
 | --- | --- |
-| Namespace | Persistent per-cell storage; keys isolate domain, policy, epoch, and URL generation |
-| Key | Same normalized key for lookup and URL purge |
-| Full purge | Increment epoch; never scan the filesystem |
-| URL purge | Durable per-edge task |
-| Development mode | Absolute bounded bypass expiry |
-| Failure | Retry the same task and expose backlog |
+| Storage | Each cell has its own persistent cache volume. Keys separate domain, policy, epoch, and URL generation |
+| Key | Lookup and URL purge use the same normalized key |
+| Full purge | Raises a per-domain epoch number. Nothing scans the disk |
+| URL purge | One durable task per edge |
+| Development mode | Bypasses the cache until a fixed time |
+| Failure | The same task is retried and the backlog is visible |
 
 ```mermaid
 flowchart LR
@@ -32,19 +36,23 @@ flowchart LR
 ```
 
 ::: info Purge completion
-An accepted purge proves task creation. Confirm edge task completion and make a
-real request to verify the expected MISS.
+A `202` reply proves only that the purge tasks exist. Check the purge status, then
+request the URL and look for a MISS.
 :::
 
-Cache policy is per domain and revisioned with edge configuration.
+## Cache settings
+
+Open the domain and choose **Cache settings**, or use `GET` and `PATCH` on `/api/domains/{domain}/cache`. Cache settings belong to one domain and are delivered to edges with its other configuration.
+
+**Expected result:** the change returns an operation, and edges apply the new revision after they acknowledge it.
 
 | Setting | Allowed values |
 | --- | --- |
-| enabled | boolean |
+| enabled (**Cache enabled**) | boolean |
 | edge TTL | 0–31,536,000 seconds |
 | browser TTL | 0–31,536,000 seconds |
 | maximum object | 1 MiB–1 GiB, capped by the pool profile |
-| respect origin headers | boolean |
+| respect origin headers (**Respect origin cache headers**) | boolean |
 | query policy | include all, ignore all, include selected, or ignore selected |
 | selected query names | up to 32 distinct safe names |
 | bypass cookie names | up to 32 distinct names, each 1–64 safe characters |
@@ -60,22 +68,34 @@ maximum object, origin-header respect, query inclusion, no bypass cookies,
 approved status TTLs, two-request admission, 60 seconds of stale-if-error,
 30 seconds of stale-while-revalidate, normal serving, and 32 variants.
 
-Expired objects inside the stale-while-revalidate window are served while one
-background refresh runs. Nginx's per-key cache lock also coalesces cold misses;
-its wait and lock age are both capped at 65 seconds, matching the outer origin
-read deadline. Full purge still changes
-the domain epoch, so a stale object from an earlier epoch is never selected.
+The edge serves an expired object inside the stale-while-revalidate window while
+one background refresh runs. Nginx also uses a per-key lock so that many cold
+requests cause one origin fetch. The lock wait and age are capped at 65 seconds,
+the same as the outer origin read deadline. A full purge changes the domain epoch,
+so the edge never selects a stale object from an earlier epoch.
 
-Requests with authorization, unsafe methods, configured cookies, `Set-Cookie`,
-private/no-store responses, unsupported `Vary`, ranges, and disallowed status
-codes follow the runtime bypass or no-store rules. Cache keys and URL purge use
-the same normalized scheme, lowercase hostname, path, sorted query pairs,
-policy generation, epoch, and URL generation. Range requests bypass admission.
+These requests and responses skip the cache or are not stored: requests with
+authorization, unsafe methods, or a configured bypass cookie; responses with
+`Set-Cookie`, `private`, `no-store`, or an unsupported `Vary`; range requests;
+and disallowed status codes. Cache keys and URL purge use one key definition:
+scheme, lowercase hostname, the raw request path, and the sorted query pairs,
+then policy generation, epoch, and URL generation.
+
+The path is taken as the client sent it and stays percent-encoded. Only the case
+of escapes and escapes of unreserved characters change (`%7e` becomes `~`), so
+`%2F` never merges with `/` and `/x%3Fv=1` never shares an entry with `/x?v=1`.
+Query names and values are decoded (`+` is a space), sorted as strings by name
+and then value, and encoded again. A request has **no cache key**, and is never
+cached, when the origin could read it differently from the cache: dot segments
+(`/a/../b`, including `%2e%2e`), empty segments (`//`), malformed percent
+escapes, raw spaces or non-ASCII bytes in the path, or more than 128 query
+arguments (counted before the query policy applies). The same URLs are
+refused with `422` when you purge them. The PHP and Lua implementations are
+tested against one fixture file, `tests/fixtures/cache_key_vectors.json`.
 
 ## Pool profiles and storage
 
-Administrators select one profile on each service pool. The profile is compiled
-into every assigned domain artifact and caps the domain policy:
+An administrator selects one profile on each service pool (a group of cells that serve assigned domains). The profile goes into every assigned domain's artifact and caps the domain policy. "Cache" is the disk size per cell, "Temporary" is space for in-flight bodies, and "Inactive" is how long an unused object stays:
 
 | Profile | Cache | Temporary | Minimum free | Inactive | Object | Admissions/s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -84,45 +104,74 @@ into every assigned domain artifact and caps the domain policy:
 | Large | 4 GiB | 512 MiB | 256 MiB | 6 hours | 512 MiB | 100 |
 | Streaming | 8 GiB | 1 GiB | 512 MiB | 24 hours | 1 GiB | 25 |
 
-Every installed cell has its own persistent cache volume. Request temporary
-storage remains a separate bounded filesystem. The OpenResty cache also reserves
-minimum free space and evicts inactive/least-recent objects. Operators must set
-the volume quota to the selected profile or a stricter local ceiling; changing
-profiles never creates a directory, process, or timer per domain.
+Each cell has its own persistent cache volume. Request temporary storage is a
+separate bounded filesystem. The cache keeps the minimum free space and evicts
+inactive or least recently used objects. The operator must set the volume quota to the
+profile size or lower. Changing a profile never creates a directory, process, or timer per domain.
 
-Cache-only and stale-only keep cache hits available but reject an origin-bound
-miss with stable reason `cache_mode_origin_disabled`. They therefore remain
-safe during origin isolation and do not call Laravel from the request path.
+Cache-only and stale-only modes still serve cache hits. A miss that would go to the origin is rejected with the reason `cache_mode_origin_disabled`. Use these modes to isolate a failing origin. The request path never calls the control plane.
 
 ## Development mode
 
-Enable development mode for 1–1,440 minutes. PostgreSQL stores an absolute
-expiry and the signed artifact carries it. OpenResty checks the time on each
-request, so bypass ends without the scheduler or control plane.
+Development mode bypasses the cache for 1 to 1,440 minutes.
+
+Open the domain and choose **Enable development mode**, enter **Duration (minutes)** (default 30), and save. Use **Disable development mode** to end it early. Through the API, send `POST /api/domains/{domain}/cache/development-mode` with `duration_minutes`, or `DELETE` the same path.
+
+**Expected result:** requests show a bypass until the end time. PostgreSQL stores the absolute end time and the signed artifact carries it. OpenResty checks it on every request, so bypass ends without the scheduler or control plane.
 
 ## Purge
 
-A purge is either:
+<DocTabs :labels="['Panel', 'API']">
+<template #tab-1>
+
+Open the domain, choose **Purge cache**, then pick **Everything** or **Exact URLs**. For URLs, enter one per line.
+
+</template>
+<template #tab-2>
+
+```sh
+curl -X POST "$CDNF_URL/api/domains/42/cache/purge" \
+  -H "Authorization: Bearer $CDNF_TOKEN" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{"type": "urls", "urls": ["https://www.example.com/app.css"]}'
+```
+
+Use `{"type": "all"}` for a full purge. Follow progress with `GET /api/domains/{domain}/cache/purges/{purge}`.
+
+</template>
+</DocTabs>
+
+**Expected result:** `202 Accepted` and a purge ID. A purge is either:
 
 - `all`, which increments the domain cache epoch and does not scan disk;
-- `urls`, which accepts 1–100 distinct URLs and generates exact cache keys.
+- `urls`, which accepts 1 to 100 distinct URLs and generates exact cache keys.
 
-The payload is limited to 128 KiB. A domain may have at most 100 outstanding
-purges. The controller creates one durable task per eligible edge and returns
-`202`. Full and URL purges are idempotent through the request key and task ID.
+The payload is limited to 128 KiB. A domain may have at most 1,000 outstanding
+(pending or running) purges. The control plane creates one durable task per eligible edge and returns
+`202`. The idempotency key and task ID make repeats safe.
+
+A purge URL must be absolute, use `http` or `https`, belong to the domain, use
+the default port, and carry no credentials (`user@`) and no fragment (`#`).
 
 The agent sends the task to every matching cell. OpenResty records the new epoch
-or bounded URL-key invalidations in shared memory. Failed delivery retains the
-same task, records `last_error`, and retries with bounded delay. Traffic
-continues throughout.
+or the URL invalidations in a dedicated shared-memory dictionary (`cache_purges`,
+16 MiB) that rate-limit counters cannot evict. Each URL entry holds the purge
+id and expires after one year, the longest cache lifetime. The agent first writes
+every URL purge to `cache-purges.json` in its state directory (at most 50,000
+keys, entries older than one year dropped). A cell reports `purges_restored:
+false` after it starts; the agent then replays the saved purges in batches of
+100 and marks the cell restored, so purged content does not return after a
+cell restart. A purge that would exceed the 50,000-key bound fails with
+`cache_purge_capacity_exceeded` instead of being forgotten. Failed delivery
+keeps the same task, records `last_error`, and retries with a bounded delay.
+Traffic continues throughout.
+
+**If the purge does not finish:** read the purge status and its `last_error`. Fix the edge or its connection and the retry completes the same task. If you get `cache_purge_capacity_exceeded`, the agent already holds 50,000 URL purges. Use a full purge instead.
 
 ## Storage isolation
 
-Every cell uses a distinct persistent cache volume plus a distinct temporary
-filesystem, CPU, memory, and PID limit. Cache loss is safe because content is
-derived from origins and desired policy; restart preserves content, while
-volume replacement rebuilds it on demand. Exhaustion in one cell does not scan
-or delete another cell's storage.
+Each cell has its own cache volume, temporary filesystem, and CPU, memory, and PID limits. Losing a cache is safe, because content comes from origins. A restart keeps content. A new volume refills on demand. A full disk in one cell does not touch another cell's storage.
 
 Delivery compression does not vary the cache key. The cell requests identity
 from the origin and stores one canonical object, then applies the pool's

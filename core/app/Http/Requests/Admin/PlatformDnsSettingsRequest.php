@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Models\NameserverAddressProbe;
+use App\Models\PlatformDnsSetting;
 use App\Support\NetworkAddress;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Validator;
@@ -20,6 +22,11 @@ class PlatformDnsSettingsRequest extends FormRequest
             'nameservers.*.hostname' => ['required', 'distinct', 'string', 'max:253', self::HOSTNAME],
             'nameservers.*.ipv4' => ['required', 'ipv4'],
             'nameservers.*.ipv6' => ['nullable', 'ipv6'],
+            'customer_nameserver_pairs' => ['required', 'array', 'min:1', 'max:8'],
+            'customer_nameserver_pairs.*' => ['required', 'array', 'size:2'],
+            'customer_nameserver_pairs.*.*.hostname' => ['required', 'string', 'max:253', self::HOSTNAME],
+            'customer_nameserver_pairs.*.*.ipv4' => ['required', 'ipv4'],
+            'customer_nameserver_pairs.*.*.ipv6' => ['nullable', 'ipv6'],
             'soa_primary' => ['required', 'string', 'max:253', self::HOSTNAME],
             'soa_mailbox' => ['required', 'string', 'max:253', self::HOSTNAME],
             'soa_refresh' => ['required', 'integer', 'between:300,86400'],
@@ -27,8 +34,8 @@ class PlatformDnsSettingsRequest extends FormRequest
             'soa_expire' => ['required', 'integer', 'between:86400,2419200'],
             'soa_minimum_ttl' => ['required', 'integer', 'between:30,86400'],
             'default_ttl' => ['required', 'integer', 'between:30,86400'],
-            'cluster_targets' => ['required', 'array', 'min:1', 'max:16'],
-            'cluster_targets.*' => ['required', 'string', 'max:253'],
+            // The platform zone goes to the hidden DNS primary; per-cluster targets were removed in 2.0.
+            'cluster_targets' => ['prohibited'],
         ];
     }
 
@@ -67,6 +74,9 @@ class PlatformDnsSettingsRequest extends FormRequest
             if (isset($data['proxy_hostname']) && (! $insidePlatform($data['proxy_hostname']) || rtrim($data['proxy_hostname'], '.') === $platform)) {
                 $validator->errors()->add('proxy_hostname', 'The proxy hostname must be a subdomain of the platform domain.');
             }
+            if (is_array($data['nameservers'] ?? null) && count($data['nameservers']) % 2 !== 0) {
+                $validator->errors()->add('nameservers', 'Nameservers are offered in pairs; provide an even number (ns1 and ns2, then ns3 and ns4).');
+            }
             foreach ($data['nameservers'] ?? [] as $index => $nameserver) {
                 if (! $insidePlatform($nameserver['hostname'] ?? null)) {
                     $validator->errors()->add("nameservers.$index.hostname", 'Nameserver hostnames must be inside the platform domain.');
@@ -78,6 +88,31 @@ class PlatformDnsSettingsRequest extends FormRequest
                     }
                 }
             }
+            $hostnames = [];
+            foreach ($data['customer_nameserver_pairs'] ?? [] as $pairIndex => $pair) {
+                foreach (is_array($pair) ? $pair : [] as $index => $nameserver) {
+                    $hostname = $nameserver['hostname'] ?? null;
+                    if (! $insidePlatform($hostname)) {
+                        $validator->errors()->add("customer_nameserver_pairs.$pairIndex.$index.hostname", 'Customer nameserver hostnames must be inside the platform domain.');
+                    }
+                    if (is_string($hostname)) {
+                        if (isset($hostnames[$hostname])) {
+                            $validator->errors()->add("customer_nameserver_pairs.$pairIndex.$index.hostname", 'A hostname can belong to only one pair.');
+                        }
+                        $hostnames[$hostname] = true;
+                        if (str_contains($hostname, '*')) {
+                            $validator->errors()->add("customer_nameserver_pairs.$pairIndex.$index.hostname", 'Wildcard nameserver names are not allowed.');
+                        }
+                    }
+                    foreach (['ipv4', 'ipv6'] as $family) {
+                        $address = $nameserver[$family] ?? null;
+                        if (is_string($address) && NetworkAddress::isUnsafe($address)) {
+                            $validator->errors()->add("customer_nameserver_pairs.$pairIndex.$index.$family", 'Glue addresses must be public unicast service addresses.');
+                        }
+                    }
+                }
+            }
+            self::requireAnsweringIpv6($validator, $data, $platform);
             if (isset($data['soa_primary']) && ! $insidePlatform($data['soa_primary'])) {
                 $validator->errors()->add('soa_primary', 'The SOA primary must be inside the platform domain.');
             }
@@ -85,19 +120,39 @@ class PlatformDnsSettingsRequest extends FormRequest
                 && (int) $data['soa_expire'] <= (int) $data['soa_refresh'] + (int) $data['soa_retry']) {
                 $validator->errors()->add('soa_expire', 'The SOA expiry must be greater than refresh plus retry.');
             }
-            $targets = [];
-            foreach ($data['cluster_targets'] ?? [] as $index => $target) {
-                $target = strtolower(trim((string) $target));
-                if (isset($targets[$target])) {
-                    $validator->errors()->add("cluster_targets.$index", 'DNS cluster targets must be distinct.');
-                }
-                $targets[$target] = true;
-                if (preg_match('/^(?:[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?|\[[0-9a-f:]+\])(?::([1-9][0-9]{0,4}))?$/i', $target, $matches) !== 1
-                    || (isset($matches[1]) && (int) $matches[1] > 65535)) {
-                    $validator->errors()->add("cluster_targets.$index", 'DNS cluster targets must be bounded host or host:port values.');
-                }
-            }
         });
+    }
+
+    /**
+     * Glue that nothing answers on makes resolvers wait for a timeout before trying another address, so a
+     * new IPv6 nameserver address is saved only after an edge outside the control plane saw it answer.
+     * Asking is a side effect of the check: save again once the probe has answered. Addresses already saved
+     * are not asked again; they were accepted before.
+     */
+    private static function requireAnsweringIpv6(LaravelValidator $validator, array $data, string $platform): void
+    {
+        $current = PlatformDnsSetting::query()->find(1);
+        $saved = collect([...($current?->nameservers ?? []), ...collect($current?->customer_nameserver_pairs ?? [])->flatten(1)->all()])
+            ->pluck('ipv6')->filter()->map(fn (string $address): string => NameserverAddressProbe::canonical($address))->all();
+        $addresses = [];
+        foreach ($data['nameservers'] ?? [] as $index => $nameserver) {
+            $addresses["nameservers.$index.ipv6"] = $nameserver['ipv6'] ?? null;
+        }
+        foreach ($data['customer_nameserver_pairs'] ?? [] as $pairIndex => $pair) {
+            foreach (is_array($pair) ? $pair : [] as $index => $nameserver) {
+                $addresses["customer_nameserver_pairs.$pairIndex.$index.ipv6"] = $nameserver['ipv6'] ?? null;
+            }
+        }
+        foreach ($addresses as $field => $address) {
+            if (! is_string($address) || $validator->errors()->has($field) || in_array(NameserverAddressProbe::canonical($address), $saved, true)
+                || NameserverAddressProbe::isAnswering($address)) {
+                continue;
+            }
+            $asked = $platform !== '' && NameserverAddressProbe::request($address, $platform);
+            $validator->errors()->add($field, $asked
+                ? 'This IPv6 address has not been seen answering DNS from outside the control plane. A probe was requested; save again once it answers.'
+                : 'This IPv6 address cannot be verified because no registered edge is available to probe it.');
+        }
     }
 
     private static function normalize(array $input): array
@@ -120,10 +175,18 @@ class PlatformDnsSettingsRequest extends FormRequest
             }
             $input['nameservers'][$index]['ipv6'] = filled($nameserver['ipv6'] ?? null) ? $nameserver['ipv6'] : null;
         }
-        foreach ($input['cluster_targets'] ?? [] as $index => $target) {
-            if (is_string($target)) {
-                $input['cluster_targets'][$index] = strtolower(trim($target));
+        if (! isset($input['customer_nameserver_pairs']) && is_array($input['nameservers'] ?? null)) {
+            // Omitted: offer the platform nameservers two at a time, as the stored default.
+            $input['customer_nameserver_pairs'] = array_values(array_filter(array_chunk($input['nameservers'], 2), fn (array $pair): bool => count($pair) === 2));
+        }
+        foreach ($input['customer_nameserver_pairs'] ?? [] as $pairIndex => $pair) {
+            foreach (is_array($pair) ? $pair : [] as $index => $nameserver) {
+                if (isset($nameserver['hostname']) && is_string($nameserver['hostname'])) {
+                    $input['customer_nameserver_pairs'][$pairIndex][$index]['hostname'] = mb_strtolower(rtrim(trim($nameserver['hostname']), '.'));
+                }
+                $input['customer_nameserver_pairs'][$pairIndex][$index]['ipv6'] = filled($nameserver['ipv6'] ?? null) ? $nameserver['ipv6'] : null;
             }
+            $input['customer_nameserver_pairs'][$pairIndex] = array_values((array) $pair);
         }
 
         return $input;

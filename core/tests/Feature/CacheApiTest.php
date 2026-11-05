@@ -24,7 +24,7 @@ class CacheApiTest extends TestCase
         [$user, $domain] = $this->ownedDomain();
         $stranger = User::factory()->create();
 
-        $this->actingAs($stranger)->getJson("/api/domains/{$domain->id}/cache")->assertForbidden();
+        $this->actingAs($stranger)->getJson("/api/domains/{$domain->id}/cache")->assertNotFound();
         $this->actingAs($user)->getJson("/api/domains/{$domain->id}/cache")
             ->assertOk()->assertJsonPath('data.settings.edge_ttl_seconds', 3600)->assertJsonPath('data.cache_epoch', 1);
         $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/cache", [...$this->settings(), 'bypass_cookie_names' => array_fill(0, 33, 'cookie')])
@@ -51,7 +51,7 @@ class CacheApiTest extends TestCase
     {
         [$user, $domain] = $this->ownedDomain();
         $domain->update(['cache_settings' => $this->settings()]);
-        $edge = Edge::query()->create(['name' => 'cache-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.10', 'enabled' => true, 'registered_at' => now()]);
+        $edge = Edge::query()->create(['name' => 'cache-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'enabled' => true, 'registered_at' => now()]);
 
         $full = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/cache/purge", ['type' => 'all'])
             ->assertAccepted()->assertJsonPath('data.cache_epoch', 2);
@@ -74,11 +74,46 @@ class CacheApiTest extends TestCase
             ->assertOk()->assertJsonPath('data.status', 'succeeded')->assertJsonPath('data.edges.0.edge_id', $edge->id);
     }
 
+    public function test_purge_urls_with_credentials_a_fragment_or_an_ambiguous_path_are_rejected(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $domain->update(['cache_settings' => $this->settings()]);
+
+        foreach ([
+            'https://user@example.test/a', 'https://user:pass@example.test/a', 'https://example.test/a#top', 'https://example.test/a#',
+            'https://example.test/a/../b', 'https://example.test//b', 'https://example.test/a%zz',
+        ] as $url) {
+            $this->actingAs($user)->postJson("/api/domains/{$domain->id}/cache/purge", ['type' => 'urls', 'urls' => [$url]])
+                ->assertUnprocessable()->assertJsonValidationErrors('urls');
+        }
+        $encoded = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/cache/purge", ['type' => 'urls', 'urls' => ['https://example.test/x%2fy%20z?q=a+b']])
+            ->assertAccepted();
+        $this->assertSame(['https|example.test|/x%2Fy%20z?q=a%20b'], CachePurge::query()->findOrFail($encoded->json('data.id'))->cache_keys);
+    }
+
+    public function test_a_purge_hands_back_an_operation_that_follows_its_delivery(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $domain->update(['cache_settings' => $this->settings()]);
+        Edge::query()->create(['name' => 'op-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'enabled' => true, 'registered_at' => now()]);
+
+        $response = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/cache/purge", ['type' => 'all'])->assertAccepted();
+        $operationId = $response->json('operation_id');
+        $this->assertSame($operationId, $response->json('data.operation_id'));
+        $this->actingAs($user)->getJson("/api/operations/{$operationId}")->assertOk()->assertJsonPath('data.status', 'running')->assertJsonPath('data.type', 'cache.purge');
+
+        $purge = CachePurge::query()->findOrFail($response->json('data.id'));
+        $this->assertGreaterThan(0, $purge->sequence);
+        $this->assertSame($purge->sequence, EdgeTask::query()->where('cache_purge_id', $purge->id)->firstOrFail()->payload['purge_id']);
+        $purge->update(['status' => 'succeeded']);
+        $this->actingAs($user)->getJson("/api/operations/{$operationId}")->assertJsonPath('data.status', 'succeeded');
+    }
+
     public function test_failed_edge_purge_retries_with_a_bound_and_same_task(): void
     {
         [$user, $domain] = $this->ownedDomain();
         $edge = Edge::query()->create([
-            'name' => 'retry-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.11',
+            'name' => 'retry-edge', 'country_code' => 'IR', 'continent_code' => 'AS',
             'enabled' => true, 'registered_at' => now(), 'identity_certificate_serial' => 'ABCD1234',
             'identity_certificate_expires_at' => now()->addDay(),
         ]);
@@ -89,7 +124,7 @@ class CacheApiTest extends TestCase
         openssl_csr_export($csr, $csrPem);
         $signed = EdgeCertificateAuthority::sign($csrPem, $edge->id);
         $edge->update(['identity_certificate_serial' => $signed['serial'], 'identity_certificate' => $signed['certificate']]);
-        $headers = ['X-Edge-Certificate-Verify' => 'SUCCESS', 'X-Edge-Certificate-Serial' => $signed['serial'],
+        $headers = ['X-Edge-Proxy-Secret' => config('edge.proxy_secret'), 'X-Edge-Certificate-Verify' => 'SUCCESS', 'X-Edge-Certificate-Serial' => $signed['serial'],
             'X-Edge-Certificate-Pem' => rawurlencode($signed['certificate'])];
 
         $this->withHeaders($headers)->postJson("/edge/v1/tasks/{$task->id}/result", ['status' => 'failed', 'result' => ['status' => 'failed', 'failure_reason' => 'cache_purge_control_failed']])->assertOk();

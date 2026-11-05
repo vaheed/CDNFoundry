@@ -15,6 +15,7 @@ use App\Support\FilamentHelp;
 use App\Support\GeoVocabulary;
 use App\Support\RuntimeVersions;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Select;
@@ -23,7 +24,6 @@ use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
-use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -31,7 +31,9 @@ class EdgeResource extends Resource
 {
     protected static ?string $model = Edge::class;
 
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-globe-americas';
+    protected static ?string $recordTitleAttribute = 'name';
+
+    protected static string|\BackedEnum|null $navigationIcon = 'phosphor-globe-hemisphere-west';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Infrastructure';
 
@@ -39,12 +41,9 @@ class EdgeResource extends Resource
     {
         return $schema->components([
             TextInput::make('name')->required()->maxLength(100)->unique(ignoreRecord: true),
-            TextInput::make('cell_slot_count')->label(FilamentHelp::label('Cell slots', 'Bounded OpenResty slots created during edge installation. This cannot be changed after creation.'))->numeric()->integer()->required()->minValue(1)->maxValue(32)->default(8)->disabledOn('edit'),
+            TextInput::make('cell_slot_count')->label(FilamentHelp::label('Cell slots', 'OpenResty slots created during edge installation. Production Compose runs exactly eight cells per PoP, so the count is fixed.'))->numeric()->integer()->required()->minValue(Edge::CELL_SLOT_COUNT)->maxValue(Edge::CELL_SLOT_COUNT)->default(Edge::CELL_SLOT_COUNT)->disabled()->dehydrated(),
             Select::make('country_code')->label('Country')->options(array_combine(GeoVocabulary::countries(), GeoVocabulary::countries()))->searchable()->required(),
-            Select::make('continent_code')->label('Continent')->options(array_combine(GeoVocabulary::CONTINENTS, GeoVocabulary::CONTINENTS))->required(),
-            TextInput::make('management_ipv4')->label(FilamentHelp::label('Management IPv4', 'Optional operator access address. It is never bound by the gateway or published in customer DNS.'))->ipv4()->nullable()->unique(ignoreRecord: true),
-            TextInput::make('management_ipv6')->label(FilamentHelp::label('Management IPv6', 'Optional operator access address. Public traffic addresses belong only to pool endpoints.'))->ipv6()->nullable()->unique(ignoreRecord: true),
-        ]);
+            Select::make('continent_code')->label('Continent')->options(array_combine(GeoVocabulary::CONTINENTS, GeoVocabulary::CONTINENTS))->required()]);
     }
 
     public static function infolist(Schema $schema): Schema
@@ -94,45 +93,49 @@ class EdgeResource extends Resource
                     TextEntry::make('capacity.gateway.errors')->label(FilamentHelp::label('Gateway errors', 'Bounded gateway error counter reported by the running process.'))->placeholder('Gateway not reporting'),
                     TextEntry::make('capacity.gateway.candidate_rejections')->label(FilamentHelp::label('Gateway rejected candidates', 'Configuration candidates rejected before activation because validation failed.'))->placeholder('Gateway not reporting'),
                     TextEntry::make('identity_certificate_expires_at')->label(FilamentHelp::label('Identity expires', 'Expiry time of the certificate used to authenticate this edge to the control plane.'))->dateTime()->placeholder('Not enrolled'),
-                    TextEntry::make('capacity.last_rejection.reason')->label(FilamentHelp::label('Latest deployment rejection', 'Most recent reason a runtime configuration could not be activated.'))->placeholder('None reported'),
-                ]),
-        ]);
+                    TextEntry::make('capacity.last_rejection.reason')->label(FilamentHelp::label('Latest deployment rejection', 'Most recent reason a runtime configuration could not be activated.'))->placeholder('None reported')])]);
     }
 
     public static function table(Table $table): Table
     {
         return $table->columns([
-            TextColumn::make('name')->searchable()->sortable(),
+            TextColumn::make('name')->searchable()->sortable()->extraCellAttributes(['class' => 'cdn-link-cell']),
+            TextColumn::make('status')->label('Status')
+                ->state(fn (Edge $record): string => match (true) {
+                    ! $record->enabled => 'Disabled',
+                    $record->drained => 'Drained',
+                    default => 'Serving',
+                })
+                ->badge()
+                ->color(fn (string $state): string => match ($state) {
+                    'Serving' => 'success',
+                    'Drained' => 'warning',
+                    default => 'gray',
+                }),
             TextColumn::make('country_code')->label('Location')->formatStateUsing(fn (string $state, Edge $record): string => $state.' / '.$record->continent_code),
-            TextColumn::make('management_ipv4')->label('Management IPv4')->placeholder('None'),
-            TextColumn::make('management_ipv6')->label('Management IPv6')->placeholder('None'),
-            IconColumn::make('enabled')->boolean(),
-            IconColumn::make('drained')->boolean(),
             TextColumn::make('last_heartbeat_at')->label('Heartbeat')->since()->placeholder('Never')->sortable(),
-            TextColumn::make('agent_version')->label('Agent')->placeholder('Not registered'),
-            TextColumn::make('runtime_versions_reported_at')->label('Version report')->since()->placeholder('Not reported'),
+            TextColumn::make('agent_version')->label('Agent'),
+            TextColumn::make('cells_count')->counts('cells')->label('Cells')->alignEnd(),
             TextColumn::make('desired_runtime_versions')->label('Version drift')->badge()
                 ->state(fn (Edge $record): string => $record->desired_runtime_versions !== null && $record->desired_runtime_versions !== $record->runtime_versions ? 'Drifted' : 'Aligned')
-                ->color(fn (Edge $record): string => $record->desired_runtime_versions !== null && $record->desired_runtime_versions !== $record->runtime_versions ? 'warning' : 'success'),
-            TextColumn::make('active_sequence')->label('Active revision')->sortable(),
-            TextColumn::make('cells_count')->counts('cells')->label('Cells'),
-            TextColumn::make('capacity.last_rejection.reason')->label('Deployment failure')->placeholder('None'),
-        ])->recordActions([
-            ViewAction::make(),
-            Action::make('enable')->visible(fn (Edge $record): bool => ! $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => true], 'edge.enable')),
-            Action::make('disable')->color('danger')->requiresConfirmation()->visible(fn (Edge $record): bool => $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => false], 'edge.disable')),
-            Action::make('drain')->color('warning')->requiresConfirmation()->visible(fn (Edge $record): bool => ! $record->drained)->action(fn (Edge $record) => self::changeState($record, ['drained' => true], 'edge.drain')),
-            Action::make('undrain')->visible(fn (Edge $record): bool => $record->drained)->action(fn (Edge $record) => self::changeState($record, ['drained' => false], 'edge.undrain')),
-            Action::make('rotateIdentity')
-                ->label('Rotate identity')
-                ->icon('heroicon-o-arrow-path')
-                ->color('danger')
-                ->url(fn (Edge $record): string => self::getUrl('view', [
-                    'record' => $record,
-                    'action' => 'rotateIdentity',
-                ])),
-            EditAction::make(),
-        ])->defaultSort('name');
+                ->color(fn (string $state): string => $state === 'Drifted' ? 'warning' : 'success'),
+            TextColumn::make('capacity.last_rejection.reason')->label('Deployment failure')->limit(40),
+            TextColumn::make('runtime_versions_reported_at')->label('Version report')->since()->toggleable(isToggledHiddenByDefault: true),
+            TextColumn::make('active_sequence')->label('Active revision')->sortable()->alignEnd()->toggleable(isToggledHiddenByDefault: true)])->recordActions([
+                ViewAction::make()->iconButton(),
+                EditAction::make()->iconButton(),
+                ActionGroup::make([
+                    Action::make('enable')->icon('phosphor-check-circle')->visible(fn (Edge $record): bool => ! $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => true], 'edge.enable')),
+                    Action::make('disable')->icon('phosphor-prohibit')->color('danger')->requiresConfirmation()->visible(fn (Edge $record): bool => $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => false], 'edge.disable')),
+                    Action::make('drain')->icon('phosphor-pause-circle')->color('warning')->requiresConfirmation()->visible(fn (Edge $record): bool => ! $record->drained)->action(fn (Edge $record) => self::changeState($record, ['drained' => true], 'edge.drain')),
+                    Action::make('undrain')->icon('phosphor-play-circle')->visible(fn (Edge $record): bool => $record->drained)->action(fn (Edge $record) => self::changeState($record, ['drained' => false], 'edge.undrain')),
+                    Action::make('rotateIdentity')
+                        ->label('Rotate identity')
+                        ->icon('phosphor-arrows-clockwise')
+                        ->color('danger')
+                        ->url(fn (Edge $record): string => self::getUrl('view', [
+                            'record' => $record,
+                            'action' => 'rotateIdentity']))])->label('More')->icon('phosphor-dots-three')])->defaultSort('name');
     }
 
     public static function getRelations(): array

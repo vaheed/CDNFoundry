@@ -29,7 +29,7 @@ func TestScaleSocketThroughput50000Mappings(t *testing.T) {
 
 	const mappings = 50000
 	candidate := config{
-		SchemaVersion: 1, Revision: 9002, Listeners: []string{"127.0.0.1:80"},
+		SchemaVersion: 1, GenerationID: "generation-0000000009002", Revision: 9002, Listeners: []string{"127.0.0.1:80"},
 		Routes: make([]route, 0, mappings),
 	}
 	for index := 0; index < mappings; index++ {
@@ -177,8 +177,8 @@ func TestScaleTarget50000Mappings(t *testing.T) {
 	}
 	const mappings = 50000
 	candidate := config{
-		SchemaVersion: 1,
-		Revision:      9001,
+		SchemaVersion: 1, GenerationID: "generation-0000000009002",
+		Revision: 9001,
 		Listeners: []string{
 			"192.0.2.10:80", "192.0.2.10:443", "[2001:db8::10]:80", "[2001:db8::10]:443",
 			"192.0.2.11:80", "192.0.2.11:443", "[2001:db8::11]:80", "[2001:db8::11]:443",

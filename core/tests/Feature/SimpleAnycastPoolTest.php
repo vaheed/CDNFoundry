@@ -283,7 +283,7 @@ class SimpleAnycastPoolTest extends TestCase
             'platform_domain' => 'cdnf.test', 'proxy_hostname' => 'proxy.cdnf.test',
             'nameservers' => [['hostname' => 'ns1.cdnf.test', 'ipv4' => '192.0.2.10']], 'soa_primary' => 'ns1.cdnf.test',
             'soa_mailbox' => 'hostmaster.cdnf.test', 'soa_refresh' => 3600, 'soa_retry' => 600, 'soa_expire' => 1209600,
-            'soa_minimum_ttl' => 60, 'default_ttl' => 60, 'cluster_targets' => ['pdns-auth:8081'], 'revision' => 1,
+            'soa_minimum_ttl' => 60, 'default_ttl' => 60, 'revision' => 1,
         ]);
     }
 }

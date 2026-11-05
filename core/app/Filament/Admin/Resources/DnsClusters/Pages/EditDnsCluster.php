@@ -20,7 +20,7 @@ class EditDnsCluster extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('testConnection')->label('Test connection')->action(function (): void {
+            Action::make('testConnection')->icon('phosphor-plugs-connected')->label('Test connection')->action(function (): void {
                 $operation = Operation::query()->where('type', 'dns.cluster_test')->whereIn('status', ['pending', 'running'])->where('input->cluster_id', $this->record->id)->first();
                 if ($operation === null) {
                     $operation = Operation::query()->create(['actor_id' => auth()->id(), 'type' => 'dns.cluster_test', 'status' => 'pending', 'input' => ['cluster_id' => $this->record->id]]);

@@ -41,12 +41,12 @@ class IdempotentRequest
                     }
                 }
                 $existing = IdempotencyKey::query()->where('user_id', $userId)->where('key', $key)->first();
+                if ($existing !== null && $existing->expires_at !== null && $existing->expires_at->isPast()) {
+                    $existing->delete();
+                    $existing = null;
+                }
                 if ($existing !== null) {
-                    // Retain compatibility with receipts written before query
-                    // parameters became part of request identity.
-                    $legacyHash = hash('sha256', $request->method().'|'.$request->path().'|'.$request->getContent());
-                    if (! hash_equals($existing->request_hash, $hash)
-                        && ($request->getQueryString() !== null || ! hash_equals($existing->request_hash, $legacyHash))) {
+                    if (! hash_equals($existing->request_hash, $hash)) {
                         return response()->json(['message' => 'This key was used with a different request.', 'code' => 'idempotency_conflict', 'details' => (object) []], 409);
                     }
 
@@ -59,7 +59,7 @@ class IdempotentRequest
                 if ($response->getStatusCode() >= 500) {
                     throw new HttpResponseException($response);
                 }
-                if ($response instanceof JsonResponse && $response->getStatusCode() < 500) {
+                if ($response instanceof JsonResponse && $this->replayable($response->getStatusCode())) {
                     IdempotencyKey::query()->create([
                         'user_id' => $userId,
                         'key' => $key,
@@ -75,6 +75,15 @@ class IdempotentRequest
         } catch (LockTimeoutException) {
             return response()->json(['message' => 'A request with this idempotency key is still being processed.', 'code' => 'idempotency_busy', 'details' => (object) []], 409);
         }
+    }
+
+    /**
+     * Only outcomes the same request would produce again are stored. A 429,
+     * 403, 409, or 423 can change on the next attempt, so a retry must run.
+     */
+    private function replayable(int $status): bool
+    {
+        return ($status >= 200 && $status < 300) || in_array($status, [400, 404, 405, 410, 413, 415, 422], true);
     }
 
     private function replaySafe(?array $body): ?array

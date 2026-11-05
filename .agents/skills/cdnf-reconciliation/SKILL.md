@@ -19,17 +19,17 @@ The desired-state fields, the revision column, the target set, the obsolete-work
 
 ## Procedure
 1. In one transaction: lock the row, write the desired state, bump `revision`, call `Operation::coalesceDomain(type, domainId, actorId)`, and dispatch the unique job `->afterCommit()`.
-2. In the job: reload, return early when `revision` moved (obsolete), render **deterministically** (sort every list, never rely on `pluck()` order — roadmap M2), checksum, validate, then activate.
+2. In the job: reload, return early when `revision` moved (obsolete), render **deterministically** (sort every list, never rely on `pluck()` order), checksum, validate, then activate.
 3. Record per-target status (`DnsDeployment`, `EdgeArtifact` and acks). Mark the operation from those.
-4. Retries need backoff (`$backoff`), and a scheduled repair job must exist for the target. DNS currently has none (roadmap H7).
-5. Never make the whole target set depend on its slowest member. Promotion that waits for `every` edge blocks a pool on one dead PoP (roadmap H3).
-6. Never turn "no signal" into "remove". Missing heartbeats must not withdraw published addresses (roadmap C3).
+4. Retries need backoff (`$backoff`), and a scheduled repair job must exist for the target (`RepairDnsDrift` for DNS).
+5. Never make the whole target set depend on its slowest member. Promotion that waits for `every` edge blocks a pool on one dead PoP.
+6. Never turn "no signal" into "remove". Missing heartbeats must not withdraw published addresses; only a positive health signal removes a PoP.
 
 ## Validation commands
 - Backend: `make dev-test`, or one class with `docker compose -f compose.dev.yml -f compose.test.yml run --rm --no-deps core php artisan test --compact --filter <Class>` (the test override forces in-memory SQLite; never run tests against PostgreSQL).
 - Style: `docker compose -f compose.dev.yml -f compose.test.yml run --rm --no-deps core vendor/bin/pint --test`.
 - Add tests for: an obsolete revision is skipped, a concurrent edit coalesces, a target failure keeps the previous state, and a retry succeeds after recovery.
-- Runtime: `tests/e2e/phase4_runtime.py` (edge), `tests/e2e/phase2_dns.py` (DNS).
+- Runtime: `tests/e2e/openresty_runtime.py` (edge), `tests/e2e/dns_authoritative.py` (DNS).
 
 ## Definition of done
 Each change produces exactly one effective deployment per target. Failures are visible on the operation, and the previous valid state keeps serving.
@@ -38,7 +38,7 @@ Each change produces exactly one effective deployment per target. Failures are v
 Stop if the design needs a synchronous call from an HTTP request, a per-domain timer, or a global unchunked loop.
 
 ## Forbidden shortcuts
-No delete-before-replace, no `tries` without backoff, and no lane shared with work that can block for seconds (see `config/horizon.php`, roadmap M5).
+No delete-before-replace, no `tries` without backoff, and no lane shared with work that can block for seconds (see `config/horizon.php`).
 
 ## Expected completion summary
 State and revision flow, targets, the obsolete rule, retry and repair behavior, and failure evidence.

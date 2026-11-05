@@ -2,17 +2,29 @@
 
 namespace App\Providers;
 
+use App\Models\ApiToken;
+use App\Models\AuditLog;
+use App\Models\User;
+use App\Support\ControlPlaneMetrics;
 use App\Support\PlatformSettings;
+use Filament\Forms\Components\TagsInput;
 use Filament\Support\Facades\FilamentTimezone;
+use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\TextColumn;
+use Illuminate\Auth\Events\Failed;
+use Illuminate\Auth\Events\Login;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Context;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Validation\Rules\Password;
+use Laravel\Sanctum\Sanctum;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -42,7 +54,24 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Sanctum::usePersonalAccessTokenModel(ApiToken::class);
+        // An empty cell in a clickable row would be a link with no name, so every empty value shows a dash.
+        // A switched-off flag is not a failure: it shows a grey dash, never a red cross.
+        IconColumn::configureUsing(fn (IconColumn $column) => $column->falseIcon('phosphor-minus')->falseColor('gray'));
+        TextColumn::configureUsing(fn (TextColumn $column) => $column->placeholder('—'));
+        // List fields say how to add a value instead of Filament's "New tag".
+        TagsInput::configureUsing(fn (TagsInput $input) => $input->placeholder('Type a value and press Enter'));
         FilamentTimezone::set(fn (): string => app(PlatformSettings::class)->displayTimezone());
+
+        // Sign-ins are counted by result and by which surface asked, so a failed-login burst is visible.
+        Event::listen(Login::class, function (Login $event): void {
+            ControlPlaneMetrics::recordLogin(true, ($event->user->type ?? null) === 'admin' ? 'admin' : 'domain');
+            // Panel sign-ins are audited like API sign-ins, so a new network is visible to the SOC.
+            if ($event->user instanceof User) {
+                AuditLog::record($event->user, 'auth.login', $event->user, ['surface' => 'panel'], request()->ip());
+            }
+        });
+        Event::listen(Failed::class, fn (Failed $event) => ControlPlaneMetrics::recordLogin(false, ($event->user->type ?? null) === 'admin' ? 'admin' : 'domain'));
 
         Queue::before(function (JobProcessing $event): void {
             Context::add('job_id', $event->job->uuid() ?? $event->job->getJobId());
@@ -51,7 +80,17 @@ class AppServiceProvider extends ServiceProvider
         Queue::after($clearJobContext);
         Queue::exceptionOccurred($clearJobContext);
 
-        RateLimiter::for('login', fn (Request $request): Limit => Limit::perMinute(app(PlatformSettings::class)->integer('rate_limits', 'login_per_minute'))->by($request->ip().'|'.strtolower((string) $request->string('email'))));
+        Password::defaults(fn (): Password => Password::min(12)->letters()->mixedCase()->numbers());
+        // Spraying one password over many accounts is bounded per address; guessing one account's password
+        // from many addresses is bounded per account.
+        RateLimiter::for('login', function (Request $request): array {
+            $perMinute = max(1, app(PlatformSettings::class)->integer('rate_limits', 'login_per_minute'));
+
+            return [
+                Limit::perMinute($perMinute)->by('account|'.strtolower((string) $request->string('email'))),
+                Limit::perMinute($perMinute * 10)->by('address|'.$request->ip()),
+            ];
+        });
         RateLimiter::for('account', function (Request $request): Limit {
             $identity = (string) ($request->user()?->getAuthIdentifier() ?? $request->ip());
 

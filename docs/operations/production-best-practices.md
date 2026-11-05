@@ -1,25 +1,22 @@
 ---
 title: Production best practices
-description: Operate CDNFoundry safely in production with guidance for releases, networks, secrets, DNS, edge, origins, TLS, cache, monitoring, backup, and incidents.
+description: A checklist of safe production habits for releases, networks, secrets, DNS, edge, origins, TLS, cache, security, monitoring, backup, and capacity.
 keywords: CDN production best practices, private CDN operations, CDNFoundry hardening, CDN operations checklist
 ---
 
 # Production best practices
 
-Production readiness is evidence that the exact release, topology, network,
-origin, and recovery procedure behave correctly together. It is not only a
-successful Compose start or a green control-plane health endpoint.
+This page is a checklist for people who run CDNFoundry in production. Read it before your first launch and again before each large change. Each section covers one area. Each item says what to do and why it matters.
+
+Production is ready when the exact release, topology, network, origin, and recovery procedure work correctly together. A successful Compose start or a green health endpoint is not enough proof.
 
 ::: danger Never experiment on the only serving copy
-Keep the previous valid runtime, current certificate, database backup, key
-material, exact release, and a tested rollback path before changing production.
-Never use destructive volume or database refresh commands as an upgrade step.
+Before you change production, keep the previous valid runtime, the current certificate, a database backup, the key material, the exact release, and a tested rollback path. Never use destructive volume or database refresh commands to upgrade.
 :::
 
 ## Release and host discipline
 
-- Deploy the same exact successful commit SHA or semantic-version tag on every
-  role participating in one rollout.
+- Deploy the same release on every role in one rollout. Fleet deploys only signed, qualified release manifests.
 - Never deploy mutable `latest`, major-only, or minor-only image aliases.
 - Validate `compose.prod.yml` and every exact generated node bundle before pulling or starting.
 - Use bounded canaries and readiness gates; do not restart every failure domain
@@ -39,7 +36,7 @@ Use [Fleet rollouts](fleet-rollouts.md) for the supported canary workflow.
   control reverse proxy.
 - Keep PowerDNS, its native API, PostgreSQL, Valkey, ClickHouse, Prometheus,
   Loki, and native Grafana private.
-- Source-restrict the TLS DNS API gateway to control workers.
+- Restrict the primary's transfer port (5300) to the DNS node addresses; transfers are TSIG-signed either way.
 - Allow edge agents to initiate outbound mTLS; do not require inbound control
   access to every edge.
 - Separate management inventory addresses from customer service addresses.
@@ -73,7 +70,7 @@ TLS, origin reachability, telemetry, and failure behavior over IPv6 first.
 
 ## Desired state and changes
 
-- Make changes through the panel, API, supported CLI, or migrations—not by
+- Make changes through the panel, API, supported CLI, or migrations, not by
   editing derived PowerDNS rows or active edge files.
 - Record the operation ID, previous revision, requested revision, operator,
   expected result, and rollback trigger.
@@ -164,8 +161,8 @@ fast failure plus eligible stale content where policy allows.
 - Start with least privilege for admin accounts, domain assignments, tokens,
   database roles, and network rules.
 - Use bounded application profiles; never remove ceilings as an incident fix.
-- Introduce managed WAF policy in Observe mode, review real events, then use
-  Block only with a rollback trigger.
+- Introduce managed WAF policy in Observe mode, review real events, then move to
+  Recommended, and use High sensitivity only after application testing and with a rollback trigger.
 - Give temporary allow/block rules an owner, reason, scope, and expiry.
 - Keep trusted-proxy configuration exact so client identity cannot be spoofed.
 - Test payload, header, connection, request-rate, and origin-concurrency bounds.
@@ -257,14 +254,14 @@ Never use these as shortcuts:
 - direct edits to PowerDNS runtime rows as desired state;
 - public exposure of database, Valkey, PowerDNS API, metrics, or Grafana ports.
 
-## Final release gate
+## Release acceptance
 
-Production acceptance requires all four independently:
+Accept a production release only when all four conditions hold, each checked on its own:
 
-1. implementation for the exact revision is present;
-2. operator and user documentation is current;
-3. automated and real-runtime qualification passes;
-4. the owner completes the manual browser and external-network checklist.
+1. The code for the exact revision is in the release.
+2. The operator and user documentation matches it.
+3. The automated tests and the real-runtime qualification pass.
+4. The browser suite passes, and the owner completes the external-network checklist.
 
 Use [Production qualification](production-qualification.md) for evidence,
 [Incident runbooks](runbooks.md) for failures, and

@@ -20,6 +20,9 @@ class EditUser extends EditRecord
     {
         abort_if($record->is(auth()->user()) && ($data['type'] ?? null) === 'user', 422, 'You cannot remove your own administrator access.');
         $record->update($data);
+        if (filled($data['password'] ?? null)) {
+            $record->tokens()->delete();
+        }
         AuditLog::record(auth()->user(), 'user.updated', $record, ['fields' => array_keys($data)], request()->ip());
 
         return $record;
@@ -28,7 +31,7 @@ class EditUser extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('toggleAccess')
+            Action::make('toggleAccess')->icon('phosphor-user-switch')
                 ->label(fn (): string => $this->record->isDisabled() ? 'Enable access' : 'Disable access')
                 ->color(fn (): string => $this->record->isDisabled() ? 'success' : 'warning')
                 ->disabled(fn (): bool => $this->record->is(auth()->user()))

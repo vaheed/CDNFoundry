@@ -14,7 +14,6 @@ use App\Models\Edge;
 use App\Models\Operation;
 use App\Models\User;
 use App\Ops\Data\OpsDashboardContext;
-use App\Ops\Services\MetricComparisonService;
 use App\Ops\Services\OpsDashboardService;
 use App\Ops\Support\MetricFormatter;
 use App\Support\PlatformSettings;
@@ -77,12 +76,12 @@ class OpsDashboardTest extends TestCase
 
     public function test_metric_comparisons_and_formatting_do_not_invent_a_zero_baseline(): void
     {
-        $service = app(MetricComparisonService::class);
+        $formatter = app(MetricFormatter::class);
 
-        $this->assertSame(['delta' => 5.0, 'percent' => null, 'direction' => 'up'], $service->compare(5, 0));
-        $this->assertSame('down', $service->compare(5, 10)['direction']);
-        $this->assertSame(-50.0, $service->compare(5, 10)['percent']);
-        $this->assertSame('No comparable baseline', app(MetricFormatter::class)->deltaPercent(null));
+        $this->assertSame('No comparable baseline', $formatter->change(5, 0));
+        $this->assertSame('No comparable baseline', $formatter->change(null, 3));
+        $this->assertSame('-50.0% vs previous period', $formatter->change(5, 10));
+        $this->assertSame('+25.0% vs previous period', $formatter->change(5, 4));
         $this->assertSame('1.0 KiB', app(MetricFormatter::class)->bytes(1024));
         $this->assertSame('12.5%', app(MetricFormatter::class)->percent(0.125));
         $this->assertSame('Unavailable', app(MetricFormatter::class)->milliseconds(null));
@@ -135,7 +134,7 @@ class OpsDashboardTest extends TestCase
 
         $page = new AdminDashboard;
         $this->assertSame(Width::Full, $page->getMaxContentWidth());
-        $this->assertCount(11, $page->getWidgets());
+        $this->assertCount(4, $page->getWidgets());
         $this->assertSame(['default' => 1, 'xl' => 12], $page->getColumns());
         $this->assertSame('full', $page->getFiltersForm()->getComponents()[0]->getColumnSpan('default'));
         $range = $page->getFiltersForm()->getComponents()[0]->getChildSchema()->getComponents()[0];
@@ -216,12 +215,12 @@ class OpsDashboardTest extends TestCase
         Http::fake();
 
         $this->actingAs($user)->get('/app/analytics')->assertOk()
-            ->assertSee('Select an assigned domain')
+            ->assertSee('Select a domain')
             ->assertDontSee($private->name);
         Http::assertNothingSent();
 
         $this->actingAs($user)->get('/app/analytics?domain='.$private->id)->assertOk()
-            ->assertSee('Select an assigned domain')
+            ->assertSee('Select a domain')
             ->assertDontSee($private->name);
         Http::assertNothingSent();
     }
@@ -259,12 +258,12 @@ class OpsDashboardTest extends TestCase
 
         Livewire::actingAs($admin)->test(OpsKpiOverview::class)
             ->assertSee('No matching aggregate data')
-            ->assertSee('Healthy edges')
-            ->assertSee('Fresh enabled edge heartbeats');
+            ->assertSee('Healthy PoPs')
+            ->assertSee('Fresh heartbeats');
 
         Livewire::actingAs($admin)->test(ServiceStatusBanner::class)
-            ->assertSee('Health checked')
-            ->assertSee('Traffic aggregate');
+            ->assertSee('checked')
+            ->assertSee('Polling active');
     }
 
     public function test_dns_health_keeps_cluster_diagnostics_visible_without_aggregate_rows(): void

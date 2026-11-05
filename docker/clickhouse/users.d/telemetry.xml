@@ -1,0 +1,81 @@
+<clickhouse>
+  <profiles>
+    <cdnf_ingest>
+      <max_execution_time>30</max_execution_time>
+      <max_insert_block_size>100000</max_insert_block_size>
+      <max_memory_usage>1073741824</max_memory_usage>
+    </cdnf_ingest>
+    <cdnf_reader>
+      <readonly>2</readonly>
+      <max_execution_time>30</max_execution_time>
+      <max_rows_to_read>50000000</max_rows_to_read>
+      <max_bytes_to_read>10737418240</max_bytes_to_read>
+      <max_memory_usage>2147483648</max_memory_usage>
+      <max_result_rows>10001</max_result_rows>
+      <result_overflow_mode>break</result_overflow_mode>
+      <constraints>
+        <max_execution_time><min>1</min><max>60</max></max_execution_time>
+        <max_rows_to_read><max>50000000</max></max_rows_to_read>
+        <max_result_rows><max>10001</max></max_result_rows>
+        <max_memory_usage><max>2147483648</max></max_memory_usage>
+      </constraints>
+    </cdnf_reader>
+  </profiles>
+  <users>
+    <!-- Vector on every edge and DNS node: it can insert events and nothing else. -->
+    <cdnf_ingest>
+      <password from_env="CLICKHOUSE_INGEST_PASSWORD" />
+      <profile>cdnf_ingest</profile>
+      <quota>default</quota>
+      <default_database>cdnf</default_database>
+      <networks><ip>::/0</ip></networks>
+      <grants>
+        <query>GRANT INSERT ON cdnf.edge_events</query>
+        <query>GRANT INSERT ON cdnf.dns_events</query>
+      </grants>
+    </cdnf_ingest>
+    <!-- Laravel publishes the served zones here. It can insert into one table and nothing else. -->
+    <cdnf_zones>
+      <password from_env="CLICKHOUSE_ZONES_PASSWORD" />
+      <profile>cdnf_ingest</profile>
+      <quota>default</quota>
+      <default_database>cdnf</default_database>
+      <networks><ip>::/0</ip></networks>
+      <grants>
+        <query>GRANT INSERT ON cdnf.served_zones</query>
+      </grants>
+    </cdnf_zones>
+    <!-- Used only by the served-zone dictionary, from inside this server: no password, no network access. -->
+    <cdnf_dictionary>
+      <no_password />
+      <networks><ip>127.0.0.1</ip><ip>::1</ip></networks>
+      <default_database>cdnf</default_database>
+      <grants>
+        <query>GRANT SELECT ON cdnf.served_zones</query>
+      </grants>
+    </cdnf_dictionary>
+    <!-- Laravel analytics: read-only with a server-side settings profile. -->
+    <cdnf_reader>
+      <password from_env="CLICKHOUSE_READER_PASSWORD" />
+      <profile>cdnf_reader</profile>
+      <quota>default</quota>
+      <default_database>cdnf</default_database>
+      <networks><ip>::/0</ip></networks>
+      <grants>
+        <query>GRANT SELECT ON cdnf.edge_events</query>
+        <query>GRANT SELECT ON cdnf.dns_events</query>
+        <query>GRANT SELECT ON cdnf.edge_hourly</query>
+        <query>GRANT SELECT ON cdnf.dns_hourly</query>
+        <query>GRANT SELECT ON cdnf.edge_daily</query>
+        <query>GRANT SELECT ON cdnf.dns_daily</query>
+        <query>GRANT SELECT ON cdnf.edge_traffic_1m</query>
+        <query>GRANT SELECT ON cdnf.edge_traffic_hourly</query>
+        <query>GRANT SELECT ON cdnf.edge_traffic_daily</query>
+        <query>GRANT SELECT ON cdnf.edge_usage_5m</query>
+        <query>GRANT SELECT ON cdnf.tls_failures_hourly</query>
+        <query>GRANT SELECT ON cdnf.dns_traffic_1m</query>
+        <query>GRANT SELECT ON cdnf.dns_top_names</query>
+      </grants>
+    </cdnf_reader>
+  </users>
+</clickhouse>

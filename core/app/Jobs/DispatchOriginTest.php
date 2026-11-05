@@ -24,7 +24,7 @@ class DispatchOriginTest implements ShouldQueue
 
     public function __construct(public string $operationId)
     {
-        $this->onQueue('runtime');
+        $this->onQueue('edge');
     }
 
     public function handle(): void
@@ -67,6 +67,7 @@ class DispatchOriginTest implements ShouldQueue
             $selected = collect($operation->input['edge_ids'] ?? []);
             $edges = Edge::query()->where('enabled', true)->where('drained', false)->whereNull('identity_revoked_at')
                 ->whereNotNull('registered_at')->where('last_heartbeat_at', '>=', now()->subSeconds(app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds')))
+                ->whereIn('id', Domain::query()->findOrFail($record->domain_id)->placementEdgeIds())
                 ->when($selected->isNotEmpty(), fn ($query) => $query->whereIn('id', $selected))
                 ->orderBy('id')->limit(20)->get();
             if ($edges->isEmpty()) {

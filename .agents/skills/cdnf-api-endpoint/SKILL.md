@@ -23,7 +23,7 @@ The route, its actor (domain user, admin, or edge), its input bounds, and whethe
 3. Authorize with `Gate::authorize(...)` on the bound model. Re-check it inside the locking transaction.
 4. Validate typed and bounded input. Return errors with stable codes from `docs/reference/api/errors.md`.
 5. Lists use `cursorPaginate`. External or long work returns `202` with an `operation_id`.
-6. **Always return an API resource with an explicit field list.** Never serialize a raw model or paginator: `GET /domains/{domain}/revisions` leaked decrypted TLS keys that way (roadmap C1, L5).
+6. **Always return an API resource with an explicit field list.** Never serialize a raw model or paginator: a raw model exposes every new column automatically, and an old revisions endpoint leaked decrypted TLS keys that way.
 7. Regenerate OpenAPI: `php artisan cdnf:api:openapi` and check with `make openapi-check`.
 
 ## Validation commands

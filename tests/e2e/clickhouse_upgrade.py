@@ -45,9 +45,12 @@ def main() -> None:
                 '-e', 'CLICKHOUSE_PASSWORD=isolated-clickhouse',
                 '-e', 'CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1',
                 '-e', 'GRAFANA_CLICKHOUSE_PASSWORD=isolated-grafana',
+                '-e', 'CLICKHOUSE_INGEST_PASSWORD=isolated-ingest', '-e', 'CLICKHOUSE_READER_PASSWORD=isolated-reader',
+                '-e', 'CLICKHOUSE_ZONES_PASSWORD=isolated-zones',
                 '-v', f'{data}:/var/lib/clickhouse',
                 '-v', f'{ROOT}/docker/clickhouse/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro',
-                '-v', f'{ROOT}/docker/clickhouse/users.d/grafana.xml:/etc/clickhouse-server/users.d/grafana.xml:ro', image)
+                '-v', f'{ROOT}/docker/clickhouse/users.d/grafana.xml:/etc/clickhouse-server/users.d/grafana.xml:ro',
+                '-v', f'{ROOT}/docker/clickhouse/users.d/telemetry.xml:/etc/clickhouse-server/users.d/telemetry.xml:ro', image)
             for _ in range(90):
                 if query('SELECT count() FROM cdnf.edge_events', check=False).returncode == 0:
                     return

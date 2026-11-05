@@ -4,11 +4,16 @@ x-bounded-logging: &bounded-logging
   driver: json-file
   options: { max-size: "10m", max-file: "3" }
 
+x-hardened: &hardened
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+
 x-core-env: &core-env
   APP_ENV: production
   APP_DEBUG: "false"
   APP_KEY: ${APP_KEY:?APP_KEY is required}
   EDGE_ARTIFACT_SIGNING_KEY: ${EDGE_ARTIFACT_SIGNING_KEY:?EDGE_ARTIFACT_SIGNING_KEY is required}
+  EDGE_ARTIFACT_SIGNING_NEXT_KEY: ${EDGE_ARTIFACT_SIGNING_NEXT_KEY}
   APP_URL: ${APP_URL:?APP_URL is required}
   SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE}
   DB_CONNECTION: pgsql
@@ -25,6 +30,7 @@ x-core-env: &core-env
 
   REDIS_URL: ${REDIS_URL}
   REDIS_HOST: ${REDIS_HOST}
+  REDIS_CACHE_HOST: ${REDIS_CACHE_HOST}
   REDIS_PORT: ${REDIS_PORT}
   REDIS_CLIENT: predis
   REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
@@ -34,13 +40,16 @@ x-core-env: &core-env
   ACME_CONTACT_EMAIL: ${ACME_CONTACT_EMAIL:?ACME_CONTACT_EMAIL is required}
   ACME_ORDER_BUDGET_PER_HOUR: ${ACME_ORDER_BUDGET_PER_HOUR}
   EDGE_IDENTITY_CA_CERTIFICATE: /run/secrets/edge-identity-ca.crt
+  EDGE_PROXY_SECRET_FILE: /run/secrets/edge-proxy-secret.conf
+  # PHP-FPM listens only on this address of the private fpm network, not on the control network.
+  FPM_LISTEN_ALIAS: core-fpm
   EDGE_IDENTITY_CA_PRIVATE_KEY: /run/secrets/edge-identity-ca.key
   EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE: ${EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE}
-  PDNS_CA_CERTIFICATE: /run/secrets/pdns-api-ca.crt
   CLICKHOUSE_URL: ${CLICKHOUSE_URL:?CLICKHOUSE_URL is required}
   CLICKHOUSE_DATABASE: cdnf
-  CLICKHOUSE_USER: cdnf
-  CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
+  CLICKHOUSE_USER: cdnf_reader
+  CLICKHOUSE_PASSWORD: ${CLICKHOUSE_READER_PASSWORD:?CLICKHOUSE_READER_PASSWORD is required}
+  CLICKHOUSE_ZONES_PASSWORD: ${CLICKHOUSE_ZONES_PASSWORD:?CLICKHOUSE_ZONES_PASSWORD is required}
   PROMETHEUS_URL: http://prometheus:9090
   METRICS_TOKEN_FILE: /run/secrets/metrics-token
   RESTIC_REPOSITORY: ${RESTIC_REPOSITORY}
@@ -52,9 +61,33 @@ x-core-env: &core-env
   LOG_STACK: stderr
   LOG_STDERR_FORMATTER: App\Logging\OperationalJsonFormatter
   GRAFANA_EXPLORE_URL: ${GRAFANA_EXPLORE_URL}
+  # Operator tunables. .env.prod holds every value; the template and Fleet write the application defaults.
+  ACME_VERIFY_TLS: ${ACME_VERIFY_TLS}
+  ACME_RENEW_BEFORE_DAYS: ${ACME_RENEW_BEFORE_DAYS}
+  ACME_DNS_TTL: ${ACME_DNS_TTL}
+  ACME_DNS_PROBE_SERVER: ${ACME_DNS_PROBE_SERVER}
+  ACME_CHALLENGE_LIFETIME_MINUTES: ${ACME_CHALLENGE_LIFETIME_MINUTES}
+  ACME_INITIAL_JITTER_SECONDS: ${ACME_INITIAL_JITTER_SECONDS}
+  TLS_EXPIRY_ALERT_DAYS: ${TLS_EXPIRY_ALERT_DAYS}
+  TLS_UPLOAD_TRUST_FILE: ${TLS_UPLOAD_TRUST_FILE}
+  BACKUP_KEEP_DAILY: ${BACKUP_KEEP_DAILY}
+  BACKUP_KEEP_WEEKLY: ${BACKUP_KEEP_WEEKLY}
+  BACKUP_KEEP_MONTHLY: ${BACKUP_KEEP_MONTHLY}
+  BACKUP_RESTORE_ALLOWED: ${BACKUP_RESTORE_ALLOWED}
+  MMDB_STALE_HOURS: ${MMDB_STALE_HOURS}
+  VECTOR_METRICS_URL: ${VECTOR_METRICS_URL}
+  WAF_RULESET_VERSION: ${WAF_RULESET_VERSION}
+  EDGE_IDENTITY_VALIDITY_DAYS: ${EDGE_IDENTITY_VALIDITY_DAYS}
+  REDIS_CACHE_PORT: ${REDIS_CACHE_PORT}
+  REDIS_CACHE_URL: ${REDIS_CACHE_URL}
+  # Optional two-node control plane. Empty on a single node.
+  CONTROL_NODE_NAME: ${CONTROL_NODE_NAME}
+  CONTROL_PEER_ADDRESSES: ${CONTROL_PEER_ADDRESSES}
 
 x-edge-cell: &edge-cell
   logging: *bounded-logging
+  <<: *hardened
+  cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID]
   image: ${CDNF_EDGE_RUNTIME_IMAGE:?CDNF_EDGE_RUNTIME_IMAGE must be an immutable image reference}
   profiles: [edge]
   volumes:
@@ -89,11 +122,16 @@ x-edge-cell: &edge-cell
     start_period: 120s
 
 x-core: &core
+  <<: *hardened
+  # Root only to prepare storage ownership and drop to www-data, so these four capabilities suffice.
+  cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+  mem_limit: 1g
   image: ${CDNF_CORE_IMAGE:?CDNF_CORE_IMAGE must be an immutable image reference}
   environment: *core-env
   depends_on:
     control-db: { condition: service_healthy }
     redis: { condition: service_healthy }
+    cache: { condition: service_healthy }
     mmdb-updater: { condition: service_healthy }
   networks: [control, telemetry, egress]
   restart: unless-stopped
@@ -112,13 +150,16 @@ x-core: &core
     - mmdb:/mmdb:ro
     - ${EDGE_IDENTITY_CA_CERTIFICATE:?EDGE_IDENTITY_CA_CERTIFICATE is required}:/run/secrets/edge-identity-ca.crt:ro
     - ${EDGE_IDENTITY_CA_PRIVATE_KEY:?EDGE_IDENTITY_CA_PRIVATE_KEY is required}:/run/secrets/edge-identity-ca.key:ro
-    - ${PDNS_CA_CERTIFICATE:?PDNS_CA_CERTIFICATE is required}:/run/secrets/pdns-api-ca.crt:ro
+    - ${EDGE_PROXY_SECRET_FILE:?EDGE_PROXY_SECRET_FILE is required}:/run/secrets/edge-proxy-secret.conf:ro
     - ${METRICS_TOKEN_FILE:?METRICS_TOKEN_FILE is required}:/run/secrets/metrics-token:ro
     - ${RESTIC_PASSWORD_FILE}:/run/secrets/restic-password:ro
 
 services:
   caddy:
     logging: *bounded-logging
+    <<: *hardened
+    cap_add: [NET_BIND_SERVICE]
+    mem_limit: 256m
     image: caddy:2.11-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
     profiles: [control]
     environment:
@@ -144,29 +185,11 @@ services:
     tmpfs: [/tmp]
     healthcheck: { test: [CMD, wget, -qO-, http://127.0.0.1:2019/healthz], interval: 10s, timeout: 3s, retries: 10 }
 
-  dns-api:
-    logging: *bounded-logging
-    image: caddy:2.11-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
-    profiles: [dns]
-    environment:
-      XDG_CONFIG_HOME: /config
-      XDG_DATA_HOME: /data
-      DNS_API_HOSTNAME: ${DNS_API_HOSTNAME:?DNS_API_HOSTNAME is required}
-      CONTROL_PUBLIC_IPV4_ALLOWLIST: ${CONTROL_PUBLIC_IPV4_ALLOWLIST}
-      CONTROL_PUBLIC_IPV6_ALLOWLIST: ${CONTROL_PUBLIC_IPV6_ALLOWLIST}
-    ports: ["${HOST_BIND_IPV4}:8444:8444/tcp"]
-    volumes: [./deploy/production/Caddyfile.dns-api:/etc/caddy/Caddyfile:ro, "${DNS_API_SERVER_CERTIFICATE:?required}:/run/secrets/dns-api.crt:ro", "${DNS_API_SERVER_PRIVATE_KEY:?required}:/run/secrets/dns-api.key:ro", dns-api-caddy-data:/data, dns-api-caddy-config:/config]
-    depends_on: { pdns-auth: { condition: service_healthy } }
-    # The gateway must be dual-homed: ingress receives the published host
-    # traffic while dns-private is the only path to the PowerDNS API.
-    networks: [ingress, dns-private]
-    restart: unless-stopped
-    read_only: true
-    tmpfs: [/tmp]
-    healthcheck: { test: [CMD, wget, -qO-, http://127.0.0.1:2019/healthz], interval: 10s, timeout: 3s, retries: 10 }
-
   telemetry-gateway:
     logging: *bounded-logging
+    <<: *hardened
+    cap_add: [NET_BIND_SERVICE]
+    mem_limit: 256m
     image: caddy:2.11-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
     profiles: [telemetry]
     environment:
@@ -197,20 +220,28 @@ services:
     logging: *bounded-logging
     <<: *core
     profiles: [control]
+    networks:
+      control: {}
+      telemetry: {}
+      egress: {}
+      fpm: { aliases: [core-fpm] }
     healthcheck:
-      test: [CMD, php, -r, "exit(@fsockopen('127.0.0.1', 9000) ? 0 : 1);"]
+      test: [CMD, php, -r, "exit(@fsockopen('core-fpm', 9000) ? 0 : 1);"]
       interval: 10s
       timeout: 3s
       retries: 10
 
   web:
     logging: *bounded-logging
+    <<: *hardened
+    cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID]
+    mem_limit: 256m
     image: ${CDNF_WEB_IMAGE:?CDNF_WEB_IMAGE must be an immutable image reference}
     profiles: [control]
     ports: ["${CONTROL_BIND}:8080"]
     depends_on:
       core: { condition: service_healthy }
-    networks: [control, ingress]
+    networks: [control, fpm, ingress]
     restart: unless-stopped
     stop_signal: SIGQUIT
     stop_grace_period: 30s
@@ -222,6 +253,9 @@ services:
 
   edge-control:
     logging: *bounded-logging
+    <<: *hardened
+    cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID]
+    mem_limit: 256m
     image: ${CDNF_EDGE_CONTROL_IMAGE:?CDNF_EDGE_CONTROL_IMAGE must be an immutable image reference}
     profiles: [control]
     ports: ["${EDGE_CONTROL_BIND}:8443"]
@@ -229,28 +263,48 @@ services:
       - ${EDGE_CONTROL_SERVER_CERTIFICATE:?EDGE_CONTROL_SERVER_CERTIFICATE is required}:/run/secrets/edge-control-server.crt:ro
       - ${EDGE_CONTROL_SERVER_PRIVATE_KEY:?EDGE_CONTROL_SERVER_PRIVATE_KEY is required}:/run/secrets/edge-control-server.key:ro
       - ${EDGE_IDENTITY_CA_CERTIFICATE:?EDGE_IDENTITY_CA_CERTIFICATE is required}:/run/secrets/edge-identity-ca.crt:ro
+      - ${EDGE_PROXY_SECRET_FILE:?EDGE_PROXY_SECRET_FILE is required}:/run/secrets/edge-proxy-secret.conf:ro
     depends_on:
       core: { condition: service_healthy }
-    networks: [control, ingress]
+    networks: [fpm, ingress]
     restart: unless-stopped
     stop_signal: SIGQUIT
     stop_grace_period: 30s
     read_only: true
     tmpfs: [/var/cache/nginx, /var/run]
+    healthcheck:
+      test: [CMD-SHELL, "wget --no-check-certificate -qO- https://127.0.0.1:8443/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
 
   horizon:
     logging: *bounded-logging
     <<: *core
     profiles: [control]
-    command: [php, artisan, horizon]
+    # The start guard refuses a standby, a replica, and a node that a higher epoch replaced.
+    command: [sh, -c, "php artisan cdnf:control:guard && exec php artisan horizon"]
     stop_grace_period: 120s
+    healthcheck:
+      test: [CMD-SHELL, "php artisan horizon:status | grep -q running"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   scheduler:
     logging: *bounded-logging
     <<: *core
     profiles: [control]
-    command: [php, artisan, schedule:work]
+    command: [sh, -c, "php artisan cdnf:control:guard && exec php artisan schedule:work"]
     stop_grace_period: 30s
+    healthcheck:
+      test: [CMD, php, artisan, cdnf:scheduler:check]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   migrate:
     logging: *bounded-logging
@@ -265,6 +319,9 @@ services:
 
   control-db:
     logging: *bounded-logging
+    <<: *hardened
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    mem_limit: 2g
     image: postgres:18.6-alpine3.24@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
     profiles: [control]
     environment:
@@ -282,22 +339,48 @@ services:
 
   redis:
     logging: *bounded-logging
+    <<: *hardened
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    mem_limit: 1280m
     image: valkey/valkey:9.1.2-alpine3.24@sha256:a0dbf4c1d5708782907c10e2c72deff317518518b5288a58416981d9db95d30b
     profiles: [control]
-    command: [valkey-server, --appendonly, "yes", --requirepass, "${REDIS_PASSWORD}", --maxmemory, 1gb, --maxmemory-policy, noeviction]
-    volumes: [redis:/data]
+    # Queues, sessions, and locks: persistent, and never evicted. The password comes from a mounted
+    # configuration file, so it is not on the command line or in `docker inspect`.
+    command: [valkey-server, /run/secrets/valkey.conf, --appendonly, "yes", --maxmemory, 1gb, --maxmemory-policy, noeviction]
+    volumes: [redis:/data, "${VALKEY_CONFIG_FILE:?VALKEY_CONFIG_FILE is required}:/run/secrets/valkey.conf:ro"]
     networks: [control]
     restart: unless-stopped
     healthcheck:
-      test: [CMD-SHELL, "valkey-cli -a '${REDIS_PASSWORD}' ping | grep PONG"]
+      test: [CMD-SHELL, "REDISCLI_AUTH=$$(sed -n 's/^requirepass //p' /run/secrets/valkey.conf) valkey-cli ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  cache:
+    logging: *bounded-logging
+    <<: *hardened
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    mem_limit: 768m
+    image: valkey/valkey:9.1.2-alpine3.24@sha256:a0dbf4c1d5708782907c10e2c72deff317518518b5288a58416981d9db95d30b
+    profiles: [control]
+    # Application cache only: rebuildable, not persisted, and evicted least-recently-used when full.
+    command: [valkey-server, /run/secrets/valkey.conf, --save, "", --appendonly, "no", --maxmemory, 512mb, --maxmemory-policy, allkeys-lru]
+    volumes: ["${VALKEY_CONFIG_FILE:?VALKEY_CONFIG_FILE is required}:/run/secrets/valkey.conf:ro"]
+    networks: [control]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD-SHELL, "REDISCLI_AUTH=$$(sed -n 's/^requirepass //p' /run/secrets/valkey.conf) valkey-cli ping | grep PONG"]
       interval: 5s
       timeout: 3s
       retries: 20
 
   pdns-db:
     logging: *bounded-logging
+    <<: *hardened
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    mem_limit: 1g
     image: postgres:18.6-alpine3.24@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
-    profiles: [dns]
+    profiles: [control]
     environment:
       POSTGRES_DB: pdns
       POSTGRES_USER: pdns
@@ -314,20 +397,63 @@ services:
       timeout: 3s
       retries: 20
 
+  # The hidden primary. Laravel writes zones here through the API on the private control network;
+  # DNS nodes pull them over TSIG-signed transfers on port 5300 and never call in. Publish 5300 only
+  # as far as the node addresses need to reach it.
+  pdns-primary:
+    logging: *bounded-logging
+    <<: *hardened
+    cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID]
+    mem_limit: 512m
+    image: powerdns/pdns-auth-51:5.1.4@sha256:bb5b1c133bcca1dd455075321de7d55db4945a8d7f2ba23339e3c7bbe416b205
+    entrypoint: [/usr/local/bin/pdns-production-start]
+    command: [--disable-syslog, --daemon=no, --guardian=no]
+    init: true
+    profiles: [control]
+    environment:
+      PDNS_DB_PASSWORD: ${PDNS_DB_PASSWORD:?PDNS_DB_PASSWORD is required}
+      PDNS_API_KEY: ${PDNS_API_KEY:?PDNS_API_KEY is required}
+    ports:
+      - "${HOST_BIND_IPV4}:5300:5300/tcp"
+      - "${HOST_BIND_IPV4}:5300:5300/udp"
+    volumes:
+      - ./docker/pdns/primary.conf:/etc/powerdns/pdns.conf:ro
+      - ./docker/pdns/production-start.sh:/usr/local/bin/pdns-production-start:ro
+    depends_on:
+      pdns-db: { condition: service_healthy }
+    # The API is reachable only through control and dns-private; ingress carries the published
+    # transfer port.
+    networks: [ingress, control, dns-private]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, pdns_control, rping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # A DNS node: a PowerDNS secondary that serves the zones the hidden primary hands it. Its SQLite
+  # store is a cache the primary can rebuild; the PoP agent configures it through the local API.
   pdns-auth:
     logging: *bounded-logging
+    <<: *hardened
+    cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID]
+    mem_limit: 512m
     image: powerdns/pdns-auth-51:5.1.4@sha256:bb5b1c133bcca1dd455075321de7d55db4945a8d7f2ba23339e3c7bbe416b205
-    entrypoint: [/usr/local/sbin/pdns_server]
+    entrypoint: [/usr/local/bin/pdns-production-start]
     command: [--disable-syslog, --daemon=no, --guardian=no]
     init: true
     profiles: [dns]
+    environment:
+      PDNS_API_KEY: ${PDNS_API_KEY:?PDNS_API_KEY is required}
     volumes:
       - ./docker/pdns/pdns.conf:/etc/powerdns/pdns.conf:ro
+      - ./docker/pdns/production-start.sh:/usr/local/bin/pdns-production-start:ro
       - ./docker/pdns/geoip-zones.yml:/etc/powerdns/geoip-zones.yml:ro
+      - pdns-node:/var/lib/powerdns
       - mmdb:/mmdb:ro
     depends_on:
-      pdns-db: { condition: service_healthy }
       mmdb-updater: { condition: service_healthy }
+    # The agent reaches the local API on dns-private; DNSdist reaches the DNS port there too.
     networks: [dns-private]
     restart: unless-stopped
     healthcheck:
@@ -338,6 +464,8 @@ services:
 
   pdns-migrate:
     logging: *bounded-logging
+    <<: *hardened
+    mem_limit: 128m
     image: postgres:18.6-alpine3.24@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
     profiles: [tools]
     command: [psql, -v, ON_ERROR_STOP=1, -h, pdns-db, -U, pdns, -d, pdns, -f, /migrations/2026_07_17_000001_add_powerdns_metadata_tables.sql]
@@ -350,6 +478,9 @@ services:
 
   dnsdist:
     logging: *bounded-logging
+    <<: *hardened
+    cap_add: [NET_BIND_SERVICE, SETGID, SETUID]
+    mem_limit: 512m
     image: powerdns/dnsdist-21:2.1.2@sha256:efabf173811e27438bebee5f1f40e047f263ea39093a8f7d6097df494cf1ed67
     entrypoint: [/usr/local/bin/dnsdist]
     command: [--supervised, --disable-syslog]
@@ -374,6 +505,9 @@ services:
 
   clickhouse:
     logging: *bounded-logging
+    <<: *hardened
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    mem_limit: 4g
     image: clickhouse/clickhouse-server:26.8.7.19-alpine@sha256:2bece7c646f08865eadc2000a60427e2964adf2b46908a6d476dfa7cc5408720
     profiles: [telemetry]
     environment:
@@ -382,11 +516,15 @@ services:
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
       GRAFANA_CLICKHOUSE_PASSWORD: ${GRAFANA_CLICKHOUSE_PASSWORD:?GRAFANA_CLICKHOUSE_PASSWORD is required}
+      CLICKHOUSE_INGEST_PASSWORD: ${CLICKHOUSE_INGEST_PASSWORD:?CLICKHOUSE_INGEST_PASSWORD is required}
+      CLICKHOUSE_READER_PASSWORD: ${CLICKHOUSE_READER_PASSWORD:?CLICKHOUSE_READER_PASSWORD is required}
+      CLICKHOUSE_ZONES_PASSWORD: ${CLICKHOUSE_ZONES_PASSWORD:?CLICKHOUSE_ZONES_PASSWORD is required}
     volumes:
       - clickhouse:/var/lib/clickhouse
       - ./docker/clickhouse/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
       - ./docker/clickhouse/config.d/prometheus.xml:/etc/clickhouse-server/config.d/prometheus.xml:ro
       - ./docker/clickhouse/users.d/grafana.xml:/etc/clickhouse-server/users.d/grafana.xml:ro
+      - ./docker/clickhouse/users.d/telemetry.xml:/etc/clickhouse-server/users.d/telemetry.xml:ro
     networks: [telemetry]
     restart: unless-stopped
     healthcheck:
@@ -396,19 +534,44 @@ services:
       retries: 12
       start_period: 20s
 
+  clickhouse-migrate:
+    logging: *bounded-logging
+    <<: *hardened
+    mem_limit: 256m
+    image: clickhouse/clickhouse-server:26.8.7.19-alpine@sha256:2bece7c646f08865eadc2000a60427e2964adf2b46908a6d476dfa7cc5408720
+    profiles: [tools]
+    entrypoint: [sh, /migrate.sh]
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_USER: cdnf
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
+    volumes:
+      - ./docker/clickhouse/migrate.sh:/migrate.sh:ro
+      - ./docker/clickhouse/migrations:/migrations:ro
+    # The deployment starts and health-checks clickhouse before this one-shot tool.
+    networks: [telemetry]
+    restart: "no"
+
   vector:
     logging: *bounded-logging
+    <<: *hardened
+    mem_limit: 512m
     image: timberio/vector:0.58.0-debian@sha256:1c1ea358c617ea0b23003d5af87f7a678b30f8f7096437e680380c47fc13d2d9
     profiles: [telemetry, dns, edge]
     environment:
       VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION: "true"
       CDNF_TELEMETRY_EDGE_ID: ${EDGE_ID}
+      CDNF_TELEMETRY_POP: ${CDNF_TELEMETRY_POP}
+      CDNF_TELEMETRY_REGION: ${CDNF_TELEMETRY_REGION}
       CLICKHOUSE_ENDPOINT: ${CLICKHOUSE_URL:?CLICKHOUSE_URL is required}
-      CLICKHOUSE_USER: cdnf
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
+      CLICKHOUSE_USER: cdnf_ingest
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_INGEST_PASSWORD:?CLICKHOUSE_INGEST_PASSWORD is required}
+      EDGE_STATUS_TOKEN: ${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}
     volumes:
       - ./docker/vector/vector.yaml:/etc/vector/vector.yaml:ro
       - vector-data:/vector-data-dir
+    # Prometheus on the monitoring host scrapes the live counters from this address.
+    ports: ["${VECTOR_METRICS_BIND}:9598"]
     networks: [telemetry, edge, dns-private]
     restart: unless-stopped
     healthcheck:
@@ -419,21 +582,26 @@ services:
 
   loki-data-init:
     logging: *bounded-logging
-    image: alpine:3.22.6@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
+    <<: *hardened
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    mem_limit: 64m
+    image: busybox:1.37.0-musl@sha256:f6a95d611e0a8780fabdb2aec43e31275b2720dfefa3e41b16835bfc42454478
     profiles: [telemetry]
-    command: [chown, "10001:10001", /loki]
-    volumes: [loki-data:/loki]
+    # Loki's image has no shell or HTTP client, so this also supplies a static busybox for its health check.
+    command: [sh, -c, "chown 10001:10001 /loki && cp /bin/busybox /tools/busybox && chmod 0555 /tools/busybox"]
+    volumes: [loki-data:/loki, loki-tools:/tools]
     restart: "no"
 
   loki:
     logging: *bounded-logging
+    security_opt: [no-new-privileges:true]
     image: grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193
     command: [-config.file=/etc/loki/loki.yml, -config.expand-env=true]
     profiles: [telemetry]
     environment:
       LOKI_RETENTION_PERIOD: ${LOKI_RETENTION_PERIOD}
       LOKI_MAX_QUERY_LENGTH: ${LOKI_MAX_QUERY_LENGTH}
-    volumes: [./docker/loki/loki.yml:/etc/loki/loki.yml:ro, loki-data:/loki]
+    volumes: [./docker/loki/loki.yml:/etc/loki/loki.yml:ro, loki-data:/loki, loki-tools:/tools:ro]
     depends_on:
       loki-data-init: { condition: service_completed_successfully }
     networks: [telemetry]
@@ -444,13 +612,52 @@ services:
     cpus: 1
     pids_limit: 128
     cap_drop: [ALL]
-    healthcheck: { disable: true }
+    healthcheck:
+      test: [CMD, /tools/busybox, wget, -q, --spider, http://127.0.0.1:3100/ready]
+      interval: 15s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
     deploy:
       resources:
         limits: { memory: 1g, cpus: "1", pids: 128 }
 
+  docker-socket-proxy:
+    logging: *bounded-logging
+    image: tecnativa/docker-socket-proxy:0.3.0@sha256:9e4b9e7517a6b660f2cc903a19b257b1852d5b3344794e3ea334ff00ae677ac2
+    profiles: [logs]
+    environment:
+      # Container listing, logs, and events are all the log collector reads. Everything else is refused.
+      CONTAINERS: "1"
+      EVENTS: "1"
+      PING: "1"
+      VERSION: "1"
+      POST: "0"
+      EXEC: "0"
+      IMAGES: "0"
+      INFO: "0"
+      NETWORKS: "0"
+      SECRETS: "0"
+      SERVICES: "0"
+      VOLUMES: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [docker-api]
+    restart: unless-stopped
+    tmpfs: [/run]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    mem_limit: 64m
+    pids_limit: 64
+    healthcheck:
+      test: [CMD-SHELL, "wget -qO- http://127.0.0.1:2375/_ping | grep -q OK"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
   log-collector:
     logging: *bounded-logging
+    security_opt: [no-new-privileges:true]
     image: timberio/vector:0.58.0-debian@sha256:1c1ea358c617ea0b23003d5af87f7a678b30f8f7096437e680380c47fc13d2d9
     profiles: [logs]
     command: [--config, /etc/vector/operational.yaml]
@@ -466,10 +673,11 @@ services:
       LOG_AUTH_TOKEN: ${LOG_AUTH_TOKEN:?LOG_AUTH_TOKEN is required for the logs profile}
     volumes:
       - ./docker/vector/operational.yaml:/etc/vector/operational.yaml:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - operational-vector-data:/vector-data-dir
     ports: ["${LOG_METRICS_BIND}:9599"]
-    networks: [telemetry, egress]
+    depends_on:
+      docker-socket-proxy: { condition: service_healthy }
+    networks: [telemetry, egress, docker-api]
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
@@ -480,15 +688,32 @@ services:
     deploy:
       resources:
         limits: { memory: 256m, cpus: "0.25", pids: 96 }
+    healthcheck:
+      test: [CMD, bash, -c, "exec 3<>/dev/tcp/127.0.0.1/9599"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
 
   prometheus:
     logging: *bounded-logging
+    <<: *hardened
+    mem_limit: 1g
     image: prom/prometheus:v3.13.3@sha256:6976aa8a60fec930796ce5772b8d12da7a318a5daa8d40d69c5c7819a05eeed7
     profiles: [telemetry]
     group_add: ["82"]
+    # Retention is explicit: it matches the typed telemetry.prometheus_retention_days default.
+    command: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.path=/prometheus, --storage.tsdb.retention.time=30d]
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro
+      - ./docker/prometheus/control-ha-alerts.yml:/etc/prometheus/control-ha-alerts.yml:ro
+      - ./docker/prometheus/traffic-alerts.yml:/etc/prometheus/traffic-alerts.yml:ro
+      - ./docker/prometheus/security-alerts.yml:/etc/prometheus/security-alerts.yml:ro
+      - ./docker/prometheus/slo-rules.yml:/etc/prometheus/slo-rules.yml:ro
+      - ./docker/prometheus/dashboard-rules.yml:/etc/prometheus/dashboard-rules.yml:ro
+      - ${PROMETHEUS_PROBE_TARGETS_FILE}:/etc/prometheus/probe-targets.yml:ro
+      - ${PROMETHEUS_VECTOR_TARGETS_FILE}:/etc/prometheus/vector-targets.yml:ro
       - ${PROMETHEUS_CONTROL_TARGETS_FILE}:/etc/prometheus/control-targets.yml:ro
       - ${PROMETHEUS_NODE_TARGETS_FILE}:/etc/prometheus/node-targets.yml:ro
       - ${PROMETHEUS_DNS_TARGETS_FILE}:/etc/prometheus/dns-targets.yml:ro
@@ -507,6 +732,8 @@ services:
 
   grafana-plugins-init:
     logging: *bounded-logging
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
     image: alpine:3.22.6@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
     profiles: [telemetry]
     command:
@@ -522,6 +749,7 @@ services:
 
   grafana-control-db-provision:
     logging: *bounded-logging
+    <<: *hardened
     image: postgres:18.6-alpine3.24@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
     profiles: [telemetry]
     environment:
@@ -545,6 +773,7 @@ services:
 
   grafana:
     logging: *bounded-logging
+    <<: *hardened
     image: grafana/grafana:12.4.11@sha256:3ea272e5cab64a4a62240c682e2c62433b25614d956d44c299a10cb6994f6f2e
     profiles: [telemetry]
     ports: ["${GRAFANA_BIND}:3000"]
@@ -560,7 +789,7 @@ services:
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_SECURITY_COOKIE_SECURE: ${GRAFANA_COOKIE_SECURE}
       GF_PATHS_PLUGINS: /var/lib/grafana/plugins
-      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/system-command-center.json
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/00-overview/cdnf-now.json
       GRAFANA_LOKI_URL: ${GRAFANA_LOKI_URL}
       GRAFANA_CLICKHOUSE_HOST: ${GRAFANA_CLICKHOUSE_HOST}
       GRAFANA_CLICKHOUSE_PORT: ${GRAFANA_CLICKHOUSE_PORT}
@@ -602,8 +831,40 @@ services:
       timeout: 3s
       retries: 20
 
+  grafana-bootstrap:
+    logging: *bounded-logging
+    <<: *hardened
+    mem_limit: 128m
+    image: python:3.13-alpine3.22@sha256:e81548ac35b07a3bd4805f275107592ef458b1e893c0e04d45aedaa19416cca5
+    profiles: [telemetry]
+    # Reconciles what file provisioning cannot hold: library panels, teams, folder permissions, team homes, and playlists.
+    command: [python3, /bootstrap/bootstrap.py]
+    environment:
+      GRAFANA_URL: http://grafana:3000
+      GRAFANA_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GRAFANA_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+    volumes:
+      - ./docker/grafana/bootstrap.py:/bootstrap/bootstrap.py:ro
+      - ./docker/grafana/access.json:/bootstrap/access.json:ro
+      - ./docker/grafana/library-panels:/bootstrap/library-panels:ro
+    depends_on:
+      grafana: { condition: service_healthy }
+    networks: [telemetry]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=4m
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python3, -c, "import os,sys;sys.exit(0 if os.path.exists('/tmp/bootstrap-ok') else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
   node-exporter:
     logging: *bounded-logging
+    <<: *hardened
+    mem_limit: 128m
     image: prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
     profiles: [control, dns, edge, telemetry]
     command: [--path.procfs=/host/proc, --path.sysfs=/host/sys, --path.rootfs=/host/root, --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)]
@@ -615,12 +876,43 @@ services:
     networks: [telemetry, egress]
     read_only: true
     restart: unless-stopped
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1:9100/]
+      interval: 30s
+      timeout: 3s
+      retries: 5
+
+
+  blackbox:
+    logging: *bounded-logging
+    <<: *hardened
+    mem_limit: 128m
+    image: prom/blackbox-exporter:v0.28.0@sha256:e753ff9f3fc458d02cca5eddab5a77e1c175eee484a8925ac7d524f04366c2fc
+    profiles: [telemetry]
+    command: [--config.file=/etc/blackbox/blackbox.yml]
+    volumes:
+      - ./docker/prometheus/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    networks: [telemetry, egress]
+    read_only: true
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, wget, -qO-, http://127.0.0.1:9115/-/healthy]
+      interval: 30s
+      timeout: 3s
+      retries: 5
 
   alertmanager:
     logging: *bounded-logging
+    <<: *hardened
+    mem_limit: 128m
     image: prom/alertmanager:v0.34.1@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a
     profiles: [telemetry]
-    volumes: [./docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro]
+    entrypoint: [/bin/sh, /usr/local/bin/alertmanager-start]
+    environment:
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:?ALERT_WEBHOOK_URL is required; Alertmanager refuses to run without a notifier}
+    volumes:
+      - ./docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./docker/alertmanager/start.sh:/usr/local/bin/alertmanager-start:ro
     networks: [telemetry]
     restart: unless-stopped
     healthcheck:
@@ -632,7 +924,7 @@ services:
   cell-01: &cell-01
     <<: *edge-cell
     ports: ["127.0.0.1:18081:8081", "127.0.0.1:18444:8444", "127.0.0.1:19081:9080"]
-    environment: { EDGE_CELL_NAME: cell-01, EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-01.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    environment: { EDGE_CELL_NAME: cell-01, EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS: "${EDGE_NETWORK_SUBNET:?EDGE_NETWORK_SUBNET is required}", EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-01.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb, GEOIP_ASN_DATABASE: /mmdb/GeoLite2-ASN.mmdb }
     volumes:
       - ${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro
       - ${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro
@@ -647,7 +939,7 @@ services:
     logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18082:8081", "127.0.0.1:18445:8444", "127.0.0.1:19082:9080"]
-    environment: { EDGE_CELL_NAME: cell-02, EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-02.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    environment: { EDGE_CELL_NAME: cell-02, EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS: "${EDGE_NETWORK_SUBNET:?EDGE_NETWORK_SUBNET is required}", EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-02.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb, GEOIP_ASN_DATABASE: /mmdb/GeoLite2-ASN.mmdb }
     volumes:
       - ${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro
       - ${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro
@@ -662,46 +954,48 @@ services:
     logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18083:8081", "127.0.0.1:18446:8444", "127.0.0.1:19083:9080"]
-    environment: { EDGE_CELL_NAME: cell-03, EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-03.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    environment: { EDGE_CELL_NAME: cell-03, EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS: "${EDGE_NETWORK_SUBNET:?EDGE_NETWORK_SUBNET is required}", EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-03.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb, GEOIP_ASN_DATABASE: /mmdb/GeoLite2-ASN.mmdb }
     volumes: [edge-runtime-memory:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-03-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-04:
     logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18084:8081", "127.0.0.1:18447:8444", "127.0.0.1:19084:9080"]
-    environment: { EDGE_CELL_NAME: cell-04, EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-04.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    environment: { EDGE_CELL_NAME: cell-04, EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS: "${EDGE_NETWORK_SUBNET:?EDGE_NETWORK_SUBNET is required}", EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-04.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb, GEOIP_ASN_DATABASE: /mmdb/GeoLite2-ASN.mmdb }
     volumes: [edge-runtime-memory:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-04-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-05:
     logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18085:8081", "127.0.0.1:18448:8444", "127.0.0.1:19085:9080"]
-    environment: { EDGE_CELL_NAME: cell-05, EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-05.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    environment: { EDGE_CELL_NAME: cell-05, EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS: "${EDGE_NETWORK_SUBNET:?EDGE_NETWORK_SUBNET is required}", EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-05.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb, GEOIP_ASN_DATABASE: /mmdb/GeoLite2-ASN.mmdb }
     volumes: [edge-runtime-memory:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-05-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-06:
     logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18086:8081", "127.0.0.1:18449:8444", "127.0.0.1:19086:9080"]
-    environment: { EDGE_CELL_NAME: cell-06, EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-06.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    environment: { EDGE_CELL_NAME: cell-06, EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS: "${EDGE_NETWORK_SUBNET:?EDGE_NETWORK_SUBNET is required}", EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-06.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb, GEOIP_ASN_DATABASE: /mmdb/GeoLite2-ASN.mmdb }
     volumes: [edge-runtime-memory:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-06-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-07:
     logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18087:8081", "127.0.0.1:18450:8444", "127.0.0.1:19087:9080"]
-    environment: { EDGE_CELL_NAME: cell-07, EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-07.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    environment: { EDGE_CELL_NAME: cell-07, EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS: "${EDGE_NETWORK_SUBNET:?EDGE_NETWORK_SUBNET is required}", EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-07.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb, GEOIP_ASN_DATABASE: /mmdb/GeoLite2-ASN.mmdb }
     volumes: [edge-runtime-memory:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-07-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   cell-08:
     logging: *bounded-logging
     <<: *edge-cell
     ports: ["127.0.0.1:18088:8081", "127.0.0.1:18451:8444", "127.0.0.1:19088:9080"]
-    environment: { EDGE_CELL_NAME: cell-08, EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-08.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb }
+    environment: { EDGE_CELL_NAME: cell-08, EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS: "${EDGE_NETWORK_SUBNET:?EDGE_NETWORK_SUBNET is required}", EDGE_REQUIRE_MEMORY_TLS: "true", EDGE_RUNTIME_FILE: /var/lib/cdnfoundry/runtime/current/cell-08.json, EDGE_STATUS_TOKEN: "${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}", GEOIP_DATABASE: /mmdb/GeoLite2-City.mmdb, GEOIP_ASN_DATABASE: /mmdb/GeoLite2-ASN.mmdb }
     volumes: [edge-runtime-memory:/var/lib/cdnfoundry/runtime:ro, mmdb:/mmdb:ro, cell-08-cache:/var/cache/nginx, "${EDGE_RUNTIME_TLS_CERTIFICATE:?EDGE_RUNTIME_TLS_CERTIFICATE is required}:/run/edge/tls.crt:ro", "${EDGE_RUNTIME_TLS_PRIVATE_KEY:?EDGE_RUNTIME_TLS_PRIVATE_KEY is required}:/run/edge/tls.key:ro"]
 
   edge-agent:
     logging: *bounded-logging
+    <<: *hardened
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     image: ${CDNF_EDGE_AGENT_IMAGE:?CDNF_EDGE_AGENT_IMAGE must be an immutable image reference}
     profiles: [edge]
     environment:
@@ -719,6 +1013,9 @@ services:
       EDGE_CELL_ASSIGNMENTS: '{"cell-01":"shared-default","cell-02":"quarantine-default","cell-03":"","cell-04":"","cell-05":"","cell-06":"","cell-07":"","cell-08":""}'
       EDGE_CELL_STATUS_URLS: http://cell-01:9080/passive-failures,http://cell-02:9080/passive-failures,http://cell-03:9080/passive-failures,http://cell-04:9080/passive-failures,http://cell-05:9080/passive-failures,http://cell-06:9080/passive-failures,http://cell-07:9080/passive-failures,http://cell-08:9080/passive-failures
       EDGE_STATUS_TOKEN: ${EDGE_STATUS_TOKEN:?EDGE_STATUS_TOKEN is required}
+      # Set only on a PoP that also runs a DNS node: the agent drives that node's local PowerDNS API.
+      EDGE_DNS_API_URL: ${EDGE_DNS_API_URL}
+      EDGE_DNS_API_KEY: ${EDGE_DNS_API_KEY}
     volumes:
       - edge-agent-state:/var/lib/cdnfoundry/agent
       - edge-runtime-memory:/var/lib/cdnfoundry/runtime
@@ -727,9 +1024,16 @@ services:
     networks:
       edge:
         aliases: [edge-agent]
+      dns-private: {}
     extra_hosts:
       - "host-gateway:host-gateway"
     restart: unless-stopped
+    healthcheck:
+      test: [CMD, /usr/local/bin/edge-agent, --healthcheck]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
     stop_grace_period: 30s
     read_only: true
     tmpfs: [/tmp]
@@ -745,6 +1049,7 @@ services:
 
   edge-gateway:
     logging: *bounded-logging
+    security_opt: [no-new-privileges:true]
     image: ${CDNF_EDGE_GATEWAY_IMAGE:?CDNF_EDGE_GATEWAY_IMAGE must be an immutable image reference}
     profiles: [edge]
     environment:
@@ -752,6 +1057,9 @@ services:
       GATEWAY_STATE_DIR: /var/lib/cdnfoundry/gateway-state
       GATEWAY_METRICS_ADDRESS: ${EDGE_GATEWAY_METRICS_ADDRESS}
       GATEWAY_MAX_CONNECTIONS: ${EDGE_GATEWAY_MAX_CONNECTIONS}
+      GATEWAY_MAX_CONNECTIONS_PER_ADDRESS: ${EDGE_GATEWAY_MAX_CONNECTIONS_PER_ADDRESS}
+      GATEWAY_IDLE_TIMEOUT_SECONDS: ${EDGE_GATEWAY_IDLE_TIMEOUT_SECONDS}
+      GATEWAY_HALF_CLOSE_TIMEOUT_SECONDS: ${EDGE_GATEWAY_HALF_CLOSE_TIMEOUT_SECONDS}
     volumes:
       - edge-runtime-memory:/var/lib/cdnfoundry/runtime:ro
       - edge-gateway-state:/var/lib/cdnfoundry/gateway-state
@@ -759,6 +1067,12 @@ services:
     depends_on:
       edge-gateway-state-init: { condition: service_completed_successfully }
     restart: unless-stopped
+    healthcheck:
+      test: [CMD-SHELL, "wget -qO- http://127.0.0.1:$${GATEWAY_METRICS_ADDRESS##*:}/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
     stop_grace_period: 30s
     read_only: true
     tmpfs: [/tmp]
@@ -778,6 +1092,9 @@ services:
 
   edge-gateway-state-init:
     logging: *bounded-logging
+    <<: *hardened
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    mem_limit: 64m
     image: alpine:3.22.6@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
     profiles: [edge]
     command: [chown, "10101:10101", /state]
@@ -786,6 +1103,9 @@ services:
 
   mmdb-updater:
     logging: *bounded-logging
+    <<: *hardened
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    mem_limit: 256m
     image: ${CDNF_MMDB_UPDATER_IMAGE:?CDNF_MMDB_UPDATER_IMAGE must be an immutable image reference}
     profiles: [control, dns, edge]
     environment:
@@ -794,8 +1114,13 @@ services:
       MMDB_DOWNLOAD_INTERVAL_SECONDS: ${MMDB_DOWNLOAD_INTERVAL_SECONDS}
       MMDB_DOWNLOAD_RETRIES: ${MMDB_DOWNLOAD_RETRIES}
       MMDB_EXPECTED_SHA256: ${MMDB_EXPECTED_SHA256}
+      MMDB_CHECKSUM_URL: ${MMDB_CHECKSUM_URL}
+      MMDB_REQUIRE_VERIFICATION: "true"
       MMDB_DOWNLOAD_URL: ${MMDB_DOWNLOAD_URL}
       MMDB_DOWNLOAD_HEADER: ${MMDB_DOWNLOAD_HEADER}
+      MMDB_ASN_DOWNLOAD_URL: ${MMDB_ASN_DOWNLOAD_URL}
+      MMDB_ASN_EXPECTED_SHA256: ${MMDB_ASN_EXPECTED_SHA256}
+      MMDB_ASN_CHECKSUM_URL: ${MMDB_ASN_CHECKSUM_URL}
     volumes: [mmdb:/mmdb]
     networks: [edge]
     restart: unless-stopped
@@ -808,27 +1133,41 @@ services:
 
 networks:
   control: { internal: true }
+  # Only core and the two nginx containers. PHP-FPM listens on this network alone.
+  fpm:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${FPM_NETWORK_SUBNET:?FPM_NETWORK_SUBNET is required}
   ingress: {}
   dns-private: { internal: true }
   telemetry: { internal: true }
-  edge: {}
+  # Between the log collector and its read-only Docker API proxy; nothing else joins.
+  docker-api: { internal: true }
+  # Cells trust PROXY protocol headers only from this network, which holds the
+  # cells and carries the gateway's connections. Override the default if it
+  # collides with a host network.
+  edge:
+    ipam:
+      config:
+        - subnet: ${EDGE_NETWORK_SUBNET:?EDGE_NETWORK_SUBNET is required}
   egress: {}
 
 volumes:
   caddy-data: {}
   caddy-config: {}
-  dns-api-caddy-data: {}
-  dns-api-caddy-config: {}
   telemetry-caddy-data: {}
   telemetry-caddy-config: {}
   core-storage: {}
   control-db: {}
   redis: {}
   pdns-db: {}
+  pdns-node: {}
   clickhouse: {}
   vector-data: {}
   operational-vector-data: {}
   loki-data: {}
+  loki-tools: {}
   prometheus: {}
   grafana-data: {}
   grafana-plugins:

@@ -61,6 +61,8 @@ jobs:
         run: npm audit --omit=dev --audit-level=moderate
       - name: Check PHP formatting
         run: vendor/bin/pint --test
+      - name: Run static analysis against the committed baseline
+        run: vendor/bin/phpstan analyse --memory-limit=2G --no-progress
       - name: Build frontend assets
         run: npm run build
       - name: Run application tests
@@ -165,7 +167,7 @@ jobs:
       - name: Validate production role overrides
         run: ./scripts/validate-production-overrides.sh
       - name: Validate observability contracts
-        run: python3 -m unittest tests/observability/test_grafana_contract.py tests/observability/test_operational_logging_contract.py
+        run: python3 -m unittest tests/observability/test_grafana_contract.py tests/observability/test_metrics_contract.py tests/observability/test_grafana_bootstrap.py tests/observability/test_operational_logging_contract.py
       - name: Validate Python syntax
         run: python3 -m compileall -q tests/e2e tests/docs tests/fleet tests/qualification tests/supply_chain scripts/cdnfoundry_fleet scripts/ci
       - name: Download exact production images
@@ -240,6 +242,11 @@ jobs:
           docker run --rm --entrypoint /bin/promtool \
             -v "$PWD/docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
             -v "$PWD/docker/prometheus/telemetry-alerts.yml:/etc/prometheus/telemetry-alerts.yml:ro" \
+            -v "$PWD/docker/prometheus/control-ha-alerts.yml:/etc/prometheus/control-ha-alerts.yml:ro" \
+            -v "$PWD/docker/prometheus/traffic-alerts.yml:/etc/prometheus/traffic-alerts.yml:ro" \
+            -v "$PWD/docker/prometheus/security-alerts.yml:/etc/prometheus/security-alerts.yml:ro" \
+            -v "$PWD/docker/prometheus/slo-rules.yml:/etc/prometheus/slo-rules.yml:ro" \
+            -v "$PWD/docker/prometheus/dashboard-rules.yml:/etc/prometheus/dashboard-rules.yml:ro" \
             -v "$PWD/docker/prometheus/dev-metrics-token:/run/secrets/metrics-token:ro" \
             -v "$PWD/docker/prometheus/control-targets.dev.yml:/etc/prometheus/control-targets.yml:ro" \
             -v "$PWD/docker/prometheus/node-targets.dev.yml:/etc/prometheus/node-targets.yml:ro" \
@@ -307,7 +314,7 @@ jobs:
         run: |
           if ! sudo -E python3 tests/e2e/production_observability.py --release ci > /tmp/cdnfoundry-production-observability.log 2>&1; then
             grep -Ei 'unhealthy|dependency failed|error response|permission denied|returned non-zero|failed to|invalid|timed out' /tmp/cdnfoundry-production-observability.log | tail -n 35 > /tmp/cdnfoundry-production-observability-tail.log || true
-            tail -n 12 /tmp/cdnfoundry-production-observability.log >> /tmp/cdnfoundry-production-observability-tail.log
+            tail -n 90 /tmp/cdnfoundry-production-observability.log >> /tmp/cdnfoundry-production-observability-tail.log
             cat /tmp/cdnfoundry-production-observability-tail.log
             annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-production-observability-tail.log)"
             echo "::error title=Production observability qualification failed::${annotation}"
@@ -345,8 +352,46 @@ jobs:
           annotation="$(python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))' < /tmp/cdnfoundry-dev-up-tail.log)"
           echo "::error title=Development topology startup failed::${annotation}"
           exit "${status}"
+      - name: Enroll the development PoPs and start their agents
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .env.dev.example .env.dev
+          for side in a b; do
+            if [ "${side}" = a ]; then country=DE; continent=EU; else country=US; continent=NA; fi
+            output="$(docker compose -f compose.dev.yml exec -T core php artisan tinker --execute="[\$edge, \$token] = app(App\\Actions\\CreateEdge::class)->handle(['name' => 'dev-pop-${side}', 'country_code' => '${country}', 'continent_code' => '${continent}'], null, null); foreach ([1 => 'shared-default', 2 => 'quarantine-default'] as \$slot => \$pool) { app(App\\Actions\\AssignCellToPool::class)->handle(App\\Models\\EdgePool::query()->where('name', \$pool)->firstOrFail(), \$edge->cells()->where('slot', \$slot)->firstOrFail(), null, null); } echo json_encode(['edge_id' => \$edge->id, 'bootstrap_token' => \$token]);" | tail -n 1)"
+            CDNF_ENROLLMENT="${output}" CDNF_SIDE="${side}" python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+
+          side = os.environ['CDNF_SIDE'].upper()
+          enrolled = json.loads(os.environ['CDNF_ENROLLMENT'])
+          print(f"::add-mask::{enrolled['bootstrap_token']}")
+          path = Path('.env.dev')
+          text = path.read_text()
+          for key, value in ((f'CDNF_DEV_EDGE_{side}_ID', enrolled['edge_id']), (f'CDNF_DEV_EDGE_{side}_BOOTSTRAP_TOKEN', enrolled['bootstrap_token'])):
+              text = re.sub(rf'^{key}=.*$', f'{key}={value}', text, flags=re.M)
+          path.write_text(text)
+          PY
+          done
+          # Compose reads .env on its own, so every later compose call in the E2E scripts keeps the agents' identities.
+          cp .env.dev .env
+          docker compose --env-file .env.dev -f compose.dev.yml up -d --no-build edge-agent-a edge-agent-b
+          for _ in $(seq 1 90); do
+            ready="$(docker compose -f compose.dev.yml exec -T core php artisan tinker --execute="echo App\\Models\\Edge::query()->whereNotNull('registered_at')->whereNotNull('last_heartbeat_at')->count();" | tail -n 1 | tr -dc '0-9')"
+            if [ "${ready:-0}" -ge 2 ]; then
+              echo "Both development PoPs are registered and sending heartbeats."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error title=Development PoPs did not register::fewer than two edges sent a heartbeat within 180 seconds"
+          docker compose -f compose.dev.yml logs --no-color --tail 20 edge-agent-a edge-agent-b | sed -E 's/(token|TOKEN)[=:][^ ]+/\1=<redacted>/g'
+          exit 1
       - name: Run Python non-UI E2E
         shell: bash
+        env:
+          CDNF_E2E_SKIP_EDGE_GATEWAY_CHECK: '1'
         run: |
           set +e
           make dev-e2e 2>&1 | tee /tmp/cdnfoundry-e2e.log
@@ -428,7 +473,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.8'
+          go-version: '1.26.10'
           cache: true
           cache-dependency-path: |
             edge-agent/go.mod
@@ -450,7 +495,7 @@ jobs:
               echo "Testing ${module}"
               unformatted="$(find "${module}" -name '*.go' -type f -print0 | xargs -0 gofmt -l)"
               test -z "${unformatted}" || { printf 'Unformatted Go files:\n%s\n' "${unformatted}"; exit 1; }
-              (cd "${module}" && go vet ./... && go test -v ./... && go build ./...)
+              (cd "${module}" && go vet ./... && go test -v ./... && go build ./... && go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...)
             done
           } 2>&1 | tee /tmp/cdnfoundry-go.log
           status=${PIPESTATUS[0]}
@@ -530,6 +575,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Prepare disposable runner space for source image builds
@@ -570,6 +616,7 @@ jobs:
           name: release-image-scans
           path: release-scans
       - name: Push, scan, attest, and sign immutable images
+        id: publish
         env:
           RELEASE: ${{ github.sha }}
           RELEASE_REF: ${{ github.ref }}
@@ -650,9 +697,6 @@ jobs:
             cp "release-scans/${component}.json" "release-evidence/${component}.trivy.json"
             cp "release-scans/${component}.classified.json" "release-evidence/${component}.classified.json"
             cp "release-scans/${component}.txt" "release-evidence/${component}.trivy.txt"
-            jq -n --arg source "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" --arg commit "${RELEASE}" --arg workflow "${GITHUB_WORKFLOW_REF}" --arg builder "${GITHUB_SERVER_URL}/actions/runner" \
-              '{buildDefinition:{buildType:"https://github.com/CDNFoundry/container-release/v1",externalParameters:{source:$source,commit:$commit,workflow:$workflow}},runDetails:{builder:{id:$builder}}}' \
-              > "release-evidence/${component}.provenance.json"
             cosign_once docker run --rm \
               -e ACTIONS_ID_TOKEN_REQUEST_TOKEN \
               -e ACTIONS_ID_TOKEN_REQUEST_URL \
@@ -674,17 +718,9 @@ jobs:
               --predicate "/evidence/${component}.spdx.json" \
               "${digest}"
 
-            cosign_once docker run --rm \
-              -e ACTIONS_ID_TOKEN_REQUEST_TOKEN \
-              -e ACTIONS_ID_TOKEN_REQUEST_URL \
-              -e DOCKER_CONFIG=/docker-config \
-              -v "${HOME}/.docker/config.json:/docker-config/config.json:ro" \
-              -v "${PWD}/release-evidence:/evidence:ro" \
-              gcr.io/projectsigstore/cosign:v3.0.2@sha256:b29487e48205d875c324c79583e2806d9d269c0fa299e0861bbec023d8430c8b \
-              attest --yes \
-              --type slsaprovenance1 \
-              --predicate "/evidence/${component}.provenance.json" \
-              "${digest}"
+            # SLSA provenance is generated by GitHub's attestation action in the steps after this one,
+            # from the workflow run itself, not assembled here.
+            echo "${component//-/_}=${digest#*@}" >> "${GITHUB_OUTPUT}"
             ${first} || printf ',' >> release-evidence/release-manifest.json
             first=false
             jq -n --arg component "${component}" --arg image "${digest}" \
@@ -703,6 +739,48 @@ jobs:
               push_with_retry "${image}:${alias}"
             done
           done
+      - name: Attest builder-generated SLSA provenance for core
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-name: ghcr.io/vaheed/cdnfoundry-core
+          subject-digest: ${{ steps.publish.outputs.core }}
+          push-to-registry: true
+      - name: Attest builder-generated SLSA provenance for web
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-name: ghcr.io/vaheed/cdnfoundry-web
+          subject-digest: ${{ steps.publish.outputs.web }}
+          push-to-registry: true
+      - name: Attest builder-generated SLSA provenance for edge-control
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-name: ghcr.io/vaheed/cdnfoundry-edge-control
+          subject-digest: ${{ steps.publish.outputs.edge_control }}
+          push-to-registry: true
+      - name: Attest builder-generated SLSA provenance for edge-runtime
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-name: ghcr.io/vaheed/cdnfoundry-edge-runtime
+          subject-digest: ${{ steps.publish.outputs.edge_runtime }}
+          push-to-registry: true
+      - name: Attest builder-generated SLSA provenance for edge-agent
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-name: ghcr.io/vaheed/cdnfoundry-edge-agent
+          subject-digest: ${{ steps.publish.outputs.edge_agent }}
+          push-to-registry: true
+      - name: Attest builder-generated SLSA provenance for edge-gateway
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-name: ghcr.io/vaheed/cdnfoundry-edge-gateway
+          subject-digest: ${{ steps.publish.outputs.edge_gateway }}
+          push-to-registry: true
+      - name: Attest builder-generated SLSA provenance for mmdb-updater
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-name: ghcr.io/vaheed/cdnfoundry-mmdb-updater
+          subject-digest: ${{ steps.publish.outputs.mmdb_updater }}
+          push-to-registry: true
       - name: Normalize release evidence permissions
         if: always()
         run: |

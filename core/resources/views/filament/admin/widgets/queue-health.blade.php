@@ -1,5 +1,5 @@
 <x-filament-widgets::widget>
-    <x-filament::section heading="Queue and worker health" description="Current bounded lane depth and oldest ready job. Throughput and retry counters are not exposed by the current normalized source." icon="heroicon-o-queue-list">
+    <x-filament::section heading="Queue and worker health" description="Lane depth and oldest ready job" icon="phosphor-queue">
         <div wire:poll.10s>
             @if (!($state['available'] ?? false))
                 <x-ui.widget-state :state="$state['state'] ?? 'unavailable'" :description="$state['error'] ?? 'Queue evidence could not be loaded.'" />
@@ -9,7 +9,8 @@
                         <div class="cdn-queue-row">
                             <div class="min-w-0">
                                 <div class="cdn-row-title">{{ $lane['label'] }}</div>
-                                <div class="cdn-row-meta"><code>{{ $lane['queue'] }}</code> · Ready {{ $lane['ready'] === null ? 'unavailable' : number_format($lane['ready']) }} · Running {{ $lane['reserved'] === null ? 'unavailable' : number_format($lane['reserved']) }}</div>
+                                <div class="cdn-row-meta"><code>{{ $lane['queue'] }}</code></div>
+                                <div class="cdn-row-meta">Ready <span class="tabular-nums">{{ $lane['ready'] === null ? 'unavailable' : number_format($lane['ready']) }}</span>, running <span class="tabular-nums">{{ $lane['reserved'] === null ? 'unavailable' : number_format($lane['reserved']) }}</span></div>
                                 <div class="cdn-row-meta">Oldest {{ $lane['oldest_job_age_seconds'] === null ? 'unavailable' : \Carbon\CarbonInterval::seconds($lane['oldest_job_age_seconds'])->cascade()->forHumans(['short' => true]) }}</div>
                             </div>
                             <x-ui.status-pill :tone="$lane['status'] === 'healthy' ? (($lane['depth'] ?? 0) > 0 ? 'warning' : 'success') : ($lane['status'] === 'degraded' ? 'warning' : 'danger')">

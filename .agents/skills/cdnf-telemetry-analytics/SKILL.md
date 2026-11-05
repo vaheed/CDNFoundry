@@ -18,7 +18,7 @@ The event fields, redaction, retention, query bounds (range, rows, execution tim
 `docker/vector/vector.yaml`, `docker/vector/operational.yaml`, `docker/clickhouse/init.sql`, `docker/clickhouse/migrations/*`, `core/app/Support/AnalyticsStore.php`, `core/app/Http/Controllers/AnalyticsController.php`, `DomainLogController.php`, `UsageController.php`, `core/app/Jobs/BuildUsageRollups.php`, `docs/reference/telemetry-schema.md`, `docs/guides/analytics.md`.
 
 ## Procedure
-1. Every event that belongs to a tenant carries `domain_id`. Scope tenant queries by `domain_id`, never by name suffix. DNS events currently use `domain_id = 0` and are scoped by zone name, which leaks across tenants (roadmap H9).
+1. Every event that belongs to a tenant carries `domain_id`. Scope tenant queries by `domain_id`, never by name suffix. DNS events are tagged with `domain_id` at the DNS node from the zone, and the edge derives `domain_id` from the active snapshot, never from the request.
 2. Use ClickHouse query parameters (`{name:Type}`) for every value. Only fixed column and table names may be interpolated.
 3. Bound everything: the range (90 days for analytics, 24 hours for raw logs), the `LIMIT`, the execution time, and the Vector buffers.
 4. Redact client data according to `docs/reference/telemetry-schema.md`.
@@ -29,7 +29,7 @@ The event fields, redaction, retention, query bounds (range, rows, execution tim
 - Style: `docker compose -f compose.dev.yml -f compose.test.yml run --rm --no-deps core vendor/bin/pint --test`.
 - Feature: `AnalyticsApiTest`, `TelemetryBrowserExportTest`.
 - Contract: `make contract-check` (Grafana and logging contracts).
-- Runtime: `python3 tests/e2e/phase7_analytics.py`, `vector_traffic.py`, `vector_buffer_startup.py`.
+- Runtime: `python3 tests/e2e/telemetry_analytics.py`, `vector_traffic.py`, `vector_buffer_startup.py`.
 
 ## Definition of done
 Counts match generated traffic, tenants see only their own events, and outages degrade analytics without affecting traffic.

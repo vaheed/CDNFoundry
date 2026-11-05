@@ -227,7 +227,7 @@ Each finding uses the same fields:
   - The outer hop sends it only Host, Connection, Upgrade, `X-CDN-Original-Scheme`, and Accept-Encoding (`docker/nginx/cache-upstream.conf`).
   - Real-IP handling (`real_ip_header proxy_protocol`) exists only on the outer listeners (`edge-runtime.conf:33-35`).
   - `docker/nginx/origin-proxy.conf:7-8` (also `:32-33,:55-56`) sets `X-Forwarded-For $remote_addr` and `Forwarded "for=$remote_addr;..."`. In the inner server, `$remote_addr` is `127.0.0.1`.
-  - The E2E test `tests/e2e/phase4_runtime.py:527-529` sends from 127.0.0.1, so it cannot tell the two apart.
+  - The E2E test `tests/e2e/openresty_runtime.py:527-529` sends from 127.0.0.1, so it cannot tell the two apart.
 - **Impact:** origin access controls, origin rate limits, fraud checks, and logs all see one address.
   - An origin that allow-lists or rate-limits by `X-Forwarded-For` either blocks every visitor or trusts every visitor.
   - It breaks the documented forwarding-header normalization.
@@ -260,7 +260,7 @@ Each finding uses the same fields:
   - **Alternatives considered:** reject exclusions until this is fixed. That is an acceptable interim step: a 409 with a stable code.
 - **Effort and risk:** M, medium risk, because CRS interaction needs real-runtime tests. Roll out behind the existing per-domain WAF readiness checks. Roll back by image.
 - **Verify:**
-  - **Agent-owned:** extend `tests/e2e/phase9_waf.py`. With an exclusion for rule X on parameter `q`:
+  - **Agent-owned:** extend `tests/e2e/managed_waf.py`. With an exclusion for rule X on parameter `q`:
     - an attack that triggers rule Y is still blocked;
     - adding `?q=` does not unblock it;
     - the false positive for rule X on `q` passes.
@@ -292,7 +292,7 @@ Each finding uses the same fields:
   - `docker/dnsdist/dnsdist.conf:21` calls `newServer({address=..., name=hostname})` with no `useClientSubnet`. There is no PROXY protocol to the backend either.
   - `docker/pdns/pdns.conf:6` sets `edns-subnet-processing=yes`.
   - The LUA records use `countryCode()`, `continentCode()`, and `pickhashed()` (`core/app/Support/EdgeRoutingCompiler.php:38-43`). Those use ECS when the resolver sends it, and otherwise the source address, which here is DNSdist's private container address.
-  - `tests/e2e/phase3_geo_dns.py:93-103` checks only the default answers, never a country override.
+  - `tests/e2e/geo_dns.py:93-103` checks only the default answers, never a country override.
 - **Impact:**
   - Resolvers that send no ECS, which is most of them, all get the global answer, so per-country rules never apply.
   - `pickhashed` hashes them all to the same endpoint, which concentrates load on one edge.
@@ -406,8 +406,8 @@ Every Medium finding is a fact unless it says otherwise. Columns:
 | A24 | F | **Telemetry stores full client IPs and user agents, but README says it is redacted.** `vector.yaml:83,86,128,150` keep the full `client_ip` for 7 days. Query strings, cookies, and authorization headers are removed (`:45,88,107`). | A privacy claim that is not accurate. Raises GDPR exposure for operators. | Either document exactly what is kept, or truncate addresses to /24 and /48 in long-lived rollups and keep full addresses only in the 7-day raw table. Pick one and state it. | S / low | A: Vector unit test |
 | A25 | F, L | **DNS rollups keep attacker-chosen names for years.** `docker/clickhouse/init.sql:94-133`: the hourly and daily DNS rollups key on `zone`, which is the `qname`, with TTLs of 400 days and 3 years. The DNS scope can't use the primary key (`:64`, together with H9). | A random-subdomain flood creates millions of rows that stay for years, inflating storage and query cost. | Store the domain apex (or `domain_id`) and a bounded top-N of qnames per hour in the rollups. Bounded cardinality. | M / low | A: ClickHouse E2E with a synthetic flood |
 | A26 | F, H | **ClickHouse migrations are not run or tracked in production.** `docker/clickhouse/migrations/*.sql` are not mounted in `compose.prod.yml`. Only `tests/e2e/clickhouse_upgrade.py` and manual documentation steps apply them. | Telemetry schema drifts between hosts, and an upgrade forgets a migration. | An explicit one-shot `clickhouse-migrate` Compose service with a tracked version table, run like `prod-migrate`. Explicit migrations. | S / low | A: `clickhouse_upgrade.py` uses that service |
-| A27 | B | **GeoIP refresh and bootstrap.** The updater replaces the file with `mv -f` (`docker/mmdb-updater/entrypoint.sh`), but PowerDNS has it open with `mode=mmap` (`pdns.conf:3`) and is never reloaded (inference). The default source is an unpinned CDN URL, and `MMDB_EXPECTED_SHA256` is empty by default. `pdns-auth` depends on the updater being healthy (`compose.prod.yml:330`). | Geo answers keep using the old database until the next restart. A DNS node with no internet access never starts on first boot. | Signal PowerDNS to reload after the swap (or document a scheduled restart). Ship a bundled fallback database so DNS can start without network access. Require a checksum or signature in production. Runtime DNS stays independent of external services. | S–M / low | A: `phase8_mmdb.py` checks the served answer changes after a swap |
-| A28 | H | **Backups cover only the control database, with no retention or integrity check.** `core/docker/backup/create.sh` pipes `pg_dump` into `restic backup`. There is no `forget --keep-*`, `prune`, or `restic check`, and no alert on backup age. `tests/e2e/phase8_recovery.py` (off-host restore) is not in CI. | The repository grows without limit, and corruption is found only during a restore. | Scheduled `forget --prune` with documented retention, a weekly `restic check`, a `cdnfoundry_backup_age_seconds` alert, and the off-host restore in a scheduled CI job. | S–M / low | A: E2E; O: real off-host restore drill |
+| A27 | B | **GeoIP refresh and bootstrap.** The updater replaces the file with `mv -f` (`docker/mmdb-updater/entrypoint.sh`), but PowerDNS has it open with `mode=mmap` (`pdns.conf:3`) and is never reloaded (inference). The default source is an unpinned CDN URL, and `MMDB_EXPECTED_SHA256` is empty by default. `pdns-auth` depends on the updater being healthy (`compose.prod.yml:330`). | Geo answers keep using the old database until the next restart. A DNS node with no internet access never starts on first boot. | Signal PowerDNS to reload after the swap (or document a scheduled restart). Ship a bundled fallback database so DNS can start without network access. Require a checksum or signature in production. Runtime DNS stays independent of external services. | S–M / low | A: `mmdb_provider_outage.py` checks the served answer changes after a swap |
+| A28 | H | **Backups cover only the control database, with no retention or integrity check.** `core/docker/backup/create.sh` pipes `pg_dump` into `restic backup`. There is no `forget --keep-*`, `prune`, or `restic check`, and no alert on backup age. `tests/e2e/offhost_recovery.py` (off-host restore) is not in CI. | The repository grows without limit, and corruption is found only during a restore. | Scheduled `forget --prune` with documented retention, a weekly `restic check`, a `cdnfoundry_backup_age_seconds` alert, and the off-host restore in a scheduled CI job. | S–M / low | A: E2E; O: real off-host restore drill |
 | A29 | H | **One Valkey instance serves cache, sessions, and queues, with `noeviction`.** `compose.prod.yml:22-24,287` (1 GB, `noeviction`). The password is passed in argv. | When the cache fills Valkey, writes fail, job dispatch stops, and no runtime change goes out. | Separate logical limits: give cache keys TTLs, or run a second, eviction-enabled Valkey for cache. Read the password from a Compose secret file. | S / low | A: E2E fill test |
 | A30 | A, G | **Gaps in account security.** Login throttle keyed on IP plus email (`core/app/Providers/AppServiceProvider.php:54`), so password spraying isn't limited. Unknown users skip `Hash::check` (`AuthController.php:21`), so timing reveals which emails exist. `PATCH /me` changes the email with no `current_password` (`:66-68`). `Password::defaults()` is never configured. An admin password reset does not revoke tokens. Edge bootstrap tokens never expire (`Admin/EdgeController.php:31-34`). `trustProxies(at: '*')` (`core/bootstrap/app.php:125`). Extends M12. | Account takeover by spraying. One stolen session can change the account email. A leaked bootstrap token works forever. | Add a per-account limiter and constant-time verification. Require `current_password` to change the email. Set `Password::defaults()` to the admin policy. Revoke tokens on password reset. Give bootstrap tokens a TTL. Trust only the Caddy address. Standard Laravel features only. | S–M / low | A: feature tests |
 | A31 | G | **Containers run with few restrictions.** No `no-new-privileges` on any service. `cap_drop` on only 4 services. No memory limits on core, web, horizon, scheduler, control-db, redis, pdns-*, dnsdist, clickhouse, vector, prometheus, or caddy. The PHP-FPM master runs as root (`core/Dockerfile` has no `USER`). The log collector mounts `/var/run/docker.sock` (`compose.prod.yml:469`). | A compromised container has a wider blast radius, and one runaway service can take memory from DNS or the database. | Add an `x-hardening` anchor (`no-new-privileges`, `cap_drop: [ALL]` plus the capabilities each service needs, `read_only` where possible), and memory limits on every service. Use Docker's journald log driver instead of mounting the socket. | M / medium | A: `config-check` policy test; E2E |
@@ -478,10 +478,10 @@ Every Medium finding is a fact unless it says otherwise. Columns:
 - **Lua:** no unit tests. Cache key, WAF exclusions, XFF parsing, and Host/SNI behavior are covered only by E2E, if at all.
 - **E2E in CI** (`make dev-e2e`, plus the compose and scale jobs): DNS, Geo-DNS defaults, mTLS, runtime, TLS, security, analytics, operations including an isolated PostgreSQL restore, WAF, origin failover, scale, and the image, ingress, and Vector checks.
 - **E2E not in CI:**
-  - `phase8_recovery.py`, `phase8_upgrade.py`, `phase8_throughput.py`, `phase8_mmdb.py`
+  - `offhost_recovery.py`, `mixed_version_upgrade.py`, `cell_throughput.py`, `mmdb_provider_outage.py`
   - `edge_purge_protocol.py`, `gateway_ingress.py`, `cell_inventory.py`, `grafana_observability.py`, `operational_logging.py`
   - the six `staging_*` scripts
-- **IPv6:** tested only over development loopback (`phase2_dns.py` uses `dig @::1`) and in origin fixtures. Production IPv6 publication is not tested.
+- **IPv6:** tested only over development loopback (`dns_authoritative.py` uses `dig @::1`) and in origin fixtures. Production IPv6 publication is not tested.
 - **Browser:** no browser automation in the repository. Manual browser qualification is owner-run and was not run.
 
 ### Gaps against the AGENTS.md test requirements
@@ -514,7 +514,7 @@ All of these are agent-owned unless marked otherwise.
    - This needs an explicit AGENTS.md-compatible design: it must not use `RefreshDatabase` against the persistent development database. A separate ephemeral container satisfies that.
 8. **Chaos test for C3.** Stop edge-control and assert that the platform zone keeps its endpoints.
 9. **CI hygiene.**
-   - Scheduled weekly job: `phase8_recovery.py`, `phase8_upgrade.py`, `edge_purge_protocol.py`.
+   - Scheduled weekly job: `offhost_recovery.py`, `mixed_version_upgrade.py`, `edge_purge_protocol.py`.
    - Development and production version-parity check (A33).
    - govulncheck and Larastan (A36).
    - A check that `retry_after` exceeds the job timeouts (A9).
@@ -603,12 +603,12 @@ Each item is one PR. Items map onto the existing roadmap phases. "Pull forward" 
 | --- | --- | --- |
 | ECS and Geo-DNS behavior at real public resolvers (A6) | Needs real delegation and public resolvers. | After R12, query from resolvers in at least two countries. |
 | Anycast and BGP, public IPv6 reachability of DNS, control, and edges (H8) | Needs real network infrastructure. | Production qualification, IPv6 section. |
-| Load ceilings: cell CPU at 10k domains (M6), gateway slot exhaustion (A18), DNSdist QPS (A32), and the realistic ceiling of the minimum topology | Needs hardware and load generators; `phase8_throughput.py` was not run. | Run the throughput qualification on target hardware. |
+| Load ceilings: cell CPU at 10k domains (M6), gateway slot exhaustion (A18), DNSdist QPS (A32), and the realistic ceiling of the minimum topology | Needs hardware and load generators; `cell_throughput.py` was not run. | Run the throughput qualification on target hardware. |
 | Behavior under disk pressure (cache volume full, ClickHouse disk full) | Needs a running stack with constrained volumes. | Fill test on staging. |
 | Whether OpenResty's keepalive pool keeps verified and unverified TLS origin connections apart | Depends on how OpenResty builds the pool key; not reproduced. | Agent-owned follow-up: an E2E with two tenants on the same origin IP, SNI, and port, with different `verify_tls`. |
-| Whether PowerDNS picks up a replaced mmap'd GeoIP file without a restart (A27) | Not reproduced. | Agent-owned follow-up in `phase8_mmdb.py`. |
+| Whether PowerDNS picks up a replaced mmap'd GeoIP file without a restart (A27) | Not reproduced. | Agent-owned follow-up in `mmdb_provider_outage.py`. |
 | Whether TLS session resumption skips the Lua certificate and expiry checks | Not reproduced. | Agent-owned E2E follow-up. |
-| Off-host Restic restore to a clean host (A28) | `phase8_recovery.py` not run. | Owner-run recovery drill with real S3. |
+| Off-host Restic restore to a clean host (A28) | `offhost_recovery.py` not run. | Owner-run recovery drill with real S3. |
 | Filament UI behavior for any UI-affecting fix | Browser automation is forbidden for agents by AGENTS.md. | [Manual browser checklist](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md): **not run**, owner-run. |
 | Production traffic patterns, tenant behavior, registrar delegation at scale | No production. | Production qualification. |
 | The agent-owned real-runtime suite (`make dev-e2e` and the related targets) | Not run in this audit, because it needs the full dev stack and changes dev database state. | Agent-owned. Run it in the PR for each fix. |

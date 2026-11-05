@@ -2,7 +2,9 @@
 
 namespace App\Jobs;
 
+use App\Actions\EvaluateEndpointPublication;
 use App\Models\DnsCluster;
+use App\Models\EdgePoolEndpoint;
 use App\Models\Operation;
 use App\Models\PlatformDnsDeployment;
 use App\Models\PlatformDnsSetting;
@@ -19,13 +21,15 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
 {
     use Queueable;
 
+    public const ROUTING_OPERATION = 'platform_dns.routing_reconcile';
+
     public int $tries = 3;
 
     public int $uniqueFor = 300;
 
     public function __construct(public ?string $operationId = null)
     {
-        $this->onQueue('runtime');
+        $this->onQueue('dns');
     }
 
     public function handle(PowerDnsClient $client): void
@@ -34,6 +38,7 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
         if ($settings === null) {
             return;
         }
+        $settings = PlatformDnsZone::advanceSerial($settings);
         $revision = $settings->revision;
         $rrsets = PlatformDnsZone::render($settings);
         $checksum = hash('sha256', json_encode($rrsets, JSON_THROW_ON_ERROR));
@@ -47,13 +52,15 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
         $failures = [];
         $targets = 0;
 
-        $configuredTargets = collect($settings->cluster_targets)->map(fn (string $target): string => strtolower($target))->flip();
-        $clusters = DnsCluster::query()->where('enabled', true)->where('last_health_status', 'healthy')->orderBy('id')->get()
-            ->filter(fn (DnsCluster $cluster): bool => $configuredTargets->has($cluster->apiTarget()));
+        // The platform zone is written to the hidden primary, the enabled and healthy DNS primary; DNS nodes pull from it.
+        $clusters = DnsCluster::query()->where('enabled', true)->where('last_health_status', 'healthy')->orderBy('id')->get();
         foreach ($clusters as $cluster) {
             $targets++;
             $deployment = PlatformDnsDeployment::query()->firstOrCreate(['dns_cluster_id' => $cluster->id]);
             if ($deployment->status === 'succeeded' && $deployment->active_zone === $zone && hash_equals((string) $deployment->active_checksum, $checksum)) {
+                // Unchanged content keeps its serial; the revision is still acknowledged as deployed.
+                $deployment->update(['desired_revision' => $revision, 'deployed_revision' => $revision]);
+
                 continue;
             }
             $deployment->update([
@@ -86,7 +93,7 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
         }
 
         if ($targets === 0) {
-            $failures[] = 'No enabled, healthy DNS cluster matches the configured platform DNS targets.';
+            $failures[] = 'No enabled, healthy DNS primary is registered.';
         }
 
         if ($failures !== []) {
@@ -101,6 +108,8 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
             'error' => null,
             'finished_at' => now(),
         ]);
+        Operation::query()->where('type', self::ROUTING_OPERATION)->whereIn('status', ['pending', 'running'])
+            ->update(['status' => 'succeeded', 'result' => json_encode(['revision' => $revision, 'targets' => $targets]), 'finished_at' => now()]);
     }
 
     public function uniqueId(): string
@@ -108,15 +117,40 @@ class ReconcilePlatformDnsIdentity implements ShouldBeUniqueUntilProcessing, Sho
         return 'platform-dns-identity';
     }
 
-    public static function dispatchForRoutingChange(): void
+    /**
+     * Probe results arrive every few seconds. Re-render only when they change
+     * what DNS would publish, so a healthy fleet does not bump the zone serial.
+     */
+    public static function dispatchForProbeChange(): void
     {
-        DB::transaction(function (): void {
+        $before = EdgePoolEndpoint::query()->orderBy('id')->pluck('dns_published', 'id')->all();
+        EvaluateEndpointPublication::execute();
+        if (EdgePoolEndpoint::query()->orderBy('id')->pluck('dns_published', 'id')->all() !== $before) {
+            self::dispatchForRoutingChange();
+        }
+    }
+
+    /** Queue a platform zone render and return the receipt callers can hand back with a 202. */
+    public static function dispatchForRoutingChange(?int $actorId = null): ?Operation
+    {
+        return DB::transaction(function () use ($actorId): ?Operation {
             $settings = PlatformDnsSetting::query()->lockForUpdate()->find(1);
             if ($settings === null) {
-                return;
+                return null;
             }
             $settings->update(['revision' => $settings->revision + 1]);
+            // One unfinished receipt covers every change the next render publishes.
+            $operation = Operation::query()->where('type', self::ROUTING_OPERATION)->whereIn('status', ['pending', 'running'])->first()
+                ?? Operation::query()->create(['actor_id' => $actorId, 'type' => self::ROUTING_OPERATION, 'status' => 'pending', 'input' => ['settings_id' => 1]]);
             self::dispatch()->afterCommit();
+
+            return $operation;
         });
+    }
+
+    public function failed(Throwable $exception): void
+    {
+        Operation::query()->where('type', self::ROUTING_OPERATION)->whereIn('status', ['pending', 'running'])
+            ->update(['status' => 'failed', 'error' => mb_substr($exception->getMessage(), 0, 4000), 'finished_at' => now()]);
     }
 }

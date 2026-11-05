@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Resources\OperationResource;
 use App\Jobs\ApplyPlatformDnsSettings;
 use App\Jobs\BuildUsageRollups;
 use App\Jobs\CreateControlBackup;
@@ -31,26 +32,25 @@ class OperationController extends Controller
 {
     public function show(Request $request, Operation $operation): JsonResource
     {
-        if (! $request->user()->isAdmin()) {
-            abort_unless($operation->actor_id === $request->user()->getKey(), 403);
-            $domainId = $operation->input['domain_id'] ?? null;
-            abort_unless(is_int($domainId) || (is_string($domainId) && ctype_digit($domainId)), 403);
-            $domain = Domain::query()->find((int) $domainId);
+        if (! $request->user()->isAdmin() || $request->user()->tokenDomainIds() !== null) {
+            // Any member of the operation's domain may read it, including a coalesced
+            // operation another member started. Global operations are administrator-only.
+            $domain = $operation->domain_id === null ? null : Domain::query()->find($operation->domain_id);
             abort_unless($domain !== null && Gate::forUser($request->user())->allows('view', $domain), 403);
         }
 
-        return JsonResource::make($operation);
+        return OperationResource::make($operation);
     }
 
     public function index(): AnonymousResourceCollection
     {
-        return JsonResource::collection(Operation::query()->latest()->cursorPaginate(50));
+        return OperationResource::collection(Operation::query()->latest()->cursorPaginate(50));
     }
 
     public function retry(Request $request, Operation $operation): JsonResponse
     {
         abort_unless($operation->status === 'failed', 409, 'Only failed operations can be retried.');
-        abort_unless(in_array($operation->type, ['platform_dns_identity.update', 'system_settings.update', 'domain.nameservers_verify', 'dns.zone_reconcile', 'dns.zone_import', 'dns.cluster_test', 'dns.global_reconcile', 'edge.global_reconcile', 'edges.global_reconcile', 'tls.global_reconcile', 'purges.global_reconcile', 'usage.global_reconcile', 'backup.create', 'backup.restore', 'backup.delete', 'edge.domain_reconcile', 'edge.origin_test'], true), 422, 'Unsupported operation type.');
+        abort_unless(in_array($operation->type, ['platform_dns_identity.update', 'system_settings.update', 'domain.nameservers_verify', 'dns.zone_reconcile', 'dns.zone_import', 'dns.cluster_test', 'dns.global_reconcile', 'edge.global_reconcile', 'edges.global_reconcile', 'tls.global_reconcile', 'purges.global_reconcile', 'usage.global_reconcile', 'usage.rebuild', 'backup.create', 'backup.restore', 'backup.delete', 'edge.domain_reconcile', 'edge.origin_test'], true), 422, 'Unsupported operation type.');
         $operation->update(['status' => 'pending', 'error' => null, 'finished_at' => null]);
         AuditLog::record($request->user(), 'operation.retry_requested', $operation, [], $request->ip());
         match ($operation->type) {
@@ -65,6 +65,7 @@ class OperationController extends Controller
             'edges.global_reconcile' => ReconcileAllEdgeDomains::dispatch($operation->getKey()),
             'tls.global_reconcile' => ReconcileAllTls::dispatch($operation->getKey()),
             'purges.global_reconcile' => ReconcileAllPurges::dispatch($operation->getKey()),
+            'usage.rebuild' => BuildUsageRollups::dispatch($operation->input['from'], $operation->input['to'], $operation->input['domain_id'] ?? null, $operation->getKey()),
             'usage.global_reconcile' => BuildUsageRollups::dispatch($operation->input['from'], $operation->input['to'], null, $operation->getKey()),
             'backup.create' => CreateControlBackup::dispatch($operation->input['backup_id'], $operation->getKey()),
             'backup.restore' => PreflightBackupRestore::dispatch($operation->input['backup_id'], $operation->getKey()),
@@ -73,6 +74,6 @@ class OperationController extends Controller
             'edge.origin_test' => DispatchOriginTest::dispatch($operation->getKey()),
         };
 
-        return response()->json(['data' => $operation->refresh()], 202);
+        return response()->json(['data' => OperationResource::make($operation->refresh())->resolve()], 202);
     }
 }

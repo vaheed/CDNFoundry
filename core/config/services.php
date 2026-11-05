@@ -1,14 +1,14 @@
 <?php
 
 return [
-    'powerdns' => [
-        'ca_certificate' => env('PDNS_CA_CERTIFICATE'),
-    ],
     'clickhouse' => [
         'url' => env('CLICKHOUSE_URL', 'http://clickhouse:8123'),
         'database' => env('CLICKHOUSE_DATABASE', 'cdnf'),
         'username' => env('CLICKHOUSE_USER', 'cdnf'),
         'password' => env('CLICKHOUSE_PASSWORD', ''),
+        // The account that publishes the served-zone list; it can insert into one table.
+        'zones_username' => 'cdnf_zones',
+        'zones_password' => env('CLICKHOUSE_ZONES_PASSWORD', ''),
         'connect_timeout' => 1.0,
         'timeout' => 4.0,
         'max_execution_time' => 3,
@@ -21,11 +21,13 @@ return [
         'stale_hours' => (int) env('MMDB_STALE_HOURS', 48),
     ],
     'vector' => ['metrics_url' => env('VECTOR_METRICS_URL', 'http://vector:9598/metrics')],
-    'metrics' => ['token' => env('METRICS_TOKEN', ''), 'token_file' => env('METRICS_TOKEN_FILE')],
+    'metrics' => ['token' => '', 'token_file' => env('METRICS_TOKEN_FILE')],
     'backups' => [
         'repository' => env('RESTIC_REPOSITORY', ''), 'password_file' => env('RESTIC_PASSWORD_FILE', ''),
         'access_key' => env('BACKUP_ACCESS_KEY_ID', ''), 'secret_key' => env('BACKUP_SECRET_ACCESS_KEY', ''),
         'region' => env('BACKUP_DEFAULT_REGION', 'us-east-1'),
+        // Snapshots kept by the daily prune: one per day, week, and month for this many of each.
+        'keep_daily' => max(1, (int) env('BACKUP_KEEP_DAILY', 14)), 'keep_weekly' => max(0, (int) env('BACKUP_KEEP_WEEKLY', 8)), 'keep_monthly' => max(0, (int) env('BACKUP_KEEP_MONTHLY', 6)),
     ],
     'prometheus' => ['url' => env('PROMETHEUS_URL', 'http://prometheus:9090')],
     'grafana' => ['explore_url' => env('GRAFANA_EXPLORE_URL')],

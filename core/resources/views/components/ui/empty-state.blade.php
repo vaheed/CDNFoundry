@@ -1,9 +1,13 @@
 @props([
     'title' => null,
     'description' => null,
+    'icon' => null,
 ])
 
 <div {{ $attributes->class('cdn-empty-state') }} role="status">
+    @if (filled($icon))
+        <x-filament::icon :icon="$icon" class="cdn-empty-icon" aria-hidden="true" />
+    @endif
     @if (filled($title))
         <div class="cdn-empty-title">{{ $title }}</div>
     @endif

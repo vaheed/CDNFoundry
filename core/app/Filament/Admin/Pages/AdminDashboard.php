@@ -7,16 +7,9 @@ use App\Filament\Admin\Resources\Edges\EdgeResource;
 use App\Filament\Admin\Resources\Operations\OperationResource;
 use App\Filament\Admin\Resources\Users\UserResource;
 use App\Filament\Admin\Widgets\ActiveConditionsWidget;
-use App\Filament\Admin\Widgets\CacheEfficiencyWidget;
-use App\Filament\Admin\Widgets\DataFreshnessWidget;
-use App\Filament\Admin\Widgets\DnsHealthWidget;
-use App\Filament\Admin\Widgets\EdgeHealthTable;
-use App\Filament\Admin\Widgets\ErrorLatencyChart;
 use App\Filament\Admin\Widgets\OperationsTimelineWidget;
 use App\Filament\Admin\Widgets\OpsKpiOverview;
-use App\Filament\Admin\Widgets\QueueHealthWidget;
 use App\Filament\Admin\Widgets\ServiceStatusBanner;
-use App\Filament\Admin\Widgets\TrafficOverviewChart;
 use App\Filament\Domain\Resources\Domains\DomainResource;
 use App\Models\AuditLog;
 use App\Models\DnsCluster;
@@ -41,9 +34,9 @@ class AdminDashboard extends Dashboard
 {
     use HasFiltersForm;
 
-    protected static ?string $title = 'Operations overview';
+    protected static ?string $title = 'Overview';
 
-    protected static ?string $navigationLabel = 'Operations overview';
+    protected static ?string $navigationLabel = 'Overview';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Observe';
 
@@ -51,7 +44,7 @@ class AdminDashboard extends Dashboard
 
     public function getSubheading(): ?string
     {
-        return 'Service condition, customer impact, telemetry, infrastructure, and the changes that preceded an issue.';
+        return null;
     }
 
     public function persistsFiltersInSession(): bool
@@ -62,9 +55,7 @@ class AdminDashboard extends Dashboard
     public function filtersForm(Schema $schema): Schema
     {
         return $schema->components([
-            Section::make('Investigation context')
-                ->description('Filters are stored in the URL so this investigation can be bookmarked or shared with another administrator.')
-                ->icon('heroicon-o-funnel')
+            Section::make()
                 ->compact()
                 ->columnSpanFull()
                 ->columns(['default' => 1, 'md' => 2, 'xl' => 4])
@@ -92,15 +83,8 @@ class AdminDashboard extends Dashboard
         return [
             ServiceStatusBanner::class,
             OpsKpiOverview::class,
-            TrafficOverviewChart::class,
-            ErrorLatencyChart::class,
             ActiveConditionsWidget::class,
-            EdgeHealthTable::class,
-            CacheEfficiencyWidget::class,
-            DnsHealthWidget::class,
-            QueueHealthWidget::class,
             OperationsTimelineWidget::class,
-            DataFreshnessWidget::class,
         ];
     }
 
@@ -146,8 +130,11 @@ class AdminDashboard extends Dashboard
     {
         $lanes = [
             'interactive' => 'Interactive',
-            'runtime' => 'Runtime deployment',
-            'certificate_purge' => 'Certificates and purge',
+            'dns' => 'DNS publication',
+            'edge' => 'Edge deployment',
+            'verification' => 'Verification',
+            'tls' => 'Certificates',
+            'purge' => 'Purge',
             'bulk_maintenance' => 'Bulk maintenance',
         ];
 
@@ -173,9 +160,9 @@ class AdminDashboard extends Dashboard
     public function getQuickLinksProperty(): array
     {
         return [
-            ['label' => 'Platform settings', 'icon' => 'heroicon-o-adjustments-horizontal', 'url' => PlatformSettings::getUrl()],
-            ['label' => 'System DNS identity', 'icon' => 'heroicon-o-globe-alt', 'url' => SystemDnsIdentity::getUrl()],
-            ['label' => 'Operations', 'icon' => 'heroicon-o-arrow-path', 'url' => OperationResource::getUrl()],
+            ['label' => 'Platform settings', 'icon' => 'phosphor-sliders-horizontal', 'url' => PlatformSettings::getUrl()],
+            ['label' => 'System DNS identity', 'icon' => 'phosphor-globe', 'url' => SystemDnsIdentity::getUrl()],
+            ['label' => 'Operations', 'icon' => 'phosphor-arrows-clockwise', 'url' => OperationResource::getUrl()],
         ];
     }
 
@@ -208,6 +195,7 @@ class AdminDashboard extends Dashboard
             $label = str($key)->replace('_', ' ')->headline();
             $formatted = match (true) {
                 is_bool($value) => $value ? 'yes' : 'no',
+                is_array($value) => $value === [] ? 'none' : implode(', ', array_map('strval', $value)),
                 $value === null => 'not available',
                 is_float($value) => number_format($value, 2),
                 is_int($value) => number_format($value),
@@ -238,6 +226,7 @@ class AdminDashboard extends Dashboard
             'runtime_tasks', 'purges' => 'Review failed edge tasks or purges and retry after correcting the bounded failure reason.',
             'usage' => 'Check the scheduler, usage finalizer, bulk-maintenance queue, and ClickHouse availability.',
             'operations' => 'Open Operations, inspect failed rows, and retry only after correcting their stable failure reason.',
+            'control_ha' => 'A single control node is supported (ha: none). With a standby, open the control-plane high availability runbook and run `cdnfoundry-fleet control check`.',
             'backups' => 'Run and verify a current backup, including keys and externally stored TLS material.',
             default => 'Inspect the component details and the corresponding operations runbook.',
         };

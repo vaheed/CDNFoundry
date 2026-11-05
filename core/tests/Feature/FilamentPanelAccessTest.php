@@ -9,6 +9,7 @@ use App\Models\Edge;
 use App\Models\SystemSetting;
 use App\Models\User;
 use App\Support\GrafanaExploreUrl;
+use App\Support\SystemHealth;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Redis;
@@ -44,7 +45,7 @@ class FilamentPanelAccessTest extends TestCase
             DnsCluster::query()->create([
                 'name' => "dashboard-dns-{$index}",
                 'location' => "test-{$index}",
-                'enabled' => true,
+                'enabled' => $index === 1,
                 'api_url' => "http://dashboard-dns-{$index}.test",
                 'api_key' => "dashboard-secret-{$index}",
                 'nameservers' => ["ns1.dashboard-{$index}.test", "ns2.dashboard-{$index}.test"],
@@ -53,8 +54,9 @@ class FilamentPanelAccessTest extends TestCase
         }
 
         $this->actingAs($admin)->get('/admin')->assertOk()
-            ->assertSee('Operations overview')->assertSee('Investigation context')
-            ->assertSee('Active conditions')->assertSee('Service is degraded');
+            ->assertSee('Overview')
+            ->assertSee('Needs attention')->assertSee('Service is degraded')
+            ->assertDontSee('Investigation context');
         $this->actingAs($admin)->get('/app')->assertForbidden();
         $this->actingAs($user)->get('/app')->assertOk()->assertSee('Assigned domains')->assertSee('Start serving a domain');
         $this->actingAs($user)->get('/admin')->assertForbidden();
@@ -63,16 +65,17 @@ class FilamentPanelAccessTest extends TestCase
     public function test_dashboard_queue_lanes_include_ready_reserved_delayed_and_total_work(): void
     {
         $redis = Mockery::mock();
-        $redis->shouldReceive('llen')->times(4)->andReturnUsing(
+        $lanes = count(SystemHealth::QUEUES);
+        $redis->shouldReceive('llen')->times($lanes)->andReturnUsing(
             fn (string $key): int => $key === 'queues:interactive' ? 2 : 0,
         );
-        $redis->shouldReceive('zcard')->times(8)->andReturnUsing(
+        $redis->shouldReceive('zcard')->times($lanes * 2)->andReturnUsing(
             fn (string $key): int => $key === 'queues:interactive:reserved' || $key === 'queues:interactive:delayed' ? 1 : 0,
         );
         $redis->shouldReceive('lindex')->once()->with('queues:interactive', 0)->andReturn(json_encode([
             'pushedAt' => now()->subSeconds(20)->timestamp,
         ], JSON_THROW_ON_ERROR));
-        Redis::shouldReceive('connection')->times(4)->andReturn($redis);
+        Redis::shouldReceive('connection')->times($lanes)->andReturn($redis);
 
         $lanes = (new AdminDashboard)->getQueueStateProperty();
         $interactive = collect($lanes)->firstWhere('key', 'interactive');
@@ -116,7 +119,6 @@ class FilamentPanelAccessTest extends TestCase
             'name' => 'gateway-ui-edge',
             'country_code' => 'IR',
             'continent_code' => 'AS',
-            'management_ipv4' => '203.0.113.80',
             'registered_at' => now(),
             'last_heartbeat_at' => now(),
             'runtime_versions_reported_at' => now(),

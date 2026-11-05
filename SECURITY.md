@@ -13,8 +13,9 @@ raw telemetry.
 
 | Version | Supported |
 | --- | --- |
-| 1.2.x | Yes |
-| 0.x | No. v1.2.1 is a zero-state release; deploy it from scratch. |
+| 2.x | Yes |
+| 1.x | No. v2.0.0 is a breaking release; deploy it from scratch. |
+| 0.x | No |
 
 There is no fixed response SLA. Operators should deploy immutable, verified
 releases and qualify security updates promptly.

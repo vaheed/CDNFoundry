@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Enums\DomainLifecycleState;
+use App\Exceptions\AcmeRetryLaterException;
 use App\Models\AcmeAccount;
 use App\Models\DnsCluster;
 use App\Models\Domain;
@@ -36,7 +37,7 @@ class IssueManagedCertificate implements ShouldBeUnique, ShouldQueue
 
     public function __construct(public string $orderId)
     {
-        $this->onQueue('certificate_purge');
+        $this->onQueue('tls');
     }
 
     public function uniqueId(): string
@@ -83,7 +84,7 @@ class IssueManagedCertificate implements ShouldBeUnique, ShouldQueue
             };
         } catch (Throwable $exception) {
             $message = mb_substr($exception->getMessage(), 0, 4000);
-            DB::transaction(function () use ($order, $operation, $message): void {
+            DB::transaction(function () use ($order, $operation, $message, $exception): void {
                 Domain::query()->lockForUpdate()->find($order->domain_id);
                 $current = TlsOrder::query()->lockForUpdate()->find($order->id);
                 if ($current === null || in_array($current->status, ['succeeded', 'failed', 'obsolete'], true)
@@ -92,7 +93,7 @@ class IssueManagedCertificate implements ShouldBeUnique, ShouldQueue
                 }
                 $current->forceFill([
                     'attempts' => $current->attempts + 1, 'last_error' => $message,
-                    'available_at' => now()->addSeconds($this->retryDelay($current->attempts)),
+                    'available_at' => now()->addSeconds(max($this->retryDelay($current->attempts), $exception instanceof AcmeRetryLaterException ? $exception->retryAfterSeconds : 0)),
                 ])->save();
                 if ($operation !== null) {
                     Operation::query()->whereKey($operation->id)->whereIn('status', ['pending', 'running'])
@@ -221,8 +222,10 @@ class IssueManagedCertificate implements ShouldBeUnique, ShouldQueue
     {
         $account = AcmeAccount::query()->findOrFail($order->acme_account_id);
         $pending = false;
+        $wait = 10;
         foreach ($order->challenges as $challenge) {
             $state = $client->authorizationStatus($account, $challenge->authorization_url);
+            $wait = max($wait, min(300, (int) ($state['retry_after'] ?? 0)));
             if ($state['status'] === 'invalid') {
                 throw new RuntimeException('ACME DNS validation failed: '.($state['error'] ?? $challenge->hostname));
             }
@@ -233,8 +236,8 @@ class IssueManagedCertificate implements ShouldBeUnique, ShouldQueue
             }
         }
         if ($pending) {
-            $order->update(['next_poll_at' => now()->addSeconds(10)]);
-            $this->release(10);
+            $order->update(['next_poll_at' => now()->addSeconds($wait)]);
+            $this->release($wait);
 
             return;
         }
@@ -268,8 +271,9 @@ class IssueManagedCertificate implements ShouldBeUnique, ShouldQueue
                 throw new RuntimeException('The ACME order became invalid before finalization.');
             }
             if ($remote['status'] === 'pending') {
-                $order->update(['next_poll_at' => now()->addSeconds(10)]);
-                $this->release(10);
+                $wait = max(10, min(300, (int) ($remote['retry_after'] ?? 0)));
+                $order->update(['next_poll_at' => now()->addSeconds($wait)]);
+                $this->release($wait);
 
                 return;
             }
@@ -298,8 +302,9 @@ class IssueManagedCertificate implements ShouldBeUnique, ShouldQueue
             throw new RuntimeException('ACME order finalization failed: '.($remote['error'] ?? 'invalid order'));
         }
         if ($remote['status'] !== 'valid' || $remote['certificate_url'] === null) {
-            $order->update(['next_poll_at' => now()->addSeconds(10)]);
-            $this->release(10);
+            $wait = max(10, min(300, (int) ($remote['retry_after'] ?? 0)));
+            $order->update(['next_poll_at' => now()->addSeconds($wait)]);
+            $this->release($wait);
 
             return;
         }

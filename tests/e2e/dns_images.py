@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Qualify compiled DNS services with PostgreSQL, real UDP/TCP and Lua answers."""
+"""Qualify compiled DNS services with the shipped SQLite node, real UDP/TCP and Lua answers."""
 from __future__ import annotations
 
 import json
@@ -30,42 +30,31 @@ def main() -> None:
         os.chown(root / 'pdns.conf', 0, 82)
         run('docker', 'network', 'create', name)
         try:
-            database = name+'-postgres'
-            containers.append(database)
-            run('docker', 'run', '-d', '--name', database, '--network', name, '--network-alias', 'pdns-db',
-                '--memory', '256m', '--tmpfs', '/var/lib/postgresql:rw,size=128m',
-                '-e', 'POSTGRES_USER=pdns', '-e', 'POSTGRES_PASSWORD=pdns-dev-only', '-e', 'POSTGRES_DB=pdns',
-                '-v', f'{ROOT}/docker/postgres/pdns-schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro',
-                'postgres:18.6-alpine3.24@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd')
-            # The entrypoint's temporary initialization server accepts Unix socket
-            # queries, then stops before the final server starts. TCP is ready only
-            # after that handoff, so both the probe and fixture insert use TCP.
-            database_psql = ('docker', 'exec', '-e', 'PGPASSWORD=pdns-dev-only', database,
-                             'psql', '-h', '127.0.0.1', '-U', 'pdns')
-            for _ in range(60):
-                result = run(*database_psql, '-Atc',
-                             "SELECT count(*) FROM records", check=False)
-                if result.returncode == 0:
-                    break
-                time.sleep(0.5)
-            else:
-                raise RuntimeError('Isolated PowerDNS schema did not initialize')
-            sql = """INSERT INTO domains (name,type) VALUES ('qualification.test','NATIVE');
+            # The DNS node is a PowerDNS secondary over a local SQLite store, exactly as shipped. The fixture
+            # seeds one zone into that store before the server starts, as the primary's transfer would.
+            seed = """INSERT INTO domains (name,type) VALUES ('qualification.test','NATIVE');
 INSERT INTO records (domain_id,name,type,content,ttl,auth) VALUES
-(1,'qualification.test','SOA','ns1.qualification.test hostmaster.qualification.test 1 3600 600 86400 60',60,true),
-(1,'qualification.test','NS','ns1.qualification.test',60,true),
-(1,'ns1.qualification.test','A','192.0.2.53',60,true),
-(1,'www.qualification.test','A','192.0.2.42',60,true),
-(1,'www.qualification.test','AAAA','2001:db8::42',60,true),
-(1,'lua.qualification.test','LUA',$$A "pickrandom({'192.0.2.43'})"$$,60,true);
+(1,'qualification.test','SOA','ns1.qualification.test hostmaster.qualification.test 1 3600 600 86400 60',60,1),
+(1,'qualification.test','NS','ns1.qualification.test',60,1),
+(1,'ns1.qualification.test','A','192.0.2.53',60,1),
+(1,'www.qualification.test','A','192.0.2.42',60,1),
+(1,'www.qualification.test','AAAA','2001:db8::42',60,1),
+(1,'lua.qualification.test','LUA','A "pickrandom({''192.0.2.43''})"',60,1);
 """
-            run(*database_psql, '-v', 'ON_ERROR_STOP=1', '-c', sql)
+            (root / 'seed.sql').write_text(seed)
+            (root / 'seed.sql').chmod(0o644)
             auth = name+'-pdns'
             containers.append(auth)
+            database = '/var/lib/powerdns/pdns.sqlite3'
+            start = (f'[ -e {database} ] || sqlite3 {database} < /usr/local/share/doc/pdns/schema.sqlite3.sql; '
+                     f'[ "$(sqlite3 {database} "SELECT count(*) FROM domains")" != 0 ] || sqlite3 {database} < /seed.sql; '
+                     'exec pdns_server --daemon=no --guardian=no --disable-syslog')
             run('docker', 'run', '-d', '--name', auth, '--network', name, '--network-alias', 'pdns-auth',
                 '--memory', '256m', '--group-add', '82', '-v', f'{root}/pdns.conf:/etc/powerdns/pdns.conf:ro',
+                '-v', f'{root}/seed.sql:/seed.sql:ro', '-v', '/var/lib/powerdns',
                 '-v', f'{ROOT}/docker/pdns/geoip-zones.yml:/etc/powerdns/geoip-zones.yml:ro',
-                'powerdns/pdns-auth-51:5.1.4@sha256:bb5b1c133bcca1dd455075321de7d55db4945a8d7f2ba23339e3c7bbe416b205')
+                '--entrypoint', 'sh',
+                'powerdns/pdns-auth-51:5.1.4@sha256:bb5b1c133bcca1dd455075321de7d55db4945a8d7f2ba23339e3c7bbe416b205', '-c', start)
             for _ in range(60):
                 if run('docker', 'exec', auth, 'pdns_control', 'rping', check=False).returncode == 0:
                     break
@@ -108,8 +97,7 @@ INSERT INTO records (domain_id,name,type,content,ttl,auth) VALUES
                 raise RuntimeError('Compiled PowerDNS did not recover after restart')
             identities = {c: run('docker', 'image', 'inspect', ref, '--format', '{{.Id}}').stdout.strip()
                           for c, ref in (('pdns', 'powerdns/pdns-auth-51:5.1.4@sha256:bb5b1c133bcca1dd455075321de7d55db4945a8d7f2ba23339e3c7bbe416b205'),
-                                         ('dnsdist', 'powerdns/dnsdist-21:2.1.2@sha256:efabf173811e27438bebee5f1f40e047f263ea39093a8f7d6097df494cf1ed67'),
-                                         ('postgres', 'postgres:18.6-alpine3.24@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd'))}
+                                         ('dnsdist', 'powerdns/dnsdist-21:2.1.2@sha256:efabf173811e27438bebee5f1f40e047f263ea39093a8f7d6097df494cf1ed67'))}
             print(json.dumps({'qualification': 'dns_images', 'images': identities, 'udp_tcp_answers': 'passed',
                               'a_aaaa_lua': 'passed', 'geoip_module_load': 'passed', 'metrics': 'passed',
                               'authenticated_zone_api': 'passed', 'telemetry_outage_serving': 'passed', 'auth_restart': 'passed'}))
@@ -122,7 +110,7 @@ INSERT INTO records (domain_id,name,type,content,ttl,auth) VALUES
             raise
         finally:
             for container in reversed(containers):
-                run('docker', 'rm', '-f', container, check=False)
+                run('docker', 'rm', '-f', '-v', container, check=False)
             run('docker', 'network', 'rm', name, check=False)
 
 

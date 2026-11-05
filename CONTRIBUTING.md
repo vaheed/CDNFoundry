@@ -16,9 +16,8 @@ make docs-check
 ```
 
 Run relevant Python real-runtime tests for DNS, edge, TLS, cache, security,
-telemetry, operations, upgrade, or recovery changes. Browser qualification is
-manual and must be reported as not run unless the owner completes
-[the checklist](docs/manual-browser-qualification.md).
+telemetry, operations, upgrade, or recovery changes. UI changes also run the
+Playwright browser suite under `tests/browser` and report its results.
 
 Keep changes bounded and production named. Do not add per-domain processes,
 containers, workers, timers, cache directories, or Nginx server blocks. Preserve
@@ -32,3 +31,9 @@ For documentation changes, follow
 CDNFoundry is licensed under the [Apache License, Version 2.0](LICENSE). By
 contributing, you agree that your contribution is licensed under the same terms,
 as described in section 5 of the license.
+
+## Commits
+
+Commit in several small, logical commits, never one commit for a whole phase or
+increment. Each commit holds one concern, builds on its own, and carries its
+tests. Use Conventional Commit messages (`feat:`, `fix:`, `test:`, `docs:`).

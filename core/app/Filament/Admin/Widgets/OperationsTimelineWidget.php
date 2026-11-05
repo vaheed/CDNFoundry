@@ -12,9 +12,11 @@ class OperationsTimelineWidget extends Widget
 {
     use UsesOpsDashboardContext;
 
-    protected static ?int $sort = 10;
+    protected static bool $isLazy = false;
 
-    protected int|string|array $columnSpan = ['default' => 12, 'xl' => 8];
+    protected static ?int $sort = 4;
+
+    protected int|string|array $columnSpan = 'full';
 
     protected string $view = 'filament.admin.widgets.operations-timeline';
 

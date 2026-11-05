@@ -15,13 +15,13 @@ Changes to `compose.dev.yml`, `compose.prod.yml`, `compose.test.yml`, `docker/**
 The service, its profile (control, dns, edge, telemetry, logs, tools), networks, volumes, ports, limits, health check, and secrets.
 
 ## Files normally touched
-The Compose files, `deploy/production/Caddyfile*`, `deploy/production/.env.prod.example`, `scripts/cdnfoundry_fleet/render.py`, `scripts/generate-production-env.sh`, `scripts/validate-production-overrides.sh`, `docs/reference/services-and-ports.md`, `docs/reference/configuration.md`.
+The Compose files, `deploy/production/Caddyfile*`, `.env.prod.example`, `scripts/cdnfoundry_fleet/render.py`, `scripts/generate-production-env.sh`, `scripts/validate-production-overrides.sh`, `docs/reference/services-and-ports.md`, `docs/reference/configuration.md`.
 
 ## Procedure
 1. Only DNSdist (53), the edge gateway (80, 443), and control ingress are public. PowerDNS, its API, PostgreSQL, Redis, ClickHouse, and PHP-FPM stay on private networks.
-2. Every long-running service has a health check, a restart policy, memory and CPU limits, and bounded logging (`*bounded-logging`). The edge agent, edge gateway, edge-control, Horizon, and scheduler have no health check today (roadmap M11).
+2. Every long-running service has a health check, a restart policy, memory and CPU limits, and bounded logging (`*bounded-logging`). The edge agent, edge gateway, edge-control, Horizon, and scheduler each have one too.
 3. Migrations run only through the explicit `migrate` and `pdns-migrate` tools services.
-4. Publish IPv6 ports wherever IPv4 is published. Production publishes IPv4 only today (roadmap H8).
+4. Publish IPv6 ports wherever IPv4 is published. Production publishes DNS, control, and edge-control on IPv6 beside IPv4.
 5. Secrets come from files or env templates and are never committed or printed. Keep `.env.prod.example` placeholders only.
 6. Development volumes persist: never `down -v`, and never refresh the dev database.
 

@@ -26,7 +26,7 @@ use Throwable;
 
 final class SystemHealth
 {
-    public const QUEUES = ['interactive', 'runtime', 'certificate_purge', 'bulk_maintenance'];
+    public const QUEUES = ['interactive', 'dns', 'edge', 'verification', 'tls', 'purge', 'bulk_maintenance'];
 
     public const PUBLIC_CACHE_KEY = 'service_health:public_snapshot';
 
@@ -39,7 +39,7 @@ final class SystemHealth
         'cache' => ['label' => 'Cache and origin', 'description' => 'Purge and runtime task delivery', 'checks' => ['purges' => 'Cache purges', 'runtime_tasks' => 'Runtime tasks']],
         'security' => ['label' => 'Security', 'description' => 'Emergency controls and IP intelligence', 'checks' => ['emergency_modes' => 'Emergency modes', 'mmdb' => 'GeoIP data']],
         'telemetry' => ['label' => 'Telemetry', 'description' => 'Collection and usage processing', 'checks' => ['vector' => 'Event collection', 'clickhouse' => 'Analytics storage', 'usage' => 'Usage rollups']],
-        'control' => ['label' => 'Control plane', 'description' => 'Database, jobs, scheduling, and recovery', 'checks' => ['control_database' => 'Database', 'queue_backend' => 'Queue backend', 'queue_workers' => 'Workers', 'scheduler' => 'Scheduler', 'host_clock' => 'Clock', 'operations' => 'Operations', 'fleet_rollouts' => 'Fleet rollouts', 'backups' => 'Backups']],
+        'control' => ['label' => 'Control plane', 'description' => 'Database, jobs, scheduling, and recovery', 'checks' => ['control_database' => 'Database', 'control_ha' => 'Standby node', 'queue_backend' => 'Queue backend', 'queue_workers' => 'Workers', 'scheduler' => 'Scheduler', 'host_clock' => 'Clock', 'operations' => 'Operations', 'fleet_rollouts' => 'Fleet rollouts', 'backups' => 'Backups']],
     ];
 
     public function publicSnapshot(array $components, array $queues): array
@@ -104,6 +104,7 @@ final class SystemHealth
         $components['clickhouse'] = $this->probe(fn () => Http::connectTimeout(1)->timeout(2)->get(config('services.clickhouse.url').'/ping')->throw());
         $components['vector'] = $this->probe(fn () => Http::connectTimeout(1)->timeout(2)->get(config('services.vector.metrics_url'))->throw());
         $components['host_clock'] = $this->clock();
+        $components['control_ha'] = $this->controlHighAvailability();
         $components['mmdb'] = $this->mmdb();
 
         $heartbeatSeconds = app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds');
@@ -169,7 +170,9 @@ final class SystemHealth
         $components['operations'] = $this->state(Operation::query()->unresolvedFailures()->exists() ? 'degraded' : 'healthy', ['failed' => Operation::query()->unresolvedFailures()->count()]);
         $lastBackup = Backup::query()->where('status', 'succeeded')->whereNotNull('verified_at')->max('verified_at');
         $backupStale = $lastBackup === null || now()->diffInHours($lastBackup) > app(PlatformSettings::class)->integer('operations', 'backup_stale_hours');
-        $components['backups'] = $this->state($backupStale ? 'degraded' : 'healthy', ['last_verified_at' => $lastBackup]);
+        // The newest weekly integrity check decides too: a repository that fails `restic check` cannot be trusted to restore.
+        $lastCheck = Operation::query()->where('type', 'backup.check')->whereIn('status', ['succeeded', 'failed'])->latest('finished_at')->value('status');
+        $components['backups'] = $this->state($backupStale || $lastCheck === 'failed' ? 'degraded' : 'healthy', ['last_verified_at' => $lastBackup, 'last_integrity_check' => $lastCheck]);
 
         return $components;
     }
@@ -227,6 +230,21 @@ final class SystemHealth
         } catch (Throwable $exception) {
             return $this->state('unavailable', ['latency_ms' => round((hrtime(true) - $started) / 1_000_000, 2), 'error_code' => class_basename($exception)]);
         }
+    }
+
+    /** A single node is a supported setup: `ha: none` is a warning shown in the details, not a failure. */
+    private function controlHighAvailability(): array
+    {
+        try {
+            $status = ControlPlane::status();
+        } catch (Throwable $exception) {
+            return $this->state('unavailable', ['error_code' => class_basename($exception)]);
+        }
+
+        return $this->state($status['ha'] === 'degraded' ? 'degraded' : 'healthy', [
+            'ha' => $status['ha'], 'warning' => $status['ha'] === 'none', 'reasons' => $status['reasons'], 'epoch' => $status['epoch'],
+            'replication_lag_seconds' => $status['replication_lag_seconds'], 'edges_missing_addresses' => $status['edges_missing_addresses'],
+        ]);
     }
 
     private function clock(): array

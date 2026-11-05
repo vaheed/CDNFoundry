@@ -5,15 +5,66 @@ All notable changes are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). The root `VERSION` file is the
 single source of truth; `make version-check` enforces it.
 
-## [Unreleased]
+## [2.0.0] - prepared 2026-11-05, not yet tagged
+
+v2.0.0 is a breaking release with no upgrade from 1.x. See the
+[release notes](docs/operations/releases/v2.0.0.md).
+
+### Breaking changes
+
+- No upgrade path or data migration from 1.x. Rebuild from scratch.
+- Migrations are squashed into a PostgreSQL and a SQLite baseline.
+- The edge agent requires `EDGE_RUNTIME_DIR` and has one activation path. Agents
+  accept artifacts for agent versions 2.0.0 to 2.99.0.
+- The platform zone goes to the hidden DNS primary, and
+  `platform_dns_settings.cluster_targets` is removed.
+- `EDGE_PROXY_SECRET` and `METRICS_TOKEN` are no longer read from the
+  environment; use `EDGE_PROXY_SECRET_FILE` and `METRICS_TOKEN_FILE`.
+- Every documented tunable is passed to the control plane through `.env.prod`.
 
 ### Added
 
+- Documentation rebuilt around tasks: six sections, a Fleet web guide, a Grafana
+  guide by team, panel tours, installation options, incident response, health
+  probes, reports, a glossary, a FAQ, and generated references for the Fleet
+  CLI, Grafana dashboards, and alerts.
+- Generated documentation screenshots, a design-token match with the product
+  theme, executable documentation blocks, and `llms.txt`.
+
+- Phase 6 (optional control-plane high availability): an optional warm standby
+  control node with `cdnfoundry-fleet control add-standby`, `switchover`,
+  `demote`, `promote`, `rejoin`, `remove-standby`, `status`, and `check`; a
+  monotonic `control_epoch` that fences a returning old node (start guard,
+  scheduler gate, `503 standby` from edge-control); edge agents that dial an
+  ordered list of control addresses from signed configuration and ignore a
+  lower epoch; DNS nodes that follow both control nodes as primaries; HA
+  alerts, a **Standby node** health check, and `ha: none` as a warning in the
+  qualification report; ClickHouse usage rollups in the control backup. A
+  single node stays supported. There is no floating address and no automatic
+  failover. See [Control-plane high availability](docs/operations/control-plane-high-availability.md).
+- Phase 2 (control-plane faults): PoPs leave DNS only on a positive signal and
+  pools keep their last published set; PoPs probe each other's listeners; edge
+  identity certificates renew over mTLS; the agent rejects a bad artifact for
+  one domain only; placements promote by quorum; Alertmanager sends to a
+  required webhook with an always-firing `Watchdog`; every long-running
+  service has a health check; origins see the real client address. See the
+  [roadmap](docs/roadmap.md) completion gate.
 - Coding-agent tooling: rewritten project skills with front matter, real file
   paths, commands, tests, and known traps, plus a new `cdnf-codebase-map`
   skill; `.claude/skills` links to `.agents/skills`; `.mcp.json` registers the
   local CodeGraph MCP server (pinned 1.6.2, telemetry off). See
   `docs/development/coding-agents.md`.
+
+### Fixed
+
+- Signing in at `/admin/login` or `/app/login` no longer fails with "The password field
+  is required" on a development stack whose published Filament assets were older than the
+  installed package: the password field's script returned `404`, which broke the form. The
+  development entrypoint now republishes the assets when it starts.
+- A new control node's first start no longer fails when its databases report healthy
+  before they accept TCP connections (the migration and PowerDNS runtime step wait).
+- Fleet control bundles now contain the `pdns-migrate` tool their `start.sh`
+  runs; a generated control node could not previously finish its first start.
 
 ### Changed
 
@@ -58,7 +109,7 @@ upgrade path from 0.x. Entries below cover everything since `v0.9.9`.
 - API error envelope and proxy scheme aligned; fleet dry run and start activation hardened.
 - Edge agent, edge gateway, fleet generator, API contract and release manifest
   all report the single project version.
-- The staged roadmap is finished and archived under `docs/legacy/`.
+- The staged roadmap is finished and removed from the tree.
 
 ### Fixed
 
@@ -78,15 +129,13 @@ upgrade path from 0.x. Entries below cover everything since `v0.9.9`.
 
 ### Removed
 
-- Staging-era handoff, audit and per-phase evidence reports moved to `docs/legacy/`
-  (historical, unmaintained).
+- Staging-era handoff, audit and per-phase evidence reports.
 
 ### Documentation
 
-- Current docs aligned to the project; stale and unrelated pages archived in `docs/legacy/`.
+- Current docs aligned to the project; stale and unrelated pages removed.
 - Release notes: [v1.2.1](docs/operations/releases/v1.2.1.md).
 
 ## Earlier releases
 
-`v0.4.0` to `v0.9.9` are published as GitHub releases. Their notes are archived in
-[`docs/legacy/releases/`](docs/legacy/releases/).
+`v0.4.0` to `v0.9.9` are published as GitHub releases.

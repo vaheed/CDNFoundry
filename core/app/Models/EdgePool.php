@@ -22,6 +22,12 @@ class EdgePool extends Model
         return $this->hasMany(EdgePoolEndpoint::class);
     }
 
+    /** The pool that serves proxied names before a domain has an active placement. */
+    public static function defaultShared(): ?self
+    {
+        return static::query()->where('enabled', true)->where('withdrawn', false)->where('kind', 'shared')->orderBy('id')->first();
+    }
+
     public function isReady(): bool
     {
         $cells = $this->cells()->whereHas('edge', fn ($query) => $query->where('enabled', true)->where('drained', false))
@@ -33,7 +39,7 @@ class EdgePool extends Model
 
     protected function casts(): array
     {
-        return ['enabled' => 'boolean', 'withdrawn' => 'boolean', 'waf_capable' => 'boolean', 'minimum_ready_cells' => 'integer', 'replicas_per_edge' => 'integer', 'maximum_domains_per_cell' => 'integer'];
+        return ['enabled' => 'boolean', 'withdrawn' => 'boolean', 'dns_fail_static' => 'boolean', 'waf_capable' => 'boolean', 'minimum_ready_cells' => 'integer', 'replicas_per_edge' => 'integer', 'maximum_domains_per_cell' => 'integer'];
     }
 
     public function isSimpleAnycast(): bool

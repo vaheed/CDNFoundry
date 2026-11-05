@@ -6,6 +6,7 @@ use App\Enums\DomainLifecycleState;
 use App\Enums\UserType;
 use App\Support\DomainName;
 use App\Support\DomainNameserverVerification;
+use App\Support\NameserverPairs;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,12 +26,10 @@ class Domain extends Model
     public function resolveRouteBinding($value, $field = null)
     {
         $domain = parent::resolveRouteBinding($value, $field);
-        if ($domain !== null) {
-            // Bind before idempotency replay as well as controller execution.
-            Gate::authorize('view', $domain);
-        }
 
-        return $domain;
+        // Bind before idempotency replay as well as controller execution. A domain the caller
+        // may not view is indistinguishable from one that does not exist, so ids cannot be probed.
+        return $domain !== null && Gate::allows('view', $domain) ? $domain : null;
     }
 
     /** Serialize creation and finalization for a canonical name, including absent rows. */
@@ -69,8 +68,11 @@ class Domain extends Model
                     throw ValidationException::withMessages(['name' => 'Platform and management namespaces cannot be claimed as customer zones.']);
                 }
             }
-            if (self::query()->where('name', $name)->exists()) {
-                throw ValidationException::withMessages(['name' => 'This canonical domain is already managed.']);
+            // Another owner or claim does not block this claim: ownership is decided by who can
+            // delegate the name to the pair this claim is given, never by who asked first.
+            if ($actor->domains()->where('domains.name', $name)->where(fn ($live) => $live->where('domains.lifecycle_state', '!=', DomainLifecycleState::Deprovisioning->value)->orWhereNotNull('domains.nameservers_verified_at')
+                ->orWhereNotExists(fn ($held) => $held->from('domains as holder')->whereColumn('holder.name', 'domains.name')->whereNull('holder.deleted_at')->whereIn('holder.lifecycle_state', [DomainLifecycleState::Active->value, DomainLifecycleState::Disabled->value])->selectRaw('1')))->exists() || ($actor->isAdmin() && self::query()->where('name', $name)->exists())) {
+                throw ValidationException::withMessages(['name' => 'You already manage or have claimed this domain.']);
             }
             if (DomainNameTombstone::query()->where('name', $name)->first()?->reclaim_after?->isFuture()) {
                 throw ValidationException::withMessages(['name' => 'The domain is still in its post-deprovisioning reclaim cooldown.']);
@@ -90,48 +92,79 @@ class Domain extends Model
         });
     }
 
-    /** @return list<string> */
+    /**
+     * The nameserver pair this domain is delegated to. A claim is assigned a pair when it
+     * is first verified; a verified domain that has none falls back to the first pair.
+     *
+     * @return list<string>
+     */
     public function assignedNameservers(): array
     {
-        if ($this->delegation_nameservers !== null) {
-            return $this->delegation_nameservers;
-        }
-        // Legacy verified installations continue using the original shared pair.
-        // A pending legacy claim may never verify against this fallback.
-        if ($this->nameservers_verified_at === null) {
-            return [];
-        }
-
-        return collect(PlatformDnsSetting::query()->find(1)?->nameservers ?? [])
-            ->pluck('hostname')->map(fn (string $name): string => strtolower(rtrim($name, '.')))
-            ->unique()->sort()->values()->all();
+        return $this->delegation_nameservers ?? [];
     }
 
-    public function initializeDelegationClaim(): void
+    /**
+     * A pending claim that must not publish a zone: the name is already held by another domain, or
+     * an older pending claim owns the delegation zone. Verification only needs the parent delegation.
+     */
+    public function isSecondaryClaim(): bool
     {
-        if ($this->nameservers_verified_at !== null || $this->delegation_nameservers !== null) {
-            return;
+        if ($this->lifecycle_state !== DomainLifecycleState::PendingVerification) {
+            return false;
         }
-        $settings = PlatformDnsSetting::query()->find(1);
-        if ($settings === null) {
-            return;
-        }
-        $token = $this->delegation_token ?? bin2hex(random_bytes(16));
-        $nameservers = collect($settings->nameservers)->pluck('hostname')->map(function (string $hostname) use ($token): string {
-            $assigned = $token.'.'.strtolower(rtrim($hostname, '.'));
-            if (strlen($assigned) > 253) {
-                throw new \RuntimeException('Platform nameserver names must leave room for delegation assignments.');
-            }
 
-            return $assigned;
-        })->unique()->sort()->values()->all();
-        if (count($nameservers) < 2) {
-            throw new \RuntimeException('At least two platform nameservers are required for delegation assignments.');
+        return self::query()->where('name', $this->name)->whereKeyNot($this->getKey())
+            ->where(fn ($query) => $query->whereIn('lifecycle_state', [DomainLifecycleState::Active->value, DomainLifecycleState::Disabled->value])
+                ->orWhere(fn ($pending) => $pending->where('lifecycle_state', DomainLifecycleState::PendingVerification->value)->where('id', '<', $this->getKey())))
+            ->exists();
+    }
+
+    /** owner, awaiting_assignment, pending_delegation, expired, or superseded: what an applicant is waiting on. */
+    public function claimStatus(): string
+    {
+        return match (true) {
+            $this->nameservers_verified_at !== null => 'owner',
+            $this->lifecycle_state === DomainLifecycleState::Deprovisioning => 'superseded',
+            $this->claim_expires_at?->isPast() === true => 'expired',
+            $this->delegation_nameservers === null => 'awaiting_assignment',
+            default => 'pending_delegation',
+        };
+    }
+
+    /** Pairs reserved by the other live claims on this name. @return list<list<string>> */
+    public function competingPairs(): array
+    {
+        return self::query()->where('name', $this->name)->whereKeyNot($this->getKey())
+            ->where('lifecycle_state', '!=', DomainLifecycleState::Deprovisioning->value)
+            ->whereNotNull('delegation_nameservers')->pluck('delegation_nameservers')
+            ->map(fn ($pair): array => collect($pair)->sort()->values()->all())->all();
+    }
+
+    /**
+     * Reserve a pair for this claim: one that the parent does not publish now and no other live
+     * claim on the name holds. Runs under the canonical-name lock; the unique index backs it.
+     * Returns false, assigning nothing, when no deployed pair is available.
+     *
+     * @param  list<string>  $currentDelegation
+     */
+    public function reserveNameserverPair(array $currentDelegation): bool
+    {
+        self::lockCanonicalName($this->name);
+        $locked = self::query()->lockForUpdate()->findOrFail($this->getKey());
+        if ($locked->delegation_nameservers !== null) {
+            return true;
         }
-        $this->forceFill([
-            'delegation_token' => $token, 'delegation_nameservers' => $nameservers,
-            'claim_expires_at' => $this->claim_expires_at ?? now()->addDays(7),
+        $pair = NameserverPairs::choose($locked->name, $locked->competingPairs(), $currentDelegation);
+        if ($pair === null) {
+            return false;
+        }
+        $locked->forceFill([
+            'delegation_nameservers' => $pair,
+            'claim_expires_at' => $locked->claim_expires_at ?? now()->addDays(7),
         ])->save();
+        $this->setRawAttributes($locked->getAttributes(), true);
+
+        return true;
     }
 
     public function hasManagedAncestor(): bool
@@ -179,6 +212,16 @@ class Domain extends Model
     public function dnsDeployments(): HasMany
     {
         return $this->hasMany(DnsDeployment::class);
+    }
+
+    /**
+     * The edges that serve or are being prepared to serve this domain.
+     *
+     * @return list<string>
+     */
+    public function placementEdgeIds(): array
+    {
+        return DB::table('domain_edge_cells')->where('domain_id', $this->getKey())->pluck('edge_id')->unique()->values()->all();
     }
 
     public function edgePlacement(): HasOne

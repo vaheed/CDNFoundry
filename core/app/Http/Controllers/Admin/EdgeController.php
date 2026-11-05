@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Actions\CreateEdge;
 use App\Http\Controllers\Controller;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\AuditLog;
@@ -27,19 +28,8 @@ class EdgeController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $data = $request->validate(['name' => ['required', 'string', 'max:100', 'unique:edges'], 'country_code' => ['required', Rule::in(GeoVocabulary::countries())], 'continent_code' => ['required', Rule::in(GeoVocabulary::CONTINENTS)], 'management_ipv4' => ['nullable', 'ipv4', 'unique:edges'], 'management_ipv6' => ['nullable', 'ipv6', 'unique:edges'], 'ipv4' => ['prohibited'], 'ipv6' => ['prohibited'], 'cell_slot_count' => ['sometimes', 'integer', 'between:1,32']]);
-        $token = Str::random(64);
-        $edge = DB::transaction(function () use ($data, $token, $request): Edge {
-            $edge = Edge::query()->create(array_merge($data, ['country_code' => strtoupper($data['country_code']), 'continent_code' => strtoupper($data['continent_code']), 'cell_slot_count' => $data['cell_slot_count'] ?? 8, 'bootstrap_token_hash' => hash('sha256', $token)]));
-            for ($slot = 1; $slot <= $edge->cell_slot_count; $slot++) {
-                $edge->cells()->create([
-                    'slot' => $slot, 'edge_pool_id' => null, 'status' => 'unassigned',
-                ]);
-            }
-            AuditLog::record($request->user(), 'edge.created', $edge, [], $request->ip());
-
-            return $edge;
-        });
+        $data = $request->validate(['name' => ['required', 'string', 'max:100', 'unique:edges'], 'country_code' => ['required', Rule::in(GeoVocabulary::countries())], 'continent_code' => ['required', Rule::in(GeoVocabulary::CONTINENTS)], 'management_ipv4' => ['prohibited'], 'management_ipv6' => ['prohibited'], 'ipv4' => ['prohibited'], 'ipv6' => ['prohibited'], 'cell_slot_count' => ['sometimes', 'integer', Rule::in([Edge::CELL_SLOT_COUNT])]]);
+        [$edge, $token] = app(CreateEdge::class)->handle($data, $request->user(), $request->ip());
 
         return response()->json(['data' => array_merge($edge->toArray(), ['bootstrap_token' => $token])], 201);
     }
@@ -50,8 +40,8 @@ class EdgeController extends Controller
             'name' => ['sometimes', 'string', 'max:100', Rule::unique('edges')->ignore($edge)],
             'country_code' => ['sometimes', Rule::in(GeoVocabulary::countries())],
             'continent_code' => ['sometimes', Rule::in(GeoVocabulary::CONTINENTS)],
-            'management_ipv4' => ['sometimes', 'nullable', 'ipv4', Rule::unique('edges')->ignore($edge)],
-            'management_ipv6' => ['sometimes', 'nullable', 'ipv6', Rule::unique('edges')->ignore($edge)],
+            'management_ipv4' => ['prohibited'],
+            'management_ipv6' => ['prohibited'],
             'ipv4' => ['prohibited'],
             'ipv6' => ['prohibited'],
         ]);
@@ -119,7 +109,7 @@ class EdgeController extends Controller
             'identity_hash' => null, 'identity_csr_hash' => null, 'identity_certificate' => null,
             'identity_certificate_serial' => null, 'identity_certificate_expires_at' => null,
             'identity_revoked_at' => now(), 'bootstrap_token_hash' => hash('sha256', $token),
-            'bootstrap_consumed_at' => null, 'registered_at' => null,
+            'bootstrap_consumed_at' => null, 'registered_at' => null, 'bootstrap_expires_at' => now()->addHours(Edge::BOOTSTRAP_TOKEN_HOURS),
         ]);
         AuditLog::record($request->user(), 'edge.identity_rotated', $edge, [], $request->ip());
         ReconcilePlatformDnsIdentity::dispatch()->afterCommit();

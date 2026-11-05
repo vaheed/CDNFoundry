@@ -9,35 +9,41 @@
         <title>CDNFoundry</title>
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
-    <body class="cdn-landing-body">
-        <main class="cdn-landing-shell">
-            <header class="cdn-landing-header">
-                <a class="cdn-landing-brand" href="/" aria-label="CDNFoundry home">
-                    <span class="cdn-landing-mark" aria-hidden="true">C</span>
-                    <span>CDNFoundry</span>
-                </a>
-                <a class="cdn-landing-link" href="{{ route('service-health') }}">Service health</a>
-            </header>
+    <body class="cdn-public">
+        <header class="cdn-public-header">
+            <a class="cdn-public-brand" href="/" aria-label="CDNFoundry home">CDNFoundry</a>
+            <nav class="cdn-public-nav" aria-label="Main navigation">
+                <a href="{{ route('service-health') }}">Service health</a>
+                <a href="https://vaheed.github.io/CDNFoundry/" target="_blank" rel="noopener">Documentation</a>
+            </nav>
+        </header>
 
-            <section class="cdn-landing-hero">
-                <div>
-                    <p class="cdn-landing-eyebrow">Private CDN control plane</p>
-                    <h1>Operate DNS, edge delivery, TLS, cache, and security from one place.</h1>
-                    <p class="cdn-landing-copy">Choose the workspace that matches your role. Runtime traffic and security decisions remain independent of this control plane.</p>
-                    <div class="cdn-landing-actions">
-                        <a class="cdn-landing-button" href="/app">Open domain workspace</a>
-                        <a class="cdn-landing-button cdn-landing-button-secondary" href="/admin">Open administration</a>
-                    </div>
+        <main class="cdn-public-main cdn-public-main--narrow">
+            <section class="cdn-card" aria-labelledby="sign-in-title">
+                <div class="cdn-card-body">
+                    <h1 id="sign-in-title">Sign in to CDNFoundry</h1>
+                    <p class="cdn-muted">Private CDN control plane for DNS, edge delivery, TLS, cache, and security.</p>
                 </div>
-
-                <aside class="cdn-landing-panel" aria-label="Platform capabilities">
-                    <div class="cdn-landing-panel-label">One consistent workflow</div>
-                    <ul>
-                        <li><span>01</span><div><strong>Declare</strong><small>Save validated desired state.</small></div></li>
-                        <li><span>02</span><div><strong>Deploy</strong><small>Queue bounded, revisioned work.</small></div></li>
-                        <li><span>03</span><div><strong>Observe</strong><small>Review operations and last-valid state.</small></div></li>
-                    </ul>
-                </aside>
+                <ul class="cdn-choice-list">
+                    <li>
+                        <a class="cdn-choice" href="/app" data-testid="landing-app-link">
+                            <span>
+                                <strong>Domain workspace</strong>
+                                <small>Manage the domains assigned to you: DNS records, proxy, cache, and analytics.</small>
+                            </span>
+                            <span class="cdn-choice-arrow" aria-hidden="true">›</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="cdn-choice" href="/admin" data-testid="landing-admin-link">
+                            <span>
+                                <strong>Administration</strong>
+                                <small>Operate the platform: edges, service pools, the DNS primary, users, and settings.</small>
+                            </span>
+                            <span class="cdn-choice-arrow" aria-hidden="true">›</span>
+                        </a>
+                    </li>
+                </ul>
             </section>
         </main>
     </body>

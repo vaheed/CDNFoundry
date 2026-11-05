@@ -1,0 +1,79 @@
+/* Fleet web styles. Token names and values follow core/resources/css/filament/shared/theme.css. */
+:root {
+  --font: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --canvas: oklch(95.6% 0.003 286); --base: oklch(98.4% 0.002 286); --tint: oklch(94.8% 0.003 286);
+  --line: oklch(14.5% 0 0 / 0.12); --hairline: oklch(91.8% 0.003 286);
+  --strong: oklch(14.5% 0 0); --text: oklch(21% 0.006 285.885); --subtle: oklch(49% 0 0);
+  --brand: oklch(57.72% 0.2324 260); --link: oklch(42.4% 0.199 265.638); --brand-hover: oklch(48.8% 0.243 264.376); --on-fill: #fff;
+  --success: oklch(43.2% 0.095 166.913); --warning: oklch(50% 0.13 55); --danger: oklch(50.5% 0.213 27.518);
+  --success-dot: oklch(59.6% 0.145 163.225); --warning-dot: oklch(73.9% 0.177 58.2); --danger-dot: oklch(63.7% 0.237 25.331);
+  --radius: 0.5rem; --radius-sm: 0.25rem; --focus: oklch(15% 0 0);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --canvas: oklch(17% 0.004 286); --base: oklch(21% 0.004 286); --tint: oklch(26% 0.004 286);
+    --line: oklch(100% 0 0 / 0.14); --hairline: oklch(100% 0 0 / 0.08);
+    --strong: oklch(96% 0 0); --text: oklch(90% 0 0); --subtle: oklch(72% 0 0); --focus: oklch(96% 0 0);
+    --success: oklch(78% 0.14 163); --warning: oklch(82% 0.14 70); --danger: oklch(74% 0.17 25); --link: oklch(78% 0.12 255);
+  }
+}
+:root[data-theme="dark"] {
+  --canvas: oklch(17% 0.004 286); --base: oklch(21% 0.004 286); --tint: oklch(26% 0.004 286);
+  --line: oklch(100% 0 0 / 0.14); --hairline: oklch(100% 0 0 / 0.08);
+  --strong: oklch(96% 0 0); --text: oklch(90% 0 0); --subtle: oklch(72% 0 0); --focus: oklch(96% 0 0);
+  --success: oklch(78% 0.14 163); --warning: oklch(82% 0.14 70); --danger: oklch(74% 0.17 25); --link: oklch(78% 0.12 255);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--canvas); color: var(--text); font: 14px/1.5 var(--font); font-variant-numeric: tabular-nums; }
+a { color: var(--link); }
+a, button, summary, label[for], select, input[type=submit] { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.shell { display: grid; grid-template-columns: 13rem 1fr; min-height: 100vh; }
+.side { min-width: 0; background: var(--base); border-right: 1px solid var(--hairline); padding: 1rem 0.5rem; }
+.side .brand { font-weight: 600; color: var(--strong); padding: 0 0.75rem 1rem; }
+.side nav a { display: block; padding: 0.4rem 0.75rem; border-radius: var(--radius-sm); color: var(--text); text-decoration: none; min-height: 2.75rem; line-height: 1.9rem; }
+.side nav a:hover { background: var(--tint); }
+.side nav a[aria-current=page] { background: var(--tint); color: var(--strong); font-weight: 600; }
+main { padding: 1.5rem; max-width: 72rem; width: 100%; min-width: 0; }
+h1 { font-size: 1.25rem; margin: 0 0 1rem; color: var(--strong); }
+h2 { font-size: 0.95rem; margin: 1.5rem 0 0.5rem; color: var(--strong); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); background: var(--base); border: 1px solid var(--line); border-radius: var(--radius); }
+.kpis div { padding: 0.75rem 1rem; border-left: 1px solid var(--hairline); white-space: nowrap; }
+.kpis div:first-child { border-left: 0; }
+.kpis b { display: block; font-size: 1.4rem; color: var(--strong); font-weight: 600; }
+.kpis span { color: var(--subtle); }
+table { width: 100%; border-collapse: collapse; background: var(--base); border: 1px solid var(--line); border-radius: var(--radius); }
+th, td { text-align: left; padding: 0.5rem 0.75rem; border-top: 1px solid var(--hairline); max-width: 18rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+thead th { border-top: 0; color: var(--subtle); font-weight: 500; }
+td.num, th.num { text-align: right; }
+.tablewrap { overflow-x: auto; }
+.state { display: inline-flex; align-items: center; gap: 0.4rem; }
+.state::before { content: ""; width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--subtle); }
+.state.ok { color: var(--success); } .state.ok::before { background: var(--success-dot); }
+.state.warn { color: var(--warning); } .state.warn::before { background: var(--warning-dot); }
+.state.bad { color: var(--danger); } .state.bad::before { background: var(--danger-dot); }
+.attention { background: var(--base); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.5rem 1rem; }
+.attention li { padding: 0.25rem 0; }
+.empty { background: var(--base); border: 1px dashed var(--line); border-radius: var(--radius); padding: 1.5rem; color: var(--subtle); }
+.btn, button { font: inherit; min-height: 2.75rem; padding: 0 1rem; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--base); color: var(--strong); }
+.btn:hover, button:hover { background: var(--tint); }
+button.primary { background: var(--brand); border-color: var(--brand); color: var(--on-fill); }
+button.primary:hover { background: var(--brand-hover); }
+button:disabled { cursor: not-allowed; opacity: 0.55; }
+form.stack { display: grid; gap: 0.75rem; max-width: 26rem; }
+label { display: grid; gap: 0.25rem; color: var(--strong); }
+input, select, textarea { font: inherit; min-height: 2.75rem; padding: 0.4rem 0.6rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--base); color: var(--text); }
+.hint { color: var(--subtle); font-size: 0.85rem; }
+.topology { background: var(--base); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.5rem; overflow-x: auto; }
+.topology text { fill: var(--text); font: 12px var(--font); }
+.topology .box { fill: var(--base); stroke: var(--line); }
+.topology line { stroke: var(--line); }
+.flash { padding: 0.5rem 1rem; border-radius: var(--radius-sm); background: var(--tint); margin-bottom: 1rem; }
+pre.log { background: var(--base); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.75rem; overflow-x: auto; font-size: 0.85rem; }
+@media (max-width: 760px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .side { border-right: 0; border-bottom: 1px solid var(--hairline); padding: 0.5rem; }
+  .side nav { display: flex; gap: 0.25rem; overflow-x: auto; }
+  .side nav a { white-space: nowrap; }
+  main { padding: 1rem; }
+}

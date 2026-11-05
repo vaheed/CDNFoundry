@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
 use App\Models\Domain;
+use App\Models\EdgePool;
 use App\Models\Operation;
 use App\Models\WafExclusion;
 use App\Support\ManagedWaf;
@@ -29,6 +30,12 @@ class WafController extends Controller
             'profile' => ['required', 'in:off,monitor,balanced,strict'],
             'rules' => ['prohibited'], 'configuration' => ['prohibited'], 'secrule' => ['prohibited'],
         ]);
+        if ($data['profile'] !== 'off' && ! $this->wafCapablePoolAvailable($domain)) {
+            return response()->json([
+                'message' => 'No enabled WAF-capable pool can host this domain. An administrator must enable a WAF-capable shared pool first.',
+                'code' => 'waf_capable_pool_unavailable', 'details' => (object) [],
+            ], 409);
+        }
         DB::transaction(function () use ($data, $domain, $request): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             Gate::authorize('update', $locked);
@@ -46,26 +53,14 @@ class WafController extends Controller
         return response()->json(['data' => $domain->wafExclusions()->with('owner:id,name')->orderByDesc('created_at')->cursorPaginate(100)]);
     }
 
-    public function storeExclusion(Request $request, Domain $domain): JsonResponse
+    public function storeExclusion(Domain $domain): JsonResponse
     {
         Gate::authorize('update', $domain);
-        $data = ManagedWaf::validateExclusion($request->all());
-        $exclusion = DB::transaction(function () use ($data, $domain, $request): WafExclusion {
-            $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
-            Gate::authorize('update', $locked);
-            abort_if($locked->wafExclusions()->where('expires_at', '>', now())->count() >= ManagedWaf::MAXIMUM_EXCLUSIONS, 409, 'The per-domain active WAF-exclusion limit has been reached.');
-            $exclusion = $locked->wafExclusions()->create([...$data, 'owner_id' => $request->user()->id]);
-            $locked->update(['revision' => $locked->revision + 1]);
-            AuditLog::record($request->user(), 'waf.exclusion_created', $exclusion, [
-                'dimension' => $exclusion->dimension, 'rule_id' => $exclusion->rule_id,
-                'expires_at' => $exclusion->expires_at, 'reason' => $exclusion->reason, 'revision' => $locked->revision,
-            ], $request->ip());
 
-            return $exclusion;
-        });
-        $operation = $this->dispatch($request, $domain);
-
-        return response()->json(['data' => ['exclusion' => $exclusion, 'operation_id' => $operation->id]], 202);
+        return response()->json([
+            'message' => 'WAF exclusions are unavailable: the runtime cannot yet remove one rule for one target without weakening the whole request.',
+            'code' => 'waf_exclusions_unavailable', 'details' => (object) [],
+        ], 409);
     }
 
     public function destroyExclusion(Request $request, Domain $domain, WafExclusion $exclusion): JsonResponse
@@ -82,6 +77,16 @@ class WafController extends Controller
         });
 
         return $this->queue($request, $domain);
+    }
+
+    private function wafCapablePoolAvailable(Domain $domain): bool
+    {
+        $placement = $domain->edgePlacement ?? null;
+        $currentPoolId = $placement?->target_pool_id ?? $placement?->active_pool_id;
+
+        return EdgePool::query()->where('enabled', true)->where('withdrawn', false)->where('waf_capable', true)
+            ->where(fn ($query) => $query->where('kind', 'shared')->when($currentPoolId !== null, fn ($q) => $q->orWhere('id', $currentPoolId)))
+            ->exists();
     }
 
     private function queue(Request $request, Domain $domain): JsonResponse

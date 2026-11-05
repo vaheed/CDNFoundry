@@ -108,7 +108,7 @@ def main() -> None:
             "hold_down_seconds": 5, "failback_delay_seconds": 5,
         }
         runtime = {
-            "schema_version": 1, "sequence": 1, "certificates": {},
+            "schema_version": 1, "sequence": 1, "generation_id": "e2e-generation-1", "certificates": {},
             "hosts": {
                 "failover.example": host_config("failover.example", primary),
                 "stale-failover.example": host_config("stale-failover.example", primary, True),

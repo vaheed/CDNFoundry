@@ -1,6 +1,6 @@
 FROM php:8.5-fpm-alpine@sha256:9dc81f4086ea5402227a6bcc489b04b4baba12394624d9621faa92ed812fb8ee AS php-dependencies
 
-RUN apk add --no-cache --upgrade 'curl>=8.22.0-r0' 'libcurl>=8.22.0-r0' 'libcrypto3>=3.5.8-r0' 'libssl3>=3.5.8-r0' 'openssl>=3.5.8-r0' 'bind-tools>=9.20.29-r0' icu-libs libpq libzip libmaxminddb nginx supervisor su-exec postgresql-client restic \
+RUN apk add --no-cache --upgrade 'curl>=8.22.0-r0' 'libcurl>=8.22.0-r0' 'libcrypto3>=3.5.8-r0' 'libssl3>=3.5.8-r0' 'openssl>=3.5.8-r0' 'libexpat>=2.10.0-r0' 'bind-tools>=9.20.29-r0' icu-libs libpq libzip libmaxminddb nginx supervisor su-exec postgresql-client restic \
     && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS icu-dev postgresql-dev libzip-dev \
     && docker-php-ext-install intl pcntl pdo_pgsql zip \
     && apk del .build-deps
@@ -51,12 +51,15 @@ RUN composer dump-autoload --no-dev --classmap-authoritative \
 COPY docker/php/entrypoint.sh /usr/local/bin/cdnf-entrypoint
 COPY docker/backup/create.sh /usr/local/bin/cdnf-backup-create
 COPY docker/backup/restore.sh /usr/local/bin/cdnf-backup-restore
-RUN chmod +x /usr/local/bin/cdnf-entrypoint /usr/local/bin/cdnf-backup-create /usr/local/bin/cdnf-backup-restore
+COPY docker/backup/restore-rollups.sh /usr/local/bin/cdnf-backup-restore-rollups
+RUN chmod +x /usr/local/bin/cdnf-entrypoint /usr/local/bin/cdnf-backup-create /usr/local/bin/cdnf-backup-restore /usr/local/bin/cdnf-backup-restore-rollups
 
 ENTRYPOINT ["cdnf-entrypoint"]
 CMD ["php-fpm", "-F"]
 
 FROM php-base AS development
+# The browser suite runs on a file-backed SQLite database, whose schema Laravel loads with the sqlite3 tool.
+RUN apk add --no-cache sqlite
 RUN --mount=type=cache,target=/tmp/composer-cache \
     set -eu; \
     for attempt in 1 2 3 4 5; do \

@@ -132,30 +132,26 @@ class PoolServiceEndpointTest extends TestCase
         $this->assertDatabaseMissing('edge_pool_endpoints', ['id' => $endpoint->id]);
     }
 
-    public function test_edge_management_addresses_are_optional_private_and_distinct_from_service_endpoints(): void
+    public function test_edges_take_no_management_addresses_and_endpoints_must_be_public_unicast(): void
     {
         $admin = User::factory()->admin()->create();
-        $withoutManagement = $this->actingAs($admin)->postJson('/api/admin/edges', [
-            'name' => 'no-management-address', 'country_code' => 'IR', 'continent_code' => 'AS',
-        ])->assertCreated();
-        $privateManagement = $this->actingAs($admin)->postJson('/api/admin/edges', [
-            'name' => 'private-management-address', 'country_code' => 'DE', 'continent_code' => 'EU',
-            'management_ipv4' => '10.20.30.40',
-        ])->assertCreated();
+        $edge = $this->actingAs($admin)->postJson('/api/admin/edges', [
+            'name' => 'no-management-address', 'country_code' => 'IR', 'continent_code' => 'AS'])->assertCreated();
+        $this->assertArrayNotHasKey('management_ipv4', $edge->json('data'));
+        $this->actingAs($admin)->postJson('/api/admin/edges', [
+            'name' => 'with-management-address', 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => '203.0.113.9'])->assertUnprocessable()->assertJsonValidationErrors('management_ipv4');
         $pool = EdgePool::query()->where('kind', 'shared')->firstOrFail();
 
         $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
-            ->postJson("/api/admin/edge-pools/{$pool->id}/edges/{$privateManagement->json('data.id')}/endpoint", ['ipv4' => '10.20.30.40'])
+            ->postJson("/api/admin/edge-pools/{$pool->id}/edges/{$edge->json('data.id')}/endpoint", ['ipv4' => '10.20.30.40'])
             ->assertUnprocessable()->assertJsonValidationErrors('ipv4');
         $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())->postJson('/api/admin/edges', [
-            'name' => 'legacy-edge-address', 'country_code' => 'IR', 'continent_code' => 'AS', 'ipv4' => '8.8.8.8',
-        ])->assertUnprocessable()->assertJsonValidationErrors('ipv4');
-        $this->assertNull($withoutManagement->json('data.management_ipv4'));
+            'name' => 'legacy-edge-address', 'country_code' => 'IR', 'continent_code' => 'AS', 'ipv4' => '8.8.8.8'])->assertUnprocessable()->assertJsonValidationErrors('ipv4');
     }
 
     private function edge(string $name, string $management): Edge
     {
-        return Edge::query()->create(['name' => $name, 'country_code' => 'IR', 'continent_code' => 'AS', 'management_ipv4' => $management,
+        return Edge::query()->create(['name' => $name, 'country_code' => 'IR', 'continent_code' => 'AS',
             'enabled' => true, 'registered_at' => now(), 'last_heartbeat_at' => now(), 'capacity' => ['listener_ready' => true]]);
     }
 
@@ -164,7 +160,7 @@ class PoolServiceEndpointTest extends TestCase
         return PlatformDnsSetting::query()->create(['id' => 1, 'platform_domain' => 'cdnf.test', 'proxy_hostname' => 'proxy.cdnf.test',
             'nameservers' => [['hostname' => 'ns1.cdnf.test', 'ipv4' => '192.0.2.10']], 'soa_primary' => 'ns1.cdnf.test',
             'soa_mailbox' => 'hostmaster.cdnf.test', 'soa_refresh' => 3600, 'soa_retry' => 600, 'soa_expire' => 1209600,
-            'soa_minimum_ttl' => 60, 'default_ttl' => 60, 'cluster_targets' => ['pdns-auth:8081'], 'revision' => 1]);
+            'soa_minimum_ttl' => 60, 'default_ttl' => 60, 'revision' => 1]);
     }
 
     private function addresses(array $rows): array

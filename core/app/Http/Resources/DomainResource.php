@@ -17,6 +17,7 @@ class DomainResource extends JsonResource
             'revision' => $this->revision,
             'revision_changed_at' => $this->revision_changed_at?->toIso8601String(),
             'assigned_nameservers' => $this->resource->assignedNameservers(),
+            'claim_status' => $this->resource->claimStatus(),
             'claim_expires_at' => $this->claim_expires_at?->toIso8601String(),
             'nameservers_verified_at' => $this->nameservers_verified_at?->toIso8601String(),
             'disabled_at' => $this->disabled_at?->toIso8601String(),

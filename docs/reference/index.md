@@ -6,16 +6,18 @@ description: Exact configuration, service, DNS, API, CLI, limit, and telemetry r
 # Reference
 
 ::: info Reference values are contracts, not a production template
-Defaults and examples explain the shipped behavior. Use the deployment guide,
-environment ownership table, and measured capacity when selecting real values;
-never copy example credentials or documentation addresses.
+Defaults and examples show how the product behaves. To choose real values, use
+the deployment guide, the environment variable table, and your own measured
+capacity. Never copy example credentials or documentation addresses.
 :::
 
-- [Configuration](configuration.md) lists deployment environment variables.
-- [Platform settings](platform-settings.md) lists PostgreSQL-backed policy.
-- [Services and ports](services-and-ports.md) maps development and production services.
-- [DNS records](dns-records.md) defines record types and validation.
-- [Limits](limits.md) collects important request and resource bounds.
-- [CLI and scheduler](cli-and-scheduler.md) lists application commands and schedules.
-- [Telemetry schema](telemetry-schema.md) defines stored event fields and retention.
-- [API reference](api/index.md) documents authentication, conventions, and every route.
+- [Configuration](configuration.md) lists the deployment environment variables.
+- [Platform settings](platform-settings.md) lists the policy values stored in PostgreSQL.
+- [Services and ports](services-and-ports.md) maps services, listeners, networks, and volumes.
+- [DNS records](dns-records.md) lists record types and validation rules.
+- [Limits](limits.md) collects request and resource limits.
+- [CLI and scheduler](cli-and-scheduler.md) points to the application commands, schedules, Fleet CLI, and Make targets.
+- [Telemetry schema](telemetry-schema.md) lists stored event fields and retention.
+- [API reference](api/index.md) covers authentication, conventions, errors, and every route.
+- [Fleet CLI](fleet-cli.md) lists every Fleet command and option.
+- [Glossary](glossary.md) defines CDN and DNS terms.

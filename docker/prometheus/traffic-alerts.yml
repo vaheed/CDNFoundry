@@ -1,0 +1,101 @@
+groups:
+  - name: cdnfoundry-traffic
+    rules:
+      # Customer traffic is judged from the live counters every PoP exports. Per-domain signals (one domain's
+      # 5xx ratio, a flood on one domain, one client network) are Grafana alert rules over ClickHouse.
+      - alert: EdgeGlobal5xxRatioHigh
+        expr: sum(rate(cdnf_edge_requests_total{status_class="5xx"}[5m])) / sum(rate(cdnf_edge_requests_total[5m])) > 0.05 and sum(rate(cdnf_edge_requests_total[5m])) > 1
+        for: 5m
+        labels: { team: noc, severity: critical, dashboard: cdnf-global-traffic }
+        annotations:
+          summary: More than 5 percent of edge responses are 5xx across all PoPs
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#edge-5xx-ratio-high
+          dashboard_url: /d/cdnf-global-traffic
+      - alert: EdgePop5xxRatioHigh
+        expr: sum by (pop) (rate(cdnf_edge_requests_total{status_class="5xx"}[5m])) / sum by (pop) (rate(cdnf_edge_requests_total[5m])) > 0.1 and sum by (pop) (rate(cdnf_edge_requests_total[5m])) > 1
+        for: 5m
+        labels: { team: noc, severity: warning, dashboard: cdnf-pop-detail }
+        annotations:
+          summary: More than 10 percent of one PoP's responses are 5xx
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#edge-5xx-ratio-high
+          dashboard_url: /d/cdnf-pop-detail
+      - alert: EdgeOriginFailureRatioHigh
+        expr: sum(rate(cdnf_edge_origin_failures_total[5m])) / sum(rate(cdnf_edge_requests_total{cache_status!~"HIT|NONE"}[5m])) > 0.1 and sum(rate(cdnf_edge_requests_total{cache_status!~"HIT|NONE"}[5m])) > 1
+        for: 5m
+        labels: { team: noc, severity: warning, dashboard: cdnf-origin-health }
+        annotations:
+          summary: More than 10 percent of requests that reached an origin failed there
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#origin-failure
+          dashboard_url: /d/cdnf-origin-health
+      - alert: EdgeCacheHitCollapse
+        expr: (sum(rate(cdnf_edge_requests_total{cache_status="HIT"}[15m])) / sum(rate(cdnf_edge_requests_total[15m]))) < 0.5 * (sum(rate(cdnf_edge_requests_total{cache_status="HIT"}[15m] offset 1d)) / sum(rate(cdnf_edge_requests_total[15m] offset 1d))) and (sum(rate(cdnf_edge_requests_total{cache_status="HIT"}[15m] offset 1d)) / sum(rate(cdnf_edge_requests_total[15m] offset 1d))) > 0.2
+        for: 15m
+        labels: { team: noc, severity: warning, dashboard: cdnf-cache }
+        annotations:
+          summary: The cache hit ratio fell below half of its value at the same time yesterday
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#cache-hit-collapse
+          dashboard_url: /d/cdnf-cache
+      - alert: EdgeEgressAnomaly
+        expr: (sum(rate(cdnf_edge_bytes_sent_total[15m])) > 3 * sum(rate(cdnf_edge_bytes_sent_total[15m] offset 1w)) and sum(rate(cdnf_edge_bytes_sent_total[15m])) > 1e6) or (sum(rate(cdnf_edge_bytes_sent_total[15m])) < 0.2 * sum(rate(cdnf_edge_bytes_sent_total[15m] offset 1w)) and sum(rate(cdnf_edge_bytes_sent_total[15m] offset 1w)) > 1e6)
+        for: 15m
+        labels: { team: noc, severity: warning, dashboard: cdnf-global-traffic }
+        annotations:
+          summary: Egress is more than three times, or less than a fifth of, the same hour last week
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#egress-anomaly
+          dashboard_url: /d/cdnf-global-traffic
+      - alert: PopTrafficDropped
+        expr: (sum by (pop) (rate(cdnf_edge_requests_total[10m] offset 30m)) > 0 unless sum by (pop) (rate(cdnf_edge_requests_total[10m])) > 0) and on() sum(rate(cdnf_edge_requests_total[10m])) > 1
+        for: 5m
+        labels: { team: noc, severity: critical, dashboard: cdnf-pop-fleet }
+        annotations:
+          summary: A PoP that served traffic half an hour ago serves none while other PoPs do
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#pop-traffic-dropped
+          dashboard_url: /d/cdnf-pop-fleet
+      - alert: EdgeProbeFailing
+        expr: probe_success{job=~"blackbox-.*"} == 0
+        for: 3m
+        labels: { team: noc, severity: critical, dashboard: cdnf-synthetic-probes }
+        annotations:
+          summary: A synthetic HTTP, TLS, or DNS probe has failed for three minutes
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#synthetic-probe-failing
+          dashboard_url: /d/cdnf-synthetic-probes
+      - alert: PurgePropagationSlow
+        expr: cdnfoundry_purge_pending_oldest_seconds > 60
+        for: 2m
+        labels: { team: platform, severity: warning, dashboard: cdnf-propagation }
+        annotations:
+          summary: A cache purge has not been applied on every PoP for over a minute
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#cache-purge-failure
+          dashboard_url: /d/cdnf-propagation
+      - alert: ConfigPropagationSlow
+        expr: cdnfoundry_config_pending_oldest_seconds > 300
+        for: 2m
+        labels: { team: platform, severity: warning, dashboard: cdnf-propagation }
+        annotations:
+          summary: A published edge configuration has waited over five minutes to be applied by a PoP
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#stale-edge-map-or-endpoint-mismatch
+          dashboard_url: /d/cdnf-propagation
+      - alert: DnsSerialPropagationSlow
+        expr: cdnfoundry_dns_serial_pending_oldest_seconds > 300
+        for: 2m
+        labels: { team: noc, severity: warning, dashboard: cdnf-dns-authoritative }
+        annotations:
+          summary: A DNS deployment has waited over five minutes to reach its desired serial
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#dns-cluster-failure
+          dashboard_url: /d/cdnf-dns-authoritative
+      - alert: AcmeIssuanceFailing
+        expr: cdnfoundry_acme_orders_day{status="failed"} > 0 and cdnfoundry_acme_orders_day{status="failed"} >= cdnfoundry_acme_orders_day{status="succeeded"}
+        for: 15m
+        labels: { team: noc, severity: warning, dashboard: cdnf-tls-posture }
+        annotations:
+          summary: Managed certificate orders are failing as often as they succeed
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#acme-failure
+          dashboard_url: /d/cdnf-tls-posture
+      - alert: ControlPlaneLatencyHigh
+        expr: histogram_quantile(0.95, sum by (le) (rate(cdnfoundry_http_request_duration_seconds_bucket{route=~"/api/.*"}[10m]))) > 2.5
+        for: 10m
+        labels: { team: platform, severity: warning, dashboard: cdnf-control-plane }
+        annotations:
+          summary: The 95th-percentile API request time is over 2.5 seconds
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#control-plane-latency
+          dashboard_url: /d/cdnf-control-plane

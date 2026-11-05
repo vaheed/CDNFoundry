@@ -2,6 +2,16 @@
 set -eu
 
 target=/pki
+# The secret that proves edge identity headers came from edge-control's nginx. It is not part of
+# the required set below, so an existing volume gains it without being rejected as incomplete.
+ensure_proxy_secret() {
+    if [ ! -s "$target/edge-proxy-secret.conf" ]; then
+        printf 'fastcgi_param HTTP_X_EDGE_PROXY_SECRET "%s";\n' "$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" > "$target/edge-proxy-secret.conf"
+    fi
+    chgrp 82 "$target/edge-proxy-secret.conf"
+    chmod 640 "$target/edge-proxy-secret.conf"
+}
+
 required="edge-identity-ca.crt edge-identity-ca.key edge-server-ca.crt edge-control-server.crt edge-control-server.key edge-runtime.crt edge-runtime.key tls.crt tls.key"
 complete=true
 for file in $required; do
@@ -16,6 +26,7 @@ if [ "$complete" = true ]; then
     openssl verify -CAfile "$target/edge-server-ca.crt" \
         "$target/edge-control-server.crt" "$target/edge-runtime.crt" >/dev/null
     openssl verify -CAfile "$target/edge-identity-ca.crt" "$target/edge-identity-ca.crt" >/dev/null
+    ensure_proxy_secret
     echo "Development PKI is present and valid."
     exit 0
 fi
@@ -34,4 +45,5 @@ chmod 600 "$target"/*.key
 chgrp 82 "$target/edge-identity-ca.key"
 chmod 640 "$target/edge-identity-ca.key"
 chmod 644 "$target"/*.crt
+ensure_proxy_secret
 echo "Development-only PKI initialized in the persistent Compose volume."

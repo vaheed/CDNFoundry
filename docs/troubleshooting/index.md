@@ -1,26 +1,37 @@
 ---
 title: Troubleshooting
-description: Diagnose CDNFoundry failures from durable state toward derived runtimes.
+description: A fixed order for diagnosing CDNFoundry problems, from the saved desired state outward to the running service, with links to each area.
 ---
 
 # Troubleshooting
 
-::: tip Diagnose from durable intent outward
-Start with the desired revision and operation receipt, then inspect target
-deployment state, runtime acknowledgement, and finally a real network probe.
-This distinguishes control failure from runtime failure.
+Use this page when something does not work and you do not yet know why. You need
+administrator access to the panel. Some steps also need shell access to a host.
+
+::: tip Diagnose from the saved intent outward
+CDNFoundry saves what you asked for first, then pushes it to DNS and edges. Start
+with the saved request, then look at each later stage. This tells you whether the
+control plane or the running service failed.
 :::
 
-Start with the durable operation and desired revision, then move outward:
+## Steps
 
-1. Check `/api/ready` and administrator component health.
-2. Inspect the relevant operation, deployment, task, or certificate order.
-3. Compare desired and acknowledged revisions.
-4. Check the responsible Horizon lane and failed jobs.
-5. Check the private runtime service and its last-valid state.
-6. Reconcile only the smallest affected scope.
+<div class="steps">
 
-Choose a symptom:
+1. Open `/api/ready` and the administrator component health.
+2. Open the operation, deployment, task, or certificate order for your change.
+3. Compare the desired revision with the acknowledged revision.
+4. Check the Horizon queue that carries the work, and its failed jobs.
+5. Check the private runtime service and its last valid state.
+6. Reconcile only the smallest scope that is affected.
+
+</div>
+
+**Expected result:** you find the first stage where the desired and acknowledged
+revisions differ. Fix that stage, not the ones after it.
+
+If you start from what you see, use [Troubleshoot by symptom](by-symptom.md). Or
+choose an area:
 
 - [DNS](dns.md)
 - [Edge and origin](edge-and-origin.md)
@@ -28,23 +39,30 @@ Choose a symptom:
 - [Telemetry](telemetry.md)
 
 Do not repair desired state in PowerAdmin or by editing generated edge files.
-Those are derived and will be overwritten.
+CDNFoundry builds both from PostgreSQL and overwrites your edits.
 
 ## Docker reports `storage/logs: file exists`
 
-This message during `make dev-up` comes from Docker attempting concurrent
-copy-up into the shared Laravel storage volume, not from Laravel logging. The
-current Compose contract mounts `core-storage` with `volume.nocopy: true`, and
-the application entrypoint creates the required directories.
+You may see this message during `make dev-up`. It comes from Docker, which tries to
+copy files into the shared Laravel storage volume from several containers at once.
+Laravel logging is not the cause. `compose.dev.yml` mounts `core-storage` with
+`volume.nocopy: true`, and the application entrypoint creates the directories.
 
-1. Confirm the checkout contains the current `compose.dev.yml`.
-2. Run `docker compose -f compose.dev.yml config` and verify the
-   `/app/storage` volume reports `nocopy: true`.
+<div class="steps">
+
+1. Confirm your checkout has the current `compose.dev.yml`.
+2. Run `docker compose -f compose.dev.yml config`. The `/app/storage` volume must
+   show `nocopy: true`.
 3. Run `make dev-up` again.
+
+</div>
+
+**Expected result:** the stack starts and `docker compose -f compose.dev.yml ps`
+lists the services.
 
 ::: danger Preserve durable development state
 Do not use `docker compose down -v` or remove `core-storage` as a workaround.
-If the current contract still fails, capture `docker compose ps`, the daemon
-error, and `docker volume inspect cdnfoundry-dev_core-storage` before changing
+If it still fails, save the output of `docker compose ps`, the daemon
+error, and `docker volume inspect cdnfoundry-dev_core-storage` before you change
 anything.
 :::

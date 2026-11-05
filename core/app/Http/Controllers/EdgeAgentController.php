@@ -8,20 +8,30 @@ use App\Jobs\ReconcileAllEdgeDomains;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\CachePurge;
+use App\Models\DnsCluster;
 use App\Models\DnsRecord;
+use App\Models\DnsZoneChange;
 use App\Models\Domain;
 use App\Models\DomainEdgeCell;
 use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
 use App\Models\EdgeArtifact;
 use App\Models\EdgePoolEndpoint;
+use App\Models\EdgeProbeResult;
 use App\Models\EdgeTask;
 use App\Models\FleetRolloutEdge;
+use App\Models\NameserverAddressProbe;
 use App\Models\Operation;
 use App\Models\SecurityEvent;
+use App\Models\TlsCertificate;
 use App\Support\ArtifactSigner;
+use App\Support\ControlPlane;
 use App\Support\EdgeCertificateAuthority;
+use App\Support\EdgeKeyEnvelope;
+use App\Support\EdgeRejectionReasons;
+use App\Support\OriginPolicy;
 use App\Support\PlatformSettings;
+use App\Support\PowerDnsClient;
 use App\Support\RuntimeVersions;
 use App\Support\SecurityConfig;
 use Carbon\CarbonImmutable;
@@ -58,6 +68,51 @@ class EdgeAgentController extends Controller
         return response()->json(['data' => ['revision' => $revision, 'bindings' => $bindings]]);
     }
 
+    /** The listeners this PoP should probe from the outside: every other PoP's own addresses. */
+    public function probeTargets(Request $request): JsonResponse
+    {
+        /** @var Edge $edge */
+        $edge = $request->attributes->get('edge');
+        $targets = EdgePoolEndpoint::query()->with('edge')->where('edge_id', '!=', $edge->id)->where('withdrawn', false)
+            ->whereHas('edge', fn ($query) => $query->where('enabled', true)->whereNotNull('registered_at')->whereNull('identity_revoked_at'))
+            ->orderBy('id')->limit(256)->get()
+            ->flatMap(fn (EdgePoolEndpoint $endpoint): array => collect([$endpoint->ipv4, $endpoint->ipv6])->filter()
+                ->map(fn (string $address): array => ['edge_id' => $endpoint->edge_id, 'address' => $address])->all())
+            ->unique(fn (array $target): string => $target['edge_id'].'|'.$target['address'])->take(128)->values();
+
+        return response()->json(['data' => ['targets' => $targets, 'ports' => ['http' => 80, 'tls' => 443]]]);
+    }
+
+    public function probeResults(Request $request): JsonResponse
+    {
+        /** @var Edge $edge */
+        $edge = $request->attributes->get('edge');
+        $data = $request->validate([
+            'results' => ['required', 'array', 'max:128'],
+            'results.*.edge_id' => ['required', 'uuid'],
+            'results.*.address' => ['required', 'ip'],
+            'results.*.ok' => ['required', 'boolean'],
+            'results.*.detail' => ['nullable', 'string', 'max:120'],
+        ]);
+        $known = EdgePoolEndpoint::query()->where('edge_id', '!=', $edge->id)->get(['edge_id', 'ipv4', 'ipv6'])
+            ->flatMap(fn (EdgePoolEndpoint $endpoint): array => collect([$endpoint->ipv4, $endpoint->ipv6])->filter()->map(fn (string $address): string => $endpoint->edge_id.'|'.$address)->all())
+            ->flip();
+        $accepted = 0;
+        foreach ($data['results'] as $result) {
+            if (! $known->has($result['edge_id'].'|'.$result['address'])) {
+                continue;
+            }
+            EdgeProbeResult::query()->updateOrCreate(
+                ['observer_edge_id' => $edge->id, 'target_edge_id' => $result['edge_id'], 'address' => $result['address']],
+                ['ok' => $result['ok'], 'detail' => $result['detail'] ?? null, 'checked_at' => now()],
+            );
+            $accepted++;
+        }
+        ReconcilePlatformDnsIdentity::dispatchForProbeChange();
+
+        return response()->json(['data' => ['accepted' => $accepted]]);
+    }
+
     public function register(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -70,6 +125,8 @@ class EdgeAgentController extends Controller
             $tokenMatches = $edge->bootstrap_token_hash !== null
                 && hash_equals($edge->bootstrap_token_hash, hash('sha256', $data['bootstrap_token']));
             abort_unless($tokenMatches, 401, 'The bootstrap token is invalid or already used.');
+            // A used token may still be replayed for ten minutes (below); only an unused one expires.
+            abort_if($edge->bootstrap_consumed_at === null && $edge->bootstrap_expires_at?->isPast(), 401, 'The bootstrap token has expired. Rotate the identity to get a new one.');
             $csrHash = hash('sha256', $data['certificate_request']);
             if ($edge->bootstrap_consumed_at !== null) {
                 $replayable = $edge->bootstrap_consumed_at->gte(now()->subMinutes(10))
@@ -116,6 +173,40 @@ class EdgeAgentController extends Controller
         return response()->json(['data' => $identity], 201);
     }
 
+    /**
+     * Sign a new identity certificate for an authenticated edge. The current
+     * certificate stays valid; the new one becomes current the first time the
+     * edge authenticates with it.
+     */
+    public function renewIdentity(Request $request): JsonResponse
+    {
+        /** @var Edge $edge */
+        $edge = $request->attributes->get('edge');
+        $data = $request->validate(['certificate_request' => ['required', 'string', 'max:8192']]);
+        $identity = DB::transaction(function () use ($edge, $data): array {
+            $locked = Edge::query()->lockForUpdate()->findOrFail($edge->id);
+            $csrHash = hash('sha256', $data['certificate_request']);
+            if ($locked->pending_identity_certificate !== null && hash_equals((string) $locked->pending_identity_csr_hash, $csrHash)
+                && $locked->pending_identity_certificate_expires_at?->isFuture()) {
+                return ['identity_certificate' => $locked->pending_identity_certificate, 'identity_certificate_serial' => $locked->pending_identity_certificate_serial,
+                    'identity_certificate_expires_at' => $locked->pending_identity_certificate_expires_at->toIso8601String()];
+            }
+            try {
+                $signed = EdgeCertificateAuthority::sign($data['certificate_request'], $locked->id);
+            } catch (RuntimeException $exception) {
+                throw ValidationException::withMessages(['certificate_request' => $exception->getMessage()]);
+            }
+            $locked->update([
+                'pending_identity_certificate' => $signed['certificate'], 'pending_identity_certificate_serial' => $signed['serial'],
+                'pending_identity_certificate_expires_at' => CarbonImmutable::parse($signed['expires_at']), 'pending_identity_csr_hash' => $csrHash,
+            ]);
+
+            return ['identity_certificate' => $signed['certificate'], 'identity_certificate_serial' => $signed['serial'], 'identity_certificate_expires_at' => $signed['expires_at']];
+        });
+
+        return response()->json(['data' => $identity], 201);
+    }
+
     public function heartbeat(Request $request): JsonResponse
     {
         $edge = $request->attributes->get('edge');
@@ -127,6 +218,15 @@ class EdgeAgentController extends Controller
             'runtime_versions.normal_cell' => ['required_with:runtime_versions', 'string', 'max:255'],
             'runtime_versions.waf_cell' => ['required_with:runtime_versions', 'string', 'max:255'],
             'active_sequence' => ['required', 'integer', 'min:0'], 'cells' => ['required', 'array', 'max:32'],
+            'identity_expires_at' => ['sometimes', 'integer', 'min:0'],
+            'control_addresses_checksum' => ['sometimes', 'string', 'size:64'],
+            'dns' => ['sometimes', 'array', 'max:8'],
+            'dns.cursor' => ['required_with:dns', 'integer', 'min:0'],
+            'dns.catalog_serial' => ['sometimes', 'integer', 'min:0'],
+            'dns.latest' => ['sometimes', 'integer', 'min:0'],
+            'dns.zones' => ['sometimes', 'integer', 'min:0'],
+            'dns.pending' => ['sometimes', 'integer', 'min:0'],
+            'dns.error' => ['sometimes', 'nullable', 'string', 'max:500'],
             'gateway' => ['sometimes', 'array', 'max:12'],
             'gateway.ready' => ['required_with:gateway', 'boolean'],
             'gateway.active_revision' => ['sometimes', 'integer', 'min:0'],
@@ -180,12 +280,16 @@ class EdgeAgentController extends Controller
         $listenerReady = $data['listener_ready'] && $computedReady;
         $edge->update([
             'last_heartbeat_at' => now(), 'agent_version' => $data['agent_version'],
+            ...(isset($data['identity_expires_at']) ? ['reported_identity_expires_at' => CarbonImmutable::createFromTimestamp($data['identity_expires_at'])] : []),
             // Evaluate against the durable row, not the middleware's stale model.
             'active_sequence' => DB::raw('CASE WHEN active_sequence < '.(int) $data['active_sequence'].' THEN '.(int) $data['active_sequence'].' ELSE active_sequence END'),
             'bootstrap_token_hash' => null, 'bootstrap_consumed_at' => null,
             'capacity' => array_merge($edge->capacity ?? [], [
                 'listener_ready' => $listenerReady, 'gateway' => $data['gateway'] ?? null,
+                // Zone-transfer progress of this node's DNS service: the last change it has pulled.
+                ...(isset($data['dns']) ? ['dns' => [...$data['dns'], 'reported_at' => now()->toIso8601String()]] : []),
                 'cells' => $data['cells'], 'noisy_domains' => $data['noisy_domains'] ?? [],
+                'control_addresses_checksum' => $data['control_addresses_checksum'] ?? null,
             ]),
             ...(isset($data['runtime_versions']) ? ['runtime_versions' => $data['runtime_versions'], 'runtime_versions_reported_at' => now()] : []),
         ]);
@@ -264,13 +368,100 @@ class EdgeAgentController extends Controller
         return response()->json(['data' => ['accepted' => true, 'server_time' => now()->toIso8601String()]]);
     }
 
+    /**
+     * The platform origin destination policy, one signed document per PoP. The agent sends the
+     * checksum it already holds and receives nothing but `unchanged` while the policy is the same.
+     */
+    public function originPolicy(Request $request): JsonResponse
+    {
+        $encoded = ArtifactSigner::encode(OriginPolicy::compile());
+        $checksum = hash('sha256', $encoded);
+        if (hash_equals($checksum, (string) $request->query('checksum', ''))) {
+            return response()->json(['unchanged' => true, 'checksum' => $checksum]);
+        }
+        $expiresAt = now()->addMinutes(5)->timestamp;
+
+        return response()->json([
+            'encoded_payload' => base64_encode($encoded), 'checksum' => $checksum, 'signature' => ArtifactSigner::sign($checksum),
+            'expires_at' => $expiresAt,
+            'delivery_signature' => ArtifactSigner::signDelivery(ArtifactSigner::ORIGIN_POLICY_SCOPE, $checksum, 0, $expiresAt),
+        ]);
+    }
+
+    /**
+     * The ordered control addresses, signed like the origin policy. Adding or removing a standby
+     * reaches every PoP through this document, with no change on the PoP.
+     */
+    public function controlAddresses(Request $request): JsonResponse
+    {
+        $encoded = ArtifactSigner::encode(ControlPlane::addressDocument());
+        $checksum = hash('sha256', $encoded);
+        if (hash_equals($checksum, (string) $request->query('checksum', ''))) {
+            return response()->json(['unchanged' => true, 'checksum' => $checksum]);
+        }
+        $expiresAt = now()->addMinutes(5)->timestamp;
+
+        return response()->json([
+            'encoded_payload' => base64_encode($encoded), 'checksum' => $checksum, 'signature' => ArtifactSigner::sign($checksum),
+            'expires_at' => $expiresAt,
+            'delivery_signature' => ArtifactSigner::signDelivery(ArtifactSigner::CONTROL_ADDRESSES_SCOPE, $checksum, 0, $expiresAt),
+        ]);
+    }
+
+    /**
+     * How a DNS node pulls zones: where the primary listens, the catalog to follow, and the transfer
+     * key, sealed to this edge's identity key so it is protected beyond the mTLS channel.
+     */
+    public function dnsTransfer(Request $request): JsonResponse
+    {
+        /** @var Edge $edge */
+        $edge = $request->attributes->get('edge');
+        $primary = DnsCluster::query()->where('enabled', true)->whereNotNull('transfer_endpoint')->orderBy('id')->first();
+        abort_unless($primary !== null && filled($edge->identity_certificate), 404, 'No DNS primary accepts transfers.');
+
+        return response()->json(['data' => [
+            'primary' => $primary->transfer_endpoint, 'primaries' => $this->transferPrimaries($primary->transfer_endpoint),
+            'catalog' => PowerDnsClient::CATALOG_ZONE,
+            'key_name' => PowerDnsClient::TRANSFER_KEY, 'algorithm' => 'hmac-sha256',
+            'secret' => EdgeKeyEnvelope::seal($primary->transferSecret(), $edge->identity_certificate, $edge->id, 'dns-transfer-key'),
+        ]]);
+    }
+
+    /**
+     * Every address a node may pull zones from. With a standby, both control nodes run the same
+     * hidden primary data under the same TSIG key, so a node follows whichever one is active.
+     *
+     * @return list<string>
+     */
+    private function transferPrimaries(string $endpoint): array
+    {
+        $port = substr($endpoint, (int) strrpos($endpoint, ':') + 1);
+        $nodes = collect(ControlPlane::addresses())->map(fn (string $address): string => str_contains($address, ':') ? "[{$address}]:{$port}" : "{$address}:{$port}");
+        $listed = $nodes->contains($endpoint) ? $nodes : $nodes->prepend($endpoint);
+
+        return $listed->unique()->values()->all();
+    }
+
+    /** The zones that changed on the primary after the node's cursor, oldest first. */
+    public function dnsChanges(Request $request): JsonResponse
+    {
+        $cursor = max(0, (int) $request->query('cursor', 0));
+        $rows = DnsZoneChange::query()->where('id', '>', $cursor)->orderBy('id')->limit(200)->get(['id', 'zone', 'serial', 'deleted']);
+
+        return response()->json([
+            'data' => $rows->map(fn (DnsZoneChange $row): array => ['sequence' => $row->id, 'zone' => $row->zone, 'serial' => $row->serial, 'deleted' => $row->deleted]),
+            'cursor' => $rows->last()?->id ?? $cursor, 'has_more' => $rows->count() === 200,
+            'latest' => (int) DnsZoneChange::query()->max('id'),
+        ]);
+    }
+
     public function manifest(Request $request): JsonResponse
     {
         $edge = $request->attributes->get('edge');
         $cursor = max(0, (int) $request->query('cursor', 0));
         $rows = $edge->artifacts()->where('sequence', '>', $cursor)->orderBy('sequence')->limit(500)->get(['sequence', 'kind', 'domain_id', 'revision', 'checksum', 'signature', 'schema_version', 'minimum_agent_version', 'maximum_agent_version']);
 
-        return response()->json(['data' => $rows, 'cursor' => $rows->last()?->sequence ?? $cursor, 'has_more' => $rows->count() === 500]);
+        return response()->json(['data' => $rows, 'cursor' => $rows->last()?->sequence ?? $cursor, 'has_more' => $rows->count() === 500, 'key_rotation' => ArtifactSigner::rotation()]);
     }
 
     public function artifact(Request $request, string $checksum): JsonResponse
@@ -283,8 +474,20 @@ class EdgeAgentController extends Controller
             'data' => ['sequence' => $artifact->sequence, 'kind' => $artifact->kind, 'domain_id' => $artifact->domain_id, 'revision' => $artifact->revision],
             'encoded_payload' => base64_encode(ArtifactSigner::encode($artifact->payload)),
             'expires_at' => $expiresAt,
-            'delivery_signature' => ArtifactSigner::sign($artifact->checksum.'|'.$artifact->sequence.'|'.$expiresAt),
+            'delivery_signature' => ArtifactSigner::signDelivery(ArtifactSigner::artifactScope($artifact->kind, (int) $artifact->domain_id, (int) $artifact->revision), $artifact->checksum, $artifact->sequence, $expiresAt),
         ]);
+    }
+
+    public function certificateKey(Request $request, string $certificate): JsonResponse
+    {
+        /** @var Edge $edge */
+        $edge = $request->attributes->get('edge');
+        $record = TlsCertificate::query()->whereKey($certificate)->first();
+        $assigned = $record !== null && DomainEdgeCell::query()->where('domain_id', $record->domain_id)->where('edge_id', $edge->id)
+            ->where(fn ($query) => $query->whereNotNull('active_cell_id')->orWhereNotNull('target_cell_id'))->exists();
+        abort_unless($assigned && filled($edge->identity_certificate), 404, 'The certificate key is not available to this edge.');
+
+        return response()->json(['data' => EdgeKeyEnvelope::seal($record->private_key_ciphertext, $edge->identity_certificate, $edge->id, $record->id)]);
     }
 
     public function full(Request $request): JsonResponse
@@ -297,8 +500,8 @@ class EdgeAgentController extends Controller
         abort_if($latest->count() > 100000, 409, 'The edge snapshot exceeds the configured per-edge domain bound.');
         $payload = [
             'schema_version' => 1,
-            'minimum_agent_version' => '1.0.0',
-            'maximum_agent_version' => '1.99.0',
+            'minimum_agent_version' => '2.0.0',
+            'maximum_agent_version' => '2.99.0',
             'artifacts' => $latest,
         ];
         $encoded = ArtifactSigner::encode($payload);
@@ -309,7 +512,7 @@ class EdgeAgentController extends Controller
         $sequence = (int) $latest->max('sequence');
         $expiresAt = now()->addMinutes(5)->timestamp;
 
-        return response()->json(['data' => ['artifact_count' => $latest->count(), 'maximum_domains' => 100000], 'encoding' => 'gzip', 'encoded_snapshot' => base64_encode($compressed), 'checksum' => $checksum, 'signature' => ArtifactSigner::sign($checksum), 'signing_public_key' => ArtifactSigner::publicKey(), 'sequence' => $sequence, 'expires_at' => $expiresAt, 'delivery_signature' => ArtifactSigner::sign($checksum.'|'.$sequence.'|'.$expiresAt)]);
+        return response()->json(['data' => ['artifact_count' => $latest->count(), 'maximum_domains' => 100000], 'encoding' => 'gzip', 'encoded_snapshot' => base64_encode($compressed), 'checksum' => $checksum, 'signature' => ArtifactSigner::sign($checksum), 'signing_public_key' => ArtifactSigner::publicKey(), 'sequence' => $sequence, 'expires_at' => $expiresAt, 'delivery_signature' => ArtifactSigner::signDelivery(ArtifactSigner::SNAPSHOT_SCOPE, $checksum, $sequence, $expiresAt)]);
     }
 
     public function applied(Request $request): JsonResponse
@@ -320,10 +523,31 @@ class EdgeAgentController extends Controller
         $updated = Edge::query()->whereKey($edge->id)->where('active_sequence', '<=', $data['sequence'])
             ->update(['active_sequence' => $data['sequence']]);
         abort_unless($updated === 1, 409, 'An edge cannot acknowledge a sequence older than its active state.');
+        $this->clearResolvedRejection($edge, $data['sequence']);
         PromoteReadyEdgePlacements::execute();
         $this->completeAcknowledgedTombstones();
 
         return response()->json(['data' => ['accepted' => true]]);
+    }
+
+    /**
+     * A rejection describes one domain. It stays on the edge until that domain
+     * has a newer artifact that the edge acknowledged.
+     */
+    private function clearResolvedRejection(Edge $edge, int $appliedSequence): void
+    {
+        $fresh = Edge::query()->findOrFail($edge->id);
+        $rejection = ($fresh->capacity ?? [])['last_rejection'] ?? null;
+        if (! is_array($rejection) || ! isset($rejection['domain_id'], $rejection['sequence'])) {
+            return;
+        }
+        $resolved = $edge->artifacts()->where('domain_id', $rejection['domain_id'])
+            ->where('sequence', '>', $rejection['sequence'])->where('sequence', '<=', $appliedSequence)->exists();
+        if ($resolved) {
+            $capacity = $fresh->capacity ?? [];
+            unset($capacity['last_rejection']);
+            $fresh->update(['capacity' => $capacity]);
+        }
     }
 
     public function rejected(Request $request): JsonResponse
@@ -331,11 +555,16 @@ class EdgeAgentController extends Controller
         $edge = $request->attributes->get('edge');
         $data = $request->validate([
             'sequence' => ['required', 'integer', 'min:1'],
-            'reason' => ['required', 'in:incompatible_artifact,signature_or_checksum_invalid,candidate_validation_failed'],
+            // An unknown reason is stored as reported, never refused: a refusal
+            // would hold back every later acknowledgement from the agent.
+            'reason' => ['required', 'string', 'regex:/^[a-z][a-z0-9_]{0,63}$/'],
             'details' => ['nullable', 'string', 'max:4000'],
         ]);
         $artifact = $edge->artifacts()->where('sequence', $data['sequence'])->firstOrFail();
-        $edge->update(['capacity' => array_merge($edge->capacity ?? [], ['last_rejection' => $data])]);
+        $edge->update(['capacity' => array_merge($edge->capacity ?? [], ['last_rejection' => [
+            ...$data, 'domain_id' => $artifact->domain_id, 'known_reason' => in_array($data['reason'], EdgeRejectionReasons::all(), true),
+            'reported_at' => now()->toIso8601String(),
+        ]])]);
         if ($artifact->domain_id !== null) {
             $message = $data['reason'].(filled($data['details'] ?? null) ? ': '.$data['details'] : '');
             DomainEdgePlacement::query()->where('domain_id', $artifact->domain_id)
@@ -433,6 +662,9 @@ class EdgeAgentController extends Controller
             'available_at' => $retryPurge ? now()->addSeconds(min(300, 5 * (2 ** ($attempts - 1)))) : null,
             'finished_at' => $retryPurge ? null : now(),
         ]);
+        if ($row->type === 'dns_probe') {
+            NameserverAddressProbe::recordResult($row->refresh());
+        }
         if (str_starts_with($row->type, 'cell_') && isset($row->payload['cell_id'])) {
             $cell = $edge->cells()->whereKey($row->payload['cell_id'])->first();
             if ($cell !== null && $data['status'] === 'succeeded') {
@@ -442,6 +674,12 @@ class EdgeAgentController extends Controller
                     'undrain' => ['status' => $cell->edge_pool_id === null ? 'unassigned' : 'assigned', 'drained' => false],
                     default => [],
                 });
+            }
+            if (isset($row->payload['operation_id'])) {
+                Operation::query()->whereKey($row->payload['operation_id'])->update([
+                    'status' => $data['status'], 'error' => $data['status'] === 'failed' ? ($data['result']['failure_reason'] ?? 'cell_task_failed') : null,
+                    'finished_at' => now(),
+                ]);
             }
         }
         if ($row->type === 'origin_test' && isset($row->payload['record_id'])) {

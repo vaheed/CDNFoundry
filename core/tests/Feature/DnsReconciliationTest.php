@@ -8,10 +8,12 @@ use App\Jobs\TestDnsCluster;
 use App\Models\DnsCluster;
 use App\Models\DnsDeployment;
 use App\Models\Domain;
+use App\Models\Operation;
 use App\Models\PlatformDnsSetting;
 use App\Models\User;
 use App\Support\DnsRecordData;
 use App\Support\PowerDnsClient;
+use App\Support\PowerDnsZone;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -115,7 +117,7 @@ class DnsReconciliationTest extends TestCase
         ]);
         $domain->update(['revision' => 2]);
         Http::fake(fn (Request $request) => $request->method() === 'GET'
-            ? Http::response(['rrsets' => $previous]) : Http::response([], 204));
+            ? Http::response(['rrsets' => $previous, 'kind' => 'Master', 'catalog' => PowerDnsClient::CATALOG_ZONE, 'soa_edit_api' => 'INCREASE']) : Http::response([], 204));
 
         try {
             (new ReconcileDnsZone($domain->id))->handle(app(PowerDnsClient::class));
@@ -133,14 +135,121 @@ class DnsReconciliationTest extends TestCase
             && collect($request->data()['rrsets'] ?? [])->contains(fn (array $rrset): bool => ($rrset['type'] ?? null) === 'A' && ($rrset['records'][0]['content'] ?? null) === '192.0.2.1'));
     }
 
-    public function test_powerdns_client_uses_the_configured_private_ca(): void
+    public function test_an_outage_keeps_the_operation_running_until_a_retry_heals_it(): void
     {
-        config()->set('services.powerdns.ca_certificate', '/run/secrets/pdns-api-ca.crt');
-        $cluster = DnsCluster::query()->create($this->clusterData());
-        $method = new \ReflectionMethod(PowerDnsClient::class, 'request');
-        $request = $method->invoke(app(PowerDnsClient::class), $cluster);
+        $domain = $this->domain();
+        DnsCluster::query()->create($this->clusterData());
+        $this->platformIdentity();
+        $operation = Operation::coalesceDomain('dns.zone_reconcile', $domain->id);
+        $outage = true;
+        $published = null;
+        Http::fake(function (Request $request) use (&$outage, &$published) {
+            if ($outage) {
+                return Http::response(['error' => 'unavailable'], 503);
+            }
+            if ($request->method() === 'GET') {
+                return $published === null ? Http::response([], 404) : Http::response(['rrsets' => $published]);
+            }
+            if ($request->method() === 'PATCH') {
+                $published = collect($request->data()['rrsets'])->where('changetype', 'REPLACE')->map(fn (array $rrset): array => collect($rrset)->except('changetype')->all())->values()->all();
+            }
 
-        $this->assertSame('/run/secrets/pdns-api-ca.crt', $request->getOptions()['verify']);
+            return Http::response([], $request->method() === 'POST' ? 201 : 204);
+        });
+
+        foreach ([1, 2, 3] as $attempt) {
+            try {
+                (new ReconcileDnsZone($domain->id))->handle(app(PowerDnsClient::class));
+                $this->fail('The outage must make the job retryable.');
+            } catch (\RuntimeException) {
+                $this->assertSame('running', $operation->refresh()->status, "attempt {$attempt} must not mark the operation failed");
+                $this->assertStringStartsWith('Retrying:', $operation->error);
+            }
+        }
+
+        $outage = false;
+        (new ReconcileDnsZone($domain->id))->handle(app(PowerDnsClient::class));
+
+        $this->assertSame('succeeded', $operation->refresh()->status);
+        $this->assertNull($operation->error);
+        $this->assertSame('succeeded', DnsDeployment::query()->firstOrFail()->status);
+    }
+
+    public function test_a_deleted_domain_ends_the_job_without_retrying(): void
+    {
+        $domain = $this->domain();
+        $operation = Operation::coalesceDomain('dns.zone_reconcile', $domain->id);
+        $domain->delete();
+
+        (new ReconcileDnsZone($domain->id))->handle(app(PowerDnsClient::class));
+
+        $this->assertSame('failed', $operation->refresh()->status);
+    }
+
+    public function test_the_operation_fails_only_when_the_retry_window_ends(): void
+    {
+        $domain = $this->domain();
+        $operation = Operation::coalesceDomain('dns.zone_reconcile', $domain->id);
+        $job = new ReconcileDnsZone($domain->id);
+
+        $this->assertSame(0, $job->tries);
+        $this->assertSame([10, 30, 60, 120, 300], $job->backoff());
+        $this->assertEqualsWithDelta(now()->addMinutes(30)->getTimestamp(), $job->retryUntil()->getTimestamp(), 5);
+        $this->assertSame('pending', $operation->refresh()->status);
+
+        $job->failed(new \RuntimeException('retry window ended'));
+
+        $this->assertSame('failed', $operation->refresh()->status);
+        $this->assertSame('retry window ended', $operation->error);
+    }
+
+    public function test_drift_check_repairs_a_missing_zone_a_changed_zone_and_a_failed_deployment_but_not_an_outage(): void
+    {
+        Queue::fake();
+        $this->platformIdentity();
+        $cluster = DnsCluster::query()->create($this->clusterData());
+        $deployed = function (string $name, string $status = 'succeeded') use ($cluster): Domain {
+            $domain = Domain::query()->create(['name' => $name, 'display_name' => $name, 'lifecycle_state' => 'active', 'revision' => 1]);
+            $rrsets = PowerDnsZone::render($domain);
+            DnsDeployment::query()->create([
+                'domain_id' => $domain->id, 'dns_cluster_id' => $cluster->id, 'desired_revision' => 1, 'deployed_revision' => 1,
+                'status' => $status, 'active_checksum' => hash('sha256', json_encode($rrsets)), 'active_rrsets' => $rrsets,
+            ]);
+
+            return $domain;
+        };
+        $healthy = $deployed('healthy.example');
+        $missing = $deployed('missing.example');
+        $changed = $deployed('changed.example');
+        $failed = $deployed('failed.example', 'failed');
+        $unreachable = $deployed('unreachable.example');
+        Http::fake(function (Request $request) use ($healthy, $changed) {
+            if (str_contains($request->url(), 'missing.example')) {
+                return Http::response([], 404);
+            }
+            if (str_contains($request->url(), 'unreachable.example')) {
+                return Http::response(['error' => 'down'], 503);
+            }
+            $domain = str_contains($request->url(), 'changed.example') ? $changed : $healthy;
+            $rrsets = PowerDnsZone::render($domain);
+            if ($domain->is($changed)) {
+                $rrsets[0]['records'][0]['content'] .= ' tampered';
+            }
+
+            return Http::response(['rrsets' => $rrsets]);
+        });
+
+        $this->artisan('cdnf:dns:repair-drift')->assertSuccessful();
+
+        $queued = fn (Domain $domain): bool => Queue::pushed(ReconcileDnsZone::class, fn ($job): bool => $job->domainId === $domain->id)->isNotEmpty();
+        $this->assertFalse($queued($healthy));
+        $this->assertTrue($queued($missing));
+        $this->assertTrue($queued($changed));
+        $this->assertTrue($queued($failed));
+        $this->assertFalse($queued($unreachable), 'an unreachable host is not drift');
+        $this->assertNotNull(DnsDeployment::query()->where('domain_id', $healthy->id)->value('verified_at'));
+        $this->assertDatabaseHas('audit_logs', ['action' => 'dns.drift_repair_queued', 'subject_id' => (string) $missing->id]);
+        $this->assertDatabaseCount('operations', 3);
     }
 
     public function test_manual_reconcile_is_coalesced_to_one_pending_operation(): void
@@ -175,7 +284,7 @@ class DnsReconciliationTest extends TestCase
     {
         return [
             'name' => 'dns-eu-1', 'location' => 'eu-test', 'enabled' => true,
-            'api_url' => 'http://pdns.test', 'api_key' => 'private-test-key', 'server_id' => 'localhost',
+            'api_url' => 'http://pdns.test', 'transfer_endpoint' => '192.0.2.10:5300', 'api_key' => 'private-test-key', 'server_id' => 'localhost',
             'nameservers' => [['hostname' => 'ns1.cdnf.test'], ['hostname' => 'ns2.cdnf.test']], 'capacity_zones' => 1000,
         ];
     }
@@ -187,7 +296,6 @@ class DnsReconciliationTest extends TestCase
             'nameservers' => [['hostname' => 'ns1.cdnf.test', 'ipv4' => '192.0.2.1', 'ipv6' => '2001:db8::1'], ['hostname' => 'ns2.cdnf.test', 'ipv4' => '192.0.2.2', 'ipv6' => '2001:db8::2']],
             'soa_primary' => 'ns1.cdnf.test', 'soa_mailbox' => 'hostmaster.cdnf.test', 'soa_refresh' => 3600,
             'soa_retry' => 600, 'soa_expire' => 604800, 'soa_minimum_ttl' => 300, 'default_ttl' => 300,
-            'cluster_targets' => ['pdns.test'],
         ]);
     }
 }

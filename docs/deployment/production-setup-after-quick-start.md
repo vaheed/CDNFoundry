@@ -1,101 +1,128 @@
 ---
 title: Production setup after quick start
-description: Administrator handoff for an installed CDNFoundry fleet.
+description: First steps after installing a CDNFoundry fleet - administrator accounts, your first domain, daily checks, and how to handle changes and failures.
 ---
 
 # Production setup after quick start
 
-This guide starts after the [production quick start](production-quick-start.md) has
-installed and qualified the control host and both POPs. Keep the verified fleet
-configuration, release manifest, recovery keys, and backup location in the
-operator's secure inventory. Use the [multi-region quick start](production-quick-start-multi-region.md)
-when locations are split across failure domains.
+You will set up named administrator accounts, bring a first domain into service,
+and learn the daily checks and the common recovery paths.
 
-## First administrator access
+**You need:** a fleet that passed the [production quick start](production-quick-start.md)
+(control host and both PoPs). A PoP is a point of presence: a site with DNS and
+edge servers. If your locations sit in separate failure domains, you used the
+[multi-region quick start](production-quick-start-multi-region.md) instead; this
+page applies to both. Keep the verified fleet configuration, the release
+manifest, the recovery keys, and the backup location in your secure inventory.
 
-1. Open the administrator panel at the control hostname configured in the fleet.
-2. Sign in with the one-time bootstrap administrator created during quick start.
-3. Create a named administrator account for each operator. Confirm each account
-   has `users.type = admin` before relying on administrator access.
-4. Verify the new account can sign in, then retire the bootstrap credential.
-   Store recovery credentials outside the fleet.
-5. Give domain users only their assigned domains. Test a domain-user account
-   against an assigned and an unassigned domain before inviting customers.
+## 1. Set up administrator access
 
-Browser actions and exact expected results are recorded in the
-[manual browser qualification](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md). API clients
-use the same policies as browser sessions. Store API tokens securely; token
-secrets are shown only when issued.
+<div class="steps">
 
-## Bring a domain into service
+1. Open the administrator panel at `https://control.<operator-domain>/admin`.
+2. Sign in with the administrator you created during the quick start.
+3. Under **Customers → Users**, create one named administrator account for each
+   operator. Choose the administrator type. The API calls this `users.type = admin`.
+4. Sign in as each new account to check that it works.
+5. If several people shared the first account, disable it or give it a new
+   password that only the recovery owner knows. Store recovery credentials
+   outside the fleet.
+6. Create domain users and assign them only the domains they run. Sign in as one
+   of them, and check that an assigned domain opens and an unassigned domain does
+   not, before you invite customers.
 
-1. Create the domain under its intended owner. Record the operation ID for
-   asynchronous changes and wait until its zone is deployed to both POPs.
-2. Copy the domain's exact assigned nameservers to the registrar. Query the
-   parent authorities directly from the control host and each POP; recursive
-   answers or the child zone's NS records do not prove parent delegation.
-   If the parent authorities still return the previous assignment, wait for
-   them to converge before requesting verification again. Confirm the domain
-   becomes active. Keep management DNS at an independent provider.
-3. Add DNS records with their intended TTLs. Wait for both deployment
-   acknowledgements, then check both authoritative POPs over UDP and TCP.
-4. Configure one validated origin for each proxied hostname. Confirm its Host
-   header, scheme, port, and TLS name. Test the origin directly, then test each
-   POP with the customer hostname.
-5. Enable proxying only after DNS and origin checks pass. Confirm DNS-01
-   issuance, certificate status, HTTPS response, and renewal monitoring.
-6. Test both IPv4 and IPv6 paths if IPv6 is enabled. Confirm cache and purge
-   behavior using the same URL at each POP.
+</div>
 
-The [quick start acceptance sequence](production-quick-start.md) gives the
-commands and expected network responses. Use the
-[certificate guide](certificates.md) for uploaded certificates and renewal.
+**Expected result:** every operator has a personal sign-in, and a domain user sees
+only assigned domains. Domain users sign in at `/app/login`, administrators at
+`/admin/login`. See [Users and access](../guides/users-and-access.md).
 
-## Users and limits
+API clients follow the same rules as browser sessions. A token secret is shown
+only once, when you issue it, so store it right away.
 
-CDNFoundry grants domain access through domain assignments. Create users in the
-administrator panel, assign only the domains they operate, and verify the
-assignment with a separate user session. Set domain policies and traffic limits
-within the fields provided by the panel. There is no organization or reseller
-hierarchy; group ownership externally if your business requires it.
+## 2. Bring a domain into service
 
-## Daily operating checks
+<div class="steps">
 
-1. Review control, DNS, edge, queue, and telemetry health. Confirm both POPs
-   are current and serving their assigned domains.
-2. Check failed operations and Horizon queues. Resolve the cause and retry the
-   revision; never edit derived PowerDNS or edge state directly.
+1. Create the domain under its owner (see [Domains](../guides/domains.md)). Open
+   its operation and wait until its zone reaches both PoPs.
+2. At the registrar, set the nameservers that CDNFoundry assigned to the domain.
+   Query the parent zone's authoritative servers directly, from the control host
+   and from each PoP. The answers from a recursive resolver, or the NS records
+   inside your own zone, do not prove the delegation. If the parent still returns
+   the old nameservers, wait for them to change, then ask for verification again.
+   When verification passes, choose **Activate**.
+3. Add DNS records with the TTLs you want. Wait until both PoPs acknowledge the
+   change. Then query both authoritative servers over UDP and TCP.
+4. For each proxied hostname, set one origin. Check its Host header, scheme, port,
+   and TLS name. Test the origin directly. Then test each PoP with the customer
+   hostname.
+5. Turn on proxying only after the DNS and origin checks pass. CDNFoundry issues
+   the certificate with DNS-01 when the hostname first becomes proxied. Check the
+   certificate status, the HTTPS response, and your expiry monitoring.
+6. If IPv6 is on, test both IPv4 and IPv6. Request the same URL at each PoP to
+   check caching, then purge it and check again.
+
+</div>
+
+The commands and expected answers for these checks are in the
+[quick start acceptance steps](production-quick-start.md). For uploaded
+certificates, see the [TLS guide](../guides/tls.md#custom-certificates). The
+private certificates between your own services are on the
+[internal certificates](certificates.md) page.
+
+Keep your management DNS at an independent provider throughout.
+
+## 3. Users and limits
+
+CDNFoundry gives a domain user access through domain assignments. There is no
+organization or reseller level. If your business needs groups, track them outside
+CDNFoundry. Set domain policies and traffic limits with the fields the panel
+offers.
+
+## 4. Daily checks
+
+<div class="steps">
+
+1. Review the health of control, DNS, edges, queues, and telemetry. Check that
+   both PoPs are current and serve their assigned domains.
+2. Look for failed operations and failed Horizon jobs. Fix the cause and retry the
+   operation. Do not edit PowerDNS or edge state by hand: those are derived and
+   the next reconcile overwrites your change.
 3. Review DNS answers, certificate expiry, origin errors, cache hit rate,
-   security events, disk use, and bounded Vector buffers.
-4. Confirm backups completed and an off-host copy exists. Periodically restore
-   to an isolated environment with application encryption and signing keys and
-   externally stored TLS material.
+   security events, disk use, and the Vector buffers.
+4. Check that the last backup finished and that a copy exists off the host.
+   Restore to an isolated environment now and then. A restore needs the
+   application encryption and signing keys, and the TLS material you keep outside
+   the database.
 
-Use the [fleet operator guide](production-fleet-operator-guide.md) for health,
-logs, node lifecycle, and recovery commands, and the
-[configuration reference](../reference/configuration.md) for environment values.
-Keep `.env.prod` and fleet secrets outside version control.
+</div>
 
-## Changes, failures, and recovery
+For health, logs, node lifecycle, and recovery commands, use the
+[Fleet operator guide](production-fleet-operator-guide.md). For environment
+values, use the [configuration reference](../reference/configuration.md). Keep
+`.env.prod` and Fleet secrets out of version control.
 
-- **Deploy or roll back:** follow the [upgrade procedure](upgrade.md). Verify
-  an immutable release, back up state, roll out by dependency order, and check
-  each host before continuing. Preserve the previous valid bundle for rollback.
-- **Add or remove a server:** update the validated fleet topology, render a
-  candidate bundle, enroll the edge identity, activate and verify the target,
-  then drain the source. See the [fleet operator guide](production-fleet-operator-guide.md).
-- **Add a region:** use separate failure domains and regional node identifiers
-  in the [multi-region topology](production-quick-start-multi-region.md). Verify
-  management reachability, authoritative DNS, and regional traffic before
-  moving customer traffic.
-- **Control outage:** existing valid DNS and edge snapshots continue serving.
-  Restore PostgreSQL and required keys, then resume reconciliation and verify
-  revisions before accepting new changes.
-- **POP outage:** verify the surviving POP serves traffic, repair or replace the
-  failed node, and recheck DNS and HTTPS before restoring its traffic share.
-- **Troubleshooting:** inspect the failed operation, current revision, host
-  health, and service logs. Follow the [fleet troubleshooting steps](production-fleet-operator-guide.md#troubleshooting).
+## 5. Changes, failures, and recovery
 
-Do not treat this handoff as a release qualification record. Record each
-installation's actual health checks, backup restore result, browser checklist,
-and failure exercise separately.
+- **Deploy or roll back:** follow the [upgrade procedure](upgrade.md). Verify a
+  signed release, back up state, roll out in dependency order, and check each host
+  before you continue. Keep the previous valid bundle for rollback.
+- **Add or remove a server:** update the validated fleet topology and render a new
+  bundle. Enroll the edge identity. Check that the new target serves, then drain
+  the old one. See the [Fleet operator guide](production-fleet-operator-guide.md).
+- **Add a region:** use separate failure domains and region names in the
+  [multi-region topology](production-quick-start-multi-region.md). Check
+  management reachability, authoritative DNS, and regional traffic before you move
+  customer traffic.
+- **Control plane outage:** DNS and edges keep serving their last valid state.
+  Restore PostgreSQL and the required keys, resume reconciliation, and check the
+  revisions before you accept new changes.
+- **PoP outage:** confirm the other PoP serves traffic. Repair or replace the failed
+  node, and check DNS and HTTPS before you give it traffic again.
+- **Troubleshooting:** look at the failed operation, the current revision, host
+  health, and service logs. See the
+  [Fleet troubleshooting steps](production-fleet-operator-guide.md#troubleshooting).
+
+This page is a handoff guide, not a release record. Record your own health checks,
+restore test, and failure exercise separately.

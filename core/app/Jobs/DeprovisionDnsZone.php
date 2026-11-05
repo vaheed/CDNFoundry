@@ -24,7 +24,7 @@ class DeprovisionDnsZone implements ShouldBeUnique, ShouldQueue
 
     public function __construct(public int $domainId)
     {
-        $this->onQueue('runtime');
+        $this->onQueue('dns');
     }
 
     public function handle(PowerDnsClient $client): void
@@ -36,6 +36,10 @@ class DeprovisionDnsZone implements ShouldBeUnique, ShouldQueue
         Operation::query()->where('type', 'domain.deprovision')->whereIn('status', ['pending', 'running'])
             ->where('input->domain_id', $domain->id)->update(['status' => 'running', 'started_at' => now()]);
         $failures = [];
+        // Another claim or the new holder of this name owns the zone now; retiring this row must
+        // not delete it. Its records are replaced when the other domain publishes.
+        $zoneIsShared = Domain::query()->where('name', $domain->name)->whereKeyNot($domain->id)
+            ->where('lifecycle_state', '!=', DomainLifecycleState::Deprovisioning->value)->exists();
         foreach (DnsCluster::query()->orderBy('id')->get() as $cluster) {
             $deployment = DnsDeployment::query()->firstOrCreate(
                 ['domain_id' => $domain->id, 'dns_cluster_id' => $cluster->id],
@@ -43,7 +47,9 @@ class DeprovisionDnsZone implements ShouldBeUnique, ShouldQueue
             );
             $deployment->update(['tombstone' => true, 'status' => 'deprovisioning', 'desired_revision' => $domain->revision, 'attempts' => $deployment->attempts + 1, 'last_attempted_at' => now()]);
             try {
-                $client->deleteZone($cluster, $domain->name);
+                if (! $zoneIsShared) {
+                    $client->deleteZone($cluster, $domain->name);
+                }
                 $deployment->update(['status' => 'deprovisioned', 'active_rrsets' => [], 'active_checksum' => null, 'last_error' => null, 'deprovisioned_at' => now()]);
             } catch (Throwable $exception) {
                 $message = mb_substr($exception->getMessage(), 0, 4000);

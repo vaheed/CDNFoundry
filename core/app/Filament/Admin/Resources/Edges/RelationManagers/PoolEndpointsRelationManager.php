@@ -16,13 +16,20 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
-use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class PoolEndpointsRelationManager extends RelationManager
 {
     protected static string $relationship = 'poolEndpoints';
+
+    protected static ?string $title = 'Pool endpoints';
+
+    public static function getBadge(Model $ownerRecord, string $pageClass): ?string
+    {
+        return number_format($ownerRecord->poolEndpoints()->count());
+    }
 
     public function form(Schema $schema): Schema
     {
@@ -42,7 +49,7 @@ class PoolEndpointsRelationManager extends RelationManager
                 TextColumn::make('pool.name')->label('Pool'),
                 TextColumn::make('ipv4')->label('IPv4')->state(fn (EdgePoolEndpoint $record): ?string => $record->effectiveAddress('ipv4'))->placeholder('Not configured'),
                 TextColumn::make('ipv6')->label('IPv6')->state(fn (EdgePoolEndpoint $record): ?string => $record->effectiveAddress('ipv6'))->placeholder('Not configured'),
-                TextColumn::make('gateway_state')->badge()->label('Gateway'),
+                TextColumn::make('gateway_state')->badge()->label('Gateway')->formatStateUsing(fn ($state): string => ucfirst(str_replace('_', ' ', $state instanceof \BackedEnum ? $state->value : (string) $state))),
                 TextColumn::make('readiness')->state(fn (EdgePoolEndpoint $record): string => str($record->readinessReason())->replace('_', ' ')->headline())
                     ->tooltip(fn (EdgePoolEndpoint $record): ?string => match ($record->readinessReason()) {
                         'ready' => null,
@@ -57,7 +64,9 @@ class PoolEndpointsRelationManager extends RelationManager
                     })->badge(),
                 TextColumn::make('revision')->label('Desired revision'),
                 TextColumn::make('gateway_revision')->label('Active revision'),
-                IconColumn::make('withdrawn')->label('Temporarily removed')->boolean(),
+                TextColumn::make('withdrawn')->label('DNS')->badge()
+                    ->formatStateUsing(fn (bool $state): string => $state ? 'Withdrawn' : 'Published')
+                    ->color(fn (bool $state): string => $state ? 'warning' : 'success'),
             ])->headerActions([
                 CreateAction::make()->mutateDataUsing(fn (array $data): array => [...EdgePoolEndpointData::validate($data, null, EdgePool::query()->findOrFail($data['edge_pool_id'])), 'edge_pool_id' => $data['edge_pool_id'], 'revision' => 1, 'gateway_state' => 'pending', 'readiness_reason' => 'gateway_not_acknowledged'])
                     ->after(fn (EdgePoolEndpoint $record) => self::changed($record, 'edge.pool_endpoint_created')),

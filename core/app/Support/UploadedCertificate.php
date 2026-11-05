@@ -96,55 +96,52 @@ final class UploadedCertificate
         return str_ends_with($hostname, '.'.$suffix) && substr_count($hostname, '.') === substr_count($suffix, '.') + 1;
     }
 
+    /**
+     * Verify the leaf against the platform trust store, with the uploaded certificates only as
+     * untrusted intermediates. A root the customer supplies is never trusted: it is dropped from
+     * the stored chain, and the leaf must lead to a root the operator already trusts.
+     */
     private static function validateChain(\OpenSSLCertificate $leaf, string $chainPem): string
     {
         preg_match_all('/-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----/s', $chainPem, $matches);
-        if ($matches[0] === [] || count($matches[0]) > 10) {
-            throw ValidationException::withMessages(['chain' => 'Provide a bounded PEM chain containing the issuing certificate and root.']);
+        if (count($matches[0]) > 10) {
+            throw ValidationException::withMessages(['chain' => 'Provide a bounded PEM chain of at most ten issuing certificates.']);
         }
-        $current = $leaf;
-        $certificates = [];
+        $intermediates = [];
         foreach ($matches[0] as $pem) {
-            $issuer = openssl_x509_read($pem);
-            $public = $issuer === false ? false : openssl_pkey_get_public($issuer);
-            if ($issuer === false || $public === false || openssl_x509_verify($current, $public) !== 1) {
-                throw ValidationException::withMessages(['chain' => 'The certificate chain signature order is invalid.']);
+            $certificate = openssl_x509_read($pem);
+            $public = $certificate === false ? false : openssl_pkey_get_public($certificate);
+            if ($certificate === false || $public === false || ! openssl_x509_export($certificate, $normalized)) {
+                throw ValidationException::withMessages(['chain' => 'The certificate chain could not be read.']);
             }
-            if (! openssl_x509_export($issuer, $normalized)) {
-                throw ValidationException::withMessages(['chain' => 'The certificate chain could not be normalized.']);
+            if (openssl_x509_verify($certificate, $public) === 1) {
+                continue;
             }
-            $certificates[] = trim($normalized)."\n";
-            $current = $issuer;
+            $intermediates[] = trim($normalized)."\n";
         }
-        $rootPublic = openssl_pkey_get_public($current);
-        if ($rootPublic === false || openssl_x509_verify($current, $rootPublic) !== 1) {
-            throw ValidationException::withMessages(['chain' => 'The certificate chain must terminate in a self-signed root.']);
-        }
-        $normalizedChain = implode('', $certificates);
-        $rootFile = null;
+        $normalizedChain = implode('', $intermediates);
         $chainFile = null;
         try {
             // Only canonical public certificates reach these private temporary files.
-            $rootFile = self::temporaryCertificates($certificates[array_key_last($certificates)]);
             $chainFile = self::temporaryCertificates($normalizedChain);
-            $rootPath = stream_get_meta_data($rootFile)['uri'];
-            $chainPath = stream_get_meta_data($chainFile)['uri'];
+            $command = ['openssl', 'verify', '-purpose', 'sslserver', '-auth_level', '2'];
+            $trustFile = config('tls.upload_trust_file');
+            if (is_string($trustFile) && $trustFile !== '') {
+                array_push($command, '-no-CApath', '-no-CAstore', '-CAfile', $trustFile);
+            }
+            if ($intermediates !== []) {
+                array_push($command, '-untrusted', stream_get_meta_data($chainFile)['uri']);
+            }
             openssl_x509_export($leaf, $normalizedLeaf);
             // PHP's purpose check exposes no authentication strength setting.
             // Only public PEM enters this bounded local verifier, through stdin.
-            $result = Process::timeout(5)->input($normalizedLeaf)->run([
-                'openssl', 'verify', '-purpose', 'sslserver', '-auth_level', '2',
-                '-trusted', $rootPath, '-untrusted', $chainPath,
-            ]);
+            $result = Process::timeout(5)->input($normalizedLeaf)->run($command);
             if (! $result->successful()) {
-                throw ValidationException::withMessages(['chain' => 'The certificate chain is not currently valid for TLS server authentication.']);
+                throw ValidationException::withMessages(['chain' => 'The certificate does not chain to a trusted root for TLS server authentication.']);
             }
         } finally {
             if (is_resource($chainFile)) {
                 fclose($chainFile);
-            }
-            if (is_resource($rootFile)) {
-                fclose($rootFile);
             }
         }
 

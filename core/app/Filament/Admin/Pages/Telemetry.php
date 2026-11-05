@@ -43,7 +43,7 @@ class Telemetry extends Page
 
     public int $trafficLimit = 12;
 
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-presentation-chart-line';
+    protected static string|\BackedEnum|null $navigationIcon = 'phosphor-chart-line';
 
     protected static ?string $navigationLabel = 'Traffic and telemetry';
 
@@ -67,7 +67,7 @@ class Telemetry extends Page
         return [
             Action::make('rebuildUsage')
                 ->label('Rebuild usage')
-                ->icon('heroicon-o-arrow-path')
+                ->icon('phosphor-arrows-clockwise')
                 ->color('warning')
                 ->schema([
                     Select::make('domain_id')->label('Domain (optional)')

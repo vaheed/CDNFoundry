@@ -1,0 +1,81 @@
+{
+  "model": {
+    "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+    },
+    "description": "Control-plane components reporting degraded or unavailable.",
+    "fieldConfig": {
+      "defaults": {
+        "color": {
+          "mode": "thresholds"
+        },
+        "links": [
+          {
+            "title": "Open details",
+            "url": "/d/cdnf-control-plane"
+          }
+        ],
+        "mappings": [
+          {
+            "options": {
+              "match": "null+nan",
+              "result": {
+                "color": "text",
+                "text": "No data yet"
+              }
+            },
+            "type": "special"
+          }
+        ],
+        "noValue": "No traffic",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {
+              "color": "green",
+              "value": null
+            },
+            {
+              "color": "red",
+              "value": 1
+            }
+          ]
+        },
+        "unit": "short"
+      },
+      "overrides": []
+    },
+    "options": {
+      "colorMode": "value",
+      "graphMode": "none",
+      "justifyMode": "center",
+      "reduceOptions": {
+        "calcs": [
+          "lastNotNull"
+        ],
+        "fields": "",
+        "values": false
+      },
+      "textMode": "value",
+      "wideLayout": true
+    },
+    "targets": [
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "expr": "count(cdnfoundry_component_health == 0) or vector(0)",
+        "instant": true,
+        "legendFormat": "unhealthy",
+        "range": false,
+        "refId": "A"
+      }
+    ],
+    "title": "Unhealthy",
+    "type": "stat"
+  },
+  "name": "Unhealthy",
+  "uid": "cdnf-lib-health-unhealthy-components"
+}

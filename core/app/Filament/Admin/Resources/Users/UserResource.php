@@ -15,12 +15,15 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Validation\Rules\Password;
 
 class UserResource extends Resource
 {
     protected static ?string $model = User::class;
 
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-users';
+    protected static ?string $recordTitleAttribute = 'email';
+
+    protected static string|\BackedEnum|null $navigationIcon = 'phosphor-users';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Customers';
 
@@ -40,7 +43,7 @@ class UserResource extends Resource
                 ->revealable()
                 ->required(fn (string $operation): bool => $operation === 'create')
                 ->dehydrated(fn (?string $state): bool => filled($state))
-                ->minLength(12),
+                ->rule(Password::defaults()),
         ]);
     }
 
@@ -50,7 +53,7 @@ class UserResource extends Resource
             ->columns([
                 TextColumn::make('name')->searchable()->sortable(),
                 TextColumn::make('email')->searchable()->sortable(),
-                TextColumn::make('type')->badge(),
+                TextColumn::make('type')->badge()->color('gray')->formatStateUsing(fn ($state): string => ucfirst(str_replace('_', ' ', $state instanceof \BackedEnum ? $state->value : (string) $state))),
                 TextColumn::make('disabled_at')->label('State')->formatStateUsing(fn ($state): string => $state ? 'Disabled' : 'Active')->badge(),
                 TextColumn::make('created_at')->dateTime()->sortable(),
             ])

@@ -36,7 +36,7 @@ class OperationResource extends Resource
 
     protected static ?string $model = Operation::class;
 
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-arrow-path';
+    protected static string|\BackedEnum|null $navigationIcon = 'phosphor-arrows-clockwise';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Operate';
 
@@ -57,17 +57,22 @@ class OperationResource extends Resource
                     ->copyableState(fn (Operation $record): string => $record->id)
                     ->copyMessage('Full operation ID copied')
                     ->searchable()->limit(12)->tooltip(fn (Operation $record): string => $record->id),
-                TextColumn::make('type')->formatStateUsing(fn (string $state): string => self::TYPES[$state] ?? $state)->description(fn (Operation $record): string => $record->type)->searchable()->sortable()->wrap(),
-                TextColumn::make('status')->badge()->sortable(),
-                TextColumn::make('actor.email')->label('Requested by')->placeholder('System')->searchable()->sortable()->toggleable(),
-                TextColumn::make('attempts')->numeric()->sortable(),
-                TextColumn::make('error')->searchable()->limit(80)->tooltip(fn (Operation $record): ?string => $record->error)->wrap()->placeholder('—'),
+                TextColumn::make('type')->formatStateUsing(fn (string $state): string => self::TYPES[$state] ?? $state)->searchable()->sortable(),
+                TextColumn::make('status')->badge()->sortable()->formatStateUsing(fn ($state): string => ucfirst(str_replace('_', ' ', $state instanceof \BackedEnum ? $state->value : (string) $state)))->color(fn (string $state): string => match ($state) {
+                    'succeeded' => 'success',
+                    'failed' => 'danger',
+                    'running' => 'info',
+                    default => 'gray',
+                }),
+                TextColumn::make('actor.email')->label('Requested by')->placeholder('System')->searchable()->sortable()->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('attempts')->numeric()->sortable()->alignEnd()->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('error')->searchable()->limit(40)->tooltip(fn (Operation $record): ?string => strlen((string) $record->error) > 40 ? $record->error : null),
                 TextColumn::make('created_at')->label('Requested')->dateTime()->since()->sortable(),
                 TextColumn::make('started_at')->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('finished_at')->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('duration')->state(function (Operation $record): string {
                     if ($record->started_at === null) {
-                        return '—';
+                        return 'Not started';
                     }
 
                     return $record->started_at->diffForHumans($record->finished_at ?? now(), true);
@@ -84,7 +89,7 @@ class OperationResource extends Resource
                 SelectFilter::make('actor')->relationship('actor', 'email')->searchable()->preload(),
             ])
             ->recordActions([
-                Action::make('retry')
+                Action::make('retry')->icon('phosphor-arrow-clockwise')
                     ->visible(fn (Operation $record): bool => $record->status === 'failed')
                     ->requiresConfirmation()
                     ->action(function (Operation $record): void {

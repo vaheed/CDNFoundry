@@ -158,8 +158,11 @@ final class OpsDashboardService
         return $this->remember('queues', $context, 10, function (): array {
             $labels = [
                 'interactive' => 'Interactive',
-                'runtime' => 'Runtime deployment',
-                'certificate_purge' => 'Certificates and purge',
+                'dns' => 'DNS publication',
+                'edge' => 'Edge deployment',
+                'verification' => 'Verification',
+                'tls' => 'Certificates',
+                'purge' => 'Purge',
                 'bulk_maintenance' => 'Bulk maintenance',
             ];
 

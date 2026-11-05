@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DomainLifecycleState;
+use App\Http\Resources\EdgeRevisionResource;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
@@ -85,6 +86,7 @@ class ProxyController extends Controller
             'origin_role' => ['sometimes', 'in:primary,backup'],
         ]);
         $operation = $record->requestOriginTest($request->user(), $selected['origin_role'] ?? 'primary', $selected['edge_ids'] ?? []);
+        AuditLog::record($request->user(), 'proxy.origin_test_requested', $record, ['operation_id' => $operation->id, 'origin_role' => $selected['origin_role'] ?? 'primary'], $request->ip());
 
         return response()->json(['data' => ['operation_id' => $operation->id, 'status' => 'pending']], 202);
     }
@@ -101,7 +103,7 @@ class ProxyController extends Controller
     {
         Gate::authorize('view', $domain);
 
-        return response()->json(['data' => ['desired_revision' => $domain->revision, 'active_revision' => $domain->active_edge_revision, 'placement' => DB::table('domain_edge_placements')->where('domain_id', $domain->id)->first()]]);
+        return response()->json(['data' => ['desired_revision' => $domain->revision, 'active_revision' => $domain->active_edge_revision, 'placement' => DB::table('domain_edge_placements')->where('domain_id', $domain->id)->first(['state', 'desired_revision', 'drain_after', 'updated_at'])]]);
     }
 
     public function deploy(Request $request, Domain $domain): JsonResponse
@@ -115,7 +117,7 @@ class ProxyController extends Controller
     {
         Gate::authorize('view', $domain);
 
-        return response()->json(['data' => EdgeRevision::query()->where('domain_id', $domain->id)->orderByDesc('revision')->cursorPaginate(50)]);
+        return EdgeRevisionResource::collection(EdgeRevision::query()->where('domain_id', $domain->id)->orderByDesc('revision')->cursorPaginate(50));
     }
 
     public function rollback(Request $request, Domain $domain): JsonResponse
@@ -135,6 +137,7 @@ class ProxyController extends Controller
     private function queue(Request $request, Domain $domain, string $type): JsonResponse
     {
         $operation = Operation::coalesceDomain($type, $domain->id, $request->user()->id);
+        AuditLog::record($request->user(), 'proxy.deploy_requested', $domain, ['operation_id' => $operation->id, 'revision' => $domain->revision], $request->ip());
         ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
 
         return response()->json(['data' => ['operation_id' => $operation->id, 'status' => $operation->status]], 202);
