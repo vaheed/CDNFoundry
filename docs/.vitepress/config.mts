@@ -54,6 +54,7 @@ const getStarted = [
     items: [
       { text: 'Product model', link: '/concepts/' },
       { text: 'CDN fundamentals', link: '/concepts/cdn-fundamentals' },
+      { text: 'How it works in four diagrams', link: '/concepts/the-four-flows' },
       { text: 'How CDNFoundry works', link: '/concepts/how-cdnfoundry-works' },
       { text: 'Desired state', link: '/concepts/desired-state' },
       { text: 'Domains and DNS', link: '/concepts/domains-and-dns' },
