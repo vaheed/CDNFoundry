@@ -44,9 +44,12 @@ def edge_call(method: str, path: str, payload: object | None, identity: dict[str
     result = subprocess.run(arguments, cwd=ROOT, check=True, capture_output=True, text=True, timeout=30)
     body, status_text = result.stdout.rsplit("\n", 1)
     status = int(status_text)
-    parsed = json.loads(body) if body else {}
     if status >= 400:
-        raise AssertionError(f"{method} {path} returned {status}: {body}")
+        raise AssertionError(f"{method} {path} returned {status}: {body[:600]}")
+    try:
+        parsed = json.loads(body) if body else {}
+    except json.JSONDecodeError as error:
+        raise AssertionError(f"{method} {path} returned {status} with a non-JSON body: {body[:600]}") from error
     return status, parsed
 
 
@@ -323,6 +326,10 @@ def start_edge_control(directory: pathlib.Path) -> pathlib.Path:
         "-v", f"{directory / 'edge-proxy-secret.conf'}:/run/secrets/edge-proxy-secret.conf:ro",
         "nginx:1.30.3-alpine",
     ], cwd=ROOT, check=True, capture_output=True, text=True, timeout=30)
+    # PHP-FPM listens only on its own private network, which this nginx must also join to reach the control plane.
+    project = os.environ.get("COMPOSE_PROJECT_NAME", "cdnfoundry-dev")
+    subprocess.run(["docker", "network", "connect", f"{project}_fpm", EDGE_CONTROL_NAME],
+                   cwd=ROOT, check=True, capture_output=True, text=True, timeout=30)
     time.sleep(0.5)
     running = subprocess.run(
         ["docker", "inspect", "-f", "{{.State.Running}}", EDGE_CONTROL_NAME],
