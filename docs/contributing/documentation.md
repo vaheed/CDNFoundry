@@ -20,6 +20,72 @@ The package overrides keep VitePress on its stable `1.6.4` site contract while
 pinning audited transitive Vite and YAML parser patches. Recheck the overrides
 when upgrading VitePress; do not remove them without a clean `npm audit`.
 
+## Writing rules
+
+These rules apply to every page. A reviewer checks a page against this list
+before it merges, and records the result in the pull request.
+
+### Shape of a page
+
+1. **Task first.** A task page has four parts, in this order: what you will do
+   and what you need, the steps, how to check that it worked, and what to do
+   if it did not.
+2. **One page per task or concept.** If a page answers two questions, split it.
+3. **Command or screen first.** Show the command or the screen, then explain it
+   in a sentence or two.
+4. **Every step has an expected result.** After a command, say what the reader
+   sees when it worked.
+5. **Show each way once, in tabs.** When a task can be done in the admin panel,
+   through the API, and with Fleet, show all of them in the same tabs:
+   **Admin panel**, **API**, **Fleet CLI** (or **Fleet web**). Do not write
+   separate pages per method.
+
+### Language
+
+1. Short sentences. One idea in each.
+2. Plain English that a reader who does not speak English natively can follow.
+   Prefer "use" to "utilise" and "start" to "initiate".
+3. Name the actor. Write "Fleet copies the file", not "the file is copied".
+4. Define a CDN or DNS term the first time a page uses it, or link to the
+   [glossary](../reference/glossary.md).
+5. No marketing words. Every claim names a feature that exists and passed
+   qualification.
+6. No em dashes. Use a comma, a colon, or a new sentence.
+
+### Where contract language lives
+
+Product rules from `AGENTS.md` belong in the contributor pages. A user page
+tells the reader what to do and what happens. It does not copy the rule list
+that explains why the product behaves that way. Link to
+[the architecture pages](../architecture/index.md) for the reasons.
+
+### Review checklist
+
+Copy this list into the pull request for each page you add or change.
+
+- [ ] The page has one task or one concept.
+- [ ] The first screen says what the reader will do and what they need.
+- [ ] The command or screen comes before its explanation.
+- [ ] Every step has an expected result.
+- [ ] A way to check success and a way to recover are present.
+- [ ] Tabs show every supported way (Admin panel, API, Fleet).
+- [ ] No rule list is copied from `AGENTS.md`.
+- [ ] Terms are defined or linked.
+- [ ] `make docs-check` passes.
+
+### Components
+
+Use the documentation components instead of plain Markdown where they fit.
+
+- Cards: `<CardGrid>` with `<Card title="..." link="...">` for paths into the
+  site.
+- Steps: wrap an ordered list in `<div class="steps">` for a numbered
+  procedure.
+- Tabs: `<DocTabs :labels="['Admin panel', 'API', 'Fleet CLI']">` with one
+  `<template #tab-1>` per label.
+- Callouts: `::: info`, `::: tip`, `::: warning`, `::: danger`.
+- Diagrams: a `mermaid` fence.
+
 ## Source-of-truth order
 
 1. executable code and runtime configuration;
