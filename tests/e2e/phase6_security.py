@@ -310,7 +310,7 @@ def main() -> None:
             "quarantine.example": host(8, state="quarantined"),
             "body.example": host(9, maximum_request_body_size=8),
         }
-        state = {"schema_version": 1, "sequence": 1, "certificates": {}, "hosts": hosts}
+        state = {"schema_version": 1, "sequence": 1, "generation_id": "e2e-generation-1", "certificates": {}, "hosts": hosts}
         runtime = temporary / "active.json"
         runtime.write_text(json.dumps(state, separators=(",", ":")))
         for file in (runtime, temporary / "tls.key", temporary / "tls.crt"):

@@ -84,7 +84,7 @@ def main() -> None:
             "server { listen 80; location / { default_type text/plain; "
             "return 200 'xff=$http_x_forwarded_for\nforwarded=$http_forwarded\ninternal=$http_x_cdn_client_address\n'; } }\n")
         origin_config.chmod(0o644)
-        runtime = {"schema_version": 1, "sequence": 1, "certificates": {}, "hosts": {HOST: {
+        runtime = {"schema_version": 1, "sequence": 1, "generation_id": "e2e-generation-1", "certificates": {}, "hosts": {HOST: {
             "domain": HOST, "revision": 1, "settings": {"enabled": True},
             "cache": {"enabled": False}, "origin": {
                 "host": f"{PREFIX}-origin", "port": 80, "scheme": "http", "host_header": "origin.example", "sni": None,

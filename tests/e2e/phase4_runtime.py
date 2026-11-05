@@ -32,7 +32,7 @@ def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 
 def state(hosts: dict[str, str], sequence: int) -> dict:
-    return {"schema_version": 1, "sequence": sequence, "certificates": {}, "hosts": {
+    return {"schema_version": 1, "sequence": sequence, "generation_id": f"e2e-generation-{sequence}", "certificates": {}, "hosts": {
         hostname: {"domain": hostname, "revision": sequence, "settings": {"enabled": True}, "cache": {
             "enabled": True, "edge_ttl_seconds": 3600, "browser_ttl_seconds": 300,
             "maximum_object_bytes": 104857600, "respect_origin_headers": True,

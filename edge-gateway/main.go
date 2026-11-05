@@ -287,9 +287,6 @@ func validate(candidate config) (*routingTable, error) {
 			routes[key] = target
 		}
 	}
-	if candidate.GenerationID == "" {
-		candidate.GenerationID = fmt.Sprintf("legacy-%020d", candidate.Revision)
-	}
 	if len(candidate.GenerationID) < 22 || len(candidate.GenerationID) > 64 {
 		return nil, errors.New("invalid gateway generation identity")
 	}

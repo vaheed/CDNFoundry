@@ -46,11 +46,7 @@ class IdempotentRequest
                     $existing = null;
                 }
                 if ($existing !== null) {
-                    // Retain compatibility with receipts written before query
-                    // parameters became part of request identity.
-                    $legacyHash = hash('sha256', $request->method().'|'.$request->path().'|'.$request->getContent());
-                    if (! hash_equals($existing->request_hash, $hash)
-                        && ($request->getQueryString() !== null || ! hash_equals($existing->request_hash, $legacyHash))) {
+                    if (! hash_equals($existing->request_hash, $hash)) {
                         return response()->json(['message' => 'This key was used with a different request.', 'code' => 'idempotency_conflict', 'details' => (object) []], 409);
                     }
 

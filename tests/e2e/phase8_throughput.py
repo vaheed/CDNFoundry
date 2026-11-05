@@ -115,6 +115,7 @@ def main() -> None:
         runtime = {
             "schema_version": 1,
             "sequence": 1,
+            "generation_id": "e2e-generation-1",
             "certificates": {
                 "phase8-throughput": {
                     "id": "phase8-throughput", "certificate_pem": certificate, "chain_pem": "",

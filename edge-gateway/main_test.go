@@ -73,9 +73,9 @@ func TestLoadInitialFallsBackFromAnInvalidCandidate(t *testing.T) {
 
 func TestValidateAcceptsBoundedDualStackRoutes(t *testing.T) {
 	candidate := config{
-		SchemaVersion: 1,
-		Revision:      7,
-		Listeners:     []string{"192.0.2.10:80", "192.0.2.10:443", "[2001:db8::10]:443"},
+		SchemaVersion: 1, GenerationID: "generation-0000000000001",
+		Revision:  7,
+		Listeners: []string{"192.0.2.10:80", "192.0.2.10:443", "[2001:db8::10]:443"},
 		Routes: []route{{
 			Address: "192.0.2.10", Hostname: "www.example.test",
 			HTTP: "cell-a:8081", HTTPS: "cell-a:8444",
@@ -91,11 +91,11 @@ func TestValidateAcceptsBoundedDualStackRoutes(t *testing.T) {
 }
 
 func TestValidateAcceptsAnEmptyFailClosedCandidate(t *testing.T) {
-	table, err := validate(config{SchemaVersion: 1, Revision: 0})
+	table, err := validate(config{SchemaVersion: 1, Revision: 0, GenerationID: "generation-00000000000000"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if table.revision != 0 || len(table.routes) != 0 || table.generationID != "legacy-00000000000000000000" {
+	if table.revision != 0 || len(table.routes) != 0 || table.generationID != "generation-00000000000000" {
 		t.Fatalf("unexpected empty routing table: %#v", table)
 	}
 }
@@ -117,7 +117,7 @@ func TestValidateAcceptsListenersBeforeTheFirstHostnameRoute(t *testing.T) {
 
 func TestValidateRejectsDuplicateAndInvalidCandidates(t *testing.T) {
 	base := config{
-		SchemaVersion: 1, Revision: 1, Listeners: []string{"192.0.2.10:80", "192.0.2.10:443"},
+		SchemaVersion: 1, GenerationID: "generation-0000000000001", Revision: 1, Listeners: []string{"192.0.2.10:80", "192.0.2.10:443"},
 		Routes: []route{{Address: "192.0.2.10", Hostname: "www.example.test", HTTP: "cell-a:8081"}},
 	}
 	tests := []config{

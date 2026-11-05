@@ -100,11 +100,7 @@ class Domain extends Model
      */
     public function assignedNameservers(): array
     {
-        if ($this->delegation_nameservers !== null) {
-            return $this->delegation_nameservers;
-        }
-
-        return $this->nameservers_verified_at === null ? [] : (NameserverPairs::all()[0] ?? []);
+        return $this->delegation_nameservers ?? [];
     }
 
     /**

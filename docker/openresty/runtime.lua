@@ -143,9 +143,6 @@ local function load()
     local raw = file:read("*a"); file:close()
     if #raw > 64 * 1024 * 1024 then return nil, "runtime state exceeds limit" end
     local decoded = cjson.decode(raw)
-    if decoded and decoded.generation_id == nil and type(decoded.sequence) == "number" then
-        decoded.generation_id = "legacy-" .. tostring(decoded.sequence)
-    end
     if not decoded or decoded.schema_version ~= 1 or type(decoded.hosts) ~= "table"
         or type(decoded.generation_id) ~= "string" or #decoded.generation_id > 64 then
         return nil, "invalid runtime state"

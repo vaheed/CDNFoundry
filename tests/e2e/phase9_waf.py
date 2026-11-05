@@ -81,7 +81,7 @@ def main() -> None:
             "strict.waf.test": host("strict", True, 262144, origin_ip),
         }
         runtime = temporary / "runtime.json"
-        runtime.write_text(json.dumps({"schema_version": 1, "sequence": 1, "certificates": {}, "hosts": hosts}))
+        runtime.write_text(json.dumps({"schema_version": 1, "sequence": 1, "generation_id": "e2e-generation-1", "certificates": {}, "hosts": hosts}))
         runtime.chmod(0o644)
         run("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
             "-subj", "/CN=waf.test", "-keyout", str(temporary / "tls.key"), "-out", str(temporary / "tls.crt"))
