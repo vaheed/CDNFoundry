@@ -4,6 +4,9 @@ namespace App\Filament\Admin\Pages;
 
 use App\Filament\Admin\Pages\Concerns\BuildsSettingFields;
 use App\Models\AuditLog;
+use App\Models\Domain;
+use App\Models\Edge;
+use App\Models\User;
 use App\Support\PlatformSettings as SettingsRegistry;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -40,10 +43,29 @@ class FirstRunSetup extends Page
         return AuditLog::query()->where('action', 'setup.completed')->exists();
     }
 
-    /** The entry disappears once the wizard has been finished or skipped. */
+    /** A fresh install: the administrator is the only user and nothing has been created or changed yet. */
+    public static function systemIsUntouched(): bool
+    {
+        return User::query()->count() <= 1
+            && ! Domain::query()->exists()
+            && ! Edge::query()->exists()
+            && ! AuditLog::query()->where('action', '!=', 'auth.login')->exists();
+    }
+
+    /** Offered only on a fresh install; any change to the system, finishing, or skipping retires it for good. */
+    public static function available(): bool
+    {
+        return ! self::completed() && self::systemIsUntouched();
+    }
+
+    public static function canAccess(): bool
+    {
+        return (auth()->user()?->isAdmin() ?? false) && self::available();
+    }
+
     public static function shouldRegisterNavigation(): bool
     {
-        return ! self::completed();
+        return self::available();
     }
 
     public function getSubheading(): ?string

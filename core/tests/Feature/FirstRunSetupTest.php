@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Filament\Admin\Pages\FirstRunSetup;
+use App\Models\AuditLog;
 use App\Models\User;
 use App\Support\PlatformSettings;
 use Filament\Facades\Filament;
@@ -79,5 +80,35 @@ class FirstRunSetupTest extends TestCase
 
         $this->assertSame($before, app(PlatformSettings::class)->values('display'));
         $this->assertDatabaseHas('audit_logs', ['action' => 'setup.completed']);
+    }
+
+    public function test_it_is_offered_only_on_an_untouched_install_with_a_single_administrator(): void
+    {
+        $this->admin();
+        $this->get('/admin/first-run-setup')->assertOk();
+
+        User::factory()->create();
+
+        $this->assertFalse(FirstRunSetup::shouldRegisterNavigation());
+        $this->get('/admin/first-run-setup')->assertForbidden();
+    }
+
+    public function test_any_change_to_the_system_retires_it_for_good(): void
+    {
+        $admin = $this->admin();
+        $this->assertTrue(FirstRunSetup::available());
+
+        AuditLog::record($admin, 'system_settings.updated', null, [], '127.0.0.1');
+
+        $this->assertFalse(FirstRunSetup::available());
+        $this->get('/admin/first-run-setup')->assertForbidden();
+    }
+
+    public function test_signing_in_alone_does_not_count_as_a_change(): void
+    {
+        $admin = $this->admin();
+        AuditLog::record($admin, 'auth.login', null, [], '127.0.0.1');
+
+        $this->assertTrue(FirstRunSetup::available());
     }
 }
