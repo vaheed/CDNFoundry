@@ -68,7 +68,7 @@ func (f *fakeControl) serve() *httptest.Server {
 				rows = append(rows, map[string]any{
 					"sequence": a.sequence, "kind": a.kind, "domain_id": a.domainID, "revision": a.revision, "checksum": checksum,
 					"signature": hex.EncodeToString(ed25519.Sign(f.private, []byte(checksum))), "schema_version": 1,
-					"minimum_agent_version": "1.0.0", "maximum_agent_version": "1.99.0",
+					"minimum_agent_version": "2.0.0", "maximum_agent_version": "2.99.0",
 				})
 				if f.relabel != nil {
 					f.relabel(rows[len(rows)-1])
@@ -320,7 +320,7 @@ func TestFullSnapshotSkipsOneBadDomainAndServesTheRest(t *testing.T) {
 	}
 	publicHex := hex.EncodeToString(public)
 	payload, checksum, signature := signedGzipJSON(t, private, map[string]any{
-		"schema_version": 1, "minimum_agent_version": "1.0.0", "maximum_agent_version": "1.99.0",
+		"schema_version": 1, "minimum_agent_version": "2.0.0", "maximum_agent_version": "2.99.0",
 		"artifacts": []map[string]any{
 			{"sequence": 4, "domain_id": 1, "kind": "domain", "payload": json.RawMessage(domainPayload(1, "one.test", 1, "www.one.test"))},
 			{"sequence": 6, "domain_id": 2, "kind": "domain", "payload": json.RawMessage(`{"schema_version":1,"domain_id":2,"domain":"two.test","revision":1,"hostnames":[{"hostname":"www.two.test","origin":{}}]}`)},

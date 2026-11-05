@@ -60,7 +60,7 @@ class EdgeIdentityRenewalTest extends TestCase
         $expires = now()->addDays(40)->timestamp;
 
         $this->withHeaders($headers)->postJson('/edge/v1/heartbeat', [
-            'agent_version' => '1.2.1', 'listener_ready' => true, 'active_sequence' => 0, 'identity_expires_at' => $expires,
+            'agent_version' => '2.0.0', 'listener_ready' => true, 'active_sequence' => 0, 'identity_expires_at' => $expires,
             'cells' => [['name' => 'cell-01', 'status' => 'ready', 'capacity' => ['active_connections' => 0]]],
         ])->assertOk();
 

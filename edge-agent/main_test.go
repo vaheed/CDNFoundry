@@ -59,7 +59,7 @@ func TestVerifyAndCompatibility(t *testing.T) {
 	if err := verifyDelivery(scope, checksum, 2, time.Now().Add(-time.Second).Unix(), delivery, hex.EncodeToString(public)); err == nil {
 		t.Fatal("expired delivery accepted")
 	}
-	if !compatible("1.0.0", "1.99.99") || compatible("1.0.0", "1.0.99") {
+	if !compatible("2.0.0", "2.99.99") || compatible("2.1.0", "2.99.99") {
 		t.Fatal("compatibility bounds are incorrect")
 	}
 }
@@ -112,7 +112,7 @@ func TestControlRequestsRejectPlaintextAndRedirects(t *testing.T) {
 }
 
 func TestVersionCommand(t *testing.T) {
-	if version != "1.2.1" {
+	if version != "2.0.0" {
 		t.Fatalf("unexpected release version %q", version)
 	}
 }
@@ -598,7 +598,7 @@ func TestFreshFullSnapshotThenIncrementalArtifact(t *testing.T) {
 	}
 	publicHex := hex.EncodeToString(public)
 	fullPayload, fullChecksum, fullSignature := signedGzipJSON(t, private, map[string]any{
-		"schema_version": 1, "minimum_agent_version": "1.0.0", "maximum_agent_version": "1.99.0",
+		"schema_version": 1, "minimum_agent_version": "2.0.0", "maximum_agent_version": "2.99.0",
 		"artifacts": []map[string]any{{"sequence": 4, "domain_id": 1, "kind": "domain", "payload": json.RawMessage(runtimeDomain(4))}},
 	})
 	incrementalPayload := []byte(runtimeDomain(5))
@@ -619,7 +619,7 @@ func TestFreshFullSnapshotThenIncrementalArtifact(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{
 				"sequence": 5, "kind": "domain", "domain_id": 1, "revision": 5, "checksum": incrementalChecksumHex,
 				"signature": incrementalSignature, "schema_version": 1,
-				"minimum_agent_version": "1.0.0", "maximum_agent_version": "1.99.0",
+				"minimum_agent_version": "2.0.0", "maximum_agent_version": "2.99.0",
 			}}})
 		case strings.HasPrefix(r.URL.Path, "/edge/v1/config/artifacts/"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"encoded_payload": base64.StdEncoding.EncodeToString(incrementalPayload), "data": map[string]any{"sequence": 5}, "expires_at": expiresAt, "delivery_signature": incrementalDeliverySignature})
@@ -653,7 +653,7 @@ func TestFreshEmptyFullSnapshotActivatesBootstrapGeneration(t *testing.T) {
 	}
 	publicHex := hex.EncodeToString(public)
 	fullPayload, fullChecksum, fullSignature := signedGzipJSON(t, private, map[string]any{
-		"schema_version": 1, "minimum_agent_version": "1.0.0", "maximum_agent_version": "1.99.0",
+		"schema_version": 1, "minimum_agent_version": "2.0.0", "maximum_agent_version": "2.99.0",
 		"artifacts": []map[string]any{},
 	})
 	expiresAt := time.Now().Add(5 * time.Minute).Unix()

@@ -500,8 +500,8 @@ class EdgeAgentController extends Controller
         abort_if($latest->count() > 100000, 409, 'The edge snapshot exceeds the configured per-edge domain bound.');
         $payload = [
             'schema_version' => 1,
-            'minimum_agent_version' => '1.0.0',
-            'maximum_agent_version' => '1.99.0',
+            'minimum_agent_version' => '2.0.0',
+            'maximum_agent_version' => '2.99.0',
             'artifacts' => $latest,
         ];
         $encoded = ArtifactSigner::encode($payload);
