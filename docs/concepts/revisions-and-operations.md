@@ -1,14 +1,14 @@
 ---
 title: Revisions and operations
-description: Understand monotonic revisions, operation receipts, retries, and rollback.
+description: How revisions, operation IDs, idempotency keys, retries, and rollback work, and how to tell when a change is really live.
 ---
 
 # Revisions and operations
 
 ::: warning Accepted is not active
-`202 Accepted` proves that bounded work was recorded or queued. Do not announce
-success until the operation and every relevant DNS, edge, TLS, cache, or purge
-acknowledgement reaches the intended revision.
+`202 Accepted` means the work was recorded or queued. Do not report success until
+the operation has finished and every DNS host, edge, TLS, cache, or purge target
+has acknowledged the new revision.
 :::
 
 ```mermaid
@@ -26,65 +26,74 @@ flowchart LR
     end
 ```
 
-Each domain revision is monotonic. DNS and edge deployments record desired and
-active revisions separately so operators can see pending work and last-valid
-state. Revision numbers are never reused.
+A revision is a number that only goes up and is never reused. DNS and edge
+deployments store the desired revision and the active revision separately. This
+shows you which work is pending and which state is the last valid one.
 
-## Operation receipts
+## Operations
 
-Long-running changes create an `operations` row and return its UUID. Poll
+A long change creates an operation and returns its UUID. Poll
 `GET /api/operations/{operation}` until the status is `succeeded` or `failed`.
-Administrators can list all operations, inspect failures, and retry supported
-types, including `usage.rebuild`. Every request that changes state or queues
-work, such as a deploy, an origin test, a DNS reconcile, or a usage rebuild,
-writes an audit entry with the actor and the operation id. A user can read an operation only through its domain: every user assigned
-to the domain can read every operation of that domain, including a coalesced
-operation another member started, and a request for any other operation
-answers `403`. Operations that belong to no domain, such as global
-reconciles, are administrator-only. The domain is stored as a typed column on
-the operation, and the database allows only one unfinished `dns.zone_reconcile`
-and one unfinished `edge.domain_reconcile` per domain.
+While it runs, the status is `pending` or `running`. In the admin panel, open
+**Operate → Operations**.
 
-A DNS operation is marked `failed` only when its retry window ends. While a DNS
-host is unreachable the job retries with backoff (10, 30, 60, 120, then 300
-seconds) for up to 30 minutes, the operation stays `running` with the last
-error visible, and an outage that ends inside the window finishes
-`succeeded`. A scheduled drift check (`cdnf:dns:repair-drift`, every five
-minutes) later compares what each DNS host serves with desired state and queues
-a reconcile for any difference, so a host that was down longer is repaired once
-it returns.
+- Administrators can list all operations, read failures, and retry supported types,
+  such as `usage.rebuild` (`POST /api/admin/operations/{operation}/retry`).
+- Every request that changes state or queues work writes an audit entry with the
+  actor and the operation ID.
+- A domain user can read an operation only through its domain. Every user assigned
+  to the domain can read all of that domain's operations, including a merged
+  operation that another member started. Any other operation returns `403`.
+- Operations that belong to no domain, such as global reconciles, are for
+  administrators only.
+- The database allows only one unfinished `dns.zone_reconcile` and one unfinished
+  `edge.domain_reconcile` per domain.
 
-Operations are not a promise that every external target will succeed
-immediately. The operation response and the domain-specific deployment endpoint
-together show control-plane completion and target acknowledgement.
+### Retries and DNS outages
+
+A DNS operation becomes `failed` only when its retry window ends. If a DNS host is
+unreachable, the job retries after 10, 30, 60, 120, and then 300 seconds, for up to
+30 minutes. The operation stays `running` and shows the last error. If the outage
+ends inside the window, the operation finishes as `succeeded`.
+
+A scheduled check (`cdnf:dns:repair-drift`, every five minutes) compares what each
+DNS host serves with the desired state. It queues a reconcile for any difference. A
+host that was down longer is repaired when it comes back.
+
+A finished operation does not prove that every target has changed. Read the
+operation and the deployment status for the domain together.
 
 | Evidence | What it proves |
 | --- | --- |
-| HTTP `200` or `201` | Synchronous control-state action completed |
-| HTTP `202` and operation ID | Work was durably accepted |
+| HTTP `200` or `201` | A change that needs no background work is done |
+| HTTP `202` and operation ID | The work was saved |
 | Operation `succeeded` | The job's completion condition passed |
-| DNS active checksum | One DNS cluster activated the candidate |
-| Edge acknowledgement | One agent/cell activated the sequence |
-| Runtime probe | The real listener serves expected behavior |
+| DNS active checksum | One DNS host activated the new zone |
+| Edge acknowledgement | One agent and cell activated the sequence |
+| Runtime probe | The real listener serves the expected behavior |
 
 ## Idempotent requests
 
-Mutating account and administrator routes use the `idempotent` middleware.
-Supply a UUID in `Idempotency-Key` when retrying is possible. The same method,
-path, and normalized payload replays the prior response for 24 hours and sets
-`Idempotency-Replayed: true`. Reusing the key with different input returns
-`409 idempotency_conflict`.
+Changing requests accept an `Idempotency-Key` header. It must be a UUID. Send the
+same key when you retry. The same method, path, and payload replays the earlier
+response for 24 hours and sets `Idempotency-Replayed: true`. The same key with
+different input returns `409 idempotency_conflict`. A key that is not a UUID
+returns `422 invalid_idempotency_key`.
 
-Plaintext tokens are never stored in an idempotency response. Token creation is
-therefore a one-time secret boundary even when the request carries a key.
+CDNFoundry never stores a plaintext token in a saved response. A token is shown
+once, even if the request carried a key.
 
 ## Rollback
 
-Edge configuration rollback selects a retained validated revision. Rollback
-creates a new desired revision and new artifacts; it does not decrement the
-revision counter or restore a database backup. Retention keeps every revision
-inside the configured time window and at least the configured minimum number per
-domain, while preserving active and relevant rollback points.
+To roll back a domain's proxy configuration, choose a retained, validated edge
+revision (`POST /api/domains/{domain}/rollback`). Rollback creates a new desired
+revision and new artifacts. It does not lower the revision number and does not
+restore a database backup. Only the fields you own are restored, and CDNFoundry
+validates them again against the current rules. If an old revision no longer
+passes, CDNFoundry refuses it as a whole.
 
-Cache policy rollback uses the same mechanism. Full cache purge is different:
-it increments the cache epoch instead of scanning a filesystem.
+Retention is set in **Platform settings**, in the Configuration history group. By
+default CDNFoundry keeps every validated revision from the last 1 day, and at least
+10 revisions per domain whatever their age.
+
+A full cache purge is different. It raises the cache epoch. It does not scan a disk.

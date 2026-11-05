@@ -1,93 +1,161 @@
 ---
 title: First domain
-description: Configure system DNS, add a domain, delegate it, and activate serving.
+description: Register the DNS primary, set the platform DNS identity, add a customer domain, delegate it, and activate it.
 ---
 
 # First domain
 
-This workflow assumes an administrator account and deployed, reachable
-authoritative DNS runtimes. It registers those runtimes as healthy clusters
-before applying platform identity.
+In this page you prepare DNS for the whole platform once, then add and activate
+your first customer domain.
+
+**You need:**
+
+- an administrator account;
+- DNS hosts that are already deployed and reachable (see the
+  [Production quick start](../deployment/production-quick-start.md));
+- a domain you control for the platform itself, for example `cdn.example.net`,
+  and access to its registrar.
 
 ::: warning Delegation is an external change
-Create and verify platform identity, authoritative clusters, glue, and direct
-UDP/TCP answers before changing registrar delegation. CDNFoundry cannot roll
-back an incorrect parent-zone or registrar change.
+Test the platform zone and both DNS hosts directly before you change registrar
+delegation. CDNFoundry cannot undo a wrong change at a registrar or parent zone.
 :::
 
 ## Register the DNS primary first
 
-In **Infrastructure → DNS clusters**, create the one hidden PowerDNS primary
-with:
+The DNS primary is the hidden PowerDNS server that holds the master copy of every
+zone. Register it before anything else. Registering a row does not start
+PowerDNS or DNSdist. They must already run.
 
-- a descriptive unique name and location;
-- the primary's private API URL (`http://pdns-primary:8081`);
-- its transfer endpoint, the address and port DNS nodes pull zones from;
-- its API key;
-- server ID, normally `localhost`;
-- the nameserver identities your DNS nodes serve.
+<DocTabs :labels="['Admin panel', 'API']">
+<template #tab-1>
 
-A new cluster is disabled until its asynchronous connection test succeeds.
-Enable it only after the last health result is successful. Only one primary can
-be enabled. The primary and the DNS nodes must already be deployed; a
-control-plane row does not start PowerDNS or DNSdist.
+Open **Infrastructure → DNS primary** and create the primary. Enter:
 
-## Prepare and deploy platform identity
+- a unique **Name** and a **Location**;
+- the **API URL**, the private PowerDNS API address (in the Compose layout this is `http://pdns-primary:8081`);
+- the **Transfer endpoint**: the IP address and port that DNS nodes pull zones from, for example `192.0.2.10:5300`;
+- the **API key** (at least 8 characters);
+- the **Server ID**, normally `localhost`;
+- the **Nameservers** your DNS nodes serve (at least two).
 
-In `/admin/system-dns-identity`, enter:
+</template>
+<template #tab-2>
 
-- a platform zone such as `cdn.example.net`;
-- nameservers such as `ns1.cdn.example.net` and `ns2.cdn.example.net`;
-- at least two **customer nameserver pairs** (for example `ns1`/`ns2` and `ns3`/`ns4`) with public glue addresses; a second pair is what lets a competing claim on one name prove control;
-- one IPv4 glue address for each nameserver, and IPv6 only where reachable;
-- a proxy hostname such as `proxy.cdn.example.net`;
-- SOA values within the displayed validation bounds.
+```sh
+curl -X POST "$CDNF_URL/api/admin/dns/clusters" \
+  -H "Authorization: Bearer $CDNF_TOKEN" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d @primary.json
+curl -X POST "$CDNF_URL/api/admin/dns/clusters/$CLUSTER_ID/test" \
+  -H "Authorization: Bearer $CDNF_TOKEN" \
+  -H "Idempotency-Key: $(uuidgen)"
+```
 
-Preview first. The apply request requires the confirmation token bound to that
-exact normalized preview. Wait for its operation and every platform DNS
-deployment to succeed.
+`primary.json` uses the same fields as the panel form. See the
+[endpoint catalog](../reference/api/endpoints.md) for the exact names.
 
-Query each authoritative host directly over UDP and TCP. Only after both hosts
-serve the acknowledged platform revision should you create the required
-host/glue records and delegate the platform zone at the parent registrar.
-CDNFoundry cannot automate registrar configuration.
+</template>
+</DocTabs>
 
-## Create the customer domain
+**Expected result:** the new row starts disabled. A background connection test
+runs. When its last health result is healthy, turn on **Enabled**.
 
-In **Domains → Create domain**, enter the registrable domain name. CDNFoundry
-normalizes it to lower-case ASCII/Punycode and rejects public suffixes, IP
-addresses, single labels, wildcards, URLs, ports, and names still inside reclaim
-cooldown.
+Only one primary can be enabled. **If the test fails:** check the API URL, the
+API key, and that the `pdns-primary` container is healthy, then run the test again.
 
-Creation queues the allocation of a nameserver pair (chosen against the
-delegation the parent publishes now), then the initial SOA/NS zone deployment,
-and automatically queues public nameserver verification after that deployment
-succeeds. It does not require an origin and does not issue a certificate.
+## Set the platform DNS identity
 
-## Delegate and activate
+The platform identity is the zone and nameserver names that customers delegate
+to. Open **Infrastructure → System DNS identity** and enter:
 
-1. Create the customer domain and copy its **Assigned nameservers**. Each fresh
-   claim has its own readable pair and a seven-day expiry; never reuse another
-   claim's pair. If the name is already managed by someone else, you still get a
-   claim and a different pair: the current owner keeps the name until you change
-   the registrar delegation to your pair and verification succeeds.
-2. At the registrar (or authoritative parent for a delegated subdomain), set
-   exactly those names. Remove stale DS records from the previous provider;
-   CDNFoundry customer zones are unsigned.
-3. Watch the verification operation. Use **Verify nameservers** after propagation
-   if the automatic attempt failed. Parent authorities must agree; DNSSEC errors
-   remain visible and leave the domain pending.
-4. Successful verification activates the domain automatically. **Activate** is
-   the deliberate action for re-enabling an already verified disabled domain.
-5. Confirm that each DNS deployment has acknowledged the domain revision.
+- **Platform domain**, such as `cdn.example.net`;
+- **Proxy hostname**, a subdomain of the platform domain such as `proxy.cdn.example.net`;
+- **Nameservers**: 2 to 8, in an even number, each inside the platform domain, such as `ns1.cdn.example.net` and `ns2.cdn.example.net`. Each needs an IPv4 glue address. Add an IPv6 address only if it is reachable;
+- **Customer nameserver pairs**: 1 to 8 pairs of hostnames inside the platform domain, each with public addresses. Offer at least two pairs, such as `ns1`/`ns2` and `ns3`/`ns4`. A second claim on the same name always gets a different pair, so a second pair is what lets that claim prove control;
+- the **SOA** values and the default TTL. The form shows the allowed range for each. The SOA expire time must be larger than refresh plus retry.
 
-The administrator-only force-verify action exists for controlled local
-qualification; it is not proof of public delegation.
+Review the summary, then choose **Save DNS identity and queue update**. The
+API does this in two calls. `POST /api/admin/system/settings/dns/validate`
+returns a `confirmation_token` that is valid for 15 minutes. Then
+`PATCH /api/admin/system/settings/dns` applies that exact payload with the token
+and returns `202 Accepted`.
+
+**Expected result:** an operation appears under **Operate → Operations**. Wait
+until it and every platform DNS deployment succeed.
+
+## Delegate the platform zone
+
+1. Query each DNS host directly, over UDP and over TCP, and check that it
+   answers for the platform zone.
+2. At the parent registrar, create the host (glue) records for your nameservers
+   and delegate the platform zone to them. CDNFoundry cannot do this for you.
+
+**Expected result:** a public resolver returns your nameservers for the platform
+domain.
+
+## Add the customer domain
+
+<DocTabs :labels="['Admin panel', 'API']">
+<template #tab-1>
+
+Open **Domains**, choose **Add domain**, and enter the registrable domain name.
+
+</template>
+<template #tab-2>
+
+```sh
+curl -X POST "$CDNF_URL/api/domains" \
+  -H "Authorization: Bearer $CDNF_TOKEN" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "example.com"}'
+```
+
+</template>
+</DocTabs>
+
+CDNFoundry lower-cases the name and converts it to ASCII (Punycode). It rejects
+public suffixes, IP addresses, single labels, wildcards, URLs, ports, and names
+that are still in the reclaim cooldown.
+
+**Expected result:** the domain is *Pending verification*. A worker assigns a
+nameserver pair, deploys a first SOA and NS zone, and then checks the public
+delegation by itself. The domain needs no origin and no certificate yet.
+
+## Delegate and activate the domain
+
+<div class="steps">
+
+1. Open the domain and copy its **Assigned nameservers**. Each claim has its own
+   pair and expires after seven days. Never reuse another claim's pair. If
+   someone else already manages the name, you still get a claim and a different
+   pair. The current owner keeps the name until you set your pair at the
+   registrar and verification succeeds.
+2. At the registrar (or the parent zone, for a subdomain), set exactly those
+   names. Remove old DS records from the previous DNS provider. CDNFoundry
+   zones are not signed.
+3. Watch the verification operation. If the automatic attempt ran before the
+   change propagated, choose **Verify nameservers** (API:
+   `POST /api/domains/{domain}/verify-nameservers`). All parent authorities must
+   agree. A DNSSEC error keeps the domain pending and stays visible.
+4. Verification activates the domain. The **Activate** action
+   (`POST /api/domains/{domain}/activate`) re-enables a domain that was verified
+   and later disabled.
+5. Check that each DNS deployment reports the domain's current revision.
+
+</div>
+
+**Expected result:** the domain is *Active* and its DNS deployments are acknowledged.
+
+An administrator also sees **Force verify (local test)**. It exists for local
+qualification only. It is not proof of public delegation.
 
 ## Add content
 
 - Add DNS-only records with [Authoritative DNS](../guides/dns.md).
-- Add a proxied hostname and explicit safe origin with
+- Add a proxied hostname and an explicit, safe origin with
   [Proxy and origins](../guides/proxy-and-origins.md).
 - The first eligible proxied hostname starts [managed TLS](../guides/tls.md).
-- Assign domain users with [Users and access](../guides/users-and-access.md).
+- Give other people access with [Users and access](../guides/users-and-access.md).

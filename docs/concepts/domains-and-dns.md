@@ -1,6 +1,6 @@
 ---
 title: Domains and DNS concepts
-description: Understand domain lifecycle, delegation, DNS modes, and proxy publication.
+description: The domain lifecycle, how delegation works, the three record modes, and how proxied names are published.
 ---
 
 # Domains and DNS concepts
@@ -16,59 +16,65 @@ stateDiagram-v2
     Tombstoned --> Reclaimable: cooldown expires
 ```
 
-A domain begins as desired state without an origin. Its lifecycle is:
+A new domain has no origin. Its stored lifecycle state is `pending_verification`,
+`active`, `disabled`, or `deprovisioning`. The diagram also shows the steps after
+removal.
 
-`pending_verification` → `active` → `disabled` → `deprovisioning` → deleted
+- Nameserver verification runs in the background. A domain can be activated only
+  after its delegation is verified.
+- A disabled domain keeps serving its last valid DNS and edge state for the
+  *deprovision delay*. The default is 7 days, and you can set 1 to 365.
+- After the delay, jobs publish tombstones (removal markers) and wait until every
+  target acknowledges them.
+- The name then stays reserved for the *reclaim cooldown*. The default is 7 days,
+  and you can set 1 to 365.
 
-Nameserver verification is asynchronous. Activation requires verified
-delegation. Disabling preserves the last valid runtime for the configured
-deprovision delay; later jobs publish tombstones, wait for acknowledgement, and
-reserve the name for the reclaim cooldown.
+Both values are in **Platform settings**, in the DNS lifecycle group.
 
 ## Record modes
 
-Records use one of three modes:
+Each record uses one of three modes:
 
-- `dns_only` publishes the validated record content.
-- `proxied` is allowed only for `A`, `AAAA`, and `CNAME` and requires one safe origin.
-- `geo_dns` selects bounded answers by country, continent, then default.
+- `dns_only` publishes the record content as you entered it, after validation.
+- `proxied` works only for `A`, `AAAA`, and `CNAME` records and needs one safe origin.
+- `geo_dns` picks an answer by country, then continent, then a default.
 
-CDNFoundry owns SOA serials and platform nameserver identity. Domain users cannot
-create, change, or remove apex delegation NS records. Administrators may manage
-delegation records where policy permits.
+CDNFoundry manages SOA serials and the platform nameserver identity. Domain users
+cannot create, change, or remove apex NS records that delegate the zone.
+Administrators can manage them where policy allows.
 
 ## Proxied publication
 
-A proxied subdomain publishes a CNAME to the assigned pool hostname. A proxied
-apex cannot use CNAME, so its A and AAAA answers are compiled from listener-ready
-cells in the assigned pool. Existing non-address apex records such as MX and TXT
-remain valid.
+A proxied subdomain gets a CNAME to the hostname of its assigned pool. The apex
+(for example `example.com` itself) cannot be a CNAME. Its A and AAAA answers come
+from the ready cells of the assigned pool. Other apex records, such as MX and TXT,
+stay as they are.
 
-Every participating edge/pool pair needs one public endpoint with IPv4, IPv6,
-or both. Several private cells may serve that endpoint; cells do not own public
-addresses. The platform DNS zone advertises only enabled, fresh, non-drained,
-ready endpoints whose gateway revision is acknowledged. The target placement
-activates before the source begins its drain window.
+Each edge and pool pair needs one public endpoint with an IPv4 address, an IPv6
+address, or both. Several private cells can serve one endpoint. Cells do not own
+public addresses. The platform DNS zone lists an endpoint only when it is enabled,
+has a fresh heartbeat, is not draining, is ready, and has an acknowledged gateway
+revision. When a domain moves, the target placement activates before the source
+starts to drain.
 
 ::: warning Disable is not deletion
-Disabling preserves last-valid state for the configured delay. Final removal
-uses target tombstones and a name cooldown so stale agents and delayed jobs
-cannot recreate an earlier tenant.
+Disabling keeps the last valid state for the delay. Final removal uses tombstones
+and a name cooldown. This stops stale agents and late jobs from bringing back a
+former owner's domain.
 :::
 
-## Ownership boundaries
+## Who manages what
 
-Domain users manage records only inside assigned zones. Platform SOA,
-nameserver identity, and delegation-sensitive NS records remain administrator
-concerns. Proxied record content is platform managed because it represents
-listener-ready capacity, while its origin remains explicit desired state.
+Domain users manage records only in zones assigned to them. The platform SOA, the
+nameserver identity, and delegation NS records are for administrators. The content
+of a proxied record is managed by the platform, because it points to ready edge
+capacity. The origin is yours to set.
 
 ## DNS request path
 
-Public authoritative queries reach DNSdist over UDP or TCP port 53. DNSdist
-selects a private PowerDNS backend. PowerDNS reads its derived PostgreSQL schema
-and the local validated MMDB for Geo-DNS. No query calls Laravel or an external
-GeoIP API.
+A public DNS query reaches DNSdist on UDP or TCP port 53. DNSdist picks a private
+PowerDNS backend. PowerDNS reads its own PostgreSQL database and a local, validated
+GeoIP file (MMDB) for Geo-DNS. No query calls Laravel or an outside GeoIP service.
 
 See [Authoritative DNS](../guides/dns.md), [DNS records](../reference/dns-records.md), and
 [Geo-DNS](../guides/geo-dns.md).
