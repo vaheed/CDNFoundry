@@ -53,6 +53,21 @@ def dig(owner: str, record_type: str, subnet: str | None = None) -> str:
     ).stdout.strip()
 
 
+def eventually(owner: str, record_type: str, expected: str, subnet: str | None = None) -> str:
+    """A zone reaches the serving node by a pull, so an answer may trail the primary write by a few seconds."""
+    deadline = time.monotonic() + 90
+    output = ""
+    while time.monotonic() < deadline:
+        try:
+            output = dig(owner, record_type, subnet)
+            if expected in output:
+                return output
+        except subprocess.SubprocessError:
+            pass
+        time.sleep(1)
+    raise AssertionError((owner, record_type, subnet, expected, output))
+
+
 def wait_deployment(token: str, domain_id: int) -> None:
     deadline = time.monotonic() + 45
     while time.monotonic() < deadline:
@@ -97,6 +112,7 @@ def main() -> None:
     # A resolver's EDNS Client Subnet reaches PowerDNS through DNSdist, and a query
     # without one is located by the client address DNSdist adds, never DNSdist's own.
     override = f"override.{ZONE}"
+    eventually(override, "A", "192.0.2.41", "2.176.1.0/24")
     assert dig(override, "A", "2.176.1.0/24") == "192.0.2.41", dig(override, "A", "2.176.1.0/24")
     assert dig(override, "A", "8.8.8.0/24") == "192.0.2.40", dig(override, "A", "8.8.8.0/24")
     assert dig(override, "A") == "192.0.2.40", dig(override, "A")
@@ -110,8 +126,7 @@ def main() -> None:
         (f"_sip._tcp.geo.{ZONE}", "SRV"): "10 5 5060 sip-default.example.net.",
     }
     for query, answer in expected.items():
-        output = dig(*query)
-        assert answer in output, (query, output)
+        eventually(query[0], query[1], answer)
     print("phase3_geo_dns_e2e=passed types=A,AAAA,CNAME,MX,TXT,SRV default_runtime=passed ecs_override=passed")
 
 
