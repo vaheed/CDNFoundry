@@ -1116,7 +1116,7 @@ Exit items:
 | Regression tests | Pass for the touched areas | `FirstRunSetupTest`, `FilamentPanelAccessTest`, `AnalyticsApiTest`, `OpsDashboardTest`, `DesignSystemConsistencyTest`. A full run had one unrelated failure: `ReportsTest` cannot read `docker/grafana` from the test container |
 | Runtime tests | Not run for this update | Presentation and page visibility only |
 | Documentation | Updated | Fleet engine guide (first-run wizard) |
-| Browser suite | See the run recorded in the commit that follows | The first-run wizard flow is covered on a pristine database by `FirstRunSetupTest`; the seeded browser stack asserts it is hidden |
+| Browser suite | Pass: 125 passed, 63 skipped, 4 failed in the full run; the 4 (Platform settings full-page snapshot, four projects) were a stale snapshot, regenerated, and that test then passed 4 of 4 | `tests/browser/run.sh`, light and dark, desktop and phone. The Platform settings page grew from 5148 to 5540 px after the Phase 9 database settings were added; no other screen's snapshot changed. The first-run wizard flow is covered on a pristine database by `FirstRunSetupTest`; the seeded browser stack asserts it is hidden |
 
 Known limitations:
 
