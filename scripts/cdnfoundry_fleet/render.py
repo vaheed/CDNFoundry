@@ -285,6 +285,8 @@ class Renderer:
             "EDGE_NETWORK_SUBNET": "172.29.250.0/24",
             "FPM_NETWORK_SUBNET": "172.31.254.0/29",
             "EDGE_ID": node.get("edge_id") or "",
+            "CDNF_TELEMETRY_POP": node["name"],
+            "CDNF_TELEMETRY_REGION": node["region"],
             "EDGE_BOOTSTRAP_TOKEN": self._optional_node_secret("edge-bootstrap-token", node),
             "PDNS_DB_PASSWORD": self._optional_node_secret("pdns-db-password", node),
             "PDNS_API_KEY": self._optional_node_secret("pdns-api-key", node),
@@ -328,6 +330,9 @@ class Renderer:
             "MMDB_CHECKSUM_URL": "",
             "MMDB_DOWNLOAD_URL": "",
             "MMDB_DOWNLOAD_HEADER": "",
+            "MMDB_ASN_DOWNLOAD_URL": "",
+            "MMDB_ASN_EXPECTED_SHA256": "",
+            "MMDB_ASN_CHECKSUM_URL": "",
             "LOG_BUFFER_BYTES": "2147483648",
             # Bind only addresses configured on the local host. public_ipv4 may be
             # an advertised NAT or floating address and is not necessarily bindable.
