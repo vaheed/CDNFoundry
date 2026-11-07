@@ -48,6 +48,29 @@ There is no single-server production install. See
 [Choose your installation](https://vaheed.github.io/CDNFoundry/deployment/choose-installation)
 for all options, including installing by hand without Fleet.
 
+## Install with Fleet web
+
+Fleet web is a local page that installs and manages your hosts. It runs on your own
+computer (Windows, macOS, or Linux) and needs only Python 3.10 or newer and OpenSSH.
+
+```sh
+git clone https://github.com/vaheed/CDNFoundry.git
+cd CDNFoundry
+python3 scripts/fleet-web.py      # Windows: py scripts\fleet-web.py
+```
+
+The first run creates a private Python environment, installs what Fleet needs, asks you
+to create the Fleet vault (choose a passphrase and keep it safe), and then opens
+`http://127.0.0.1:8765` in your browser. Run the same command again any time to open it.
+Use `--port 9000` to pick another port. Fleet web listens on your own machine only; to
+use it on a remote workstation, open an SSH tunnel.
+
+Run the script from the repository root, or by its full path. Do not run files inside
+`scripts/cdnfoundry_fleet/` directly: they are a Python package, not scripts.
+
+Next: [Production quick start](https://vaheed.github.io/CDNFoundry/deployment/production-quick-start)
+and the [Fleet web guide](https://vaheed.github.io/CDNFoundry/operations/fleet-web).
+
 ## Read the docs
 
 The [documentation](https://vaheed.github.io/CDNFoundry/) is organized by what you want to do.

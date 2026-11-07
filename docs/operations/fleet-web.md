@@ -16,8 +16,15 @@ its passphrase, and a browser on the same workstation.
 ## Open it
 
 ```sh
-scripts/cdnfoundry-fleet web
+python3 scripts/fleet-web.py      # Windows: py scripts\fleet-web.py
 ```
+
+This works the same on Windows, macOS, and Linux. The first run creates a private
+Python environment under your user directory, installs PyYAML and cryptography, runs
+first-time vault setup if you have no vault, and opens your browser. Any other
+arguments go to `cdnfoundry-fleet web`, for example `--port 9000`. On macOS and Linux,
+`scripts/cdnfoundry-fleet web` also works once you have installed those two libraries
+yourself. Do not run `web.py` directly; it is part of a package.
 
 Fleet asks for the vault passphrase, then serves the page at
 `http://127.0.0.1:8765`. Use `--port` to pick another port.
