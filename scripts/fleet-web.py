@@ -5,8 +5,8 @@
     py scripts\fleet-web.py               (Windows)
 
 It needs only Python 3.10 or newer. On first run it creates a private virtual environment under your user
-directory and installs the two libraries Fleet needs (PyYAML and cryptography). If you have no Fleet vault yet it
-runs the interactive setup, then it starts Fleet web on http://127.0.0.1:8765 and opens your browser.
+directory and installs the two libraries Fleet needs (PyYAML and cryptography). Then it starts Fleet web on http://127.0.0.1:8765 and opens your browser.
+Creating the vault, entering your domains and hosts, and unlocking all happen in the browser.
 Any other arguments are passed to `cdnfoundry-fleet web` (for example --port 9000 or --vault PATH).
 """
 from __future__ import annotations
@@ -70,12 +70,6 @@ def main() -> int:
     python = ensure_environment(config_dir() / "venv")
     env = {**os.environ, "PYTHONPATH": str(SCRIPTS), "PYTHONIOENCODING": "utf-8"}
     base = [str(python), "-m", "cdnfoundry_fleet"]
-    vault = Path(args[args.index("--vault") + 1]) if "--vault" in args and args.index("--vault") + 1 < len(args) else config_dir() / "fleet.db"
-    if not vault.exists():
-        print("No Fleet vault yet. Running first-time setup.\n")
-        code = subprocess.run([*base, "setup", *(["--vault", str(vault)] if "--vault" in args else [])], env=env).returncode
-        if code != 0:
-            return code
     port = int(args[args.index("--port") + 1]) if "--port" in args and args.index("--port") + 1 < len(args) else 8765
     threading.Timer(3.0, lambda: webbrowser.open(f"http://127.0.0.1:{port}/")).start()
     try:

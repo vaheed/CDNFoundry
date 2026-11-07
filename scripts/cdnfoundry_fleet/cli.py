@@ -1133,12 +1133,16 @@ def run(args: argparse.Namespace) -> int:
         return execute(args)
     vault_path = Path(args.vault)
     if args.command == "web":
-        from .web import FleetWeb, make_server, require_loopback
+        import os
+
+        from .web import make_server, require_loopback
+        from .web_setup import WebGate
 
         require_loopback(args.host)
-        vault = Vault(vault_path, _passphrase(confirm=False))
-        vault.unlock()
-        server = make_server(FleetWeb(vault, Path(args.repo_root), Path(args.output_dir)), args.host, args.port)
+        gate = WebGate(vault_path, Path(args.repo_root), Path(args.output_dir))
+        if vault_path.exists() and (os.environ.get(PASSPHRASE_ENV) or os.environ.get(PASSPHRASE_FILE_ENV)):
+            gate.open(_passphrase(confirm=False))
+        server = make_server(gate, args.host, args.port)
         print(f"Fleet web on http://{args.host}:{args.port}/ (Ctrl+C to stop)")
         try:
             server.serve_forever()
@@ -1174,7 +1178,19 @@ def main(argv: list[str] | None = None) -> int:
         effective = list(sys.argv[1:] if argv is None else argv)
         if not effective:
             if sys.stdin.isatty():
-                effective = ["setup"]
+                choice = _prompt_choice(
+                    "CDNFoundry Fleet: what do you want to do?",
+                    [
+                        ("web", "Open Fleet web in the browser (recommended; sets everything up there)"),
+                        ("setup", "Run the setup wizard in this terminal"),
+                        ("help", "Show the commands"),
+                    ],
+                    default="web",
+                )
+                if choice == "help":
+                    parser().print_help()
+                    return EXIT_OK
+                effective = [choice]
             else:
                 parser().print_help()
                 return EXIT_OK
