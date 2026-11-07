@@ -21,7 +21,8 @@ import webbrowser
 from pathlib import Path
 
 MINIMUM = (3, 10)
-REQUIREMENTS = ["PyYAML==6.0.1", "cryptography>=41,<46"]
+TESTED_UP_TO = (3, 13)
+REQUIREMENTS = ["PyYAML>=6.0.1", "cryptography>=41,<46"]
 SCRIPTS = Path(__file__).resolve().parent
 
 
@@ -49,9 +50,9 @@ def ensure_environment(root: Path) -> Path:
     print(f"Preparing the Fleet environment in {root} (first run only)...")
     if not python.exists():
         venv.EnvBuilder(with_pip=True, clear=root.exists()).create(root)
-    done = subprocess.run([str(python), "-m", "pip", "install", "--quiet", "--disable-pip-version-check", *REQUIREMENTS])
+    done = subprocess.run([str(python), "-m", "pip", "install", "--disable-pip-version-check", "--only-binary=:all:", *REQUIREMENTS])
     if done.returncode != 0:
-        raise SystemExit(fail("could not install PyYAML and cryptography; check your internet connection and try again"))
+        raise SystemExit(fail("could not install PyYAML and cryptography as prebuilt packages. Check your internet connection, or run this with Python 3.12 or 3.13 (for example: python3.12 scripts/fleet-web.py)"))
     marker.write_text(wanted)
     return python
 
@@ -59,6 +60,9 @@ def ensure_environment(root: Path) -> Path:
 def main() -> int:
     if sys.version_info < MINIMUM:
         return fail(f"Python {MINIMUM[0]}.{MINIMUM[1]} or newer is required; this is {sys.version.split()[0]}")
+    if sys.version_info[:2] > TESTED_UP_TO:
+        print(f"warning: Python {sys.version.split()[0]} is newer than the versions Fleet is tested with (up to "
+              f"{TESTED_UP_TO[0]}.{TESTED_UP_TO[1]}); prebuilt packages may be missing. If setup fails, use Python 3.12 or 3.13.", file=sys.stderr)
     args = sys.argv[1:]
     if not shutil.which("ssh") or not shutil.which("ssh-keygen"):
         print("warning: OpenSSH (ssh, ssh-keygen) was not found. Fleet web starts, but it cannot reach hosts until you install it.\n"
