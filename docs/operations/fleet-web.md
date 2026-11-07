@@ -49,6 +49,7 @@ Only one action runs at a time. If you start a second one, the page says
 | --- | --- |
 | [Overview](#overview) | See the fleet at a glance and run a health check |
 | [Deploy](#deploy) | Follow the road: connect hosts, set the release, review, and confirm |
+| [DNS names](#dns-names) | See which names must point to which host, and check them |
 | [Nodes](#nodes) | List hosts, add one, and install it |
 | [Security](#security) | See known vulnerabilities in the running release |
 | [Upgrade](#upgrade) | Trust a release key, review a plan, and upgrade |
@@ -105,6 +106,25 @@ says "Every check passed." A failed check appears there as a line such as
 
 **If it fails:** fix the first line in **Needs attention**, then run the check again.
 Before the first check, the box says nothing has been checked in this session.
+
+## DNS names
+
+Fleet lists every name you must create, and the address each must point to. Create them
+before the first install: the control node requests its certificates when it starts, and
+that fails if the names do not point to it yet.
+
+| Name | Points to | Create it at |
+| --- | --- | --- |
+| `control.<operator domain>` | the control node | the DNS provider of the operator domain |
+| `edge-control.<operator domain>` | the control node | the DNS provider of the operator domain |
+| `grafana.<operator domain>` | the monitoring host (the control node when monitoring is on the same host) | the DNS provider of the operator domain |
+| `telemetry.<operator domain>` | the monitoring host | the DNS provider of the operator domain |
+| `ns1.<platform domain>`, `ns2.<platform domain>` | your DNS hosts | the registrar of the platform domain, as nameserver glue |
+
+Use an `A` record for an IPv4 address and an `AAAA` record for IPv6. Press **Check DNS now**
+and Fleet looks each name up from your computer and says whether it points to the right host.
+A new record can take a few minutes to appear. With monitoring disabled, Grafana and
+telemetry are not listed.
 
 ## Nodes
 
