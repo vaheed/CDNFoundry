@@ -195,3 +195,37 @@ def test_bad_node_ssh_port_is_refused():
     with pytest.raises(ValidationError):
         parse_extra_nodes("pop-1 edge 203.0.113.10 port=99999", "x.test")
     assert parse_extra_nodes("pop-1 edge 203.0.113.10 port=2222", "x.test")[0]["_ssh_port"] == 2222
+
+
+def test_dns_page_lists_every_name_and_where_it_points(gate):
+    g, port = _created(gate)
+    status, body, _ = request(port, "GET", "/dns")
+    assert status == 200
+    for name in ("control.ops.example.test", "edge-control.ops.example.test", "grafana.ops.example.test", "telemetry.ops.example.test",
+                 "ns1.cdn.example.test", "ns2.cdn.example.test"):
+        assert name in body
+    assert "A 203.0.113.5" in body and "A 203.0.113.10" in body and "A 203.0.113.11" in body
+    assert "DNS names point to your hosts" in request(port, "GET", "/deploy")[1]
+
+
+def test_dns_check_reports_what_is_wrong(gate, monkeypatch):
+    import cdnfoundry_fleet.web as web_module
+
+    monkeypatch.setattr(web_module, "resolve_matches", lambda name, wanted: (name.startswith("control."), "points to 198.51.100.9; expected " + wanted[0]))
+    g, port = _created(gate)
+    _, _, r = request(port, "POST", "/dns/check", {"csrf": g.csrf})
+    _wait_job(port, r.getheader("Location"))
+    body = request(port, "GET", "/dns")[1]
+    assert "Correct" in body and "points to 198.51.100.9; expected" in body
+
+
+def test_dedicated_monitoring_moves_grafana_to_the_monitoring_host():
+    from cdnfoundry_fleet.web import dns_records
+
+    state = {"global": {"operator_domain": "o.test", "platform_domain": "p.test"}, "features": {"monitoring": {"mode": "dedicated", "host": "mon-1"}},
+             "nodes": {"c": {"role": "control", "public_ipv4": "192.0.2.1"}, "mon-1": {"role": "monitoring", "public_ipv4": "192.0.2.9"},
+                       "d": {"role": "dns", "public_ipv4": "192.0.2.5", "public_ipv6": "2001:db8::5"}}}
+    records, glue = dns_records(state)
+    assert {r["name"]: r["ips"] for r in records}["grafana.o.test"] == ["192.0.2.9"]
+    assert {r["name"]: r["ips"] for r in records}["control.o.test"] == ["192.0.2.1"]
+    assert glue[0]["ips"] == ["192.0.2.5", "2001:db8::5"]

@@ -11,6 +11,7 @@ import html
 import http.server
 import json
 import secrets
+import socket
 import socketserver
 import threading
 import time
@@ -31,13 +32,14 @@ from .vault import Vault
 
 ASSETS = Path(__file__).parent / "web_assets"
 LOOPBACK = "127.0.0.1"
-PAGES = [("/", "Overview"), ("/deploy", "Deploy"), ("/nodes", "Nodes"), ("/security", "Security"), ("/upgrade", "Upgrade"), ("/config", "Config"),
+PAGES = [("/", "Overview"), ("/deploy", "Deploy"), ("/dns", "DNS names"), ("/nodes", "Nodes"), ("/security", "Security"), ("/upgrade", "Upgrade"), ("/config", "Config"),
          ("/rollback", "Rollback"), ("/backups", "Backups"), ("/ha", "HA"), ("/secrets", "Secrets"), ("/history", "History")]
 ROTATABLE = ["metrics-token", "telemetry-token", "edge-proxy-secret", "log-auth-token"]
 
 HELP: dict[str, tuple[str, str]] = {
     "/": ("The state of your fleet at a glance.", "Follow the roadmap from top to bottom. Run the check any time to see which host needs attention."),
     "/deploy": ("Get your hosts installed in two steps.", "Step 1: connect the hosts, set the release, and enter locations. Step 2: review exactly what will happen, then confirm. Nothing reaches a server before you confirm."),
+    "/dns": ("The DNS names you must create before the install.", "Create these records at the DNS provider of your operator domain, and the glue records at the registrar of your platform domain. Certificates for the control, telemetry, and Grafana names are requested when the control node starts, so the names must already point to it."),
     "/nodes": ("Your hosts and how Fleet logs in to them.", "Add a host here, or open one to change its SSH login or install it alone. Every host must accept the Fleet SSH key shown on the Deploy page."),
     "/security": ("Known vulnerabilities in the running release.", "Read this after an upgrade. A fix arrives by upgrading to a newer signed release."),
     "/upgrade": ("Move the whole fleet to a new signed release.", "Trust your CI signing key once, paste the signed release manifest, read the plan, then upgrade. Hosts update one at a time and roll back if a check fails."),
@@ -76,6 +78,48 @@ def explain_ssh(message: str, node: str, login: str) -> tuple[str, str]:
     if "no ssh access stored" in low:
         return ("Fleet has no SSH login saved for this host yet.", "Open Deploy and save a login (user and SSH port) for it, or set it on the host's page.")
     return ("The connection failed.", message[-200:])
+
+
+def dns_records(state: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """The names the operator must create. First list: records in the operator domain's DNS. Second: nameserver glue for the platform domain."""
+    nodes = state["nodes"]
+    operator, platform = state["global"]["operator_domain"], state["global"]["platform_domain"]
+
+    def ips(node: dict[str, Any]) -> list[str]:
+        return [a for a in (node.get("public_ipv4"), node.get("public_ipv6")) if a]
+
+    control = next((n for n in sorted(nodes) if nodes[n]["role"] == "control" and nodes[n].get("enabled", True)), None)
+    monitoring = state["features"]["monitoring"]
+    watcher = control if monitoring["mode"] == "colocated" else (monitoring.get("host") if monitoring["mode"] == "dedicated" else None)
+    records: list[dict[str, Any]] = []
+    if control:
+        records += [
+            {"name": f"control.{operator}", "node": control, "ips": ips(nodes[control]), "use": "Admin panel, domain panel, and API (https://control.%s/admin)" % operator},
+            {"name": f"edge-control.{operator}", "node": control, "ips": ips(nodes[control]), "use": "Edge nodes fetch their configuration here (TCP 8443)"},
+        ]
+    if watcher and watcher in nodes:
+        records += [
+            {"name": f"grafana.{operator}", "node": watcher, "ips": ips(nodes[watcher]), "use": "Grafana dashboards"},
+            {"name": f"telemetry.{operator}", "node": watcher, "ips": ips(nodes[watcher]), "use": "Edges send logs and metrics here (TCP 8444)"},
+        ]
+    glue: list[dict[str, Any]] = []
+    dns_nodes = [n for n in sorted(nodes) if nodes[n]["role"] in {"dns", "dns-edge"} and nodes[n].get("enabled", True)]
+    for i, label in enumerate(("ns1", "ns2")):
+        if dns_nodes:
+            n = dns_nodes[i % len(dns_nodes)]
+            glue.append({"name": f"{label}.{platform}", "node": n, "ips": ips(nodes[n]), "use": "Public nameserver of the platform"})
+    return records, glue
+
+
+def resolve_matches(name: str, wanted: list[str]) -> tuple[bool, str]:
+    try:
+        found = sorted({a[4][0] for a in socket.getaddrinfo(name, None, proto=socket.IPPROTO_TCP)})
+    except OSError:
+        return False, "does not resolve yet"
+    missing = [w for w in wanted if w not in found]
+    if not missing:
+        return True, ", ".join(found)
+    return False, f"points to {', '.join(found)}; expected {', '.join(wanted)}"
 
 
 def require_loopback(host: str) -> str:
@@ -147,6 +191,7 @@ class FleetWeb:
         self.pending_manifest: dict[str, str] = {}
         self.pending_deploy: dict[str, dict[str, Any]] = {}
         self.connections: dict[str, tuple[bool, str]] = {}
+        self.dns_results: dict[str, tuple[bool, str]] = {}
 
     # -- engine access -----------------------------------------------------------------------------------
     def _engine(self, work: Path, log: Callable[[str], None] = lambda _m: None) -> FleetEngine:
@@ -232,6 +277,35 @@ class FleetWeb:
                     continue
         return names
 
+    def _dns_section(self, state: dict[str, Any]) -> str:
+        records, glue = dns_records(state)
+        operator, platform = state["global"]["operator_domain"], state["global"]["platform_domain"]
+
+        def rows(items: list[dict[str, Any]]) -> list[list[str]]:
+            out = []
+            for r in items:
+                ok, why = self.dns_results.get(r["name"], (None, ""))
+                status = state_word("", "Not checked") if ok is None else (state_word("ok", "Correct") if ok else state_word("bad", "Not yet") + f"<br><span class=hint>{esc(why)}</span>")
+                kinds = " and ".join(("A " + a) if ":" not in a else ("AAAA " + a) for a in r["ips"])
+                out.append([f"<b>{esc(r['name'])}</b>", esc(kinds), f"{esc(r['node'])}", esc(r["use"]), status])
+            return out
+        head = ["Name", "Record", "Host", "What it is for", "Status"]
+        body = (f"<h3>1. At the DNS provider of <b>{esc(operator)}</b></h3><p>Create these records. They must point to the hosts below before the control node starts, or its certificates cannot be issued.</p>"
+                + (table(head, rows(records), label="Operator domain records") if records else '<p class="empty">Add a control node to see these names.</p>')
+                + f"<h3>2. At the registrar of <b>{esc(platform)}</b> (nameserver glue)</h3>"
+                "<p>Create these nameserver hosts with their addresses (glue), then make them the nameservers of the platform domain. Customer domains are delegated to the names the admin panel assigns later.</p>"
+                + (table(head, rows(glue), label="Platform nameserver glue") if glue else '<p class="empty">Add a DNS or combined DNS + edge node to see these names.</p>'))
+        if len({g["node"] for g in glue}) < 2 and glue:
+            body += '<p class="hint">You have one DNS host, so ns1 and ns2 use the same address. Add a second DNS host for resilience.</p>'
+        body += ("<h3>Check</h3><p>Fleet looks each name up from this computer and compares the answer. A new record can take a few minutes to appear.</p>"
+                 + self.action_form("/dns/check", "Check DNS now", primary=True))
+        return body
+
+    def _dns_ok(self, state: dict[str, Any]) -> bool:
+        records, glue = dns_records(state)
+        names = [r["name"] for r in records + glue]
+        return bool(names) and all(self.dns_results.get(n, (False, ""))[0] for n in names)
+
     def _roadmap(self, state: dict[str, Any], current: dict[str, Any] | None) -> str:
         nodes, done = state["nodes"], self.installed()
         have = self.read(lambda e: e.targets(state))
@@ -241,6 +315,7 @@ class FleetWeb:
             ("Plan created", True, "/nodes", "Your hosts and domains are saved in the encrypted vault."),
             ("SSH login saved for every host", all(n in have for n in nodes), "/deploy#connect", "Fleet needs a user, address, and port for each host."),
             ("Hosts accept the Fleet key", connected, "/deploy#connect", "Add the key to each host, then run the connection test."),
+            ("DNS names point to your hosts", self._dns_ok(state), "/dns", "Create the control, telemetry, Grafana, and nameserver names."),
             ("Signed release set", current is not None, "/deploy#release", "Fleet installs only signed releases."),
             ("Hosts installed", bool(nodes) and all(n in done for n in nodes), "/deploy#review", "Review the plan, then confirm."),
             ("Health check passed", checked, "/", "Run the check on the Overview page."),
@@ -300,7 +375,9 @@ class FleetWeb:
                 '<label>SSH user<input name="ssh_user" value="root" required autocomplete="off"></label>'
                 '<label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="22" required><span class="hint">Change it if your servers do not use 22. You can set a different port per host on its page.</span></label>')))
         out.append(self.action_form("/deploy/test", "Test connections", primary=all(n in have for n in order)))
-        out.append('<h3 id="release">b. Signed release</h3>')
+        out.append('<h3 id="dns">b. DNS names</h3><p>Fleet needs these names to point to your hosts: <b>control</b>, <b>edge-control</b>, <b>grafana</b>, <b>telemetry</b> and the platform nameservers. '
+                   'See <a href="/dns">DNS names</a> for the exact records and a check.</p>')
+        out.append('<h3 id="release">c. Signed release</h3>')
         manifest_field = '<label>Signed release manifest (JSON)<textarea name="manifest" rows="6" required></textarea></label>'
         if current is None:
             if not has_key:
@@ -310,7 +387,7 @@ class FleetWeb:
                 out.append("<p>Key trusted. Paste the signed release manifest (the <code>release.json</code> your CI produced).</p>" + self.action_form("/upgrade/first", "Use this release", fields=manifest_field))
             return "".join(out) + '<p class="empty">Step 2 opens when a signed release is set.</p>'
         out.append(f"<p>{state_word('ok', 'Done')} Release to install: <b>{esc(current['release'])}</b></p>")
-        out.append('<h3 id="review">c. Review and confirm</h3>')
+        out.append('<h3 id="review">d. Review and confirm</h3>')
         if not pending:
             return "".join(out) + '<p class="attention">Every host is installed. Use <a href="/config">Config</a> to deploy changed configuration or <a href="/upgrade">Upgrade</a> for a new release.</p>'
         fields = ""
@@ -366,6 +443,8 @@ class FleetWeb:
             body = (self._roadmap(state, current) + kpis + '<h2>Topology</h2><div class="topology" role="region" tabindex="0" aria-label="Topology diagram">' + topology_svg(state, results) + "</div><h2>Needs attention</h2>" + needs
                     + self.action_form("/check", "Run check of the whole stack", primary=True))
             return 200, self.layout(path, "Overview", body, flash)
+        if path == "/dns":
+            return 200, self.layout(path, "DNS names", self._dns_section(state), flash)
         if path == "/deploy":
             return 200, self.layout(path, "Deploy", self._deploy_page(state, current), flash)
         if path == "/nodes":
@@ -505,6 +584,17 @@ class FleetWeb:
                 bad = sum(1 for c in self.last_checks if not c.ok)
                 return f"{len(self.last_checks)} checks, {bad} failing"
             return job("Check of the whole stack", check, "check")
+        if path == "/dns/check":
+            state = self.read(lambda e: e.state())
+            records, glue = dns_records(state)
+
+            def check_dns(e: FleetEngine) -> str:
+                for r in records + glue:
+                    self.dns_results[r["name"]] = resolve_matches(r["name"], r["ips"])
+                    e.say(f"{r['name']}: {self.dns_results[r['name']][1]}")
+                bad = [r["name"] for r in records + glue if not self.dns_results[r["name"]][0]]
+                return "Every name points to the right host." if not bad else f"{len(bad)} name(s) are not correct yet: {', '.join(bad)}"
+            return job("Check DNS names", check_dns, "dns-check")
         if path == "/deploy/ssh-defaults":
             user, port = form.get("ssh_user", "root").strip() or "root", int(form.get("ssh_port", "22"))
             return self._sync("ssh-defaults", lambda e: e.ensure_targets(user=user, port=port), "/deploy", f"Saved {user} on port {port} for the hosts that had no login. Add the Fleet key to them, then test.")
