@@ -135,7 +135,7 @@ class WebGate:
             + self._field("Operator domain", "operator_domain", required="", placeholder="cdn.example.com", hint="Where the control panel and API live.")
             + self._field("Platform domain", "platform_domain", required="", placeholder="example.net", hint="Holds the platform nameserver names.")
             + self._field("Release", "release", required="", value="v2.0.0", hint="Exact release tag or commit to deploy.")
-            + self._field("Certificate contact email", "acme_email", type="email", hint="Optional. Used for the certificate authority account.")
+            + self._field("Admin email for Let's Encrypt", "acme_email", type="email", required="", autocomplete="email", hint="Let's Encrypt sends expiry and problem notices here. Used for the free certificates of the control panel and Grafana.")
             + f'<label>Layout<select name="preset">{presets}</select></label>'
             + "<h2>Control host</h2>"
             + self._field("Name", "control_name", required="", value="control-1", pattern="[a-z0-9][a-z0-9-]*")
@@ -175,6 +175,9 @@ class WebGate:
         preset = form.get("preset", "control-monitoring")
         if preset not in {v for v, _ in PRESETS}:
             raise ValidationError("Choose one of the listed layouts")
+        email = form.get("acme_email", "").strip()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+            raise ValidationError("Enter a valid admin email for Let's Encrypt, for example admin@example.com")
         config = {"global": {"operator_domain": operator, "platform_domain": form.get("platform_domain", "").strip().lower(),
                              "release": form.get("release", "").strip(), "acme_email": form.get("acme_email", "").strip()},
                   "preset": preset, "nodes": nodes}

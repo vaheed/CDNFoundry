@@ -22,7 +22,7 @@ from cdnfoundry_fleet.web import FleetWeb, make_server, require_loopback  # noqa
 
 ROOT = Path(__file__).resolve().parents[2]
 PASS = "correct horse battery"
-PAGES = ["/", "/deploy", "/dns", "/nodes", "/security", "/upgrade", "/config", "/rollback", "/backups", "/ha", "/secrets", "/history"]
+PAGES = ["/", "/deploy", "/dns", "/tls", "/nodes", "/security", "/upgrade", "/config", "/rollback", "/backups", "/ha", "/secrets", "/history"]
 
 
 @dataclass

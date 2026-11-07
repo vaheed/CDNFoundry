@@ -18,7 +18,7 @@ from cdnfoundry_fleet.common import ValidationError  # noqa: E402
 
 PASS = "correct horse battery staple"
 FORM = {"passphrase": PASS, "passphrase2": PASS, "operator_domain": "ops.example.test", "platform_domain": "cdn.example.test",
-        "release": "v2.0.0", "acme_email": "", "preset": "control-monitoring", "control_name": "control-1",
+        "release": "v2.0.0", "acme_email": "admin@example.test", "preset": "control-monitoring", "control_name": "control-1",
         "control_ipv4": "203.0.113.5", "control_hostname": "", "nodes": "pop-1 dns-edge 203.0.113.10 EU\npop-2, dns-edge, 203.0.113.11",
         "ssh_user": "root", "ssh_port": "22"}
 
@@ -122,7 +122,13 @@ def test_review_then_confirm_installs_in_start_order(gate, monkeypatch):
 
     installed: list[tuple[str, str | None]] = []
     monkeypatch.setattr(FleetEngine, "release_manifest", lambda self, which="current": {"release": "v2.0.0", "roles": {}, "images": {}} if which == "current" else None)
-    monkeypatch.setattr(FleetEngine, "bootstrap", lambda self, name, *, country=None, continent=None, log=None: installed.append((name, country)) or Outcome(True, [name]))
+    def fake_bootstrap(self, name, *, country=None, continent=None, log=None):
+        installed.append((name, country))
+        self.mark_installed(name)
+        return Outcome(True, [name])
+
+    monkeypatch.setattr(FleetEngine, "bootstrap", fake_bootstrap)
+    monkeypatch.setattr(FleetEngine, "check_dns", lambda self: {r["name"]: (True, "1.1.1.1 sees it") for g in self.dns_names() for r in g})
     monkeypatch.setattr(FleetEngine, "test_connection", lambda self, name: None)
     g, port = _created(gate)
     body = request(port, "GET", "/deploy")[1]
@@ -209,18 +215,19 @@ def test_dns_page_lists_every_name_and_where_it_points(gate):
 
 
 def test_dns_check_reports_what_is_wrong(gate, monkeypatch):
-    import cdnfoundry_fleet.web as web_module
+    from cdnfoundry_fleet.engine import FleetEngine
 
-    monkeypatch.setattr(web_module, "resolve_matches", lambda name, wanted: (name.startswith("control."), "points to 198.51.100.9; expected " + wanted[0]))
+    monkeypatch.setattr(FleetEngine, "check_dns", lambda self: {r["name"]: (r["name"].startswith("control."), "1.1.1.1 sees 198.51.100.9; expected " + r["ips"][0])
+                                                                 for g in self.dns_names() for r in g})
     g, port = _created(gate)
     _, _, r = request(port, "POST", "/dns/check", {"csrf": g.csrf})
     _wait_job(port, r.getheader("Location"))
     body = request(port, "GET", "/dns")[1]
-    assert "Correct" in body and "points to 198.51.100.9; expected" in body
+    assert "Correct" in body and "1.1.1.1 sees 198.51.100.9; expected" in body
 
 
 def test_dedicated_monitoring_moves_grafana_to_the_monitoring_host():
-    from cdnfoundry_fleet.web import dns_records
+    from cdnfoundry_fleet.management import dns_records
 
     state = {"global": {"operator_domain": "o.test", "platform_domain": "p.test"}, "features": {"monitoring": {"mode": "dedicated", "host": "mon-1"}},
              "nodes": {"c": {"role": "control", "public_ipv4": "192.0.2.1"}, "mon-1": {"role": "monitoring", "public_ipv4": "192.0.2.9"},
@@ -229,3 +236,60 @@ def test_dedicated_monitoring_moves_grafana_to_the_monitoring_host():
     assert {r["name"]: r["ips"] for r in records}["grafana.o.test"] == ["192.0.2.9"]
     assert {r["name"]: r["ips"] for r in records}["control.o.test"] == ["192.0.2.1"]
     assert glue[0]["ips"] == ["192.0.2.5", "2001:db8::5"]
+
+
+def test_certificates_page_generates_a_local_certificate_and_serves_the_ca(gate):
+    g, port = _created(gate)
+    body = request(port, "GET", "/tls")[1]
+    assert "Automatic (Let&#x27;s Encrypt)" in body and "admin@example.test" in body
+    assert request(port, "GET", "/tls/ca.crt")[0] == 404
+    status, _, _ = request(port, "POST", "/tls/local", {"csrf": g.csrf, "name:control": "1", "name:grafana": "1"})
+    assert status == 303
+    body = request(port, "GET", "/tls")[1]
+    assert "Local certificate (browsers warn)" in body and "download the local CA" in body
+    status, pem, r = request(port, "GET", "/tls/ca.crt")
+    assert status == 200 and pem.startswith("-----BEGIN CERTIFICATE-----")
+    assert request(port, "POST", "/tls/remove", {"csrf": g.csrf, "name": "control"})[0] == 303
+    assert "Local certificate" in request(port, "GET", "/tls")[1]  # grafana still local
+
+
+def test_bad_certificate_upload_is_refused_with_the_reason(gate):
+    g, port = gate
+    request(port, "POST", "/setup", {**FORM, "csrf": g.csrf})
+    status, body, _ = request(port, "POST", "/tls/set", {"csrf": g.csrf, "name:control": "1", "certificate": "nope", "key": "nope"})
+    assert status == 400 and "not a valid PEM" in body
+
+
+def test_review_warns_that_unready_names_get_local_certificates(gate, monkeypatch):
+    from cdnfoundry_fleet.engine import FleetEngine
+
+    monkeypatch.setattr(FleetEngine, "release_manifest", lambda self, which="current": {"release": "v2.0.0", "roles": {}, "images": {}} if which == "current" else None)
+    monkeypatch.setattr(FleetEngine, "test_connection", lambda self, name: None)
+    g, port = _created(gate)
+    _, _, r = request(port, "POST", "/deploy/test", {"csrf": g.csrf})
+    _wait_job(port, r.getheader("Location"))
+    geo = {"csrf": g.csrf, "country:pop-1": "de", "continent:pop-1": "eu", "country:pop-2": "jp", "continent:pop-2": "as"}
+    status, body, _ = request(port, "POST", "/deploy/review", geo)
+    assert status == 200 and "local certificate" in body and "control.ops.example.test" in body
+
+
+def test_ha_page_guides_dns_then_host_then_deploy(gate, monkeypatch):
+    from cdnfoundry_fleet import engine as engine_module
+
+    g, port = _created(gate)
+    assert "Deploy <b>control-1</b> first" in request(port, "GET", "/ha")[1]
+    monkeypatch.setattr(engine_module.FleetEngine, "installed", lambda self: {"control-1"})
+    body = request(port, "GET", "/ha")[1]
+    assert "Step 1: point the addresses" in body and "Step 2: prepare the standby host" in body and "5432" in body and "Complete step 1 first" in body
+    assert request(port, "POST", "/ha/check", {"csrf": g.csrf, "name": "control-2", "host": "bad", "ssh_port": "22"})[0] == 400
+    monkeypatch.setattr(engine_module.FleetEngine, "check_dns", lambda self: {}, raising=False)
+    import cdnfoundry_fleet.management as mgmt
+
+    monkeypatch.setattr(mgmt, "check_name", lambda name, wanted, *a, **k: (not name.startswith("control-2"), "1.1.1.1 does not see it"))
+    _, _, r = request(port, "POST", "/ha/check", {"csrf": g.csrf, "name": "control-2", "host": "203.0.113.11", "ssh_port": "2222"})
+    _wait_job(port, r.getheader("Location"))
+    body = request(port, "GET", "/ha")[1]
+    assert "control-2.ops.example.test" in body and "60 s" in body and "203.0.113.11" in body and "Continue without correct DNS" in body
+    # blocked without correct DNS, with a reason
+    status, body, _ = request(port, "POST", "/ha/add-standby", {"csrf": g.csrf, "confirm": "ADD STANDBY", "name": "control-2", "host": "203.0.113.11", "ssh_port": "2222"})
+    assert status == 400 and "Point these names first" in body and "control-2.ops.example.test" in body

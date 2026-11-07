@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import getpass
 import html
+import ipaddress
 import http.server
 import json
+import re
 import secrets
-import socket
 import socketserver
 import threading
 import time
@@ -23,7 +24,8 @@ from typing import Any, Callable
 from . import manifest as mf
 from .checks import Check
 from .common import FleetError, ValidationError
-from .engine import FleetEngine, ha_action, ControlActions
+from .engine import FleetEngine, StandbySetup, ha_action, ControlActions
+from . import management as mg
 from .render import Renderer
 from .security import classify
 from .ssh import Target
@@ -32,7 +34,7 @@ from .vault import Vault
 
 ASSETS = Path(__file__).parent / "web_assets"
 LOOPBACK = "127.0.0.1"
-PAGES = [("/", "Overview"), ("/deploy", "Deploy"), ("/dns", "DNS names"), ("/nodes", "Nodes"), ("/security", "Security"), ("/upgrade", "Upgrade"), ("/config", "Config"),
+PAGES = [("/", "Overview"), ("/deploy", "Deploy"), ("/dns", "DNS names"), ("/tls", "Certificates"), ("/nodes", "Nodes"), ("/security", "Security"), ("/upgrade", "Upgrade"), ("/config", "Config"),
          ("/rollback", "Rollback"), ("/backups", "Backups"), ("/ha", "HA"), ("/secrets", "Secrets"), ("/history", "History")]
 ROTATABLE = ["metrics-token", "telemetry-token", "edge-proxy-secret", "log-auth-token"]
 
@@ -40,13 +42,14 @@ HELP: dict[str, tuple[str, str]] = {
     "/": ("The state of your fleet at a glance.", "Follow the roadmap from top to bottom. Run the check any time to see which host needs attention."),
     "/deploy": ("Get your hosts installed in two steps.", "Step 1: connect the hosts, set the release, and enter locations. Step 2: review exactly what will happen, then confirm. Nothing reaches a server before you confirm."),
     "/dns": ("The DNS names you must create before the install.", "Create these records at the DNS provider of your operator domain, and the glue records at the registrar of your platform domain. Certificates for the control, telemetry, and Grafana names are requested when the control node starts, so the names must already point to it."),
+    "/tls": ("Certificates for the control, Grafana, and telemetry names.", "By default Caddy asks Let's Encrypt for them when the control node starts. That fails if the names do not point at the host or ports 80 and 443 are closed. Upload your own certificate to skip that."),
     "/nodes": ("Your hosts and how Fleet logs in to them.", "Add a host here, or open one to change its SSH login or install it alone. Every host must accept the Fleet SSH key shown on the Deploy page."),
     "/security": ("Known vulnerabilities in the running release.", "Read this after an upgrade. A fix arrives by upgrading to a newer signed release."),
     "/upgrade": ("Move the whole fleet to a new signed release.", "Trust your CI signing key once, paste the signed release manifest, read the plan, then upgrade. Hosts update one at a time and roll back if a check fails."),
     "/config": ("Push changed configuration to hosts.", "Use after you change hosts or settings. Fleet shows which bundles changed and swaps them in one host at a time."),
     "/rollback": ("Return the whole fleet to the previous release.", "Use only if an upgrade went wrong. It is blocked when the release holds an irreversible database change; restore from backup then."),
     "/backups": ("Back up the fleet and restore a control node.", "Back up before every upgrade. Restoring needs a snapshot ID and typing RESTORE with it."),
-    "/ha": ("Add and manage the standby control node.", "A standby lets the control plane survive the loss of one host. Add it after the first deploy works."),
+    "/ha": ("Add and manage the standby control node.", "A standby lets the control plane survive the loss of one host. First point the DNS names and addresses, prepare the host, then deploy the standby. Add it after the first deploy works."),
     "/secrets": ("Rotate fleet secrets.", "Rotate one secret at a time. Hosts that use it are updated for you."),
     "/history": ("Everything Fleet has done, who did it, and the result.", "Use it to find out what changed before a problem started."),
 }
@@ -78,48 +81,6 @@ def explain_ssh(message: str, node: str, login: str) -> tuple[str, str]:
     if "no ssh access stored" in low:
         return ("Fleet has no SSH login saved for this host yet.", "Open Deploy and save a login (user and SSH port) for it, or set it on the host's page.")
     return ("The connection failed.", message[-200:])
-
-
-def dns_records(state: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """The names the operator must create. First list: records in the operator domain's DNS. Second: nameserver glue for the platform domain."""
-    nodes = state["nodes"]
-    operator, platform = state["global"]["operator_domain"], state["global"]["platform_domain"]
-
-    def ips(node: dict[str, Any]) -> list[str]:
-        return [a for a in (node.get("public_ipv4"), node.get("public_ipv6")) if a]
-
-    control = next((n for n in sorted(nodes) if nodes[n]["role"] == "control" and nodes[n].get("enabled", True)), None)
-    monitoring = state["features"]["monitoring"]
-    watcher = control if monitoring["mode"] == "colocated" else (monitoring.get("host") if monitoring["mode"] == "dedicated" else None)
-    records: list[dict[str, Any]] = []
-    if control:
-        records += [
-            {"name": f"control.{operator}", "node": control, "ips": ips(nodes[control]), "use": "Admin panel, domain panel, and API (https://control.%s/admin)" % operator},
-            {"name": f"edge-control.{operator}", "node": control, "ips": ips(nodes[control]), "use": "Edge nodes fetch their configuration here (TCP 8443)"},
-        ]
-    if watcher and watcher in nodes:
-        records += [
-            {"name": f"grafana.{operator}", "node": watcher, "ips": ips(nodes[watcher]), "use": "Grafana dashboards"},
-            {"name": f"telemetry.{operator}", "node": watcher, "ips": ips(nodes[watcher]), "use": "Edges send logs and metrics here (TCP 8444)"},
-        ]
-    glue: list[dict[str, Any]] = []
-    dns_nodes = [n for n in sorted(nodes) if nodes[n]["role"] in {"dns", "dns-edge"} and nodes[n].get("enabled", True)]
-    for i, label in enumerate(("ns1", "ns2")):
-        if dns_nodes:
-            n = dns_nodes[i % len(dns_nodes)]
-            glue.append({"name": f"{label}.{platform}", "node": n, "ips": ips(nodes[n]), "use": "Public nameserver of the platform"})
-    return records, glue
-
-
-def resolve_matches(name: str, wanted: list[str]) -> tuple[bool, str]:
-    try:
-        found = sorted({a[4][0] for a in socket.getaddrinfo(name, None, proto=socket.IPPROTO_TCP)})
-    except OSError:
-        return False, "does not resolve yet"
-    missing = [w for w in wanted if w not in found]
-    if not missing:
-        return True, ", ".join(found)
-    return False, f"points to {', '.join(found)}; expected {', '.join(wanted)}"
 
 
 def require_loopback(host: str) -> str:
@@ -192,6 +153,8 @@ class FleetWeb:
         self.pending_deploy: dict[str, dict[str, Any]] = {}
         self.connections: dict[str, tuple[bool, str]] = {}
         self.dns_results: dict[str, tuple[bool, str]] = {}
+        self.ha_plan: dict[str, str] = {}
+        self.ha_results: dict[str, tuple[bool, str]] = {}
 
     # -- engine access -----------------------------------------------------------------------------------
     def _engine(self, work: Path, log: Callable[[str], None] = lambda _m: None) -> FleetEngine:
@@ -266,19 +229,16 @@ class FleetWeb:
         with self.write_lock, self.vault.session() as work:
             return self._engine(work).public_key()
 
+    def local_ca(self) -> str | None:
+        return self.read(lambda e: e.local_ca())
+
     def installed(self) -> set[str]:
-        """Hosts Fleet has installed, from the sealed history of successful installs."""
-        names: set[str] = set()
-        for h in self.vault.history(2000):
-            if h["kind"] == "node-installed":
-                try:
-                    names.add(json.loads(h["detail"])["node"])
-                except (ValueError, KeyError):
-                    continue
-        return names
+        """Hosts Fleet has installed, from the sealed state (shared with the CLI)."""
+        return self.read(lambda e: e.installed())
 
     def _dns_section(self, state: dict[str, Any]) -> str:
-        records, glue = dns_records(state)
+        records, glue = mg.dns_records(state)
+        own = set(self.read(lambda e: e.management_certificates()))
         operator, platform = state["global"]["operator_domain"], state["global"]["platform_domain"]
 
         def rows(items: list[dict[str, Any]]) -> list[list[str]]:
@@ -286,6 +246,8 @@ class FleetWeb:
             for r in items:
                 ok, why = self.dns_results.get(r["name"], (None, ""))
                 status = state_word("", "Not checked") if ok is None else (state_word("ok", "Correct") if ok else state_word("bad", "Not yet") + f"<br><span class=hint>{esc(why)}</span>")
+                if r.get("key") and r["key"] in own:
+                    status += "<br>" + state_word("ok", "Own certificate: this name need not be correct to deploy")
                 kinds = " and ".join(("A " + a) if ":" not in a else ("AAAA " + a) for a in r["ips"])
                 out.append([f"<b>{esc(r['name'])}</b>", esc(kinds), f"{esc(r['node'])}", esc(r["use"]), status])
             return out
@@ -297,14 +259,95 @@ class FleetWeb:
                 + (table(head, rows(glue), label="Platform nameserver glue") if glue else '<p class="empty">Add a DNS or combined DNS + edge node to see these names.</p>'))
         if len({g["node"] for g in glue}) < 2 and glue:
             body += '<p class="hint">You have one DNS host, so ns1 and ns2 use the same address. Add a second DNS host for resilience.</p>'
-        body += ("<h3>Check</h3><p>Fleet looks each name up from this computer and compares the answer. A new record can take a few minutes to appear.</p>"
+        body += ("<h3>Check</h3><p>Fleet asks the public resolver 1.1.1.1, the way the certificate authority will see your names, and compares the answer. A new record can take a few minutes to appear.</p>"
                  + self.action_form("/dns/check", "Check DNS now", primary=True))
         return body
 
+    def _ha_setup(self, state: dict[str, Any]) -> str:
+        """Adding a standby control node, as a road: point the addresses, prepare the host, then deploy it."""
+        nodes = state["nodes"]
+        controls = [n for n in sorted(nodes) if nodes[n]["role"] == "control"]
+        if len(controls) != 1:
+            return '<p class="empty">Add exactly one control node and deploy it first. A standby needs a working active control node.</p>'
+        if controls[0] not in self.read(lambda e: e.installed()):
+            return f'<p class="empty">Deploy <b>{esc(controls[0])}</b> first (see <a href="/deploy">Deploy</a>). The standby copies it, so it must already be running.</p>'
+        active = nodes[controls[0]]
+        plan = self.ha_plan
+        name = plan.get("name") or self.read(lambda e: StandbySetup(e).next_name(state))
+        form = (f'<label>Standby name<input name="name" value="{esc(name)}" required pattern="[a-z0-9][a-z0-9-]*" autocomplete="off"></label>'
+                f'<label>Standby public IPv4<input name="host" value="{esc(plan.get("host", ""))}" required autocomplete="off" placeholder="203.0.113.11"></label>'
+                f'<label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="{esc(plan.get("ssh_port", "22"))}" required></label>'
+                f'<label>Standby private address<input name="replication_address" value="{esc(plan.get("replication_address", ""))}" autocomplete="off"><span class="hint">Optional. Fleet reads it from the host when there is exactly one private address.</span></label>'
+                f'<label>Active private address<input name="active_replication_address" value="{esc(plan.get("active_replication_address", ""))}" autocomplete="off"><span class="hint">Optional, same rule.</span></label>')
+        out = ["<p>A standby is a second control node that copies the first and takes over when you promote it. DNS and HTTP keep serving while control is down; the standby restores the panel and API.</p>",
+               "<h2>Step 1: point the addresses</h2>",
+               f"<p>Create or change these records <b>before</b> you add the standby. The two client names point at the <b>active</b> node ({esc(controls[0])}), not the standby. "
+               "Set their TTL to <b>60 seconds</b> now so that moving them after a failure is quick. The standby gets its own name.</p>",
+               self.action_form("/ha/check", "Save and check DNS with 1.1.1.1", primary=not plan, fields=form)]
+        if plan:
+            records = mg.ha_records(state, plan["name"], plan["host"])
+            rows = []
+            for r in records:
+                ok, why = self.ha_results.get(r["name"], (None, ""))
+                status = state_word("", "Not checked") if ok is None else (state_word("ok", "Correct") if ok else state_word("bad", "Not yet") + f"<br><span class=hint>{esc(why)}</span>")
+                rows.append([f"<b>{esc(r['name'])}</b>", esc(" and ".join(("AAAA " if ":" in a else "A ") + a for a in r["ips"])), f"{r['ttl']} s", esc(r["use"]), status])
+            out.append(table(["Name", "Record", "TTL", "What it is for", "Status"], rows, label="HA records"))
+        out += ["<h2>Step 2: prepare the standby host</h2><ol>",
+                f"<li>A server with a fixed public IPv4 address. Fleet installs Docker and everything else.</li>",
+                "<li>A <b>private network or VPN</b> between the two control nodes. Database and cache replication use it and Fleet refuses public addresses. Never replicate across the internet.</li>",
+                "<li>Allow TCP <b>5432</b>, <b>5433</b>, and <b>6379</b> between the two private addresses only.</li>",
+                "<li>Add the Fleet SSH key to the standby (the command is on the <a href=\"/deploy#connect\">Deploy page</a>).</li>",
+                "<li>The standby serves the same control certificate as the active node. Fleet copies it: your own or local certificate from the "
+                "<a href=\"/tls\">Certificates</a> page, or the one Caddy obtained. It must be valid for at least 14 days.</li></ol>"]
+        ready = bool(plan) and all(self.ha_results.get(r["name"], (False, ""))[0] for r in mg.ha_records(state, plan["name"], plan["host"]))
+        out.append("<h2>Step 3: deploy the standby</h2>")
+        if not plan:
+            out.append('<p class="empty">Complete step 1 first.</p>')
+        else:
+            if not ready:
+                out.append('<p class="empty">1.1.1.1 does not yet see every record above. Fix them and check again. Without DNS you can still continue, but a failover will be slow and manual.</p>')
+            hidden = "".join(f'<input type="hidden" name="{k}" value="{esc(plan.get(k, ""))}">' for k in ("name", "host", "ssh_port", "replication_address", "active_replication_address"))
+            skip = "" if ready else '<label><span><input type="checkbox" name="skip_dns" value="1"> Continue without correct DNS</span></label>'
+            out.append(f"<p>Fleet installs the prerequisites on <b>{esc(plan['host'])}</b>, copies the secrets and the control certificate, sets up replication, and starts the standby. "
+                       "Edges learn both control addresses from signed configuration.</p>"
+                       + self.action_form("/ha/add-standby", f"Deploy standby {plan['name']}", primary=ready, confirm="ADD STANDBY", fields=hidden + skip))
+        return "".join(out)
+
+    def _tls_section(self, state: dict[str, Any]) -> str:
+        own = self.read(lambda e: e.management_certificates())
+        email = state["global"].get("acme_email") or "not set"
+        rows = []
+        for name in mg.MANAGEMENT_NAMES:
+            host = mg.hostname(state, name)
+            if name in own and "error" in own[name]:
+                what = state_word("bad", "Own certificate is invalid") + f"<br><span class=hint>{esc(own[name]['error'])}</span>"
+            elif name in own:
+                c = own[name]
+                label = "Local certificate (browsers warn)" if c.get("kind") == "local" else "Own certificate"
+                what = state_word("ok" if c["days_left"] > mg.EXPIRY_WARNING_DAYS and c.get("kind") != "local" else "warn", label) + f" expires {esc(c['not_after'])} ({c['days_left']} days)"
+            else:
+                what = state_word("", "Automatic (Let's Encrypt)") + "<br><span class=hint>Needs the name to point at the host and ports 80 and 443 open.</span>"
+            remove = self.action_form("/tls/remove", "Use automatic", fields=f'<input type="hidden" name="name" value="{name}">') if name in own else ""
+            rows.append([f"<b>{esc(host)}</b>", what, remove])
+        boxes = "".join(f'<label><span><input type="checkbox" name="name:{n}" value="1" checked> {esc(mg.hostname(state, n))}</span></label>' for n in mg.MANAGEMENT_NAMES)
+        fields = (boxes + '<label>Certificate chain (PEM, your certificate first)<textarea name="certificate" rows="6" required spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>'
+                  '<label>Private key (PEM, no password)<textarea name="key" rows="6" required spellcheck="false" placeholder="-----BEGIN PRIVATE KEY-----"></textarea></label>')
+        return (f"<p>Let's Encrypt contact email: <b>{esc(email)}</b>. Automatic certificates are requested by Caddy when the node starts.</p>"
+                + table(["Name", "Certificate", ""], rows, label="Management certificates")
+                + "<h2>Use your own certificate</h2><p>Choose the names it covers. One certificate can cover several names (a SAN or wildcard certificate). "
+                  "Fleet checks that the key matches, every chosen name is covered, and it has not expired. The key is kept in the encrypted vault and is never shown again. "
+                  "If hosts are already installed, deploy the change from the <a href=\"/config\">Config</a> page.</p>"
+                + self.action_form("/tls/set", "Save certificate", primary=True, fields=fields)
+                + "<h2>No certificate yet? Generate a local one</h2><p>Fleet makes its own certificate authority and signs a certificate for the chosen names, so the control panel and Grafana "
+                  "open over HTTPS even when Let's Encrypt cannot reach them. Deploy does this by itself for names that are not ready. Browsers show a warning until you trust the local CA"
+                  + (' (<a href="/tls/ca.crt">download the local CA</a>)' if self.read(lambda e: e.local_ca()) else "") + ", or you replace it with a real certificate later.</p>"
+                + self.action_form("/tls/local", "Generate local certificate", fields=boxes))
+
     def _dns_ok(self, state: dict[str, Any]) -> bool:
-        records, glue = dns_records(state)
-        names = [r["name"] for r in records + glue]
-        return bool(names) and all(self.dns_results.get(n, (False, ""))[0] for n in names)
+        records, glue = mg.dns_records(state)
+        names = [r["name"] for r in records]
+        own = set(self.read(lambda e: e.management_certificates()))
+        return bool(names) and all(self.dns_results.get(r["name"], (False, ""))[0] or r["key"] in own for r in records)
 
     def _roadmap(self, state: dict[str, Any], current: dict[str, Any] | None) -> str:
         nodes, done = state["nodes"], self.installed()
@@ -315,7 +358,7 @@ class FleetWeb:
             ("Plan created", True, "/nodes", "Your hosts and domains are saved in the encrypted vault."),
             ("SSH login saved for every host", all(n in have for n in nodes), "/deploy#connect", "Fleet needs a user, address, and port for each host."),
             ("Hosts accept the Fleet key", connected, "/deploy#connect", "Add the key to each host, then run the connection test."),
-            ("DNS names point to your hosts", self._dns_ok(state), "/dns", "Create the control, telemetry, Grafana, and nameserver names."),
+            ("DNS names point to your hosts (or you supply your own certificates)", self._dns_ok(state), "/dns", "Caddy gets its certificates only if 1.1.1.1 sees the names pointing at the hosts."),
             ("Signed release set", current is not None, "/deploy#release", "Fleet installs only signed releases."),
             ("Hosts installed", bool(nodes) and all(n in done for n in nodes), "/deploy#review", "Review the plan, then confirm."),
             ("Health check passed", checked, "/", "Run the check on the Overview page."),
@@ -375,8 +418,9 @@ class FleetWeb:
                 '<label>SSH user<input name="ssh_user" value="root" required autocomplete="off"></label>'
                 '<label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="22" required><span class="hint">Change it if your servers do not use 22. You can set a different port per host on its page.</span></label>')))
         out.append(self.action_form("/deploy/test", "Test connections", primary=all(n in have for n in order)))
-        out.append('<h3 id="dns">b. DNS names</h3><p>Fleet needs these names to point to your hosts: <b>control</b>, <b>edge-control</b>, <b>grafana</b>, <b>telemetry</b> and the platform nameservers. '
-                   'See <a href="/dns">DNS names</a> for the exact records and a check.</p>')
+        out.append('<h3 id="dns">b. DNS names and certificates</h3><p>Caddy gets Let\'s Encrypt certificates for <b>control</b>, <b>grafana</b>, and <b>telemetry</b> when the control node starts. '
+                   'That works only if 1.1.1.1 sees those names pointing at the host. See <a href="/dns">DNS names</a> for the exact records and a check, or '
+                   'put your own certificates on the <a href="/tls">Certificates</a> page to skip it.</p>')
         out.append('<h3 id="release">c. Signed release</h3>')
         manifest_field = '<label>Signed release manifest (JSON)<textarea name="manifest" rows="6" required></textarea></label>'
         if current is None:
@@ -443,6 +487,8 @@ class FleetWeb:
             body = (self._roadmap(state, current) + kpis + '<h2>Topology</h2><div class="topology" role="region" tabindex="0" aria-label="Topology diagram">' + topology_svg(state, results) + "</div><h2>Needs attention</h2>" + needs
                     + self.action_form("/check", "Run check of the whole stack", primary=True))
             return 200, self.layout(path, "Overview", body, flash)
+        if path == "/tls":
+            return 200, self.layout(path, "Certificates", self._tls_section(state), flash)
         if path == "/dns":
             return 200, self.layout(path, "DNS names", self._dns_section(state), flash)
         if path == "/deploy":
@@ -534,11 +580,7 @@ class FleetWeb:
         if path == "/ha":
             section = state.get("ha") or {}
             if not section or section.get("mode") == "none" or not section.get("standby"):
-                info = '<p class="empty">This fleet has one control node (<b>ha: none</b>). Add a standby to survive losing it.</p>'
-                fields = ('<label>Standby host address<input name="host" required autocomplete="off"><span class="hint">Fleet installs the prerequisites, reads the private replication '
-                          'addresses and the control certificate from the nodes, and sets everything up. Authorise the Fleet public key on the host first.</span></label>'
-                          '<label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="22" required></label>')
-                actions_html = self.action_form("/ha/add-standby", "Add standby", primary=True, fields=fields)
+                return 200, self.layout(path, "HA", self._ha_setup(state), flash)
             else:
                 info = table(["Active", "Standby"], label="Control nodes", rows=[[esc(section.get("active", "?")), esc(section.get("standby", "?"))]])
                 actions_html = "".join(self.action_form(f"/ha/{a}", label, confirm=a.upper()) for a, label in
@@ -584,17 +626,27 @@ class FleetWeb:
                 bad = sum(1 for c in self.last_checks if not c.ok)
                 return f"{len(self.last_checks)} checks, {bad} failing"
             return job("Check of the whole stack", check, "check")
+        if path == "/tls/set":
+            names = [n for n in mg.MANAGEMENT_NAMES if form.get(f"name:{n}")]
+            if not names:
+                raise ValidationError("Choose at least one name")
+            return self._sync("management-tls", lambda e: e.set_management_certificate(names, form["certificate"], form["key"]), "/tls",
+                              f"Certificate saved for {', '.join(names)}. It is used the next time the bundle is deployed.")
+        if path == "/tls/local":
+            names = [n for n in mg.MANAGEMENT_NAMES if form.get(f"name:{n}")]
+            if not names:
+                raise ValidationError("Choose at least one name")
+            return self._sync("management-tls", lambda e: e.generate_local_certificates(names), "/tls", f"Local certificate generated for {', '.join(names)}. Download the local CA to trust it.")
+        if path == "/tls/remove":
+            return self._sync("management-tls", lambda e: e.remove_management_certificate(form["name"]), "/tls", f"{form['name']} will use an automatic certificate again.")
         if path == "/dns/check":
-            state = self.read(lambda e: e.state())
-            records, glue = dns_records(state)
-
             def check_dns(e: FleetEngine) -> str:
-                for r in records + glue:
-                    self.dns_results[r["name"]] = resolve_matches(r["name"], r["ips"])
-                    e.say(f"{r['name']}: {self.dns_results[r['name']][1]}")
-                bad = [r["name"] for r in records + glue if not self.dns_results[r["name"]][0]]
-                return "Every name points to the right host." if not bad else f"{len(bad)} name(s) are not correct yet: {', '.join(bad)}"
-            return job("Check DNS names", check_dns, "dns-check")
+                self.dns_results = e.check_dns()
+                for name, (ok, why) in sorted(self.dns_results.items()):
+                    e.say(f"{name}: {'ok' if ok else 'NOT READY'}: {why}")
+                bad = [n for n, (ok, _) in self.dns_results.items() if not ok]
+                return "Every name points to the right host." if not bad else f"{len(bad)} name(s) are not correct yet: {', '.join(sorted(bad))}"
+            return job("Check DNS names with 1.1.1.1", check_dns, "dns-check")
         if path == "/deploy/ssh-defaults":
             user, port = form.get("ssh_user", "root").strip() or "root", int(form.get("ssh_port", "22"))
             return self._sync("ssh-defaults", lambda e: e.ensure_targets(user=user, port=port), "/deploy", f"Saved {user} on port {port} for the hosts that had no login. Add the Fleet key to them, then test.")
@@ -631,14 +683,19 @@ class FleetWeb:
             bad = [n for n in pending if not self.connections.get(n, (False, ""))[0]]
             if bad:
                 raise ValidationError(f"Test the connection to {', '.join(bad)} first. Fleet must be able to log in to a host before it can install it.")
+            waiting = self.read(lambda e: mg.unready(e.state(), e.work, self.dns_results))
             geo = {n: (form.get(f"country:{n}", "").upper(), form.get(f"continent:{n}", "").upper()) for n in pending}
             plans = self.read(lambda e: {n: e.bootstrap_plan(n) for n in pending})
             token = secrets.token_urlsafe(12)
             self.pending_deploy[token] = {"nodes": pending, "geo": geo, "release": current["release"]}
             sections = "".join(f"<h3>{i}. {esc(n)} ({esc(state['nodes'][n]['role'])}, {esc(state['nodes'][n]['public_ipv4'])})</h3><ol>"
                                + "".join(f"<li>{esc(st.label())}</li>" for st in plans[n].steps) + "</ol>" for i, n in enumerate(pending, 1))
+            local_note = ("<h3>Certificates</h3><p>1.1.1.1 does not yet see these names pointing at their host" + ("" if self.dns_results else " (DNS has not been checked)")
+                           + ", so Let's Encrypt could not issue for them. Fleet checks again just before deploying; any name still not ready gets a <b>local certificate</b> so the page still opens over HTTPS "
+                           "(browsers warn until you trust the local CA on the <a href=\"/tls\">Certificates</a> page):</p><ul>"
+                           + "".join(f"<li>{esc(reason)}</li>" for _k, reason in waiting) + "</ul>") if waiting else ""
             body = (f"<h2>Step 2 of 2: confirm</h2><p>Fleet will install release <b>{esc(current['release'])}</b> on {len(pending)} host(s), in this order, "
-                    "and stop at the first failure. Nothing has been sent to any host yet.</p>" + sections
+                    "and stop at the first failure. Nothing has been sent to any host yet.</p>" + local_note + sections
                     + self.action_form("/deploy/run", "Deploy to servers", primary=True, confirm="DEPLOY", fields=f'<input type="hidden" name="token" value="{esc(token)}">')
                     + '<p><a href="/deploy">Go back and change something</a></p>')
             raise _Render(self.layout("/deploy", "Review and confirm", body))
@@ -649,13 +706,8 @@ class FleetWeb:
                 raise ValidationError("The review has expired; review the deployment again")
 
             def deploy(e: FleetEngine) -> Any:
-                for n in plan["nodes"]:
-                    country, continent = plan["geo"][n]
-                    outcome = e.bootstrap(n, country=country or None, continent=continent or None)
-                    if not outcome.ok:
-                        return outcome
-                    self.vault.record("node-installed", json.dumps({"node": n, "release": plan["release"]}))
-                return f"Installed {', '.join(plan['nodes'])}"
+                outcome = e.deploy({n: tuple(v) for n, v in plan["geo"].items()})
+                return outcome if outcome is not None else f"Installed {', '.join(plan['nodes'])}"
             return job("Deploy the fleet", deploy, "deploy")
         if path == "/nodes/add":
             if not self.write_lock.acquire(blocking=False):
@@ -673,10 +725,7 @@ class FleetWeb:
         if path.startswith("/nodes/") and path.endswith("/bootstrap"):
             name = path.split("/")[2]
             def install(e: FleetEngine) -> Any:
-                outcome = e.bootstrap(name, country=form.get("country"), continent=form.get("continent"))
-                if outcome.ok:
-                    self.vault.record("node-installed", json.dumps({"node": name}))
-                return outcome
+                return e.bootstrap(name, country=form.get("country"), continent=form.get("continent"))
             return job(f"Install {name}", install, "bootstrap")
         if path == "/upgrade/trust":
             return self._sync("trust-release-key", lambda e: e.trust_release_key(form["key"]), "/deploy" if form.get("next") == "/deploy" else "/upgrade", "Release key trusted")
@@ -713,10 +762,42 @@ class FleetWeb:
             snapshot = form["snapshot"]
             need(f"RESTORE {snapshot}")
             return job("Restore", lambda e: ControlActions(e).restore(form["node"], snapshot, form["confirm"], overwrite_live=form.get("overwrite") == "1", operation=form.get("operation") or None), "restore")
+        if path == "/ha/check":
+            plan = {k: form.get(k, "").strip() for k in ("name", "host", "ssh_port", "replication_address", "active_replication_address")}
+            if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,40}", plan["name"]):
+                raise ValidationError("The standby name may use lowercase letters, digits, and dashes only")
+            try:
+                ipaddress.ip_address(plan["host"])
+            except ValueError as exc:
+                raise ValidationError("Enter the standby's public IPv4 address, for example 203.0.113.11") from exc
+            if not (plan["ssh_port"].isdigit() and 1 <= int(plan["ssh_port"]) <= 65535):
+                raise ValidationError("The SSH port must be a number from 1 to 65535")
+            self.ha_plan = plan
+            state = self.read(lambda e: e.state())
+            records = mg.ha_records(state, plan["name"], plan["host"])
+
+            def check_ha(e: FleetEngine) -> str:
+                for r in records:
+                    self.ha_results[r["name"]] = mg.check_name(r["name"], r["ips"])
+                    e.say(f"{r['name']}: {'ok' if self.ha_results[r['name']][0] else 'NOT READY'}: {self.ha_results[r['name']][1]}")
+                bad = [r["name"] for r in records if not self.ha_results[r["name"]][0]]
+                return "Every HA name points to the right address. Continue with step 3 on the HA page." if not bad else f"Not correct yet: {', '.join(bad)}"
+            return job("Check HA DNS names with 1.1.1.1", check_ha, "ha-dns-check")
         if path.startswith("/ha/"):
             action = path.split("/", 2)[2]
             if action == "add-standby":
-                return job("Add standby", lambda e: json.dumps(ha_action(e, "add-standby", host=form["host"], ssh_port=int(form.get("ssh_port", "22")))), "ha")
+                need("ADD STANDBY")
+                plan = {k: form.get(k, "").strip() for k in ("name", "host", "ssh_port", "replication_address", "active_replication_address")}
+                if not plan["host"]:
+                    raise ValidationError("Enter the standby's public address in step 1")
+                if not form.get("skip_dns"):
+                    state = self.read(lambda e: e.state())
+                    bad = [r["name"] for r in mg.ha_records(state, plan["name"], plan["host"]) if not self.ha_results.get(r["name"], (False, ""))[0]]
+                    if bad:
+                        raise ValidationError(f"Point these names first (1.1.1.1 does not see them yet): {', '.join(bad)}. Run the DNS check in step 1, or choose to continue without DNS.")
+                options = {"host": plan["host"], "name": plan["name"] or None, "ssh_port": int(plan["ssh_port"] or 22),
+                           "replication_address": plan["replication_address"] or None, "active_replication_address": plan["active_replication_address"] or None}
+                return job("Add standby", lambda e: json.dumps(ha_action(e, "add-standby", **options)), "ha")
             need(action.upper())
             return job(f"HA: {action}", lambda e: json.dumps(ha_action(e, action)), "ha")
         if path == "/secrets/rotate":
@@ -785,6 +866,10 @@ def make_server(web: FleetWeb, host: str = LOOPBACK, port: int = 8765) -> http.s
             url = urllib.parse.urlparse(self.path)
             if url.path == "/assets/fleet.css":
                 return self._send(200, (ASSETS / "fleet.css").read_text(), "text/css")
+            if url.path == "/tls/ca.crt":
+                inner = getattr(web, "web", web)
+                pem = inner.local_ca() if inner is not None and hasattr(inner, "local_ca") else None
+                return self._send(200, pem, "application/x-pem-file") if pem else self._send(404, "No local CA has been generated", "text/plain")
             try:
                 code, body = web.page(url.path, urllib.parse.parse_qs(url.query))
             except FleetError as exc:
