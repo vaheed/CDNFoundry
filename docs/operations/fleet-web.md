@@ -306,4 +306,3 @@ Everything here has a command. See the [Fleet CLI reference](../reference/fleet-
 | Signed release | `trust-release-key`, `set-release` |
 | Review and **Deploy to servers** | `deploy --plan-only`, then `deploy --location pop-1=DE:EU` |
 | HA: check DNS, deploy the standby | `dns-names --standby-address`, `control add-standby` |
-
