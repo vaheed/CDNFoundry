@@ -77,3 +77,13 @@ pre.log { background: var(--base); border: 1px solid var(--line); border-radius:
   .side nav a { white-space: nowrap; }
   main { padding: 1rem; }
 }
+
+fieldset { border: 1px solid var(--line, #d0d5dd); border-radius: 6px; padding: 0.75rem; display: grid; gap: 0.75rem; }
+legend { padding: 0 0.25rem; font-weight: 600; }
+
+details.help { margin: 0 0 1rem; padding: 0.5rem 0.75rem; border: 1px solid var(--line, #d0d5dd); border-radius: 6px; }
+details.help summary { cursor: pointer; font-weight: 600; }
+ol.roadmap { list-style: none; padding: 0; display: grid; gap: 0.5rem; }
+ol.roadmap li { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; }
+h3 { margin: 1.25rem 0 0.5rem; }
+code { overflow-wrap: anywhere; }

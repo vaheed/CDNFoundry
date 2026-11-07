@@ -23,6 +23,7 @@ from . import manifest as mf
 from .checks import Check
 from .common import FleetError, ValidationError
 from .engine import FleetEngine, ha_action, ControlActions
+from .render import Renderer
 from .security import classify
 from .ssh import Target
 from .state import FleetState
@@ -30,9 +31,51 @@ from .vault import Vault
 
 ASSETS = Path(__file__).parent / "web_assets"
 LOOPBACK = "127.0.0.1"
-PAGES = [("/", "Overview"), ("/nodes", "Nodes"), ("/security", "Security"), ("/upgrade", "Upgrade"), ("/config", "Config"),
+PAGES = [("/", "Overview"), ("/deploy", "Deploy"), ("/nodes", "Nodes"), ("/security", "Security"), ("/upgrade", "Upgrade"), ("/config", "Config"),
          ("/rollback", "Rollback"), ("/backups", "Backups"), ("/ha", "HA"), ("/secrets", "Secrets"), ("/history", "History")]
 ROTATABLE = ["metrics-token", "telemetry-token", "edge-proxy-secret", "log-auth-token"]
+
+HELP: dict[str, tuple[str, str]] = {
+    "/": ("The state of your fleet at a glance.", "Follow the roadmap from top to bottom. Run the check any time to see which host needs attention."),
+    "/deploy": ("Get your hosts installed in two steps.", "Step 1: connect the hosts, set the release, and enter locations. Step 2: review exactly what will happen, then confirm. Nothing reaches a server before you confirm."),
+    "/nodes": ("Your hosts and how Fleet logs in to them.", "Add a host here, or open one to change its SSH login or install it alone. Every host must accept the Fleet SSH key shown on the Deploy page."),
+    "/security": ("Known vulnerabilities in the running release.", "Read this after an upgrade. A fix arrives by upgrading to a newer signed release."),
+    "/upgrade": ("Move the whole fleet to a new signed release.", "Trust your CI signing key once, paste the signed release manifest, read the plan, then upgrade. Hosts update one at a time and roll back if a check fails."),
+    "/config": ("Push changed configuration to hosts.", "Use after you change hosts or settings. Fleet shows which bundles changed and swaps them in one host at a time."),
+    "/rollback": ("Return the whole fleet to the previous release.", "Use only if an upgrade went wrong. It is blocked when the release holds an irreversible database change; restore from backup then."),
+    "/backups": ("Back up the fleet and restore a control node.", "Back up before every upgrade. Restoring needs a snapshot ID and typing RESTORE with it."),
+    "/ha": ("Add and manage the standby control node.", "A standby lets the control plane survive the loss of one host. Add it after the first deploy works."),
+    "/secrets": ("Rotate fleet secrets.", "Rotate one secret at a time. Hosts that use it are updated for you."),
+    "/history": ("Everything Fleet has done, who did it, and the result.", "Use it to find out what changed before a problem started."),
+}
+
+
+def error_help(message: str) -> str:
+    if "No SSH access stored" in message:
+        return '<p>Fleet has no SSH login saved for that host. Open <a href="/deploy">Deploy</a> and save a login (user and SSH port), then add the Fleet key to the host.</p>'
+    if "permission denied" in message.lower():
+        return '<p>The host did not accept the Fleet key. The <a href="/deploy#connect">Deploy page</a> shows the key and the exact command to add it.</p>'
+    return ""
+
+
+def explain_ssh(message: str, node: str, login: str) -> tuple[str, str]:
+    """Turn ssh's own words into what is wrong and what to do about it."""
+    low = message.lower()
+    if "permission denied" in low or "publickey" in low:
+        return ("The host did not accept the Fleet key.", f"The key is not in the authorized keys of {login}. Add it with the command in step 1, then test again. If root login is disabled on that host, log in as another user with passwordless sudo and set that user on the host's page.")
+    if "refused" in low:
+        return ("Nothing is listening for SSH at that address and port.", "Check the port on the host's page, that sshd is running, and that the host firewall allows it.")
+    if "timed out" in low or "timeout" in low:
+        return ("The host did not answer in time.", "Check the IPv4 address, the cloud firewall or security group, and that the host is powered on.")
+    if "could not resolve" in low or "no route" in low or "unreachable" in low:
+        return ("This computer cannot reach that address.", "Check the IPv4 address on the Nodes page and your own network or VPN.")
+    if "could not read a host key" in low:
+        return ("Fleet could not read the host's SSH identity.", "Check the IPv4 address and port, and that sshd is running on the host.")
+    if "host key" in low or "identification" in low:
+        return ("The host key does not match the one Fleet saved.", "The server may have been reinstalled. If you expected that, a host key change must be reviewed before you continue; do not ignore it if you did not.")
+    if "no ssh access stored" in low:
+        return ("Fleet has no SSH login saved for this host yet.", "Open Deploy and save a login (user and SSH port) for it, or set it on the host's page.")
+    return ("The connection failed.", message[-200:])
 
 
 def require_loopback(host: str) -> str:
@@ -102,6 +145,8 @@ class FleetWeb:
         self.write_lock = threading.Lock()
         self.operator = getpass.getuser()
         self.pending_manifest: dict[str, str] = {}
+        self.pending_deploy: dict[str, dict[str, Any]] = {}
+        self.connections: dict[str, tuple[bool, str]] = {}
 
     # -- engine access -----------------------------------------------------------------------------------
     def _engine(self, work: Path, log: Callable[[str], None] = lambda _m: None) -> FleetEngine:
@@ -149,11 +194,13 @@ class FleetWeb:
         nav = "".join(f'<a href="{p}"{" aria-current=page" if p == path else ""}>{esc(t)}</a>' for p, t in PAGES)
         notice = f'<p class="flash" role="status">{esc(flash)}</p>' if flash else ""
         meta = '<meta http-equiv="refresh" content="2">' if refresh else ""
+        what, how = HELP.get(path, ("", ""))
+        guide = f'<details class="help"><summary>What is this page?</summary><p><b>{esc(what)}</b> {esc(how)}</p></details>' if what else ""
         return (
             '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
             f'{meta}<title>{esc(title)} - CDNFoundry Fleet</title><link rel="stylesheet" href="/assets/fleet.css"></head>'
             f'<body><div class="shell"><aside class="side"><div class="brand">CDNFoundry Fleet</div><nav aria-label="Fleet">{nav}</nav></aside>'
-            f"<main><h1>{esc(title)}</h1>{notice}{body}</main></div></body></html>"
+            f"<main><h1>{esc(title)}</h1>{guide}{notice}{body}</main></div></body></html>"
         )
 
     def results(self) -> dict[str, bool]:
@@ -173,6 +220,110 @@ class FleetWeb:
             return key
         with self.write_lock, self.vault.session() as work:
             return self._engine(work).public_key()
+
+    def installed(self) -> set[str]:
+        """Hosts Fleet has installed, from the sealed history of successful installs."""
+        names: set[str] = set()
+        for h in self.vault.history(2000):
+            if h["kind"] == "node-installed":
+                try:
+                    names.add(json.loads(h["detail"])["node"])
+                except (ValueError, KeyError):
+                    continue
+        return names
+
+    def _roadmap(self, state: dict[str, Any], current: dict[str, Any] | None) -> str:
+        nodes, done = state["nodes"], self.installed()
+        have = self.read(lambda e: e.targets(state))
+        connected = bool(nodes) and all(self.connections.get(n, (False, ""))[0] for n in nodes)
+        checked = bool(self.last_checks) and all(c.ok for c in self.last_checks)
+        items = [
+            ("Plan created", True, "/nodes", "Your hosts and domains are saved in the encrypted vault."),
+            ("SSH login saved for every host", all(n in have for n in nodes), "/deploy#connect", "Fleet needs a user, address, and port for each host."),
+            ("Hosts accept the Fleet key", connected, "/deploy#connect", "Add the key to each host, then run the connection test."),
+            ("Signed release set", current is not None, "/deploy#release", "Fleet installs only signed releases."),
+            ("Hosts installed", bool(nodes) and all(n in done for n in nodes), "/deploy#review", "Review the plan, then confirm."),
+            ("Health check passed", checked, "/", "Run the check on the Overview page."),
+        ]
+        first_open = next((i for i, it in enumerate(items) if not it[1]), None)
+        rows = []
+        for i, (label, ok, link, why) in enumerate(items):
+            mark = state_word("ok", "Done") if ok else (state_word("warn", "Next") if i == first_open else state_word("", "Later"))
+            rows.append(f'<li>{mark} <a href="{link}">{esc(label)}</a><span class="hint"> {esc(why)}</span></li>')
+        return '<h2>Your road to a running CDN</h2><ol class="roadmap">' + "".join(rows) + "</ol>"
+
+    def _key_help(self, state: dict[str, Any], key: str, have: dict[str, Any]) -> str:
+        first = next(iter(sorted(state["nodes"])), None)
+        t = have.get(first)
+        sample = (f"-p {t.port} {t.user}@{t.host}" if t and t.port != 22 else f"{t.user}@{t.host}") if t else "root@SERVER_IP"
+        command = f"mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '{key}' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+        return (
+            "<p>Fleet logs in to every host with one SSH key, never a password. Put this public key on each host once.</p>"
+            f'<pre class="log" tabindex="0" aria-label="Fleet SSH public key">{esc(key)}</pre>'
+            '<details class="help"><summary>How do I add the key to a host?</summary><ol>'
+            "<li>Open a terminal on the computer where you run Fleet, or the web console of your hosting provider.</li>"
+            f"<li>Log in to the host. From your computer: <code>ssh {esc(sample)}</code>. Use the password or key your provider gave you.</li>"
+            f"<li>On the host, paste and run this single command:</li></ol><pre class=\"log\" tabindex=\"0\" aria-label=\"Command to run on the host\">{esc(command)}</pre>"
+            "<ol start=\"4\"><li>Repeat on every host, then press <b>Test connections</b> below.</li></ol>"
+            "<p>Short version from your own computer, per host: <code>ssh root@IP \"&lt;command above&gt;\"</code>. "
+            "If the provider disabled root login, use a user with passwordless sudo and set that user on the host's page. "
+            "The key gives full control of the host, so keep the Fleet vault passphrase safe.</p></details>"
+        )
+
+    def _deploy_page(self, state: dict[str, Any], current: dict[str, Any] | None) -> str:
+        """The road to a first install. Steps 1 and 2 change nothing on a host except the connection test, which only runs `true`."""
+        nodes, done = state["nodes"], self.installed()
+        order = [n for group in Renderer.start_order(state) for n in group["nodes"]]
+        order = [n for i, n in enumerate(order) if n not in order[:i]]
+        pending = [n for n in order if n not in done]
+        have = self.read(lambda e: e.targets(state))
+        has_key = self.read(lambda e: e._release_file("trusted.pub").exists())
+        out = [self._roadmap(state, current), '<h2 id="connect">Step 1 of 2: prepare</h2><h3>a. Connect your hosts</h3>', self._key_help(state, self.fleet_public_key(), have)]
+        rows = []
+        for n in order:
+            login = f"{have[n].user}@{have[n].host}:{have[n].port}" if n in have else None
+            ok, why = self.connections.get(n, (None, ""))
+            if login is None:
+                conn = state_word("bad", "No SSH login saved")
+            elif ok is None:
+                conn = state_word("", "Not tested")
+            elif ok:
+                conn = state_word("ok", "Connected")
+            else:
+                title, advice = explain_ssh(why, n, login)
+                conn = state_word("bad", "Failed") + f"<br><b>{esc(title)}</b><br><span class=hint>{esc(advice)}</span>"
+            rows.append([f'<a href="/nodes/{esc(n)}">{esc(n)}</a>', esc(nodes[n]["role"]), esc(login or nodes[n]["public_ipv4"]),
+                         state_word("ok", "Installed") if n in done else state_word("warn", "Not installed"), conn])
+        out.append(table(["Host", "Role", "Login", "Install", "Connection"], rows, label="Hosts"))
+        if any(n not in have for n in order):
+            out.append(self.action_form("/deploy/ssh-defaults", "Save this login for hosts without one", primary=True, fields=(
+                '<label>SSH user<input name="ssh_user" value="root" required autocomplete="off"></label>'
+                '<label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="22" required><span class="hint">Change it if your servers do not use 22. You can set a different port per host on its page.</span></label>')))
+        out.append(self.action_form("/deploy/test", "Test connections", primary=all(n in have for n in order)))
+        out.append('<h3 id="release">b. Signed release</h3>')
+        manifest_field = '<label>Signed release manifest (JSON)<textarea name="manifest" rows="6" required></textarea></label>'
+        if current is None:
+            if not has_key:
+                out.append("<p>Fleet installs only releases signed by your CI. Paste the public key your CI signs with (the release pipeline publishes it).</p>"
+                           + self.action_form("/upgrade/trust", "Trust this key", fields='<label>Release public key (PEM)<textarea name="key" rows="4" required></textarea></label><input type="hidden" name="next" value="/deploy">'))
+            else:
+                out.append("<p>Key trusted. Paste the signed release manifest (the <code>release.json</code> your CI produced).</p>" + self.action_form("/upgrade/first", "Use this release", fields=manifest_field))
+            return "".join(out) + '<p class="empty">Step 2 opens when a signed release is set.</p>'
+        out.append(f"<p>{state_word('ok', 'Done')} Release to install: <b>{esc(current['release'])}</b></p>")
+        out.append('<h3 id="review">c. Review and confirm</h3>')
+        if not pending:
+            return "".join(out) + '<p class="attention">Every host is installed. Use <a href="/config">Config</a> to deploy changed configuration or <a href="/upgrade">Upgrade</a> for a new release.</p>'
+        fields = ""
+        for n in pending:
+            if nodes[n]["role"] in {"edge", "dns-edge"} and "EDGE_ID" not in nodes[n].get("extra_env", {}):
+                fields += (f'<fieldset><legend>{esc(n)} location (places it in Geo-DNS)</legend>'
+                           f'<label>Country code<input name="country:{esc(n)}" maxlength="2" required pattern="[A-Za-z]{{2}}" placeholder="DE" autocomplete="off"></label>'
+                           f'<label>Continent code<input name="continent:{esc(n)}" maxlength="2" required pattern="[A-Za-z]{{2}}" placeholder="EU" autocomplete="off"></label></fieldset>')
+        ready = all(self.connections.get(n, (False, ""))[0] for n in pending)
+        if not ready:
+            out.append('<p class="empty">Run <b>Test connections</b> above and get every host to Connected. Then you can review.</p>')
+        out.append(self.action_form("/deploy/review", f"Step 2: review the deployment of {len(pending)} host(s)", primary=ready, fields=fields))
+        return "".join(out)
 
     def csrf_field(self) -> str:
         return f'<input type="hidden" name="csrf" value="{esc(self.csrf)}">'
@@ -212,9 +363,11 @@ class FleetWeb:
                 needs = '<ul class="attention">' + "".join(f"<li>{state_word('bad', a)}</li>" for a in attention) + "</ul>"
             else:
                 needs = '<p class="attention">Every check passed.</p>'
-            body = (kpis + '<h2>Topology</h2><div class="topology" role="region" tabindex="0" aria-label="Topology diagram">' + topology_svg(state, results) + "</div><h2>Needs attention</h2>" + needs
+            body = (self._roadmap(state, current) + kpis + '<h2>Topology</h2><div class="topology" role="region" tabindex="0" aria-label="Topology diagram">' + topology_svg(state, results) + "</div><h2>Needs attention</h2>" + needs
                     + self.action_form("/check", "Run check of the whole stack", primary=True))
             return 200, self.layout(path, "Overview", body, flash)
+        if path == "/deploy":
+            return 200, self.layout(path, "Deploy", self._deploy_page(state, current), flash)
         if path == "/nodes":
             rows = [[esc(n["name"]), esc(n["role"]), esc(n["hostname"]), esc(n["public_ipv4"]), esc(n["release"]),
                      (state_word("ok" if self.results().get(n["name"]) else "bad", "Healthy" if self.results().get(n["name"]) else "Needs attention")
@@ -237,12 +390,21 @@ class FleetWeb:
             if name not in nodes:
                 return 404, self.layout(path, "Not found", '<p class="empty">There is no such node.</p>')
             node = nodes[name]
+            have = self.read(lambda e: e.targets(state))
+            login = have.get(name)
+            ssh_form = self.action_form(f"/nodes/{esc(name)}/ssh", "Save SSH login", fields=(
+                f'<label>SSH user<input name="ssh_user" value="{esc(login.user if login else "root")}" required autocomplete="off"><span class="hint">root, or a user with passwordless sudo.</span></label>'
+                f'<label>Address<input name="ssh_host" value="{esc(login.host if login else node["public_ipv4"])}" required autocomplete="off"></label>'
+                f'<label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="{login.port if login else 22}" required></label>'))
+            facts = table(["Role", "Host", "IPv4", "Release"], label="Node facts", rows=[[esc(node["role"]), esc(node["hostname"]), esc(node["public_ipv4"]), esc(node["release"])]])
+            if login is None:
+                return 200, self.layout(path, name, facts + "<h2>SSH login</h2><p>Fleet has no login saved for this host. Save one, then add the Fleet key on the <a href=\"/deploy#connect\">Deploy page</a>.</p>" + ssh_form, flash)
             plan = self.read(lambda e: e.bootstrap_plan(name))
             enroll = any(s.kind == "enroll" for s in plan.steps)
             geo = ('<label>Country code<input name="country" value="US" maxlength="2" required><span class="hint">Places this PoP in Geo-DNS.</span></label>'
                    '<label>Continent code<input name="continent" value="NA" maxlength="2" required></label>') if enroll else ""
-            facts = table(["Role", "Host", "IPv4", "Release"], label="Node facts", rows=[[esc(node["role"]), esc(node["hostname"]), esc(node["public_ipv4"]), esc(node["release"])]])
-            body = (facts + "<h2>Plan</h2><ol>" + "".join(f"<li>{esc(s.label())}</li>" for s in plan.steps) + "</ol>"
+            body = (facts + "<h2>SSH login</h2>" + f"<p>Fleet logs in as <b>{esc(login.user)}@{esc(login.host)}:{login.port}</b>. The Fleet key must be on this host (see the <a href=\"/deploy#connect\">Deploy page</a>).</p>" + ssh_form
+                    + "<h2>Install only this host</h2><p>Most people use the <a href=\"/deploy\">Deploy page</a> to install everything in order.</p><ol>" + "".join(f"<li>{esc(s.label())}</li>" for s in plan.steps) + "</ol>"
                     + self.action_form(f"/nodes/{esc(name)}/bootstrap", "Install and start this node", primary=True, fields=geo))
             return 200, self.layout(path, name, body, flash)
         if path == "/security":
@@ -343,6 +505,68 @@ class FleetWeb:
                 bad = sum(1 for c in self.last_checks if not c.ok)
                 return f"{len(self.last_checks)} checks, {bad} failing"
             return job("Check of the whole stack", check, "check")
+        if path == "/deploy/ssh-defaults":
+            user, port = form.get("ssh_user", "root").strip() or "root", int(form.get("ssh_port", "22"))
+            return self._sync("ssh-defaults", lambda e: e.ensure_targets(user=user, port=port), "/deploy", f"Saved {user} on port {port} for the hosts that had no login. Add the Fleet key to them, then test.")
+        if path == "/deploy/test":
+            def test(e: FleetEngine) -> str:
+                state = e.state()
+                for name in sorted(state["nodes"]):
+                    try:
+                        e.test_connection(name)
+                        self.connections[name] = (True, "")
+                        e.say(f"{name}: connected")
+                    except FleetError as exc:
+                        self.connections[name] = (False, str(exc))
+                        e.say(f"{name}: {explain_ssh(str(exc), name, name)[0]}")
+                bad = [n for n in state["nodes"] if not self.connections[n][0]]
+                return "All hosts are connected. Go back to Deploy to continue." if not bad else f"{len(bad)} host(s) need attention: {', '.join(sorted(bad))}. The Deploy page says what to fix."
+            return job("Test connections", test, "ssh-test")
+        if path.startswith("/nodes/") and path.endswith("/ssh"):
+            from .ssh import Target, save_target
+
+            name = path.split("/")[2]
+            target = Target(name, form["ssh_host"].strip(), int(form["ssh_port"]), form["ssh_user"].strip())
+            self.connections.pop(name, None)
+            return self._sync("node-ssh", lambda e: save_target(e.work, target), f"/nodes/{name}", f"SSH login for {name} saved. Test it on the Deploy page.")
+        if path == "/deploy/review":
+            state, current = self.read(lambda e: (e.state(), e.release_manifest()))
+            if current is None:
+                raise ValidationError("Set a signed release first")
+            done = self.installed()
+            order = [n for group in Renderer.start_order(state) for n in group["nodes"]]
+            pending = [n for i, n in enumerate(order) if n not in order[:i] and n not in done]
+            if not pending:
+                raise ValidationError("Every host is already installed")
+            bad = [n for n in pending if not self.connections.get(n, (False, ""))[0]]
+            if bad:
+                raise ValidationError(f"Test the connection to {', '.join(bad)} first. Fleet must be able to log in to a host before it can install it.")
+            geo = {n: (form.get(f"country:{n}", "").upper(), form.get(f"continent:{n}", "").upper()) for n in pending}
+            plans = self.read(lambda e: {n: e.bootstrap_plan(n) for n in pending})
+            token = secrets.token_urlsafe(12)
+            self.pending_deploy[token] = {"nodes": pending, "geo": geo, "release": current["release"]}
+            sections = "".join(f"<h3>{i}. {esc(n)} ({esc(state['nodes'][n]['role'])}, {esc(state['nodes'][n]['public_ipv4'])})</h3><ol>"
+                               + "".join(f"<li>{esc(st.label())}</li>" for st in plans[n].steps) + "</ol>" for i, n in enumerate(pending, 1))
+            body = (f"<h2>Step 2 of 2: confirm</h2><p>Fleet will install release <b>{esc(current['release'])}</b> on {len(pending)} host(s), in this order, "
+                    "and stop at the first failure. Nothing has been sent to any host yet.</p>" + sections
+                    + self.action_form("/deploy/run", "Deploy to servers", primary=True, confirm="DEPLOY", fields=f'<input type="hidden" name="token" value="{esc(token)}">')
+                    + '<p><a href="/deploy">Go back and change something</a></p>')
+            raise _Render(self.layout("/deploy", "Review and confirm", body))
+        if path == "/deploy/run":
+            need("DEPLOY")
+            plan = self.pending_deploy.pop(form.get("token", ""), None)
+            if plan is None:
+                raise ValidationError("The review has expired; review the deployment again")
+
+            def deploy(e: FleetEngine) -> Any:
+                for n in plan["nodes"]:
+                    country, continent = plan["geo"][n]
+                    outcome = e.bootstrap(n, country=country or None, continent=continent or None)
+                    if not outcome.ok:
+                        return outcome
+                    self.vault.record("node-installed", json.dumps({"node": n, "release": plan["release"]}))
+                return f"Installed {', '.join(plan['nodes'])}"
+            return job("Deploy the fleet", deploy, "deploy")
         if path == "/nodes/add":
             if not self.write_lock.acquire(blocking=False):
                 raise ValidationError("Another action is running; wait for it to finish")
@@ -358,9 +582,14 @@ class FleetWeb:
             return f"/nodes/{name}", f"Added {name}. Review the plan, then install."
         if path.startswith("/nodes/") and path.endswith("/bootstrap"):
             name = path.split("/")[2]
-            return job(f"Install {name}", lambda e: e.bootstrap(name, country=form.get("country"), continent=form.get("continent")), "bootstrap")
+            def install(e: FleetEngine) -> Any:
+                outcome = e.bootstrap(name, country=form.get("country"), continent=form.get("continent"))
+                if outcome.ok:
+                    self.vault.record("node-installed", json.dumps({"node": name}))
+                return outcome
+            return job(f"Install {name}", install, "bootstrap")
         if path == "/upgrade/trust":
-            return self._sync("trust-release-key", lambda e: e.trust_release_key(form["key"]), "/upgrade", "Release key trusted")
+            return self._sync("trust-release-key", lambda e: e.trust_release_key(form["key"]), "/deploy" if form.get("next") == "/deploy" else "/upgrade", "Release key trusted")
         if path == "/upgrade/plan":
             document = json.loads(form["manifest"])
             plan, manifest, diff = self.read(lambda e: e.upgrade_plan(document))
@@ -375,7 +604,7 @@ class FleetWeb:
             raise _Render(self.layout("/upgrade", "Upgrade plan", body))
         if path == "/upgrade/first":
             document = json.loads(form["manifest"])
-            return self._sync("set-release", lambda e: e.set_release(document), "/nodes", f"Release {document['manifest']['release']} set. Nodes install from it.")
+            return self._sync("set-release", lambda e: e.set_release(document), "/deploy", f"Release {document['manifest']['release']} set. Review the deployment below.")
         if path == "/upgrade/apply":
             document = json.loads(self.pending_manifest.pop(form["token"], "null") or "null")
             if document is None:
@@ -469,7 +698,7 @@ def make_server(web: FleetWeb, host: str = LOOPBACK, port: int = 8765) -> http.s
             try:
                 code, body = web.page(url.path, urllib.parse.parse_qs(url.query))
             except FleetError as exc:
-                code, body = 500, web.layout(url.path, "Error", f'<p class="empty" role="alert">{esc(exc)}</p>')
+                code, body = 500, web.layout(url.path, "Something needs attention", f'<p class="empty" role="alert">{esc(exc)}</p>{error_help(str(exc))}')
             self._send(code, body)
 
         def do_POST(self) -> None:
@@ -484,7 +713,7 @@ def make_server(web: FleetWeb, host: str = LOOPBACK, port: int = 8765) -> http.s
             except _Render as page:
                 return self._send(200, page.html)
             except (FleetError, ValueError, KeyError) as exc:
-                return self._send(400, web.layout("", "Action failed", f'<p class="empty" role="alert">{esc(exc)}</p>'))
+                return self._send(400, web.layout("", "Action failed", f'<p class="empty" role="alert">{esc(exc)}</p>{error_help(str(exc))}<p><a href="/deploy">Back to Deploy</a></p>'))
             self.send_response(303)
             self.send_header("Location", target + (("?" + urllib.parse.urlencode({"msg": msg})) if msg else ""))
             self.end_headers()

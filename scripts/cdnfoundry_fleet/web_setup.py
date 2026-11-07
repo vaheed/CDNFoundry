@@ -33,22 +33,27 @@ EXTRA_ROLES = sorted(ROLES - {"control"})
 
 
 def parse_extra_nodes(text: str, operator_domain: str) -> list[dict[str, Any]]:
-    """One node per line: `name role ipv4 [region]`, separated by spaces or commas."""
+    """One node per line: `name role ipv4 [region] [port=2222] [user=ubuntu]`, separated by spaces or commas."""
     nodes: list[dict[str, Any]] = []
     for number, raw in enumerate(text.splitlines(), 1):
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
         parts = [p for p in re.split(r"[\s,]+", line) if p]
-        if len(parts) not in (3, 4):
-            raise ValidationError(f"Node line {number}: write `name role ipv4 [region]`, for example `pop-1 dns-edge 203.0.113.10 EU`")
+        options = {p.split("=", 1)[0]: p.split("=", 1)[1] for p in parts if "=" in p}
+        parts = [p for p in parts if "=" not in p]
+        if len(parts) not in (3, 4) or set(options) - {"port", "user"}:
+            raise ValidationError(f"Node line {number}: write `name role ipv4 [region] [port=2222] [user=ubuntu]`, for example `pop-1 dns-edge 203.0.113.10 EU port=2222`")
+        if "port" in options and not (options["port"].isdigit() and 1 <= int(options["port"]) <= 65535):
+            raise ValidationError(f"Node line {number}: the SSH port must be a number from 1 to 65535")
         name, role, ipv4 = parts[:3]
         if not NODE_NAME.match(name):
             raise ValidationError(f"Node line {number}: the name may use lowercase letters, digits, and dashes only")
         if role not in EXTRA_ROLES:
             raise ValidationError(f"Node line {number}: the role must be one of {', '.join(EXTRA_ROLES)}")
         nodes.append({"name": name, "role": role, "region": parts[3] if len(parts) == 4 else "global", "location": "primary",
-                      "hostname": f"{name}.{operator_domain}", "public_ipv4": ipv4, "bind_ipv4": "0.0.0.0"})
+                      "hostname": f"{name}.{operator_domain}", "public_ipv4": ipv4, "bind_ipv4": "0.0.0.0",
+                      "_ssh_port": int(options["port"]) if "port" in options else None, "_ssh_user": options.get("user")})
     return nodes
 
 
@@ -139,10 +144,10 @@ class WebGate:
             + "<h2>Other hosts</h2>"
             + '<label>One host per line: name role ipv4 [region]<textarea name="nodes" rows="5" spellcheck="false" '
               'placeholder="pop-1 dns-edge 203.0.113.10 EU&#10;pop-2 dns-edge 203.0.113.11 AS"></textarea>'
-              f'<span class="hint">Roles: {esc(", ".join(EXTRA_ROLES))}. You can add more later.</span></label>'
+              f'<span class="hint">Roles: {esc(", ".join(EXTRA_ROLES))}. A host with its own SSH port or user: add port=2222 user=ubuntu. You can change any login later.</span></label>'
             + "<h2>SSH</h2>"
-            + self._field("SSH user", "ssh_user", required="", value="root")
-            + self._field("SSH port", "ssh_port", type="number", min_="1", max_="65535", required="", value="22")
+            + self._field("SSH user for all hosts", "ssh_user", required="", value="root")
+            + self._field("SSH port for all hosts", "ssh_port", type="number", min_="1", max_="65535", required="", value="22")
             + '<button class="primary">Create fleet</button></form>'
         ).replace("min_=", "min=").replace("max_=", "max=")
 
@@ -164,6 +169,7 @@ class WebGate:
                   "hostname": form.get("control_hostname", "").strip() or f"{control}.{operator}",
                   "public_ipv4": form.get("control_ipv4", "").strip(), "bind_ipv4": "0.0.0.0"}]
         nodes += parse_extra_nodes(form.get("nodes", ""), operator)
+        logins = {n["name"]: (n.pop("_ssh_user", None) or ssh_user, n.pop("_ssh_port", None) or ssh_port) for n in nodes}
         if len({n["name"] for n in nodes}) != len(nodes):
             raise ValidationError("Every host needs a different name")
         preset = form.get("preset", "control-monitoring")
@@ -188,7 +194,7 @@ class WebGate:
                     if code != cli.EXIT_OK:
                         raise StateError("Setup did not finish")
                     for node in nodes:
-                        save_target(work, Target(node["name"], node["public_ipv4"], ssh_port, ssh_user))
+                        save_target(work, Target(node["name"], node["public_ipv4"], logins[node["name"]][1], logins[node["name"]][0]))
                     from .engine import FleetEngine
 
                     FleetEngine(work, self.repo_root, self.output_dir).public_key()
@@ -198,4 +204,4 @@ class WebGate:
             self.vault_path.unlink(missing_ok=True)
             raise
         self.open(passphrase)
-        return "/nodes", "Your fleet is created. Add the SSH key below to each host, then open a host to install it."
+        return "/deploy", "Your fleet is created. Add the SSH key to each host, set the signed release, then review and deploy."
