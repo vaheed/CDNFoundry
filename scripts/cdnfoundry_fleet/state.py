@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import copy
-import fcntl
 import ipaddress
 import os
 import shutil
@@ -78,6 +77,28 @@ def validate_alert_webhook(value: Any) -> str:
     return text
 
 
+if os.name == "nt":
+    import msvcrt
+
+    def _lock(fd: int, exclusive: bool) -> None:
+        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+
+    def _unlock(fd: int) -> None:
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        except OSError:
+            pass
+else:
+    import fcntl
+
+    def _lock(fd: int, exclusive: bool) -> None:
+        fcntl.flock(fd, (fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH) | fcntl.LOCK_NB)
+
+    def _unlock(fd: int) -> None:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+
+
 class FleetState:
     def __init__(self, state_dir: Path, *, dry_run: bool = False) -> None:
         self.state_dir = state_dir.resolve()
@@ -100,14 +121,13 @@ class FleetState:
             pass
         fd = os.open(self.lock_file, os.O_CREAT | os.O_RDWR, 0o600)
         try:
-            mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
             try:
-                fcntl.flock(fd, mode | fcntl.LOCK_NB)
-            except BlockingIOError as exc:
+                _lock(fd, exclusive)
+            except OSError as exc:
                 raise StateError("Another fleet generator process is already running") from exc
             yield
         finally:
-            fcntl.flock(fd, fcntl.LOCK_UN)
+            _unlock(fd)
             os.close(fd)
 
     def exists(self) -> bool:
