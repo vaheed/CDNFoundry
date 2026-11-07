@@ -17,7 +17,7 @@ from .checks import Check, gate_with_retry, node_gate, run_checks
 from .common import ValidationError, atomic_json, utc_now
 from .control_cli import Runner, bundle_digest
 from .render import Renderer
-from .ssh import SshTransport, Target, load_targets, save_target
+from .ssh import SshError, SshTransport, Target, load_targets, save_target
 from .state import FleetState
 
 RELEASES = "releases"
@@ -82,6 +82,28 @@ class FleetEngine:
         self.public_key()
         save_target(self.work, target)
         return self.transport.pin_host_key(target)
+
+    def ensure_targets(self, *, user: str = "root", port: int = 22) -> list[str]:
+        """Give every host without SSH details the default login (root on port 22) and return the hosts changed."""
+        state = self.state()
+        have = self.targets(state)
+        added = [n for n in sorted(state["nodes"]) if n not in have]
+        for name in added:
+            save_target(self.work, Target(name, state["nodes"][name]["public_ipv4"], port, user))
+        if added:
+            self.public_key()
+        return added
+
+    def test_connection(self, name: str) -> None:
+        """Pin the host key on first use, then run a no-op as the stored SSH user. Raises SshError with ssh's own reason."""
+        state = self.state()
+        self._missing_access(state, [name])
+        target = self.targets(state)[name]
+        self.public_key()
+        self.transport.pin_host_key(target)
+        result = self.transport.run(target, "true")
+        if not result.ok:
+            raise SshError(f"{name}: the login worked but the test command failed: {(result.stderr or result.stdout).strip()[:200]}")
 
     def _render(self, state: dict[str, Any]) -> dict[str, tuple[str, str]]:
         for node in state["nodes"].values():
