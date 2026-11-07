@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from . import ha
+from . import ha, management as mg
 from .certs import PKI
 from .common import RenderError, atomic_write, quote_env, sync_tree, sync_directory, exchange_directories
 from .compose import (
@@ -111,6 +111,8 @@ class Renderer:
             atomic_write(tmp / "compose.yml", dump_yaml(filtered), 0o600)
             atomic_write(tmp / ".env.prod", self._format_env(env), 0o600)
             self._write_generated_configs(state, node, tmp, monitoring_host or watcher)
+            for filename, (text, mode) in self._own_tls_files(state, filtered.get("services", {})).items():
+                atomic_write(tmp / "tls" / filename, text, mode)
             atomic_write(tmp / "README.md", self._node_readme(state, node, filtered), 0o600)
             atomic_write(tmp / "validate.sh", self._validate_script(node, filtered), 0o700)
             atomic_write(tmp / "start.sh", self._start_script(state, node), 0o700)
@@ -132,8 +134,19 @@ class Renderer:
             return feature.get("host") == node["name"]
         return False
 
+    def _own_tls_files(self, state: dict[str, Any], services: dict[str, Any]) -> dict[str, tuple[str, int]]:
+        """Operator-supplied certificates for the names this node's Caddy serves. The two-node control ingress certificate wins for `control`."""
+        names = list(mg.MANAGEMENT_NAMES) if "caddy" in services else (["grafana", "telemetry"] if "telemetry-gateway" in services else [])
+        if ha.section(state).get("ingress_certificate"):
+            names = [n for n in names if n != "control"]
+        return mg.caddy_files(self.store.state_dir, names)
+
     def _apply_generated_overrides(self, state: dict[str, Any], node: dict[str, Any], compose: dict[str, Any]) -> None:
         services = compose.get("services", {})
+        if self._own_tls_files(state, services):
+            for gateway in ("caddy", "telemetry-gateway"):
+                if gateway in services:
+                    services[gateway].setdefault("volumes", []).append("./tls:/etc/caddy/own-tls:ro")
         gateway_ip = node.get("extra_env", {}).get("EDGE_HOST_GATEWAY_IPV4")
         if gateway_ip and "edge-agent" in services:
             # Some Docker hosts materialize the symbolic host-gateway as the
@@ -558,7 +571,7 @@ class Renderer:
 
     def _copy_runtime_files(self, compose: dict[str, Any], destination: Path) -> None:
         for relative in sorted(bind_mount_sources(compose)):
-            if relative.parts and relative.parts[0] in {'generated', 'pki', 'secrets', 'ha'}:
+            if relative.parts and relative.parts[0] in {'generated', 'pki', 'secrets', 'ha', 'tls'}:
                 continue
             source = (self.repo_root / relative).resolve()
             try:

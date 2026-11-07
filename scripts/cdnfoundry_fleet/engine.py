@@ -17,6 +17,7 @@ from .checks import Check, gate_with_retry, node_gate, run_checks
 from .common import ValidationError, atomic_json, utc_now
 from .control_cli import Runner, bundle_digest
 from .render import Renderer
+from . import management as mg
 from .ssh import SshError, SshTransport, Target, load_targets, save_target
 from .state import FleetState
 
@@ -105,6 +106,95 @@ class FleetEngine:
         if not result.ok:
             raise SshError(f"{name}: the login worked but the test command failed: {(result.stderr or result.stdout).strip()[:200]}")
 
+    # -- install tracking, DNS, certificates, and the guided deploy ------------------------------------------------
+    def installed(self) -> set[str]:
+        path = self.work / "deploy" / "installed.json"
+        return set(json.loads(path.read_text(encoding="utf-8"))) if path.exists() else set()
+
+    def mark_installed(self, name: str) -> None:
+        atomic_json(self.work / "deploy" / "installed.json", sorted(self.installed() | {name}))
+
+    def pending_nodes(self, state: dict[str, Any] | None = None) -> list[str]:
+        """Hosts not installed yet, in the order they must start."""
+        state = state or self.state()
+        order: list[str] = []
+        for group in Renderer.start_order(state):
+            order += [n for n in group["nodes"] if n not in order]
+        done = self.installed()
+        return [n for n in order if n not in done]
+
+    def dns_names(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        return mg.dns_records(self.state())
+
+    def check_dns(self) -> dict[str, tuple[bool, str]]:
+        """Asks the public resolver 1.1.1.1, the way the certificate authority will see the names."""
+        records, glue = mg.dns_records(self.state())
+        return {r["name"]: mg.check_name(r["name"], r["ips"]) for r in records + glue}
+
+    def management_certificates(self) -> dict[str, dict[str, Any]]:
+        return mg.stored(self.work, self.state())
+
+    def set_management_certificate(self, names: list[str], certificate_pem: str, key_pem: str) -> dict[str, Any]:
+        state = self.state()
+        hosts = [mg.hostname(state, n) for n in names]
+        info = mg.validate_certificate(certificate_pem, key_pem, hosts)
+        for name in names:
+            mg.save_certificate(self.work, name, certificate_pem, key_pem)
+        self.events.append({"kind": "management-certificate", "names": names})
+        return info
+
+    def remove_management_certificate(self, name: str) -> bool:
+        mg.hostname(self.state(), name)
+        return mg.remove_certificate(self.work, name)
+
+    def generate_local_certificates(self, names: list[str]) -> None:
+        """Local-CA certificates for names that have no operator certificate and cannot get an automatic one."""
+        state = self.state()
+        for name in names:
+            mg.hostname(state, name)
+        mg.generate_local(self.work, state, names)
+        self.events.append({"kind": "local-certificate", "names": names})
+
+    def local_ca(self) -> str | None:
+        return mg.local_ca_certificate(self.work)
+
+    def deploy_blockers(self, pending: list[str]) -> list[str]:
+        problems = []
+        if self.release_manifest() is None:
+            problems.append("No signed release is set")
+        if not pending:
+            problems.append("Every host is already installed")
+        return problems
+
+    def deploy(self, locations: dict[str, tuple[str | None, str | None]] | None = None, *, log: Callable[[str], None] | None = None) -> actions.Outcome | None:
+        """Install every pending host in start order. Returns the failed outcome, or None when all succeeded.
+
+        A management name that has no operator certificate and does not resolve to its host in 1.1.1.1 cannot get a Let's Encrypt
+        certificate. It gets a local one instead, so the control plane still opens over HTTPS.
+        """
+        say = log or self.say
+        locations = locations or {}
+        state = self.state()
+        pending = self.pending_nodes(state)
+        blockers = self.deploy_blockers(pending)
+        if blockers:
+            raise ValidationError("Cannot deploy yet: " + "; ".join(blockers))
+        waiting = mg.unready(state, self.work, self.check_dns())
+        if waiting:
+            for _key, reason in waiting:
+                say(f"DNS not ready, {reason}")
+            say("Let's Encrypt cannot validate these names yet, so Fleet generates local certificates for them. Browsers warn until you trust the local CA or replace them.")
+            self.generate_local_certificates([key for key, _ in waiting])
+        for name in pending:
+            say(f"{name}: testing the SSH connection")
+            self.test_connection(name)
+        for name in pending:
+            country, continent = locations.get(name, (None, None))
+            outcome = self.bootstrap(name, country=country, continent=continent, log=say)
+            if not outcome.ok:
+                return outcome
+        return None
+
     def _render(self, state: dict[str, Any]) -> dict[str, tuple[str, str]]:
         for node in state["nodes"].values():
             self.store._ensure_node_secrets(node)  # a vault from an older release may lack a secret the compose file needs
@@ -170,7 +260,10 @@ class FleetEngine:
         engine = self._engine(state)
         engine.enroll = self._enroll
         self.events.append({"kind": "bootstrap", "node": name})
-        return engine.apply(plan, release, log=log or self.say)
+        outcome = engine.apply(plan, release, log=log or self.say)
+        if outcome.ok:
+            self.mark_installed(name)
+        return outcome
 
     def _enroll(self, name: str) -> tuple[bool, str]:
         """Register the PoP in the control plane, put its cells in the shared pool, and give the node its identity."""
@@ -420,6 +513,10 @@ class StandbySetup:
     def ingress_certificate(self, state: dict[str, Any], active: Target) -> tuple[str, str]:
         """The certificate Caddy on the active node already holds for the control hostname, so nobody supplies one."""
         host = f"control.{state['global']['operator_domain']}"
+        own = mg.tls_dir(self.e.work)
+        if (own / "control.crt").exists() and (own / "control.key").exists():
+            # An operator or Fleet-local certificate is what the active node serves, so the standby serves the same one.
+            return (own / "control.crt").read_text(encoding="utf-8"), (own / "control.key").read_text(encoding="utf-8")
         base = f"cd {actions.REMOTE_ROOT} && docker compose --env-file .env.prod exec -T caddy"
         path = self._run(active, f"{base} find /data/caddy/certificates -type f -name {shlex.quote(host + '.crt')}").strip().splitlines()
         if not path:

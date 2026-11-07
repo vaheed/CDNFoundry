@@ -7,6 +7,8 @@
 	# A two-node control plane serves an operator-supplied certificate (the standby cannot obtain one while
 	# idle). Without the HA bundle this directory does not exist and Caddy issues its own.
 	import /etc/caddy/tls.d/*.caddy
+	# An operator-supplied certificate (Fleet web or `management-tls`) replaces automatic issuance for this name.
+	import /etc/caddy/own-tls/control-*.caddy
 
 	encode zstd gzip
 	reverse_proxy web:8080 {
@@ -29,6 +31,7 @@
 }
 
 https://{$TELEMETRY_HOSTNAME}:8444 {
+	import /etc/caddy/own-tls/telemetry-*.caddy
 	@log_sources {
 		remote_ip {$LOG_SOURCE_IPV4_ALLOWLIST} {$LOG_SOURCE_IPV6_ALLOWLIST}
 		path /loki/api/v1/push
@@ -49,6 +52,7 @@ https://{$TELEMETRY_HOSTNAME}:8444 {
 }
 
 {$GRAFANA_HOSTNAME} {
+	import /etc/caddy/own-tls/grafana-*.caddy
 	reverse_proxy grafana:3000
 	header {
 		Strict-Transport-Security "max-age=31536000"
