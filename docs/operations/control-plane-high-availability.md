@@ -118,6 +118,12 @@ the fingerprints to match. A node with a different signing key cannot become rea
 
 ## Add a standby
 
+**First point the addresses.** Before you add the standby, set the TTL of `control.<operator-zone>` and
+`edge-control.<operator-zone>` to 60 seconds (both stay pointing at the **active** node), and create
+`<standby-name>.<operator-zone>` (for example `control-2`) pointing at the standby's public address. Check
+them with `cdnfoundry-fleet dns-names --standby-address 203.0.113.11 --check`, which asks 1.1.1.1, or on the HA
+page of Fleet web. Then add the standby.
+
 Authorize the Fleet public key (`cdnfoundry-fleet public-key`) on the new host, put both control nodes on a private
 network or VPN, then give Fleet the new host's address and nothing else:
 

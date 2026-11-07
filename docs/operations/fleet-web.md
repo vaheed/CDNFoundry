@@ -49,7 +49,8 @@ Only one action runs at a time. If you start a second one, the page says
 | --- | --- |
 | [Overview](#overview) | See the fleet at a glance and run a health check |
 | [Deploy](#deploy) | Follow the road: connect hosts, set the release, review, and confirm |
-| [DNS names](#dns-names) | See which names must point to which host, and check them |
+| [DNS names](#dns-names) | See which names must point to which host, and check them with 1.1.1.1 |
+| [Certificates](#certificates) | Use your own certificates, or a local one, for the control, Grafana, and telemetry names |
 | [Nodes](#nodes) | List hosts, add one, and install it |
 | [Security](#security) | See known vulnerabilities in the running release |
 | [Upgrade](#upgrade) | Trust a release key, review a plan, and upgrade |
@@ -75,11 +76,14 @@ installed until you confirm in step 2. Every page also has a **What is this page
 2. Press **Test connections**. Each host shows **Connected**, or the reason it failed and
    what to do: key not accepted, nothing listening on the port, no answer in time, or a
    changed host key.
-3. **Signed release.** Trust the public key your CI signs with, then paste the signed
+3. **DNS names and certificates.** Create the names on the [DNS names](#dns-names) page.
+   Fleet checks them with 1.1.1.1. Or put your own certificates on the
+   [Certificates](#certificates) page.
+4. **Signed release.** Trust the public key your CI signs with, then paste the signed
    release manifest.
-4. For each edge, enter its country and continent codes. They place it in Geo-DNS.
+5. For each edge, enter its country and continent codes. They place it in Geo-DNS.
 
-**Step 2: review and confirm.** Press **Review**. Fleet lists, host by host and in start
+**Step 2: review and confirm.** Press **Review**. If a management name does not yet point to its host in 1.1.1.1 and you gave no certificate, the review says so: Let's Encrypt cannot issue for it, so Fleet generates a **local certificate** for that name when you deploy (the page opens over HTTPS, and your browser warns until you trust the local CA). Fleet lists, host by host and in start
 order, what it will do. Type `DEPLOY` and press **Deploy to servers**. Fleet installs the
 hosts one after another and stops at the first failure. Watch the live log on the job page.
 
@@ -122,9 +126,25 @@ that fails if the names do not point to it yet.
 | `ns1.<platform domain>`, `ns2.<platform domain>` | your DNS hosts | the registrar of the platform domain, as nameserver glue |
 
 Use an `A` record for an IPv4 address and an `AAAA` record for IPv6. Press **Check DNS now**
-and Fleet looks each name up from your computer and says whether it points to the right host.
+and Fleet asks the public resolver **1.1.1.1** (the way Let's Encrypt will see your names) and says whether each name points to the right host. It needs UDP port 53 to 1.1.1.1 from your computer.
 A new record can take a few minutes to appear. With monitoring disabled, Grafana and
 telemetry are not listed.
+
+## Certificates
+
+Caddy on the control node serves the control panel, Grafana, and telemetry names over HTTPS.
+By default it asks Let's Encrypt, using the **admin email** you gave in setup. That works
+only when 1.1.1.1 sees the names pointing at the host and ports 80 and 443 reach it. If it
+cannot, the control panel does not open. You have three ways around that:
+
+| Option | When to use it |
+| --- | --- |
+| **Automatic** (default) | The names are correct in DNS and the ports are open. |
+| **Your own certificate** | You have a certificate (a SAN or wildcard certificate can cover several names). Paste the chain, your certificate first, and the private key without a password. Fleet checks that the key matches, every chosen name is covered, and it has not expired, then keeps the key in the encrypted vault. |
+| **Local certificate** | You have nothing yet. Fleet makes its own certificate authority and signs a certificate for the names. Deploy does this by itself for names that are not ready. Download the local CA from the page and trust it in your browser, or replace the certificate later. |
+
+**Use automatic** switches a name back. If hosts are already installed, deploy a change with
+**Config**. A control standby serves the same control certificate as the active node.
 
 ## Nodes
 
@@ -235,8 +255,19 @@ The Overview counter shows "disabled" until you configure backups. See
 
 ## HA
 
-With one control node, the page offers **Add standby**. Enter the standby host
-address and its SSH port, after you authorize the Fleet key on that host.
+With one control node, the page is a road in three steps. Deploy the control node first.
+
+1. **Point the addresses.** Enter the standby's name, public IPv4, and SSH port. Fleet
+   shows the records to set and checks them with 1.1.1.1: `control.<operator domain>`
+   and `edge-control.<operator domain>` stay at the **active** node with a TTL of 60
+   seconds (so moving them after a failure is quick), and `<standby name>.<operator domain>`
+   points at the standby.
+2. **Prepare the standby host.** A fixed public IPv4, a private network or VPN between
+   the two control nodes, TCP 5432, 5433, and 6379 open between their private addresses only,
+   and the Fleet SSH key on the host.
+3. **Deploy the standby.** Type `ADD STANDBY`. Fleet installs the prerequisites, copies the
+   secrets and the control certificate, sets up replication, and starts the standby. The step
+   is blocked until 1.1.1.1 sees the records; you can choose to continue without correct DNS.
 
 With a standby, the page shows the active and standby nodes and one button for
 each action: planned switchover, demote the active node, promote the standby,
@@ -264,3 +295,15 @@ Use it to see what changed before a problem started.
 ## Command line equivalents
 
 Everything here has a command. See the [Fleet CLI reference](../reference/fleet-cli.md).
+
+| In Fleet web | On the command line |
+| --- | --- |
+| Set up your fleet | `cdnfoundry-fleet setup` (with no arguments, choose the terminal wizard) |
+| Save a login for hosts without one | `ssh-defaults --ssh-user root --ssh-port 22`, or `node-ssh` per host |
+| Test connections | `test-connection` |
+| DNS names and **Check DNS now** | `dns-names --check` (and `--standby-address` for HA) |
+| Certificates: own, local, automatic | `management-tls set`, `local`, `remove`, `list`, `ca` |
+| Signed release | `trust-release-key`, `set-release` |
+| Review and **Deploy to servers** | `deploy --plan-only`, then `deploy --location pop-1=DE:EU` |
+| HA: check DNS, deploy the standby | `dns-names --standby-address`, `control add-standby` |
+
