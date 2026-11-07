@@ -20,14 +20,19 @@ python3 scripts/fleet-web.py      # Windows: py scripts\fleet-web.py
 ```
 
 This works the same on Windows, macOS, and Linux. The first run creates a private
-Python environment under your user directory, installs PyYAML and cryptography, runs
-first-time vault setup if you have no vault, and opens your browser. Any other
-arguments go to `cdnfoundry-fleet web`, for example `--port 9000`. On macOS and Linux,
-`scripts/cdnfoundry-fleet web` also works once you have installed those two libraries
-yourself. Do not run `web.py` directly; it is part of a package.
+Python environment under your user directory, installs PyYAML and cryptography, and
+opens your browser. Any other arguments go to `cdnfoundry-fleet web`, for example
+`--port 9000`. Do not run `web.py` directly; it is part of a package.
 
-Fleet asks for the vault passphrase, then serves the page at
-`http://127.0.0.1:8765`. Use `--port` to pick another port.
+If you run `scripts/cdnfoundry-fleet` with no arguments in a terminal, it asks whether to
+open Fleet web (recommended) or run the setup wizard in the terminal.
+
+With no vault yet, the page shows **Set up your fleet**: choose the vault passphrase, enter
+the operator domain, platform domain, release, the control host, and one line per other
+host (`name role ipv4 [region]`). Select **Create fleet** and Fleet creates the vault, plans
+the hosts, renders their bundles, and opens the **Nodes** page. With an existing vault, the
+page asks for the passphrase. Fleet serves it at `http://127.0.0.1:8765`; use `--port` to
+pick another port.
 
 **Expected result:** your browser shows the **Overview** page with a menu on the left.
 

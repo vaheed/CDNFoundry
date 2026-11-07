@@ -59,10 +59,10 @@ cd CDNFoundry
 python3 scripts/fleet-web.py      # Windows: py scripts\fleet-web.py
 ```
 
-The first run creates a private Python environment, installs what Fleet needs, asks you
-to create the Fleet vault (choose a passphrase and keep it safe), and then opens
-`http://127.0.0.1:8765` in your browser. Run the same command again any time to open it.
-Use `--port 9000` to pick another port. Fleet web listens on your own machine only; to
+The first run creates a private Python environment and installs what Fleet needs, then
+opens `http://127.0.0.1:8765` in your browser. Everything else happens in the browser: the
+page asks you to choose the vault passphrase, enter your domains, release, and hosts, and it
+creates the fleet. On later runs it asks for the passphrase to unlock. Use `--port 9000` to pick another port. Fleet web listens on your own machine only; to
 use it on a remote workstation, open an SSH tunnel.
 
 Run the script from the repository root, or by its full path. Do not run files inside
