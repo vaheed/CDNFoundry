@@ -48,6 +48,7 @@ Only one action runs at a time. If you start a second one, the page says
 | Page | Use it to |
 | --- | --- |
 | [Overview](#overview) | See the fleet at a glance and run a health check |
+| [Deploy](#deploy) | Follow the road: connect hosts, set the release, review, and confirm |
 | [Nodes](#nodes) | List hosts, add one, and install it |
 | [Security](#security) | See known vulnerabilities in the running release |
 | [Upgrade](#upgrade) | Trust a release key, review a plan, and upgrade |
@@ -57,6 +58,32 @@ Only one action runs at a time. If you start a second one, the page says
 | [HA](#ha) | Manage the standby control node |
 | [Secrets](#secrets) | Rotate a fleet secret |
 | [History](#history) | See every action, who ran it, and the result |
+
+## Deploy
+
+Deploy is the road from an empty plan to installed hosts, in two steps. Nothing is
+installed until you confirm in step 2. Every page also has a **What is this page?** box.
+
+**Step 1: prepare.**
+
+1. **Connect your hosts.** Fleet logs in with one SSH key, never a password. The page shows
+   the key and the exact command to run on each host. If your SSH port is not 22, or your
+   user is not root, set them in the setup form (`pop-1 dns-edge 203.0.113.10 EU port=2222
+   user=ubuntu`), on **Save this login for hosts without one**, or on the host's page. A
+   non-root user needs passwordless sudo.
+2. Press **Test connections**. Each host shows **Connected**, or the reason it failed and
+   what to do: key not accepted, nothing listening on the port, no answer in time, or a
+   changed host key.
+3. **Signed release.** Trust the public key your CI signs with, then paste the signed
+   release manifest.
+4. For each edge, enter its country and continent codes. They place it in Geo-DNS.
+
+**Step 2: review and confirm.** Press **Review**. Fleet lists, host by host and in start
+order, what it will do. Type `DEPLOY` and press **Deploy to servers**. Fleet installs the
+hosts one after another and stops at the first failure. Watch the live log on the job page.
+
+**Expected result:** every host shows **Installed**, and the roadmap on **Overview**
+moves on to the health check.
 
 ## Overview
 
