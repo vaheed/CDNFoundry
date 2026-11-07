@@ -745,6 +745,11 @@ def test_cli_parser_exposes_all_commands_and_help() -> None:
         "adopt-existing",
         "rotate-secret",
         "control",
+        "test-connection",
+        "ssh-defaults",
+        "dns-names",
+        "management-tls",
+        "deploy",
     }
     subparsers = next(action for action in cli._actions if isinstance(action, argparse._SubParsersAction))
     assert set(subparsers.choices) == commands

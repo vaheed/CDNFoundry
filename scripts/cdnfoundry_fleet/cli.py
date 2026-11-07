@@ -27,7 +27,7 @@ DEFAULT_VAULT = Path.home() / ".config" / "cdnfoundry-fleet" / "fleet.db"
 PASSPHRASE_ENV = "CDNF_FLEET_PASSPHRASE"
 PASSPHRASE_FILE_ENV = "CDNF_FLEET_PASSPHRASE_FILE"
 
-ENGINE_COMMANDS = {"set-release", "public-key", "node-ssh", "trust-release-key", "bootstrap", "upgrade", "apply-config", "rollback", "security", "backup-now", "restore", "vault-backup"}
+ENGINE_COMMANDS = {"test-connection", "ssh-defaults", "dns-names", "management-tls", "deploy", "set-release", "public-key", "node-ssh", "trust-release-key", "bootstrap", "upgrade", "apply-config", "rollback", "security", "backup-now", "restore", "vault-backup"}
 EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_VALIDATION = 3
@@ -225,6 +225,24 @@ def parser() -> argparse.ArgumentParser:
     rotate.add_argument("--phase", choices=("prepare", "commit", "abort"), default="prepare", help="Rotation phase to run")
 
     sub.add_parser("public-key", parents=[command_common], help="print the Fleet SSH public key; add it to root's authorized_keys on every node")
+    tc = sub.add_parser("test-connection", parents=[command_common], help="test that Fleet can log in to hosts over SSH (the same test as Fleet web)")
+    tc.add_argument("--node", action="append", help="repeatable; default is every host")
+    sd = sub.add_parser("ssh-defaults", parents=[command_common], help="save an SSH login (default root, port 22) for every host that has none")
+    sd.add_argument("--ssh-user", default="root", help="SSH user")
+    sd.add_argument("--ssh-port", type=int, default=22, help="SSH port")
+    dn = sub.add_parser("dns-names", parents=[command_common], help="list the DNS names to create and the host each points to")
+    dn.add_argument("--check", action="store_true", help="ask the public resolver 1.1.1.1 whether each name points to the right host")
+    dn.add_argument("--json", action="store_true", help="Print the result as JSON")
+    dn.add_argument("--standby-address", help="public IPv4 of a planned control standby: also list the HA records to set before `control add-standby`")
+    dn.add_argument("--standby-name", default="control-2", help="name of the planned standby (default control-2)")
+    mt = sub.add_parser("management-tls", parents=[command_common], help="certificates for the control, grafana, and telemetry names")
+    mt.add_argument("action", choices=("list", "set", "local", "remove", "ca"), help="list; set (your own certificate); local (generate from a Fleet-local CA); remove (back to automatic); ca (print the local CA)")
+    mt.add_argument("--name", action="append", choices=("control", "grafana", "telemetry"), help="repeatable; the management names to change")
+    mt.add_argument("--cert-file", help="PEM certificate chain, your certificate first (set)")
+    mt.add_argument("--key-file", help="PEM private key without a password (set)")
+    dp = sub.add_parser("deploy", parents=[command_common], help="review, then install every host that is not installed yet, in start order")
+    dp.add_argument("--plan-only", action="store_true", help="Show the plan and the DNS state and change nothing")
+    dp.add_argument("--location", action="append", default=[], metavar="NODE=CC:CONTINENT", help="repeatable; country and continent of an edge, for example pop-1=DE:EU")
     nssh = sub.add_parser("node-ssh", parents=[command_common], help="record how to reach a node over SSH and pin its host key (the node must already authorise the Fleet public key)")
     nssh.add_argument("--node", required=True, help="Node name")
     nssh.add_argument("--host", required=True, help="Host name or address")
@@ -484,12 +502,14 @@ def _setup(args: argparse.Namespace, store: FleetState, output_dir: Path, config
         operator = args.operator_domain or global_cfg.get("operator_domain")
         platform = args.platform_domain or global_cfg.get("platform_domain")
         release = args.release or global_cfg.get("release")
+        acme_email = args.acme_email or global_cfg.get("acme_email", "")
         if not args.non_interactive:
             print("CDNFoundry production fleet setup")
             print("This wizard creates fleet state, node bundles, certificates, secrets, and operator runbooks.")
             operator = _prompt(operator, "Operator domain")
             platform = _prompt(platform, "Platform domain")
             release = _prompt(release, "Exact release tag or commit")
+            acme_email = _prompt(acme_email, "Admin email for Let's Encrypt certificates")
         if not all((operator, platform, release)):
             raise ValidationError("operator_domain, platform_domain, and release are required")
         state = store.init(
@@ -497,7 +517,7 @@ def _setup(args: argparse.Namespace, store: FleetState, output_dir: Path, config
                 "operator_domain": operator,
                 "platform_domain": platform,
                 "release": release,
-                "acme_email": args.acme_email or global_cfg.get("acme_email", ""),
+                "acme_email": acme_email,
                 "alert_webhook_url": global_cfg.get("alert_webhook_url", ""),
                 "ipv6": args.dual_stack or global_cfg.get("ipv6", False),
             }
@@ -1041,6 +1061,7 @@ def _vault_restore(args: argparse.Namespace, vault_path: Path) -> int:
 
 
 def _engine_command(args: argparse.Namespace, store: FleetState, output_dir: Path) -> int:
+    from . import management
     from .engine import ControlActions, FleetEngine
 
     engine = FleetEngine(store.state_dir, Path(args.repo_root), output_dir, say=lambda m: print(m, flush=True))
@@ -1048,6 +1069,90 @@ def _engine_command(args: argparse.Namespace, store: FleetState, output_dir: Pat
     def outcome(out: Any) -> int:
         print(json.dumps({"ok": out.ok, "failed": out.failed, "detail": out.detail, "rolled_back": out.rolled_back, "steps_done": len(out.done)}))
         return EXIT_OK if out.ok else EXIT_EXTERNAL
+
+    if args.command == "test-connection":
+        names = args.node or sorted(engine.state()["nodes"])
+        failed = 0
+        for name in names:
+            try:
+                engine.test_connection(name)
+                print(json.dumps({"node": name, "connected": True}))
+            except FleetError as exc:
+                from .web import explain_ssh
+
+                failed += 1
+                title, advice = explain_ssh(str(exc), name, name)
+                print(json.dumps({"node": name, "connected": False, "problem": title, "fix": advice}))
+        return EXIT_OK if not failed else EXIT_EXTERNAL
+    if args.command == "ssh-defaults":
+        print(json.dumps({"saved": engine.ensure_targets(user=args.ssh_user, port=args.ssh_port)}))
+        return EXIT_OK
+    if args.command == "dns-names":
+        records, glue = engine.dns_names()
+        if args.standby_address:
+            records = management.ha_records(engine.state(), args.standby_name, args.standby_address)
+            glue = []
+        results = {r["name"]: management.check_name(r["name"], r["ips"]) for r in records} if args.check and args.standby_address else (engine.check_dns() if args.check else {})
+        rows = [{"name": r["name"], "type": "AAAA" if ":" in ip else "A", "address": ip, "host": r["node"], "use": r["use"],
+                 **({"ok": results[r["name"]][0], "detail": results[r["name"]][1]} if args.check else {})}
+                for group, kind in ((records, "operator-domain dns"), (glue, "registrar glue")) for r in group for ip in r["ips"]]
+        for row, kind in zip(rows, [k for group, k in ((records, "operator-domain dns"), (glue, "registrar glue")) for r in group for _ in r["ips"]]):
+            row["where"] = kind
+        if args.json:
+            print(json.dumps(rows, indent=2))
+        else:
+            for row in rows:
+                print(f"{row['type']:<4} {row['name']:<40} -> {row['address']:<16} ({row['host']}; {row['where']}) " + (("OK" if row["ok"] else "NOT READY: " + row["detail"]) if args.check else ""))
+        return EXIT_OK if all(r.get("ok", True) for r in rows) else EXIT_EXTERNAL
+    if args.command == "management-tls":
+        if args.action == "list":
+            print(json.dumps(engine.management_certificates(), indent=2))
+        elif args.action == "ca":
+            ca = engine.local_ca()
+            if ca is None:
+                raise ValidationError("No local CA has been generated")
+            print(ca, end="")
+        else:
+            if not args.name:
+                raise ValidationError("Choose at least one --name")
+            if args.action == "set":
+                if not (args.cert_file and args.key_file):
+                    raise ValidationError("--cert-file and --key-file are required")
+                info = engine.set_management_certificate(args.name, Path(args.cert_file).read_text(encoding="utf-8"), Path(args.key_file).read_text(encoding="utf-8"))
+                print(json.dumps({"status": "saved", "names": args.name, **info}))
+            elif args.action == "local":
+                engine.generate_local_certificates(args.name)
+                print(json.dumps({"status": "generated", "names": args.name}))
+            else:
+                print(json.dumps({"status": "removed", "removed": [n for n in args.name if engine.remove_management_certificate(n)]}))
+            print("Deploy the change with `apply-config` (hosts already installed) or `deploy` (new hosts).", file=sys.stderr)
+        return EXIT_OK
+    if args.command == "deploy":
+        state = engine.state()
+        pending = engine.pending_nodes(state)
+        results = engine.check_dns()
+        problems = engine.deploy_blockers(pending)
+        waiting = management.unready(state, engine.work, results)
+        print("Hosts to install, in order: " + (", ".join(pending) or "none"))
+        for _key, reason in waiting:
+            print(f"DNS not ready (1.1.1.1): {reason}  -> a local certificate will be generated for it")
+        for problem in problems:
+            print(f"Blocked: {problem}")
+        if args.plan_only or problems:
+            return EXIT_OK if not problems else EXIT_VALIDATION
+        locations: dict[str, tuple[str | None, str | None]] = {}
+        for item in args.location:
+            node, _, place = item.partition("=")
+            country, _, continent = place.partition(":")
+            if not (node and country and continent):
+                raise ValidationError(f"--location {item!r}: write NODE=CC:CONTINENT, for example pop-1=DE:EU")
+            locations[node] = (country.upper(), continent.upper())
+        _confirm(args, f"Install {len(pending)} host(s)")
+        failed = engine.deploy(locations)
+        if failed is not None:
+            return outcome(failed)
+        print(json.dumps({"ok": True, "installed": pending}))
+        return EXIT_OK
 
     if args.command == "public-key":
         print(engine.public_key())

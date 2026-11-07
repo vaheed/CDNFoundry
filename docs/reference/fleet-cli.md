@@ -255,6 +255,26 @@ Demote the active node, then promote the standby, losing no committed write.
 | `--deploy-dir` `DEPLOY_DIR` | No description. |
 | `--ssh-command` `SSH_COMMAND` | command used to reach a node; replaceable for tests |
 
+## deploy
+
+Review, then install every host that is not installed yet, in start order.
+
+| Option | Meaning |
+| --- | --- |
+| `--plan-only` | Show the plan and the DNS state and change nothing |
+| `--location` `NODE=CC:CONTINENT` | repeatable; country and continent of an edge, for example pop-1=DE:EU |
+
+## dns-names
+
+List the DNS names to create and the host each points to.
+
+| Option | Meaning |
+| --- | --- |
+| `--check` | ask the public resolver 1.1.1.1 whether each name points to the right host |
+| `--json` | Print the result as JSON |
+| `--standby-address` `STANDBY_ADDRESS` | public IPv4 of a planned control standby: also list the HA records to set before `control add-standby` |
+| `--standby-name` `STANDBY_NAME` | name of the planned standby (default control-2) |
+
 ## doctor
 
 Check the repository and the local tools.
@@ -280,6 +300,16 @@ Create the fleet state and nothing else.
 List the hosts in the plan.
 
 No options beyond the shared ones.
+
+## management-tls
+
+Certificates for the control, grafana, and telemetry names.
+
+| Option | Meaning |
+| --- | --- |
+| `--name` `NAME` | repeatable; the management names to change (one of `control`, `grafana`, `telemetry`) |
+| `--cert-file` `CERT_FILE` | PEM certificate chain, your certificate first (set) |
+| `--key-file` `KEY_FILE` | PEM private key without a password (set) |
 
 ## node-ssh
 
@@ -397,6 +427,15 @@ Show the order in which to start the hosts.
 
 No options beyond the shared ones.
 
+## ssh-defaults
+
+Save an SSH login (default root, port 22) for every host that has none.
+
+| Option | Meaning |
+| --- | --- |
+| `--ssh-user` `SSH_USER` | SSH user |
+| `--ssh-port` `SSH_PORT` | SSH port |
+
 ## status
 
 Show the fleet and the state of each feature.
@@ -404,6 +443,14 @@ Show the fleet and the state of each feature.
 | Option | Meaning |
 | --- | --- |
 | `--json` | Print the result as JSON |
+
+## test-connection
+
+Test that Fleet can log in to hosts over SSH (the same test as Fleet web).
+
+| Option | Meaning |
+| --- | --- |
+| `--node` `NODE` | repeatable; default is every host |
 
 ## trust-release-key
 
