@@ -47,7 +47,7 @@ def test_first_visit_shows_setup_and_creates_the_fleet(gate):
     status, _, r = request(port, "POST", "/setup", {**FORM, "csrf": g.csrf})
     assert status == 303 and r.getheader("Location").startswith("/deploy")
     status, body, _ = request(port, "GET", "/nodes")
-    assert status == 200 and "pop-1" in body and "What is this page?" in body and "pop-2" in body and "control-1" in body
+    assert status == 200 and "pop-1" in body and "About this page" in body and "pop-2" in body and "control-1" in body
     assert (g.output_dir / "pop-1").is_dir()
 
 

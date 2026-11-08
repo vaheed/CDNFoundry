@@ -36,6 +36,11 @@ ASSETS = Path(__file__).parent / "web_assets"
 LOOPBACK = "127.0.0.1"
 PAGES = [("/", "Overview"), ("/deploy", "Deploy"), ("/dns", "DNS names"), ("/tls", "Certificates"), ("/nodes", "Nodes"), ("/security", "Security"), ("/upgrade", "Upgrade"), ("/config", "Config"),
          ("/rollback", "Rollback"), ("/backups", "Backups"), ("/ha", "HA"), ("/secrets", "Secrets"), ("/history", "History")]
+NAV_GROUPS = [
+    ("Set up", ["/", "/deploy", "/dns", "/tls", "/nodes"]),
+    ("Operate", ["/upgrade", "/config", "/backups", "/ha", "/security"]),
+    ("Protect", ["/rollback", "/secrets", "/history"]),
+]
 ROTATABLE = ["metrics-token", "telemetry-token", "edge-proxy-secret", "log-auth-token"]
 
 HELP: dict[str, tuple[str, str]] = {
@@ -199,16 +204,21 @@ class FleetWeb:
 
     # -- pages -------------------------------------------------------------------------------------------
     def layout(self, path: str, title: str, body: str, flash: str = "", refresh: bool = False) -> str:
-        nav = "".join(f'<a href="{p}"{" aria-current=page" if p == path else ""}>{esc(t)}</a>' for p, t in PAGES)
+        titles = dict(PAGES)
+        nav = "".join(
+            f'<div class="nav-group"><span class="nav-label">{esc(label)}</span>'
+            + "".join(f'<a href="{p}"{" aria-current=page" if p == path else ""}>{esc(titles[p])}</a>' for p in paths) + "</div>"
+            for label, paths in NAV_GROUPS)
         notice = f'<p class="flash" role="status">{esc(flash)}</p>' if flash else ""
         meta = '<meta http-equiv="refresh" content="2">' if refresh else ""
         what, how = HELP.get(path, ("", ""))
-        guide = f'<details class="help"><summary>What is this page?</summary><p><b>{esc(what)}</b> {esc(how)}</p></details>' if what else ""
+        lede = f'<p class="lede">{esc(what)}</p>' if what else ""
+        guide = f'<details class="help"><summary>About this page</summary><p>{esc(how)}</p></details>' if how else ""
         return (
             '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
             f'{meta}<title>{esc(title)} - CDNFoundry Fleet</title><link rel="stylesheet" href="/assets/fleet.css"></head>'
             f'<body><div class="shell"><aside class="side"><div class="brand">CDNFoundry Fleet</div><nav aria-label="Fleet">{nav}</nav></aside>'
-            f"<main><h1>{esc(title)}</h1>{guide}{notice}{body}</main></div></body></html>"
+            f'<main><header class="page-head"><h1>{esc(title)}</h1>{lede}</header>{notice}{guide}{body}</main></div></body></html>'
         )
 
     def results(self) -> dict[str, bool]:
