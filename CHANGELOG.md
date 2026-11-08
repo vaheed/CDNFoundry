@@ -5,6 +5,27 @@ All notable changes are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). The root `VERSION` file is the
 single source of truth; `make version-check` enforces it.
 
+## [2.0.1] - 2026-11-08
+
+Fleet is easier to run. No change to the control plane, DNS, or edge runtime.
+See the [release notes](docs/operations/releases/v2.0.1.md).
+
+### Changed
+
+- Fleet builds and signs the release itself: it reads the release your checkout is
+  on, looks up the published image digests, and signs the manifest with a key kept
+  in the encrypted vault. `set-release` and `upgrade` no longer need `--manifest`.
+  Operators who sign releases themselves still pin their key and pass a manifest.
+- Fleet web has a new layout on the CDNFoundry theme: grouped navigation, a page
+  header with a one-line description, and bordered tables and forms.
+- `scripts/fleet-web.py` restarts under Python 3.13 to 3.10 when the default Python
+  is newer than the tested range, and installs PyYAML without a prebuilt wheel.
+
+### Fixed
+
+- The Backups page no longer scrolls sideways on a phone.
+- The Fleet browser suite no longer fails when its projects share fixture state.
+
 ## [2.0.0] - prepared 2026-11-05, not yet tagged
 
 v2.0.0 is a breaking release with no upgrade from 1.x. See the
