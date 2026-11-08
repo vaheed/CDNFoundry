@@ -51,7 +51,7 @@ for all options, including installing by hand without Fleet.
 ## Install with Fleet web
 
 Fleet web is a local page that installs and manages your hosts. It runs on your own
-computer (Windows, macOS, or Linux) and (3.12 or 3.13 recommended) and OpenSSH.
+computer (Windows, macOS, or Linux) and (python 3.12 or 3.13 recommended) and OpenSSH.
 
 ```sh
 git clone https://github.com/vaheed/CDNFoundry.git
