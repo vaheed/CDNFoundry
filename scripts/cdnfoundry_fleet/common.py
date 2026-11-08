@@ -245,13 +245,32 @@ def sync_tree(root: Path) -> None:
         sync_directory(Path(directory))
 
 
+def _swap_by_renames(candidate: Path, active: Path) -> None:
+    """Portable exchange for hosts without renameat2 (macOS, Windows).
+
+    The bundle is local files only, so a short gap while the three renames run is
+    acceptable; a failure puts the previous bundle back before it is reported.
+    """
+    parked = active.with_name(f".{active.name}.exchange-{os.getpid()}")
+    os.rename(active, parked)
+    try:
+        os.rename(candidate, active)
+    except OSError as error:
+        os.rename(parked, active)
+        raise RenderError(f"Bundle exchange failed ({error.strerror}); current bundle retained") from error
+    os.rename(parked, candidate)
+
+
 def exchange_directories(candidate: Path, active: Path) -> None:
-    """Linux renameat2 keeps the active generation continuously addressable."""
+    """Linux renameat2 swaps the generations atomically; other hosts use plain renames."""
     import ctypes
-    library = ctypes.CDLL(None, use_errno=True)
-    rename = getattr(library, "renameat2", None)
+    try:
+        rename = getattr(ctypes.CDLL(None, use_errno=True), "renameat2", None)
+    except (OSError, TypeError):
+        rename = None
     if rename is None:
-        raise RenderError("Atomic bundle exchange requires Linux renameat2; preserve the current bundle and use a supported Linux host")
+        _swap_by_renames(candidate, active)
+        return
     rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
     rename.restype = ctypes.c_int
     if rename(-100, os.fsencode(candidate), -100, os.fsencode(active), 2) != 0:

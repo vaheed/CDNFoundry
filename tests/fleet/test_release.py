@@ -150,3 +150,20 @@ def test_first_install_targets_the_release_chosen_at_setup_not_the_checkout_tag(
     FleetState(tmp_path / "state").init({"operator_domain": "ops.example.test", "platform_domain": "cdn.example.test", "release": "v2.0.0"})
     engine = FleetEngine(tmp_path / "state", ROOT, tmp_path / "out", transport=object(), say=lambda _m: None)
     assert engine.target_release() == "v2.0.0"
+
+
+def test_bundle_exchange_falls_back_to_renames_without_renameat2(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import ctypes
+
+    from cdnfoundry_fleet.common import exchange_directories
+
+    class NoRenameat2:
+        def __init__(self, *_a, **_k) -> None:
+            pass
+
+    monkeypatch.setattr(ctypes, "CDLL", NoRenameat2)
+    active, candidate = tmp_path / "out", tmp_path / "cand"
+    active.mkdir(); candidate.mkdir()
+    (active / "old").write_text("old"); (candidate / "new").write_text("new")
+    exchange_directories(candidate, active)
+    assert (active / "new").exists() and (candidate / "old").exists()
