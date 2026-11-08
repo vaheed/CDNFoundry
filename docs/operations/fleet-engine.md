@@ -217,7 +217,9 @@ hosts side by side (up to 6 hosts, and up to 4 images at a time on each host), b
 validated, or restarted. Each host still runs its own steps in order, and each pulled image is checked against its
 pinned digest. Nothing in this phase changes what a host serves, so a failed pull needs no rollback; one failure stops
 new steps, lets the running ones finish, and keeps the journal so the same command resumes. Uploads, validation,
-activation, and the health gate stay one host at a time, in start order.
+activation, and the health gate stay one host at a time, in start order. `deploy` runs this phase for every pending host
+before it installs the first one. Output of long host commands (activation, which runs `start.sh`) is streamed to the
+log line by line, and a step with no output for 30 seconds is reported with its running time.
 
 `cdnfoundry-fleet alert-webhook [--url https://...]` shows or sets where Alertmanager sends alerts. It is optional: with no
 webhook Alertmanager starts with receivers that send nothing, and `--url ""` turns notifications off again. A change

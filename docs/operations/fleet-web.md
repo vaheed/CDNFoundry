@@ -135,6 +135,11 @@ reading hardware) opens one action page.
   step took.
 - **Progress.** A bar and a count ("7 of 18 steps") follow the tasks. A failed step stays
   marked, and the page says where the action stopped and why.
+- **Host output.** While a host starts its services (the **activate** step), every line the
+  host prints appears in the log as it happens: database migrations, containers starting,
+  health waits. When a step is quiet for 30 seconds, the log says so and how long it has run, so
+  a slow start never looks like a hang. A first start pulls up to 19 images and waits up to 5
+  minutes for health checks, so several minutes is normal.
 - **Log.** The log follows the end while the action runs. Untick **Follow the end** to read
   it, type in **Filter the log** to find a line, and use **Download log** to keep it.
 - **Stop.** **Stop after this step** lets the step in progress finish and stops before the
