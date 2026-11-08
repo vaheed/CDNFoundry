@@ -7,16 +7,22 @@ so a node needs nothing but sshd, tar, and a POSIX shell.
 from __future__ import annotations
 
 import os
+import queue
 import shlex
 import subprocess
 import tarfile
 import tempfile
+import threading
+import time
 from dataclasses import dataclass
+from typing import Callable
 from pathlib import Path
 
 from .common import FleetError, ValidationError, atomic_write
 
 SSH_TIMEOUT = 120
+STREAM_HEARTBEAT_SECONDS = 30
+_PIN_LOCK = threading.Lock()  # hosts are pinned side by side; the known_hosts file is read, extended, and rewritten as a whole
 FLEET_KEY = "fleet_ed25519"
 
 
@@ -103,6 +109,10 @@ class SshTransport:
 
     def pin_host_key(self, target: Target) -> str:
         """Record the host key on first use. A host that is already pinned is left alone."""
+        with _PIN_LOCK:
+            return self._pin_host_key_locked(target)
+
+    def _pin_host_key_locked(self, target: Target) -> str:
         pinned = self.known_hosts().read_text(encoding="utf-8") if self.known_hosts().exists() else ""
         marker = target.host if target.port == 22 else f"[{target.host}]:{target.port}"
         if any(line.split(" ", 1)[0] == marker for line in pinned.splitlines()):
@@ -126,7 +136,8 @@ class SshTransport:
     def run(self, target: Target, command: str, *, stdin: bytes | None = None, check: bool = False, timeout: int | None = None) -> Result:
         try:
             done = subprocess.run(
-                self._base(target) + [self._as_root(target, command)], input=stdin, capture_output=True, timeout=timeout or self.timeout, check=False,
+                # A command that is given no input gets an empty stdin, never the operator's terminal: a host command that reads stdin must see the end of it.
+                self._base(target) + [self._as_root(target, command)], input=stdin, stdin=None if stdin is not None else subprocess.DEVNULL, capture_output=True, timeout=timeout or self.timeout, check=False,
                 start_new_session=True,  # Ctrl+C in the terminal stops Fleet between steps, never a command half way on a host
             )
         except subprocess.TimeoutExpired as exc:
@@ -142,9 +153,49 @@ class SshTransport:
             raise SshError(f"{target.name}: `{command}` failed ({result.code}): {(result.stderr or result.stdout).strip()[:500]}")
         return result
 
+    def run_stream(self, target: Target, command: str, on_line: Callable[[str], None], *, timeout: int = 1800,
+                   on_quiet: Callable[[int], None] | None = None, heartbeat: int = STREAM_HEARTBEAT_SECONDS) -> Result:
+        """Run a long command and hand every output line to `on_line` as it appears, so an operator sees what the host is doing.
+
+        Standard error is merged into the output. `on_quiet(seconds)` is called every `heartbeat` seconds without output.
+        """
+        process = subprocess.Popen(self._base(target) + [self._as_root(target, command)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                   text=True, errors="replace", bufsize=1, start_new_session=True)
+        lines: queue.Queue[str | None] = queue.Queue()
+
+        def read() -> None:
+            assert process.stdout is not None
+            for raw in process.stdout:
+                lines.put(raw.rstrip("\r\n"))
+            lines.put(None)
+
+        threading.Thread(target=read, daemon=True).start()
+        started, collected = time.monotonic(), []
+        while True:
+            try:
+                item = lines.get(timeout=heartbeat)
+            except queue.Empty:
+                if time.monotonic() - started > timeout:
+                    process.kill()
+                    raise SshError(f"{target.name}: the command did not finish within {timeout} seconds")
+                if on_quiet:
+                    on_quiet(round(time.monotonic() - started))
+                continue
+            if item is None:
+                break
+            collected.append(item)
+            on_line(item)
+        code = process.wait()
+        output = "\n".join(collected)
+        if code == 255 and ("REMOTE HOST IDENTIFICATION HAS CHANGED" in output or "Host key verification failed" in output):
+            raise HostKeyChanged(f"The host key of {target.name} changed or is not pinned; refusing to connect")
+        if code == 255:
+            raise SshError(f"SSH to {target.name} failed or was interrupted: {output.strip()[-200:] or 'connection lost'}")
+        return Result(code, output, "")
+
     def run_raw(self, target: Target, command: str, *, stdin: bytes | None = None, timeout: int = 1800) -> "subprocess.CompletedProcess[bytes]":
         """Run with the pinned key and return the raw process, for callers that stream bytes."""
-        return subprocess.run(self._base(target) + [self._as_root(target, command)], input=stdin, capture_output=True, timeout=timeout, check=False)
+        return subprocess.run(self._base(target) + [self._as_root(target, command)], input=stdin, stdin=None if stdin is not None else subprocess.DEVNULL, capture_output=True, timeout=timeout, check=False)
 
     def upload_tree(self, target: Target, local: Path, remote: str, *, keep_previous: bool = True) -> None:
         """Replace `remote` with a copy of `local`. Interrupting the stream leaves `remote` untouched."""

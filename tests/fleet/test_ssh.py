@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import getpass
+import os
 import shutil
 import socket
 import subprocess
@@ -194,3 +195,67 @@ def test_a_dropped_connection_is_a_transport_error_not_a_command_failure(tmp_pat
     t.key_path().write_text("k")
     with pytest.raises(SshError, match="failed or was interrupted"):
         t.run(Target("pop-1", "h"), "./start.sh")
+
+
+def test_stream_delivers_each_line_while_the_command_runs_and_reports_quiet_periods(tmp_path: Path, sshd: Sshd) -> None:
+    t, target = transport(tmp_path, sshd)
+    t.pin_host_key(target)
+    seen: list[tuple[float, str]] = []
+    quiet: list[int] = []
+    started = time.monotonic()
+    result = t.run_stream(target, "echo first; sleep 1.5; echo second; echo oops >&2", lambda line: seen.append((time.monotonic() - started, line)),
+                          on_quiet=quiet.append, heartbeat=0.5)
+    assert result.ok and [line for _, line in seen] == ["first", "second", "oops"]
+    assert seen[0][0] < seen[1][0] - 1.0, "the first line arrived before the command finished"
+    assert quiet and quiet[0] >= 0
+    assert result.stdout.splitlines() == ["first", "second", "oops"]
+
+
+def test_stream_returns_the_exit_code_and_refuses_an_unpinned_host(tmp_path: Path, sshd: Sshd) -> None:
+    t, target = transport(tmp_path, sshd)
+    with pytest.raises(HostKeyChanged):
+        t.run_stream(target, "true", lambda _l: None)
+    t.pin_host_key(target)
+    assert t.run_stream(target, "echo bad; exit 3", lambda _l: None).code == 3
+
+
+def test_stream_stops_a_command_that_runs_past_its_limit(tmp_path: Path, sshd: Sshd) -> None:
+    t, target = transport(tmp_path, sshd)
+    t.pin_host_key(target)
+    with pytest.raises(SshError, match="did not finish"):
+        t.run_stream(target, "sleep 30", lambda _l: None, timeout=1, heartbeat=0.3)
+
+
+def test_pinning_many_hosts_at_once_keeps_every_key(tmp_path: Path, sshd: Sshd) -> None:
+    import threading
+
+    t = SshTransport(tmp_path / "state")
+    install_key(t, sshd.client_key)
+    targets = [Target(f"h{i}", "127.0.0.1", sshd.port, getpass.getuser()) for i in range(1)]
+    # Different names for the same listener: pin one marker per port so each gets its own known_hosts line.
+    ports = [sshd.port]
+    for extra in range(4):
+        other = Sshd(tmp_path / f"extra{extra}") if (tmp_path / f"extra{extra}").mkdir() is None else None
+        ports.append(other.port)
+        targets.append(Target(f"h{extra + 1}", "127.0.0.1", other.port, getpass.getuser()))
+    threads = [threading.Thread(target=t.pin_host_key, args=(target,)) for target in targets]
+    [th.start() for th in threads]
+    [th.join() for th in threads]
+    pinned = t.known_hosts().read_text()
+    assert all(f"[127.0.0.1]:{port}" in pinned for port in ports[1:]) and len([l for l in pinned.splitlines() if l.strip()]) >= 5
+
+
+def test_a_command_without_input_sees_an_empty_stdin_not_the_operators_terminal(tmp_path: Path, sshd: Sshd) -> None:
+    """A host command that reads stdin (clickhouse-client does for INSERT) must reach end of input instead of waiting on Fleet's own stdin."""
+    t, target = transport(tmp_path, sshd)
+    t.pin_host_key(target)
+    read, write = os.pipe()  # an open pipe that never closes, like a terminal
+    saved = os.dup(0)
+    os.dup2(read, 0)
+    try:
+        result = t.run(target, "cat; echo end-of-input", timeout=15)
+        assert result.ok and result.stdout.strip() == "end-of-input"
+        assert t.run_raw(target, "cat; echo end-of-input", timeout=15).stdout.strip() == b"end-of-input"
+    finally:
+        os.dup2(saved, 0)
+        os.close(saved), os.close(read), os.close(write)

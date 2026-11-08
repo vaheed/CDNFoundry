@@ -33,7 +33,8 @@ for file in $(ls "$directory"/*.sql | sort); do
         exit 1
     fi
     client --multiquery < "$file"
-    client --query "INSERT INTO cdnf.schema_migrations (name, checksum) VALUES ('$name', '$checksum')"
+    # clickhouse-client also reads more rows from standard input when it is not a terminal, so an open pipe would hang it here.
+    client --query "INSERT INTO cdnf.schema_migrations (name, checksum) VALUES ('$name', '$checksum')" < /dev/null
     echo "applied $name"
     applied=$((applied + 1))
 done
