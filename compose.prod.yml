@@ -342,7 +342,7 @@ services:
     <<: *hardened
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     mem_limit: 1280m
-    image: valkey/valkey:9.1.2-alpine3.24@sha256:a0dbf4c1d5708782907c10e2c72deff317518518b5288a58416981d9db95d30b
+    image: valkey/valkey:9.1.3-alpine3.24@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b
     profiles: [control]
     # Queues, sessions, and locks: persistent, and never evicted. The password comes from a mounted
     # configuration file, so it is not on the command line or in `docker inspect`.
@@ -361,7 +361,7 @@ services:
     <<: *hardened
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     mem_limit: 768m
-    image: valkey/valkey:9.1.2-alpine3.24@sha256:a0dbf4c1d5708782907c10e2c72deff317518518b5288a58416981d9db95d30b
+    image: valkey/valkey:9.1.3-alpine3.24@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b
     profiles: [control]
     # Application cache only: rebuildable, not persisted, and evicted least-recently-used when full.
     command: [valkey-server, /run/secrets/valkey.conf, --save, "", --appendonly, "no", --maxmemory, 512mb, --maxmemory-policy, allkeys-lru]
@@ -405,7 +405,7 @@ services:
     <<: *hardened
     cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID]
     mem_limit: 512m
-    image: powerdns/pdns-auth-51:5.1.4@sha256:bb5b1c133bcca1dd455075321de7d55db4945a8d7f2ba23339e3c7bbe416b205
+    image: powerdns/pdns-auth-51:5.1.5@sha256:77ff4efdbb9ec30e9309c8a1cbed6121a67fa3be25c848bbbfa756fc75bf9a27
     entrypoint: [/usr/local/bin/pdns-production-start]
     command: [--disable-syslog, --daemon=no, --guardian=no]
     init: true
@@ -438,7 +438,7 @@ services:
     <<: *hardened
     cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID]
     mem_limit: 512m
-    image: powerdns/pdns-auth-51:5.1.4@sha256:bb5b1c133bcca1dd455075321de7d55db4945a8d7f2ba23339e3c7bbe416b205
+    image: powerdns/pdns-auth-51:5.1.5@sha256:77ff4efdbb9ec30e9309c8a1cbed6121a67fa3be25c848bbbfa756fc75bf9a27
     entrypoint: [/usr/local/bin/pdns-production-start]
     command: [--disable-syslog, --daemon=no, --guardian=no]
     init: true
@@ -481,7 +481,7 @@ services:
     <<: *hardened
     cap_add: [NET_BIND_SERVICE, SETGID, SETUID]
     mem_limit: 512m
-    image: powerdns/dnsdist-21:2.1.2@sha256:efabf173811e27438bebee5f1f40e047f263ea39093a8f7d6097df494cf1ed67
+    image: powerdns/dnsdist-21:2.1.3@sha256:c70ae7363712188ab2878d22bc9f1801cae29190688474a224caee2089f74837
     entrypoint: [/usr/local/bin/dnsdist]
     command: [--supervised, --disable-syslog]
     init: true
@@ -508,7 +508,7 @@ services:
     <<: *hardened
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     mem_limit: 4g
-    image: clickhouse/clickhouse-server:26.8.7.19-alpine@sha256:2bece7c646f08865eadc2000a60427e2964adf2b46908a6d476dfa7cc5408720
+    image: clickhouse/clickhouse-server:26.10.3.7-alpine@sha256:1b09f476eb1109522cfc0e8e4ddf6a4305263e7cdd310f7bd1d3fd29dfcb8b33
     profiles: [telemetry]
     environment:
       CLICKHOUSE_DB: cdnf
@@ -538,7 +538,7 @@ services:
     logging: *bounded-logging
     <<: *hardened
     mem_limit: 256m
-    image: clickhouse/clickhouse-server:26.8.7.19-alpine@sha256:2bece7c646f08865eadc2000a60427e2964adf2b46908a6d476dfa7cc5408720
+    image: clickhouse/clickhouse-server:26.10.3.7-alpine@sha256:1b09f476eb1109522cfc0e8e4ddf6a4305263e7cdd310f7bd1d3fd29dfcb8b33
     profiles: [tools]
     entrypoint: [sh, /migrate.sh]
     environment:
@@ -556,7 +556,7 @@ services:
     logging: *bounded-logging
     <<: *hardened
     mem_limit: 512m
-    image: timberio/vector:0.58.0-debian@sha256:1c1ea358c617ea0b23003d5af87f7a678b30f8f7096437e680380c47fc13d2d9
+    image: timberio/vector:0.61.0-debian@sha256:f6c23b5a7e16fb2838d33619ef7acf4bad2289a7cf22bc90efc2371f520c4ea2
     profiles: [telemetry, dns, edge]
     environment:
       VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION: "true"
@@ -585,7 +585,7 @@ services:
     <<: *hardened
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     mem_limit: 64m
-    image: busybox:1.37.0-musl@sha256:f6a95d611e0a8780fabdb2aec43e31275b2720dfefa3e41b16835bfc42454478
+    image: busybox:1.38.0-musl@sha256:80e38f9a1b39188b8bdb28879178edb322a4402b081a9aedda1924609decd6f6
     profiles: [telemetry]
     # Loki's image has no shell or HTTP client, so this also supplies a static busybox for its health check.
     command: [sh, -c, "chown 10001:10001 /loki && cp /bin/busybox /tools/busybox && chmod 0555 /tools/busybox"]
@@ -595,7 +595,7 @@ services:
   loki:
     logging: *bounded-logging
     security_opt: [no-new-privileges:true]
-    image: grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193
+    image: grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28
     command: [-config.file=/etc/loki/loki.yml, -config.expand-env=true]
     profiles: [telemetry]
     environment:
@@ -624,7 +624,7 @@ services:
 
   docker-socket-proxy:
     logging: *bounded-logging
-    image: tecnativa/docker-socket-proxy:0.3.0@sha256:9e4b9e7517a6b660f2cc903a19b257b1852d5b3344794e3ea334ff00ae677ac2
+    image: tecnativa/docker-socket-proxy:v0.5.0@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
     profiles: [logs]
     environment:
       # Container listing, logs, and events are all the log collector reads. Everything else is refused.
@@ -658,7 +658,7 @@ services:
   log-collector:
     logging: *bounded-logging
     security_opt: [no-new-privileges:true]
-    image: timberio/vector:0.58.0-debian@sha256:1c1ea358c617ea0b23003d5af87f7a678b30f8f7096437e680380c47fc13d2d9
+    image: timberio/vector:0.61.0-debian@sha256:f6c23b5a7e16fb2838d33619ef7acf4bad2289a7cf22bc90efc2371f520c4ea2
     profiles: [logs]
     command: [--config, /etc/vector/operational.yaml]
     environment:
@@ -699,7 +699,7 @@ services:
     logging: *bounded-logging
     <<: *hardened
     mem_limit: 1g
-    image: prom/prometheus:v3.13.3@sha256:6976aa8a60fec930796ce5772b8d12da7a318a5daa8d40d69c5c7819a05eeed7
+    image: prom/prometheus:v3.16.0@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06
     profiles: [telemetry]
     group_add: ["82"]
     # Retention is explicit: it matches the typed telemetry.prometheus_retention_days default.
@@ -734,7 +734,7 @@ services:
     logging: *bounded-logging
     security_opt: [no-new-privileges:true]
     mem_limit: 256m
-    image: alpine:3.22.6@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
+    image: alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
     profiles: [telemetry]
     command:
       - sh
@@ -774,7 +774,7 @@ services:
   grafana:
     logging: *bounded-logging
     <<: *hardened
-    image: grafana/grafana:12.4.11@sha256:3ea272e5cab64a4a62240c682e2c62433b25614d956d44c299a10cb6994f6f2e
+    image: grafana/grafana:13.3.0@sha256:488984b716c0862639f91a698adbe2862677a5a07bad42da5f03f3030883b205
     profiles: [telemetry]
     ports: ["${GRAFANA_BIND}:3000"]
     environment:
@@ -835,7 +835,7 @@ services:
     logging: *bounded-logging
     <<: *hardened
     mem_limit: 128m
-    image: python:3.13-alpine3.22@sha256:e81548ac35b07a3bd4805f275107592ef458b1e893c0e04d45aedaa19416cca5
+    image: python:3.14-alpine3.22@sha256:6b91e66ab2a880ce9ca5a1b91c70f45963ff71ff68268df056336e1a657d5efd
     profiles: [telemetry]
     # Reconciles what file provisioning cannot hold: library panels, teams, folder permissions, team homes, and playlists.
     command: [python3, /bootstrap/bootstrap.py]
@@ -887,7 +887,7 @@ services:
     logging: *bounded-logging
     <<: *hardened
     mem_limit: 128m
-    image: prom/blackbox-exporter:v0.28.0@sha256:e753ff9f3fc458d02cca5eddab5a77e1c175eee484a8925ac7d524f04366c2fc
+    image: prom/blackbox-exporter:v0.29.1@sha256:ea1c7aa3ef3f307cd03e85f34abb604478ccb90b567fc690da0cd9776da76b13
     profiles: [telemetry]
     command: [--config.file=/etc/blackbox/blackbox.yml]
     volumes:
@@ -905,7 +905,7 @@ services:
     logging: *bounded-logging
     <<: *hardened
     mem_limit: 128m
-    image: prom/alertmanager:v0.34.1@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a
+    image: prom/alertmanager:v0.34.2@sha256:39d8bb3966c694a124428a3a88fbcffd40bd069129ecd47c059f8a3f17c55f3b
     profiles: [telemetry]
     entrypoint: [/bin/sh, /usr/local/bin/alertmanager-start]
     environment:
@@ -1095,7 +1095,7 @@ services:
     <<: *hardened
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     mem_limit: 64m
-    image: alpine:3.22.6@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
+    image: alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
     profiles: [edge]
     command: [chown, "10101:10101", /state]
     volumes: [edge-gateway-state:/state]
