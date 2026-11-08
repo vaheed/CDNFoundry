@@ -27,7 +27,7 @@ DEFAULT_VAULT = Path.home() / ".config" / "cdnfoundry-fleet" / "fleet.db"
 PASSPHRASE_ENV = "CDNF_FLEET_PASSPHRASE"
 PASSPHRASE_FILE_ENV = "CDNF_FLEET_PASSPHRASE_FILE"
 
-ENGINE_COMMANDS = {"test-connection", "ssh-defaults", "dns-names", "management-tls", "deploy", "set-release", "public-key", "node-ssh", "trust-release-key", "bootstrap", "upgrade", "apply-config", "rollback", "security", "backup-now", "restore", "vault-backup"}
+ENGINE_COMMANDS = {"test-connection", "ssh-defaults", "dns-names", "management-tls", "deploy", "set-release", "public-key", "node-ssh", "trust-release-key", "bootstrap", "upgrade", "apply-config", "rollback", "security", "backup-now", "restore", "vault-backup", "inventory", "watch"}
 EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_VALIDATION = 3
@@ -281,9 +281,18 @@ def parser() -> argparse.ArgumentParser:
     vr.add_argument("--snapshot", default="latest", help="Backup snapshot to restore")
     vr.add_argument("--repository", required=True, help="Backup repository location")
     vr.add_argument("--password-file", required=True, help="File that holds the backup repository password")
+    hw = sub.add_parser("inventory", parents=[command_common], help="show the hardware and system of every host, as last read; --refresh reads them over SSH first")
+    hw.add_argument("--node", action="append", default=[], help="Node name; repeat for several (default: every node)")
+    hw.add_argument("--refresh", action="store_true", help="Read the hosts over SSH now and record the result")
+    hw.add_argument("--json", action="store_true", help="Print the result as JSON")
+    watch = sub.add_parser("watch", parents=[command_common], help="a live table of every host: state, load, memory, disk, and containers")
+    watch.add_argument("--interval", type=int, default=10, help="Seconds between readings (minimum 5)")
+    watch.add_argument("--once", action="store_true", help="Read once, print, and exit")
+    watch.add_argument("--json", action="store_true", help="Print each reading as one JSON line")
     web = sub.add_parser("web", parents=[command_common], help="local fleet web on 127.0.0.1")
     web.add_argument("--host", default="127.0.0.1", help="Host name or address")
     web.add_argument("--port", type=int, default=8765, help="TCP port to listen on")
+    web.add_argument("--monitor-interval", type=int, default=60, help="Seconds between read-only probes of every host for the live view; 0 turns probing off (minimum 15)")
 
     control_cli.add_parser(sub, command_common)
 
@@ -1061,10 +1070,26 @@ def _vault_restore(args: argparse.Namespace, vault_path: Path) -> int:
 
 
 def _engine_command(args: argparse.Namespace, store: FleetState, output_dir: Path) -> int:
+    """Run an engine command with a step bar on a terminal (plain step lines elsewhere); the first Ctrl+C stops after the current step."""
+    import contextlib
+
+    from .progress import BarWriter, TerminalBar, Tracker, graceful_stop
+
+    tracker = Tracker()
+    bar = TerminalBar(sys.stdout, sys.stdout.isatty())
+    tracker.listeners.append(bar)
+    with contextlib.redirect_stdout(BarWriter(bar, sys.stdout)), graceful_stop(tracker):  # type: ignore[type-var]
+        try:
+            return _engine_command_body(args, store, output_dir, tracker)
+        finally:
+            bar.close()
+
+
+def _engine_command_body(args: argparse.Namespace, store: FleetState, output_dir: Path, tracker: Any) -> int:
     from . import management
     from .engine import ControlActions, FleetEngine
 
-    engine = FleetEngine(store.state_dir, Path(args.repo_root), output_dir, say=lambda m: print(m, flush=True))
+    engine = FleetEngine(store.state_dir, Path(args.repo_root), output_dir, say=tracker.line, progress=tracker)
 
     def outcome(out: Any) -> int:
         print(json.dumps({"ok": out.ok, "failed": out.failed, "detail": out.detail, "rolled_back": out.rolled_back, "steps_done": len(out.done)}))
@@ -1153,6 +1178,52 @@ def _engine_command(args: argparse.Namespace, store: FleetState, output_dir: Pat
             return outcome(failed)
         print(json.dumps({"ok": True, "installed": pending}))
         return EXIT_OK
+
+    if args.command == "inventory":
+        from . import inventory as inv_mod
+        from .terminal import inventory_table
+
+        state = engine.state()
+        names = args.node or sorted(state["nodes"])
+        unknown = [n for n in names if n not in state["nodes"]]
+        if unknown:
+            raise ValidationError(f"Unknown node: {', '.join(unknown)}")
+        if args.refresh:
+            engine.collect_inventory(names)
+        recorded = {n: v for n, v in engine.inventory().items() if n in names}
+        if args.json:
+            print(json.dumps({n: {**recorded.get(n, {}), "findings": inv_mod.findings(state["nodes"][n], recorded.get(n, {}))} for n in names}, indent=2, sort_keys=True))
+        else:
+            print(inventory_table({n: state["nodes"][n] for n in names}, recorded))
+            found = [f"{n}: {f['text']}" for n in names for f in inv_mod.findings(state["nodes"][n], recorded.get(n, {}))] + [f["text"] for f in inv_mod.fleet_findings(recorded)]
+            print("\nNeeds attention:" + ("".join("\n  - " + f for f in found) if found else " nothing"))
+            if len(recorded) < len(names):
+                print(f"\n{len(names) - len(recorded)} host(s) have not been read. Run with --refresh.")
+        return EXIT_OK
+    if args.command == "watch":
+        import time as time_mod
+
+        from .terminal import watch_table
+
+        state = engine.state()
+        interval = max(5, args.interval)
+        try:
+            while True:
+                probes = engine.probe_nodes()
+                if args.json:
+                    from .monitor import summarize
+
+                    print(json.dumps({"at": time_mod.strftime("%Y-%m-%dT%H:%M:%SZ", time_mod.gmtime()), "nodes": {n: summarize(p) for n, p in probes.items()}}, sort_keys=True), flush=True)
+                else:
+                    if sys.stdout.isatty() and not args.once:
+                        sys.stdout.write("\x1b[2J\x1b[H")
+                    print(f"CDNFoundry fleet, {time_mod.strftime('%H:%M:%S')}" + ("" if args.once else f", every {interval} s, Ctrl+C to leave") + "\n")
+                    print(watch_table(state["nodes"], probes), flush=True)
+                if args.once:
+                    return EXIT_OK if all(p.get("ok") for p in probes.values()) else EXIT_EXTERNAL
+                time_mod.sleep(interval)
+        except KeyboardInterrupt:
+            return EXIT_OK
 
     if args.command == "public-key":
         print(engine.public_key())
@@ -1244,7 +1315,7 @@ def run(args: argparse.Namespace) -> int:
         from .web_setup import WebGate
 
         require_loopback(args.host)
-        gate = WebGate(vault_path, Path(args.repo_root), Path(args.output_dir))
+        gate = WebGate(vault_path, Path(args.repo_root), Path(args.output_dir), args.monitor_interval)
         if vault_path.exists() and (os.environ.get(PASSPHRASE_ENV) or os.environ.get(PASSPHRASE_FILE_ENV)):
             gate.open(_passphrase(confirm=False))
         server = make_server(gate, args.host, args.port)

@@ -127,6 +127,7 @@ class SshTransport:
         try:
             done = subprocess.run(
                 self._base(target) + [self._as_root(target, command)], input=stdin, capture_output=True, timeout=timeout or self.timeout, check=False,
+                start_new_session=True,  # Ctrl+C in the terminal stops Fleet between steps, never a command half way on a host
             )
         except subprocess.TimeoutExpired as exc:
             raise SshError(f"SSH to {target.name} timed out") from exc

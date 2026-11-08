@@ -210,6 +210,22 @@ procedures for them.
 On the monitoring host, the check also confirms that Prometheus reports the `Watchdog` alert. Add `--json` for
 machine-readable output.
 
+## Inventory, live watch, and progress
+
+`cdnfoundry-fleet inventory` prints the hardware and system of every host as last read (processor, memory, disk,
+kernel, Docker, platform) with the findings that need attention. `--refresh` reads the hosts over SSH first and records
+the result in the vault; `--node` limits it to some hosts and `--json` prints it for scripts. The read is one
+read-only command per host.
+
+`cdnfoundry-fleet watch` is a live table of every host: state, load per core, memory, disk, and containers, read
+every `--interval` seconds (at least 5). `--once` prints one reading and exits non-zero when a host is unreachable;
+`--json` prints one JSON line per reading.
+
+Long commands (`deploy`, `bootstrap`, `upgrade`, `apply-config`, `rollback`, `inventory --refresh`) show a progress bar
+and the current step on a terminal, and one plain line per step when the output is piped or in CI. The first Ctrl+C
+asks Fleet to stop before the next step, so no command is cut half way on a host and the same command resumes from the
+journal; a second Ctrl+C interrupts at once.
+
 `cdnfoundry-fleet security` lists the known vulnerabilities in the running release. Each finding has exactly one
 status:
 

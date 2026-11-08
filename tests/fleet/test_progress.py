@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import io
+import os
+import signal
 import sys
 import threading
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
-from cdnfoundry_fleet.progress import TerminalBar, Tracker  # noqa: E402
+from cdnfoundry_fleet.progress import BarWriter, TerminalBar, Tracker, graceful_stop  # noqa: E402
 
 STEPS = [{"id": "a:pin", "node": "a", "kind": "pin", "label": "a: pin"}, {"id": "a:gate", "node": "a", "kind": "gate", "label": "a: gate"}]
 
@@ -87,3 +91,31 @@ def test_terminal_bar_draws_one_line_on_a_tty_and_plain_lines_otherwise():
     t2.step("a:pin", "ok")
     t2.line("hello")
     assert "\r" not in plain.getvalue() and "[1/2] a:pin ok" in plain.getvalue() and "hello" in plain.getvalue()
+
+
+def test_first_ctrl_c_stops_after_the_step_and_the_second_interrupts():
+    t = Tracker()
+    t.plan([{"id": "a:one", "node": "a", "kind": "pin", "label": "a: pin"}])
+    with graceful_stop(t):
+        os.kill(os.getpid(), signal.SIGINT)
+        assert t.cancel_requested
+        with pytest.raises(KeyboardInterrupt):
+            os.kill(os.getpid(), signal.SIGINT)
+
+
+def test_ctrl_c_without_steps_interrupts_at_once():
+    with graceful_stop(Tracker()):
+        with pytest.raises(KeyboardInterrupt):
+            os.kill(os.getpid(), signal.SIGINT)
+
+
+def test_prints_during_a_bar_settle_it_onto_its_own_line():
+    out = io.StringIO()
+    bar = TerminalBar(out, tty=True)
+    t = Tracker()
+    t.listeners.append(bar)
+    t.plan(STEPS)
+    t.step("a:pin", "ok")
+    writer = BarWriter(bar, out)
+    writer.write('{"ok": true}\n')
+    assert out.getvalue().endswith('1/2\n{"ok": true}\n')

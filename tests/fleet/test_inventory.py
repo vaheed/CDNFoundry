@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -221,3 +222,24 @@ def test_container_logs_need_a_container_the_host_reported_and_hide_credentials(
             with pytest.raises(ValidationError):
                 engine.container_log("control-1", bad)
     assert not any("reboot" in command for _n, command in engine.transport.commands)
+
+
+def test_cli_inventory_and_watch_before_any_host_was_read(vault, capsys):
+    base = ["--vault", str(vault.path)]
+    assert main(["inventory", *base]) == 0
+    out = capsys.readouterr().out
+    assert "HOST" in out and "Needs attention: nothing" in out and "2 host(s) have not been read" in out
+    assert main(["inventory", *base, "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"control-1": {"findings": []}, "pop-1": {"findings": []}}
+    assert main(["inventory", *base, "--node", "ghost"]) == 3
+    assert main(["watch", *base, "--once"]) == 6  # the saved logins reach no sshd that knows the Fleet key
+    assert "LOAD/CORE" in capsys.readouterr().out
+
+
+def test_cli_watch_once_json_reports_unreachable_hosts_with_a_failing_exit_code(vault, capsys, monkeypatch):
+    from cdnfoundry_fleet import engine as engine_module
+
+    monkeypatch.setattr(engine_module.FleetEngine, "probe_nodes", lambda self, **_k: {"control-1": {"ok": False, "error": "connection refused"}, "pop-1": {"ok": True, "inventory": inv.parse(HOST)}})
+    assert main(["watch", "--vault", str(vault.path), "--once", "--json"]) == 6
+    line = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert line["nodes"]["control-1"]["state"] == "offline" and line["nodes"]["pop-1"]["state"] == "degraded"

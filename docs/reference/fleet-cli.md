@@ -295,6 +295,16 @@ Create the fleet state and nothing else.
 | `--acme-email` `ACME_EMAIL` | Contact address for the certificate authority account |
 | `--dual-stack` | Plan IPv4 and IPv6 on every node |
 
+## inventory
+
+Show the hardware and system of every host, as last read; --refresh reads them over SSH first.
+
+| Option | Meaning |
+| --- | --- |
+| `--node` `NODE` | Node name; repeat for several (default: every node) |
+| `--refresh` | Read the hosts over SSH now and record the result |
+| `--json` | Print the result as JSON |
+
 ## list-nodes
 
 List the hosts in the plan.
@@ -518,6 +528,16 @@ Restore the vault on a new workstation.
 | `--repository` `REPOSITORY` | Backup repository location (required) |
 | `--password-file` `PASSWORD_FILE` | File that holds the backup repository password (required) |
 
+## watch
+
+A live table of every host: state, load, memory, disk, and containers.
+
+| Option | Meaning |
+| --- | --- |
+| `--interval` `INTERVAL` | Seconds between readings (minimum 5) |
+| `--once` | Read once, print, and exit |
+| `--json` | Print each reading as one JSON line |
+
 ## web
 
 Local fleet web on 127.0.0.1.
@@ -526,3 +546,4 @@ Local fleet web on 127.0.0.1.
 | --- | --- |
 | `--host` `HOST` | Host name or address |
 | `--port` `PORT` | TCP port to listen on |
+| `--monitor-interval` `MONITOR_INTERVAL` | Seconds between read-only probes of every host for the live view; 0 turns probing off (minimum 15) |

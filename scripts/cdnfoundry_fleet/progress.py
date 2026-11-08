@@ -6,9 +6,11 @@ and still see everything. It holds only what is already printed in the action lo
 """
 from __future__ import annotations
 
+import contextlib
+import signal
 import threading
 import time
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 MAX_LINES = 5000
 MAX_LINE_CHARS = 600
@@ -170,6 +172,41 @@ class TerminalBar:
             self.stream.write("\r\x1b[K")
 
     def close(self) -> None:
+        """Leave the finished bar on its own line, so nothing printed next lands on it."""
         if self.tty and self._drawn:
             self.stream.write("\r\x1b[K" + self._bar() + "\n")
             self.stream.flush()
+            self._drawn = False
+
+
+class BarWriter:
+    """Stands in for standard output while a bar is drawn: ordinary prints first settle the bar onto its own line."""
+
+    def __init__(self, bar: TerminalBar, real: Any) -> None:
+        self.bar, self.real = bar, real
+
+    def write(self, text: str) -> int:
+        if text:
+            self.bar.close()
+        return self.real.write(text)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.real, name)
+
+
+@contextlib.contextmanager
+def graceful_stop(tracker: Tracker) -> Iterator[None]:
+    """First Ctrl+C asks the action to stop before its next step; the second one interrupts at once."""
+    def handler(_signum: int, _frame: Any) -> None:
+        if not tracker.steps or tracker.cancel_requested:
+            raise KeyboardInterrupt
+        tracker.request_cancel()
+
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    previous = signal.signal(signal.SIGINT, handler)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGINT, previous)

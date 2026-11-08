@@ -713,6 +713,8 @@ def test_cli_parser_exposes_all_commands_and_help() -> None:
     commands = {
         "setup",
         "web",
+        "inventory",
+        "watch",
         "public-key",
         "set-release",
         "node-ssh",
