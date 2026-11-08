@@ -11,7 +11,10 @@ from pathlib import Path
 
 import pytest
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+
+from test_inventory import HOST as HOST_INVENTORY  # noqa: E402
 
 from cdnfoundry_fleet import release  # noqa: E402
 from cdnfoundry_fleet.cli import main  # noqa: E402
@@ -22,7 +25,7 @@ from cdnfoundry_fleet.web import FleetWeb, make_server, require_loopback  # noqa
 
 ROOT = Path(__file__).resolve().parents[2]
 PASS = "correct horse battery"
-PAGES = ["/", "/deploy", "/dns", "/tls", "/nodes", "/security", "/upgrade", "/config", "/rollback", "/backups", "/ha", "/secrets", "/history"]
+PAGES = ["/", "/deploy", "/dns", "/tls", "/nodes", "/inventory", "/security", "/upgrade", "/config", "/rollback", "/backups", "/ha", "/secrets", "/history"]
 
 
 @dataclass
@@ -57,6 +60,10 @@ class Fake:
             raise SshError("connection refused")
         if command == "true":
             return R()
+        if "__cdnfoundry_inventory__" in command:
+            return R(0, HOST_INVENTORY)
+        if command.startswith("docker logs"):
+            return R(0, "listening\nAPI_TOKEN=abc123\n")
         if "ps -a --format json" in command:
             return R(0, "")
         if "RELEASE" in command:
@@ -221,7 +228,7 @@ def test_history_records_actions_with_the_operator(served) -> None:
     web, port = served
     add_node(web, port)
     page = get(port, "/history")[1]
-    assert "add-node" in page and web.operator in page
+    assert "Add node" in page and web.operator in page
 
 
 def test_check_job_lists_every_node_as_a_task_and_ticks_them(served) -> None:
@@ -357,3 +364,107 @@ def test_continue_without_an_interrupted_install_says_so(served) -> None:
     status, _, r = post(port, "/deploy/continue", {"csrf": web.csrf})
     assert status == 303
     assert "no interrupted installation" in wait_job(port, r.getheader("Location"))
+
+
+def wait_for(predicate, tries: int = 100) -> None:
+    for _ in range(tries):
+        if predicate():
+            return
+        time.sleep(0.1)
+    raise AssertionError("condition not met")
+
+
+def test_inventory_page_asks_for_a_first_read_then_shows_hardware_and_findings(served) -> None:
+    web, port = served
+    assert "No nodes yet" in get(port, "/inventory")[1]
+    add_node(web, port, "control-1")
+    add_node(web, port, "pop-1", "edge", "203.0.113.9")
+    assert "has not read any host" in get(port, "/inventory")[1]
+    status, _, r = post(port, "/inventory/refresh", {"csrf": web.csrf})
+    assert status == 303
+    wait_job(port, r.getheader("Location"))
+    page = get(port, "/inventory")[1]
+    assert "CPU cores" in page and "16" in page and "6.8.0-60-generic" in page and "Hardware of every host" in page
+    assert "vector" in page and "docker disk" in page.lower()
+
+
+def test_node_page_shows_hardware_containers_logs_link_and_actions(served) -> None:
+    web, port = served
+    add_node(web, port, "control-1")
+    _, _, r = post(port, "/nodes/control-1/inventory", {"csrf": web.csrf})
+    wait_job(port, r.getheader("Location"))
+    page = get(port, "/nodes/control-1")[1]
+    assert "Hardware and system" in page and "Intel(R) Xeon" in page and "Synchronized" in page and "eth0" in page
+    assert '/nodes/control-1/logs?c=edge-agent' in page and "Check this host" in page and "Read hardware again" in page
+
+
+def test_container_log_page_hides_credentials_and_refuses_unknown_containers(served) -> None:
+    web, port = served
+    add_node(web, port, "control-1")
+    _, _, r = post(port, "/nodes/control-1/inventory", {"csrf": web.csrf})
+    wait_job(port, r.getheader("Location"))
+    page = get(port, "/nodes/control-1/logs?c=edge-agent")[1]
+    assert "listening" in page and "abc123" not in page
+    assert "Fleet has not seen that container" in get(port, "/nodes/control-1/logs?c=ghost")[1]
+    status, body, _ = get(port, "/api/logs?node=control-1&c=edge-agent;reboot")
+    assert status == 400 and "not a container name" in body
+    status, body, _ = get(port, "/api/logs?node=control-1&c=edge-agent")
+    assert status == 200 and "abc123" not in body
+
+
+def test_live_probe_updates_states_everywhere_and_the_api(served) -> None:
+    web, port = served
+    add_node(web, port, "control-1")
+    add_node(web, port, "pop-1", "edge", "203.0.113.9")
+    Fake.down = True
+    status, _, _ = post(port, "/live/refresh", {"csrf": web.csrf})
+    assert status == 303
+    wait_for(lambda: web.live.updated)
+    data = json.loads(get(port, "/api/live")[1])
+    assert data["nodes"]["control-1"]["state"] == "offline" and data["interval"] == 0 and data["job"] is None
+    assert "Unreachable" in get(port, "/nodes")[1] and "unreachable (connection refused)" in get(port, "/")[1]
+    Fake.down = False
+    web.live.refresh()
+    data = json.loads(get(port, "/api/live")[1])
+    assert data["nodes"]["control-1"]["state"] == "degraded" and data["nodes"]["control-1"]["memory"] == 75
+    assert "Containers need attention" in get(port, "/nodes")[1]
+
+
+def test_topology_links_every_host_and_names_its_state(served) -> None:
+    web, port = served
+    add_node(web, port, "control-1")
+    web.live.refresh()
+    page = get(port, "/")[1]
+    assert 'href="/nodes/control-1"' in page and "control-1: Containers need attention" in page and "8 cores" in page
+
+
+def test_check_one_host_runs_as_a_job_for_that_host_only(served) -> None:
+    web, port = served
+    add_node(web, port, "control-1")
+    add_node(web, port, "pop-1", "edge", "203.0.113.9")
+    _, _, r = post(port, "/nodes/pop-1/check", {"csrf": web.csrf})
+    page = wait_job(port, r.getheader("Location"))
+    assert 'data-step="pop-1:check"' in page and 'data-step="control-1:check"' not in page
+
+
+def test_history_lists_each_action_with_its_steps_and_log(served) -> None:
+    web, port = served
+    add_node(web, port)
+    _, _, r = post(port, "/check", {"csrf": web.csrf})
+    wait_job(port, r.getheader("Location"))
+    wait_for(lambda: any(h["kind"] == "check" for h in web.vault.history()))
+    page = get(port, "/history")[1]
+    assert '<details class="entry">' in page and "control-1: check" in page and "Check of the whole stack" in page
+
+
+def test_live_json_and_logs_are_not_served_before_unlock(tmp_path, monkeypatch) -> None:
+    from cdnfoundry_fleet.web_setup import WebGate
+
+    gate = WebGate(tmp_path / "none.db", ROOT, tmp_path / "bundles")
+    server = make_server(gate, "127.0.0.1", 0)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    port = server.server_address[1]
+    try:
+        assert get(port, "/api/live")[0] == 404 and get(port, "/api/logs?node=a&c=b")[0] == 404
+    finally:
+        server.shutdown()

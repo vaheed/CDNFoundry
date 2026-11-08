@@ -125,6 +125,85 @@
     if (follow) { follow.checked = false; }
   }
 
+  /* ---- live fleet view: numbers and states refresh while the tab is visible ---- */
+  function relative(seconds) {
+    return seconds < 90 ? Math.max(0, seconds) + ' seconds ago' : Math.round(seconds / 60) + ' minutes ago';
+  }
+  var STATE = {
+    online: ['ok', 'Online', 'var(--success-dot)'], degraded: ['warn', 'Containers need attention', 'var(--warning-dot)'],
+    offline: ['bad', 'Unreachable', 'var(--danger-dot)'], unknown: ['', 'Not probed', 'var(--subtle)']
+  };
+  function field(node, name) {
+    return all('[data-live-node]').filter(function (e) { return e.getAttribute('data-live-node') === node && e.getAttribute('data-live-field') === name; });
+  }
+  function paintGauge(el, value) {
+    if (value === null || value === undefined) { return; }
+    var meter = one('meter', el), num = one('.gauge-n', el);
+    if (meter) { meter.value = value; }
+    if (num) { num.textContent = value + '%'; }
+  }
+  function initLive() {
+    var status = one('[data-live-status]');
+    var banner = one('[data-testid=running-banner]');
+    var lastUpdate = status && Number(status.getAttribute('data-updated')) || 0;
+    var interval = status ? Number(status.getAttribute('data-interval')) : 0;
+    function paint(data) {
+      Object.keys(data.nodes).forEach(function (name) {
+        var n = data.nodes[name];
+        var st = STATE[n.state] || STATE.unknown;
+        field(name, 'state').forEach(function (el) {
+          var word = one('.state', el);
+          if (word) { word.className = 'state ' + st[0]; word.textContent = st[1]; }
+        });
+        field(name, 'dot').forEach(function (el) { el.setAttribute('fill', st[2]); });
+        field(name, 'memory').forEach(function (el) { paintGauge(el, n.memory); });
+        field(name, 'disk').forEach(function (el) { paintGauge(el, n.disk); });
+      });
+      if (data.updated) { lastUpdate = data.updated; }
+    }
+    function tick() {
+      if (document.hidden) { return; }
+      fetch('/api/live', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (data) {
+        paint(data);
+        if (data.job && !banner && !one('.job[data-job]') && !one('[data-testid=deploy-running]')) { window.location.reload(); }
+        if (!data.job && banner) { window.location.reload(); }
+      }).catch(function () { /* the next tick tries again */ });
+    }
+    setInterval(function () {
+      if (status && lastUpdate) {
+        var text = 'Probed ' + relative(Math.round(Date.now() / 1000 - lastUpdate)) + (interval ? ', every ' + interval + ' seconds.' : '.');
+        status.textContent = text;
+      }
+    }, 1000);
+    setInterval(tick, 10000);
+    document.addEventListener('visibilitychange', tick);
+  }
+
+  /* ---- container logs: poll the tail while the box is ticked ---- */
+  function initLogs(root) {
+    var log = one('#job-log', root);
+    var poll = one('[data-log-poll]', root);
+    var filter = one('[data-log-filter]', root);
+    var text = log.textContent;
+    function paint() {
+      var needle = filter && filter.value.trim().toLowerCase();
+      var lines = text.split('\n');
+      var shown = needle ? lines.filter(function (l) { return l.toLowerCase().indexOf(needle) !== -1; }) : lines;
+      log.textContent = shown.join('\n') || 'No log line matches the filter.';
+      log.scrollTop = log.scrollHeight;
+    }
+    if (filter) { filter.addEventListener('input', paint); }
+    setInterval(function () {
+      if (!poll.checked || document.hidden) { return; }
+      fetch(root.getAttribute('data-logs-url'), { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (t) { text = t; paint(); });
+    }, 5000);
+    paint();
+  }
+
+  var logs = one('.job[data-logs-url]');
+  if (logs) { initLogs(logs); }
+  if (one('[data-live-node]')) { initLive(); }
+
   var job = one('.job[data-job]');
   if (job) {
     if (job.getAttribute('data-state') === 'running') { initJob(job); } else { initStaticLog(job); }

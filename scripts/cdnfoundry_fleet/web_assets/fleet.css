@@ -144,3 +144,25 @@ pre.log { max-height: 26rem; overflow: auto; white-space: pre-wrap; overflow-wra
 .banner a { margin-left: auto; }
 .resume { margin: 0 0 1.5rem; padding: 0.25rem 1rem 1rem; border-radius: var(--radius); background: var(--canvas); box-shadow: 0 0 0 1px var(--line); }
 .resume h2 { margin-top: 0.75rem; }
+.gauge { display: inline-flex; align-items: center; gap: 0.5rem; }
+.gauge-n { min-width: 2.5rem; text-align: right; }
+meter { width: 5rem; height: 0.6rem; }
+dl.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); margin: 0; background: var(--base); border-radius: var(--radius); box-shadow: 0 0 0 1px var(--line); }
+dl.facts div { padding: 0.5rem 0.75rem; border-top: 1px solid var(--hairline); min-width: 0; }
+dl.facts dt { color: var(--subtle); font-size: 0.8125rem; }
+dl.facts dd { margin: 0; color: var(--strong); overflow-wrap: anywhere; }
+.trends { display: flex; flex-wrap: wrap; gap: 1.5rem; margin: 1rem 0; }
+.trends div { display: grid; gap: 0.25rem; }
+.trends span, .spark-empty { color: var(--subtle); font-size: 0.8125rem; }
+svg.spark polyline { stroke: var(--strong); stroke-width: 1.5; }
+.live-line { color: var(--subtle); margin: 0.5rem 0 0; }
+ul.activity, ul.attention { list-style: none; margin: 0; padding: 0.25rem 1rem; }
+ul.activity { background: var(--base); border-radius: var(--radius); box-shadow: 0 0 0 1px var(--line); }
+ul.activity li { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; padding: 0.5rem 0; border-top: 1px solid var(--hairline); }
+ul.activity li:first-child { border-top: 0; }
+ul.activity time, details.entry time { color: var(--subtle); }
+details.entry { background: var(--base); border-radius: var(--radius); box-shadow: 0 0 0 1px var(--line); margin-bottom: 0.5rem; padding: 0 1rem; }
+details.entry summary { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; padding: 0.6rem 0; list-style-position: inside; }
+details.entry[open] summary { border-bottom: 1px solid var(--hairline); margin-bottom: 0.75rem; }
+details.entry ol.tasks { margin-bottom: 0.75rem; columns: 17rem; }
+details.entry pre.log { margin-bottom: 1rem; }

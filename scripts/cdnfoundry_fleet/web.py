@@ -28,17 +28,20 @@ from . import management as mg
 from .render import Renderer
 from .security import classify
 from .ssh import Target
+from . import inventory as inv
+from . import web_inventory as wv
+from .monitor import LiveHealth
 from .progress import Tracker
 from .state import FleetState
 from .vault import Vault
 
 ASSETS = Path(__file__).parent / "web_assets"
 LOOPBACK = "127.0.0.1"
-PAGES = [("/", "Overview"), ("/deploy", "Deploy"), ("/dns", "DNS names"), ("/tls", "Certificates"), ("/nodes", "Nodes"), ("/security", "Security"), ("/upgrade", "Upgrade"), ("/config", "Config"),
+PAGES = [("/", "Overview"), ("/deploy", "Deploy"), ("/dns", "DNS names"), ("/tls", "Certificates"), ("/nodes", "Nodes"), ("/inventory", "Inventory"), ("/security", "Security"), ("/upgrade", "Upgrade"), ("/config", "Config"),
          ("/rollback", "Rollback"), ("/backups", "Backups"), ("/ha", "HA"), ("/secrets", "Secrets"), ("/history", "History")]
 NAV_GROUPS = [
     ("Set up", ["/", "/deploy", "/dns", "/tls", "/nodes"]),
-    ("Operate", ["/upgrade", "/config", "/backups", "/ha", "/security"]),
+    ("Operate", ["/inventory", "/upgrade", "/config", "/backups", "/ha", "/security"]),
     ("Protect", ["/rollback", "/secrets", "/history"]),
 ]
 MAX_KEPT_JOBS = 20
@@ -51,6 +54,7 @@ HELP: dict[str, tuple[str, str]] = {
     "/dns": ("The DNS names you must create before the install.", "Create these records at the DNS provider of your operator domain, and the glue records at the registrar of your platform domain. Certificates for the control, telemetry, and Grafana names are requested when the control node starts, so the names must already point to it."),
     "/tls": ("Certificates for the control, Grafana, and telemetry names.", "By default Caddy asks Let's Encrypt for them when the control node starts. That fails if the names do not point at the host or ports 80 and 443 are closed. Upload your own certificate to skip that."),
     "/nodes": ("Your hosts and how Fleet logs in to them.", "Add a host here, or open one to change its SSH login or install it alone. Every host must accept the Fleet SSH key shown on the Deploy page."),
+    "/inventory": ("The hardware and system of every host.", "Fleet reads each host over SSH: processor, memory, disks, kernel, Docker, time sync, and containers. Findings list what needs attention. Reading is read-only."),
     "/security": ("Known vulnerabilities in the running release.", "Read this after an upgrade. A fix arrives by upgrading to a newer signed release."),
     "/upgrade": ("Move the whole fleet to a new signed release.", "Trust your CI signing key once, paste the signed release manifest, read the plan, then upgrade. Hosts update one at a time and roll back if a check fails."),
     "/config": ("Push changed configuration to hosts.", "Use after you change hosts or settings. Fleet shows which bundles changed and swaps them in one host at a time."),
@@ -112,8 +116,13 @@ def table(headers: list[str], rows: list[list[str]], numeric: set[int] | None = 
     return f'<div class="tablewrap" role="region" tabindex="0" aria-label="{esc(label)}"><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
 
 
-def topology_svg(state: dict[str, Any], results: dict[str, bool]) -> str:
+TOPOLOGY_DOT = {"online": "var(--success-dot)", "degraded": "var(--warning-dot)", "offline": "var(--danger-dot)", "unknown": "var(--subtle)"}
+
+
+def topology_svg(state: dict[str, Any], results: dict[str, bool], live: dict[str, str] | None = None, detail: dict[str, str] | None = None) -> str:
+    """Hosts by role, each a link to its page, with a dot for its live state (or the last check when nothing has been probed)."""
     nodes = state["nodes"]
+    live, detail = live or {}, detail or {}
     columns = [("Control", ["control"]), ("DNS", ["dns", "dns-edge"]), ("Edge", ["edge"]), ("Telemetry", ["monitoring"])]
     parts: list[str] = []
     height = 80
@@ -125,16 +134,18 @@ def topology_svg(state: dict[str, Any], results: dict[str, bool]) -> str:
         for row, name in enumerate(names):
             y = 30 + row * 46
             placed[name] = (x, y)
-            colour = "var(--subtle)" if name not in results else ("var(--success-dot)" if results[name] else "var(--danger-dot)")
-            parts.append(f'<rect class="box" x="{x}" y="{y}" width="170" height="36" rx="6"/><circle cx="{x + 14}" cy="{y + 18}" r="5" fill="{colour}"/>'
-                         f'<text x="{x + 28}" y="{y + 22}">{esc(name[:20])}</text>')
+            kind = live.get(name) or ("unknown" if name not in results else ("online" if results[name] else "offline"))
+            word = wv.STATE_LABELS[kind][1]
+            parts.append(f'<a href="/nodes/{esc(name)}" aria-label="{esc(name)}, {esc(word)}"><title>{esc(name)}: {esc(word)}. {esc(detail.get(name, ""))}</title>'
+                         f'<rect class="box" x="{x}" y="{y}" width="170" height="36" rx="6"/><circle cx="{x + 14}" cy="{y + 18}" r="5" fill="{TOPOLOGY_DOT[kind]}" data-live-node="{esc(name)}" data-live-field="dot"/>'
+                         f'<text x="{x + 28}" y="{y + 22}">{esc(name[:20])}</text></a>')
         height = max(height, 40 + len(names) * 46)
     control = next((p for n, p in placed.items() if nodes[n]["role"] == "control"), None)
     for name, (x, y) in placed.items():
         if control and nodes[name]["role"] in {"edge", "dns", "dns-edge"}:
             parts.insert(0, f'<line x1="{control[0] + 170}" y1="{control[1] + 18}" x2="{x}" y2="{y + 18}"/>')
     label = "Fleet topology: " + (", ".join(f"{n} ({v['role']})" for n, v in sorted(nodes.items())) or "no nodes")
-    return f'<svg role="img" aria-label="{esc(label)}" viewBox="0 0 770 {height}" width="770" height="{height}">{"".join(parts)}</svg>'
+    return f'<svg role="group" aria-label="{esc(label)}" viewBox="0 0 770 {height}" width="770" height="{height}">{"".join(parts)}</svg>'
 
 
 class Job(Tracker):
@@ -153,6 +164,7 @@ class FleetWeb:
         self.jobs: dict[str, Job] = {}
         self.seen_jobs: set[str] = set()
         self.write_lock = threading.Lock()
+        self.live = LiveHealth(lambda: self.read(lambda e: e.probe_nodes()), self.write_lock.locked, interval=0)
         self.operator = getpass.getuser()
         self.pending_manifest: dict[str, str] = {}
         self.pending_deploy: dict[str, dict[str, Any]] = {}
@@ -227,6 +239,85 @@ class FleetWeb:
             f'<body><div class="shell"><aside class="side"><div class="brand">CDNFoundry Fleet</div><nav aria-label="Fleet">{nav}</nav></aside>'
             f'<main><header class="page-head"><h1>{esc(title)}</h1>{lede}</header>{notice}{guide}{body}</main></div></body></html>'
         )
+
+    # -- live view and inventory --------------------------------------------------------------------------
+    def start_monitor(self, interval: int) -> None:
+        """Probe the hosts on a timer so the screens stay current. 0 keeps probing manual."""
+        self.live.stop()
+        self.live = LiveHealth(lambda: self.read(lambda e: e.probe_nodes()), self.write_lock.locked, interval=interval)
+        self.live.start()
+
+    def hardware(self) -> dict[str, dict[str, Any]]:
+        """The newest inventory of each host: what the live view saw, else what the last recorded read found."""
+        stored = self.read(lambda e: e.inventory())
+        return {**stored, **self.live.inventory}
+
+    def live_json(self) -> str:
+        snap = self.live.snapshot()
+        running = next((j for j in self.jobs.values() if j.state == "running"), None)
+        snap["job"] = {"id": running.id, "title": running.title, **running.snapshot()} if running else None
+        return json.dumps(snap)
+
+    def logs_text(self, node: str, container: str) -> str:
+        return self.read(lambda e: e.container_log(node, container))
+
+    def _topology(self, state: dict[str, Any]) -> str:
+        results = self.results()
+        live = {n: wv.live_state(self.live.latest.get(n), results.get(n)) for n in state["nodes"]}
+        return topology_svg(state, results, live, self.live_detail(state))
+
+    def live_detail(self, state: dict[str, Any]) -> dict[str, str]:
+        hw = self.live.inventory
+        return {n: " · ".join(x for x in (state["nodes"][n]["role"], state["nodes"][n]["public_ipv4"], f"{hw[n]['cpu_cores']} cores" if n in hw and hw[n].get("cpu_cores") else "", wv.memory(hw[n].get("mem_total_mb")) if n in hw and hw[n].get("mem_total_mb") else "") if x) for n in state["nodes"]}
+
+    def _node_hardware(self, name: str, node: dict[str, Any]) -> str:
+        i = self.hardware().get(name, {})
+        live = self.live.latest.get(name)
+        actions = (self.action_form(f"/nodes/{esc(name)}/check", "Check this host", primary=True) + self.action_form(f"/nodes/{esc(name)}/inventory", "Read hardware again"))
+        if not i:
+            note = (f'<p class="empty">{esc(live["error"])}</p>' if live and live["state"] == "offline" else '<p class="empty">Fleet has not read this host yet. Read the hardware to see its processor, memory, disks, and containers.</p>')
+            return "<h2>Hardware and system</h2>" + note + actions
+        history = self.live.history.get(name, [])
+        trend = (f'<div class="trends"><div><span>Memory in use</span>{wv.sparkline([h["memory"] for h in history], "Memory in use")}</div>'
+                 f'<div><span>Fullest disk</span>{wv.sparkline([h["disk"] for h in history], "Fullest disk")}</div>'
+                 f'<div><span>Load per core</span>{wv.sparkline([h["load"] for h in history], "Load per core", 2.0)}</div></div>') if history else ""
+        problems = inv.findings(node, i)
+        return ("<h2>Hardware and system</h2>" + wv.hardware_card(i) + trend + "<h3>Needs attention</h3>" + wv.findings_list(problems, "Nothing needs attention on this host.")
+                + wv.disks_and_nics(i, table) + "<h3>Containers</h3>" + wv.containers_table(name, i, table) + actions)
+
+    def _inventory_page(self, nodes: dict[str, Any]) -> str:
+        hardware = self.hardware()
+        if not nodes:
+            return '<p class="empty">No nodes yet. Add the control node on the Nodes page.</p>'
+        results = self.results()
+        data = [{"name": n, "role": nodes[n]["role"], "inventory": hardware.get(n), "live": self.live.latest.get(n), "check": results.get(n)} for n in sorted(nodes)]
+        online = sum(1 for d in data if wv.live_state(d["live"], d["check"]) in {"online", "degraded"})
+        found = [{"level": f["level"], "text": f"{n}: {f['text']}"} for n in sorted(nodes) for f in inv.findings(nodes[n], hardware.get(n, {}))] + inv.fleet_findings(hardware)
+        head = (wv.summary_strip(inv.totals(hardware), online, len(nodes)) if hardware else "")
+        refresh = self.action_form("/inventory/refresh", "Read hardware of every host", primary=not hardware)
+        if not hardware:
+            return '<p class="empty">Fleet has not read any host yet. Reading is read-only and takes a few seconds per host.</p>' + refresh
+        return head + "<h2>Needs attention</h2>" + wv.findings_list(found, "Nothing needs attention across the fleet.") + "<h2>Hosts</h2>" + wv.inventory_table(data, table) + refresh
+
+    def _logs_page(self, path: str, nodes: dict[str, Any], query: dict[str, list[str]]) -> tuple[int, str]:
+        name = path.split("/")[2]
+        if name not in nodes:
+            return 404, self.layout(path, "Not found", '<p class="empty">There is no such node.</p>')
+        known = (self.hardware().get(name) or {}).get("containers", [])
+        container = (query.get("c") or [""])[0]
+        back = f'<p><a href="/nodes/{esc(name)}">Back to {esc(name)}</a></p>'
+        if not container:
+            links = "".join(f'<li><a href="/nodes/{esc(name)}/logs?c={esc(c["name"])}">{esc(c["name"])}</a> {esc(c["status"])}</li>' for c in known)
+            return 200, self.layout(path, f"Logs of {name}", (f"<ul>{links}</ul>" if links else '<p class="empty">Fleet has not seen any container on this host. Read the hardware first.</p>') + back)
+        try:
+            text = self.logs_text(name, container)
+        except (FleetError, KeyError) as exc:
+            return 200, self.layout(path, f"Logs of {container}", f'<p class="empty" role="alert">{esc(exc)}</p>' + back)
+        tools = ('<div class="log-tools"><label class="inline-field">Filter the log<input type="search" data-log-filter autocomplete="off"></label>'
+                 '<label class="check"><input type="checkbox" data-log-poll>Follow (every 5 seconds)</label></div>')
+        return 200, self.layout(path, f"Logs of {container}", f'<div class="job" data-state="logs" data-logs-url="/api/logs?node={esc(name)}&amp;c={esc(container)}">{tools}'
+                                f'<pre class="log" id="job-log" tabindex="0" aria-label="Container log">{esc(text) or "The container has written nothing yet."}</pre></div>'
+                                f'<p class="hint">Showing the last 300 lines. Values that follow names like token, secret, or password are hidden.</p>' + back)
 
     def _job_banner(self, path: str) -> str:
         """Every page says when an action is running or finished while the operator was away, with a way back to it."""
@@ -579,15 +670,27 @@ class FleetWeb:
             )
             if not nodes:
                 return 200, self.layout(path, "Overview", kpis + '<h2>Needs attention</h2><p class="empty">No nodes yet. Add the control node on the Nodes page.</p>', flash)
+            hardware = self.hardware()
             attention = [f"{c.node}: {c.name}" + (f" ({c.detail})" if c.detail else "") for c in self.last_checks if not c.ok]
-            if not self.last_checks:
-                needs = '<p class="empty">Nothing has been checked in this session. Run the check to see the state of every node.</p>'
+            attention += [f"{n}: unreachable ({v.get('error', '')})" for n, v in sorted(self.live.latest.items()) if v["state"] == "offline"]
+            attention += [f"{n}: {v['containers']['unhealthy']} container(s) not healthy" for n, v in sorted(self.live.latest.items()) if v["state"] == "degraded"]
+            found = [(n, f) for n in sorted(nodes) for f in inv.findings(nodes[n], hardware.get(n, {}))]
+            attention += [f"{n}: {f['text']}" for n, f in found]
+            attention += [f["text"] for f in inv.fleet_findings(hardware)]
+            if not self.last_checks and not self.live.updated and not hardware:
+                needs = '<p class="empty">Nothing has been checked in this session. Run the check, or probe the hosts, to see the state of every node.</p>'
             elif attention:
                 needs = '<ul class="attention">' + "".join(f"<li>{state_word('bad', a)}</li>" for a in attention) + "</ul>"
             else:
-                needs = '<p class="attention">Every check passed.</p>'
-            body = (self._roadmap(state, current) + kpis + '<h2>Topology</h2><div class="topology" role="region" tabindex="0" aria-label="Topology diagram">' + topology_svg(state, results) + "</div><h2>Needs attention</h2>" + needs
-                    + self.action_form("/check", "Run check of the whole stack", primary=True))
+                needs = '<p class="attention">Nothing needs attention.</p>'
+            live_line = (f'<p class="live-line" data-live-status data-updated="{round(self.live.updated) if self.live.updated else ""}" data-interval="{self.live.interval}">'
+                         + (f"Probed {max(0, round(time.time() - self.live.updated))} seconds ago" + (f", every {self.live.interval} seconds." if self.live.interval else ".") if self.live.updated else
+                            ("Probing every " + str(self.live.interval) + " seconds. The first reading is on its way." if self.live.interval else "Live probing is off. Probe now reads every host once."))
+                         + "</p>" + self.action_form("/live/refresh", "Probe now"))
+            recent = [wv.history_entry(h) for h in self.vault.history(8)]
+            body = (self._roadmap(state, current) + kpis + '<h2>Topology</h2><div class="topology" role="region" tabindex="0" aria-label="Topology diagram">' + self._topology(state) + "</div>" + live_line
+                    + "<h2>Needs attention</h2>" + needs + self.action_form("/check", "Run check of the whole stack", primary=True)
+                    + '<h2>Recent activity</h2>' + wv.activity(recent) + '<p><a href="/history">All history</a></p>')
             return 200, self.layout(path, "Overview", body, flash)
         if path == "/tls":
             return 200, self.layout(path, "Certificates", self._tls_section(state), flash)
@@ -596,11 +699,15 @@ class FleetWeb:
         if path == "/deploy":
             return 200, self.layout(path, "Deploy", self._deploy_page(state, current), flash)
         if path == "/nodes":
-            rows = [[esc(n["name"]), esc(n["role"]), esc(n["hostname"]), esc(n["public_ipv4"]), esc(n["release"]),
-                     (state_word("ok" if self.results().get(n["name"]) else "bad", "Healthy" if self.results().get(n["name"]) else "Needs attention")
-                      if n["name"] in self.results() else state_word("", "Not checked")),
-                     f'<a href="/nodes/{esc(n["name"])}">Open</a>'] for n in (nodes[k] for k in sorted(nodes))]
-            listing = table(["Name", "Role", "Host", "IPv4", "Release", "State", ""], rows, label="Nodes") if rows else '<p class="empty">No nodes yet.</p>'
+            hardware = self.hardware()
+            rows = []
+            for n in (nodes[k] for k in sorted(nodes)):
+                i, disk = hardware.get(n["name"], {}), inv.worst_disk(hardware.get(n["name"], {}))
+                rows.append([esc(n["name"]), esc(n["role"]), esc(n["hostname"]), esc(n["public_ipv4"]), esc(n["release"]),
+                             wv.state_cell(n["name"], self.live.latest.get(n["name"]), self.results().get(n["name"])),
+                             esc(i.get("cpu_cores") or "-"), wv.gauge(n["name"], "memory", i.get("mem_used_pct")), wv.gauge(n["name"], "disk", disk["used_pct"] if disk else None),
+                             f'<a href="/nodes/{esc(n["name"])}">Open</a>'])
+            listing = (table(["Name", "Role", "Host", "IPv4", "Release", "State", "Cores", "Memory", "Disk", ""], rows, numeric={6}, label="Nodes") if rows else '<p class="empty">No nodes yet.</p>')
             fields = (
                 '<label>Name<input name="name" required pattern="[a-z0-9-]+" autocomplete="off"></label>'
                 '<label>Role<select name="role"><option>control</option><option>dns</option><option>edge</option><option>dns-edge</option><option>monitoring</option></select></label>'
@@ -612,6 +719,8 @@ class FleetWeb:
                          "<b>before</b> you add it here. Fleet logs in with key authentication only.</p>"
                          f'<pre class="log" tabindex="0" aria-label="Fleet SSH public key">{esc(self.fleet_public_key())}</pre>')
             return 200, self.layout(path, "Nodes", listing + key_block + "<h2>Add a node</h2>" + self.action_form("/nodes/add", "Add node and show plan", primary=True, fields=fields), flash)
+        if path.startswith("/nodes/") and path.endswith("/logs"):
+            return self._logs_page(path, nodes, query)
         if path.startswith("/nodes/"):
             name = path.split("/", 2)[2]
             if name not in nodes:
@@ -630,10 +739,12 @@ class FleetWeb:
             enroll = any(s.kind == "enroll" for s in plan.steps)
             geo = ('<label>Country code<input name="country" value="US" maxlength="2" required><span class="hint">Places this PoP in Geo-DNS.</span></label>'
                    '<label>Continent code<input name="continent" value="NA" maxlength="2" required></label>') if enroll else ""
-            body = (facts + "<h2>SSH login</h2>" + f"<p>Fleet logs in as <b>{esc(login.user)}@{esc(login.host)}:{login.port}</b>. The Fleet key must be on this host (see the <a href=\"/deploy#connect\">Deploy page</a>).</p>" + ssh_form
+            body = (facts + self._node_hardware(name, node) + "<h2>SSH login</h2>" + f"<p>Fleet logs in as <b>{esc(login.user)}@{esc(login.host)}:{login.port}</b>. The Fleet key must be on this host (see the <a href=\"/deploy#connect\">Deploy page</a>).</p>" + ssh_form
                     + "<h2>Install only this host</h2><p>Most people use the <a href=\"/deploy\">Deploy page</a> to install everything in order.</p><ol>" + "".join(f"<li>{esc(s.label())}</li>" for s in plan.steps) + "</ol>"
                     + self.action_form(f"/nodes/{esc(name)}/bootstrap", "Install and start this node", primary=True, fields=geo))
             return 200, self.layout(path, name, body, flash)
+        if path == "/inventory":
+            return 200, self.layout(path, "Inventory", self._inventory_page(nodes), flash)
         if path == "/security":
             rows = classify(current, self.repo_root)
             if current is None:
@@ -699,17 +810,8 @@ class FleetWeb:
                     + self.action_form("/secrets/rotate", "Rotate and deploy", primary=True, fields=f'<label>Secret<select name="secret">{options}</select></label>', confirm="ROTATE"))
             return 200, self.layout(path, "Secrets", body, flash)
         if path == "/history":
-            events = self.vault.history()
-            rows = []
-            for h in events:
-                try:
-                    d = json.loads(h["detail"])
-                    summary = f'{d.get("operator", "")}: {d.get("title", "")} ' + ("failed: " + str(d.get("failed") or d.get("error")) if d.get("failed") or d.get("error") else "ok")
-                except ValueError:
-                    summary = h["detail"]
-                rows.append([esc(h["at"]), esc(h["kind"]), esc(summary)])
-            body = table(["When", "Action", "Result"], rows, label="History") if rows else '<p class="empty">No actions recorded yet.</p>'
-            return 200, self.layout(path, "History", body, flash)
+            entries = [wv.history_entry(h) for h in self.vault.history()]
+            return 200, self.layout(path, "History", wv.history_details(entries) if entries else '<p class="empty">No actions recorded yet.</p>', flash)
         return 404, self.layout(path, "Not found", '<p class="empty">There is no such page.</p>')
 
     # -- actions -----------------------------------------------------------------------------------------
@@ -725,6 +827,23 @@ class FleetWeb:
         def job(title: str, fn: Callable[[FleetEngine], Any], kind: str) -> tuple[str, str]:
             return f"/jobs/{self.run_job(title, fn, kind).id}", ""
 
+        if path == "/live/refresh":
+            threading.Thread(target=self.live.refresh, daemon=True).start()
+            return "/", "Probing every host now. The numbers update in a few seconds."
+        if path == "/inventory/refresh":
+            return job("Read the hardware of every host", lambda e: f"{len(e.collect_inventory())} host(s) read", "inventory")
+        if path.startswith("/nodes/") and path.endswith("/inventory"):
+            node = path.split("/")[2]
+            return job(f"Read the hardware of {node}", lambda e: f"{len(e.collect_inventory([node]))} host(s) read", "inventory")
+        if path.startswith("/nodes/") and path.endswith("/check"):
+            node = path.split("/")[2]
+
+            def check_one(e: FleetEngine) -> str:
+                found = e.doctor([node])
+                self.last_checks = [c for c in self.last_checks if c.node != node] + found
+                bad = sum(1 for c in found if not c.ok)
+                return f"{len(found)} checks, {bad} failing"
+            return job(f"Check {node}", check_one, "check")
         if path.startswith("/jobs/") and path.endswith("/cancel"):
             job_id = path.split("/")[2]
             self.cancel_job(job_id)
@@ -1043,6 +1162,16 @@ def make_server(web: FleetWeb, host: str = LOOPBACK, port: int = 8765) -> http.s
                 return self._send(200, (ASSETS / "fleet.js").read_text(), "text/javascript")
             parts = url.path.strip("/").split("/")
             inner = getattr(web, "web", web)
+            if url.path == "/api/live" and hasattr(inner, "live_json"):
+                return self._send(200, inner.live_json(), "application/json")
+            if url.path == "/api/logs" and hasattr(inner, "logs_text"):
+                query = urllib.parse.parse_qs(url.query)
+                try:
+                    return self._send(200, inner.logs_text((query.get("node") or [""])[0], (query.get("c") or [""])[0]), "text/plain; charset=utf-8")
+                except FleetError as exc:
+                    return self._send(400, str(exc), "text/plain")
+            if url.path.startswith("/api/"):
+                return self._send(404, "Not available", "text/plain")
             if len(parts) == 3 and parts[0] == "jobs" and parts[2] in {"events", "log.txt"} and hasattr(inner, "jobs"):
                 job = inner.jobs.get(parts[1])
                 if job is None:

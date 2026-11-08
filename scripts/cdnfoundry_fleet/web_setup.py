@@ -61,7 +61,8 @@ def parse_extra_nodes(text: str, operator_domain: str) -> list[dict[str, Any]]:
 class WebGate:
     """Same surface as FleetWeb (page, post, layout, csrf) so the HTTP handler does not care which one answers."""
 
-    def __init__(self, vault_path: Path, repo_root: Path, output_dir: Path | None = None) -> None:
+    def __init__(self, vault_path: Path, repo_root: Path, output_dir: Path | None = None, monitor_interval: int = 0) -> None:
+        self.monitor_interval = monitor_interval
         self.vault_path, self.repo_root = vault_path, repo_root
         self.output_dir = output_dir or vault_path.parent / "bundles"
         self.csrf = secrets.token_urlsafe(24)
@@ -73,6 +74,8 @@ class WebGate:
         vault.unlock()
         self.web = FleetWeb(vault, self.repo_root, self.output_dir)
         self.csrf = self.web.csrf
+        if self.monitor_interval:
+            self.web.start_monitor(self.monitor_interval)
 
     # -- handler surface ---------------------------------------------------------------------------------
     def layout(self, path: str, title: str, body: str, flash: str = "", refresh: bool = False) -> str:

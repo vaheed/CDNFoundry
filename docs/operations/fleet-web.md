@@ -63,7 +63,8 @@ Only one action runs at a time. If you start a second one, the page says
 | [Deploy](#deploy) | Follow the road: connect hosts, set the release, review, and confirm |
 | [DNS names](#dns-names) | See which names must point to which host, and check them with 1.1.1.1 |
 | [Certificates](#certificates) | Use your own certificates, or a local one, for the control, Grafana, and telemetry names |
-| [Nodes](#nodes) | List hosts, add one, and install it |
+| [Nodes](#nodes) | List hosts with their live state and hardware, add one, and install it |
+| [Inventory](#inventory) | See the processor, memory, disks, kernel, Docker, and containers of every host, and what needs attention |
 | [Security](#security) | See known vulnerabilities in the running release |
 | [Upgrade](#upgrade) | Trust a release key, review a plan, and upgrade |
 | [Config](#config) | Deploy changed configuration |
@@ -99,10 +100,38 @@ installed until you confirm in step 2. Every page also has a **What is this page
 
 **Step 2: review and confirm.** Press **Review**. If a management name does not yet point to its host in 1.1.1.1 and you gave no certificate, the review says so: Let's Encrypt cannot issue for it, so Fleet generates a **local certificate** for that name when you deploy (the page opens over HTTPS, and your browser warns until you trust the local CA). Fleet lists, host by host and in start
 order, what it will do. Type `DEPLOY` and press **Deploy to servers**. Fleet installs the
-hosts one after another and stops at the first failure. Watch the live log on the job page.
+hosts one after another and stops at the first failure. Fleet opens the action page, where
+you [watch every step](#watch-an-action).
+
+**You can leave and come back.** An installation runs in Fleet web, not in your browser tab.
+While it runs, every page shows a **Running** bar with a link to the live view, and **Deploy**
+shows the installation in progress. If it stops (a host failed, you pressed **Stop after this
+step**, or Fleet web was closed), **Deploy** shows **Continue the installation**. Continue
+skips every step that is already done and picks up at the first one that is not.
 
 **Expected result:** every host shows **Installed**, and the roadmap on **Overview**
 moves on to the health check.
+
+## Watch an action
+
+Every long action (install, upgrade, config, check, rollback, backup, secret rotation, and
+reading hardware) opens one action page.
+
+- **Tasks.** Every step is listed up front, grouped by host, and ticked as it finishes:
+  waiting, running, done, failed, or already done in an earlier run, with the time each
+  step took.
+- **Progress.** A bar and a count ("7 of 18 steps") follow the tasks. A failed step stays
+  marked, and the page says where the action stopped and why.
+- **Log.** The log follows the end while the action runs. Untick **Follow the end** to read
+  it, type in **Filter the log** to find a line, and use **Download log** to keep it.
+- **Stop.** **Stop after this step** lets the step in progress finish and stops before the
+  next one. Nothing is cut half way on a host, and running the action again resumes. It is
+  shown only for actions that have steps.
+- The tab title shows the progress, so you can follow it from another tab. The page works
+  without JavaScript as a page that refreshes itself.
+
+Fleet keeps the latest 20 actions on this page. Every finished action, with its steps and
+log tail, stays in [History](#history).
 
 ## Overview
 
@@ -303,10 +332,46 @@ deploys it to the nodes that use it.
 Application keys, the backup password, and the database passwords are not in this
 list. They rotate only through the guided command-line procedures.
 
+## Inventory
+
+<span id="inventory"></span>
+
+**Inventory** shows what each host is made of: processor and cores, memory, system disk,
+kernel, Docker version, platform (bare metal or the hypervisor), time sync, global IPv6,
+network interfaces and speed, and every container with its status. Press **Read hardware of
+every host**; Fleet runs one read-only command per host over SSH and records the result in
+the vault. It changes nothing on a host.
+
+**Needs attention** lists what deserves a look: a disk over 85 % (bad over 95 %), memory over
+90 %, swap in use, high load per core, a clock that is not synchronized, Docker not running,
+a container that is not running or not healthy, an IPv6 address in the plan that the host
+does not have, and hosts that run different kernels, Docker versions, or operating systems.
+These are hygiene checks, not hardware requirements of CDNFoundry.
+
+A host's own page adds its full hardware card, trend lines, disks, interfaces, containers
+with a **Logs** link, **Check this host**, and **Read hardware again**. The log page shows the
+last 300 lines of one container and can follow it every 5 seconds. Values after names such
+as token, secret, and password are hidden, and only containers the host reported can be read.
+
+## Live view
+
+While Fleet web is open it probes every host every 60 seconds with the same read-only
+command, so the **Overview**, **Nodes**, and **Inventory** pages show whether each host is
+online, has containers that need attention, or is unreachable, with memory and disk gauges.
+The topology diagram colors each host by that state and links to its page. The numbers
+refresh by themselves while the tab is visible, and **Probe now** reads once on demand.
+
+- Probing is read-only, runs at most 6 hosts at a time, and is skipped while an action runs.
+- Readings live in memory only. Closing Fleet web discards them; the last **Read hardware**
+  result stays in the vault.
+- Change the interval with `cdnfoundry-fleet web --monitor-interval 120`, or turn probing
+  off with `0`. The minimum is 15 seconds.
+
 ## History
 
-Every action is recorded with the time, the kind, the operator, and the result.
-Use it to see what changed before a problem started.
+Every action is recorded with the time, the kind, the operator, and the result. Open an
+entry to see its steps and the tail of its log. Use it to see what changed before a problem
+started.
 
 ## Command line equivalents
 
@@ -317,6 +382,9 @@ Everything here has a command. See the [Fleet CLI reference](../reference/fleet-
 | Set up your fleet | `cdnfoundry-fleet setup` (with no arguments, choose the terminal wizard) |
 | Save a login for hosts without one | `ssh-defaults --ssh-user root --ssh-port 22`, or `node-ssh` per host |
 | Test connections | `test-connection` |
+| Inventory and **Read hardware** | `inventory` (add `--refresh` to read the hosts first, `--json` for scripts) |
+| The live view | `watch` (a table that refreshes; `--once` prints once) |
+| **Stop after this step** | Ctrl+C once; a second Ctrl+C interrupts at once |
 | DNS names and **Check DNS now** | `dns-names --check` (and `--standby-address` for HA) |
 | Certificates: own, local, automatic | `management-tls set`, `local`, `remove`, `list`, `ca` |
 | Release | `set-release`, `upgrade` (add `--manifest` only if you sign releases yourself) |
