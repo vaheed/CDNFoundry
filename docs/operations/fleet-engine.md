@@ -210,6 +210,18 @@ procedures for them.
 On the monitoring host, the check also confirms that Prometheus reports the `Watchdog` alert. Add `--json` for
 machine-readable output.
 
+## Parallel preparation
+
+`deploy`, `bootstrap`, and `upgrade` prepare every host at once: SSH pinning, prerequisites, and image pulls run on all
+hosts side by side (up to 6 hosts, and up to 4 images at a time on each host), before the first host is uploaded to,
+validated, or restarted. Each host still runs its own steps in order, and each pulled image is checked against its
+pinned digest. Nothing in this phase changes what a host serves, so a failed pull needs no rollback; one failure stops
+new steps, lets the running ones finish, and keeps the journal so the same command resumes. Uploads, validation,
+activation, and the health gate stay one host at a time, in start order.
+
+`cdnfoundry-fleet alert-webhook [--url https://...]` shows or sets where Alertmanager sends alerts. Install, upgrade, and
+config runs refuse to start until it is set, because Alertmanager will not start without a notifier.
+
 ## Inventory, live watch, and progress
 
 `cdnfoundry-fleet inventory` prints the hardware and system of every host as last read (processor, memory, disk,

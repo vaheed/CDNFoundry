@@ -92,16 +92,24 @@ installed until you confirm in step 2. Every page also has a **What is this page
 3. **DNS names and certificates.** Create the names on the [DNS names](#dns-names) page.
    Fleet checks them with 1.1.1.1. Or put your own certificates on the
    [Certificates](#certificates) page.
-4. **Release.** Choose **Use release vX**. Fleet installs the release you chose at setup.
+4. **Alert webhook.** Enter the https:// address that receives Alertmanager's alerts. Alertmanager
+   refuses to start without it, which would make every host fail its configuration check, so
+   Fleet will not start an install, upgrade, or config run until it is set. You can also set it
+   at setup, on **Config**, or with `cdnfoundry-fleet alert-webhook --url`.
+5. **Release.** Choose **Use release vX**. Fleet installs the release you chose at setup.
    It looks up the published images, builds the release description, and signs it
    with its own key, so you paste nothing. If you sign releases yourself, open
    **I sign releases myself** and use your key and manifest instead.
-5. For each edge, enter its country and continent codes. They place it in Geo-DNS.
+6. For each edge, enter its country and continent codes. They place it in Geo-DNS.
 
 **Step 2: review and confirm.** Press **Review**. If a management name does not yet point to its host in 1.1.1.1 and you gave no certificate, the review says so: Let's Encrypt cannot issue for it, so Fleet generates a **local certificate** for that name when you deploy (the page opens over HTTPS, and your browser warns until you trust the local CA). Fleet lists, host by host and in start
 order, what it will do. Type `DEPLOY` and press **Deploy to servers**. Fleet installs the
-hosts one after another and stops at the first failure. Fleet opens the action page, where
-you [watch every step](#watch-an-action).
+hosts one after another and stops at the first failure. Before any host is changed, Fleet
+connects to **every host at the same time**, installs prerequisites, and pulls the images
+(up to 6 hosts at once and 4 images at once per host), so the install no longer waits for one
+server to finish downloading before the next starts. The log says which image each host is
+pulling and how far along it is. A failed pull changes no host. Fleet opens the action page,
+where you [watch every step](#watch-an-action).
 
 **You can leave and come back.** An installation runs in Fleet web, not in your browser tab.
 While it runs, every page shows a **Running** bar with a link to the live view, and **Deploy**
@@ -333,8 +341,6 @@ Application keys, the backup password, and the database passwords are not in thi
 list. They rotate only through the guided command-line procedures.
 
 ## Inventory
-
-<span id="inventory"></span>
 
 **Inventory** shows what each host is made of: processor and cores, memory, system disk,
 kernel, Docker version, platform (bare metal or the hypervisor), time sync, global IPv6,
