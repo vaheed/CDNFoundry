@@ -141,3 +141,12 @@ def test_registry_lookup_reports_an_unpublished_image_clearly(monkeypatch: pytes
     monkeypatch.setattr(urllib.request, "urlopen", refuse)
     with pytest.raises(ValidationError, match="is not published"):
         release.registry_digest("core", "v9.9.9")
+
+
+def test_first_install_targets_the_release_chosen_at_setup_not_the_checkout_tag(tmp_path: Path) -> None:
+    from cdnfoundry_fleet.engine import FleetEngine
+    from cdnfoundry_fleet.state import FleetState
+
+    FleetState(tmp_path / "state").init({"operator_domain": "ops.example.test", "platform_domain": "cdn.example.test", "release": "v2.0.0"})
+    engine = FleetEngine(tmp_path / "state", ROOT, tmp_path / "out", transport=object(), say=lambda _m: None)
+    assert engine.target_release() == "v2.0.0"

@@ -433,7 +433,7 @@ class FleetWeb:
         out.append('<h3 id="release">c. Release</h3>')
         if current is None:
             target = self.read(lambda e: e.target_release())
-            out.append(f"<p>Fleet installs release <b>{esc(target)}</b> (the version your checkout is on). It looks up the published images and signs the release for you. Nothing to paste.</p>"
+            out.append(f"<p>Fleet installs release <b>{esc(target)}</b> (the release you chose at setup). It looks up the published images and signs the release for you. Nothing to paste.</p>"
                        + self.action_form("/upgrade/first", f"Use release {target}", primary=True)
                        + self._manual_release('/upgrade/first', "/deploy"))
             return "".join(out) + '<p class="empty">Step 2 opens when the release is set.</p>'

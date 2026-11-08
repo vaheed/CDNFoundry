@@ -22,7 +22,7 @@ from pathlib import Path
 
 MINIMUM = (3, 10)
 TESTED_UP_TO = (3, 13)
-REQUIREMENTS = ["PyYAML>=6.0.1", "cryptography>=41,<46"]
+REQUIREMENTS = ["PyYAML>=6.0.1", "cryptography>=41,<46", "certifi"]
 SCRIPTS = Path(__file__).resolve().parent
 
 

@@ -104,27 +104,41 @@ IMAGE_NAMES = {
 REGISTRY = "ghcr.io/vaheed/cdnfoundry-"
 
 
+def _tls_context() -> Any:
+    """Verify the registry with the certifi bundle when present. Python from python.org on macOS ships without system roots."""
+    import ssl
+
+    try:
+        import certifi
+
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
 def registry_digest(name: str, tag: str) -> str:
     """The sha256 digest the public registry holds for one release image."""
     import urllib.error
     import urllib.request
 
     repository = f"vaheed/cdnfoundry-{name}"
+    context = _tls_context()
     try:
-        with urllib.request.urlopen(f"https://ghcr.io/token?scope=repository:{repository}:pull", timeout=20) as response:
+        with urllib.request.urlopen(f"https://ghcr.io/token?scope=repository:{repository}:pull", timeout=20, context=context) as response:
             token = json.load(response)["token"]
         request = urllib.request.Request(
             f"https://ghcr.io/v2/{repository}/manifests/{tag}", method="HEAD",
             headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, "
                      "application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json"})
-        with urllib.request.urlopen(request, timeout=20) as response:
+        with urllib.request.urlopen(request, timeout=20, context=context) as response:
             digest = response.headers.get("Docker-Content-Digest", "")
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
             raise ValidationError(f"The image {REGISTRY}{name}:{tag} is not published. Check that release {tag} exists and its CI run finished") from exc
         raise ValidationError(f"The image registry answered {exc.code} for {name}:{tag}") from exc
     except (urllib.error.URLError, OSError, KeyError, ValueError) as exc:
-        raise ValidationError(f"Could not reach the image registry to look up release {tag}: {exc}") from exc
+        hint = " Run `pip install certifi` in the Fleet environment, or on macOS run the `Install Certificates.command` that comes with Python." if "CERTIFICATE_VERIFY_FAILED" in str(exc) else ""
+        raise ValidationError(f"Could not reach the image registry to look up release {tag}: {exc}.{hint}") from exc
     if not mf.DIGEST.match(digest):
         raise ValidationError(f"The registry returned no digest for {name}:{tag}")
     return digest

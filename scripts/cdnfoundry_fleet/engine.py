@@ -308,8 +308,14 @@ class FleetEngine:
         return self._engine(state).apply(plan, current, log=log or self.say)
 
     def target_release(self) -> str:
-        """The release to install or upgrade to: the tag the checkout is on, else the release chosen at setup."""
+        """The release to install or upgrade to.
+
+        A first install uses the release chosen at setup. An upgrade uses the tag the checkout is on, else the release chosen at setup.
+        """
         import subprocess
+
+        if self.release_manifest() is None:
+            return self.state()["global"]["release"]
 
         tag = subprocess.run(["git", "-C", str(self.repo_root), "describe", "--tags", "--exact-match"], capture_output=True, text=True, check=False)
         return tag.stdout.strip() if tag.returncode == 0 and tag.stdout.strip() else self.state()["global"]["release"]
