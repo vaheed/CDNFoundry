@@ -88,7 +88,7 @@ cdnfoundry-fleet node-ssh --node pop-1 --host 203.0.113.30
 cdnfoundry-fleet bootstrap --node pop-1 --country DE --continent EU
 ```
 
-`bootstrap` needs a release first. Run `set-release`: Fleet builds it for the release your checkout is on, looks up the image digests in the registry, and signs it with its own key. Pass `--manifest release.json` only if you sign releases yourself.
+`bootstrap` needs a release first. Run `set-release`: Fleet builds it for the release you chose at setup, looks up the image digests in the registry, and signs it with its own key. Pass `--manifest release.json` only if you sign releases yourself.
 Bootstrap shows a plan and asks for confirmation. Then it does these steps in order:
 
 1. Pins the host key.

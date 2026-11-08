@@ -344,7 +344,7 @@ Fleet can install, start, upgrade, and roll back nodes over SSH. It uses one key
    ./scripts/cdnfoundry-fleet node-ssh --node edge-frankfurt --host 203.0.113.30
    ```
 
-3. Adopt the release. Fleet builds it from your checkout, pins the published image digests, and signs it with its own key.
+3. Adopt the release. Fleet builds the release you chose at setup, pins the published image digests, and signs it with its own key.
 
    ```bash
    ./scripts/cdnfoundry-fleet set-release

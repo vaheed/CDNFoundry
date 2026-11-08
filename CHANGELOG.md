@@ -23,6 +23,9 @@ See the [release notes](docs/operations/releases/v2.0.1.md).
 
 ### Fixed
 
+- A first install uses the release chosen at setup, not the tag of the checkout.
+- The release lookup verifies the registry with the certifi bundle, so it works on
+  Python builds without system root certificates (python.org builds on macOS).
 - The Backups page no longer scrolls sideways on a phone.
 - The Fleet browser suite no longer fails when its projects share fixture state.
 

@@ -20,7 +20,7 @@ python3 scripts/fleet-web.py      # Windows: py scripts\fleet-web.py
 ```
 
 This works the same on Windows, macOS, and Linux. The first run creates a private
-Python environment under your user directory, installs PyYAML and cryptography, and
+Python environment under your user directory, installs PyYAML, cryptography, and certifi, and
 opens your browser. Any other arguments go to `cdnfoundry-fleet web`, for example
 `--port 9000`. Do not run `web.py` directly; it is part of a package.
 
@@ -91,8 +91,8 @@ installed until you confirm in step 2. Every page also has a **What is this page
 3. **DNS names and certificates.** Create the names on the [DNS names](#dns-names) page.
    Fleet checks them with 1.1.1.1. Or put your own certificates on the
    [Certificates](#certificates) page.
-4. **Release.** Choose **Use release vX**. Fleet installs the release your checkout is
-   on. It looks up the published images, builds the release description, and signs it
+4. **Release.** Choose **Use release vX**. Fleet installs the release you chose at setup.
+   It looks up the published images, builds the release description, and signs it
    with its own key, so you paste nothing. If you sign releases yourself, open
    **I sign releases myself** and use your key and manifest instead.
 5. For each edge, enter its country and continent codes. They place it in Geo-DNS.
