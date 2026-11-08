@@ -572,6 +572,16 @@ class FleetWeb:
             "The key gives full control of the host, so keep the Fleet vault passphrase safe.</p></details>"
         )
 
+    def _alert_section(self, back: str) -> str:
+        """The notifier Alertmanager needs. Without it every host's configuration check fails, so Deploy asks for it before the review."""
+        url = self.read(lambda e: e.alert_webhook())
+        status = state_word("ok", "Set") + f" <b>{esc(url)}</b>" if url else state_word("bad", "Not set") + " Alertmanager refuses to start without it, so no host can be installed."
+        form = self.action_form("/alert-webhook", "Save alert webhook" if not url else "Change alert webhook", primary=not url, fields=(
+            f'<label>Alert webhook URL<input name="url" type="url" required pattern="https://.+" value="{esc(url)}" placeholder="https://alerts.example.com/cdnfoundry" autocomplete="off">'
+            '<span class="hint">An https:// address that receives every alert Alertmanager sends.</span></label>'
+            f'<input type="hidden" name="next" value="{esc(back)}">'))
+        return f"<p>{status}</p>{form}"
+
     def _resume_panel(self, order: list[str], done: set[str]) -> str:
         """Leaving the page never stops an install. Coming back shows it running, or offers to continue where it stopped."""
         running = next((j for j in self.jobs.values() if j.state == "running" and j.title.startswith(("Deploy", "Continue"))), None)
@@ -621,7 +631,8 @@ class FleetWeb:
         out.append('<h3 id="dns">b. DNS names and certificates</h3><p>Caddy gets Let\'s Encrypt certificates for <b>control</b>, <b>grafana</b>, and <b>telemetry</b> when the control node starts. '
                    'That works only if 1.1.1.1 sees those names pointing at the host. See <a href="/dns">DNS names</a> for the exact records and a check, or '
                    'put your own certificates on the <a href="/tls">Certificates</a> page to skip it.</p>')
-        out.append('<h3 id="release">c. Release</h3>')
+        out.append('<h3 id="alerts">c. Alert webhook</h3>' + self._alert_section("/deploy"))
+        out.append('<h3 id="release">d. Release</h3>')
         if current is None:
             target = self.read(lambda e: e.target_release())
             out.append(f"<p>Fleet installs release <b>{esc(target)}</b> (the release you chose at setup). It looks up the published images and signs the release for you. Nothing to paste.</p>"
@@ -629,7 +640,7 @@ class FleetWeb:
                        + self._manual_release('/upgrade/first', "/deploy"))
             return "".join(out) + '<p class="empty">Step 2 opens when the release is set.</p>'
         out.append(f"<p>{state_word('ok', 'Done')} Release to install: <b>{esc(current['release'])}</b></p>")
-        out.append('<h3 id="review">d. Review and confirm</h3>')
+        out.append('<h3 id="review">e. Review and confirm</h3>')
         if not pending:
             return "".join(out) + '<p class="attention">Every host is installed. Use <a href="/config">Config</a> to deploy changed configuration or <a href="/upgrade">Upgrade</a> for a new release.</p>'
         fields = ""
@@ -770,7 +781,8 @@ class FleetWeb:
                 form_html = self.action_form("/upgrade/plan", f"Show the plan for {target}", primary=True)
             return 200, self.layout(path, "Upgrade", head + form_html + self._manual_release("/upgrade/plan" if current else "/upgrade/first", "/upgrade"), flash)
         if path == "/config":
-            body = ("<p>Compares the bundles Fleet would render now with what each node runs, validates them on the node, and swaps them in one node at a time.</p>"
+            body = ("<h2>Alert webhook</h2>" + self._alert_section("/config") + "<h2>Deploy changes</h2>"
+                    "<p>Compares the bundles Fleet would render now with what each node runs, validates them on the node, and swaps them in one node at a time.</p>"
                     + self.action_form("/config/apply", "Show changes and deploy", primary=True))
             return 200, self.layout(path, "Config", body, flash)
         if path == "/rollback":
@@ -829,6 +841,8 @@ class FleetWeb:
         def job(title: str, fn: Callable[[FleetEngine], Any], kind: str) -> tuple[str, str]:
             return f"/jobs/{self.run_job(title, fn, kind).id}", ""
 
+        if path == "/alert-webhook":
+            return self._sync("alert-webhook", lambda e: e.set_alert_webhook(form.get("url", "")), form.get("next", "/deploy") if form.get("next") in {"/deploy", "/config"} else "/deploy", "Alert webhook saved")
         if path == "/live/refresh":
             threading.Thread(target=self.live.refresh, daemon=True).start()
             return "/", "Probing every host now. The numbers update in a few seconds."
@@ -913,6 +927,7 @@ class FleetWeb:
             bad = [n for n in pending if not self.connections.get(n, (False, ""))[0]]
             if bad:
                 raise ValidationError(f"Test the connection to {', '.join(bad)} first. Fleet must be able to log in to a host before it can install it.")
+            self.read(lambda e: e.require_alert_webhook())
             waiting = self.read(lambda e: mg.unready(e.state(), e.work, self.dns_results))
             geo = {n: (form.get(f"country:{n}", "").upper(), form.get(f"continent:{n}", "").upper()) for n in pending}
             plans = self.read(lambda e: {n: e.bootstrap_plan(n) for n in pending})

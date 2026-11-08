@@ -27,7 +27,7 @@ DEFAULT_VAULT = Path.home() / ".config" / "cdnfoundry-fleet" / "fleet.db"
 PASSPHRASE_ENV = "CDNF_FLEET_PASSPHRASE"
 PASSPHRASE_FILE_ENV = "CDNF_FLEET_PASSPHRASE_FILE"
 
-ENGINE_COMMANDS = {"test-connection", "ssh-defaults", "dns-names", "management-tls", "deploy", "set-release", "public-key", "node-ssh", "trust-release-key", "bootstrap", "upgrade", "apply-config", "rollback", "security", "backup-now", "restore", "vault-backup", "inventory", "watch"}
+ENGINE_COMMANDS = {"test-connection", "ssh-defaults", "dns-names", "management-tls", "deploy", "set-release", "public-key", "node-ssh", "trust-release-key", "bootstrap", "upgrade", "apply-config", "rollback", "security", "backup-now", "restore", "vault-backup", "inventory", "watch", "alert-webhook"}
 EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_VALIDATION = 3
@@ -281,6 +281,8 @@ def parser() -> argparse.ArgumentParser:
     vr.add_argument("--snapshot", default="latest", help="Backup snapshot to restore")
     vr.add_argument("--repository", required=True, help="Backup repository location")
     vr.add_argument("--password-file", required=True, help="File that holds the backup repository password")
+    alert = sub.add_parser("alert-webhook", parents=[command_common], help="show or set where Alertmanager sends alerts (an https:// URL; required before the first install)")
+    alert.add_argument("--url", help="The https:// URL to save; omit to show the current one")
     hw = sub.add_parser("inventory", parents=[command_common], help="show the hardware and system of every host, as last read; --refresh reads them over SSH first")
     hw.add_argument("--node", action="append", default=[], help="Node name; repeat for several (default: every node)")
     hw.add_argument("--refresh", action="store_true", help="Read the hosts over SSH now and record the result")
@@ -1179,6 +1181,11 @@ def _engine_command_body(args: argparse.Namespace, store: FleetState, output_dir
         print(json.dumps({"ok": True, "installed": pending}))
         return EXIT_OK
 
+    if args.command == "alert-webhook":
+        if args.url is not None:
+            engine.set_alert_webhook(args.url)
+        print(json.dumps({"alert_webhook_url": engine.alert_webhook()}))
+        return EXIT_OK
     if args.command == "inventory":
         from . import inventory as inv_mod
         from .terminal import inventory_table

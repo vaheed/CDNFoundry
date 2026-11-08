@@ -714,6 +714,7 @@ def test_cli_parser_exposes_all_commands_and_help() -> None:
         "setup",
         "web",
         "inventory",
+        "alert-webhook",
         "watch",
         "public-key",
         "set-release",

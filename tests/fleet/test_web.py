@@ -468,3 +468,49 @@ def test_live_json_and_logs_are_not_served_before_unlock(tmp_path, monkeypatch) 
         assert get(port, "/api/live")[0] == 404 and get(port, "/api/logs?node=a&c=b")[0] == 404
     finally:
         server.shutdown()
+
+
+def test_event_stream_delivers_lines_while_the_action_is_still_running(served) -> None:
+    web, port = served
+    gate = threading.Event()
+
+    def slow(engine):
+        engine.say("first line")
+        gate.wait(10)
+        engine.say("second line")
+        return "ok"
+
+    job = web.run_job("Slow action", slow, "test")
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    conn.request("GET", f"/jobs/{job.id}/events?after=0", headers={"Host": f"127.0.0.1:{port}"})
+    resp = conn.getresponse()
+    seen = ""
+    while "first line" not in seen:
+        seen += resp.fp.readline().decode()
+    assert job.state == "running" and "second line" not in seen
+    gate.set()
+    while '"type": "done"' not in seen:
+        seen += resp.fp.readline().decode()
+    assert "second line" in seen
+    conn.close()
+
+
+def test_the_alert_webhook_is_asked_for_saved_and_required_before_an_install(served) -> None:
+    web, port = served
+    add_node(web, port)
+    page = get(port, "/deploy")[1]
+    assert "Alert webhook" in page and "Not set" in page and 'action="/alert-webhook"' in page
+    status, body, _ = post(port, "/alert-webhook", {"csrf": web.csrf, "url": "http://alerts.example.com/x", "next": "/deploy"})
+    assert status == 400 and "https://" in body
+    status, _, r = post(port, "/alert-webhook", {"csrf": web.csrf, "url": "https://alerts.example.com/cdnfoundry", "next": "/config"})
+    assert status == 303 and r.getheader("Location").startswith("/config")
+    assert "https://alerts.example.com/cdnfoundry" in get(port, "/config")[1]
+    assert "Not set" not in get(port, "/deploy")[1]
+
+
+def test_deploy_and_config_refuse_without_an_alert_webhook(served) -> None:
+    web, port = served
+    add_node(web, port)
+    _, _, r = post(port, "/config/apply", {"csrf": web.csrf})
+    assert "Alertmanager refuses to start" in wait_job(port, r.getheader("Location"))
+    assert any("Alertmanager refuses to start" in p for p in web.read(lambda e: e.deploy_blockers(["control-1"])))

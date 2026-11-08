@@ -138,6 +138,7 @@ class WebGate:
             + "<h2>Your platform</h2>"
             + self._field("Operator domain", "operator_domain", required="", placeholder="cdn.example.com", hint="Where the control panel and API live.")
             + self._field("Platform domain", "platform_domain", required="", placeholder="example.net", hint="Holds the platform nameserver names.")
+            + self._field("Alert webhook (https)", "alert_webhook_url", type="url", placeholder="https://alerts.example.com/cdnfoundry", hint="Where Alertmanager sends alerts. Optional now, but required before the first install. You can set it later on the Deploy page.")
             + self._field("Release", "release", required="", value=f"v{__version__}", hint="Exact release tag or commit to deploy.")
             + self._field("Admin email for Let's Encrypt", "acme_email", type="email", required="", autocomplete="email", hint="Let's Encrypt sends expiry and problem notices here. Used for the free certificates of the control panel and Grafana.")
             + f'<label>Layout<select name="preset">{presets}</select></label>'
@@ -183,7 +184,8 @@ class WebGate:
         if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
             raise ValidationError("Enter a valid admin email for Let's Encrypt, for example admin@example.com")
         config = {"global": {"operator_domain": operator, "platform_domain": form.get("platform_domain", "").strip().lower(),
-                             "release": form.get("release", "").strip(), "acme_email": form.get("acme_email", "").strip()},
+                             "release": form.get("release", "").strip(), "acme_email": form.get("acme_email", "").strip(),
+                             "alert_webhook_url": form.get("alert_webhook_url", "").strip()},
                   "preset": preset, "nodes": nodes}
         vault = Vault(self.vault_path, passphrase)
         vault.create()  # also checks the passphrase length

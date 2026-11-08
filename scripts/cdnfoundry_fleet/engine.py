@@ -21,7 +21,7 @@ from .progress import Tracker, plan_steps
 from .render import Renderer
 from . import management as mg
 from .ssh import SshError, SshTransport, Target, load_targets, save_target
-from .state import FleetState
+from .state import FleetState, validate_alert_webhook
 
 RELEASES = "releases"
 INVENTORY = "inventory"
@@ -178,8 +178,25 @@ class FleetEngine:
     def local_ca(self) -> str | None:
         return mg.local_ca_certificate(self.work)
 
+    ALERT_WEBHOOK_HELP = "Set the alert webhook first (Alertmanager refuses to start without a notifier, so every host would fail its configuration check)"
+
+    def alert_webhook(self) -> str:
+        return self.state()["global"].get("alert_webhook_url", "")
+
+    def set_alert_webhook(self, url: str) -> None:
+        """Where Alertmanager sends alerts. Saved in the plan; the next deploy or config run carries it to the hosts."""
+        state = self.state()
+        state["global"]["alert_webhook_url"] = validate_alert_webhook(url.strip())
+        self.store._write(state)
+
+    def require_alert_webhook(self) -> None:
+        if not self.alert_webhook():
+            raise ValidationError(self.ALERT_WEBHOOK_HELP)
+
     def deploy_blockers(self, pending: list[str]) -> list[str]:
         problems = []
+        if not self.alert_webhook():
+            problems.append(self.ALERT_WEBHOOK_HELP)
         if self.release_manifest() is None:
             problems.append("No signed release is set")
         if not pending:
@@ -332,6 +349,7 @@ class FleetEngine:
         return actions.plan_config_change(state["nodes"], changed, state["global"]["release"], ha_standby=ha_standby), digests
 
     def apply_config(self, *, log: Callable[[str], None] | None = None) -> actions.Outcome:
+        self.require_alert_webhook()
         plan, _ = self.config_plan()
         state = self.state()
         self._missing_access(state, [s.node for s in plan.steps])
@@ -406,6 +424,7 @@ class FleetEngine:
         return actions.plan_upgrade(state["nodes"], current, manifest, ha_standby=ha_standby), manifest, mf.diff(current, manifest)
 
     def upgrade(self, document: dict[str, Any] | None = None, *, key_pem: str | None = None, log: Callable[[str], None] | None = None) -> actions.Outcome:
+        self.require_alert_webhook()
         document = document or self.automatic_release()
         plan, manifest, _diff = self.upgrade_plan(document, key_pem=key_pem)
         state = self.state()

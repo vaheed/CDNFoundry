@@ -243,3 +243,12 @@ def test_cli_watch_once_json_reports_unreachable_hosts_with_a_failing_exit_code(
     assert main(["watch", "--vault", str(vault.path), "--once", "--json"]) == 6
     line = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert line["nodes"]["control-1"]["state"] == "offline" and line["nodes"]["pop-1"]["state"] == "degraded"
+
+
+def test_cli_alert_webhook_shows_saves_and_refuses_plain_http(vault, capsys):
+    base = ["--vault", str(vault.path)]
+    assert main(["alert-webhook", *base]) == 0 and json.loads(capsys.readouterr().out)["alert_webhook_url"] == ""
+    assert main(["alert-webhook", *base, "--url", "https://alerts.example.com/hook"]) == 0
+    assert json.loads(capsys.readouterr().out)["alert_webhook_url"] == "https://alerts.example.com/hook"
+    assert main(["alert-webhook", *base]) == 0 and "alerts.example.com" in capsys.readouterr().out
+    assert main(["alert-webhook", *base, "--url", "http://alerts.example.com/hook"]) == 3
