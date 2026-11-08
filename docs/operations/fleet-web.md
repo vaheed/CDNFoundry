@@ -91,8 +91,10 @@ installed until you confirm in step 2. Every page also has a **What is this page
 3. **DNS names and certificates.** Create the names on the [DNS names](#dns-names) page.
    Fleet checks them with 1.1.1.1. Or put your own certificates on the
    [Certificates](#certificates) page.
-4. **Signed release.** Trust the public key your CI signs with, then paste the signed
-   release manifest.
+4. **Release.** Choose **Use release vX**. Fleet installs the release your checkout is
+   on. It looks up the published images, builds the release description, and signs it
+   with its own key, so you paste nothing. If you sign releases yourself, open
+   **I sign releases myself** and use your key and manifest instead.
 5. For each edge, enter its country and continent codes. They place it in Geo-DNS.
 
 **Step 2: review and confirm.** Press **Review**. If a management name does not yet point to its host in 1.1.1.1 and you gave no certificate, the review says so: Let's Encrypt cannot issue for it, so Fleet generates a **local certificate** for that name when you deploy (the page opens over HTTPS, and your browser warns until you trust the local CA). Fleet lists, host by host and in start
@@ -206,14 +208,16 @@ upgrade to a signed manifest first.
 
 ## Upgrade
 
-Fleet only installs releases that carry a valid signature from a key you trust.
+Fleet upgrades to the release your checkout is on. Check out the newer release first
+(`git fetch --tags && git checkout vX.Y.Z`); Fleet then does the rest.
 
 <div class="steps">
 
-1. If no key is trusted yet, paste the public key your release pipeline signs
-   with into **Release public key (PEM)**, and choose **Trust this key**.
-2. Paste the signed release manifest (JSON) and choose **Show plan**. On a new
-   fleet, choose **Use this release for the first install** instead.
+1. Open **Upgrade**. It shows the running release and the release of your checkout.
+2. Choose **Show the plan for vX**. On a new fleet, choose **Use release vX for the
+   first install** instead. Fleet looks up the published images and signs the release
+   itself. If you sign releases yourself, open **I sign releases myself** and paste your
+   key and manifest.
 3. Read the page. It shows the release, its profile, whether it holds an
    irreversible migration, each image or config that changes, and the ordered
    plan. Services that do not change are listed as "Unchanged, not restarted".
@@ -315,6 +319,6 @@ Everything here has a command. See the [Fleet CLI reference](../reference/fleet-
 | Test connections | `test-connection` |
 | DNS names and **Check DNS now** | `dns-names --check` (and `--standby-address` for HA) |
 | Certificates: own, local, automatic | `management-tls set`, `local`, `remove`, `list`, `ca` |
-| Signed release | `trust-release-key`, `set-release` |
+| Release | `set-release`, `upgrade` (add `--manifest` only if you sign releases yourself) |
 | Review and **Deploy to servers** | `deploy --plan-only`, then `deploy --location pop-1=DE:EU` |
 | HA: check DNS, deploy the standby | `dns-names --standby-address`, `control add-standby` |

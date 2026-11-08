@@ -1,4 +1,3 @@
-import { generateKeyPairSync } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
 import { expectAccessible } from '../specs/helpers';
 
@@ -115,7 +114,7 @@ test('destructive actions cannot be submitted without their typed confirmation',
     await expect(page).toHaveURL(/\/secrets$/);
     expect(await field.evaluate((el: HTMLInputElement) => el.validity.patternMismatch)).toBe(true);
     await page.goto('/ha');
-    await expect(page.getByText('ha: none')).toBeVisible();
+    await expect(page.getByText(/Deploy .* first|Add exactly one control node/)).toBeVisible();
 });
 
 test('restore refuses a wrong confirmation with a readable error', async ({ page }) => {
@@ -135,16 +134,14 @@ test('restore refuses a wrong confirmation with a readable error', async ({ page
     await expectAccessible(page);
 });
 
-test('upgrade asks for a release key first, then refuses an unsigned manifest', async ({ page }) => {
-    const { publicKey } = generateKeyPairSync('ed25519');
+test('upgrade offers the release of the checkout with one button, and refuses an unsigned pasted manifest', async ({ page }) => {
     await page.goto('/upgrade');
-    await expect(page.getByText('No release signing key is trusted yet')).toBeVisible();
-    await page.getByLabel('Release public key (PEM)').fill(publicKey.export({ type: 'spki', format: 'pem' }).toString());
-    await page.getByRole('button', { name: 'Trust this key' }).click();
-    await expect(page.getByText('Release key trusted')).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Use release .* for the first install$/ })).toBeVisible();
+    await expect(page.getByLabel('Release public key (PEM)')).toBeHidden();
+    await page.getByText('I sign releases myself').click();
     await page.getByLabel('Signed release manifest (JSON)').fill('{"manifest": {"release": "v9"}}');
-    await page.getByRole('button', { name: 'Use this release for the first install' }).click();
-    await expect(page.getByRole('alert')).toContainText('not signed');
+    await page.getByRole('button', { name: 'Use this manifest' }).click();
+    await expect(page.getByRole('alert')).toContainText(/signed|release/);
     await expectAccessible(page);
 });
 

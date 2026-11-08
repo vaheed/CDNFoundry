@@ -97,6 +97,45 @@ def from_trivy(report: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+IMAGE_NAMES = {
+    "CDNF_CORE_IMAGE": "core", "CDNF_WEB_IMAGE": "web", "CDNF_EDGE_CONTROL_IMAGE": "edge-control", "CDNF_EDGE_RUNTIME_IMAGE": "edge-runtime",
+    "CDNF_EDGE_AGENT_IMAGE": "edge-agent", "CDNF_EDGE_GATEWAY_IMAGE": "edge-gateway", "CDNF_MMDB_UPDATER_IMAGE": "mmdb-updater",
+}
+REGISTRY = "ghcr.io/vaheed/cdnfoundry-"
+
+
+def registry_digest(name: str, tag: str) -> str:
+    """The sha256 digest the public registry holds for one release image."""
+    import urllib.error
+    import urllib.request
+
+    repository = f"vaheed/cdnfoundry-{name}"
+    try:
+        with urllib.request.urlopen(f"https://ghcr.io/token?scope=repository:{repository}:pull", timeout=20) as response:
+            token = json.load(response)["token"]
+        request = urllib.request.Request(
+            f"https://ghcr.io/v2/{repository}/manifests/{tag}", method="HEAD",
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, "
+                     "application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json"})
+        with urllib.request.urlopen(request, timeout=20) as response:
+            digest = response.headers.get("Docker-Content-Digest", "")
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            raise ValidationError(f"The image {REGISTRY}{name}:{tag} is not published. Check that release {tag} exists and its CI run finished") from exc
+        raise ValidationError(f"The image registry answered {exc.code} for {name}:{tag}") from exc
+    except (urllib.error.URLError, OSError, KeyError, ValueError) as exc:
+        raise ValidationError(f"Could not reach the image registry to look up release {tag}: {exc}") from exc
+    if not mf.DIGEST.match(digest):
+        raise ValidationError(f"The registry returned no digest for {name}:{tag}")
+    return digest
+
+
+def automatic_manifest(root: Path, release: str, *, digest: Any = registry_digest) -> dict[str, Any]:
+    """Build the manifest for a published release from the checkout, looking every image digest up in the registry."""
+    env_images = {var: f"{REGISTRY}{name}@{digest(name, release)}" for var, name in IMAGE_NAMES.items()}
+    return build(root, release=release, env_images=env_images)
+
+
 def generate_key(directory: Path) -> tuple[Path, Path]:
     key = Ed25519PrivateKey.generate()
     directory.mkdir(parents=True, exist_ok=True)

@@ -100,3 +100,44 @@ def test_first_install_adopts_a_signed_release_and_bootstrap_refuses_without_one
     (engine2.work / "releases" / "current.json").unlink()
     with pytest.raises(mf.ManifestError, match="does not verify"):
         engine2.set_release(forged)
+
+
+def test_automatic_release_builds_signs_and_verifies_without_any_pasted_key(tmp_path: Path) -> None:
+    from cdnfoundry_fleet.engine import FleetEngine
+
+    engine = FleetEngine(tmp_path / "state", ROOT, tmp_path / "out", transport=object(), say=lambda _m: None)
+    looked_up: list[tuple[str, str]] = []
+
+    def digest(name: str, tag: str) -> str:
+        looked_up.append((name, tag))
+        return "sha256:" + "a" * 64
+
+    document = engine.automatic_release("v2.0.0", digest=digest)
+    assert {name for name, _tag in looked_up} == set(release.IMAGE_NAMES.values())
+    assert engine.verify_release(document)["release"] == "v2.0.0"
+    assert engine.automatic_release("v2.0.0", digest=digest)["signature"] == document["signature"]
+
+
+def test_automatic_release_refuses_when_the_operator_pinned_their_own_key(tmp_path: Path) -> None:
+    from cdnfoundry_fleet.common import ValidationError
+    from cdnfoundry_fleet.engine import FleetEngine
+
+    engine = FleetEngine(tmp_path / "state", ROOT, tmp_path / "out", transport=object(), say=lambda _m: None)
+    engine.trust_release_key(release.generate_key(tmp_path / "keys")[1].read_text())
+    with pytest.raises(ValidationError, match="pinned your own release key"):
+        engine.automatic_release("v2.0.0", digest=lambda _n, _t: "sha256:" + "a" * 64)
+
+
+def test_registry_lookup_reports_an_unpublished_image_clearly(monkeypatch: pytest.MonkeyPatch) -> None:
+    import io
+    import urllib.error
+    import urllib.request
+
+    from cdnfoundry_fleet.common import ValidationError
+
+    def refuse(*_a, **_k):
+        raise urllib.error.HTTPError("https://ghcr.io", 404, "not found", {}, io.BytesIO())
+
+    monkeypatch.setattr(urllib.request, "urlopen", refuse)
+    with pytest.raises(ValidationError, match="is not published"):
+        release.registry_digest("core", "v9.9.9")

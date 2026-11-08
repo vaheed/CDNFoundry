@@ -395,7 +395,6 @@ class FleetWeb:
         order = [n for i, n in enumerate(order) if n not in order[:i]]
         pending = [n for n in order if n not in done]
         have = self.read(lambda e: e.targets(state))
-        has_key = self.read(lambda e: e._release_file("trusted.pub").exists())
         out = [self._roadmap(state, current), '<h2 id="connect">Step 1 of 2: prepare</h2><h3>a. Connect your hosts</h3>', self._key_help(state, self.fleet_public_key(), have)]
         rows = []
         for n in order:
@@ -421,15 +420,13 @@ class FleetWeb:
         out.append('<h3 id="dns">b. DNS names and certificates</h3><p>Caddy gets Let\'s Encrypt certificates for <b>control</b>, <b>grafana</b>, and <b>telemetry</b> when the control node starts. '
                    'That works only if 1.1.1.1 sees those names pointing at the host. See <a href="/dns">DNS names</a> for the exact records and a check, or '
                    'put your own certificates on the <a href="/tls">Certificates</a> page to skip it.</p>')
-        out.append('<h3 id="release">c. Signed release</h3>')
-        manifest_field = '<label>Signed release manifest (JSON)<textarea name="manifest" rows="6" required></textarea></label>'
+        out.append('<h3 id="release">c. Release</h3>')
         if current is None:
-            if not has_key:
-                out.append("<p>Fleet installs only releases signed by your CI. Paste the public key your CI signs with (the release pipeline publishes it).</p>"
-                           + self.action_form("/upgrade/trust", "Trust this key", fields='<label>Release public key (PEM)<textarea name="key" rows="4" required></textarea></label><input type="hidden" name="next" value="/deploy">'))
-            else:
-                out.append("<p>Key trusted. Paste the signed release manifest (the <code>release.json</code> your CI produced).</p>" + self.action_form("/upgrade/first", "Use this release", fields=manifest_field))
-            return "".join(out) + '<p class="empty">Step 2 opens when a signed release is set.</p>'
+            target = self.read(lambda e: e.target_release())
+            out.append(f"<p>Fleet installs release <b>{esc(target)}</b> (the version your checkout is on). It looks up the published images and signs the release for you. Nothing to paste.</p>"
+                       + self.action_form("/upgrade/first", f"Use release {target}", primary=True)
+                       + self._manual_release('/upgrade/first', "/deploy"))
+            return "".join(out) + '<p class="empty">Step 2 opens when the release is set.</p>'
         out.append(f"<p>{state_word('ok', 'Done')} Release to install: <b>{esc(current['release'])}</b></p>")
         out.append('<h3 id="review">d. Review and confirm</h3>')
         if not pending:
@@ -543,14 +540,17 @@ class FleetWeb:
                 body = table(["Severity", "Finding", "Image", "State"], label="Vulnerabilities", rows=[[esc(r["severity"]), esc(r["id"]), esc(r["image"]), state_word(kind[r["state"]], r["detail"])] for r in rows])
             return 200, self.layout(path, "Security", body, flash)
         if path == "/upgrade":
-            has_key = self.read(lambda e: e._release_file("trusted.pub").exists())
-            trust = "" if has_key else ('<p class="empty">No release signing key is trusted yet. Paste the public key CI signs with.</p>'
-                                        + self.action_form("/upgrade/trust", "Trust this key", fields='<label>Release public key (PEM)<textarea name="key" rows="4" required></textarea></label>'))
-            manifest_field = '<label>Signed release manifest (JSON)<textarea name="manifest" rows="8" required></textarea></label>'
-            plan_form = ((self.action_form("/upgrade/plan", "Show plan", primary=True, fields=manifest_field) if current else
-                          self.action_form("/upgrade/first", "Use this release for the first install", primary=True, fields=manifest_field)) if has_key else "")
-            current_line = f"<p>Running release: <b>{esc(current['release'])}</b></p>" if current else "<p>No signed release is recorded yet.</p>"
-            return 200, self.layout(path, "Upgrade", current_line + trust + plan_form, flash)
+            target = self.read(lambda e: e.target_release())
+            if current is None:
+                head = f"<p>No release is recorded yet. Fleet will install <b>{esc(target)}</b>.</p>"
+                form_html = self.action_form("/upgrade/first", f"Use release {target} for the first install", primary=True)
+            elif current["release"] == target:
+                head = f"<p>Running release: <b>{esc(current['release'])}</b>. Your checkout is on the same version.</p>"
+                form_html = '<p class="hint">To upgrade, check out the newer release first: <code>git fetch --tags && git checkout vX.Y.Z</code>, then reload this page.</p>'
+            else:
+                head = f"<p>Running release: <b>{esc(current['release'])}</b>. Your checkout is on <b>{esc(target)}</b>.</p>"
+                form_html = self.action_form("/upgrade/plan", f"Show the plan for {target}", primary=True)
+            return 200, self.layout(path, "Upgrade", head + form_html + self._manual_release("/upgrade/plan" if current else "/upgrade/first", "/upgrade"), flash)
         if path == "/config":
             body = ("<p>Compares the bundles Fleet would render now with what each node runs, validates them on the node, and swaps them in one node at a time.</p>"
                     + self.action_form("/config/apply", "Show changes and deploy", primary=True))
@@ -730,10 +730,10 @@ class FleetWeb:
         if path == "/upgrade/trust":
             return self._sync("trust-release-key", lambda e: e.trust_release_key(form["key"]), "/deploy" if form.get("next") == "/deploy" else "/upgrade", "Release key trusted")
         if path == "/upgrade/plan":
-            document = json.loads(form["manifest"])
+            document = self._release_document(form)
             plan, manifest, diff = self.read(lambda e: e.upgrade_plan(document))
             token = secrets.token_urlsafe(12)
-            self.pending_manifest[token] = form["manifest"]
+            self.pending_manifest[token] = json.dumps(document)
             lines = [f"image {n}: {o or 'new'} -> {w or 'removed'}" for n, (o, w) in diff.images.items()] + [f"config {c} changes" for c in diff.configs]
             body = (f"<p>Release <b>{esc(manifest['release'])}</b>, profile <b>{esc(manifest['profile'])}</b>; irreversible migration: <b>{'yes' if diff.migrations else 'no'}</b>.</p>"
                     "<h2>Changes</h2>" + ("<ul>" + "".join(f"<li>{esc(l)}</li>" for l in lines) + "</ul>" if lines else '<p class="empty">Nothing changes between the running release and the target.</p>')
@@ -742,7 +742,7 @@ class FleetWeb:
                     + (self.action_form("/upgrade/apply", "Upgrade the fleet", primary=True, fields=f'<input type="hidden" name="token" value="{esc(token)}">') if plan.steps else ""))
             raise _Render(self.layout("/upgrade", "Upgrade plan", body))
         if path == "/upgrade/first":
-            document = json.loads(form["manifest"])
+            document = self._release_document(form)
             return self._sync("set-release", lambda e: e.set_release(document), "/deploy", f"Release {document['manifest']['release']} set. Review the deployment below.")
         if path == "/upgrade/apply":
             document = json.loads(self.pending_manifest.pop(form["token"], "null") or "null")
@@ -811,6 +811,26 @@ class FleetWeb:
                 return e.apply_config()
             return job(f"Rotate {secret}", rotate, "rotate-secret")
         raise ValidationError("Unknown action")
+
+    def _manual_release(self, action: str, back: str) -> str:
+        """For operators who sign releases themselves: pin their key, then paste the signed manifest. Hidden by default."""
+        return ('<details class="help"><summary>I sign releases myself</summary>'
+                "<p>Paste your release public key (the whole block, with its BEGIN and END lines) to pin it, then paste the signed manifest. Fleet then accepts only releases signed with your key.</p>"
+                + self.action_form("/upgrade/trust", "Pin this key", fields=f'<label>Release public key (PEM)<textarea name="key" rows="4" required placeholder="-----BEGIN PUBLIC KEY-----"></textarea></label><input type="hidden" name="next" value="{back}">')
+                + self.action_form(action, "Use this manifest", fields='<label>Signed release manifest (JSON)<textarea name="manifest" rows="6" required></textarea></label>')
+                + "</details>")
+
+    def _release_document(self, form: dict[str, str]) -> dict[str, Any]:
+        """The pasted manifest, or the one Fleet builds and signs itself for the release the checkout is on."""
+        if form.get("manifest", "").strip():
+            return json.loads(form["manifest"])
+        if not self.write_lock.acquire(blocking=False):
+            raise ValidationError("Another action is running; wait for it to finish")
+        try:
+            with self.vault.session() as work:
+                return self._engine(work).automatic_release()
+        finally:
+            self.write_lock.release()
 
     def _sync(self, kind: str, fn: Callable[[FleetEngine], Any], target: str, flash: str) -> tuple[str, str]:
         if not self.write_lock.acquire(blocking=False):

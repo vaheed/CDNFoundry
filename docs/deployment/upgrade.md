@@ -1,13 +1,13 @@
 ---
 title: Upgrade and rollback
-description: Upgrade a running CDNFoundry fleet to a new signed release with Fleet or by hand, in a safe order with a backup first, and know when to roll back or restore.
+description: Upgrade a running CDNFoundry fleet to a new release with Fleet or by hand, in a safe order with a backup first, and know when to roll back or restore.
 ---
 
 # Upgrade and rollback
 
 This page shows how to move a running fleet to a new release, check it, and go back if needed.
 
-**You need:** a working fleet, the signed release manifest (or the exact image references) for the target release, and a verified off-host backup.
+**You need:** a working fleet, your checkout on the target release tag (`git fetch --tags && git checkout vX.Y.Z`), and a verified off-host backup.
 
 ::: danger v2.0.0 is a breaking release
 There is no upgrade from 1.x or 0.x. Deploy v2.0.0 from scratch with the [production quick start](production-quick-start.md). Do not point v2.0.0 images at a 1.x or 0.x database or volumes. This page applies to updates within 2.x.
@@ -42,23 +42,23 @@ The order protects serving. Edge and DNS hosts keep serving the last valid runti
 Show the plan first. It changes nothing.
 
 ```sh
-./scripts/cdnfoundry-fleet upgrade --manifest release-manifest.json --plan-only
+./scripts/cdnfoundry-fleet upgrade --plan-only
 ```
 
 The output lists the profile, whether the release holds an irreversible migration, each image and config that changes, and the steps for each node. Then apply it. Fleet asks you to confirm (or pass `--yes`):
 
 ```sh
-./scripts/cdnfoundry-fleet upgrade --manifest release-manifest.json
+./scripts/cdnfoundry-fleet upgrade
 ```
 
-Fleet verifies the manifest signature, then pre-pulls, uploads, validates, activates, and health-checks one node at a time. It upgrades DNS and edge nodes first, then control nodes (a standby first, then a planned switchover, then the old active node), then monitoring. Nodes whose images and configs do not change are not restarted. If the connection drops, run the same command again and it continues after the last finished step. Add `--key-file` to verify with a key other than the trusted one.
+Fleet builds the release from your checkout and the published images, verifies its signature, then pre-pulls, uploads, validates, activates, and health-checks one node at a time. It upgrades DNS and edge nodes first, then control nodes (a standby first, then a planned switchover, then the old active node), then monitoring. Nodes whose images and configs do not change are not restarted. If the connection drops, run the same command again and it continues after the last finished step. If you sign releases yourself, pass `--manifest FILE` (and `--key-file` for a key other than the trusted one).
 
 **Expected result:** every step ends `ok` and Fleet records the new release. If activation or the health gate fails, that node returns to its previous bundle, the roll stops, and the previous release stays on record.
 
 </template>
 <template #tab-2>
 
-Open **Upgrade** in the local Fleet web page (`cdnfoundry-fleet web`, bound to `127.0.0.1`). Paste the release public key under **Trust this key** once, paste the signed manifest, and choose **Show plan**. Follow the page to apply the plan.
+Open **Upgrade** in the local Fleet web page (`cdnfoundry-fleet web`, bound to `127.0.0.1`). Choose **Show the plan for vX**. Follow the page to apply the plan.
 
 **Expected result:** the page shows the new running release.
 

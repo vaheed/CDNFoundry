@@ -88,7 +88,7 @@ cdnfoundry-fleet node-ssh --node pop-1 --host 203.0.113.30
 cdnfoundry-fleet bootstrap --node pop-1 --country DE --continent EU
 ```
 
-`bootstrap` needs a signed release first. Run `trust-release-key`, then `set-release --manifest release.json`.
+`bootstrap` needs a release first. Run `set-release`: Fleet builds it for the release your checkout is on, looks up the image digests in the registry, and signs it with its own key. Pass `--manifest release.json` only if you sign releases yourself.
 Bootstrap shows a plan and asks for confirmation. Then it does these steps in order:
 
 1. Pins the host key.
@@ -143,13 +143,14 @@ from the published release evidence. The manifest lists:
 - which images and configs belong to each role;
 - the known vulnerabilities from the Trivy scan.
 
-Trust the public key once:
+By default Fleet builds this manifest itself from your checkout and signs it with a key
+it keeps in the vault. If you sign releases yourself, pin your public key once:
 
 ```sh
 cdnfoundry-fleet trust-release-key --key-file release-signing.pub
 ```
 
-After that, Fleet refuses a manifest in any of these cases:
+Fleet then accepts only manifests signed with that key and refuses a manifest in any of these cases:
 
 - it is unsigned, or its signature does not verify;
 - it did not pass CI;

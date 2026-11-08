@@ -39,7 +39,7 @@ Expected: the last command prints the commit you chose.
 
 Images must be pinned by digest. There are two ways to set them:
 
-- With a signed release manifest, run `trust-release-key` and `set-release` (see [Deploy with Fleet](#deploy-with-fleet)). Fleet then writes the `CDNF_*_IMAGE` values for you.
+- Run `set-release` (see [Deploy with Fleet](#deploy-with-fleet)). Fleet builds the release from your checkout and then writes the `CDNF_*_IMAGE` values for you.
 - By hand, copy the verified digests into each node's `extra_env`, as in [Software supply chain](../operations/software-supply-chain.md#populate-fleet-image-references).
 
 Without digests, `render` still works for offline checks, but a bundle's `validate.sh` rejects any image that is not pinned by digest.
@@ -134,7 +134,7 @@ Expected: `status` prints `Monitoring: colocated`. The control bundle's Compose 
 | Check the workstation and the nodes | `doctor` |
 | Check or generate bundles | `validate`, `render` |
 | Record how to reach a node | `public-key`, `node-ssh` |
-| Trust and adopt a signed release | `trust-release-key`, `set-release` |
+| Adopt the release | `set-release` |
 | Install and start a node | `bootstrap` |
 | Change release or config on running nodes | `upgrade`, `apply-config`, `rollback` |
 | Look for known vulnerabilities | `security` |
@@ -344,11 +344,10 @@ Fleet can install, start, upgrade, and roll back nodes over SSH. It uses one key
    ./scripts/cdnfoundry-fleet node-ssh --node edge-frankfurt --host 203.0.113.30
    ```
 
-3. Trust the release signing key and adopt a signed manifest.
+3. Adopt the release. Fleet builds it from your checkout, pins the published image digests, and signs it with its own key.
 
    ```bash
-   ./scripts/cdnfoundry-fleet trust-release-key --key-file release-signing.pub
-   ./scripts/cdnfoundry-fleet set-release --manifest release.json
+   ./scripts/cdnfoundry-fleet set-release
    ```
 
 4. Install and start a node. Fleet shows a plan and asks you to confirm.

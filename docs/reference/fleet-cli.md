@@ -389,7 +389,7 @@ Adopt a signed release manifest for the first install (deploys nothing).
 
 | Option | Meaning |
 | --- | --- |
-| `--manifest` `MANIFEST` | Signed release manifest file (required) |
+| `--manifest` `MANIFEST` | Signed release manifest file (default: Fleet builds it for the release your checkout is on) |
 | `--key-file` `KEY_FILE` | verify with this key instead of the trusted one |
 
 ## set-secret
@@ -490,7 +490,7 @@ Show, then apply, a rolling upgrade to a signed release manifest.
 
 | Option | Meaning |
 | --- | --- |
-| `--manifest` `MANIFEST` | Signed release manifest file (required) |
+| `--manifest` `MANIFEST` | Signed release manifest file (default: Fleet builds it for the release your checkout is on) |
 | `--key-file` `KEY_FILE` | verify with this key instead of the trusted one |
 | `--plan-only` | Show the plan and change nothing |
 

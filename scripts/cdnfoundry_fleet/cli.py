@@ -251,7 +251,7 @@ def parser() -> argparse.ArgumentParser:
     trust = sub.add_parser("trust-release-key", parents=[command_common], help="trust the Ed25519 public key that signs release manifests")
     trust.add_argument("--key-file", required=True, help="File that holds the release public key")
     sr = sub.add_parser("set-release", parents=[command_common], help="adopt a signed release manifest for the first install (deploys nothing)")
-    sr.add_argument("--manifest", required=True, help="Signed release manifest file")
+    sr.add_argument("--manifest", help="Signed release manifest file (default: Fleet builds it for the release your checkout is on)")
     sr.add_argument("--key-file", help="verify with this key instead of the trusted one")
     boot = sub.add_parser("bootstrap", parents=[command_common], help="install prerequisites on a node, deploy its bundle, and start it")
     boot.add_argument("--node", required=True, help="Node name")
@@ -259,7 +259,7 @@ def parser() -> argparse.ArgumentParser:
     boot.add_argument("--country", help="ISO country code of a PoP (Geo-DNS placement)")
     boot.add_argument("--continent", help="continent code of a PoP (Geo-DNS placement)")
     up = sub.add_parser("upgrade", parents=[command_common], help="show, then apply, a rolling upgrade to a signed release manifest")
-    up.add_argument("--manifest", required=True, help="Signed release manifest file")
+    up.add_argument("--manifest", help="Signed release manifest file (default: Fleet builds it for the release your checkout is on)")
     up.add_argument("--key-file", help="verify with this key instead of the trusted one")
     up.add_argument("--plan-only", action="store_true", help="Show the plan and change nothing")
     cfg = sub.add_parser("apply-config", parents=[command_common], help="deploy re-rendered configs to the nodes whose bundle changed")
@@ -1163,7 +1163,7 @@ def _engine_command(args: argparse.Namespace, store: FleetState, output_dir: Pat
         engine.trust_release_key(Path(args.key_file).read_text(encoding="utf-8"))
         print(json.dumps({"status": "trusted"}))
     elif args.command == "set-release":
-        manifest = engine.set_release(json.loads(Path(args.manifest).read_text(encoding="utf-8")), key_pem=Path(args.key_file).read_text(encoding="utf-8") if args.key_file else None)
+        manifest = engine.set_release(json.loads(Path(args.manifest).read_text(encoding="utf-8")) if args.manifest else None, key_pem=Path(args.key_file).read_text(encoding="utf-8") if args.key_file else None)
         print(json.dumps({"status": "release-set", "release": manifest["release"], "profile": manifest["profile"]}))
     elif args.command == "bootstrap":
         plan = engine.bootstrap_plan(args.node)
@@ -1173,7 +1173,7 @@ def _engine_command(args: argparse.Namespace, store: FleetState, output_dir: Pat
         _confirm(args, f"Install and start {args.node}")
         return outcome(engine.bootstrap(args.node, country=args.country, continent=args.continent))
     elif args.command == "upgrade":
-        document = json.loads(Path(args.manifest).read_text(encoding="utf-8"))
+        document = json.loads(Path(args.manifest).read_text(encoding="utf-8")) if args.manifest else engine.automatic_release()
         key = Path(args.key_file).read_text(encoding="utf-8") if args.key_file else None
         plan, manifest, diff = engine.upgrade_plan(document, key_pem=key)
         print(f"Profile: {manifest['profile']}; irreversible migration: {'yes' if diff.migrations else 'no'}")

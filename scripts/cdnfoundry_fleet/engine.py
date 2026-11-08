@@ -66,6 +66,7 @@ class FleetEngine:
 
     def trust_release_key(self, pem: str) -> None:
         mf.public_key_from_pem(pem)
+        self._release_file("signing.key").unlink(missing_ok=True)
         path = self._release_file("trusted.pub")
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         path.write_text(pem.strip() + "\n", encoding="utf-8")
@@ -306,16 +307,44 @@ class FleetEngine:
         current = self.release_manifest() or {"release": state["global"]["release"], "roles": {}, "images": {}}
         return self._engine(state).apply(plan, current, log=log or self.say)
 
+    def target_release(self) -> str:
+        """The release to install or upgrade to: the tag the checkout is on, else the release chosen at setup."""
+        import subprocess
+
+        tag = subprocess.run(["git", "-C", str(self.repo_root), "describe", "--tags", "--exact-match"], capture_output=True, text=True, check=False)
+        return tag.stdout.strip() if tag.returncode == 0 and tag.stdout.strip() else self.state()["global"]["release"]
+
+    def automatic_release(self, release: str | None = None, *, digest: Any = None) -> dict[str, Any]:
+        """Build and sign the manifest for the target release, creating Fleet's own signing key on first use.
+
+        The key lives only in the encrypted vault. The signature proves the manifest came from this Fleet and this checkout, not from CI.
+        """
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        from . import release as rel
+
+        private_file, public_file = self._release_file("signing.key"), self._release_file("trusted.pub")
+        if not private_file.exists():
+            if public_file.exists():
+                raise ValidationError("You pinned your own release key, so Fleet cannot sign for you. Give it the signed manifest (--manifest FILE)")
+            key = Ed25519PrivateKey.generate()
+            self.trust_release_key(key.public_key().public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo).decode())
+            private_file.touch(mode=0o600)
+            private_file.write_bytes(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
+        manifest = rel.automatic_manifest(self.repo_root, release or self.target_release(), **({"digest": digest} if digest else {}))
+        return rel.sign_file(manifest, private_file.read_bytes())
+
     def verify_release(self, document: dict[str, Any], *, key_pem: str | None = None) -> dict[str, Any]:
         manifest = mf.verify(document, mf.public_key_from_pem(key_pem or self.trusted_key()))
         mf.verify_checkout(manifest, self.repo_root)
         return manifest
 
-    def set_release(self, document: dict[str, Any], *, key_pem: str | None = None) -> dict[str, Any]:
+    def set_release(self, document: dict[str, Any] | None = None, *, key_pem: str | None = None) -> dict[str, Any]:
         """Adopt a signed release for the first install: sets the release and image references, deploys nothing."""
         if self.release_manifest() is not None:
             raise ValidationError("A release is already running; use `upgrade` to move to another")
-        manifest = self.verify_release(document, key_pem=key_pem)
+        manifest = self.verify_release(document or self.automatic_release(), key_pem=key_pem)
         state = self.state()
         candidate = copy.deepcopy(state)
         old = candidate["global"]["release"]
@@ -332,14 +361,15 @@ class FleetEngine:
         self.events.append({"kind": "set-release", "release": manifest["release"]})
         return manifest
 
-    def upgrade_plan(self, document: dict[str, Any], *, key_pem: str | None = None) -> tuple[actions.Plan, dict[str, Any], mf.Diff]:
-        manifest = self.verify_release(document, key_pem=key_pem)
+    def upgrade_plan(self, document: dict[str, Any] | None = None, *, key_pem: str | None = None) -> tuple[actions.Plan, dict[str, Any], mf.Diff]:
+        manifest = self.verify_release(document or self.automatic_release(), key_pem=key_pem)
         state = self.state()
         current = self.release_manifest()
         ha_standby = (state.get("ha") or {}).get("standby")
         return actions.plan_upgrade(state["nodes"], current, manifest, ha_standby=ha_standby), manifest, mf.diff(current, manifest)
 
-    def upgrade(self, document: dict[str, Any], *, key_pem: str | None = None, log: Callable[[str], None] | None = None) -> actions.Outcome:
+    def upgrade(self, document: dict[str, Any] | None = None, *, key_pem: str | None = None, log: Callable[[str], None] | None = None) -> actions.Outcome:
+        document = document or self.automatic_release()
         plan, manifest, _diff = self.upgrade_plan(document, key_pem=key_pem)
         state = self.state()
         self._missing_access(state, [s.node for s in plan.steps])
