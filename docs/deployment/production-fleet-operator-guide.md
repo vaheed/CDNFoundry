@@ -446,7 +446,7 @@ Expected: a changed hostname or public address makes Fleet issue a new certifica
 
 ## Render and recovery guarantees
 
-Setup checks the full plan before it saves any node. `render` builds a complete new generation, flushes it to disk, and swaps it in with Linux `renameat2` exchange. If any node fails to render, every active bundle stays as it was. `<output-dir>.previous` holds the full previous generation, and each node also keeps a `NODE.previous` directory. A render writes only local files. Deploying to a host is a separate step.
+Setup checks the full plan before it saves any node. `render` builds a complete new generation, flushes it to disk, and swaps it in with a Linux `renameat2` exchange (macOS and Windows use three plain renames that restore the previous bundle on failure). If any node fails to render, every active bundle stays as it was. `<output-dir>.previous` holds the full previous generation, and each node also keeps a `NODE.previous` directory. A render writes only local files. Deploying to a host is a separate step.
 
 Use a Linux filesystem that supports same-filesystem rename and directory flush. If the exchange is not supported, Fleet stops with an error and does not move the active bundle. If archiving fails after the swap, keep the `.candidate-*` directory that Fleet names: it holds the previous generation. Do not delete recovery files while you diagnose an interrupted render.
 
