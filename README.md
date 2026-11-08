@@ -30,10 +30,6 @@ anyone who must keep traffic and data on their own network.
 | **Grafana** | 35 dashboards in role-based folders for the NOC, SOC, platform admins, support, and business, with 77 alerts and runbooks |
 | **DNS and edge runtime** | DNSdist and PowerDNS for DNS, and bounded OpenResty cells for HTTP and HTTPS, with cache, purge, WAF, and compression |
 
-![The Edges list in the admin panel](docs/public/screenshots/light/admin-edges.png)
-
-![The Now dashboard in Grafana, shown with generated demo data](docs/public/screenshots/light/grafana-now.png)
-
 ## Pick your setup
 
 | You want | Servers | Start here |
