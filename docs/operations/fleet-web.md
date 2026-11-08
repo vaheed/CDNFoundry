@@ -24,6 +24,18 @@ Python environment under your user directory, installs PyYAML and cryptography, 
 opens your browser. Any other arguments go to `cdnfoundry-fleet web`, for example
 `--port 9000`. Do not run `web.py` directly; it is part of a package.
 
+**Requirements:** Python 3.10 to 3.13 (3.12 or 3.13 recommended), OpenSSH, and this
+repository checkout. Fleet needs the checkout for the Compose files and release checks, so
+run it from a clone. Docker is not needed on your workstation; it runs on the hosts Fleet
+manages. If your default `python3` is newer than 3.13, the script restarts itself with
+`python3.13`, `3.12`, `3.11`, or `3.10` when one is on your `PATH`. Otherwise install one
+(macOS: `brew install python@3.13`; Windows: `py -3.13 scripts\fleet-web.py`).
+
+**If setup fails with "No matching distribution found":** your Python is too new for the
+prebuilt libraries. Delete the Fleet environment folder (`~/.config/cdnfoundry-fleet/venv`
+on macOS and Linux, `%APPDATA%\cdnfoundry-fleet\venv` on Windows) and run the script again
+with `python3.13`.
+
 If you run `scripts/cdnfoundry-fleet` with no arguments in a terminal, it asks whether to
 open Fleet web (recommended) or run the setup wizard in the terminal.
 

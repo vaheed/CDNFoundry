@@ -51,7 +51,7 @@ for all options, including installing by hand without Fleet.
 ## Install with Fleet web
 
 Fleet web is a local page that installs and manages your hosts. It runs on your own
-computer (Windows, macOS, or Linux) and needs only Python 3.10 or newer and OpenSSH.
+computer (Windows, macOS, or Linux) and needs only Python 3.10 to 3.13 (3.12 or 3.13 recommended) and OpenSSH.
 
 ```sh
 git clone https://github.com/vaheed/CDNFoundry.git
@@ -64,6 +64,10 @@ opens `http://127.0.0.1:8765` in your browser. Everything else happens in the br
 page asks you to choose the vault passphrase, enter your domains, release, and hosts, and it
 creates the fleet. On later runs it asks for the passphrase to unlock. Use `--port 9000` to pick another port. Fleet web listens on your own machine only; to
 use it on a remote workstation, open an SSH tunnel.
+
+If your `python3` is newer than 3.13, the script switches to `python3.13` or `3.12` when one is installed;
+otherwise install one (macOS: `brew install python@3.13`). If setup fails, see the
+[Fleet web guide](https://vaheed.github.io/CDNFoundry/operations/fleet-web).
 
 Run the script from the repository root, or by its full path. Do not run files inside
 `scripts/cdnfoundry_fleet/` directly: they are a Python package, not scripts.

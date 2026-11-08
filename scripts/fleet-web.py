@@ -50,9 +50,14 @@ def ensure_environment(root: Path) -> Path:
     print(f"Preparing the Fleet environment in {root} (first run only)...")
     if not python.exists():
         venv.EnvBuilder(with_pip=True, clear=root.exists()).create(root)
-    done = subprocess.run([str(python), "-m", "pip", "install", "--disable-pip-version-check", "--only-binary=:all:", *REQUIREMENTS])
+    pip = [str(python), "-m", "pip", "install", "--disable-pip-version-check"]
+    # cryptography ships prebuilt wheels and must never be compiled. PyYAML is pure Python when no wheel exists,
+    # so it may be built from source, which keeps very new Python versions working.
+    done = subprocess.run([*pip, "--only-binary=cryptography", *REQUIREMENTS])
     if done.returncode != 0:
-        raise SystemExit(fail("could not install PyYAML and cryptography as prebuilt packages. Check your internet connection, or run this with Python 3.12 or 3.13 (for example: python3.12 scripts/fleet-web.py)"))
+        raise SystemExit(fail("could not install PyYAML and cryptography. Check your internet connection, or run this with Python 3.12 or 3.13 "
+                              "(for example: python3.12 scripts/fleet-web.py). If you ran it before, delete the folder "
+                              f"{root} and try again"))
     marker.write_text(wanted)
     return python
 
