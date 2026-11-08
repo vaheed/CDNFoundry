@@ -252,3 +252,4 @@ def test_cli_alert_webhook_shows_saves_and_refuses_plain_http(vault, capsys):
     assert json.loads(capsys.readouterr().out)["alert_webhook_url"] == "https://alerts.example.com/hook"
     assert main(["alert-webhook", *base]) == 0 and "alerts.example.com" in capsys.readouterr().out
     assert main(["alert-webhook", *base, "--url", "http://alerts.example.com/hook"]) == 3
+    assert main(["alert-webhook", *base, "--url", ""]) == 0 and json.loads(capsys.readouterr().out)["alert_webhook_url"] == ""

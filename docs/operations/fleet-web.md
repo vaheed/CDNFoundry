@@ -92,10 +92,15 @@ installed until you confirm in step 2. Every page also has a **What is this page
 3. **DNS names and certificates.** Create the names on the [DNS names](#dns-names) page.
    Fleet checks them with 1.1.1.1. Or put your own certificates on the
    [Certificates](#certificates) page.
-4. **Alert webhook.** Enter the https:// address that receives Alertmanager's alerts. Alertmanager
-   refuses to start without it, which would make every host fail its configuration check, so
-   Fleet will not start an install, upgrade, or config run until it is set. You can also set it
-   at setup, on **Config**, or with `cdnfoundry-fleet alert-webhook --url`.
+4. **Alert webhook (optional).** The https:// address that receives Alertmanager's alerts. You
+   can skip it: without one, alerts still fire and show in Prometheus, but nobody is notified.
+   Set it now, or at any time later on this page or on **Config**, then deploy the change from
+   **Config**. Leave the field empty and save to turn notifications off again. You can also use
+   `cdnfoundry-fleet alert-webhook --url`. If you have no notifier yet, open **What is this, and
+   where do I get one?** on the page. To try it out, a throwaway address from webhook.site is
+   enough; for real notifications, create a webhook trigger in Zapier, Make, or n8n and forward
+   it to email, Slack, or Telegram. A Slack or Discord incoming-webhook address does not work
+   directly, because Alertmanager sends its own JSON format.
 5. **Release.** Choose **Use release vX**. Fleet installs the release you chose at setup.
    It looks up the published images, builds the release description, and signs it
    with its own key, so you paste nothing. If you sign releases yourself, open

@@ -133,7 +133,6 @@ def test_review_then_confirm_installs_in_start_order(gate, monkeypatch):
     g, port = _created(gate)
     body = request(port, "GET", "/deploy")[1]
     assert "Run <b>Test connections</b>" in body and "Alert webhook" in body
-    assert request(port, "POST", "/alert-webhook", {"csrf": g.csrf, "url": "https://alerts.example.com/hook", "next": "/deploy"})[0] == 303
     assert request(port, "POST", "/deploy/review", {"csrf": g.csrf})[0] == 400
     _, _, r = request(port, "POST", "/deploy/test", {"csrf": g.csrf})
     _wait_job(port, r.getheader("Location"))
@@ -267,7 +266,6 @@ def test_review_warns_that_unready_names_get_local_certificates(gate, monkeypatc
     monkeypatch.setattr(FleetEngine, "release_manifest", lambda self, which="current": {"release": "v2.0.0", "roles": {}, "images": {}} if which == "current" else None)
     monkeypatch.setattr(FleetEngine, "test_connection", lambda self, name: None)
     g, port = _created(gate)
-    assert request(port, "POST", "/alert-webhook", {"csrf": g.csrf, "url": "https://alerts.example.com/hook", "next": "/deploy"})[0] == 303
     _, _, r = request(port, "POST", "/deploy/test", {"csrf": g.csrf})
     _wait_job(port, r.getheader("Location"))
     geo = {"csrf": g.csrf, "country:pop-1": "de", "continent:pop-1": "eu", "country:pop-2": "jp", "continent:pop-2": "as"}
@@ -297,7 +295,7 @@ def test_ha_page_guides_dns_then_host_then_deploy(gate, monkeypatch):
     assert status == 400 and "Point these names first" in body and "control-2.ops.example.test" in body
 
 
-def test_review_is_refused_until_the_alert_webhook_is_set(gate, monkeypatch):
+def test_review_works_without_an_alert_webhook(gate, monkeypatch):
     from cdnfoundry_fleet.engine import FleetEngine
 
     monkeypatch.setattr(FleetEngine, "release_manifest", lambda self, which="current": {"release": "v2.0.0", "roles": {}, "images": {}} if which == "current" else None)
@@ -307,4 +305,4 @@ def test_review_is_refused_until_the_alert_webhook_is_set(gate, monkeypatch):
     _wait_job(port, r.getheader("Location"))
     geo = {"csrf": g.csrf, "country:pop-1": "de", "continent:pop-1": "eu", "country:pop-2": "jp", "continent:pop-2": "as"}
     status, body, _ = request(port, "POST", "/deploy/review", geo)
-    assert status == 400 and "Alertmanager refuses to start" in body
+    assert status == 200 and "Step 2 of 2" in body

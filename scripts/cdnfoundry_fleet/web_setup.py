@@ -138,7 +138,7 @@ class WebGate:
             + "<h2>Your platform</h2>"
             + self._field("Operator domain", "operator_domain", required="", placeholder="cdn.example.com", hint="Where the control panel and API live.")
             + self._field("Platform domain", "platform_domain", required="", placeholder="example.net", hint="Holds the platform nameserver names.")
-            + self._field("Alert webhook (https)", "alert_webhook_url", type="url", placeholder="https://alerts.example.com/cdnfoundry", hint="Where Alertmanager sends alerts. Optional now, but required before the first install. You can set it later on the Deploy page.")
+            + self._field("Alert webhook (https, optional)", "alert_webhook_url", type="url", placeholder="https://alerts.example.com/cdnfoundry", hint="Where Alertmanager sends alerts. Optional: leave it empty and set it at any time on the Deploy or Config page.")
             + self._field("Release", "release", required="", value=f"v{__version__}", hint="Exact release tag or commit to deploy.")
             + self._field("Admin email for Let's Encrypt", "acme_email", type="email", required="", autocomplete="email", hint="Let's Encrypt sends expiry and problem notices here. Used for the free certificates of the control panel and Grafana.")
             + f'<label>Layout<select name="preset">{presets}</select></label>'

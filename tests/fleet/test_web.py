@@ -499,7 +499,8 @@ def test_the_alert_webhook_is_asked_for_saved_and_required_before_an_install(ser
     web, port = served
     add_node(web, port)
     page = get(port, "/deploy")[1]
-    assert "Alert webhook" in page and "Not set" in page and 'action="/alert-webhook"' in page
+    assert "Alert webhook (optional)" in page and "Not set" in page and 'action="/alert-webhook"' in page
+    assert "What is this, and where do I get one?" in page and "webhook.site" in page
     status, body, _ = post(port, "/alert-webhook", {"csrf": web.csrf, "url": "http://alerts.example.com/x", "next": "/deploy"})
     assert status == 400 and "https://" in body
     status, _, r = post(port, "/alert-webhook", {"csrf": web.csrf, "url": "https://alerts.example.com/cdnfoundry", "next": "/config"})
@@ -508,9 +509,14 @@ def test_the_alert_webhook_is_asked_for_saved_and_required_before_an_install(ser
     assert "Not set" not in get(port, "/deploy")[1]
 
 
-def test_deploy_and_config_refuse_without_an_alert_webhook(served) -> None:
+def test_the_alert_webhook_is_optional_and_can_be_cleared_again(served) -> None:
     web, port = served
     add_node(web, port)
+    assert web.read(lambda e: e.deploy_blockers(["control-1"])) == ["No signed release is set"]
     _, _, r = post(port, "/config/apply", {"csrf": web.csrf})
-    assert "Alertmanager refuses to start" in wait_job(port, r.getheader("Location"))
-    assert any("Alertmanager refuses to start" in p for p in web.read(lambda e: e.deploy_blockers(["control-1"])))
+    assert "Alertmanager" not in wait_job(port, r.getheader("Location"))
+    wait_for(lambda: not web.write_lock.locked())
+    assert post(port, "/alert-webhook", {"csrf": web.csrf, "url": "https://alerts.example.com/h", "next": "/deploy"})[0] == 303
+    assert web.read(lambda e: e.alert_webhook()) == "https://alerts.example.com/h"
+    assert post(port, "/alert-webhook", {"csrf": web.csrf, "url": "", "next": "/deploy"})[0] == 303
+    assert web.read(lambda e: e.alert_webhook()) == "" and "Optional" in get(port, "/deploy")[1]

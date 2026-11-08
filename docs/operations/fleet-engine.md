@@ -219,8 +219,9 @@ pinned digest. Nothing in this phase changes what a host serves, so a failed pul
 new steps, lets the running ones finish, and keeps the journal so the same command resumes. Uploads, validation,
 activation, and the health gate stay one host at a time, in start order.
 
-`cdnfoundry-fleet alert-webhook [--url https://...]` shows or sets where Alertmanager sends alerts. Install, upgrade, and
-config runs refuse to start until it is set, because Alertmanager will not start without a notifier.
+`cdnfoundry-fleet alert-webhook [--url https://...]` shows or sets where Alertmanager sends alerts. It is optional: with no
+webhook Alertmanager starts with receivers that send nothing, and `--url ""` turns notifications off again. A change
+reaches the hosts with the next `apply-config`.
 
 ## Inventory, live watch, and progress
 

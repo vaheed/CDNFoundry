@@ -575,12 +575,21 @@ class FleetWeb:
     def _alert_section(self, back: str) -> str:
         """The notifier Alertmanager needs. Without it every host's configuration check fails, so Deploy asks for it before the review."""
         url = self.read(lambda e: e.alert_webhook())
-        status = state_word("ok", "Set") + f" <b>{esc(url)}</b>" if url else state_word("bad", "Not set") + " Alertmanager refuses to start without it, so no host can be installed."
-        form = self.action_form("/alert-webhook", "Save alert webhook" if not url else "Change alert webhook", primary=not url, fields=(
-            f'<label>Alert webhook URL<input name="url" type="url" required pattern="https://.+" value="{esc(url)}" placeholder="https://alerts.example.com/cdnfoundry" autocomplete="off">'
-            '<span class="hint">An https:// address that receives every alert Alertmanager sends.</span></label>'
+        status = state_word("ok", "Set") + f" <b>{esc(url)}</b>" if url else state_word("", "Not set") + " Optional. Alerts still fire and show in Prometheus, but nobody is notified. You can set it at any time."
+        form = self.action_form("/alert-webhook", "Save alert webhook" if not url else "Change alert webhook", fields=(
+            f'<label>Alert webhook URL<input name="url" type="url" pattern="https://.+" value="{esc(url)}" placeholder="https://alerts.example.com/cdnfoundry" autocomplete="off">'
+            '<span class="hint">An https:// address that receives every alert Alertmanager sends. Leave it empty and save to turn notifications off.</span></label>'
             f'<input type="hidden" name="next" value="{esc(back)}">'))
-        return f"<p>{status}</p>{form}"
+        about = ('<details class="help"><summary>What is this, and where do I get one?</summary>'
+                 "<p>Alertmanager is the part of CDNFoundry that sends you a message when something breaks: a host is down, a certificate is close to expiring, a disk is filling up. "
+                 "It sends each message to one web address, called a webhook. You do not need one to install: without it, alerts still fire and show in Prometheus, but nobody is notified. "
+                 "A change reaches your hosts when you deploy it from <a href=\"/config\">Config</a>.</p>"
+                 "<p>To get an address, use any https address that accepts a JSON POST:</p><ul>"
+                 "<li><b>To try it out:</b> open webhook.site and copy &quot;Your unique URL&quot;. It only shows the messages in your browser and notifies nobody.</li>"
+                 "<li><b>To be notified:</b> create a catch-hook or webhook trigger in a tool you already use (Zapier, Make, or n8n) and send it on to email, Slack, or Telegram. Paste that trigger's URL here.</li>"
+                 "<li><b>Not directly:</b> a Slack or Discord incoming-webhook address. They expect their own message format, and Alertmanager sends JSON in its own format.</li></ul>"
+                 "<p>A test message called Watchdog arrives every minute on purpose. If it stops arriving, alerting is broken, so have your notifier warn you when it goes quiet. You can change the address later on <a href=\"/config\">Config</a>.</p></details>")
+        return f"{about}<p>{status}</p>{form}"
 
     def _resume_panel(self, order: list[str], done: set[str]) -> str:
         """Leaving the page never stops an install. Coming back shows it running, or offers to continue where it stopped."""
@@ -631,7 +640,7 @@ class FleetWeb:
         out.append('<h3 id="dns">b. DNS names and certificates</h3><p>Caddy gets Let\'s Encrypt certificates for <b>control</b>, <b>grafana</b>, and <b>telemetry</b> when the control node starts. '
                    'That works only if 1.1.1.1 sees those names pointing at the host. See <a href="/dns">DNS names</a> for the exact records and a check, or '
                    'put your own certificates on the <a href="/tls">Certificates</a> page to skip it.</p>')
-        out.append('<h3 id="alerts">c. Alert webhook</h3>' + self._alert_section("/deploy"))
+        out.append('<h3 id="alerts">c. Alert webhook (optional)</h3>' + self._alert_section("/deploy"))
         out.append('<h3 id="release">d. Release</h3>')
         if current is None:
             target = self.read(lambda e: e.target_release())
@@ -927,7 +936,6 @@ class FleetWeb:
             bad = [n for n in pending if not self.connections.get(n, (False, ""))[0]]
             if bad:
                 raise ValidationError(f"Test the connection to {', '.join(bad)} first. Fleet must be able to log in to a host before it can install it.")
-            self.read(lambda e: e.require_alert_webhook())
             waiting = self.read(lambda e: mg.unready(e.state(), e.work, self.dns_results))
             geo = {n: (form.get(f"country:{n}", "").upper(), form.get(f"continent:{n}", "").upper()) for n in pending}
             plans = self.read(lambda e: {n: e.bootstrap_plan(n) for n in pending})

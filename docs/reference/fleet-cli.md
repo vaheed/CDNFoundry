@@ -68,11 +68,11 @@ Import the credentials of an existing host.
 
 ## alert-webhook
 
-Show or set where Alertmanager sends alerts (an https:// URL; required before the first install).
+Show or set where Alertmanager sends alerts (an https:// URL; optional, and an empty value turns notifications off).
 
 | Option | Meaning |
 | --- | --- |
-| `--url` `URL` | The https:// URL to save; omit to show the current one |
+| `--url` `URL` | The https:// URL to save, or an empty value to turn notifications off; omit to show the current one |
 
 ## apply-config
 
