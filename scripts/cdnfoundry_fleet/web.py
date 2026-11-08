@@ -273,7 +273,8 @@ class FleetWeb:
     def _node_hardware(self, name: str, node: dict[str, Any]) -> str:
         i = self.hardware().get(name, {})
         live = self.live.latest.get(name)
-        actions = (self.action_form(f"/nodes/{esc(name)}/check", "Check this host", primary=True) + self.action_form(f"/nodes/{esc(name)}/inventory", "Read hardware again"))
+        actions = ('<div class="actions">' + self.action_form(f"/nodes/{esc(name)}/check", "Check this host", primary=True, inline=True)
+                   + self.action_form(f"/nodes/{esc(name)}/inventory", "Read hardware again", inline=True) + "</div>")
         if not i:
             note = (f'<p class="empty">{esc(live["error"])}</p>' if live and live["state"] == "offline" else '<p class="empty">Fleet has not read this host yet. Read the hardware to see its processor, memory, disks, and containers.</p>')
             return "<h2>Hardware and system</h2>" + note + actions
@@ -294,7 +295,7 @@ class FleetWeb:
         online = sum(1 for d in data if wv.live_state(d["live"], d["check"]) in {"online", "degraded"})
         found = [{"level": f["level"], "text": f"{n}: {f['text']}"} for n in sorted(nodes) for f in inv.findings(nodes[n], hardware.get(n, {}))] + inv.fleet_findings(hardware)
         head = (wv.summary_strip(inv.totals(hardware), online, len(nodes)) if hardware else "")
-        refresh = self.action_form("/inventory/refresh", "Read hardware of every host", primary=not hardware)
+        refresh = '<div class="actions">' + self.action_form("/inventory/refresh", "Read hardware of every host", primary=not hardware, inline=True) + "</div>"
         if not hardware:
             return '<p class="empty">Fleet has not read any host yet. Reading is read-only and takes a few seconds per host.</p>' + refresh
         return head + "<h2>Needs attention</h2>" + wv.findings_list(found, "Nothing needs attention across the fleet.") + "<h2>Hosts</h2>" + wv.inventory_table(data, table) + refresh
@@ -646,9 +647,9 @@ class FleetWeb:
     def csrf_field(self) -> str:
         return f'<input type="hidden" name="csrf" value="{esc(self.csrf)}">'
 
-    def action_form(self, action: str, label: str, *, primary: bool = False, fields: str = "", confirm: str | None = None) -> str:
+    def action_form(self, action: str, label: str, *, primary: bool = False, fields: str = "", confirm: str | None = None, inline: bool = False) -> str:
         typed = (f'<label>Type <b>{esc(confirm)}</b> to confirm<input name="confirm" required autocomplete="off" pattern="{esc(confirm)}"></label>' if confirm else "")
-        return (f'<form class="stack" method="post" action="{action}">{self.csrf_field()}{fields}{typed}'
+        return (f'<form class="{"inline" if inline else "stack"}" method="post" action="{action}">{self.csrf_field()}{fields}{typed}'
                 f'<button{" class=primary" if primary else ""}>{esc(label)}</button></form>')
 
     def page(self, path: str, query: dict[str, list[str]]) -> tuple[int, str]:
@@ -686,10 +687,11 @@ class FleetWeb:
             live_line = (f'<p class="live-line" data-live-status data-updated="{round(self.live.updated) if self.live.updated else ""}" data-interval="{self.live.interval}">'
                          + (f"Probed {max(0, round(time.time() - self.live.updated))} seconds ago" + (f", every {self.live.interval} seconds." if self.live.interval else ".") if self.live.updated else
                             ("Probing every " + str(self.live.interval) + " seconds. The first reading is on its way." if self.live.interval else "Live probing is off. Probe now reads every host once."))
-                         + "</p>" + self.action_form("/live/refresh", "Probe now"))
+                         + "</p>")
+            probe = self.action_form("/live/refresh", "Probe now", inline=True)
             recent = [wv.history_entry(h) for h in self.vault.history(8)]
-            body = (self._roadmap(state, current) + kpis + '<h2>Topology</h2><div class="topology" role="region" tabindex="0" aria-label="Topology diagram">' + self._topology(state) + "</div>" + live_line
-                    + "<h2>Needs attention</h2>" + needs + self.action_form("/check", "Run check of the whole stack", primary=True)
+            body = (self._roadmap(state, current) + kpis + '<h2>Topology</h2><div class="topology" role="region" tabindex="0" aria-label="Topology diagram">' + self._topology(state) + "</div>" + '<div class="live-row">' + live_line + probe + "</div>"
+                    + "<h2>Needs attention</h2>" + needs + '<div class="actions">' + self.action_form("/check", "Run check of the whole stack", primary=True, inline=True) + "</div>"
                     + '<h2>Recent activity</h2>' + wv.activity(recent) + '<p><a href="/history">All history</a></p>')
             return 200, self.layout(path, "Overview", body, flash)
         if path == "/tls":
