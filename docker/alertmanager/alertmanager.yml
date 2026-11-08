@@ -1,5 +1,6 @@
 # Every alert carries a `team` label (noc, soc, platform) and is routed by it. start.sh writes the
-# webhook URL to /tmp/alert-webhook-url from ALERT_WEBHOOK_URL and refuses to start without it. A
+# webhook URL to /tmp/alert-webhook-url from ALERT_WEBHOOK_URL. Without one it removes the webhook_configs lines
+# below, so the receivers send nothing and Alertmanager still starts. A
 # deployment points all three teams at one webhook, or overrides a receiver with its own notifier.
 route:
   receiver: platform

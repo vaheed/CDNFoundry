@@ -119,7 +119,7 @@ The rule files in `docker/prometheus/` define more alerts for edge gateways, tra
 
 ### Alert delivery
 
-Alertmanager sends every alert to one webhook, `ALERT_WEBHOOK_URL`. It refuses to start when the value is empty or not an `https://` URL. Development sets `ALERT_WEBHOOK_ALLOW_HTTP=true` and points the URL at the `alert-sink` container.
+Alertmanager sends every alert to one webhook, `ALERT_WEBHOOK_URL`. The webhook is optional. With no value, Alertmanager starts with receivers that send nothing: alerts still fire and show in Prometheus and Alertmanager, but nobody is notified. Set the value and restart Alertmanager (in Fleet, save it on **Config** and deploy) to start receiving them. A value that is not an `https://` URL is refused. Development sets `ALERT_WEBHOOK_ALLOW_HTTP=true` and points the URL at the `alert-sink` container.
 
 Prometheus also fires an always-on `Watchdog` alert. Alertmanager forwards it like any other alert and repeats it every minute. If your notifier stops receiving `Watchdog`, alerting is broken. Point the webhook at a service that pages you when `Watchdog` stops arriving.
 

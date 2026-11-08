@@ -1,12 +1,15 @@
 #!/bin/sh
-# Starts Alertmanager only when a notifier is configured, so an install can
-# never run with alerts that go nowhere.
+# Starts Alertmanager with the configured notifier. The notifier is optional: with no
+# ALERT_WEBHOOK_URL it starts with receivers that send nothing, so alerts still fire and show in
+# Prometheus and Alertmanager, and a webhook can be added later by setting the value and restarting.
 set -eu
 
 url="${ALERT_WEBHOOK_URL:-}"
+config=/etc/alertmanager/alertmanager.yml
 if [ -z "$url" ]; then
-    echo 'ALERT_WEBHOOK_URL is required: configure a notifier before starting Alertmanager' >&2
-    exit 1
+    echo 'no notifier configured: alerts are evaluated but sent nowhere. Set ALERT_WEBHOOK_URL to receive them.' >&2
+    sed -e '/^    webhook_configs:$/d' -e '/^      - url_file:/d' -e '/^        send_resolved:/d' "$config" > /tmp/alertmanager-no-notifier.yml
+    exec /bin/alertmanager --config.file=/tmp/alertmanager-no-notifier.yml --storage.path=/alertmanager "$@"
 fi
 case "$url" in
     https://*) ;;
@@ -23,4 +26,4 @@ case "$url" in
 esac
 umask 077
 printf '%s' "$url" > /tmp/alert-webhook-url
-exec /bin/alertmanager --config.file=/etc/alertmanager/alertmanager.yml --storage.path=/alertmanager "$@"
+exec /bin/alertmanager --config.file="$config" --storage.path=/alertmanager "$@"

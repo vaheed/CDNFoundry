@@ -15,7 +15,11 @@ def run(*args: str) -> subprocess.CompletedProcess[str]:
 
 def main() -> None:
     script = ROOT / "docker/alertmanager/start.sh"
-    for environment, expected in (({}, "ALERT_WEBHOOK_URL is required"), ({"ALERT_WEBHOOK_URL": "ftp://x"}, "http:// or https://"),
+    # No notifier is allowed: Alertmanager starts with receivers that send nothing (here it only prints its version and exits).
+    command = ["docker", "run", "--rm", "--entrypoint", "/bin/sh", "-v", f"{script}:/start.sh:ro", "prom/alertmanager:v0.32.1", "/start.sh", "--version"]
+    result = run(*command)
+    assert result.returncode == 0 and "no notifier configured" in result.stderr, result.stderr
+    for environment, expected in (({"ALERT_WEBHOOK_URL": "ftp://x"}, "http:// or https://"),
                                   ({"ALERT_WEBHOOK_URL": "http://sink/"}, "must use https://")):
         command = ["docker", "run", "--rm", "--entrypoint", "/bin/sh", "-v", f"{script}:/start.sh:ro"]
         for key, value in environment.items():

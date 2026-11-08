@@ -909,7 +909,7 @@ services:
     profiles: [telemetry]
     entrypoint: [/bin/sh, /usr/local/bin/alertmanager-start]
     environment:
-      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:?ALERT_WEBHOOK_URL is required; Alertmanager refuses to run without a notifier}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL}
     volumes:
       - ./docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - ./docker/alertmanager/start.sh:/usr/local/bin/alertmanager-start:ro
