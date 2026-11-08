@@ -18,6 +18,7 @@ prove that customer traffic reaches both failure domains.
 - [Production best practices](production-best-practices.md): network, secret, DNS, edge, origin, cache, TLS,
   observability, backup, capacity, and change-control checklists. Read it before the first release or any topology change.
 - [Production qualification](production-qualification.md): the two-POP acceptance gate and its evidence.
+- [v2.0.2 release notes](releases/v2.0.2.md): a live action page, hosts that prepare together, an inventory, and an optional Alertmanager webhook.
 - [v2.0.1 release notes](releases/v2.0.1.md): Fleet picks, signs, and installs the release for you, and the Fleet web has a new layout.
 - [v2.0.0 release notes](releases/v2.0.0.md): what changed, what is qualified, and what stays with the operator.
 

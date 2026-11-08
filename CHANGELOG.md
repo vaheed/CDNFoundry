@@ -5,6 +5,45 @@ All notable changes are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). The root `VERSION` file is the
 single source of truth; `make version-check` enforces it.
 
+## [2.0.2] - 2026-11-08
+
+Fleet shows what it is doing, installs hosts in parallel, and no longer hangs at
+ClickHouse migration. One behavior change outside Fleet: the Alertmanager webhook is
+now optional. See the [release notes](docs/operations/releases/v2.0.2.md).
+
+### Added
+
+- Fleet web action page: every step of an action is listed up front, grouped by host,
+  and ticked as it finishes, with a progress bar, a live log that follows the end, a
+  log filter and download, and **Stop after this step**. A running or finished action
+  is announced on every page, and an interrupted install offers **Continue**.
+- Fleet inventory: processor, memory, disks, kernel, Docker, time sync, network
+  interfaces, and containers of every host, with findings, on a new Inventory page and
+  with `cdnfoundry-fleet inventory`.
+- Fleet live view: online, degraded, or unreachable state and memory and disk gauges
+  on Overview, Nodes, and Inventory, refreshed by a read-only probe, a linked
+  topology, a recent-activity feed, container log tails, and `cdnfoundry-fleet watch`.
+- Fleet CLI: a step progress bar on a terminal, and a first Ctrl+C that stops before
+  the next step.
+- Fleet streams host output into the action log while a host starts its services, and
+  reports a step that has been quiet for 30 seconds.
+- `cdnfoundry-fleet alert-webhook`, and an alert webhook field at setup, on Deploy,
+  and on Config.
+
+### Changed
+
+- Fleet connects to, prepares, and pulls images on every host at the same time before
+  it installs the first one (up to 6 hosts and 4 images per host at once).
+- The Alertmanager webhook (`ALERT_WEBHOOK_URL`) is optional. With no value,
+  Alertmanager starts with receivers that send nothing; alerts still fire and show in
+  Prometheus. A value that is not an `https://` URL is still refused.
+
+### Fixed
+
+- A Fleet install hung at ClickHouse migration: host commands inherited the operator's
+  terminal as standard input, and `clickhouse-client` waits for extra rows on it.
+- Pinning several hosts at once could drop host keys from the known-hosts file.
+
 ## [2.0.1] - 2026-11-08
 
 Fleet is easier to run. No change to the control plane, DNS, or edge runtime.
