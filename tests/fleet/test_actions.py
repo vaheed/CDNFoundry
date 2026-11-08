@@ -269,3 +269,61 @@ def test_a_stop_request_before_preparation_changes_nothing(tmp_path: Path) -> No
     eng.progress = track
     out = eng.apply(plan, new)
     assert not out.ok and "Stopped by the operator" in out.detail and t.calls == []
+
+
+class Streaming(FakeTransport):
+    """A transport that can stream: start.sh prints progress lines, and a quiet period is reported."""
+
+    def run_stream(self, target, command, on_line, *, timeout=None, on_quiet=None, heartbeat=None):
+        self.calls.append((target.name, command))
+        for line in ("Container pdns-db  Healthy", "", "Container web  Starting"):
+            on_line(line)
+        if on_quiet:
+            on_quiet(45)
+        return R(0, "Container pdns-db  Healthy\n\nContainer web  Starting")
+
+
+def test_activation_output_reaches_the_log_line_by_line_with_quiet_periods_reported(tmp_path: Path) -> None:
+    lines: list[str] = []
+    t = Streaming()
+    new = manifest("2.0.1", D2)
+    plan = a.plan_upgrade({"pop-1": {"role": "edge"}}, manifest("2.0.0", D1), new)
+    eng = engine(tmp_path, t)
+    out = eng.apply(plan, new, log=lines.append)
+    assert out.ok
+    assert "pop-1: Container pdns-db  Healthy" in lines and "pop-1: Container web  Starting" in lines
+    assert "pop-1: still working, no output for 45s in this step" in lines
+    assert not any(line == "pop-1: " for line in lines), "blank host lines are not logged"
+
+
+def test_a_failed_activation_reports_the_tail_of_the_hosts_output(tmp_path: Path) -> None:
+    class Failing(Streaming):
+        def run_stream(self, target, command, on_line, **kw):
+            on_line("waiting for web to become healthy")
+            return R(1, "waiting for web to become healthy\ncontainer web is unhealthy", "")
+
+    new = manifest("2.0.1", D2)
+    plan = a.plan_upgrade({"pop-1": {"role": "edge"}}, manifest("2.0.0", D1), new)
+    out = engine(tmp_path, Failing()).apply(plan, new)
+    assert not out.ok and out.failed == "pop-1:activate" and "container web is unhealthy" in out.detail
+
+
+def test_prepare_readies_all_hosts_together_and_later_runs_do_not_repeat_it(tmp_path: Path) -> None:
+    t = Rendezvous(2)
+    plan, new = pull_plan()
+    eng = engine(tmp_path, t)
+    assert eng.prepare(plan, new) is None
+    pulls = len([1 for _n, c in t.calls if c.startswith("docker pull")])
+    assert pulls == 2 and {"pop-1:prepull", "pop-2:prepull"} <= eng.prepared
+    assert eng.apply(plan, new).ok
+    assert len([1 for _n, c in t.calls if c.startswith("docker pull")]) == pulls, "apply skipped the prepared steps"
+
+
+def test_prepare_reports_a_failed_pull_and_leaves_every_host_unchanged(tmp_path: Path) -> None:
+    t = Rendezvous(1)
+    t.fail_pull = {"pop-1"}
+    plan, new = pull_plan()
+    eng = engine(tmp_path, t)
+    out = eng.prepare(plan, new)
+    assert out is not None and not out.ok and out.failed == "pop-1:prepull"
+    assert not any(c.startswith("upload") or "start.sh" in c for _n, c in t.calls)

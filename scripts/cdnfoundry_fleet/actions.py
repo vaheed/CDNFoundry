@@ -164,6 +164,7 @@ class Engine:
         self.journal, self.gate, self.switchover = journal, gate, switchover
         self.mixed_versions_ok = mixed_versions_ok
         self._log: Callable[[str], None] = lambda _m: None
+        self.prepared: set[str] = set()
 
     def journal_key(self, plan: Plan) -> str:
         """A resumed run may skip a step only for the same plan over the same bundle bytes: a re-rendered bundle must be uploaded again."""
@@ -190,7 +191,7 @@ class Engine:
         if failure is not None:
             return failure
         for step in plan.steps:
-            if step.id in prepared:
+            if step.id in prepared or step.id in self.prepared:
                 continue
             if step.id in done:
                 if step.kind == "gate":
@@ -229,6 +230,24 @@ class Engine:
                 upgraded.append(step.node)
         return Outcome(True, done)
 
+    def prepare(self, plan: Plan, manifest: dict[str, Any], *, log: Callable[[str], None] = lambda _m: None) -> Outcome | None:
+        """Run only the side-by-side preparation of a plan (connect, prerequisites, image pulls) for several hosts. None means every host is ready.
+
+        The steps it finishes are remembered in `prepared`, so the per-host runs that follow do not repeat them. It keeps its own journal.
+        """
+        self._log = log
+        if self.progress:
+            self.progress.plan(plan_steps(plan))
+        saved, self.journal = self.journal, Journal(self.journal.path.with_name("prepare.json"))
+        try:
+            state = self.journal.load(self.journal_key(plan))
+            done = state["done"]
+            _ran, failure = self._prepare_hosts(plan, manifest, state, done)
+        finally:
+            self.journal = saved
+        self.prepared |= {sid for sid in done if sid.rsplit(":", 1)[-1] in PARALLEL_KINDS}
+        return failure
+
     def _prepare_hosts(self, plan: Plan, manifest: dict[str, Any], state: dict[str, Any], done: list[str]) -> tuple[set[str], Outcome | None]:
         """Connect, install prerequisites, and pull images on every host at the same time, before any host is changed.
 
@@ -238,7 +257,7 @@ class Engine:
         """
         chains: dict[str, list[Step]] = {}
         for st in plan.steps:
-            if st.kind in PARALLEL_KINDS and st.id not in done:
+            if st.kind in PARALLEL_KINDS and st.id not in done and st.id not in self.prepared:
                 chains.setdefault(st.node, []).append(st)
         if len(chains) < 2:
             return set(), None
@@ -295,6 +314,15 @@ class Engine:
         shutil.copytree(self.bundles / node, staged / "bundle", dirs_exist_ok=True)
         (staged / "bundle" / "RELEASE").write_text(str(manifest["release"]) + "\n", encoding="utf-8")
         return staged / "bundle"
+
+    def _remote(self, node: str, target: Target, command: str) -> Any:
+        """Run a long command on a host. When the transport can stream, every output line reaches the log as it appears,
+        and a quiet period is reported, so a slow start never looks like a hang."""
+        stream = getattr(self.t, "run_stream", None)
+        if stream is None:
+            return self.t.run(target, command, timeout=LONG_STEP_SECONDS)
+        return stream(target, command, lambda line: self._log(f"{node}: {line}") if line.strip() else None, timeout=LONG_STEP_SECONDS,
+                      on_quiet=lambda seconds: self._log(f"{node}: still working, no output for {seconds}s in this step"))
 
     def _pull_images(self, node: str, target: Target, role: str, manifest: dict[str, Any]) -> tuple[bool, str]:
         """Pull and verify every image of the role, a few at a time, saying how far it is so the log never goes quiet."""
@@ -367,13 +395,10 @@ class Engine:
             return True, ""
         if step.kind == "activate":
             # Safe to run twice: a retry after a dropped connection finds the swap already done and only starts the services.
-            r = self.t.run(
-                target,
-                # Only a bundle that passed its health gate (it carries .cdnf-good) becomes the rollback target; a broken one is discarded.
-                f"set -e; if [ -d {remote}.next ]; then rm -rf {remote}.previous; if [ -d {remote} ]; then if [ -e {remote}/.cdnf-good ]; then mv {remote} {remote}.previous; else rm -rf {remote}; fi; fi; mv {remote}.next {remote}; fi; "
-                f"cd {remote} && ./start.sh",
-                timeout=LONG_STEP_SECONDS,
-            )
+            # Only a bundle that passed its health gate (it carries .cdnf-good) becomes the rollback target; a broken one is discarded.
+            command = (f"set -e; if [ -d {remote}.next ]; then rm -rf {remote}.previous; if [ -d {remote} ]; then if [ -e {remote}/.cdnf-good ]; then mv {remote} {remote}.previous; else rm -rf {remote}; fi; fi; mv {remote}.next {remote}; fi; "
+                       f"cd {remote} && ./start.sh")
+            r = self._remote(step.node, target, command)
             return r.ok, "" if r.ok else ((r.stderr or r.stdout).strip()[-600:] or f"start.sh exited with {r.code} and printed nothing")
         if step.kind == "gate":
             ok, detail = self.gate(step.node)

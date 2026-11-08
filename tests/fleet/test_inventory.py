@@ -253,3 +253,76 @@ def test_cli_alert_webhook_shows_saves_and_refuses_plain_http(vault, capsys):
     assert main(["alert-webhook", *base]) == 0 and "alerts.example.com" in capsys.readouterr().out
     assert main(["alert-webhook", *base, "--url", "http://alerts.example.com/hook"]) == 3
     assert main(["alert-webhook", *base, "--url", ""]) == 0 and json.loads(capsys.readouterr().out)["alert_webhook_url"] == ""
+
+
+DIGEST = "sha256:" + "a" * 64
+
+
+class Prepping:
+    """Every pull waits for the other host's pull, so hosts prepared one after another would fail."""
+
+    def __init__(self) -> None:
+        import threading
+
+        self.barrier, self.calls = threading.Barrier(2, timeout=5), []
+
+    def pin_host_key(self, target):
+        return target.host
+
+    def run(self, target, command, **_):
+        self.calls.append((target.name, command))
+        if command.startswith("docker pull"):
+            self.barrier.wait()
+        if "docker image inspect" in command:
+            return R(0, f"{command.rsplit(' ', 1)[-1].split('@')[0]}@{DIGEST}\n")
+        return R(0, "")
+
+
+def test_deploy_prepares_every_pending_host_at_once_then_installs_them_in_order(vault, tmp_path, monkeypatch):
+    from cdnfoundry_fleet import engine as engine_module
+    from cdnfoundry_fleet.actions import Outcome
+
+    release = {"release": "v2.0.0", "images": {"app": DIGEST, "openresty": DIGEST}, "roles": {"control": {"images": ["app"]}, "edge": {"images": ["openresty"]}}}
+    monkeypatch.setattr(engine_module.FleetEngine, "release_manifest", lambda self, which="current": release if which == "current" else None)
+    monkeypatch.setattr(engine_module.FleetEngine, "check_dns", lambda self: {r["name"]: (True, "ok") for g in self.dns_names() for r in g})
+    monkeypatch.setattr(engine_module.FleetEngine, "test_connection", lambda self, name: None)
+    installed: list[tuple[str, bool]] = []
+
+    def fake_bootstrap(self, name, *, country=None, continent=None, log=None):
+        installed.append((name, f"{name}:prepull" in self._prepared and f"{name}:prereq" in self._prepared))
+        self.mark_installed(name)
+        return Outcome(True, [name])
+
+    monkeypatch.setattr(engine_module.FleetEngine, "bootstrap", fake_bootstrap)
+    transport, said, tracker = Prepping(), [], Tracker()
+    with vault.session() as work:
+        engine = FleetEngine(work, ROOT, tmp_path / "b", transport=transport, say=said.append, progress=tracker)
+        assert engine.deploy({"pop-1": ("DE", "EU")}) is None
+    assert installed == [("control-1", True), ("pop-1", True)], "each host was already prepared when its install started"
+    assert any("Preparing 2 hosts at the same time" in line for line in said)
+    assert len([c for _n, c in transport.calls if c.startswith("docker pull")]) == 2
+    states = {s["id"]: s["state"] for s in tracker.steps}
+    assert states["control-1:prepull"] == "ok" and states["pop-1:prepull"] == "ok"
+
+
+def test_deploy_stops_before_any_install_when_a_host_cannot_prepare(vault, tmp_path, monkeypatch):
+    from cdnfoundry_fleet import engine as engine_module
+
+    release = {"release": "v2.0.0", "images": {"app": DIGEST, "openresty": DIGEST}, "roles": {"control": {"images": ["app"]}, "edge": {"images": ["openresty"]}}}
+    monkeypatch.setattr(engine_module.FleetEngine, "release_manifest", lambda self, which="current": release if which == "current" else None)
+    monkeypatch.setattr(engine_module.FleetEngine, "check_dns", lambda self: {r["name"]: (True, "ok") for g in self.dns_names() for r in g})
+    monkeypatch.setattr(engine_module.FleetEngine, "test_connection", lambda self, name: None)
+    called: list[str] = []
+    monkeypatch.setattr(engine_module.FleetEngine, "bootstrap", lambda self, name, **_k: called.append(name))
+
+    class NoImages(Prepping):
+        def run(self, target, command, **_):
+            if command.startswith("docker pull") and target.name == "pop-1":
+                self.calls.append((target.name, command))
+                return R(1, "", "denied")
+            self.barrier = type("B", (), {"wait": staticmethod(lambda: None)})()
+            return super().run(target, command, **_)
+
+    with vault.session() as work:
+        outcome = FleetEngine(work, ROOT, tmp_path / "b", transport=NoImages(), say=lambda _m: None).deploy({"pop-1": ("DE", "EU")})
+    assert outcome is not None and not outcome.ok and outcome.failed == "pop-1:prepull" and called == []

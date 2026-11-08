@@ -128,6 +128,9 @@ def test_review_then_confirm_installs_in_start_order(gate, monkeypatch):
         return Outcome(True, [name])
 
     monkeypatch.setattr(FleetEngine, "bootstrap", fake_bootstrap)
+    from cdnfoundry_fleet import actions
+
+    monkeypatch.setattr(actions.Engine, "prepare", lambda self, plan, manifest, log=None: None)  # the side-by-side preparation is covered in test_actions
     monkeypatch.setattr(FleetEngine, "check_dns", lambda self: {r["name"]: (True, "1.1.1.1 sees it") for g in self.dns_names() for r in g})
     monkeypatch.setattr(FleetEngine, "test_connection", lambda self, name: None)
     g, port = _created(gate)

@@ -45,6 +45,7 @@ class FleetEngine:
         self.store = FleetState(work)
         self.transport = transport or SshTransport(work)
         self.events: list[dict[str, Any]] = []
+        self._prepared: set[str] = set()
         self._geo: tuple[str | None, str | None] = (None, None)
 
     # -- state ------------------------------------------------------------------------------------------
@@ -229,6 +230,13 @@ class FleetEngine:
                 raise
             if self.progress:
                 self.progress.step(f"{name}:connect", "ok")
+        release = self.release_manifest()
+        if len(pending) > 1 and release is not None:
+            # Connect, install prerequisites, and pull images on every host at once; the host-by-host installs below skip what is done.
+            combined = actions.Plan("deploy", state["global"]["release"], steps=[step for n in pending for step in self.bootstrap_plan(n).steps])
+            failed = self._engine(state).prepare(combined, release, log=say)
+            if failed is not None:
+                return failed
         for name in pending:
             country, continent = locations.get(name, (None, None))
             outcome = self.bootstrap(name, country=country, continent=continent, log=say)
@@ -253,11 +261,13 @@ class FleetEngine:
                 import yaml
 
                 services[name] = set((yaml.safe_load(compose.read_text(encoding="utf-8")) or {}).get("services", {}))
-        return actions.Engine(
+        built = actions.Engine(
             self.transport, targets, state["nodes"], self.output_dir, journal,
             gate=lambda n: gate_with_retry(lambda: node_gate(self.transport, targets[n], state["nodes"][n], state)), switchover=self._switchover,
             mixed_versions_ok=mixed_versions_ok, services=services, provision=self._provision, progress=self.progress,
         )
+        built.prepared = self._prepared
+        return built
 
     def _provision(self, name: str) -> tuple[bool, str]:
         """Issue the node's in-memory key material from the vault's PKI and write it to the host's tmpfs."""
