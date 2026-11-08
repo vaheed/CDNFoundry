@@ -100,3 +100,47 @@ ol.roadmap li { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; align-item
 ol.roadmap li:first-child { border-top: 0; }
 h3 { margin: 1.25rem 0 0.5rem; }
 code { overflow-wrap: anywhere; }
+
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+form.inline { display: inline; margin: 0; padding: 0; background: none; box-shadow: none; max-width: none; }
+.job-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin-bottom: 0.75rem; }
+.job-head form.inline { margin-left: auto; }
+.job-count, .job-time { color: var(--subtle); }
+progress { width: 100%; height: 0.5rem; appearance: none; border: 0; border-radius: 999px; background: var(--tint); overflow: hidden; display: block; margin-bottom: 1rem; }
+progress::-webkit-progress-bar { background: var(--tint); }
+progress::-webkit-progress-value { background: var(--brand); border-radius: 999px; }
+progress::-moz-progress-bar { background: var(--brand); }
+.job[data-state=ok] progress::-webkit-progress-value { background: var(--success-dot); }
+.job[data-state=ok] progress::-moz-progress-bar { background: var(--success-dot); }
+.job[data-state=failed] progress::-webkit-progress-value { background: var(--danger-dot); }
+.job[data-state=failed] progress::-moz-progress-bar { background: var(--danger-dot); }
+.job-result { margin: 0 0 1rem; padding: 0.5rem 0.75rem; border-radius: var(--radius-sm); background: var(--canvas); box-shadow: 0 0 0 1px var(--hairline); }
+.tasks-wrap { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+.task-group { background: var(--base); border-radius: var(--radius); box-shadow: 0 0 0 1px var(--line); padding: 0.5rem 0.75rem 0.25rem; min-width: 0; }
+.task-group h3 { margin: 0 0 0.25rem; font-size: 0.875rem; color: var(--strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ol.tasks { list-style: none; margin: 0; padding: 0; }
+ol.tasks li { display: flex; align-items: center; gap: 0.6rem; min-height: 1.875rem; color: var(--subtle); }
+ol.tasks li[data-state=running], ol.tasks li[data-state=ok], ol.tasks li[data-state=failed] { color: var(--strong); }
+.task-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.took { color: var(--subtle); font-size: 0.8125rem; }
+.mark { position: relative; flex: none; width: 1rem; height: 1rem; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--line); }
+li[data-state=running] .mark { box-shadow: inset 0 0 0 2px var(--hairline); border-top: 2px solid var(--brand); animation: spin 0.9s linear infinite; }
+li[data-state=ok] .mark { background: var(--success-dot); box-shadow: none; }
+li[data-state=ok] .mark::after { content: ""; position: absolute; left: 0.3rem; top: 0.12rem; width: 0.28rem; height: 0.5rem; border: solid var(--base); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+li[data-state=failed] .mark { background: var(--danger-dot); box-shadow: none; }
+li[data-state=failed] .mark::before, li[data-state=failed] .mark::after { content: ""; position: absolute; left: 0.25rem; top: 0.45rem; width: 0.5rem; height: 2px; background: var(--base); transform: rotate(45deg); }
+li[data-state=failed] .mark::after { transform: rotate(-45deg); }
+li[data-state=skipped] .mark { background: var(--tint); box-shadow: inset 0 0 0 1.5px var(--line); }
+li[data-state=skipped] .mark::after { content: ""; position: absolute; left: 0.25rem; top: 0.45rem; width: 0.5rem; height: 2px; background: var(--subtle); }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { li[data-state=running] .mark { animation: none; border: 2px solid var(--brand); } }
+.log-tools { display: flex; flex-wrap: wrap; align-items: end; gap: 0.5rem 1rem; margin: 0.5rem 0; }
+.inline-field { display: grid; gap: 0.25rem; }
+label.check { display: flex; align-items: center; gap: 0.4rem; min-height: 2.75rem; }
+label.check input { min-height: 0; width: 1rem; height: 1rem; }
+a.btn { display: inline-flex; align-items: center; text-decoration: none; }
+pre.log { max-height: 26rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.banner { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.75rem; margin: 0 0 1rem; padding: 0.625rem 1rem; border-radius: var(--radius); background: var(--canvas); box-shadow: 0 0 0 1px var(--line); }
+.banner a { margin-left: auto; }
+.resume { margin: 0 0 1.5rem; padding: 0.25rem 1rem 1rem; border-radius: var(--radius); background: var(--canvas); box-shadow: 0 0 0 1px var(--line); }
+.resume h2 { margin-top: 0.75rem; }

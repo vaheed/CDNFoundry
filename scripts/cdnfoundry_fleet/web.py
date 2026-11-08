@@ -17,7 +17,6 @@ import socketserver
 import threading
 import time
 import urllib.parse
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
@@ -29,6 +28,7 @@ from . import management as mg
 from .render import Renderer
 from .security import classify
 from .ssh import Target
+from .progress import Tracker
 from .state import FleetState
 from .vault import Vault
 
@@ -41,6 +41,8 @@ NAV_GROUPS = [
     ("Operate", ["/upgrade", "/config", "/backups", "/ha", "/security"]),
     ("Protect", ["/rollback", "/secrets", "/history"]),
 ]
+MAX_KEPT_JOBS = 20
+HISTORY_LOG_LINES = 200
 ROTATABLE = ["metrics-token", "telemetry-token", "edge-proxy-secret", "log-auth-token"]
 
 HELP: dict[str, tuple[str, str]] = {
@@ -135,13 +137,10 @@ def topology_svg(state: dict[str, Any], results: dict[str, bool]) -> str:
     return f'<svg role="img" aria-label="{esc(label)}" viewBox="0 0 770 {height}" width="770" height="{height}">{"".join(parts)}</svg>'
 
 
-@dataclass
-class Job:
-    id: str
-    title: str
-    lines: list[str] = field(default_factory=list)
-    state: str = "running"
-    result: str = ""
+class Job(Tracker):
+    def __init__(self, job_id: str, title: str) -> None:
+        super().__init__()
+        self.id, self.title = job_id, title
 
 
 class FleetWeb:
@@ -152,6 +151,7 @@ class FleetWeb:
         self.csrf = secrets.token_urlsafe(24)
         self.last_checks: list[Check] = []
         self.jobs: dict[str, Job] = {}
+        self.seen_jobs: set[str] = set()
         self.write_lock = threading.Lock()
         self.operator = getpass.getuser()
         self.pending_manifest: dict[str, str] = {}
@@ -162,9 +162,9 @@ class FleetWeb:
         self.ha_results: dict[str, tuple[bool, str]] = {}
 
     # -- engine access -----------------------------------------------------------------------------------
-    def _engine(self, work: Path, log: Callable[[str], None] = lambda _m: None) -> FleetEngine:
+    def _engine(self, work: Path, log: Callable[[str], None] = lambda _m: None, progress: Tracker | None = None) -> FleetEngine:
         transport = self.transport_factory(work) if self.transport_factory else None
-        return FleetEngine(work, self.repo_root, self.output_dir, transport=transport, say=log)
+        return FleetEngine(work, self.repo_root, self.output_dir, transport=transport, say=log, progress=progress)
 
     def read(self, fn: Callable[[FleetEngine], Any]) -> Any:
         with self.vault.read_session() as work:
@@ -175,25 +175,31 @@ class FleetWeb:
             raise ValidationError("Another action is running; wait for it to finish")
         job = Job(secrets.token_hex(6), title)
         self.jobs[job.id] = job
+        for old in [j for j in self.jobs.values() if j.state != "running"][:-MAX_KEPT_JOBS]:
+            del self.jobs[old.id]
 
         def work_fn() -> None:
             started = time.time()
             detail: dict[str, Any] = {"operator": self.operator, "title": title}
             try:
                 with self.vault.session() as work:
-                    engine = self._engine(work, job.lines.append)
+                    engine = self._engine(work, job.line, job)
                     result = fn(engine)
                     ok = getattr(result, "ok", True)
                     if hasattr(result, "ok"):
                         detail |= {"failed": result.failed, "detail": result.detail, "rolled_back": result.rolled_back, "steps_done": len(result.done)}
                     detail["events"] = engine.events
-                    job.result = "" if result is None or hasattr(result, "ok") else str(result)[:2000]
-                    job.state = "ok" if ok else "failed"
+                    text = "" if result is None or hasattr(result, "ok") else str(result)[:2000]
+                    if hasattr(result, "ok") and not ok:
+                        text = f"Stopped at {result.failed}: {result.detail}"[:2000]
+                    job.finish("ok" if ok else "failed", text)
             except Exception as exc:  # the job page reports it; nothing is sealed
-                job.state, job.result = "failed", str(exc)[:1000]
-                detail["error"] = job.result
+                detail["error"] = str(exc)[:1000]
+                job.finish("failed", detail["error"])
             finally:
                 detail["seconds"] = round(time.time() - started, 1)
+                detail["log"] = job.lines[-HISTORY_LOG_LINES:]
+                detail["steps"] = [{"label": st["label"], "state": st["state"], "seconds": st["seconds"]} for st in job.steps][:200]
                 try:
                     self.vault.record(kind, json.dumps(detail, sort_keys=True))
                 finally:
@@ -210,16 +216,92 @@ class FleetWeb:
             + "".join(f'<a href="{p}"{" aria-current=page" if p == path else ""}>{esc(titles[p])}</a>' for p in paths) + "</div>"
             for label, paths in NAV_GROUPS)
         notice = f'<p class="flash" role="status">{esc(flash)}</p>' if flash else ""
-        meta = '<meta http-equiv="refresh" content="2">' if refresh else ""
+        notice = self._job_banner(path) + notice
+        meta = '<noscript><meta http-equiv="refresh" content="2"></noscript>' if refresh else ""
         what, how = HELP.get(path, ("", ""))
         lede = f'<p class="lede">{esc(what)}</p>' if what else ""
         guide = f'<details class="help"><summary>About this page</summary><p>{esc(how)}</p></details>' if how else ""
         return (
             '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-            f'{meta}<title>{esc(title)} - CDNFoundry Fleet</title><link rel="stylesheet" href="/assets/fleet.css"></head>'
+            f'{meta}<title>{esc(title)} - CDNFoundry Fleet</title><link rel="stylesheet" href="/assets/fleet.css"><script src="/assets/fleet.js" defer></script></head>'
             f'<body><div class="shell"><aside class="side"><div class="brand">CDNFoundry Fleet</div><nav aria-label="Fleet">{nav}</nav></aside>'
             f'<main><header class="page-head"><h1>{esc(title)}</h1>{lede}</header>{notice}{guide}{body}</main></div></body></html>'
         )
+
+    def _job_banner(self, path: str) -> str:
+        """Every page says when an action is running or finished while the operator was away, with a way back to it."""
+        for job in sorted(self.jobs.values(), key=lambda j: j.started, reverse=True):
+            if path == f"/jobs/{job.id}":
+                self.seen_jobs.add(job.id)
+                continue
+            if path == "/deploy" and job.title.startswith(("Deploy", "Continue")):
+                continue
+            if job.state == "running":
+                done, total = job.counts()
+                progress = f", {done} of {total} steps" if total else ""
+                return (f'<p class="banner" role="status" data-testid="running-banner">{state_word("warn", "Running")} <b>{esc(job.title)}</b>{progress}. '
+                        f'<a href="/jobs/{esc(job.id)}">Open the live view</a></p>')
+            if job.id not in self.seen_jobs and time.time() - (job.finished or 0) < 86400:
+                word = state_word("ok", "Finished") if job.state == "ok" else state_word("bad", "Failed")
+                return (f'<p class="banner" role="status" data-testid="finished-banner">{word} <b>{esc(job.title)}</b> while you were away. '
+                        f'<a href="/jobs/{esc(job.id)}">Open the result</a></p>')
+        return ""
+
+    STATE_WORDS = {"pending": "Waiting", "running": "Running", "ok": "Done", "failed": "Failed", "skipped": "Already done"}
+
+    def _task_list(self, steps: list[dict[str, Any]]) -> str:
+        """Every step of the action, grouped by host, ticked as it finishes."""
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for st in steps:
+            groups.setdefault(st["node"] or "Steps", []).append(st)
+
+        def item(st: dict[str, Any]) -> str:
+            name = st["label"].split(": ", 1)[-1] if st["node"] else st["label"]
+            took = f'{st["seconds"]}s' if st.get("seconds") else ""
+            return (f'<li data-step="{esc(st["id"])}" data-state="{st["state"]}"><span class="mark" aria-hidden="true"></span>'
+                    f'<span class="task-name">{esc(name)}</span><span class="sr">{self.STATE_WORDS[st["state"]]}</span><span class="took">{took}</span></li>')
+
+        return "".join(f'<section class="task-group" data-node="{esc(n)}"><h3>{esc(n)}</h3><ol class="tasks">{"".join(item(st) for st in group)}</ol></section>' for n, group in groups.items())
+
+    def _job_view(self, job: Job) -> str:
+        steps, lines, after = job.view()
+        snap = job.snapshot()
+        running = job.state == "running"
+        badge = {"running": state_word("warn", "Running"), "ok": state_word("ok", "Finished"), "failed": state_word("bad", "Failed")}[job.state]
+        total, done = len(steps), snap["done"]
+        meter = (f'<progress max="{total}" value="{done}" aria-label="Steps done"></progress>' if total
+                 else '<progress aria-label="Working, the number of steps is not known"></progress>' if running else "")
+        cancel = ""
+        if running and total:
+            cancel = (f'<form class="inline" method="post" action="/jobs/{esc(job.id)}/cancel">{self.csrf_field()}'
+                      '<button data-testid="job-cancel-button">Stop after this step</button></form>')
+        result = f'<p class="job-result" role="status">{esc(job.result)}</p>' if job.result else ""
+        return (
+            f'<div class="job" data-job="{esc(job.id)}" data-state="{job.state}" data-after="{after}" data-title="{esc(job.title)}">'
+            f'<div class="job-head"><span class="job-badge" data-testid="job-state">{badge}</span>'
+            f'<span class="job-count" data-testid="job-count">{f"{done} of {total} steps" if total else ""}</span>'
+            f'<span class="job-time" data-since="{round(job.started)}" data-end="{round(job.finished) if job.finished else ""}">{snap["elapsed"]}s</span>{cancel}</div>'
+            f'{meter}{result}'
+            + (f'<div class="tasks-wrap" data-testid="job-tasks">{self._task_list(steps)}</div>' if total or running else "")
+            + '<div class="log-tools"><label class="inline-field">Filter the log<input type="search" data-log-filter autocomplete="off"></label>'
+              '<label class="check"><input type="checkbox" data-log-follow checked>Follow the end</label>'
+              f'<a class="btn" href="/jobs/{esc(job.id)}/log.txt" download="fleet-{esc(job.id)}.log">Download log</a></div>'
+            f'<pre class="log" id="job-log" tabindex="0" aria-label="Action log" data-testid="job-log">{esc(chr(10).join(lines) or "Waiting for the first step...")}</pre>'
+            '<p><a href="/">Back to overview</a> <a href="/history">History</a></p></div>'
+        )
+
+    def job_events(self, job_id: str, after: int) -> tuple[list[dict[str, Any]], str] | None:
+        """For the event stream: the next events of a job and its state, or None when the job is unknown."""
+        job = self.jobs.get(job_id)
+        if job is None:
+            return None
+        return job.wait(after), job.state
+
+    def cancel_job(self, job_id: str) -> None:
+        job = self.jobs.get(job_id)
+        if job is None or job.state != "running":
+            raise ValidationError("That action is not running")
+        job.request_cancel()
 
     def results(self) -> dict[str, bool]:
         by_node: dict[str, bool] = {}
@@ -398,6 +480,23 @@ class FleetWeb:
             "The key gives full control of the host, so keep the Fleet vault passphrase safe.</p></details>"
         )
 
+    def _resume_panel(self, order: list[str], done: set[str]) -> str:
+        """Leaving the page never stops an install. Coming back shows it running, or offers to continue where it stopped."""
+        running = next((j for j in self.jobs.values() if j.state == "running" and j.title.startswith(("Deploy", "Continue"))), None)
+        if running:
+            d, t = running.counts()
+            return (f'<div class="resume" data-testid="deploy-running"><h2>Installation in progress</h2><p>{d} of {t} steps are done. You can leave this page; the installation keeps going.</p>'
+                    f'<a class="btn primary" href="/jobs/{esc(running.id)}">Open the live view</a></div>')
+        session, steps_done = self.read(lambda e: (e.deploy_session(), e.steps_done_in_journal()))
+        left = [n for n in order if n not in done]
+        if not session or not left:
+            return ""
+        hosts = ", ".join(left[:6]) + ("..." if len(left) > 6 else "")
+        return ('<div class="resume" data-testid="deploy-resume"><h2>Continue the installation</h2>'
+                f'<p>An earlier installation did not finish. {len(done)} host(s) are installed; {len(left)} remain ({esc(hosts)}). '
+                f'{steps_done} step(s) of the current host are already done and are skipped. Continue picks up at the first step that is not done.</p>'
+                + self.action_form("/deploy/continue", f"Continue installing {len(left)} host(s)", primary=True) + "</div>")
+
     def _deploy_page(self, state: dict[str, Any], current: dict[str, Any] | None) -> str:
         """The road to a first install. Steps 1 and 2 change nothing on a host except the connection test, which only runs `true`."""
         nodes, done = state["nodes"], self.installed()
@@ -405,7 +504,7 @@ class FleetWeb:
         order = [n for i, n in enumerate(order) if n not in order[:i]]
         pending = [n for n in order if n not in done]
         have = self.read(lambda e: e.targets(state))
-        out = [self._roadmap(state, current), '<h2 id="connect">Step 1 of 2: prepare</h2><h3>a. Connect your hosts</h3>', self._key_help(state, self.fleet_public_key(), have)]
+        out = [self._resume_panel(order, done), self._roadmap(state, current), '<h2 id="connect">Step 1 of 2: prepare</h2><h3>a. Connect your hosts</h3>', self._key_help(state, self.fleet_public_key(), have)]
         rows = []
         for n in order:
             login = f"{have[n].user}@{have[n].host}:{have[n].port}" if n in have else None
@@ -464,14 +563,10 @@ class FleetWeb:
     def page(self, path: str, query: dict[str, list[str]]) -> tuple[int, str]:
         flash = (query.get("msg") or [""])[0]
         if path.startswith("/jobs/"):
-            job = self.jobs.get(path.split("/", 2)[2])
+            job = self.jobs.get(path.split("/")[2])
             if job is None:
-                return 404, self.layout(path, "Not found", '<p class="empty">That action is not known.</p>')
-            running = job.state == "running"
-            badge = {"running": state_word("warn", "Running"), "ok": state_word("ok", "Finished"), "failed": state_word("bad", "Failed")}[job.state]
-            log = esc("\n".join(job.lines) or "Waiting for the first step...")
-            extra = f"<p>{esc(job.result)}</p>" if job.result else ""
-            return 200, self.layout(path, job.title, f"<p>{badge}</p><pre class=\"log\" tabindex=\"0\" aria-label=\"Action log\">{log}</pre>{extra}<p><a href=\"/\">Back to overview</a></p>", refresh=running)
+                return 404, self.layout(path, "Not found", '<p class="empty">That action is not known. Fleet keeps the latest actions only; older ones are in <a href="/history">History</a>.</p>')
+            return 200, self.layout(path, job.title, self._job_view(job), refresh=job.state == "running")
         state, current, previous, history = self.read(lambda e: (e.state(), e.release_manifest(), e.release_manifest("previous"), None))
         nodes = state["nodes"]
         if path == "/":
@@ -630,6 +725,10 @@ class FleetWeb:
         def job(title: str, fn: Callable[[FleetEngine], Any], kind: str) -> tuple[str, str]:
             return f"/jobs/{self.run_job(title, fn, kind).id}", ""
 
+        if path.startswith("/jobs/") and path.endswith("/cancel"):
+            job_id = path.split("/")[2]
+            self.cancel_job(job_id)
+            return f"/jobs/{job_id}", ""
         if path == "/check":
             def check(e: FleetEngine) -> str:
                 self.last_checks = e.doctor()
@@ -716,9 +815,23 @@ class FleetWeb:
                 raise ValidationError("The review has expired; review the deployment again")
 
             def deploy(e: FleetEngine) -> Any:
-                outcome = e.deploy({n: tuple(v) for n, v in plan["geo"].items()})
+                geo = {n: tuple(v) for n, v in plan["geo"].items()}
+                e.remember_deploy(geo, plan["release"])
+                outcome = e.deploy(geo)
+                if outcome is None:
+                    e.forget_deploy()
                 return outcome if outcome is not None else f"Installed {', '.join(plan['nodes'])}"
             return job("Deploy the fleet", deploy, "deploy")
+        if path == "/deploy/continue":
+            def resume(e: FleetEngine) -> Any:
+                session = e.deploy_session()
+                if session is None:
+                    raise ValidationError("There is no interrupted installation to continue")
+                outcome = e.deploy({n: tuple(v) for n, v in session["geo"].items()})
+                if outcome is None:
+                    e.forget_deploy()
+                return outcome if outcome is not None else "Installation finished"
+            return job("Continue the installation", resume, "deploy")
         if path == "/nodes/add":
             if not self.write_lock.acquire(blocking=False):
                 raise ValidationError("Another action is running; wait for it to finish")
@@ -886,9 +999,39 @@ def make_server(web: FleetWeb, host: str = LOOPBACK, port: int = 8765) -> http.s
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Frame-Options", "DENY")
-            self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'self'; form-action 'self'; img-src 'self'; frame-ancestors 'none'")
+            self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; form-action 'self'; img-src 'self'; frame-ancestors 'none'")
             self.end_headers()
             self.wfile.write(data)
+
+        def _stream(self, inner: Any, job_id: str, query: dict[str, list[str]]) -> None:
+            """Server-sent events: every event of one action, from the number the page already shows."""
+            try:
+                after = max(0, int((query.get("after") or ["0"])[0]))
+            except ValueError:
+                after = 0
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+            try:
+                while True:
+                    found = inner.job_events(job_id, after)
+                    if found is None:
+                        return
+                    events, state = found
+                    if not events:
+                        if state != "running":
+                            return
+                        self.wfile.write(b": keepalive\n\n")
+                    for event in events:
+                        self.wfile.write(f"id: {event['n']}\ndata: {json.dumps(event)}\n\n".encode())
+                        after = event["n"] + 1
+                    self.wfile.flush()
+                    if events and events[-1]["type"] == "done":
+                        return
+            except (BrokenPipeError, ConnectionResetError):
+                return
 
         def do_GET(self) -> None:
             if not self._host_ok():
@@ -896,6 +1039,17 @@ def make_server(web: FleetWeb, host: str = LOOPBACK, port: int = 8765) -> http.s
             url = urllib.parse.urlparse(self.path)
             if url.path == "/assets/fleet.css":
                 return self._send(200, (ASSETS / "fleet.css").read_text(), "text/css")
+            if url.path == "/assets/fleet.js":
+                return self._send(200, (ASSETS / "fleet.js").read_text(), "text/javascript")
+            parts = url.path.strip("/").split("/")
+            inner = getattr(web, "web", web)
+            if len(parts) == 3 and parts[0] == "jobs" and parts[2] in {"events", "log.txt"} and hasattr(inner, "jobs"):
+                job = inner.jobs.get(parts[1])
+                if job is None:
+                    return self._send(404, "Unknown action", "text/plain")
+                if parts[2] == "log.txt":
+                    return self._send(200, "\n".join(job.lines) + "\n", "text/plain; charset=utf-8")
+                return self._stream(inner, parts[1], urllib.parse.parse_qs(url.query))
             if url.path == "/tls/ca.crt":
                 inner = getattr(web, "web", web)
                 pem = inner.local_ca() if inner is not None and hasattr(inner, "local_ca") else None

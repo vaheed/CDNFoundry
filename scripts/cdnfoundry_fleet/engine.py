@@ -117,6 +117,21 @@ class FleetEngine:
     def mark_installed(self, name: str) -> None:
         atomic_json(self.work / "deploy" / "installed.json", sorted(self.installed() | {name}))
 
+    def deploy_session(self) -> dict[str, Any] | None:
+        """What the last install was asked to do, kept until it succeeds so an interrupted install can continue."""
+        path = self.work / "deploy" / "session.json"
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+    def remember_deploy(self, locations: dict[str, tuple[str | None, str | None]], release: str) -> None:
+        atomic_json(self.work / "deploy" / "session.json", {"geo": {n: list(v) for n, v in locations.items()}, "release": release, "started": utc_now()}, 0o600)
+
+    def forget_deploy(self) -> None:
+        (self.work / "deploy" / "session.json").unlink(missing_ok=True)
+
+    def steps_done_in_journal(self) -> int:
+        path = self.work / "journal" / "current.json"
+        return len(json.loads(path.read_text(encoding="utf-8")).get("done", [])) if path.exists() else 0
+
     def pending_nodes(self, state: dict[str, Any] | None = None) -> list[str]:
         """Hosts not installed yet, in the order they must start."""
         state = state or self.state()

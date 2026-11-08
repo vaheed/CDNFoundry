@@ -122,7 +122,7 @@ def test_every_page_renders_with_landmarks_title_and_no_script(served) -> None:
         status, body, r = get(port, path)
         assert status == 200, path
         assert '<html lang="en">' in body and "<title>" in body and "<main>" in body and "<h1>" in body
-        assert "<script" not in body.lower()
+        assert "<script>" not in body.lower() and '<script src="/assets/fleet.js" defer>' in body
         assert "default-src 'none'" in r.getheader("Content-Security-Policy")
 
 
@@ -222,3 +222,138 @@ def test_history_records_actions_with_the_operator(served) -> None:
     add_node(web, port)
     page = get(port, "/history")[1]
     assert "add-node" in page and web.operator in page
+
+
+def test_check_job_lists_every_node_as_a_task_and_ticks_them(served) -> None:
+    web, port = served
+    add_node(web, port, "control-1")
+    add_node(web, port, "pop-1", "edge", "203.0.113.9")
+    _, _, r = post(port, "/check", {"csrf": web.csrf})
+    page = wait_job(port, r.getheader("Location"))
+    assert 'data-step="control-1:check"' in page and 'data-step="pop-1:check"' in page
+    tasks = page.split('class="tasks-wrap"')[1].split('class="log-tools"')[0]
+    assert 'data-state="running"' not in tasks and "2 of 2 steps" in page
+    assert "control-1: " in page.split("<pre")[1]
+    assert "<progress" in page and 'href="' + r.getheader("Location") + '/log.txt"' in page
+
+
+def test_job_event_stream_replays_then_ends_with_done(served) -> None:
+    web, port = served
+    add_node(web, port)
+    _, _, r = post(port, "/check", {"csrf": web.csrf})
+    location = r.getheader("Location")
+    wait_job(port, location)
+    status, body, resp = get(port, location + "/events?after=0")
+    assert status == 200 and resp.getheader("Content-Type") == "text/event-stream"
+    kinds = [json.loads(chunk[chunk.index("data: ") + 6:])["type"] for chunk in body.strip().split("\n\n") if "data: " in chunk]
+    assert kinds[0] == "plan" and kinds[-1] == "done" and "step" in kinds
+    status, tail, _ = get(port, location + "/events?after=999")
+    assert status == 200 and tail.strip() == ""
+
+
+def test_unknown_job_stream_and_log_are_not_found(served) -> None:
+    _, port = served
+    assert get(port, "/jobs/nope/events")[0] == 404 and get(port, "/jobs/nope/log.txt")[0] == 404
+
+
+def test_log_download_is_plain_text(served) -> None:
+    web, port = served
+    add_node(web, port)
+    _, _, r = post(port, "/check", {"csrf": web.csrf})
+    location = r.getheader("Location")
+    wait_job(port, location)
+    web.jobs[location.rsplit("/", 1)[1]].line("custom line")
+    status, body, resp = get(port, location + "/log.txt")
+    assert status == 200 and resp.getheader("Content-Type").startswith("text/plain") and "custom line" in body
+
+
+def test_a_running_action_can_be_asked_to_stop_and_the_page_says_so(served) -> None:
+    web, port = served
+    gate = threading.Event()
+
+    def slow(engine):
+        engine.progress.plan([{"id": "n:one", "node": "n", "kind": "pin", "label": "n: pin"}])
+        engine.progress.step("n:one", "running")
+        gate.wait(5)
+        engine.progress.step("n:one", "ok")
+        return "done"
+
+    job = web.run_job("Slow action", slow, "test")
+    for _ in range(100):
+        if job.steps:
+            break
+        time.sleep(0.05)
+    page = get(port, f"/jobs/{job.id}")[1]
+    assert "Stop after this step" in page and 'data-state="running"' in page
+    assert post(port, f"/jobs/{job.id}/cancel", {"csrf": "wrong"})[0] == 400
+    assert post(port, f"/jobs/{job.id}/cancel", {"csrf": web.csrf})[0] == 303
+    assert job.cancel_requested
+    gate.set()
+    wait_job(port, f"/jobs/{job.id}")
+    assert post(port, f"/jobs/{job.id}/cancel", {"csrf": web.csrf})[0] == 400
+
+
+def test_history_keeps_the_log_and_steps_of_a_finished_action(served) -> None:
+    web, port = served
+    add_node(web, port)
+    _, _, r = post(port, "/check", {"csrf": web.csrf})
+    wait_job(port, r.getheader("Location"))
+    for _ in range(50):
+        if any(h["kind"] == "check" for h in web.vault.history()):
+            break
+        time.sleep(0.1)
+    detail = json.loads(next(h for h in web.vault.history() if h["kind"] == "check")["detail"])
+    assert detail["steps"][0]["label"] == "control-1: check" and isinstance(detail["log"], list)
+
+
+def test_leaving_a_running_action_and_coming_back_shows_it_on_every_page(served) -> None:
+    web, port = served
+    add_node(web, port)
+    gate = threading.Event()
+
+    def slow(engine):
+        engine.progress.plan([{"id": "control-1:pin", "node": "control-1", "kind": "pin", "label": "control-1: pin"}] * 1)
+        engine.progress.step("control-1:pin", "running")
+        gate.wait(5)
+        engine.progress.step("control-1:pin", "ok")
+        return "ok"
+
+    job = web.run_job("Deploy the fleet", slow, "deploy")
+    for _ in range(100):
+        if job.steps:
+            break
+        time.sleep(0.05)
+    for path in ("/", "/nodes", "/history"):
+        page = get(port, path)[1]
+        assert 'data-testid="running-banner"' in page and f'/jobs/{job.id}' in page and "0 of 1 steps" in page, path
+    deploy = get(port, "/deploy")[1]
+    assert 'data-testid="deploy-running"' in deploy and 'data-testid="running-banner"' not in deploy
+    gate.set()
+    for _ in range(100):
+        if job.state != "running":
+            break
+        time.sleep(0.05)
+    assert 'data-testid="finished-banner"' in get(port, "/")[1]
+    get(port, f"/jobs/{job.id}")
+    assert "finished-banner" not in get(port, "/")[1]
+
+
+def test_an_interrupted_install_offers_to_continue(served) -> None:
+    web, port = served
+    add_node(web, port)
+
+    def stops(engine):
+        engine.remember_deploy({}, "v2.0.0")
+        return type("Out", (), {"ok": False, "failed": "control-1:prereq", "detail": "boom", "rolled_back": [], "done": []})()
+
+    job = web.run_job("Deploy the fleet", stops, "deploy")
+    wait_job(port, f"/jobs/{job.id}")
+    page = get(port, "/deploy")[1]
+    assert 'data-testid="deploy-resume"' in page and "Continue installing 1 host(s)" in page and 'action="/deploy/continue"' in page
+
+
+def test_continue_without_an_interrupted_install_says_so(served) -> None:
+    web, port = served
+    status, _, r = post(port, "/deploy/continue", {"csrf": web.csrf})
+    assert status == 303
+    assert "no interrupted installation" in wait_job(port, r.getheader("Location"))
