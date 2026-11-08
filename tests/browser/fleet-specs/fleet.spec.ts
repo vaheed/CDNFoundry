@@ -7,7 +7,7 @@ import { expectAccessible } from '../specs/helpers';
  */
 
 const pages = [
-    ['overview', '/'], ['nodes', '/nodes'], ['security', '/security'], ['upgrade', '/upgrade'], ['config', '/config'],
+    ['overview', '/'], ['nodes', '/nodes'], ['inventory', '/inventory'], ['security', '/security'], ['upgrade', '/upgrade'], ['config', '/config'],
     ['rollback', '/rollback'], ['backups', '/backups'], ['ha', '/ha'], ['secrets', '/secrets'], ['history', '/history'],
     ['node-detail', '/nodes/pop-tehran-a'],
 ] as const;
@@ -41,7 +41,7 @@ for (const [name, path] of pages) {
 
 test('navigation reaches every page and marks the current one', async ({ page }) => {
     await page.goto('/');
-    for (const [label, path] of [['Nodes', '/nodes'], ['Security', '/security'], ['Upgrade', '/upgrade'], ['Config', '/config'], ['Rollback', '/rollback'],
+    for (const [label, path] of [['Nodes', '/nodes'], ['Inventory', '/inventory'], ['Security', '/security'], ['Upgrade', '/upgrade'], ['Config', '/config'], ['Rollback', '/rollback'],
         ['Backups', '/backups'], ['HA', '/ha'], ['Secrets', '/secrets'], ['History', '/history'], ['Overview', '/']] as const) {
         await page.getByRole('navigation', { name: 'Fleet' }).getByRole('link', { name: label, exact: true }).click();
         await expect(page).toHaveURL(new RegExp(`${path === '/' ? '/$' : path}$`));
@@ -58,7 +58,7 @@ test('keyboard users can tab to the navigation with a visible focus ring', async
 
 test('overview draws the topology with an accessible name and every seeded node', async ({ page }) => {
     await page.goto('/');
-    const svg = page.getByRole('img', { name: /Fleet topology/ });
+    const svg = page.getByRole('group', { name: /Fleet topology/ });
     await expect(svg).toBeVisible();
     await expect(svg).toHaveAttribute('aria-label', /control-1 \(control\)/);
     await expect(svg).toHaveAttribute('aria-label', /pop-frankfurt-with-a-very-long-point-of-presence-name \(edge\)/);
@@ -71,6 +71,10 @@ test('run check starts a job, shows its progress page, and ends with the unreach
     await expect(page).toHaveURL(/\/jobs\//);
     await expect(page.getByText('Finished')).toBeVisible({ timeout: 30_000 });
     await expectAccessible(page);
+    // Every host is a task on the page, all ticked, and the progress count says so.
+    await expect(page.getByTestId('job-tasks').locator('li[data-step]')).toHaveCount(6);
+    await expect(page.getByTestId('job-tasks').locator('li[data-state=failed], li[data-state=ok]')).toHaveCount(6);
+    await expect(page.getByTestId('job-count')).toHaveText('6 of 6 steps');
     await page.goto('/');
     await expect(page.getByText(/control-1: Host reachable/)).toBeVisible();
     await expect(page.getByText('Healthy at last check')).toBeVisible();
@@ -147,7 +151,7 @@ test('upgrade offers the release of the checkout with one button, and refuses an
 
 test('history lists the seeded action with its operator', async ({ page }) => {
     await page.goto('/history');
-    await expect(page.getByRole('cell', { name: /fixture: Seed the browser fixture/ })).toBeVisible();
+    await expect(page.getByText('fixture: Seed the browser fixture')).toBeVisible();
 });
 
 test('a link or button on every page leads somewhere that exists', async ({ page, request }) => {
@@ -158,4 +162,45 @@ test('a link or button on every page leads somewhere that exists', async ({ page
             expect((await request.get(href)).status(), `${path} links to ${href}`).toBe(200);
         }
     }
+});
+
+
+test('the action page filters its log and offers the log as a download', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Run check of the whole stack' }).click();
+    await expect(page.getByText('Finished')).toBeVisible({ timeout: 30_000 });
+    const log = page.getByTestId('job-log');
+    await expect(log).toContainText('control-1:');
+    await page.getByLabel('Filter the log').fill('monitoring-1');
+    await expect(log).toContainText('monitoring-1');
+    await expect(log).not.toContainText('dns-2');
+    await page.getByLabel('Filter the log').fill('no such line');
+    await expect(log).toHaveText('No log line matches the filter.');
+    await expect(page.getByRole('link', { name: 'Download log' })).toHaveAttribute('href', /\/jobs\/\w+\/log\.txt$/);
+});
+
+test('once the result of an action was opened, no page keeps announcing it', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Run check of the whole stack' }).click();
+    await expect(page).toHaveURL(/\/jobs\//);
+    await expect(page.getByText('Finished')).toBeVisible({ timeout: 30_000 });
+    await page.goto('/nodes');
+    await expect(page.getByTestId('running-banner')).toHaveCount(0);
+    await expect(page.getByTestId('finished-banner')).toHaveCount(0);
+});
+
+test('inventory asks for a first read and the nodes page lists the live columns', async ({ page }) => {
+    await page.goto('/inventory');
+    await expect(page.getByText('has not read any host')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Read hardware of every host' })).toBeVisible();
+    await page.goto('/nodes');
+    await expect(page.getByRole('columnheader', { name: 'Memory' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Cores' })).toBeVisible();
+});
+
+test('every topology host links to its page', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('link', { name: /^pop-tehran-a, / }).click();
+    await expect(page).toHaveURL(/\/nodes\/pop-tehran-a$/);
+    await expect(page.getByRole('heading', { name: 'Hardware and system' })).toBeVisible();
 });
