@@ -16,6 +16,7 @@ from . import actions, manifest as mf, provision as tmpfs_material
 from .checks import Check, gate_with_retry, node_gate, run_checks
 from .common import FleetError, ValidationError, atomic_json, utc_now
 from .control_cli import Runner, bundle_digest
+from .inventory import collect as collect_inventory, redact
 from .progress import Tracker, plan_steps
 from .render import Renderer
 from . import management as mg
@@ -23,6 +24,7 @@ from .ssh import SshError, SshTransport, Target, load_targets, save_target
 from .state import FleetState
 
 RELEASES = "releases"
+INVENTORY = "inventory"
 
 
 class VaultRunner(Runner):
@@ -470,15 +472,97 @@ class FleetEngine:
             (releases / "previous.json").unlink(missing_ok=True)
         return rolled
 
-    # -- checks and security ----------------------------------------------------------------------------
-    def doctor(self) -> list[Check]:
+    # -- inventory --------------------------------------------------------------------------------------
+    def inventory(self) -> dict[str, dict[str, Any]]:
+        """The last hardware and system inventory of each host, as recorded by `collect_inventory`."""
+        out: dict[str, dict[str, Any]] = {}
+        for name in self.state()["nodes"]:
+            path = self.work / INVENTORY / f"{name}.json"
+            if path.exists():
+                try:
+                    out[name] = json.loads(path.read_text(encoding="utf-8"))
+                except ValueError:
+                    continue
+        return out
+
+    def collect_inventory(self, names: list[str] | None = None, *, workers: int = 6) -> dict[str, dict[str, Any]]:
+        """Read the inventory of the given hosts (all when none are named) in parallel and record each one that answered."""
+        from concurrent.futures import ThreadPoolExecutor
+
         state = self.state()
         targets = self.targets(state)
+        chosen = [n for n in (names or sorted(state["nodes"])) if n in state["nodes"]]
+        if self.progress:
+            self.progress.plan([{"id": f"{n}:inventory", "node": n, "kind": "inventory", "label": f"{n}: read hardware"} for n in chosen])
+
+        def one(name: str) -> tuple[str, dict[str, Any] | None, str]:
+            if name not in targets:
+                return name, None, "no SSH login saved"
+            if self.progress:
+                self.progress.step(f"{name}:inventory", "running")
+            try:
+                inv = collect_inventory(self.transport, targets[name])
+            except SshError as exc:
+                return name, None, str(exc)
+            return name, inv or None, "" if inv else "the host answered, but not with an inventory"
+
+        out: dict[str, dict[str, Any]] = {}
+        with ThreadPoolExecutor(max_workers=max(1, min(workers, len(chosen) or 1))) as pool:
+            for name, inv, problem in pool.map(one, chosen):
+                if inv:
+                    atomic_json(self.work / INVENTORY / f"{name}.json", inv, 0o600)
+                    out[name] = inv
+                    self.say(f"{name}: {inv.get('cpu_cores') or '?'} cores, {round((inv.get('mem_total_mb') or 0) / 1024, 1)} GB memory, {inv.get('kernel')}")
+                else:
+                    self.say(f"{name}: no inventory ({problem})")
+                if self.progress:
+                    self.progress.step(f"{name}:inventory", "ok" if inv else "failed", problem)
+        return out
+
+    def probe_nodes(self, *, workers: int = 6) -> dict[str, dict[str, Any]]:
+        """A read-only look at every host right now, for the live view. Nothing is recorded; an unreachable host is a result, not an error."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        state = self.state()
+        targets = self.targets(state)
+
+        def one(name: str) -> tuple[str, dict[str, Any]]:
+            if name not in targets:
+                return name, {"ok": False, "error": "No SSH login saved"}
+            try:
+                inv = collect_inventory(self.transport, targets[name])
+            except SshError as exc:
+                return name, {"ok": False, "error": str(exc)[:200]}
+            return name, ({"ok": True, "inventory": inv} if inv else {"ok": False, "error": "The host answered without an inventory"})
+
+        names = sorted(state["nodes"])
+        with ThreadPoolExecutor(max_workers=max(1, min(workers, len(names) or 1))) as pool:
+            return dict(pool.map(one, names))
+
+    def container_log(self, name: str, container: str, lines: int = 300) -> str:
+        """The tail of one container's log, read-only. The container must be one the host reported, so the name never reaches a shell unchecked."""
+        import re as _re
+
+        if not _re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", container):
+            raise ValidationError("That is not a container name")
+        known = {c["name"] for c in (self.inventory().get(name) or {}).get("containers", [])}
+        if container not in known:
+            raise ValidationError("Fleet has not seen that container on this host. Refresh the hardware inventory first.")
+        target = self.targets().get(name)
+        if target is None:
+            raise ValidationError("No SSH login saved for this host")
+        result = self.transport.run(target, f"docker logs --tail {int(max(1, min(lines, 1000)))} --timestamps {container} 2>&1", timeout=30)
+        return redact((result.stdout or result.stderr)[-200_000:])
+
+    # -- checks and security ----------------------------------------------------------------------------
+    def doctor(self, only: list[str] | None = None) -> list[Check]:
+        state = self.state()
+        targets = {n: t for n, t in self.targets(state).items() if only is None or n in only}
         roles = {n: v["role"] for n, v in state["nodes"].items()}
         mon = state["features"]["monitoring"]
         hosts = {n for n, v in state["nodes"].items() if v["role"] == "monitoring"} | ({n for n, v in state["nodes"].items() if v["role"] == "control"} if mon["mode"] == "colocated" else set())
         checks = run_checks(self.transport, targets, state["global"]["release"], roles, hosts, self.progress)
-        missing = [n for n in state["nodes"] if n not in targets]
+        missing = [n for n in state["nodes"] if n not in targets and (only is None or n in only)]
         extra = [Check(n, "SSH access stored", False, "run node-ssh") for n in missing]
         ingress = self.work / "ha" / "ingress.crt"
         if (state.get("ha") or {}).get("standby") and ingress.exists():

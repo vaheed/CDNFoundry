@@ -28,7 +28,7 @@ SCRYPT_N, SCRYPT_R, SCRYPT_P = 2**15, 8, 1
 VERIFIER_PATH = "__verifier__"
 VERIFIER_TEXT = b"cdnfoundry-fleet-vault"
 # Directories sealed into the vault. Rendered bundles and history are derived and stay out.
-SEALED_ROOTS = ("fleet.json", "secrets", "pki", "ha", "ssh", "releases", "journal", "tls", "deploy")
+SEALED_ROOTS = ("fleet.json", "secrets", "pki", "ha", "ssh", "releases", "journal", "tls", "deploy", "inventory")
 MIN_PASSPHRASE = 12
 
 
