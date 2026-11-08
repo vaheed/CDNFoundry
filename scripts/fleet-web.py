@@ -57,12 +57,27 @@ def ensure_environment(root: Path) -> Path:
     return python
 
 
+def supported_interpreter() -> str | None:
+    """Return a Python 3.13 down to 3.10 on PATH, for when the running Python is too new for prebuilt wheels."""
+    for minor in range(TESTED_UP_TO[1], MINIMUM[1] - 1, -1):
+        found = shutil.which(f"python3.{minor}") 
+        if found:
+            return found
+    return None
+
+
 def main() -> int:
+    if sys.version_info[:2] > TESTED_UP_TO and not os.environ.get("CDNFOUNDRY_FLEET_REEXEC"):
+        other = supported_interpreter()
+        if other:
+            print(f"Python {sys.version.split()[0]} is newer than Fleet supports; restarting with {other}.", file=sys.stderr)
+            env = {**os.environ, "CDNFOUNDRY_FLEET_REEXEC": "1"}
+            return subprocess.run([other, str(Path(__file__).resolve()), *sys.argv[1:]], env=env).returncode
     if sys.version_info < MINIMUM:
         return fail(f"Python {MINIMUM[0]}.{MINIMUM[1]} or newer is required; this is {sys.version.split()[0]}")
     if sys.version_info[:2] > TESTED_UP_TO:
         print(f"warning: Python {sys.version.split()[0]} is newer than the versions Fleet is tested with (up to "
-              f"{TESTED_UP_TO[0]}.{TESTED_UP_TO[1]}); prebuilt packages may be missing. If setup fails, use Python 3.12 or 3.13.", file=sys.stderr)
+              f"{TESTED_UP_TO[0]}.{TESTED_UP_TO[1]}); prebuilt packages may be missing, and no Python 3.10-3.13 was found on PATH to switch to. If setup fails, install Python 3.12 or 3.13 (macOS: brew install python@3.13).", file=sys.stderr)
     args = sys.argv[1:]
     if not shutil.which("ssh") or not shutil.which("ssh-keygen"):
         print("warning: OpenSSH (ssh, ssh-keygen) was not found. Fleet web starts, but it cannot reach hosts until you install it.\n"
