@@ -9,6 +9,9 @@ is idempotent on the node.
 from __future__ import annotations
 
 import json
+import threading
+import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Protocol
@@ -31,6 +34,12 @@ PREREQUISITES = (
     "if [ $need = 1 ]; then command -v apt-get >/dev/null || { echo 'install Docker with Compose v2, tar, python3 and openssl' >&2; exit 1; }; "
     "DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io docker-compose-v2 python3 openssl ca-certificates tar; fi"
 )
+
+
+PARALLEL_KINDS = ("pin", "prereq", "prepull")  # per-host work that touches nothing a host serves, so all hosts do it at once
+HOST_WORKERS = 6
+IMAGE_WORKERS = 4
+PULL_HEARTBEAT_SECONDS = 20
 
 
 class ActionError(FleetError):
@@ -154,6 +163,7 @@ class Engine:
         self.t, self.targets, self.nodes, self.bundles = transport, targets, nodes, bundles
         self.journal, self.gate, self.switchover = journal, gate, switchover
         self.mixed_versions_ok = mixed_versions_ok
+        self._log: Callable[[str], None] = lambda _m: None
 
     def journal_key(self, plan: Plan) -> str:
         """A resumed run may skip a step only for the same plan over the same bundle bytes: a re-rendered bundle must be uploaded again."""
@@ -173,9 +183,15 @@ class Engine:
         done: list[str] = list(state["done"])
         upgraded: list[str] = []
         track = self.progress
+        self._log = log
         if track:
             track.plan(plan_steps(plan))
+        prepared, failure = self._prepare_hosts(plan, manifest, state, done)
+        if failure is not None:
+            return failure
         for step in plan.steps:
+            if step.id in prepared:
+                continue
             if step.id in done:
                 if step.kind == "gate":
                     upgraded.append(step.node)
@@ -213,6 +229,60 @@ class Engine:
                 upgraded.append(step.node)
         return Outcome(True, done)
 
+    def _prepare_hosts(self, plan: Plan, manifest: dict[str, Any], state: dict[str, Any], done: list[str]) -> tuple[set[str], Outcome | None]:
+        """Connect, install prerequisites, and pull images on every host at the same time, before any host is changed.
+
+        Nothing here changes what a host serves, so a failure leaves every host on its old release and needs no rollback.
+        Hosts run side by side; each host keeps its own steps in order. One failure stops new steps, lets the running ones finish,
+        and keeps the journal so the same action resumes.
+        """
+        chains: dict[str, list[Step]] = {}
+        for st in plan.steps:
+            if st.kind in PARALLEL_KINDS and st.id not in done:
+                chains.setdefault(st.node, []).append(st)
+        if len(chains) < 2:
+            return set(), None
+        track, lock = self.progress, threading.Lock()
+        failures: list[tuple[Step, str]] = []
+        ran: set[str] = set()
+        self._log(f"Preparing {len(chains)} hosts at the same time: {', '.join(sorted(chains))}")
+
+        def chain(steps: list[Step]) -> None:
+            for st in steps:
+                if failures or (track and track.cancel_requested):
+                    return
+                if track:
+                    track.step(st.id, "running")
+                try:
+                    ok, detail = self._run(st, manifest)
+                except SshError as exc:
+                    ok, detail = False, f"{exc} (run the action again to resume)"
+                with lock:
+                    state["log"].append({"at": utc_now(), "step": st.id, "ok": ok, "detail": detail})
+                    if ok:
+                        done.append(st.id)
+                        ran.add(st.id)
+                        state["done"] = done
+                    else:
+                        failures.append((st, detail))
+                    self.journal.save(state)
+                if track:
+                    track.step(st.id, "ok" if ok else "failed", detail)
+                self._log(f"{st.label()}: {'ok' if ok else 'FAILED'} {detail}".strip())
+                if not ok:
+                    return
+
+        with ThreadPoolExecutor(max_workers=min(HOST_WORKERS, len(chains))) as pool:
+            for future in [pool.submit(chain, steps) for steps in chains.values()]:
+                future.result()
+        if failures:
+            step, detail = failures[0]
+            return ran, Outcome(False, list(done), step.id, detail, [])
+        remaining = next((st for steps in chains.values() for st in steps if st.id not in done), None)
+        if remaining is not None:
+            return ran, Outcome(False, list(done), remaining.id, "Stopped by the operator before this step (run the action again to resume)")
+        return ran, None
+
     def root(self, node: str) -> str:
         return self.roots.get(node, REMOTE_ROOT)
 
@@ -226,22 +296,52 @@ class Engine:
         (staged / "bundle" / "RELEASE").write_text(str(manifest["release"]) + "\n", encoding="utf-8")
         return staged / "bundle"
 
+    def _pull_images(self, node: str, target: Target, role: str, manifest: dict[str, Any]) -> tuple[bool, str]:
+        """Pull and verify every image of the role, a few at a time, saying how far it is so the log never goes quiet."""
+        names = list(manifest["roles"].get(role, {}).get("images", []))
+        if not names:
+            return True, ""
+        say, total, started = self._log, len(names), time.time()
+
+        def pull(name: str) -> tuple[bool, str]:
+            digest = manifest["images"][name]
+            image = mf.pull_ref(name, digest)
+            began = time.time()
+            say(f"{node}: pulling {name}")
+            if not self.t.run(target, f"docker pull {image}", timeout=LONG_STEP_SECONDS).ok:
+                return False, f"could not pull {image}"
+            pulled = _pulled_digest(self.t, target, image)
+            try:
+                mf.verify_pulled(manifest, {name: pulled or ""})
+            except mf.ManifestError as exc:
+                return False, str(exc)
+            say(f"{node}: {name} ready ({round(time.time() - began)}s)")
+            return True, ""
+
+        failed: tuple[bool, str] | None = None
+        with ThreadPoolExecutor(max_workers=min(IMAGE_WORKERS, total)) as pool:
+            pending = {pool.submit(pull, n) for n in names}
+            finished = 0
+            while pending:
+                ready, pending = wait(pending, timeout=PULL_HEARTBEAT_SECONDS, return_when=FIRST_COMPLETED)
+                for future in ready:
+                    finished += 1
+                    result = future.result()
+                    if not result[0] and failed is None:
+                        failed = result
+                if failed is not None:
+                    for future in pending:
+                        future.cancel()
+                if pending and not ready:
+                    say(f"{node}: still pulling, {finished} of {total} images ready after {round(time.time() - started)}s")
+        return failed if failed is not None else (True, f"{total} images")
+
     def _run(self, step: Step, manifest: dict[str, Any]) -> tuple[bool, str]:
         target = self.targets[step.node]
         remote = self.root(step.node)
         role = self.nodes[step.node]["role"]
         if step.kind == "prepull":
-            for name in manifest["roles"].get(role, {}).get("images", []):
-                digest = manifest["images"][name]
-                image = mf.pull_ref(name, digest)
-                if not self.t.run(target, f"docker pull {image}", timeout=LONG_STEP_SECONDS).ok:
-                    return False, f"could not pull {image}"
-                pulled = _pulled_digest(self.t, target, image)
-                try:
-                    mf.verify_pulled(manifest, {name: pulled or ""})
-                except mf.ManifestError as exc:
-                    return False, str(exc)
-            return True, ""
+            return self._pull_images(step.node, target, role, manifest)
         if step.kind == "upload":
             self.t.upload_tree(target, self._stage(step.node, manifest), remote + ".next", keep_previous=False)
             return True, ""

@@ -126,7 +126,8 @@ def test_broken_canary_rolls_back_and_leaves_the_other_nodes_alone(tmp_path: Pat
     out = engine(tmp_path, t).apply(a.plan_upgrade(NODES, manifest("2.0.0", D1), new), new)
     assert not out.ok and out.failed == "pop-1:activate"
     assert out.rolled_back == ["pop-1"]
-    assert not any(n == "pop-2" for n, _ in t.calls)
+    # pop-2 only had its images pulled ahead of time; it was never uploaded to, restarted, or rolled back
+    assert not any(n == "pop-2" and (c.startswith("upload") or "start.sh" in c) for n, c in t.calls)
 
 
 def test_failed_health_gate_rolls_back_that_node(tmp_path: Path) -> None:
@@ -177,3 +178,94 @@ def test_a_resumed_run_uploads_again_when_the_rendered_bundle_changed(tmp_path: 
     (tmp_path / "bundles" / "pop-1" / "start.sh").write_text("a different, re-rendered bundle")
     assert resumed.apply(plan, new).ok
     assert uploads().count("pop-1") == 2  # the changed bundle went up again instead of resuming past the upload
+
+
+class Rendezvous(FakeTransport):
+    """Every image pull waits for `parties` pulls to be in flight at once, so one that runs alone times out and fails."""
+
+    def __init__(self, parties: int) -> None:
+        super().__init__()
+        import threading
+
+        self.barrier = threading.Barrier(parties, timeout=5)
+        self.lock = threading.Lock()
+        self.fail_pull: set[str] = set()
+
+    def run(self, target, command, **kw):
+        if command.startswith("docker pull"):
+            if target.name in self.fail_pull:
+                with self.lock:
+                    self.calls.append((target.name, command))
+                return R(1, "", "pull denied")
+            try:
+                self.barrier.wait()
+            except Exception:
+                return R(1, "", "pulls did not overlap")
+        with self.lock:
+            return super().run(target, command, **kw)
+
+
+def pull_plan() -> tuple[a.Plan, dict[str, Any]]:
+    new = manifest("2.0.1", D2)
+    return a.plan_upgrade({k: v for k, v in NODES.items() if v["role"] == "edge"}, manifest("2.0.0", D1), new), new
+
+
+def test_every_host_pulls_its_images_at_the_same_time_before_any_host_changes(tmp_path: Path) -> None:
+    t = Rendezvous(2)  # pop-1 and pop-2 must be pulling together, or the barrier fails the pull
+    plan, new = pull_plan()
+    out = engine(tmp_path, t).apply(plan, new)
+    assert out.ok, out.detail
+    commands = [c for _n, c in t.calls]
+    assert max(i for i, c in enumerate(commands) if c.startswith("docker pull")) < min(i for i, c in enumerate(commands) if "&& ./start.sh" in c)
+
+
+def test_one_failed_pull_changes_no_host_and_the_rerun_pulls_only_what_is_missing(tmp_path: Path) -> None:
+    t = Rendezvous(1)
+    t.fail_pull = {"pop-2"}
+    plan, new = pull_plan()
+    out = engine(tmp_path, t).apply(plan, new)
+    assert not out.ok and out.failed == "pop-2:prepull" and "could not pull" in out.detail and out.rolled_back == []
+    assert not any("&& ./start.sh" in c or c.startswith("upload") for _n, c in t.calls)
+    t.fail_pull, before = set(), len([1 for n, c in t.calls if n == "pop-1" and c.startswith("docker pull")])
+    assert engine(tmp_path, t).apply(plan, new).ok
+    assert len([1 for n, c in t.calls if n == "pop-1" and c.startswith("docker pull")]) == before  # pop-1 was already done
+
+
+def test_a_hosts_images_are_pulled_in_parallel_too(tmp_path: Path) -> None:
+    t = Rendezvous(3)
+    new = manifest("2.0.1", D2)
+    new["images"].update({"vector": D2, "agent": D2})
+    new["roles"]["edge"]["images"] = ["openresty", "vector", "agent"]
+    nodes = {"pop-1": {"role": "edge"}}
+    (tmp_path / "bundles" / "pop-1").mkdir(parents=True)
+    (tmp_path / "bundles" / "pop-1" / "start.sh").write_text("x")
+    eng = a.Engine(t, {"pop-1": Target("pop-1", "127.0.0.1")}, nodes, tmp_path / "bundles", a.Journal(tmp_path / "j.json"), gate=lambda n: (True, ""), provision=lambda n: (True, ""))
+    out = eng.apply(a.plan_upgrade(nodes, manifest("2.0.0", D1), new), new)
+    assert out.ok, out.detail
+    assert len([c for _n, c in t.calls if c.startswith("docker pull")]) == 3
+
+
+def test_parallel_preparation_reports_each_step_once_and_logs_each_image(tmp_path: Path) -> None:
+    from cdnfoundry_fleet.progress import Tracker
+
+    t, lines, track = Rendezvous(2), [], Tracker()
+    plan, new = pull_plan()
+    eng = engine(tmp_path, t)
+    eng.progress = track
+    assert eng.apply(plan, new, log=lines.append).ok
+    states = [e["state"] for e in track.events if e["type"] == "step" and e["id"] == "pop-1:prepull"]
+    assert states == ["running", "ok"]
+    assert any("pop-1: pulling openresty" in line for line in lines) and any("pop-2: openresty ready" in line for line in lines)
+    assert any("Preparing 2 hosts at the same time" in line for line in lines)
+
+
+def test_a_stop_request_before_preparation_changes_nothing(tmp_path: Path) -> None:
+    from cdnfoundry_fleet.progress import Tracker
+
+    t, track = Rendezvous(1), Tracker()
+    track.cancel_requested = True
+    plan, new = pull_plan()
+    eng = engine(tmp_path, t)
+    eng.progress = track
+    out = eng.apply(plan, new)
+    assert not out.ok and "Stopped by the operator" in out.detail and t.calls == []
