@@ -14,8 +14,9 @@ from typing import Any, Callable
 
 from . import actions, manifest as mf, provision as tmpfs_material
 from .checks import Check, gate_with_retry, node_gate, run_checks
-from .common import ValidationError, atomic_json, utc_now
+from .common import FleetError, ValidationError, atomic_json, utc_now
 from .control_cli import Runner, bundle_digest
+from .progress import Tracker, plan_steps
 from .render import Renderer
 from . import management as mg
 from .ssh import SshError, SshTransport, Target, load_targets, save_target
@@ -36,8 +37,9 @@ class VaultRunner(Runner):
 
 
 class FleetEngine:
-    def __init__(self, work: Path, repo_root: Path, output_dir: Path, *, transport: Any = None, say: Callable[[str], None] = print) -> None:
+    def __init__(self, work: Path, repo_root: Path, output_dir: Path, *, transport: Any = None, say: Callable[[str], None] = print, progress: Tracker | None = None) -> None:
         self.work, self.repo_root, self.output_dir, self.say = work, repo_root, output_dir, say
+        self.progress = progress
         self.store = FleetState(work)
         self.transport = transport or SshTransport(work)
         self.events: list[dict[str, Any]] = []
@@ -186,9 +188,21 @@ class FleetEngine:
                 say(f"DNS not ready, {reason}")
             say("Let's Encrypt cannot validate these names yet, so Fleet generates local certificates for them. Browsers warn until you trust the local CA or replace them.")
             self.generate_local_certificates([key for key, _ in waiting])
+        if self.progress:
+            self.progress.plan([{"id": f"{n}:connect", "node": n, "kind": "connect", "label": f"{n}: connect"} for n in pending]
+                               + [step for n in pending for step in plan_steps(self.bootstrap_plan(n))])
         for name in pending:
             say(f"{name}: testing the SSH connection")
-            self.test_connection(name)
+            if self.progress:
+                self.progress.step(f"{name}:connect", "running")
+            try:
+                self.test_connection(name)
+            except FleetError as exc:
+                if self.progress:
+                    self.progress.step(f"{name}:connect", "failed", str(exc))
+                raise
+            if self.progress:
+                self.progress.step(f"{name}:connect", "ok")
         for name in pending:
             country, continent = locations.get(name, (None, None))
             outcome = self.bootstrap(name, country=country, continent=continent, log=say)
@@ -216,7 +230,7 @@ class FleetEngine:
         return actions.Engine(
             self.transport, targets, state["nodes"], self.output_dir, journal,
             gate=lambda n: gate_with_retry(lambda: node_gate(self.transport, targets[n], state["nodes"][n], state)), switchover=self._switchover,
-            mixed_versions_ok=mixed_versions_ok, services=services, provision=self._provision,
+            mixed_versions_ok=mixed_versions_ok, services=services, provision=self._provision, progress=self.progress,
         )
 
     def _provision(self, name: str) -> tuple[bool, str]:
@@ -448,7 +462,7 @@ class FleetEngine:
         roles = {n: v["role"] for n, v in state["nodes"].items()}
         mon = state["features"]["monitoring"]
         hosts = {n for n, v in state["nodes"].items() if v["role"] == "monitoring"} | ({n for n, v in state["nodes"].items() if v["role"] == "control"} if mon["mode"] == "colocated" else set())
-        checks = run_checks(self.transport, targets, state["global"]["release"], roles, hosts)
+        checks = run_checks(self.transport, targets, state["global"]["release"], roles, hosts, self.progress)
         missing = [n for n in state["nodes"] if n not in targets]
         extra = [Check(n, "SSH access stored", False, "run node-ssh") for n in missing]
         ingress = self.work / "ha" / "ingress.crt"

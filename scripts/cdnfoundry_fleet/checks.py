@@ -173,18 +173,28 @@ def monitoring_checks(transport: Any, target: Target) -> list[Check]:
     return [Check(target.name, "Watchdog alert firing", firing, "" if firing else "Prometheus does not report Watchdog")]
 
 
-def run_checks(transport: Any, targets: dict[str, Target], release: str, roles: dict[str, str] | None = None, monitoring_hosts: set[str] | None = None) -> list[Check]:
+def run_checks(transport: Any, targets: dict[str, Target], release: str, roles: dict[str, str] | None = None, monitoring_hosts: set[str] | None = None, progress: Any = None) -> list[Check]:
     out: list[Check] = []
     roles = roles or {}
+    if progress:
+        progress.plan([{"id": f"{t.name}:check", "node": t.name, "kind": "check", "label": f"{t.name}: check"} for t in targets.values()])
     for target in targets.values():
+        step = f"{target.name}:check"
+        if progress:
+            progress.step(step, "running")
+        before = len(out)
         node_checks = check_node(transport, target, release)
         out += node_checks
-        if not all(c.ok for c in node_checks if c.name == "Host reachable"):
-            continue
-        if roles.get(target.name) == "control":
-            out += control_components(transport, target)
-        if target.name in (monitoring_hosts or set()):
-            out += monitoring_checks(transport, target)
+        if all(c.ok for c in node_checks if c.name == "Host reachable"):
+            if roles.get(target.name) == "control":
+                out += control_components(transport, target)
+            if target.name in (monitoring_hosts or set()):
+                out += monitoring_checks(transport, target)
+        if progress:
+            bad = [c for c in out[before:] if not c.ok]
+            made = len(out) - before
+            progress.line(f"{target.name}: {made} checks, " + (f"{len(bad)} failing: " + ", ".join(c.name + (f" ({c.detail})" if c.detail else "") for c in bad) if bad else "all passed"))
+            progress.step(step, "failed" if bad else "ok", "; ".join(f"{c.name}" for c in bad)[:200])
     return out
 
 

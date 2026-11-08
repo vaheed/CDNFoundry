@@ -15,6 +15,7 @@ from typing import Any, Callable, Protocol
 
 from . import manifest as mf
 from .common import FleetError, atomic_json, load_json, utc_now
+from .progress import Tracker, plan_steps
 from .ssh import SshError, Target
 from .checks import dns_port_conflicts
 from .validators import validate_node_config
@@ -143,7 +144,9 @@ class Engine:
         enroll: Callable[[str], tuple[bool, str]] | None = None,
         provision: Callable[[str], tuple[bool, str]] | None = None,
         roots: dict[str, str] | None = None,
+        progress: Tracker | None = None,
     ) -> None:
+        self.progress = progress
         self.services = services or {}
         self.enroll = enroll
         self.provision = provision
@@ -169,17 +172,31 @@ class Engine:
         state = self.journal.load(self.journal_key(plan))
         done: list[str] = list(state["done"])
         upgraded: list[str] = []
+        track = self.progress
+        if track:
+            track.plan(plan_steps(plan))
         for step in plan.steps:
             if step.id in done:
                 if step.kind == "gate":
                     upgraded.append(step.node)
+                if track:
+                    track.step(step.id, "skipped", "already done in an earlier run")
                 continue
+            if track and track.cancel_requested:
+                self.journal.save(state)
+                return Outcome(False, done, step.id, "Stopped by the operator before this step (run the action again to resume)")
+            if track:
+                track.step(step.id, "running")
             try:
                 ok, detail = self._run(step, manifest)
             except SshError as exc:  # transport fault: stop, keep the journal, the next run resumes here
                 state["log"].append({"at": utc_now(), "step": step.id, "ok": False, "detail": str(exc)})
                 self.journal.save(state)
+                if track:
+                    track.step(step.id, "failed", str(exc))
                 return Outcome(False, done, step.id, f"{exc} (run the action again to resume)")
+            if track:
+                track.step(step.id, "ok" if ok else "failed", detail)
             state["log"].append({"at": utc_now(), "step": step.id, "ok": ok, "detail": detail})
             log(f"{step.label()}: {'ok' if ok else 'FAILED'} {detail}".strip())
             if not ok:
