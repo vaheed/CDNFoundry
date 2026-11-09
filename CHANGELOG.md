@@ -5,6 +5,33 @@ All notable changes are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). The root `VERSION` file is the
 single source of truth; `make version-check` enforces it.
 
+## [2.0.5] - 2026-11-09
+
+Makes a fresh Fleet install complete by itself and fixes the zone transfer, the pair names, and the missing logs
+that kept a new fleet from answering DNS. See the [release notes](docs/operations/releases/v2.0.5.md).
+
+### Fixed
+
+- A PowerDNS node could never pull zones from the primary: it sat only on an internal network, so every transfer
+  failed with `Network is unreachable`. It now also joins the egress network.
+- A customer nameserver pair name typed with capital letters failed the PowerDNS read-back and rolled the whole
+  platform DNS identity back. Pair names are now lowercased.
+- Central logs stayed off after setup, so Loki and the log collectors were never deployed and Grafana showed no
+  logs. The monitoring presets now turn them on.
+- The Fleet gate checked ports 80 and 443 on loopback and hung for minutes on a PoP with no placed pool address.
+  It now checks the public address once the gateway listens, and prints the reason after each failed attempt.
+
+### Added
+
+- Fleet registers the private PowerDNS primary as a DNS cluster and stores the platform DNS identity after it
+  installs the control node. Neither replaces something already set.
+- A failed installation in Fleet web offers a Retry button that resumes at the first step not done.
+- The DNS identity review lists every customer nameserver pair.
+
+### Removed
+
+- The scheduled off-host restore drill workflow. `make dev-recovery-e2e` still runs it by hand.
+
 ## [2.0.4] - 2026-11-09
 
 Fixes a fleet that could not enrol its edges when the Fleet-generated edge identity CA had no
