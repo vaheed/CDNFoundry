@@ -390,6 +390,8 @@ func (g *gateway) accept(address string, listener net.Listener) {
 	}
 }
 
+const misdirectedResponse = "HTTP/1.1 421 Misdirected Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+
 func (g *gateway) handle(listener string, client net.Conn) error {
 	_ = client.SetDeadline(time.Now().Add(15 * time.Second))
 	_, port, _ := net.SplitHostPort(listener)
@@ -417,6 +419,11 @@ func (g *gateway) handle(listener string, client net.Conn) error {
 	target := table.routes[protocol+"|"+ip.String()+"|"+name]
 	if target == "" {
 		g.rejected.Add(1)
+		if protocol == "http" {
+			// Answer a plain-HTTP request for a host that is not routed here, so a health probe can tell a serving
+			// PoP from a dead one. The answer is a fixed 421; TLS clients still get a closed connection.
+			_, _ = client.Write([]byte(misdirectedResponse))
+		}
 		return errors.New("unknown gateway route")
 	}
 	if protocol == "https" && g.handshakes != nil {
