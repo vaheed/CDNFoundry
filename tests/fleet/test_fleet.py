@@ -1274,6 +1274,7 @@ def test_setup_command_generates_control_monitoring_fleet(source_repo: Path, tmp
     assert (output_dir / "control-1/compose.yml").exists()
     state = json.loads((state_dir / "fleet.json").read_text(encoding="utf-8"))
     assert state["features"]["monitoring"]["mode"] == "colocated"
+    assert state["features"]["logs"]["mode"] == "centralized" and state["features"]["logs"]["host"] == "control-1"
 
 
 def test_status_and_doctor_are_actionable(source_repo: Path, tmp_path: Path) -> None:

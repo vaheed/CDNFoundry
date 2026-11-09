@@ -493,6 +493,12 @@ def _apply_setup_features(store: FleetState, state: dict[str, Any], config: dict
 
     if features.get("logs"):
         state = store.configure_feature(state, "logs", features["logs"])
+    elif state["features"]["monitoring"]["mode"] != "disabled":
+        # Monitoring without central logs leaves Grafana's log view and the panel's live logs empty, so the presets turn them on
+        # together, with Loki on the same host as monitoring.
+        host = state["features"]["monitoring"].get("host") or next((n["name"] for n in state["nodes"].values() if n["role"] == "control"), None)
+        if host:
+            state = store.configure_feature(state, "logs", {"mode": "centralized", "host": host, "endpoint": None})
     if features.get("backups"):
         state = store.configure_feature(state, "backups", features["backups"])
     return state
