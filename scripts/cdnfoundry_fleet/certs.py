@@ -85,6 +85,8 @@ class PKI:
                     "basicConstraints=critical,CA:TRUE,pathlen:0",
                     "-addext",
                     "keyUsage=critical,keyCertSign,cRLSign",
+                    "-addext",
+                    "subjectKeyIdentifier=hash",
                 ]
             )
             os.chmod(tmp_key, 0o600)

@@ -36,6 +36,7 @@ issue_ca() {
         -key "$output_directory/$name.key" -subj "/CN=$common_name" \
         -addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
         -addext "keyUsage=critical,keyCertSign,cRLSign" \
+        -addext "subjectKeyIdentifier=hash" \
         -out "$output_directory/$name.crt"
 }
 
