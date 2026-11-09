@@ -154,7 +154,9 @@ healthy DNS cluster. Fix those, then activate again.
 `dns_lifecycle.deprovision_delay_days`. After that, the scheduler removes the
 zone in bounded steps and retires the domain.
 
-**Delete** starts retirement in the background. It does not remove the row at
+**Delete** is in the **Domain actions** menu on the domain page, and in the API as
+`DELETE /api/domains/{domain}`. It asks for confirmation and states the delay before
+the zone is removed. It starts retirement in the background. It does not remove the row at
 once. Each PoP must acknowledge its tombstone first, and the name then stays
 reserved for `domain_reclaim_cooldown_days` before anyone can reclaim it.
 
