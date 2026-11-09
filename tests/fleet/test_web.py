@@ -244,6 +244,17 @@ def test_check_job_lists_every_node_as_a_task_and_ticks_them(served) -> None:
     assert "<progress" in page and 'href="' + r.getheader("Location") + '/log.txt"' in page
 
 
+def test_a_failed_install_offers_a_retry_that_resumes_the_installation(served) -> None:
+    web, _ = served
+    from cdnfoundry_fleet.web import Job
+
+    deploy = Job("d1", "Deploy the fleet")
+    deploy.finish("failed", "Stopped at pop-1:gate")
+    view = web._job_view(deploy)
+    assert 'action="/deploy/continue"' in view and 'data-testid="job-retry-button"' in view and 'data-state="failed"' in view
+    assert 'data-testid="job-retry-button"' not in web._job_view(Job("c1", "Check the fleet"))
+
+
 def test_job_event_stream_replays_then_ends_with_done(served) -> None:
     web, port = served
     add_node(web, port)

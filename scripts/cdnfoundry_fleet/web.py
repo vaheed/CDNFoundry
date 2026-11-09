@@ -376,12 +376,17 @@ class FleetWeb:
         if running and total:
             cancel = (f'<form class="inline" method="post" action="/jobs/{esc(job.id)}/cancel">{self.csrf_field()}'
                       '<button data-testid="job-cancel-button">Stop after this step</button></form>')
+        # Shown only while the job is failed (see fleet.css), so a host fixed after a failure resumes at the first step not done.
+        retry = ""
+        if job.title.startswith(("Deploy", "Continue")):
+            retry = (f'<form class="inline retry" method="post" action="/deploy/continue">{self.csrf_field()}'
+                     '<button class="primary" data-testid="job-retry-button">Retry the installation</button></form>')
         result = f'<p class="job-result" role="status">{esc(job.result)}</p>' if job.result else ""
         return (
             f'<div class="job" data-job="{esc(job.id)}" data-state="{job.state}" data-after="{after}" data-title="{esc(job.title)}">'
             f'<div class="job-head"><span class="job-badge" data-testid="job-state">{badge}</span>'
             f'<span class="job-count" data-testid="job-count">{f"{done} of {total} steps" if total else ""}</span>'
-            f'<span class="job-time" data-since="{round(job.started)}" data-end="{round(job.finished) if job.finished else ""}">{snap["elapsed"]}s</span>{cancel}</div>'
+            f'<span class="job-time" data-since="{round(job.started)}" data-end="{round(job.finished) if job.finished else ""}">{snap["elapsed"]}s</span>{cancel}{retry}</div>'
             f'{meter}{result}'
             + (f'<div class="tasks-wrap" data-testid="job-tasks">{self._task_list(steps)}</div>' if total or running else "")
             + '<div class="log-tools"><label class="inline-field">Filter the log<input type="search" data-log-filter autocomplete="off"></label>'
