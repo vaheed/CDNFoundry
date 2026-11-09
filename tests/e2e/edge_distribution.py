@@ -768,14 +768,21 @@ def main() -> None:
         call("POST", f"/api/admin/domains/{domain_id}/move", {"pool_id": shared["id"]}, token)
         call("POST", f"/api/domains/{domain_id}/deploy", {}, token)
 
-        sequences: dict[str, int] = {}
-        baseline_revision: int | None = None
-        for edge in edges:
-            sequence, payload = latest_artifact(edge, domain_id)
-            assert payload["pools"] == ["shared-default"], payload
-            baseline_revision = int(payload["revision"])
-            sequences[edge["id"]] = sequence
-            acknowledge(edge, sequence)
+        # Acknowledge the artifact at the placement's current desired revision.
+        # The revision can still advance while the records above reconcile, and
+        # acknowledging an older artifact would leave the placement deploying.
+        sequences: dict[str, int] = {edge["id"]: 0 for edge in edges}
+        _, baseline_revisions = converge_placement_artifacts(
+            token,
+            domain_id,
+            edges,
+            sequences,
+            1,
+            "active",
+            {"shared-default"},
+            drain_scheduled=False,
+        )
+        baseline_revision: int | None = max(baseline_revisions.values())
         wait_isolation(token, domain_id, "active")
         wait_deployment(token, domain_id)
         assert wait_answers(f"www.{ZONE}", "CNAME", {f"pool-{shared['id']}.proxy.cdnf.test."}) == [f"pool-{shared['id']}.proxy.cdnf.test."]
