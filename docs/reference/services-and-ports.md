@@ -72,7 +72,7 @@ Alertmanager `9093`, PostgreSQL `5432`, Valkey `6379`, and OpenResty control
 | --- | --- |
 | `control` | Internal control plane |
 | `fpm` | Internal. Only `core` and the two Nginx containers join. PHP-FPM listens here alone |
-| `dns-private` | Internal. PowerDNS and its API |
+| `dns-private` | Internal. PowerDNS and its API. `pdns-auth` also joins `egress` so it can pull zones from the primary |
 | `telemetry` | Internal telemetry |
 | `docker-api` | Internal. Only the log collector and its read-only Docker API proxy |
 | `ingress` | Reverse-proxy ingress |

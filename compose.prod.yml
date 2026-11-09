@@ -453,8 +453,9 @@ services:
       - mmdb:/mmdb:ro
     depends_on:
       mmdb-updater: { condition: service_healthy }
-    # The agent reaches the local API on dns-private; DNSdist reaches the DNS port there too.
-    networks: [dns-private]
+    # The agent reaches the local API on dns-private; DNSdist reaches the DNS port there too. Egress lets it pull zones from the
+    # primary (dns-private is internal, so without it every transfer fails with "Network is unreachable"). It publishes no port.
+    networks: [dns-private, egress]
     restart: unless-stopped
     healthcheck:
       test: [CMD, pdns_control, rping]
