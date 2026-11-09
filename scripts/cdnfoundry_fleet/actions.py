@@ -324,6 +324,25 @@ class Engine:
         return stream(target, command, lambda line: self._log(f"{node}: {line}") if line.strip() else None, timeout=LONG_STEP_SECONDS,
                       on_quiet=lambda seconds: self._log(f"{node}: still working, no output for {seconds}s in this step"))
 
+    FAILING_CONTAINER_LOGS = (
+        "cd {remote} 2>/dev/null || exit 0; "
+        "for id in $(docker compose --env-file .env.prod --profile '*' ps -a --format '{{{{.Name}}}} {{{{.State}}}} {{{{.Health}}}} {{{{.ExitCode}}}}' 2>/dev/null "
+        "| awk '$2==\"restarting\" || $2==\"dead\" || $3==\"unhealthy\" || ($2==\"exited\" && $4!=\"0\") {{print $1}}' | head -4); do "
+        "echo \"--- $id ---\"; docker logs --tail 12 \"$id\" 2>&1 | cut -c1-400; done"
+    )
+
+    def _with_container_logs(self, node: str, target: Target, remote: str, detail: str) -> str:
+        """Append the last log lines of every failing container, so the failure shows its cause and not only its name."""
+        try:
+            r = self.t.run(target, self.FAILING_CONTAINER_LOGS.format(remote=remote), timeout=45)
+        except Exception as exc:  # diagnostics must never hide the original failure
+            return f"{detail}\n(could not read container logs: {exc})"
+        logs = (r.stdout or "").strip()[-2400:]
+        if not logs:
+            return detail
+        self._log(f"{node}: logs of failing containers:\n{logs}")
+        return f"{detail}\n{logs}"
+
     def _pull_images(self, node: str, target: Target, role: str, manifest: dict[str, Any]) -> tuple[bool, str]:
         """Pull and verify every image of the role, a few at a time, saying how far it is so the log never goes quiet."""
         names = list(manifest["roles"].get(role, {}).get("images", []))
@@ -403,7 +422,10 @@ class Engine:
             command = (f"set -e; if [ -d {remote}.next ]; then rm -rf {remote}.previous; if [ -d {remote} ]; then if [ -e {remote}/.cdnf-good ]; then mv {remote} {remote}.previous; else rm -rf {remote}; fi; fi; mv {remote}.next {remote}; fi; "
                        f"cd {remote} && ./start.sh")
             r = self._remote(step.node, target, command)
-            return r.ok, "" if r.ok else ((r.stderr or r.stdout).strip()[-600:] or f"start.sh exited with {r.code} and printed nothing")
+            if r.ok:
+                return True, ""
+            detail = (r.stderr or r.stdout).strip()[-600:] or f"start.sh exited with {r.code} and printed nothing"
+            return False, self._with_container_logs(step.node, target, remote, detail)
         if step.kind == "gate":
             ok, detail = self.gate(step.node)
             if ok:

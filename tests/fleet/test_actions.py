@@ -338,3 +338,33 @@ def test_a_failed_pull_cancels_the_waiting_pulls_without_raising(tmp_path: Path)
     new["images"] = {n: "sha256:" + "a" * 64 for n in new["roles"]["edge"]["images"]}
     out = engine(tmp_path, t).apply(plan, new)
     assert not out.ok and "pull denied" in out.detail
+
+
+def test_a_failed_start_reports_the_logs_of_the_failing_containers(tmp_path: Path) -> None:
+    class Crashing(FakeTransport):
+        def run(self, target, command, **kw):
+            if "docker logs" in command:
+                self.calls.append((target.name, command))
+                return R(0, "--- cdnfoundry-edge-agent-1 ---\nedge agent terminated: Unable to sign the edge identity certificate\n")
+            return super().run(target, command, **kw)
+
+    t = Crashing()
+    t.fail_activate = {"pop-1"}
+    new = manifest("2.0.1", D2)
+    out = engine(tmp_path, t).apply(a.plan_upgrade(NODES, manifest("2.0.0", D1), new), new)
+    assert out.failed == "pop-1:activate"
+    assert "boom" in out.detail and "Unable to sign the edge identity certificate" in out.detail
+
+
+def test_a_failed_start_still_reports_when_the_logs_cannot_be_read(tmp_path: Path) -> None:
+    class Unreadable(FakeTransport):
+        def run(self, target, command, **kw):
+            if "docker logs" in command:
+                raise SshError("connection dropped")
+            return super().run(target, command, **kw)
+
+    t = Unreadable()
+    t.fail_activate = {"pop-1"}
+    new = manifest("2.0.1", D2)
+    out = engine(tmp_path, t).apply(a.plan_upgrade(NODES, manifest("2.0.0", D1), new), new)
+    assert out.failed == "pop-1:activate" and "boom" in out.detail and "could not read container logs" in out.detail
