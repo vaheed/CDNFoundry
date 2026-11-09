@@ -272,7 +272,7 @@ The default health thresholds in that file are three failures before removal, tw
 
 ## MMDB (GeoIP database) behavior
 
-The MMDB files hold the GeoIP data used for country and ASN answers. The `mmdb-updater` service runs in the `dns` and `edge` profiles and fills the `mmdb` volume. By default it downloads the `dbip-jsdelivr` database once a day. A bundle contains only the Compose files, volumes, and variables that its role uses, so a control or monitoring host has no MMDB settings.
+The MMDB files hold the GeoIP data used for country and ASN answers. The `mmdb-updater` service runs in the `dns` and `edge` profiles and fills the `mmdb` volume. By default it downloads the `dbip-npm` database once a day: it reads the SHA-512 that the npm registry publishes for the package, refuses the file if it does not match, and only then activates it. PowerDNS reloads the new file within a minute. Until a verified database is installed, the node serves an empty placeholder and every Geo-DNS record answers its default value (the file `FALLBACK_IN_USE` marks that state in the `mmdb` volume). The autonomous-system database has no verified default source, so events carry ASN 0 until you set `MMDB_ASN_DOWNLOAD_URL` with a checksum. A bundle contains only the Compose files, volumes, and variables that its role uses, so a control or monitoring host has no MMDB settings.
 
 To check a rendered bundle on the control machine:
 
