@@ -128,10 +128,10 @@ component degraded until a later check succeeds. The `ControlBackupStale` alert
 fires when the newest verified backup is older than `operations.backup_stale_hours`
 or the last integrity check failed.
 
-The weekly GitHub workflow `restore-drill.yml` backs up to a disposable
-S3-compatible store and restores into a clean PostgreSQL, so a broken backup path
-fails there before an incident exposes it. It does not replace a restore rehearsal on
-your own infrastructure with your own repository.
+`make dev-recovery-e2e` backs up to a disposable S3-compatible store and restores
+into a clean PostgreSQL on a development stack. It is not part of the CI pipeline and
+does not replace a restore rehearsal on your own infrastructure with your own
+repository.
 
 ### S3-compatible repository setup
 
