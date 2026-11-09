@@ -363,8 +363,20 @@ Run these on every host, from `/opt/cdnfoundry`:
 ```bash
 docker compose --env-file .env.prod -f compose.prod.yml config --quiet
 docker compose --env-file .env.prod -f compose.prod.yml config --profiles
-docker compose --env-file .env.prod -f compose.prod.yml pull
 ```
+
+Every service belongs to a profile, so `pull` needs the profiles that host runs. A `pull`
+without `--profile` pulls nothing and prints nothing. On the control host:
+
+```bash
+docker compose --env-file .env.prod -f compose.prod.yml \
+  --profile control --profile tools pull
+```
+
+On a DNS and edge host, use `--profile dns --profile edge --profile tools`. Add
+`--profile telemetry` or `--profile logs` on a host that runs them. Docker Hub
+images such as PostgreSQL and Valkey come from the same command. If the host
+cannot reach Docker Hub, the pull fails and names the image it could not fetch.
 
 The checked-in template always validates. CI runs this block:
 
@@ -659,7 +671,8 @@ deletes the volumes.
 Control host commands for steps 3 and 4:
 
 ```bash
-docker compose --env-file .env.prod -f compose.prod.yml pull
+docker compose --env-file .env.prod -f compose.prod.yml \
+  --profile control --profile tools pull
 docker compose --env-file .env.prod -f compose.prod.yml \
   --profile tools run --rm migrate
 docker compose --env-file .env.prod -f compose.prod.yml \

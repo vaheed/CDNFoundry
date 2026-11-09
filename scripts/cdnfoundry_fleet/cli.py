@@ -177,7 +177,7 @@ def parser() -> argparse.ArgumentParser:
     set_secret.add_argument("--node", help="Node name")
     set_secret.add_argument("--from-file", required=True, help="Read the secret value from this file")
 
-    remove = sub.add_parser("remove-node", parents=[command_common], help="Remove a host from the plan")
+    remove = sub.add_parser("remove-node", parents=[command_common], help="Remove a host from the plan; it does not stop or clean the host")
     remove.add_argument("--node", required=True, help="Node name")
 
     sub.add_parser("list-nodes", parents=[command_common], help="List the hosts in the plan")

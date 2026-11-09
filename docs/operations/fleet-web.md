@@ -67,7 +67,7 @@ Only one action runs at a time. If you start a second one, the page says
 | [Inventory](#inventory) | See the processor, memory, disks, kernel, Docker, and containers of every host, and what needs attention |
 | [Security](#security) | See known vulnerabilities in the running release |
 | [Upgrade](#upgrade) | Trust a release key, review a plan, and upgrade |
-| [Config](#config) | Deploy changed configuration |
+| [Config](#config) | Set monitoring, central logs, and backups, and deploy changed configuration |
 | [Rollback](#rollback) | Return to the previous release |
 | [Backups](#backups) | Back up now, back up the vault, and restore |
 | [HA](#ha) | Manage the standby control node |
@@ -284,9 +284,19 @@ For the same steps in the command line, see [Upgrade](../deployment/upgrade.md).
 
 ## Config
 
-Use this when you changed fleet settings and want hosts to match. Fleet renders the
-bundles it would send now, compares them with what each node runs, validates the
-new files on the node, and swaps them in, one node at a time.
+Use this when you changed fleet settings and want hosts to match.
+
+**Features** sets the same three things as `configure-monitoring`, `configure-logs`, and `configure-backups`:
+
+- **Monitoring**: off, on the control node, or on its own host. Its own host needs a host with the monitoring role that can reach the control database over a private network. See [Set up a dedicated monitoring host](../deployment/production-fleet.md#set-up-a-dedicated-monitoring-host).
+- **Central logs**: off, or on, with the log host and the endpoint.
+- **Backups**: off, the control plane, or every stateful host, with the restic repository and region.
+
+Saving a feature changes the plan only. Nothing reaches a host until you deploy.
+
+Fleet renders the bundles it would send now, compares each one with the bundle that node last ran
+successfully, validates the new files on the node, and swaps them in, one node at a time. A change you
+saved earlier, even one saved by another command, is still found here until it is deployed.
 
 Choose **Show changes and deploy**.
 
@@ -320,13 +330,13 @@ The Overview counter shows "disabled" until you configure backups. See
 
 With one control node, the page is a road in three steps. Deploy the control node first.
 
-1. **Point the addresses.** Enter the standby's name, public IPv4, and SSH port. Fleet
+1. **Point the addresses.** Enter the standby's name, public IPv4, SSH user, and SSH port. The user can be root or any user with passwordless sudo. Fleet
    shows the records to set and checks them with 1.1.1.1: `control.<operator domain>`
    and `edge-control.<operator domain>` stay at the **active** node with a TTL of 60
    seconds (so moving them after a failure is quick), and `<standby name>.<operator domain>`
    points at the standby.
 2. **Prepare the standby host.** A fixed public IPv4, a private network or VPN between
-   the two control nodes, TCP 5432, 5433, and 6379 open between their private addresses only,
+   the two control nodes (a local network or a WireGuard tunnel, see [Set up control-plane HA step by step](set-up-control-plane-ha.md)), TCP 5432, 5433, and 6379 open between their private addresses only,
    and the Fleet SSH key on the host.
 3. **Deploy the standby.** Type `ADD STANDBY`. Fleet installs the prerequisites, copies the
    secrets and the control certificate, sets up replication, and starts the standby. The step

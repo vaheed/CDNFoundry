@@ -348,7 +348,7 @@ No options beyond the shared ones.
 
 ## remove-node
 
-Remove a host from the plan.
+Remove a host from the plan; it does not stop or clean the host.
 
 | Option | Meaning |
 | --- | --- |

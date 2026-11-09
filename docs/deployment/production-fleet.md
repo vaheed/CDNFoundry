@@ -292,6 +292,39 @@ Expected: matches only for `dns`, `edge`, and `dns-edge` nodes. Then check on th
 
 Fleet regenerates the Prometheus target files when you add, change, disable, or remove a node. Render the monitoring host again to apply them.
 
+### Set up a dedicated monitoring host
+
+A `monitoring`-role host always runs the whole telemetry stack (Prometheus, Grafana, Loki, ClickHouse, Vector). Grafana reads the control database, so the monitoring host must reach PostgreSQL over a **private** network. A control node installed by Fleet keeps its database on a private Docker network, so you must make it reachable first. Use a private LAN or a WireGuard tunnel as in [Set up control-plane HA step by step](../operations/set-up-control-plane-ha.md) (step 2). Never publish PostgreSQL on a public address.
+
+1. Connect the control and monitoring hosts privately. Below, the control host has `10.77.0.1` and the monitoring host `10.77.0.2`.
+2. Make PostgreSQL on the control host reachable on its private address only. One way is a small forwarder container that publishes the port on that address only:
+
+   ```sh
+   docker run -d --name cdnf-pg-forward --restart unless-stopped \
+     -p 10.77.0.1:5432:5432 alpine/socat TCP-LISTEN:5432,fork,reuseaddr TCP:control-db:5432
+   docker network connect cdnfoundry_control cdnf-pg-forward
+   ```
+
+   Create the container first, connect it to the network, then start it. The control network is internal, so a container that is only on it cannot publish a port. Check `docker port cdnf-pg-forward`: it must print `5432/tcp -> 10.77.0.1:5432`. Only the tunnel or LAN can reach that address. If you can, run PostgreSQL with TLS and leave `DB_SSLMODE` at its default instead.
+3. Add the host and tell Fleet where PostgreSQL is:
+
+   ```sh
+   cdnfoundry-fleet add-node --node monitoring-1 --role monitoring --region eu --location fra \
+     --public-ipv4 203.0.113.40 --hostname monitoring-1.example.com
+   cdnfoundry-fleet node-ssh --node monitoring-1 --host 203.0.113.40
+   cdnfoundry-fleet update-node --node monitoring-1 \
+     --extra-env GRAFANA_POSTGRES_HOST=10.77.0.1 \
+     --extra-env GRAFANA_POSTGRES_SSLMODE=disable --extra-env DB_SSLMODE=disable
+   cdnfoundry-fleet configure-monitoring --mode dedicated --host monitoring-1
+   cdnfoundry-fleet render
+   cdnfoundry-fleet bootstrap --node monitoring-1
+   ```
+
+   Leave out the two `SSLMODE` settings when your PostgreSQL endpoint has a certificate that Fleet's `verify-full` default accepts. `render` fails with `Dedicated monitoring requires an externally reachable control PostgreSQL endpoint` while `GRAFANA_POSTGRES_HOST` is not set, and with `has the monitoring role, but monitoring is colocated` while the mode is still `colocated`.
+4. Check it: `cdnfoundry-fleet watch` shows the host `online`, and Grafana answers on the monitoring name.
+
+The Grafana ClickHouse plugin is downloaded from `grafana.com` the first time the stack starts. If your network blocks that host, download the pinned version once from a machine that can, unpack it into the `grafana-plugins` volume, and the start step finds it present. To remove the host, run `configure-monitoring --mode colocated`, then `remove-node`, then clean the host as described in [Removing a node](../operations/fleet-engine.md#removing-a-node).
+
 ## Backup modes
 
 - `disabled`: no backup settings or credentials.

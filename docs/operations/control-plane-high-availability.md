@@ -27,6 +27,8 @@ network fault would leave two nodes accepting writes, and desired state would fo
 Because DNS and HTTP keep serving while control is down, a few minutes without control
 costs no traffic. One safe command is simpler than automatic failover on two nodes.
 
+For a hands-on walkthrough with a local network or a WireGuard tunnel, see [Set up control-plane HA step by step](set-up-control-plane-ha.md).
+
 ## What you get
 
 | When the active node is lost | Result |

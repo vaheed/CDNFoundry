@@ -119,6 +119,10 @@ cdnfoundry-fleet update-node --node pop-1 --bind-ipv4 203.0.113.30 --bind-ipv6 2
 
 Leave out `--bind-ipv6` if the node has no IPv6 address.
 
+## Removing a node
+
+`remove-node` takes the host out of the plan only. It does not stop containers, delete data, or change the host. Fleet then stops managing it, and the next `render` leaves it out of every allowlist and monitoring target. To retire a host, remove it from the plan, then stop its services and delete `/opt/cdnfoundry` and its Docker volumes yourself. For a standby control node, use `control remove-standby`, which also removes it from the edges' address list. To retire a monitoring host, first switch monitoring back with `configure-monitoring --mode colocated` (or `disabled`), then remove the node.
+
 ## Adding a standby control node
 
 Run `cdnfoundry-fleet control add-standby HOST`. It needs only the host address. Fleet then names the node, pins
