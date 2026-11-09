@@ -272,7 +272,7 @@ class FleetEngine:
                 services[name] = set((yaml.safe_load(compose.read_text(encoding="utf-8")) or {}).get("services", {}))
         built = actions.Engine(
             self.transport, targets, state["nodes"], self.output_dir, journal,
-            gate=lambda n: self._gate_and_record(n, lambda: gate_with_retry(lambda: node_gate(self.transport, targets[n], state["nodes"][n], state))),
+            gate=lambda n: self._gate_and_record(n, lambda: gate_with_retry(lambda: node_gate(self.transport, targets[n], state["nodes"][n], state), report=self._report_gate)),
             switchover=self._switchover,
             mixed_versions_ok=mixed_versions_ok, services=services, provision=self._provision, progress=self.progress,
         )
@@ -286,6 +286,10 @@ class FleetEngine:
         """The digest of the bundle each host last ran successfully. Config changes are measured against it, not against the last render."""
         path = self._deployed_file()
         return {k: str(v) for k, v in load_json(path).items()} if path.exists() else {}
+
+    def _report_gate(self, text: str) -> None:
+        if self.progress:
+            self.progress.line(text)
 
     def _gate_and_record(self, name: str, gate: Callable[[], tuple[bool, str]]) -> tuple[bool, str]:
         ok, detail = gate()

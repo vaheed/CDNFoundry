@@ -121,7 +121,7 @@ def test_the_gate_probes_the_bind_addresses_and_loopback_only_for_a_wildcard_bin
     node = {"role": "dns-edge", "name": "p", "bind_ipv4": "93.184.216.12", "bind_ipv6": "2001:db8::12", "public_ipv6": "2001:db8::12"}
     assert node_gate(t, TARGET, node, state)[0]
     joined = "\n".join(t.ran)
-    assert "dig @93.184.216.12" in joined.replace("  ", " ") and "dig @2001:db8::12" in joined.replace("  ", " ") and "/dev/tcp/93.184.216.12/443" in joined and "/dev/tcp/2001:db8::12/80" in joined
+    assert "dig @93.184.216.12" in joined.replace("  ", " ") and "dig @2001:db8::12" in joined.replace("  ", " ") and "/dev/tcp/" not in joined
     assert "127.0.0.1" not in joined
     t2 = T()
     node_gate(t2, TARGET, {"role": "dns", "name": "d", "bind_ipv4": "0.0.0.0", "bind_ipv6": None}, state)
@@ -154,16 +154,42 @@ def test_our_own_docker_proxy_on_port_53_is_not_a_conflict() -> None:
     assert dns_port_conflicts(Ss(), TARGET, node) == (True, "")
 
 
-def test_a_public_port_that_refuses_connections_fails_the_gate() -> None:
+class _Listening(T):
+    def __init__(self, listening: bool, refused: str | None = None) -> None:
+        super().__init__()
+        self.listening, self.refused = listening, refused
+
+    def run(self, target, command, **kw):
+        if command.startswith("ss -H -ltn"):
+            self.ran.append(command)
+            return R(0, "", "LISTEN 0 4096 93.184.216.12:80 0.0.0.0:*\n" if self.listening else "")
+        if "/dev/tcp/" in command:
+            self.ran.append(command)
+            return R(1) if self.refused and self.refused in command else R(0)
+        return super().run(target, command, **kw)
+
+
+EDGE = {"role": "edge", "name": "e", "bind_ipv4": "0.0.0.0", "bind_ipv6": "", "public_ipv4": "93.184.216.12"}
+GATE_STATE = {"global": {"operator_domain": "ops.example.test", "platform_domain": "cdn.example.test"}}
+
+
+def test_an_edge_without_placed_listeners_passes_the_gate() -> None:
     from cdnfoundry_fleet.checks import node_gate
 
-    class Closed(T):
-        def run(self, target, command, **kw):
-            return R(1) if "/dev/tcp/" in command and command.endswith("/443'") else super().run(target, command, **kw)
+    t = _Listening(listening=False)
+    assert node_gate(t, TARGET, EDGE, GATE_STATE)[0]
+    assert not any("/dev/tcp/" in c for c in t.ran)
 
-    state = {"global": {"operator_domain": "ops.example.test", "platform_domain": "cdn.example.test"}}
-    ok, detail = node_gate(Closed(), TARGET, {"role": "edge", "name": "e", "bind_ipv4": "93.184.216.12", "bind_ipv6": ""}, state)
-    assert not ok and detail == "https not accepting connections on 93.184.216.12:443"
+
+def test_a_listening_gateway_must_accept_connections_on_the_public_address_not_loopback() -> None:
+    from cdnfoundry_fleet.checks import node_gate
+
+    t = _Listening(listening=True)
+    assert node_gate(t, TARGET, EDGE, GATE_STATE)[0]
+    probes = [c for c in t.ran if "/dev/tcp/" in c]
+    assert probes and all("/dev/tcp/93.184.216.12/" in c for c in probes) and not any("127.0.0.1" in c for c in probes)
+    ok, detail = node_gate(_Listening(listening=True, refused="/80'"), TARGET, EDGE, GATE_STATE)
+    assert not ok and "public address 93.184.216.12:80" in detail
 
 
 def test_a_stopped_long_running_service_fails_the_container_check_but_a_finished_one_shot_does_not() -> None:

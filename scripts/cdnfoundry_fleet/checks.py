@@ -75,7 +75,7 @@ def _containers(transport: Any, target: Target) -> tuple[bool, str]:
 
 
 def node_gate(transport: Any, target: Target, node: dict[str, Any], state: dict[str, Any]) -> tuple[bool, str]:
-    """After-upgrade gate: containers healthy, DNS over UDP and TCP, HTTP and HTTPS, control health."""
+    """After-upgrade gate: containers healthy, DNS over UDP and TCP, control health."""
     ok, detail = _containers(transport, target)
     if not ok:
         return False, f"containers not healthy: {detail}"
@@ -95,18 +95,35 @@ def node_gate(transport: Any, target: Target, node: dict[str, Any], state: dict[
                 r = transport.run(target, f"dig @{addr} {proto} +time=3 +tries=1 +noall +comments SOA {zone}".replace("  ", " "))
                 if not r.ok or "status:" not in r.stdout:
                     return False, f"DNS did not answer {proto.lstrip('+') or 'udp'} on {addr}"
-        if role in {"edge", "dns-edge"}:
-            # The gateway routes by Host and SNI and drops connections that carry neither, so an HTTP request here would be refused.
-            # A completed TCP handshake on each public port proves the listener is up.
-            for scheme, port in (("http", 80), ("https", 443)):
-                r = transport.run(target, f"timeout 6 bash -c 'exec 3<>/dev/tcp/{addr}/{port}'")
-                if not r.ok:
-                    return False, f"{scheme} not accepting connections on {addr}:{port}"
+    if role in {"edge", "dns-edge"}:
+        ok, detail = _public_listeners(transport, target, node)
+        if not ok:
+            return False, detail
     if role == "control":
         host = f"control.{state['global']['operator_domain']}"
         r = transport.run(target, f"curl -fsk -m 8 --resolve {host}:443:127.0.0.1 https://{host}/api/health")
         if not r.ok:
             return False, "control /api/health did not answer"
+    return True, ""
+
+
+def _public_listeners(transport: Any, target: Target, node: dict[str, Any]) -> tuple[bool, str]:
+    """Ports 80 and 443 must accept connections on the node's public addresses, never on loopback.
+
+    The gateway opens listeners only for the pool addresses placed on this PoP, so a PoP with nothing placed has no listener
+    on the port at all. That is not a fault; once any listener exists, the public address must answer too.
+    """
+    addresses = [a for a in (node.get("public_ipv4"), node.get("public_ipv6")) if a]
+    if not addresses:
+        addresses = [a for a in (node.get("bind_ipv4"), node.get("bind_ipv6")) if a and a not in {"0.0.0.0", "::"}]
+    for scheme, port in (("http", 80), ("https", 443)):
+        listening = transport.run(target, f"ss -H -ltn 'sport = :{port}'")
+        if not listening.ok or not listening.stdout.strip():
+            continue
+        for addr in addresses:
+            r = transport.run(target, f"timeout 6 bash -c 'exec 3<>/dev/tcp/{addr}/{port}'")
+            if not r.ok:
+                return False, f"{scheme} is listening on this host but not accepting connections on the public address {addr}:{port}"
     return True, ""
 
 
@@ -131,7 +148,7 @@ def dns_port_conflicts(transport: Any, target: Target, node: dict[str, Any]) -> 
     return True, ""
 
 
-def gate_with_retry(check: Any, *, attempts: int = 18, delay: float = 10.0, sleep: Any = None) -> tuple[bool, str]:
+def gate_with_retry(check: Any, *, attempts: int = 18, delay: float = 10.0, sleep: Any = None, report: Any = None) -> tuple[bool, str]:
     """Services take a while to answer after a start; the gate passes as soon as one attempt does and fails after a bounded wait."""
     import time
 
@@ -141,6 +158,8 @@ def gate_with_retry(check: Any, *, attempts: int = 18, delay: float = 10.0, slee
         ok, detail = check()
         if ok:
             return True, ""
+        if report:
+            report(f"gate attempt {attempt + 1}/{attempts} failed: {detail}")
         if attempt < attempts - 1:
             sleep(delay)
     return False, detail
