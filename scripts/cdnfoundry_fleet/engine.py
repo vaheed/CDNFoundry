@@ -344,7 +344,25 @@ class FleetEngine:
         outcome = engine.apply(plan, release, log=log or self.say)
         if outcome.ok:
             self.mark_installed(name)
+            if state["nodes"][name]["role"] == "control":
+                ok, detail = self._register_dns_primary(name)
+                (log or self.say)(f"{name}: " + ("PowerDNS primary registered in the panel" if ok else f"could not register the PowerDNS primary ({detail}); add it under DNS clusters"))
         return outcome
+
+    def _register_dns_primary(self, name: str) -> tuple[bool, str]:
+        """Register the private PowerDNS primary as a DNS cluster. The control plane tests it and enables it once healthy."""
+        state = self.state()
+        node = state["nodes"][name]
+        endpoint = node.get("bind_ipv4") if node.get("bind_ipv4") not in (None, "", "0.0.0.0") else node["public_ipv4"]
+        platform = state["global"]["platform_domain"]
+        names = "".join(f" --nameserver={shlex.quote(f'{label}.{platform}')}" for label in ("ns1", "ns2"))
+        key = "$(sed -n 's/^PDNS_API_KEY=//p' .env.prod)"
+        r = self.transport.run(
+            self.targets(state)[name],
+            f"cd {actions.REMOTE_ROOT} && docker compose --env-file .env.prod exec -T -e PDNS_API_KEY=\"{key}\" core php artisan cdnf:dns:register-primary"
+            f" --transfer-endpoint={shlex.quote(f'{endpoint}:5300')}{names}",
+        )
+        return r.ok, "" if r.ok else (r.stderr or r.stdout).strip()[-200:]
 
     def _enroll(self, name: str) -> tuple[bool, str]:
         """Register the PoP in the control plane, put its cells in the shared pool, and give the node its identity."""

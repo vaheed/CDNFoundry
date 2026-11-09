@@ -27,6 +27,8 @@ flowchart LR
 
 You register the one primary once. The panel and the API both call it a DNS cluster.
 
+When Fleet installs the control node, it registers the primary for you: the cluster `pdns-primary` is created with the nameservers `ns1` and `ns2` of the platform domain, tested in the background, and enabled once healthy. Use the steps below only to add it by hand, for example after an install from an earlier Fleet version.
+
 <DocTabs :labels="['Admin panel', 'API']">
 <template #tab-1>
 

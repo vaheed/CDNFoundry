@@ -167,3 +167,29 @@ def test_bundle_exchange_falls_back_to_renames_without_renameat2(tmp_path: Path,
     (active / "old").write_text("old"); (candidate / "new").write_text("new")
     exchange_directories(candidate, active)
     assert (active / "new").exists() and (candidate / "old").exists()
+
+
+def test_a_control_install_registers_the_private_powerdns_primary_in_the_panel(tmp_path: Path) -> None:
+    from cdnfoundry_fleet.engine import FleetEngine
+    from cdnfoundry_fleet.ssh import Target, save_target
+    from cdnfoundry_fleet.state import FleetState
+
+    class Recorder:
+        def __init__(self) -> None:
+            self.ran: list[str] = []
+
+        def run(self, target, command, **_):
+            self.ran.append(command)
+            return type("R", (), {"ok": True, "stdout": "", "stderr": ""})()
+
+    store = FleetState(tmp_path / "state")
+    state = store.init({"operator_domain": "ops.example.test", "platform_domain": "cdn.example.test", "release": "v0"})
+    store.add_node(state, {"name": "control-1", "role": "control", "public_ipv4": "93.184.216.10"})
+    save_target(tmp_path / "state", Target("control-1", "93.184.216.10"))
+    transport = Recorder()
+    engine = FleetEngine(tmp_path / "state", ROOT, tmp_path / "out", transport=transport, say=lambda _m: None)
+    assert engine._register_dns_primary("control-1") == (True, "")
+    command = transport.ran[-1]
+    assert "cdnf:dns:register-primary" in command and "--transfer-endpoint=93.184.216.10:5300" in command
+    platform = engine.state()["global"]["platform_domain"]
+    assert f"--nameserver=ns1.{platform}" in command and f"--nameserver=ns2.{platform}" in command and "PDNS_API_KEY=" in command
