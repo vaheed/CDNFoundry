@@ -828,7 +828,9 @@ def main() -> None:
         _, moving_operation = call("GET", f"/api/operations/{move_operation}", token=token)
         assert moving_operation["data"]["status"] == "running", moving_operation
         wait_deployment(token, domain_id)
-        assert wait_answers(f"www.{ZONE}", "CNAME", {f"pool-{quarantine['id']}.proxy.cdnf.test."}) == [f"pool-{quarantine['id']}.proxy.cdnf.test."]
+        # Every PowerDNS node must pick up the moved zone before the answer flips,
+        # so allow for a zone transfer round after the reconcile succeeds.
+        assert wait_answers(f"www.{ZONE}", "CNAME", {f"pool-{quarantine['id']}.proxy.cdnf.test."}, timeout=120) == [f"pool-{quarantine['id']}.proxy.cdnf.test."]
         quarantine_global = f"pool-{quarantine['id']}.global.all.proxy.cdnf.test"
         wait_answers(quarantine_global, "A", {"9.9.9.101", "9.9.9.102"})
         wait_answers(quarantine_global, "AAAA", {"2620:fe::101", "2620:fe::102"})
