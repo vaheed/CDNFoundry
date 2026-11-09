@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Enums\DomainLifecycleState;
 use App\Jobs\AllocateNameserverPair;
+use App\Jobs\CheckDomainNameservers;
 use App\Jobs\DeprovisionDnsZone;
 use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\ReconcileDnsZone;
@@ -155,6 +156,10 @@ class DomainNameserverVerification
                     'lifecycle_state' => DomainLifecycleState::Active,
                     'disabled_at' => null,
                     'revision' => $locked->revision + 1,
+                    'delegation_lost_at' => null,
+                    'ns_mismatch_count' => 0,
+                    'ns_check_attempts' => 0,
+                    'ns_check_next_at' => now()->addHours(app(PlatformSettings::class)->integer('domain_monitoring', 'active_check_hours')),
                 ];
             }
             $locked->forceFill($changes)->save();
@@ -184,6 +189,10 @@ class DomainNameserverVerification
                 } else {
                     $reconciliation->update(['input' => ['domain_id' => $locked->id, 'revision' => $locked->revision]]);
                 }
+            }
+
+            if ($activated) {
+                CheckDomainNameservers::notifyUsers($locked, 'Nameservers verified', "{$locked->name} uses its assigned nameservers and is active.", good: true);
             }
 
             if ($verification !== null) {

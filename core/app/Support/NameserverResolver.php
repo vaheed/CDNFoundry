@@ -2,12 +2,27 @@
 
 namespace App\Support;
 
+use Illuminate\Support\Facades\Cache;
 use RuntimeException;
 use Symfony\Component\Process\Process;
 
 class NameserverResolver
 {
     private float $deadline;
+
+    private bool $cacheParents = false;
+
+    /**
+     * Scheduled checks reuse the DNSSEC-validated parent authority names and addresses for a few
+     * hours, so thousands of domains under one TLD do not re-resolve it each time. Manual
+     * verification never uses this.
+     */
+    public function withParentCache(): static
+    {
+        $this->cacheParents = true;
+
+        return $this;
+    }
 
     /**
      * Validate through BIND's root trust anchor, then query the actual parent
@@ -51,7 +66,7 @@ class NameserverResolver
         while (count($labels) > 1) {
             array_shift($labels);
             $parent = implode('.', $labels);
-            $parents = $this->validatedRecords($parent, 'NS', allowNegative: true);
+            $parents = $this->parentAuthorityRecords($parent, 'NS');
             if ($parents !== []) {
                 break;
             }
@@ -61,7 +76,7 @@ class NameserverResolver
         }
         $observed = null;
         foreach ($parents as $parentServer) {
-            $addresses = array_merge($this->validatedRecords($parentServer, 'A', allowNegative: true), $this->validatedRecords($parentServer, 'AAAA', allowNegative: true));
+            $addresses = array_merge($this->parentAuthorityRecords($parentServer, 'A'), $this->parentAuthorityRecords($parentServer, 'AAAA'));
             if ($addresses === []) {
                 throw new RuntimeException('A parent authority address could not be validated.');
             }
@@ -89,6 +104,16 @@ class NameserverResolver
         }
 
         return $observed;
+    }
+
+    /** @return list<string> */
+    private function parentAuthorityRecords(string $name, string $type): array
+    {
+        if (! $this->cacheParents) {
+            return $this->validatedRecords($name, $type, allowNegative: true);
+        }
+
+        return Cache::remember('ns-parent:'.$type.':'.$name, now()->addHours(6), fn (): array => $this->validatedRecords($name, $type, allowNegative: true));
     }
 
     /** @return list<string> */
