@@ -506,7 +506,7 @@ services:
   clickhouse:
     logging: *bounded-logging
     <<: *hardened
-    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, KILL, SETGID, SETUID]
     mem_limit: 4g
     image: clickhouse/clickhouse-server:26.8.7.19-alpine@sha256:2bece7c646f08865eadc2000a60427e2964adf2b46908a6d476dfa7cc5408720
     profiles: [telemetry]

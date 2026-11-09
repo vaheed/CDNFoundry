@@ -10,7 +10,8 @@ import json
 import sys
 
 # Capabilities a service may add back. Anything else needs a reason in this list.
-ALLOWED_CAP_ADD = {"CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID", "NET_BIND_SERVICE"}
+# KILL is for the ClickHouse image entrypoint, which stops its temporary init server after the first start.
+ALLOWED_CAP_ADD = {"CHOWN", "DAC_OVERRIDE", "FOWNER", "KILL", "SETGID", "SETUID", "NET_BIND_SERVICE"}
 SOCKET = "docker.sock"
 
 
