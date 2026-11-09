@@ -830,7 +830,20 @@ def main() -> None:
         wait_deployment(token, domain_id)
         # Every PowerDNS node must pick up the moved zone before the answer flips,
         # so allow for a zone transfer round after the reconcile succeeds.
-        assert wait_answers(f"www.{ZONE}", "CNAME", {f"pool-{quarantine['id']}.proxy.cdnf.test."}, timeout=120) == [f"pool-{quarantine['id']}.proxy.cdnf.test."]
+        try:
+            moved_answers = wait_answers(f"www.{ZONE}", "CNAME", {f"pool-{quarantine['id']}.proxy.cdnf.test."}, timeout=120)
+        except AssertionError:
+            # Print the state that decides which pool the zone renders, so a failure explains itself.
+            _, state_placement = call("GET", f"/api/admin/domains/{domain_id}/isolation", token=token)
+            _, state_deployment = call("GET", f"/api/domains/{domain_id}/dns/deployment", token=token)
+            _, state_pools = call("GET", "/api/admin/edge-pools", token=token)
+            pool_flags = [
+                {key: pool.get(key) for key in ("id", "name", "enabled", "withdrawn", "kind", "minimum_ready_cells")}
+                for pool in state_pools["data"]
+            ]
+            print(f"moved_cname_diagnostics placement={state_placement['data']} deployment={state_deployment['data']} pools={pool_flags}", flush=True)
+            raise
+        assert moved_answers == [f"pool-{quarantine['id']}.proxy.cdnf.test."], moved_answers
         quarantine_global = f"pool-{quarantine['id']}.global.all.proxy.cdnf.test"
         wait_answers(quarantine_global, "A", {"9.9.9.101", "9.9.9.102"})
         wait_answers(quarantine_global, "AAAA", {"2620:fe::101", "2620:fe::102"})
