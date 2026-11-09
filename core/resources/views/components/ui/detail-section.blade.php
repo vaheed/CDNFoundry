@@ -26,7 +26,7 @@
                         <span class="cdn-dl-empty">{{ $row['empty'] ?? 'None' }}</span>
                     @elseif ($empty)
                     @elseif ($row['kind'] === 'badge')
-                        <x-ui.status-pill :tone="$tone((string) $value)" appearance="dot">{{ ucfirst(str_replace('_', ' ', (string) $value)) }}</x-ui.status-pill>
+                        <x-ui.status-pill :tone="$row['tone'] ?? $tone((string) $value)" appearance="dot">{{ ucfirst(str_replace('_', ' ', (string) $value)) }}</x-ui.status-pill>
                     @elseif ($row['kind'] === 'time')
                         <time class="cdn-mono" datetime="{{ $value }}" title="{{ \Carbon\CarbonImmutable::parse($value)->diffForHumans() }}">{{ app(\App\Support\PlatformSettings::class)->formatTimestamp($value, 'Y-m-d H:i:s T') }}</time>
                     @elseif ($row['kind'] === 'chips')

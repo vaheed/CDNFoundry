@@ -10,6 +10,7 @@ use App\Filament\Domain\Resources\Domains\RelationManagers\SecurityRulesRelation
 use App\Filament\Domain\Resources\Domains\RelationManagers\UsersRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\WafExclusionsRelationManager;
 use App\Models\Domain;
+use App\Support\PlatformSettings;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
@@ -55,6 +56,15 @@ class DomainResource extends Resource
                 ->state(fn (Domain $record): string => $record->nameservers_verified_at ? 'Verified' : 'Pending')
                 ->badge()
                 ->color(fn (string $state): string => $state === 'Verified' ? 'success' : 'warning'),
+            TextColumn::make('registration_expires_at')->label('Expires')->sortable()
+                ->state(fn (Domain $record): string => $record->registrationExpiry()['label'] ?? 'Unknown')
+                ->badge()
+                ->color(fn (Domain $record): string => match ($record->registrationExpiry()['tone'] ?? 'neutral') {
+                    'danger' => 'danger',
+                    'warning' => 'warning',
+                    default => 'gray',
+                })
+                ->tooltip(fn (Domain $record): ?string => $record->registration_expires_at === null ? null : app(PlatformSettings::class)->formatTimestamp($record->registration_expires_at, 'Y-m-d')),
             TextColumn::make('dns_records_count')->label('Records')->counts('dnsRecords')->alignEnd()->fontFamily(FontFamily::Mono),
             TextColumn::make('revision')->sortable()->alignEnd()->fontFamily(FontFamily::Mono)->prefix('#'),
             TextColumn::make('updated_at')->label('Last change')->since()->sortable()->fontFamily(FontFamily::Mono)

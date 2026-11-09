@@ -2,6 +2,7 @@
 
 namespace App\Filament\Domain\Resources\Domains\Widgets;
 
+use App\Enums\DomainLifecycleState;
 use App\Models\Domain;
 use Filament\Widgets\Widget;
 use Illuminate\Database\Eloquent\Model;
@@ -22,6 +23,13 @@ class DomainNeedsAttention extends Widget
         $problems = [];
         if ($domain->nameservers_verified_at === null) {
             $problems[] = ['text' => 'Nameservers are not verified', 'fix' => 'Set the assigned nameservers at your registrar, then verify.'];
+        }
+        if ($domain->delegation_lost_at !== null && $domain->lifecycle_state === DomainLifecycleState::PendingVerification) {
+            $problems[] = ['text' => 'Nameservers changed, so the domain is unverified', 'fix' => 'Set '.implode(' and ', $domain->assignedNameservers()).' at your registrar. It verifies on its own at the next check.'];
+        }
+        $expiry = $domain->registrationExpiry();
+        if ($expiry !== null && $expiry['tone'] !== 'neutral') {
+            $problems[] = ['text' => 'Registration '.($expiry['days'] < 0 ? 'has expired' : 'expires soon').': '.strtolower($expiry['label']), 'fix' => 'Renew the domain at your registrar.'];
         }
         $failedDeployments = $domain->dnsDeployments()->whereNotNull('last_error')->count();
         if ($failedDeployments > 0 && auth()->user()?->isAdmin()) {
