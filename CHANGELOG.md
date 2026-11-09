@@ -5,6 +5,24 @@ All notable changes are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). The root `VERSION` file is the
 single source of truth; `make version-check` enforces it.
 
+## [2.0.4] - 2026-11-09
+
+Fixes a fleet that could not enrol its edges when the Fleet-generated edge identity CA had no
+subject key identifier, and makes a failed host start show its cause. See the
+[release notes](docs/operations/releases/v2.0.4.md).
+
+### Fixed
+
+- Edge enrolment failed with `Unable to sign the edge identity certificate` when the edge identity CA
+  certificate had no Subject Key Identifier. Core now signs with such a CA, and Fleet adds the identifier
+  to every CA it generates.
+- A signing failure now says why (unreadable CA key, key and certificate that do not match, or the
+  OpenSSL error) instead of a bare message.
+
+### Added
+
+- When a host fails to start, the Fleet action shows the last log lines of each failing container.
+
 ## [2.0.3] - 2026-11-09
 
 Fleet fixes found by running every CLI command and web page against real hosts, a Fleet web

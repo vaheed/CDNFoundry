@@ -36,7 +36,7 @@ import (
 	"time"
 )
 
-var version = "2.0.3"
+var version = "2.0.4"
 
 const (
 	generationMismatchGrace       = 15 * time.Second
