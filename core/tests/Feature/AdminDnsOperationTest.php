@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\DomainLifecycleState;
+use App\Jobs\ApplyPlatformDnsSettings;
 use App\Jobs\ReconcileAllDnsZones;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\TestDnsCluster;
@@ -10,6 +11,7 @@ use App\Models\DnsCluster;
 use App\Models\DnsDeployment;
 use App\Models\Domain;
 use App\Models\Operation;
+use App\Models\PlatformDnsSetting;
 use App\Models\User;
 use App\Support\PowerDnsClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -57,6 +59,28 @@ class AdminDnsOperationTest extends TestCase
         $this->assertTrue($cluster->refresh()->enabled);
         Queue::assertPushed(ReconcileAllDnsZones::class);
         putenv('PDNS_API_KEY');
+    }
+
+    public function test_fleet_stores_the_first_platform_dns_identity_and_never_replaces_an_existing_one(): void
+    {
+        Queue::fake();
+        $identity = json_encode([
+            'platform_domain' => 'cdn.example.net', 'proxy_hostname' => 'proxy.cdn.example.net',
+            'nameservers' => [['hostname' => 'ns1.cdn.example.net', 'ipv4' => '93.184.216.20'], ['hostname' => 'ns2.cdn.example.net', 'ipv4' => '93.184.216.21']],
+            'soa_primary' => 'ns1.cdn.example.net', 'soa_mailbox' => 'hostmaster.cdn.example.net',
+            'soa_refresh' => 3600, 'soa_retry' => 600, 'soa_expire' => 604800, 'soa_minimum_ttl' => 300, 'default_ttl' => 300,
+        ]);
+        $this->artisan('cdnf:dns:identity:seed', ['values' => $identity])->assertSuccessful();
+        $stored = PlatformDnsSetting::query()->findOrFail(1);
+        $this->assertSame('cdn.example.net', $stored->platform_domain);
+        $this->assertSame(1, $stored->revision);
+        $this->assertCount(1, $stored->customer_nameserver_pairs);
+        Queue::assertPushed(ApplyPlatformDnsSettings::class, 1);
+
+        $changed = str_replace('cdn.example.net', 'other.example.net', $identity);
+        $this->artisan('cdnf:dns:identity:seed', ['values' => $changed])->assertSuccessful();
+        $this->assertSame('cdn.example.net', PlatformDnsSetting::query()->findOrFail(1)->platform_domain);
+        $this->artisan('cdnf:dns:identity:seed', ['values' => '{"platform_domain":"x"}'])->assertFailed();
     }
 
     public function test_new_cluster_is_disabled_tested_asynchronously_and_cannot_enable_before_success(): void
