@@ -121,6 +121,13 @@ class ViewDomain extends ViewRecord
         return 1;
     }
 
+    private function domain(): Domain
+    {
+        assert($this->record instanceof Domain);
+
+        return $this->record;
+    }
+
     protected function getHeaderActions(): array
     {
         $actions = [
@@ -506,16 +513,16 @@ class ViewDomain extends ViewRecord
                 }),
             Action::make('deleteDomain')->label('Delete domain')->icon('phosphor-trash')->color('danger')->requiresConfirmation()
                 ->extraAttributes(['data-testid' => 'domain-delete-action'])
-                ->modalHeading(fn (): string => "Delete {$this->record->name}?")
+                ->modalHeading(fn (): string => "Delete {$this->domain()->name}?")
                 ->modalDescription(function (): string {
                     $days = app(PlatformSettings::class)->integer('dns_lifecycle', 'deprovision_delay_days');
 
                     return "Traffic and DNS for this domain stop being served, and its zone, records, and certificates are removed after {$days} days.";
                 })
                 ->modalSubmitActionLabel('Delete domain')
-                ->visible(fn (): bool => $this->record->lifecycle_state !== DomainLifecycleState::Deprovisioning && Gate::allows('delete', $this->record))
+                ->visible(fn (): bool => $this->domain()->lifecycle_state !== DomainLifecycleState::Deprovisioning && Gate::allows('delete', $this->domain()))
                 ->action(function (): void {
-                    $response = app(DomainController::class)->destroy(request(), $this->record);
+                    $response = app(DomainController::class)->destroy(request(), $this->domain());
                     $operation = $response->getData(true)['data'];
                     $this->record->refresh();
                     Notification::make()->info()->title('Domain deletion queued')
