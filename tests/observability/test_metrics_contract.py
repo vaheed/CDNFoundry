@@ -108,6 +108,31 @@ class AlertContractTest(unittest.TestCase):
             self.assertLessEqual({f"slo:{slo}:bad_ratio_rate{window}" for window in ("5m", "30m", "1h", "6h")}, recorded)
 
 
+class VectorMetricNamesContractTest(unittest.TestCase):
+    """The names Vector exports are the names the recording rules and dashboards read."""
+
+    VECTOR = yaml.safe_load((ROOT / "docker/vector/vector.yaml").read_text())
+
+    def test_the_exporter_sets_no_empty_namespace(self) -> None:
+        # Vector 0.58 turns an empty default namespace into a leading underscore (_cdnf_...), which no rule matches.
+        sink = self.VECTOR["sinks"]["prometheus"]
+        self.assertNotIn("default_namespace", sink)
+
+    def test_every_cdnf_series_the_recording_rules_read_is_exported_by_vector(self) -> None:
+        exported = {
+            metric["name"]
+            for transform in self.VECTOR["transforms"].values() if transform.get("type") == "log_to_metric"
+            for metric in transform["metrics"]
+        }
+        rules = (PROMETHEUS / "dashboard-rules.yml").read_text()
+        read = set(re.findall(r"\b(cdnf_[a-z_]+?)(?:_bucket)?\b(?=\[|\{|\))", rules))
+        self.assertTrue(read, "the recording rules read no cdnf_ series")
+        for name in sorted(read):
+            self.assertIn(name, exported, f"{name} is read by a recording rule but no log_to_metric produces it")
+        for name in exported:
+            self.assertTrue(name.startswith("cdnf_") and not name.startswith("_"), name)
+
+
 class RoutingContractTest(unittest.TestCase):
     def amtool(self, *arguments: str) -> str:
         completed = subprocess.run(

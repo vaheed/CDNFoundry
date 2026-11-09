@@ -359,7 +359,8 @@ sinks:
     address: 0.0.0.0:9598
     # Counters of a quiet PoP stay exported; they are bounded by the label sets above.
     flush_period_secs: 3600
-    default_namespace: ""
+    # No default_namespace: Vector 0.58 turns an empty one into a leading underscore (_cdnf_...), and the
+    # recording rules and dashboards read the cdnf_ names.
     buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
 
 tests:
