@@ -81,6 +81,11 @@ class Renderer:
         base = load_yaml(self.repo_root / "compose.prod.yml")
         monitoring_enabled = state["features"]["monitoring"]["mode"] != "disabled"
         monitoring_host = self._is_monitoring_host(state, node)
+        if node["role"] == "monitoring" and state["features"]["monitoring"]["mode"] == "colocated":
+            raise RenderError(
+                f"{node['name']} has the monitoring role, but monitoring is colocated on the control node. "
+                f"Run configure-monitoring --mode dedicated --host {node['name']}, or remove the node"
+            )
         watcher = ha.is_watcher(state, node)
         logs_enabled = state["features"]["logs"]["mode"] == "centralized"
         filtered = select_services(

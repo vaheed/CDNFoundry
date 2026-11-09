@@ -1224,6 +1224,16 @@ def test_dedicated_monitoring_fails_closed_without_external_control_database(
         )
 
 
+def test_a_monitoring_role_node_is_refused_while_monitoring_is_colocated(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
+    add(store, node("control-1", "control", "192.0.2.147"))
+    add(store, node("monitor-1", "monitoring", "192.0.2.148"))
+    assert store.load()["features"]["monitoring"]["mode"] != "dedicated"
+    with pytest.raises(RenderError, match="configure-monitoring --mode dedicated --host monitor-1"):
+        Renderer(source_repo, store, tmp_path / "bundles")._render_node(
+            {**store.load(), "features": {**store.load()["features"], "monitoring": {"mode": "colocated"}}}, store.load()["nodes"]["monitor-1"]
+        )
+
+
 def test_edge_bundle_has_control_url_and_server_ca(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
     add(store, node("control-1", "control", "192.0.2.141"))
     add(store, node("edge-1", "edge", "192.0.2.142"))

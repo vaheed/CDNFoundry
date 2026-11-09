@@ -14,7 +14,7 @@ from typing import Any, Callable
 
 from . import actions, manifest as mf, provision as tmpfs_material
 from .checks import Check, gate_with_retry, node_gate, run_checks
-from .common import FleetError, ValidationError, atomic_json, utc_now
+from .common import FleetError, ValidationError, atomic_json, load_json, utc_now
 from .control_cli import Runner, bundle_digest
 from .inventory import collect as collect_inventory, redact
 from .progress import Tracker, plan_steps
@@ -188,6 +188,15 @@ class FleetEngine:
         state["global"]["alert_webhook_url"] = validate_alert_webhook(url.strip())
         self.store._write(state)
 
+    def features(self) -> dict[str, dict[str, Any]]:
+        """The monitoring, central log, and backup settings of the plan."""
+        return copy.deepcopy(self.state()["features"])
+
+    def configure_feature(self, feature: str, config: dict[str, Any]) -> None:
+        """Set monitoring, central logs, or backups. The next config run carries the change to the hosts."""
+        self.store.configure_feature(self.state(), feature, config)
+        self.events.append({"kind": f"configure-{feature}", "mode": config.get("mode")})
+
     def deploy_blockers(self, pending: list[str]) -> list[str]:
         problems = []
         if self.release_manifest() is None:
@@ -263,11 +272,28 @@ class FleetEngine:
                 services[name] = set((yaml.safe_load(compose.read_text(encoding="utf-8")) or {}).get("services", {}))
         built = actions.Engine(
             self.transport, targets, state["nodes"], self.output_dir, journal,
-            gate=lambda n: gate_with_retry(lambda: node_gate(self.transport, targets[n], state["nodes"][n], state)), switchover=self._switchover,
+            gate=lambda n: self._gate_and_record(n, lambda: gate_with_retry(lambda: node_gate(self.transport, targets[n], state["nodes"][n], state))),
+            switchover=self._switchover,
             mixed_versions_ok=mixed_versions_ok, services=services, provision=self._provision, progress=self.progress,
         )
         built.prepared = self._prepared
         return built
+
+    def _deployed_file(self) -> Path:
+        return self.work / "deploy" / "deployed.json"
+
+    def deployed_digests(self) -> dict[str, str]:
+        """The digest of the bundle each host last ran successfully. Config changes are measured against it, not against the last render."""
+        path = self._deployed_file()
+        return {k: str(v) for k, v in load_json(path).items()} if path.exists() else {}
+
+    def _gate_and_record(self, name: str, gate: Callable[[], tuple[bool, str]]) -> tuple[bool, str]:
+        ok, detail = gate()
+        if ok:
+            recorded = self.deployed_digests()
+            recorded[name] = bundle_digest(self.output_dir / name)
+            atomic_json(self._deployed_file(), recorded, 0o600)
+        return ok, detail
 
     def _provision(self, name: str) -> tuple[bool, str]:
         """Issue the node's in-memory key material from the vault's PKI and write it to the host's tmpfs."""
@@ -346,7 +372,8 @@ class FleetEngine:
     def config_plan(self) -> tuple[actions.Plan, dict[str, tuple[str, str]]]:
         state = self.state()
         digests = self._render(state)
-        changed = {n for n, (old, new) in digests.items() if old != new}
+        deployed = self.deployed_digests()
+        changed = {n for n, (old, new) in digests.items() if deployed.get(n, old) != new}
         ha_standby = (state.get("ha") or {}).get("standby")
         return actions.plan_config_change(state["nodes"], changed, state["global"]["release"], ha_standby=ha_standby), digests
 
@@ -731,7 +758,11 @@ class StandbySetup:
         (stage / "ingress.crt").write_text(cert_text, encoding="utf-8")
         (stage / "ingress.key").write_text(key_text, encoding="utf-8")
         (stage / "ingress.key").chmod(0o600)
-        runner = VaultRunner(e.transport, e.targets(e.state()))
+        manifest = e.release_manifest()
+        if manifest:  # a node that may be promoted must run the same digest-pinned images as the active node
+            options["extra_env"] = {**manifest["env_images"], **(options.get("extra_env") or {})}
+        reachable = {**e.targets(e.state()), name: target}  # the standby is not in the plan yet, but Fleet must already reach it
+        runner = VaultRunner(e.transport, reachable)
         control = Control(e.store, e.repo_root, e.output_dir, runner, say=e.say)
         try:
             result = control.add_standby(host, name=name, replication_address=standby_address, active_replication_address=active_address,
