@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Filament\Admin\Pages\SystemDnsIdentity;
+use App\Http\Requests\Admin\PlatformDnsSettingsRequest;
 use App\Jobs\ApplyPlatformDnsSettings;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\DnsCluster;
@@ -144,6 +145,26 @@ class SystemIdentityApiTest extends TestCase
         (new ReconcilePlatformDnsIdentity)->handle(app(PowerDnsClient::class));
         $this->assertSame(5, $deployment->refresh()->deployed_revision);
         $this->assertSame($serial, PlatformDnsSetting::query()->find(1)->soa_serial);
+    }
+
+    public function test_customer_pair_hostnames_are_lowercased_so_powerdns_read_back_matches(): void
+    {
+        $payload = [
+            'platform_domain' => 'Cdn.Example.Net', 'proxy_hostname' => 'proxy.cdn.example.net',
+            'nameservers' => [['hostname' => 'NS1.cdn.example.net', 'ipv4' => '93.184.216.20'], ['hostname' => 'ns2.cdn.example.net', 'ipv4' => '93.184.216.21']],
+            'customer_nameserver_pairs' => [[
+                ['hostname' => 'Ines.ns.cdn.example.net.', 'ipv4' => '93.184.216.20', 'ipv6' => ''],
+                ['hostname' => 'ORKI.ns.cdn.example.net', 'ipv4' => '93.184.216.21'],
+            ]],
+            'soa_primary' => 'ns1.cdn.example.net', 'soa_mailbox' => 'hostmaster.cdn.example.net',
+            'soa_refresh' => 3600, 'soa_retry' => 600, 'soa_expire' => 1209600, 'soa_minimum_ttl' => 300, 'default_ttl' => 300,
+        ];
+
+        $valid = PlatformDnsSettingsRequest::validateInput($payload);
+
+        $this->assertSame('ines.ns.cdn.example.net', $valid['customer_nameserver_pairs'][0][0]['hostname']);
+        $this->assertSame('orki.ns.cdn.example.net', $valid['customer_nameserver_pairs'][0][1]['hostname']);
+        $this->assertNull($valid['customer_nameserver_pairs'][0][0]['ipv6']);
     }
 
     public function test_the_platform_zone_serial_changes_exactly_when_the_content_changes(): void

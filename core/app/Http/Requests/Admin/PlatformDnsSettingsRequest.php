@@ -186,7 +186,7 @@ class PlatformDnsSettingsRequest extends FormRequest
                 }
                 $input['customer_nameserver_pairs'][$pairIndex][$index]['ipv6'] = filled($nameserver['ipv6'] ?? null) ? $nameserver['ipv6'] : null;
             }
-            $input['customer_nameserver_pairs'][$pairIndex] = array_values((array) $pair);
+            $input['customer_nameserver_pairs'][$pairIndex] = array_values((array) $input['customer_nameserver_pairs'][$pairIndex]);
         }
 
         return $input;
