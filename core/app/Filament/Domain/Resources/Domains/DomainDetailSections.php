@@ -2,6 +2,7 @@
 
 namespace App\Filament\Domain\Resources\Domains;
 
+use App\Enums\DomainLifecycleState;
 use App\Http\Controllers\CacheController;
 use App\Models\Domain;
 use App\Models\EdgeRevision;
@@ -38,6 +39,7 @@ class DomainDetailSections
     private static function delegation(Domain $domain): array
     {
         $verification = $domain->nameservers_verified_by !== null ? null : self::latestNameserverVerification($domain);
+        $expiry = $domain->registrationExpiry();
 
         return ['title' => 'Delegation', 'rows' => [
             self::row('Label', $domain->display_name && $domain->display_name !== $domain->name ? $domain->display_name : null, 'text'),
@@ -47,6 +49,10 @@ class DomainDetailSections
             self::row('Claim expires', $domain->nameservers_verified_at === null ? $domain->claim_expires_at : null, 'time'),
             self::row('Last check', $domain->nameservers_verified_by !== null ? 'force_verified' : $verification?->status, 'badge'),
             self::row('Check error', $domain->nameservers_verified_by !== null ? null : $verification?->error, 'text'),
+            self::row('Checked', $domain->ns_checked_at, 'time'),
+            self::row('Next check', $domain->ns_check_next_at !== null && in_array($domain->lifecycle_state, [DomainLifecycleState::PendingVerification, DomainLifecycleState::Active], true) ? $domain->ns_check_next_at : null, 'time'),
+            self::row('Seen at registrar', $domain->ns_check_result === 'mismatch' ? $domain->ns_observed : null, 'list'),
+            self::row('Registration expires', $expiry['label'] ?? null, 'badge', empty: 'Unknown', help: $domain->registration_expires_at === null ? null : app(PlatformSettings::class)->formatTimestamp($domain->registration_expires_at, 'Y-m-d'), tone: $expiry === null ? null : ($expiry['tone'] === 'neutral' ? 'neutral' : $expiry['tone'])),
         ]];
     }
 
@@ -156,13 +162,13 @@ class DomainDetailSections
         ]];
     }
 
-    private static function row(string $label, mixed $value, string $kind, bool $copy = false, ?string $empty = null, ?int $collapse = null, ?string $help = null, ?string $badge = null): array
+    private static function row(string $label, mixed $value, string $kind, bool $copy = false, ?string $empty = null, ?int $collapse = null, ?string $help = null, ?string $badge = null, ?string $tone = null): array
     {
         if ($value instanceof \DateTimeInterface) {
             $value = $value->format(DATE_ATOM);
         }
 
-        return ['label' => $label, 'value' => $value, 'kind' => $kind, 'copy' => $copy, 'empty' => $empty, 'collapse' => $collapse, 'help' => $help, 'badge' => $badge];
+        return ['label' => $label, 'value' => $value, 'kind' => $kind, 'copy' => $copy, 'empty' => $empty, 'collapse' => $collapse, 'help' => $help, 'badge' => $badge, 'tone' => $tone];
     }
 
     private static function latestNameserverVerification(Domain $domain): ?Operation

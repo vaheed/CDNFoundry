@@ -110,7 +110,7 @@ def source_repo(tmp_path: Path) -> Path:
             "mmdb-updater": {
                 "image": "mmdb:${CDNF_RELEASE:?required}",
                 "profiles": ["dns", "edge"],
-                "environment": {"MMDB_PROVIDER": "${MMDB_PROVIDER:-dbip-jsdelivr}"},
+                "environment": {"MMDB_PROVIDER": "${MMDB_PROVIDER:-dbip-npm}"},
                 "volumes": ["mmdb:/mmdb"],
             },
             "pdns-primary": {

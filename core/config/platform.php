@@ -48,6 +48,42 @@ return [
                 ],
             ],
         ],
+        'domain_monitoring' => [
+            'label' => 'Domain monitoring',
+            'description' => 'Scheduled nameserver re-verification and registration expiry checks. Both run in small bounded batches.',
+            'fields' => [
+                'nameserver_enforcement' => [
+                    'type' => 'boolean', 'label' => 'Un-verify domains whose nameservers changed', 'default' => true,
+                    'description' => 'When off, changes are only recorded in the audit log and the domain stays active.',
+                    'rules' => ['required', 'boolean'],
+                ],
+                'active_check_hours' => [
+                    'type' => 'integer', 'label' => 'Active domain check interval (hours)', 'default' => 12,
+                    'description' => 'How often each active domain nameserver delegation is re-checked.',
+                    'rules' => ['required', 'integer', 'between:1,24'],
+                ],
+                'mismatch_confirmations' => [
+                    'type' => 'integer', 'label' => 'Confirmed mismatches before un-verifying', 'default' => 3,
+                    'description' => 'Consecutive checks that must show a different delegation. A lookup failure never counts.',
+                    'rules' => ['required', 'integer', 'between:1,10'],
+                ],
+                'confirmation_spacing_minutes' => [
+                    'type' => 'integer', 'label' => 'Spacing between confirmations (minutes)', 'default' => 60,
+                    'description' => 'Time between the checks that confirm a changed delegation.',
+                    'rules' => ['required', 'integer', 'between:5,720'],
+                ],
+                'registration_check_days' => [
+                    'type' => 'integer', 'label' => 'Registration expiry check interval (days)', 'default' => 7,
+                    'description' => 'How often each domain registration expiry is looked up. Domains close to expiry are checked daily.',
+                    'rules' => ['required', 'integer', 'between:1,30'],
+                ],
+                'registration_warning_days' => [
+                    'type' => 'integer', 'label' => 'Registration expiry warning (days)', 'default' => 30,
+                    'description' => 'Panels highlight a registration that expires within this many days, and users are reminded.',
+                    'rules' => ['required', 'integer', 'between:1,90'],
+                ],
+            ],
+        ],
         'dns_lifecycle' => [
             'label' => 'DNS lifecycle',
             'description' => 'Retention windows for disabled domains and released domain names.',

@@ -358,7 +358,7 @@ class Renderer:
             "EDGE_GATEWAY_STATUS_URL": "http://host-gateway:9105/metrics",
             "EDGE_GATEWAY_ADDRESS_MAP": "{}",
             "EDGE_GATEWAY_REQUIRE_ADDRESS_MAP": "false",
-            "MMDB_PROVIDER": "dbip-jsdelivr",
+            "MMDB_PROVIDER": "dbip-npm",
             "MMDB_TARGET_FILE": "GeoLite2-City.mmdb",
             "MMDB_DOWNLOAD_INTERVAL_SECONDS": "86400",
             "MMDB_DOWNLOAD_RETRIES": "5",

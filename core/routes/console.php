@@ -19,6 +19,8 @@ Schedule::command('cdnf:dns:deprovision-due')->everyMinute()->withoutOverlapping
 Schedule::command('cdnf:analytics:publish-zones')->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:dns:repair-drift')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('cdnf:domains:expire-claims')->everyMinute()->withoutOverlapping();
+Schedule::command('cdnf:domains:dispatch-nameserver-checks')->everyMinute()->withoutOverlapping();
+Schedule::command('cdnf:domains:dispatch-registration-checks')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('cdnf:domains:finalize-deprovisioning')->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:edge:complete-placement-drains')->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:edge:promote-placements')->everyMinute()->withoutOverlapping();

@@ -5,6 +5,31 @@ All notable changes are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). The root `VERSION` file is the
 single source of truth; `make version-check` enforces it.
 
+## [2.0.6] - 2026-11-10
+
+Makes Geo-DNS and the Grafana dashboards work on a fresh fleet, and adds automatic nameserver checks, registration
+expiry, and a delete action for domains. See the [release notes](docs/operations/releases/v2.0.6.md).
+
+### Fixed
+
+- Geo-DNS always answered the default: production required a verified GeoIP database but Fleet configured no
+  checksum, so nodes kept an empty placeholder. The default provider `dbip-npm` verifies the registry's SHA-512.
+- Vector exported the `cdnf` metrics as `_cdnf_...`, so the recording rules and most DNS and edge dashboard panels
+  were empty. The exporter no longer sets an empty namespace.
+- The PoP logs panel failed for All PoPs because its LogQL selector matched only empty values.
+- The edge gateway closed an unrouted plain-HTTP connection without an answer, so synthetic probes always failed. It
+  now answers `421`.
+- The blackbox DNS probe (`probe.cdnfoundry.invalid`) was counted as customer traffic, inflating DNS query and
+  REFUSED figures by about half. Vector now drops it from DNS telemetry.
+- Solid danger buttons failed contrast in light mode.
+
+### Added
+
+- Delete domain in the domain page menu.
+- Scheduled nameserver checks for pending and active domains, with un-verify after three confirmed changes.
+- Registration expiry in both panels and the API, with a warning window and reminders.
+- A Domain monitoring settings group.
+
 ## [2.0.5] - 2026-11-09
 
 Makes a fresh Fleet install complete by itself and fixes the zone transfer, the pair names, and the missing logs

@@ -144,7 +144,7 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `PROMETHEUS_URL` | optional control | Default `http://prometheus:9090` |
 | `VECTOR_METRICS_URL` | optional control | Vector metrics probe URL when overridden |
 | `MMDB_STALE_HOURS` | optional control | Health threshold; default `48` |
-| `MMDB_PROVIDER` | updater | `dbip-jsdelivr` (default), `dbip-official`, `ip66`, or `generic`. `generic` needs `MMDB_DOWNLOAD_URL` |
+| `MMDB_PROVIDER` | updater | `dbip-npm` (default, verified against the registry's SHA-512), `dbip-jsdelivr`, `dbip-official`, `ip66`, or `generic`. Production accepts a download only when it is verified: `dbip-npm` verifies itself, and every other provider needs `MMDB_EXPECTED_SHA256` or `MMDB_CHECKSUM_URL`. `generic` needs `MMDB_DOWNLOAD_URL`. The autonomous-system database has no verified default source: set `MMDB_ASN_DOWNLOAD_URL` and a checksum for it, or events carry ASN 0 |
 | `MMDB_TARGET_FILE` | updater | Default `GeoLite2-City.mmdb` |
 | `MMDB_DOWNLOAD_INTERVAL_SECONDS` | updater | Default `86400`, clamped to at least 300 |
 | `MMDB_DOWNLOAD_RETRIES` | updater | Default `5` |

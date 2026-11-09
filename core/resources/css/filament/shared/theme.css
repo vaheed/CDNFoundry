@@ -54,6 +54,9 @@
     --cdn-danger: oklch(63.7% 0.237 25.331);
     --cdn-danger-text: oklch(50.5% 0.213 27.518);
     --cdn-danger-tint: oklch(93.6% 0.032 17.7 / 0.42);
+    /* Solid destructive buttons carry white text, so the light fill is dark enough for 4.5:1. */
+    --cdn-danger-fill: oklch(50.5% 0.213 27.518);
+    --cdn-danger-fill-hover: oklch(44.4% 0.177 26.899);
     --cdn-info: oklch(68.5% 0.169 237.323);
     --cdn-info-text: oklch(42.4% 0.199 265.638);
     --cdn-info-tint: oklch(93.2% 0.032 255.6 / 0.45);
@@ -124,6 +127,8 @@
     --cdn-danger: oklch(57.7% 0.245 27.325);
     --cdn-danger-text: oklch(70.4% 0.191 22.216);
     --cdn-danger-tint: oklch(42.9% 0.176 28.7 / 0.17);
+    --cdn-danger-fill: oklch(57.7% 0.245 27.325);
+    --cdn-danger-fill-hover: oklch(50.5% 0.213 27.518);
     --cdn-info: oklch(68.5% 0.169 237.323);
     --cdn-info-text: oklch(70.7% 0.165 254.624);
     --cdn-info-tint: oklch(38% 0.145 265.5 / 0.22);
@@ -464,13 +469,13 @@ body,
 }
 
 .fi-btn.fi-color-danger {
-    background-color: var(--cdn-danger);
+    background-color: var(--cdn-danger-fill);
     color: var(--cdn-on-fill);
-    box-shadow: 0 0 0 1px var(--cdn-danger), var(--cdn-shadow-xs);
+    box-shadow: 0 0 0 1px var(--cdn-danger-fill), var(--cdn-shadow-xs);
 }
 
 .fi-btn.fi-color-danger:hover {
-    background-color: var(--cdn-danger-text);
+    background-color: var(--cdn-danger-fill-hover);
 }
 
 .fi-btn:disabled,

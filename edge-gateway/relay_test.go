@@ -242,3 +242,44 @@ func waitFor(t *testing.T, condition func() bool, state func() string) {
 	}
 	t.Fatal("condition not reached in time: " + state())
 }
+
+func TestGatewayAnswersAnUnroutedPlainHTTPHostWith421ButClosesAnUnroutedTLSName(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	g := &gateway{}
+	g.table.Store(&routingTable{routes: map[string]string{}})
+	go g.accept("127.0.0.1:80", listener)
+
+	connection, err := net.DialTimeout("tcp", listener.Addr().String(), 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.Close()
+	_ = connection.SetDeadline(time.Now().Add(2 * time.Second))
+	if _, err := connection.Write([]byte("GET / HTTP/1.1\r\nHost: unrouted.test\r\n\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	response, _ := io.ReadAll(connection)
+	if string(response) != misdirectedResponse {
+		t.Fatalf("an unrouted plain-HTTP host must get the fixed 421 answer, got %q", response)
+	}
+	waitFor(t, func() bool { return g.rejected.Load() == 1 }, func() string { return fmt.Sprintf("rejected=%d", g.rejected.Load()) })
+
+	tlsListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tlsListener.Close()
+	go g.accept("127.0.0.1:443", tlsListener)
+	secure, err := net.DialTimeout("tcp", tlsListener.Addr().String(), 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer secure.Close()
+	_ = secure.SetDeadline(time.Now().Add(500 * time.Millisecond))
+	_ = tls.Client(secure, &tls.Config{ServerName: "unrouted.test", MinVersion: tls.VersionTLS12}).Handshake()
+	waitFor(t, func() bool { return g.rejected.Load() == 2 }, func() string { return fmt.Sprintf("rejected=%d", g.rejected.Load()) })
+}

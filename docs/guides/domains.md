@@ -121,6 +121,22 @@ CDNFoundry already hosts is not published, so it cannot hide the parent's record
 - The scheduler retires at most 500 expired claims a minute.
 - One verification attempt has a 45-second DNS budget and a 60-second timeout.
 
+### Automatic checks
+
+You do not have to keep clicking **Verify nameservers**. Fleet checks a pending domain
+by itself, at 1, 2, 5, 10, 15, and 30 minutes after the last attempt, then hourly for the
+first day, then every six hours until the claim expires. When the nameservers match,
+the domain verifies and activates, and you get a notification.
+
+An active domain is checked again every 12 hours. If the parent zone shows different
+nameservers on three checks in a row, an hour apart, the domain becomes **Pending
+verification** with a "nameservers changed" notice. Its zone and edge settings stay in
+place, and it is never removed for this. Set the assigned nameservers again and it
+verifies and activates on its own. A lookup failure never counts as a change.
+
+The domain page shows when it was last checked, when the next check is due, and the
+nameservers that were seen.
+
 ## 3. Activate
 
 <DocTabs :labels="['Panel', 'API']">
@@ -147,6 +163,14 @@ the SOA serials: `dig @<DNS host> example.com SOA`.
 
 **If it fails:** activation needs verified nameservers and at least one enabled,
 healthy DNS cluster. Fix those, then activate again.
+
+## Registration expiry
+
+Both panels show when the domain registration expires, looked up from the registry (RDAP)
+about once a week. The date is orange inside the warning window (30 days by default) and
+red when 7 days or fewer remain or the registration has expired. You get a reminder
+when the window starts and at 14, 7, 1, and 0 days. Some registries publish no RDAP
+service. The panel then shows **Unknown** and nothing else changes.
 
 ## Disable and delete
 

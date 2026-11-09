@@ -94,8 +94,11 @@ def curl(address: str, hostname: str, tls: bool = False, expect_success: bool = 
     result = run(*command, url, check=False)
     if expect_success and (result.returncode or "server: openresty" not in result.stdout.lower()):
         raise RuntimeError(f"route {address}/{hostname} did not reach OpenResty:\n{result.stdout}")
-    if not expect_success and result.returncode == 0:
-        raise RuntimeError(f"unknown route {address}/{hostname} was accepted")
+    if not expect_success:
+        # An unrouted TLS name is dropped. An unrouted plain-HTTP host gets the gateway's own 421, never OpenResty.
+        misdirected = not tls and result.stdout.startswith("HTTP/1.1 421") and "server: openresty" not in result.stdout.lower()
+        if result.returncode == 0 and not misdirected:
+            raise RuntimeError(f"unknown route {address}/{hostname} was accepted:\n{result.stdout}")
     return result.stdout
 
 
