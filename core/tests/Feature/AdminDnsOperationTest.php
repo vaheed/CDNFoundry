@@ -38,6 +38,27 @@ class AdminDnsOperationTest extends TestCase
         $this->assertSame('succeeded', Operation::findOrFail($first->json('data.id'))->status);
     }
 
+    public function test_fleet_registers_the_private_primary_idempotently_and_it_is_enabled_once_healthy(): void
+    {
+        Queue::fake();
+        putenv('PDNS_API_KEY=generated-api-key');
+        $arguments = ['--transfer-endpoint' => '192.0.2.10:5300', '--nameserver' => ['ns1.cdn.test', 'ns2.cdn.test']];
+        $this->artisan('cdnf:dns:register-primary', $arguments)->assertSuccessful();
+        $this->artisan('cdnf:dns:register-primary', $arguments)->assertSuccessful();
+        $cluster = DnsCluster::query()->sole();
+        $this->assertFalse($cluster->enabled);
+        $this->assertSame('http://pdns-primary:8081', $cluster->api_url);
+        $this->assertSame('generated-api-key', $cluster->api_key);
+        Queue::assertPushed(TestDnsCluster::class, 1);
+
+        Http::fake(['*' => Http::response(['id' => 'localhost'])]);
+        $operation = Operation::query()->where('type', 'dns.cluster_test')->sole();
+        (new TestDnsCluster($operation->id))->handle(app(PowerDnsClient::class));
+        $this->assertTrue($cluster->refresh()->enabled);
+        Queue::assertPushed(ReconcileAllDnsZones::class);
+        putenv('PDNS_API_KEY');
+    }
+
     public function test_new_cluster_is_disabled_tested_asynchronously_and_cannot_enable_before_success(): void
     {
         Queue::fake();
