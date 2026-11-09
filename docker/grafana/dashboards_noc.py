@@ -182,7 +182,7 @@ def pop_detail() -> dict:
             timeseries("CPU", "Host CPU used.", [prom('100 * (1 - avg by (node) (rate(node_cpu_seconds_total{mode="idle",node=~"$pop"}[5m])))', "{{node}}")], "percent", w=8, max_value=100),
             timeseries("Memory", "Host memory used.", [prom('100 * (1 - node_memory_MemAvailable_bytes{node=~"$pop"} / node_memory_MemTotal_bytes{node=~"$pop"})', "{{node}}")], "percent", w=8, max_value=100),
             timeseries("Network", "Host network traffic in bits per second.", [prom('8 * sum by (node) (rate(node_network_transmit_bytes_total{node=~"$pop",device!~"lo|veth.*|br-.*|docker.*"}[5m]))', "{{node}} out")], "bps", w=8)],
-        row("Logs"), [logs("PoP logs", "Operational logs from the selected PoPs.", [loki('{host=~"$pop"}')], h=10)],
+        row("Logs"), [logs("PoP logs", "Operational logs from the selected PoPs.", [loki('{host=~"$pop", service=~".+"}')], h=10)],
     ]
     return dashboard("cdnf-pop-detail", "PoP detail", "cdnf-noc", "One PoP's edges, cells, gateway, cache, upstream connections, host resources, and logs.", rows, runbook="edge-or-cell-failure")
 

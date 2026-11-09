@@ -1068,7 +1068,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{host=~\"$pop\"}",
+          "expr": "{host=~\"$pop\", service=~\".+\"}",
           "queryType": "range",
           "refId": "A"
         }
