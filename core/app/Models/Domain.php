@@ -7,6 +7,8 @@ use App\Enums\UserType;
 use App\Support\DomainName;
 use App\Support\DomainNameserverVerification;
 use App\Support\NameserverPairs;
+use App\Support\PlatformSettings;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 #[Fillable(['name', 'display_name', 'lifecycle_state', 'revision', 'nameservers_verified_at', 'nameservers_verified_by', 'disabled_at', 'deprovision_after', 'proxy_settings', 'active_edge_revision', 'cache_settings', 'cache_epoch', 'cache_development_mode_until', 'tls_mode', 'active_tls_certificate_id', 'security_settings', 'security_state', 'security_state_changed_at', 'waf_profile', 'delegation_token', 'delegation_nameservers', 'claim_expires_at'])]
@@ -117,6 +120,46 @@ class Domain extends Model
             ->where(fn ($query) => $query->whereIn('lifecycle_state', [DomainLifecycleState::Active->value, DomainLifecycleState::Disabled->value])
                 ->orWhere(fn ($pending) => $pending->where('lifecycle_state', DomainLifecycleState::PendingVerification->value)->where('id', '<', $this->getKey())))
             ->exists();
+    }
+
+    /** Whole days until a moment, rounded up so "in 12 days" stays 12 for the whole of that day, and negative once past. */
+    public static function daysUntil(CarbonImmutable $moment): int
+    {
+        $seconds = $moment->getTimestamp() - now()->getTimestamp();
+
+        return $seconds >= 0 ? (int) ceil($seconds / 86400) : -(int) ceil(abs($seconds) / 86400);
+    }
+
+    /**
+     * The registration expiry as a short label and a tone: danger within a week or after expiry, warning inside
+     * the configured window, neutral otherwise. Null until the registry has been read.
+     *
+     * @return array{label: string, tone: string, days: int}|null
+     */
+    public function registrationExpiry(): ?array
+    {
+        $stored = $this->getAttribute('registration_expires_at');
+        if ($stored === null) {
+            return null;
+        }
+        $expires = CarbonImmutable::parse($stored);
+        $warning = app(PlatformSettings::class)->integer('domain_monitoring', 'registration_warning_days');
+        $days = self::daysUntil($expires);
+
+        return [
+            'days' => $days,
+            'tone' => match (true) {
+                $days <= 7 => 'danger',
+                $days <= $warning => 'warning',
+                default => 'neutral',
+            },
+            'label' => match (true) {
+                $days < 0 => 'Expired '.abs($days).' '.Str::plural('day', abs($days)).' ago',
+                $days === 0 => 'Expires today',
+                $days <= 90 => 'In '.$days.' '.Str::plural('day', $days),
+                default => $expires->format('M j, Y'),
+            },
+        ];
     }
 
     /** owner, awaiting_assignment, pending_delegation, expired, or superseded: what an applicant is waiting on. */
@@ -281,6 +324,13 @@ class Domain extends Model
             'claim_expires_at' => 'immutable_datetime',
             'lifecycle_state' => DomainLifecycleState::class,
             'nameservers_verified_at' => 'immutable_datetime',
+            'ns_check_next_at' => 'immutable_datetime',
+            'ns_checked_at' => 'immutable_datetime',
+            'ns_observed' => 'array',
+            'delegation_lost_at' => 'immutable_datetime',
+            'registration_expires_at' => 'immutable_datetime',
+            'registration_checked_at' => 'immutable_datetime',
+            'registration_next_check_at' => 'immutable_datetime',
             'disabled_at' => 'immutable_datetime',
             'deprovision_after' => 'immutable_datetime',
             'proxy_settings' => 'array',

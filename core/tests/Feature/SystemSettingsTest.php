@@ -29,7 +29,7 @@ class SystemSettingsTest extends TestCase
         $admin = User::factory()->admin()->create();
         $response = $this->actingAs($admin)->getJson('/api/admin/system/settings')->assertOk();
 
-        $this->assertCount(10, $response->json('data'));
+        $this->assertCount(11, $response->json('data'));
         $settings = collect($response->json('data'));
         $dnsLifecycle = $settings->firstWhere('group', 'dns_lifecycle');
         $this->assertSame(7, $dnsLifecycle['fields'][0]['value']);

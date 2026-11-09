@@ -30,7 +30,7 @@ requests or scheduled work. They do not rewrite every domain.
 
 Each table below lists the field name used in the API and commands, the default,
 and the allowed range. Ranges are inclusive. The API group names are `display`,
-`operations`, `telemetry`, `observability`, `dns_lifecycle`, `revision_history`,
+`operations`, `telemetry`, `observability`, `dns_lifecycle`, `domain_monitoring`, `revision_history`,
 `rate_limits`, `edge_runtime`, `origin_safety`, and `proxy_defaults`.
 
 The platform DNS zone and its nameservers have their own settings endpoint,
@@ -122,6 +122,23 @@ serving traffic.
 
 - `deprovision_delay_days`: a disabled domain keeps serving its last valid DNS and edge state for this long. Removal then starts asynchronously.
 - `domain_reclaim_cooldown_days`: a fully removed domain name stays reserved for this long before another account can claim it.
+
+## Domain monitoring
+
+| Field | Default | Allowed |
+| --- | --- | --- |
+| `nameserver_enforcement` | on | on or off |
+| `active_check_hours` | 12 | 1–24 |
+| `mismatch_confirmations` | 3 | 1–10 |
+| `confirmation_spacing_minutes` | 60 | 5–720 |
+| `registration_check_days` | 7 | 1–30 |
+| `registration_warning_days` | 30 | 1–90 |
+
+- `nameserver_enforcement`: when on, an active domain whose nameservers changed is un-verified. When off, the change is only recorded in the audit log and the domain stays active.
+- `active_check_hours`: how often each active domain's delegation is re-checked.
+- `mismatch_confirmations` and `confirmation_spacing_minutes`: the number of consecutive checks that must show a different delegation, and the time between them, before a domain is un-verified. A failed lookup never counts.
+- `registration_check_days`: how often each registration expiry is looked up. A domain within the warning window is checked daily.
+- `registration_warning_days`: panels highlight an expiry inside this window, and users get a reminder when it starts and again at 14, 7, 1, and 0 days.
 
 ## Revision history
 
