@@ -1238,7 +1238,7 @@ services:
     build:
       context: ./docker/mmdb-updater
     environment:
-      MMDB_PROVIDER: ${MMDB_PROVIDER:-dbip-jsdelivr}
+      MMDB_PROVIDER: ${MMDB_PROVIDER:-dbip-npm}
       MMDB_TARGET_FILE: ${MMDB_TARGET_FILE:-GeoLite2-City.mmdb}
       MMDB_DOWNLOAD_INTERVAL_SECONDS: ${MMDB_DOWNLOAD_INTERVAL_SECONDS:-86400}
       MMDB_DOWNLOAD_RETRIES: ${MMDB_DOWNLOAD_RETRIES:-5}

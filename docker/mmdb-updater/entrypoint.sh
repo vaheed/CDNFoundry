@@ -3,7 +3,9 @@ set -Eeuo pipefail
 
 readonly MMDB_DIR="${MMDB_DIR:-/mmdb}"
 MMDB_TARGET_FILE="${MMDB_TARGET_FILE:-GeoLite2-City.mmdb}"
-readonly MMDB_PROVIDER="${MMDB_PROVIDER:-dbip-jsdelivr}"
+# dbip-npm verifies itself: the npm registry publishes the SHA-512 of the package, so no checksum has to be configured.
+readonly MMDB_PROVIDER="${MMDB_PROVIDER:-dbip-npm}"
+readonly MMDB_NPM_REGISTRY_URL="${MMDB_NPM_REGISTRY_URL:-https://registry.npmjs.org}"
 MMDB_DOWNLOAD_URL="${MMDB_DOWNLOAD_URL:-}"
 readonly MMDB_DOWNLOAD_HEADER="${MMDB_DOWNLOAD_HEADER:-}"
 MMDB_EXPECTED_SHA256="${MMDB_EXPECTED_SHA256:-}"
@@ -21,6 +23,7 @@ readonly MMDB_ASN_DOWNLOAD_URL="${MMDB_ASN_DOWNLOAD_URL:-}"
 readonly MMDB_ASN_EXPECTED_SHA256="${MMDB_ASN_EXPECTED_SHA256:-}"
 readonly MMDB_ASN_CHECKSUM_URL="${MMDB_ASN_CHECKSUM_URL:-}"
 ASN_MODE=false
+ARTIFACT_VERIFIED=false
 
 timestamp() { date -u +'%Y-%m-%dT%H:%M:%SZ'; }
 log() { printf '[%s] [mmdb-updater] %s\n' "$(timestamp)" "$*"; }
@@ -105,6 +108,26 @@ extract_mmdb() {
     find "$destination" -type f -iname '*.mmdb' -print0 | sort -z | head -z -n 1 | tr -d '\0'
 }
 
+# Download the dbip-city-lite package from the npm registry, check it against the SHA-512 integrity the
+# registry publishes for that exact version, and stream the database out of it.
+fetch_npm_database() {
+    local artifact="$1" destination="$2" meta tarball integrity version actual
+    meta="$(curl --fail --silent --show-error --location --max-time 60 --retry "$MMDB_DOWNLOAD_RETRIES" --retry-delay 5 --retry-all-errors \
+        "$MMDB_NPM_REGISTRY_URL/dbip-city-lite/latest")" || { log 'could not read the npm registry'; return 1; }
+    tarball="$(grep -o '"tarball"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"$meta" | head -n 1 | cut -d'"' -f4)"
+    integrity="$(grep -o '"integrity"[[:space:]]*:[[:space:]]*"sha512-[^"]*"' <<<"$meta" | head -n 1 | cut -d'"' -f4)"
+    version="$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"$meta" | head -n 1 | cut -d'"' -f4)"
+    [[ "$tarball" == "$MMDB_NPM_REGISTRY_URL/dbip-city-lite/-/dbip-city-lite-"*.tgz ]] || { log 'the registry returned an unexpected package address'; return 1; }
+    [[ "$integrity" =~ ^sha512-[A-Za-z0-9+/]{86}==$ ]] || { log 'the registry published no SHA-512 integrity for the package'; return 1; }
+    log "downloading dbip-city-lite ${version} from $tarball"
+    fetch "$tarball" "$artifact" || return 1
+    actual="sha512-$(sha512sum "$artifact" | awk '{print toupper($1)}' | basenc --base16 -d | base64 -w0)"
+    [[ "$actual" == "$integrity" ]] || { log 'package integrity mismatch'; return 1; }
+    mkdir -p "$destination"
+    tar -xzOf "$artifact" package/dbip-city-lite.mmdb.gz | gzip -dc > "$destination/$MMDB_TARGET_FILE" || { log 'the package contains no database'; return 1; }
+    ARTIFACT_VERIFIED=true
+}
+
 validate_candidate() {
     local candidate="$1" expected="$MMDB_EXPECTED_SHA256"
     [[ -s "$candidate" ]] || { log 'download contained no non-empty MMDB'; return 1; }
@@ -112,7 +135,7 @@ validate_candidate() {
         expected="$(curl --fail --silent --show-error --location --max-time 60 "$MMDB_CHECKSUM_URL" | head -n 1 | awk '{print $1}')"
         [[ "$expected" =~ ^[0-9a-fA-F]{64}$ ]] || { log 'the published checksum is not a SHA-256'; return 1; }
     fi
-    if [[ -z "$expected" && "$MMDB_REQUIRE_VERIFICATION" == true ]]; then
+    if [[ -z "$expected" && "$MMDB_REQUIRE_VERIFICATION" == true && "$ARTIFACT_VERIFIED" != true ]]; then
         log 'refusing an unverified download: set MMDB_EXPECTED_SHA256 or MMDB_CHECKSUM_URL'
         return 1
     fi
@@ -133,16 +156,22 @@ update_once() {
     extract="$work/extract"
     trap 'rm -rf "$work"' RETURN
 
-    while IFS= read -r url; do
-        [[ -n "$url" ]] || continue
-        log "downloading from $url"
-        if fetch "$url" "$artifact"; then success=true; break; fi
-        log "download failed for $url"
-    done < <(download_urls)
-
-    [[ "$success" == true ]] || return 1
+    ARTIFACT_VERIFIED=false
     # update_once runs inside an `if`, where `set -e` is off, so every step reports failure explicitly.
-    candidate="$(extract_mmdb "$artifact" "$extract" "$url")" || return 1
+    if [[ "$MMDB_PROVIDER" == dbip-npm && -z "$MMDB_DOWNLOAD_URL" && "$ASN_MODE" != true ]]; then
+        fetch_npm_database "$artifact" "$extract" || return 1
+        candidate="$extract/$MMDB_TARGET_FILE"
+    else
+        while IFS= read -r url; do
+            [[ -n "$url" ]] || continue
+            log "downloading from $url"
+            if fetch "$url" "$artifact"; then success=true; break; fi
+            log "download failed for $url"
+        done < <(download_urls)
+
+        [[ "$success" == true ]] || return 1
+        candidate="$(extract_mmdb "$artifact" "$extract" "$url")" || return 1
+    fi
     validate_candidate "$candidate" || return 1
 
     install -m 0644 "$candidate" "$MMDB_DIR/.${MMDB_TARGET_FILE}.candidate" || return 1
@@ -173,7 +202,13 @@ update_asn() {
         MMDB_EXPECTED_SHA256="$MMDB_ASN_EXPECTED_SHA256"
         MMDB_CHECKSUM_URL="$MMDB_ASN_CHECKSUM_URL"
         MMDB_FALLBACK_FILE="${MMDB_ASN_FALLBACK_FILE:-/opt/fallback/GeoLite2-ASN.mmdb}"
-        if ! update_once; then
+        if [[ "$MMDB_PROVIDER" == dbip-npm && -z "$MMDB_DOWNLOAD_URL" ]]; then
+            # No verified autonomous-system source is published for this provider, so nothing is attempted.
+            if [[ ! -s "$MMDB_DIR/$MMDB_TARGET_FILE" && -s "$MMDB_FALLBACK_FILE" ]]; then
+                install -m 0644 "$MMDB_FALLBACK_FILE" "$MMDB_DIR/$MMDB_TARGET_FILE"
+                log 'no ASN source is configured (set MMDB_ASN_DOWNLOAD_URL and a checksum); events carry ASN 0'
+            fi
+        elif ! update_once; then
             log 'ASN update failed; preserving the existing ASN database'
             if [[ ! -s "$MMDB_DIR/$MMDB_TARGET_FILE" && -s "$MMDB_FALLBACK_FILE" ]]; then
                 install -m 0644 "$MMDB_FALLBACK_FILE" "$MMDB_DIR/$MMDB_TARGET_FILE"
