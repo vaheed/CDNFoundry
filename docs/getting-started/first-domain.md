@@ -68,7 +68,7 @@ API key, and that the `pdns-primary` container is healthy, then run the test aga
 ## Set the platform DNS identity
 
 The platform identity is the zone and nameserver names that customers delegate
-to. Open **Infrastructure → System DNS identity** and enter:
+to. When Fleet installs the control node it stores a first identity for you: the platform domain, `proxy.<platform domain>`, `ns1` and `ns2` with their IPv4 glue addresses, and standard SOA values. It never replaces an identity that already exists, and it sends no IPv6 glue (an IPv6 address is accepted only after an edge has seen it answer). Open **Infrastructure → System DNS identity** to review it, add a second nameserver pair, or add IPv6. To enter it by hand, set:
 
 - **Platform domain**, such as `cdn.example.net`;
 - **Proxy hostname**, a subdomain of the platform domain such as `proxy.cdn.example.net`;

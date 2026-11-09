@@ -345,9 +345,34 @@ class FleetEngine:
         if outcome.ok:
             self.mark_installed(name)
             if state["nodes"][name]["role"] == "control":
+                ok, detail = self._seed_dns_identity(name)
+                (log or self.say)(f"{name}: " + ("platform DNS identity stored in the panel" if ok else f"platform DNS identity not stored ({detail}); enter it under System DNS identity"))
                 ok, detail = self._register_dns_primary(name)
                 (log or self.say)(f"{name}: " + ("PowerDNS primary registered in the panel" if ok else f"could not register the PowerDNS primary ({detail}); add it under DNS clusters"))
         return outcome
+
+    def _seed_dns_identity(self, name: str) -> tuple[bool, str]:
+        """Store the platform DNS identity Fleet already knows: the platform domain, the ns1 and ns2 glue, and standard SOA values.
+
+        Only IPv4 glue is sent. An IPv6 glue address is accepted only after an enrolled edge has seen it answer, which cannot be true yet.
+        The control plane keeps an identity that already exists unchanged.
+        """
+        state = self.state()
+        platform = state["global"]["platform_domain"]
+        _records, glue = mg.dns_records(state)
+        nameservers = [{"hostname": g["name"], "ipv4": next((a for a in g["ips"] if ":" not in a), None)} for g in glue]
+        if len(nameservers) < 2 or not all(n["ipv4"] for n in nameservers):
+            return False, "needs two DNS nodes with a public IPv4 address"
+        identity = {
+            "platform_domain": platform, "proxy_hostname": f"proxy.{platform}", "nameservers": nameservers,
+            "soa_primary": f"ns1.{platform}", "soa_mailbox": f"hostmaster.{platform}",
+            "soa_refresh": 3600, "soa_retry": 600, "soa_expire": 604800, "soa_minimum_ttl": 300, "default_ttl": 300,
+        }
+        r = self.transport.run(
+            self.targets(state)[name],
+            f"cd {actions.REMOTE_ROOT} && docker compose --env-file .env.prod exec -T core php artisan cdnf:dns:identity:seed {shlex.quote(json.dumps(identity))}",
+        )
+        return r.ok, "" if r.ok else (r.stderr or r.stdout).strip()[-200:]
 
     def _register_dns_primary(self, name: str) -> tuple[bool, str]:
         """Register the private PowerDNS primary as a DNS cluster. The control plane tests it and enables it once healthy."""
