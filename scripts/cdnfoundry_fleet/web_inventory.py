@@ -94,7 +94,7 @@ def disks_and_nics(i: dict[str, Any], table: Any) -> str:
 def containers_table(node: str, i: dict[str, Any], table: Any) -> str:
     rows = []
     for c in i.get("containers", []):
-        kind = "ok" if c["state"] == "running" and c["healthy"] is not False else "bad"
+        kind = "bad" if inv.container_down(c) else "ok"
         rows.append([esc(c["name"]), state_word(kind, c["status"] or c["state"]), esc(c["image"].rsplit("/", 1)[-1]), f'<a href="/nodes/{esc(node)}/logs?c={esc(c["name"])}">Logs</a>'])
     return table(["Container", "Status", "Image", ""], rows, label="Containers") if rows else '<p class="empty">No containers were reported by this host.</p>'
 

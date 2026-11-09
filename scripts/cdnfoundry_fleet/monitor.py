@@ -24,10 +24,10 @@ def summarize(sample: dict[str, Any]) -> dict[str, Any]:
     containers = i.get("containers", [])
     disk = inv.worst_disk(i)
     return {
-        "state": "degraded" if any(c["state"] != "running" or c["healthy"] is False for c in containers) else "online",
+        "state": "degraded" if any(inv.container_down(c) for c in containers) else "online",
         "load": inv.load_per_core(i), "memory": i.get("mem_used_pct"), "disk": disk["used_pct"] if disk else None, "uptime_s": i.get("uptime_s"),
         "containers": {"total": len(containers), "running": sum(1 for c in containers if c["state"] == "running"),
-                       "unhealthy": sum(1 for c in containers if c["state"] != "running" or c["healthy"] is False)},
+                       "unhealthy": sum(1 for c in containers if inv.container_down(c))},
         "cores": i.get("cpu_cores"), "memory_mb": i.get("mem_total_mb"),
     }
 

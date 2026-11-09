@@ -145,7 +145,7 @@ def findings(node: dict[str, Any], inv: dict[str, Any]) -> list[dict[str, str]]:
         out.append({"level": "bad", "text": "Docker is not running or not installed."})
     if node.get("public_ipv6") and not inv.get("ipv6"):
         out.append({"level": "warn", "text": "The plan has an IPv6 address for this host, but the host has no global IPv6 address."})
-    down = [c["name"] for c in inv.get("containers", []) if c["state"] != "running" or c["healthy"] is False]
+    down = [c["name"] for c in inv.get("containers", []) if container_down(c)]
     if down:
         out.append({"level": "bad", "text": f"{len(down)} container(s) not healthy: " + ", ".join(down[:4]) + ("..." if len(down) > 4 else "")})
     return out
@@ -169,3 +169,10 @@ def totals(inventories: dict[str, dict[str, Any]]) -> dict[str, int]:
     known = [i for i in inventories.values() if i]
     return {"hosts": len(known), "cores": sum(i.get("cpu_cores") or 0 for i in known), "memory_gb": round(sum(i.get("mem_total_mb") or 0 for i in known) / 1024),
             "disk_gb": round(sum((d["total_gb"] for i in known for d in i.get("disks", []) if d["label"] == "system"), 0))}
+
+
+def container_down(container: dict[str, Any]) -> bool:
+    """A container is down when it is not running or reports unhealthy. A one-shot job that finished with exit code 0 is done, not down."""
+    if container["state"] == "exited" and str(container.get("status", "")).startswith("Exited (0)"):
+        return False
+    return container["state"] != "running" or container["healthy"] is False

@@ -326,3 +326,9 @@ def test_deploy_stops_before_any_install_when_a_host_cannot_prepare(vault, tmp_p
     with vault.session() as work:
         outcome = FleetEngine(work, ROOT, tmp_path / "b", transport=NoImages(), say=lambda _m: None).deploy({"pop-1": ("DE", "EU")})
     assert outcome is not None and not outcome.ok and outcome.failed == "pop-1:prepull" and called == []
+
+
+def test_a_finished_one_shot_container_is_not_reported_as_down():
+    finished = {"state": "exited", "status": "Exited (0) 5 minutes ago", "healthy": None}
+    failed = {"state": "exited", "status": "Exited (1) 5 minutes ago", "healthy": None}
+    assert not inv.container_down(finished) and inv.container_down(failed)
