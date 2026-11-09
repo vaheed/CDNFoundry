@@ -188,6 +188,26 @@ class SystemDnsIdentity extends Page
                                 TextEntry::make('ipv6')->placeholder('Not configured'),
                             ]),
                     ]),
+                Section::make('Customer nameserver pairs')
+                    ->description('Customers delegate their domains to one of these pairs. A second claim on the same name always gets a different pair.')
+                    ->icon('phosphor-users-three')
+                    ->schema([
+                        RepeatableEntry::make('customer_nameserver_pairs')
+                            ->hiddenLabel()
+                            ->state(fn (): array => $this->customerPairRows())
+                            ->table([
+                                TableColumn::make('Pair'),
+                                TableColumn::make('Hostname'),
+                                TableColumn::make('IPv4 glue'),
+                                TableColumn::make('IPv6 glue'),
+                            ])
+                            ->schema([
+                                TextEntry::make('pair'),
+                                TextEntry::make('hostname')->placeholder('Not configured'),
+                                TextEntry::make('ipv4')->placeholder('Not configured'),
+                                TextEntry::make('ipv6')->placeholder('Not configured'),
+                            ]),
+                    ]),
                 Section::make('Hidden primary')
                     ->description('The desired state is written here; DNS nodes pull it.')
                     ->icon('phosphor-cloud-arrow-up')
@@ -292,6 +312,17 @@ class SystemDnsIdentity extends Page
         ])->all();
 
         return $settings;
+    }
+
+    /** @return list<array{pair:string,hostname:?string,ipv4:?string,ipv6:?string}> one row per customer nameserver, numbered by pair */
+    private function customerPairRows(): array
+    {
+        return collect($this->preview['customer_nameserver_pairs'] ?? [])->flatMap(
+            fn (array $pair, int $index): array => collect($pair)->map(fn (array $nameserver): array => [
+                'pair' => 'Pair '.($index + 1),
+                'hostname' => $nameserver['hostname'] ?? null, 'ipv4' => $nameserver['ipv4'] ?? null, 'ipv6' => $nameserver['ipv6'] ?? null,
+            ])->all(),
+        )->values()->all();
     }
 
     /** @return list<string> the enabled DNS primary (normally one hidden PowerDNS), as "name (target)" */

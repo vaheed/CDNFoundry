@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\DomainLifecycleState;
+use App\Filament\Admin\Pages\SystemDnsIdentity;
 use App\Filament\Admin\Pages\Telemetry;
 use App\Filament\Admin\Resources\DnsClusters\Pages\ListDnsClusters;
 use App\Filament\Admin\Resources\EdgePools\Pages\EditEdgePool as EditServicePool;
@@ -48,6 +49,28 @@ use Tests\TestCase;
 class FilamentWorkflowTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_dns_identity_review_lists_every_customer_nameserver_pair(): void
+    {
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs(User::factory()->admin()->create());
+        $pair = fn (string $a, string $b): array => [
+            'first_hostname' => $a, 'first_ipv4' => '93.184.216.20', 'second_hostname' => $b, 'second_ipv4' => '93.184.216.21',
+        ];
+
+        Livewire::test(SystemDnsIdentity::class)
+            ->fillForm([
+                'platform_domain' => 'cdn.example.net', 'proxy_hostname' => 'proxy.cdn.example.net',
+                'nameservers' => [['hostname' => 'ns1.cdn.example.net', 'ipv4' => '93.184.216.20'], ['hostname' => 'ns2.cdn.example.net', 'ipv4' => '93.184.216.21']],
+                'customer_pairs' => [$pair('cary.ns.cdn.example.net', 'seri.ns.cdn.example.net'), $pair('elfy.ns.cdn.example.net', 'orki.ns.cdn.example.net')],
+                'soa_primary' => 'ns1.cdn.example.net', 'soa_mailbox' => 'hostmaster.cdn.example.net',
+                'soa_refresh' => 3600, 'soa_retry' => 600, 'soa_expire' => 1209600, 'soa_minimum_ttl' => 300, 'default_ttl' => 300,
+            ])
+            ->call('previewChanges')
+            ->assertSee('Customer nameserver pairs')
+            ->assertSee('Pair 1')->assertSee('Pair 2')
+            ->assertSee('cary.ns.cdn.example.net')->assertSee('orki.ns.cdn.example.net');
+    }
 
     public function test_user_panel_disable_revokes_tokens_and_delete_requires_revocation(): void
     {
