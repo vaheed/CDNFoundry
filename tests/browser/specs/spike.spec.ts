@@ -54,7 +54,7 @@ test.describe('domains', () => {
         await settle(page);
         await page.getByRole('button', { name: 'Domain actions', exact: true }).click();
         await page.getByTestId('domain-delete-action').click();
-        const dialog = page.getByRole('dialog');
+        const dialog = page.getByRole('alertdialog');
         await expect(dialog.getByText('Delete alpha-browser.example?')).toBeVisible();
         await expect(dialog.getByText(/removed after \d+ days/)).toBeVisible();
         await expectAccessible(page);
