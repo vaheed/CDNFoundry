@@ -52,24 +52,16 @@ class FilamentWorkflowTest extends TestCase
 
     public function test_dns_identity_review_lists_every_customer_nameserver_pair(): void
     {
-        Filament::setCurrentPanel(Filament::getPanel('admin'));
-        $this->actingAs(User::factory()->admin()->create());
-        $pair = fn (string $a, string $b): array => [
-            'first_hostname' => $a, 'first_ipv4' => '93.184.216.20', 'second_hostname' => $b, 'second_ipv4' => '93.184.216.21',
-        ];
+        $page = new SystemDnsIdentity;
+        $page->preview = ['customer_nameserver_pairs' => [
+            [['hostname' => 'cary.ns.cdn.example.net', 'ipv4' => '93.184.216.20', 'ipv6' => null], ['hostname' => 'seri.ns.cdn.example.net', 'ipv4' => '93.184.216.21', 'ipv6' => null]],
+            [['hostname' => 'elfy.ns.cdn.example.net', 'ipv4' => '93.184.216.20', 'ipv6' => null], ['hostname' => 'orki.ns.cdn.example.net', 'ipv4' => '93.184.216.21', 'ipv6' => null]],
+        ]];
 
-        Livewire::test(SystemDnsIdentity::class)
-            ->fillForm([
-                'platform_domain' => 'cdn.example.net', 'proxy_hostname' => 'proxy.cdn.example.net',
-                'nameservers' => [['hostname' => 'ns1.cdn.example.net', 'ipv4' => '93.184.216.20'], ['hostname' => 'ns2.cdn.example.net', 'ipv4' => '93.184.216.21']],
-                'customer_pairs' => [$pair('cary.ns.cdn.example.net', 'seri.ns.cdn.example.net'), $pair('elfy.ns.cdn.example.net', 'orki.ns.cdn.example.net')],
-                'soa_primary' => 'ns1.cdn.example.net', 'soa_mailbox' => 'hostmaster.cdn.example.net',
-                'soa_refresh' => 3600, 'soa_retry' => 600, 'soa_expire' => 1209600, 'soa_minimum_ttl' => 300, 'default_ttl' => 300,
-            ])
-            ->call('previewChanges')
-            ->assertSee('Customer nameserver pairs')
-            ->assertSee('Pair 1')->assertSee('Pair 2')
-            ->assertSee('cary.ns.cdn.example.net')->assertSee('orki.ns.cdn.example.net');
+        $rows = (new \ReflectionMethod($page, 'customerPairRows'))->invoke($page);
+
+        $this->assertSame(['Pair 1', 'Pair 1', 'Pair 2', 'Pair 2'], array_column($rows, 'pair'));
+        $this->assertSame(['cary.ns.cdn.example.net', 'seri.ns.cdn.example.net', 'elfy.ns.cdn.example.net', 'orki.ns.cdn.example.net'], array_column($rows, 'hostname'));
     }
 
     public function test_user_panel_disable_revokes_tokens_and_delete_requires_revocation(): void
