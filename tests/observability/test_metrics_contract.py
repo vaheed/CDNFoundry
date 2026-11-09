@@ -133,6 +133,21 @@ class VectorMetricNamesContractTest(unittest.TestCase):
             self.assertTrue(name.startswith("cdnf_") and not name.startswith("_"), name)
 
 
+    def test_the_dns_probe_name_is_dropped_from_customer_dns_telemetry(self) -> None:
+        blackbox = yaml.safe_load((PROMETHEUS / "blackbox.yml").read_text())
+        names = {
+            module["dns"]["query_name"]
+            for module in blackbox["modules"].values() if module.get("prober") == "dns"
+        }
+        self.assertTrue(names, "no DNS probe module found")
+        condition = self.VECTOR["transforms"]["customer_dns_events"]["condition"]
+        for name in names:
+            self.assertIn(name, condition, f"the probe name {name} must be filtered out of customer DNS events")
+        for consumer in ("dns_metric_events", "clickhouse_dns"):
+            section = self.VECTOR["transforms"].get(consumer) or self.VECTOR["sinks"][consumer]
+            self.assertEqual(["customer_dns_events"], section["inputs"], consumer)
+
+
 class RoutingContractTest(unittest.TestCase):
     def amtool(self, *arguments: str) -> str:
         completed = subprocess.run(

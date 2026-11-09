@@ -200,6 +200,12 @@ transforms:
       .security_class = ""
       if .outcome == "response_limit" { .security_class = "dns_response_limit" }
       del(.authorization); del(.cookie); del(.request_body); del(.body)
+  customer_dns_events:
+    type: filter
+    inputs: [safe_dns_events]
+    # The blackbox DNS probe asks for a name that never exists and expects REFUSED. It is health traffic, not
+    # customer traffic, and counting it inflated every DNS query and REFUSED figure by about half.
+    condition: replace(downcase(string!(.qname)), r'\.$', "") != "probe.cdnfoundry.invalid"
   decoded_dns_dnstap:
     type: remap
     inputs: [dns_dnstap]
@@ -305,7 +311,7 @@ transforms:
       - { type: counter, field: kind, name: cdnf_edge_tls_failures_total, tags: { pop: "{{pop}}", region: "{{region}}", edge: "{{edge}}", reason: "{{tls_reason}}" } }
   dns_metric_events:
     type: remap
-    inputs: [safe_dns_events]
+    inputs: [customer_dns_events]
     drop_on_error: true
     source: |
       rcode = upcase(to_string(.rcode) ?? "")
@@ -344,7 +350,7 @@ sinks:
     request: { retry_initial_backoff_secs: 1, retry_max_duration_secs: 300, timeout_secs: 10 }
   clickhouse_dns:
     type: clickhouse
-    inputs: [safe_dns_events]
+    inputs: [customer_dns_events]
     endpoint: "${CLICKHOUSE_ENDPOINT}"
     database: cdnf
     table: dns_events
@@ -387,6 +393,29 @@ tests:
             source: |-
               assert_eq!(.path, "/item")
               assert_eq!(.referrer, "https://example.test/cart")
+  - name: keep_customer_dns_events_and_drop_the_synthetic_probe
+    inputs:
+      - insert_at: safe_dns_events
+        type: log
+        log_fields:
+          qname: www.example.test
+          rcode: NOERROR
+      - insert_at: safe_dns_events
+        type: log
+        log_fields:
+          qname: probe.cdnfoundry.invalid
+          rcode: REFUSED
+      - insert_at: safe_dns_events
+        type: log
+        log_fields:
+          qname: PROBE.CdnFoundry.Invalid.
+          rcode: REFUSED
+    outputs:
+      - extract_from: customer_dns_events
+        conditions:
+          - type: vrl
+            source: |-
+              assert_eq!(.qname, "www.example.test")
   - name: keep_security_events_in_reserved_buffer
     inputs:
       - insert_at: safe_edge_events
