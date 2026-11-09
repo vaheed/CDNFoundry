@@ -24,7 +24,7 @@ import (
 	"time"
 )
 
-var version = "2.0.2"
+var version = "2.0.3"
 
 var logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 

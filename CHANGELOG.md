@@ -5,6 +5,32 @@ All notable changes are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). The root `VERSION` file is the
 single source of truth; `make version-check` enforces it.
 
+## [2.0.3] - 2026-11-09
+
+Fleet fixes found by running every CLI command and web page against real hosts, a Fleet web
+Config page for monitoring, logs, and backups, and a step-by-step HA guide. See the
+[release notes](docs/operations/releases/v2.0.3.md).
+
+### Added
+
+- Fleet web: monitoring, central logs, and backups can be set on the Config page, and the HA form takes
+  an SSH user.
+- Documentation: [Set up control-plane HA step by step](docs/operations/set-up-control-plane-ha.md) for a
+  local network or WireGuard, and the requirements of a dedicated monitoring host.
+
+### Fixed
+
+- `apply-config` compared a render with the previous render and missed saved changes. It compares with the
+  bundle each host last ran.
+- `control add-standby` failed with `KeyError`, and a standby added without image pins could not be
+  promoted.
+- ClickHouse could not finish its first start because it lacked the `KILL` capability.
+- A failed image pull crashed Fleet with a traceback and hid the reason.
+- A finished one-shot container marked a host degraded.
+- A monitoring-role node with colocated monitoring rendered a broken bundle.
+- Fleet web showed raw Python errors, and form fields overflowed a phone screen.
+- The manual Compose guide ran `pull` without a profile, which pulls nothing.
+
 ## [2.0.2] - 2026-11-08
 
 Fleet shows what it is doing, installs hosts in parallel, and no longer hangs at
