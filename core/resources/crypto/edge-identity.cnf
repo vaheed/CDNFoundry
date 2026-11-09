@@ -8,4 +8,4 @@ basicConstraints = critical,CA:FALSE
 keyUsage = critical,digitalSignature
 extendedKeyUsage = critical,clientAuth
 subjectKeyIdentifier = hash
-authorityKeyIdentifier = keyid:always
+authorityKeyIdentifier = keyid, issuer
