@@ -826,6 +826,7 @@ def main() -> None:
         wait_answers(quarantine_global, "A", {"9.9.9.101", "9.9.9.102"})
         wait_answers(quarantine_global, "AAAA", {"2620:fe::101", "2620:fe::102"})
 
+        wait_isolation(token, domain_id, "draining")
         artisan(
             f"App\\Models\\DomainEdgePlacement::query()->where('domain_id',{domain_id})->update(['drain_after'=>now()->subSecond()]);"
             "Illuminate\\Support\\Facades\\Artisan::call('cdnf:edge:complete-placement-drains');"

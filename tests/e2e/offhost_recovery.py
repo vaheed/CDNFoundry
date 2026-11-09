@@ -214,8 +214,11 @@ def main() -> None:
         if queue_length("*queues:bulk_maintenance") + queue_length("*queues:purge") != 0:
             raise AssertionError("replacement global reconciliation queue did not drain")
         reconstructed_runtime_jobs = sum(queue_length(f"*queues:{lane}") for lane in ("dns", "edge", "verification", "tls"))
-        if reconstructed_runtime_jobs == 0:
+        # Runtime work is reconstructed per domain; a restored database with no domains has none to rebuild.
+        if restored_counts["domains"] > 0 and reconstructed_runtime_jobs == 0:
             raise AssertionError("global reconciliation reconstructed no bounded runtime work")
+        if restored_counts["domains"] == 0 and reconstructed_runtime_jobs != 0:
+            raise AssertionError("global reconciliation queued runtime work for a database without domains")
         reconciliations_succeeded = int(psql(
             RESTORE, "cdnf_restore", "cdnf_restore",
             "SELECT count(*) FROM operations WHERE type IN ('dns.global_reconcile','edges.global_reconcile',"
