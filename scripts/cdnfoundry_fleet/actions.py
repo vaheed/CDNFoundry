@@ -336,8 +336,10 @@ class Engine:
             image = mf.pull_ref(name, digest)
             began = time.time()
             say(f"{node}: pulling {name}")
-            if not self.t.run(target, f"docker pull {image}", timeout=LONG_STEP_SECONDS).ok:
-                return False, f"could not pull {image}"
+            pull_result = self.t.run(target, f"docker pull {image}", timeout=LONG_STEP_SECONDS)
+            if not pull_result.ok:
+                reason = (pull_result.stderr or pull_result.stdout).strip().splitlines()
+                return False, f"could not pull {image}" + (f": {reason[-1][-300:]}" if reason else "")
             pulled = _pulled_digest(self.t, target, image)
             try:
                 mf.verify_pulled(manifest, {name: pulled or ""})
@@ -353,6 +355,8 @@ class Engine:
             while pending:
                 ready, pending = wait(pending, timeout=PULL_HEARTBEAT_SECONDS, return_when=FIRST_COMPLETED)
                 for future in ready:
+                    if future.cancelled():
+                        continue
                     finished += 1
                     result = future.result()
                     if not result[0] and failed is None:

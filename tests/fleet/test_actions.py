@@ -224,7 +224,7 @@ def test_one_failed_pull_changes_no_host_and_the_rerun_pulls_only_what_is_missin
     t.fail_pull = {"pop-2"}
     plan, new = pull_plan()
     out = engine(tmp_path, t).apply(plan, new)
-    assert not out.ok and out.failed == "pop-2:prepull" and "could not pull" in out.detail and out.rolled_back == []
+    assert not out.ok and out.failed == "pop-2:prepull" and "could not pull" in out.detail and "pull denied" in out.detail and out.rolled_back == []
     assert not any("&& ./start.sh" in c or c.startswith("upload") for _n, c in t.calls)
     t.fail_pull, before = set(), len([1 for n, c in t.calls if n == "pop-1" and c.startswith("docker pull")])
     assert engine(tmp_path, t).apply(plan, new).ok
@@ -327,3 +327,14 @@ def test_prepare_reports_a_failed_pull_and_leaves_every_host_unchanged(tmp_path:
     out = eng.prepare(plan, new)
     assert out is not None and not out.ok and out.failed == "pop-1:prepull"
     assert not any(c.startswith("upload") or "start.sh" in c for _n, c in t.calls)
+
+
+def test_a_failed_pull_cancels_the_waiting_pulls_without_raising(tmp_path: Path) -> None:
+    """With more images than workers, a failure cancels the queued pulls; reporting must skip them instead of raising CancelledError."""
+    t = Rendezvous(1)
+    t.fail_pull = {"pop-1"}
+    plan, new = pull_plan()
+    new["roles"]["edge"]["images"] = [f"image-{i}" for i in range(a.IMAGE_WORKERS * 4)]
+    new["images"] = {n: "sha256:" + "a" * 64 for n in new["roles"]["edge"]["images"]}
+    out = engine(tmp_path, t).apply(plan, new)
+    assert not out.ok and "pull denied" in out.detail
