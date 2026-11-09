@@ -66,10 +66,10 @@ td.num, th.num { text-align: right; }
 button.primary { background: var(--brand); border-color: var(--brand); color: var(--on-fill); }
 button.primary:hover { background: var(--brand-hover); }
 button:disabled { cursor: not-allowed; opacity: 0.55; }
-form.stack { display: grid; gap: 0.75rem; max-width: 30rem; margin: 0.75rem 0 1.25rem; padding: 1rem; background: var(--canvas); border-radius: var(--radius); box-shadow: 0 0 0 1px var(--hairline); }
+form.stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.75rem; max-width: 30rem; margin: 0.75rem 0 1.25rem; padding: 1rem; background: var(--canvas); border-radius: var(--radius); box-shadow: 0 0 0 1px var(--hairline); }
 form.stack button { justify-self: start; }
-label { display: grid; gap: 0.25rem; color: var(--strong); }
-input, select, textarea { font: inherit; min-height: 2.75rem; padding: 0.4rem 0.6rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--base); color: var(--text); }
+label { display: grid; gap: 0.25rem; color: var(--strong); min-width: 0; }
+input, select, textarea { min-width: 0; max-width: 100%; font: inherit; min-height: 2.75rem; padding: 0.4rem 0.6rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--base); color: var(--text); }
 .hint { color: var(--subtle); font-size: 0.85rem; }
 .topology { background: var(--base); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.5rem; overflow-x: auto; }
 .topology text { fill: var(--text); font: 12px var(--font); }

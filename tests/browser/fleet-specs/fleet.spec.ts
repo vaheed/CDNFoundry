@@ -204,3 +204,22 @@ test('every topology host links to its page', async ({ page }) => {
     await expect(page).toHaveURL(/\/nodes\/pop-tehran-a$/);
     await expect(page.getByRole('heading', { name: 'Hardware and system' })).toBeVisible();
 });
+
+test('the config page saves the backup setting and refuses a log host that does not exist', async ({ page }) => {
+    await page.goto('/config');
+    await noHorizontalOverflow(page);
+    const backups = page.locator('form[action="/config/feature/backups"]');
+    await backups.getByLabel('Backups').selectOption('control');
+    await backups.getByLabel('Repository').fill('s3:https://storage.example/bucket/cdnfoundry');
+    await backups.getByRole('button', { name: 'Save backups' }).click();
+    await expect(page.locator('.flash')).toContainText('Backups settings saved');
+    await expect(page.locator('form[action="/config/feature/backups"] select[name="mode"]')).toHaveValue('control');
+    await backups.getByLabel('Backups').selectOption('disabled');
+    await backups.getByRole('button', { name: 'Save backups' }).click();
+    await expect(page.locator('.flash')).toContainText('Backups settings saved');
+    const logs = page.locator('form[action="/config/feature/logs"]');
+    await logs.getByLabel('Central logs').selectOption('centralized');
+    await logs.getByRole('button', { name: 'Save central logs' }).click();
+    await expect(page.getByRole('alert')).toContainText('existing log host');
+    await expectAccessible(page);
+});

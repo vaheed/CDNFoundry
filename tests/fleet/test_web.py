@@ -520,3 +520,40 @@ def test_the_alert_webhook_is_optional_and_can_be_cleared_again(served) -> None:
     assert web.read(lambda e: e.alert_webhook()) == "https://alerts.example.com/h"
     assert post(port, "/alert-webhook", {"csrf": web.csrf, "url": "", "next": "/deploy"})[0] == 303
     assert web.read(lambda e: e.alert_webhook()) == "" and "Optional" in get(port, "/deploy")[1]
+
+
+def test_config_page_sets_monitoring_logs_and_backups_like_the_cli(served) -> None:
+    web, port = served
+    add_node(web, port)
+    page = get(port, "/config")[1]
+    assert 'data-testid="monitoring-mode"' in page and 'data-testid="logs-mode"' in page and 'data-testid="backups-mode"' in page
+    assert post(port, "/config/feature/monitoring", {"csrf": web.csrf, "mode": "colocated", "host": ""})[0] == 303
+    assert post(port, "/config/feature/backups", {"csrf": web.csrf, "mode": "control", "repository": "s3:https://storage.example/b", "region": "eu-1"})[0] == 303
+    features = web.read(lambda e: e.features())
+    assert features["monitoring"]["mode"] == "colocated"
+    assert features["backups"] == {"mode": "control", "repository": "s3:https://storage.example/b", "region": "eu-1"}
+    assert "selected" in get(port, "/config")[1]
+
+
+def test_config_page_refuses_a_log_host_that_does_not_exist_and_an_unknown_setting(served) -> None:
+    web, port = served
+    code, body, _ = post(port, "/config/feature/logs", {"csrf": web.csrf, "mode": "centralized", "host": "ghost"})
+    assert code == 400 and "existing log host" in body
+    code, body, _ = post(port, "/config/feature/nothing", {"csrf": web.csrf, "mode": "x"})
+    assert code == 400 and "Unknown setting" in body
+    assert web.read(lambda e: e.features())["logs"]["mode"] == "disabled"
+
+
+def test_a_form_with_a_missing_field_or_a_bad_number_is_explained_in_words(served) -> None:
+    web, port = served
+    code, body, _ = post(port, "/nodes/add", {"csrf": web.csrf, "name": "x"})
+    assert code == 400 and "missing the field" in body and "KeyError" not in body
+    code, body, _ = post(port, "/deploy/ssh-defaults", {"csrf": web.csrf, "ssh_user": "root", "ssh_port": "abc"})
+    assert code == 400 and "Enter a whole number" in body and "invalid literal" not in body
+
+
+def test_the_standby_form_asks_for_the_ssh_user_and_refuses_a_bad_one(served) -> None:
+    web, port = served
+    add_node(web, port)
+    code, body, _ = post(port, "/ha/check", {"csrf": web.csrf, "name": "control-2", "host": "203.0.113.11", "ssh_user": "Bad User", "ssh_port": "22"})
+    assert code == 400 and "SSH user" in body

@@ -66,6 +66,15 @@ HELP: dict[str, tuple[str, str]] = {
 }
 
 
+def friendly_error(exc: Exception) -> str:
+    """A form that arrives without a field or with a bad number is reported in words, not as a Python error."""
+    if isinstance(exc, KeyError):
+        return f"The form is missing the field {exc.args[0]!r}. Reload the page and try again."
+    if isinstance(exc, ValueError) and str(exc).startswith("invalid literal for int()"):
+        return "Enter a whole number."
+    return str(exc)
+
+
 def error_help(message: str) -> str:
     if "No SSH access stored" in message:
         return '<p>Fleet has no SSH login saved for that host. Open <a href="/deploy">Deploy</a> and save a login (user and SSH port), then add the Fleet key to the host.</p>'
@@ -460,6 +469,7 @@ class FleetWeb:
         name = plan.get("name") or self.read(lambda e: StandbySetup(e).next_name(state))
         form = (f'<label>Standby name<input name="name" value="{esc(name)}" required pattern="[a-z0-9][a-z0-9-]*" autocomplete="off"></label>'
                 f'<label>Standby public IPv4<input name="host" value="{esc(plan.get("host", ""))}" required autocomplete="off" placeholder="203.0.113.11"></label>'
+                f'<label>SSH user<input name="ssh_user" value="{esc(plan.get("ssh_user", "root"))}" required pattern="[a-z_][a-z0-9_-]*" autocomplete="off"><span class="hint">Any user with passwordless sudo works.</span></label>'
                 f'<label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="{esc(plan.get("ssh_port", "22"))}" required></label>'
                 f'<label>Standby private address<input name="replication_address" value="{esc(plan.get("replication_address", ""))}" autocomplete="off"><span class="hint">Optional. Fleet reads it from the host when there is exactly one private address.</span></label>'
                 f'<label>Active private address<input name="active_replication_address" value="{esc(plan.get("active_replication_address", ""))}" autocomplete="off"><span class="hint">Optional, same rule.</span></label>')
@@ -490,12 +500,39 @@ class FleetWeb:
         else:
             if not ready:
                 out.append('<p class="empty">1.1.1.1 does not yet see every record above. Fix them and check again. Without DNS you can still continue, but a failover will be slow and manual.</p>')
-            hidden = "".join(f'<input type="hidden" name="{k}" value="{esc(plan.get(k, ""))}">' for k in ("name", "host", "ssh_port", "replication_address", "active_replication_address"))
+            hidden = "".join(f'<input type="hidden" name="{k}" value="{esc(plan.get(k, ""))}">' for k in ("name", "host", "ssh_user", "ssh_port", "replication_address", "active_replication_address"))
             skip = "" if ready else '<label><span><input type="checkbox" name="skip_dns" value="1"> Continue without correct DNS</span></label>'
             out.append(f"<p>Fleet installs the prerequisites on <b>{esc(plan['host'])}</b>, copies the secrets and the control certificate, sets up replication, and starts the standby. "
                        "Edges learn both control addresses from signed configuration.</p>"
                        + self.action_form("/ha/add-standby", f"Deploy standby {plan['name']}", primary=ready, confirm="ADD STANDBY", fields=hidden + skip))
         return "".join(out)
+
+    def _features_section(self, state: dict[str, Any]) -> str:
+        """Monitoring, central logs, and backups. Saving changes the plan; Deploy changes below carries it to the hosts."""
+        features = state["features"]
+        monitors = [n for n, v in sorted(state["nodes"].items()) if v["role"] == "monitoring"]
+        hosts = sorted(state["nodes"])
+
+        def options(values: list[str] | tuple[str, ...], current: str | None, words: dict[str, str] | None = None) -> str:
+            return "".join(f'<option value="{esc(v)}"{" selected" if v == current else ""}>{esc((words or {}).get(v, v))}</option>' for v in values)
+
+        mon, logs, backups = features["monitoring"], features["logs"], features["backups"]
+        monitoring = self.action_form(
+            "/config/feature/monitoring", "Save monitoring", fields=(
+                f'<label>Monitoring<select name="mode" data-testid="monitoring-mode">{options(("disabled", "colocated", "dedicated"), mon["mode"], {"disabled": "Off", "colocated": "On the control node", "dedicated": "On its own host"})}</select></label>'
+                f'<label>Monitoring host<select name="host" data-testid="monitoring-host"><option value="">None</option>{options(monitors, mon.get("host"))}</select>'
+                '<span class="hint">Only for its own host: a host with the monitoring role that can reach the control database.</span></label>'))
+        central = self.action_form(
+            "/config/feature/logs", "Save central logs", fields=(
+                f'<label>Central logs<select name="mode" data-testid="logs-mode">{options(("disabled", "centralized"), logs["mode"], {"disabled": "Off", "centralized": "On"})}</select></label>'
+                f'<label>Log host<select name="host" data-testid="logs-host"><option value="">None</option>{options(hosts, logs.get("host"))}</select></label>'
+                f'<label>Endpoint<input name="endpoint" value="{esc(logs.get("endpoint") or "")}" autocomplete="off" placeholder="https://logs.example.com"></label>'))
+        backup = self.action_form(
+            "/config/feature/backups", "Save backups", fields=(
+                f'<label>Backups<select name="mode" data-testid="backups-mode">{options(("disabled", "control", "all-stateful"), backups["mode"], {"disabled": "Off", "control": "Control plane", "all-stateful": "Every stateful host"})}</select></label>'
+                f'<label>Repository<input name="repository" value="{esc(backups.get("repository") or "")}" autocomplete="off" placeholder="s3:https://storage.example/bucket/cdnfoundry"></label>'
+                f'<label>Region<input name="region" value="{esc(backups.get("region") or "us-east-1")}" autocomplete="off"></label>'))
+        return ('<p class="hint">Saving changes the plan only. Use Deploy changes below to send it to the hosts.</p>' + monitoring + central + backup)
 
     def _tls_section(self, state: dict[str, Any]) -> str:
         own = self.read(lambda e: e.management_certificates())
@@ -790,7 +827,7 @@ class FleetWeb:
                 form_html = self.action_form("/upgrade/plan", f"Show the plan for {target}", primary=True)
             return 200, self.layout(path, "Upgrade", head + form_html + self._manual_release("/upgrade/plan" if current else "/upgrade/first", "/upgrade"), flash)
         if path == "/config":
-            body = ("<h2>Alert webhook</h2>" + self._alert_section("/config") + "<h2>Deploy changes</h2>"
+            body = ("<h2>Features</h2>" + self._features_section(state) + "<h2>Alert webhook</h2>" + self._alert_section("/config") + "<h2>Deploy changes</h2>"
                     "<p>Compares the bundles Fleet would render now with what each node runs, validates them on the node, and swaps them in one node at a time.</p>"
                     + self.action_form("/config/apply", "Show changes and deploy", primary=True))
             return 200, self.layout(path, "Config", body, flash)
@@ -1016,6 +1053,15 @@ class FleetWeb:
             if document is None:
                 raise ValidationError("The plan has expired; show it again")
             return job("Rolling upgrade", lambda e: e.upgrade(document), "upgrade")
+        if path.startswith("/config/feature/"):
+            feature = path.rsplit("/", 1)[1]
+            if feature not in {"monitoring", "logs", "backups"}:
+                raise ValidationError("Unknown setting")
+            config = {k: form.get(k, "").strip() or None for k in ("mode", "host", "endpoint", "repository", "region")}
+            if not config["mode"]:
+                raise ValidationError("Choose a mode")
+            config = {k: v for k, v in config.items() if k in {"monitoring": ("mode", "host"), "logs": ("mode", "host", "endpoint"), "backups": ("mode", "repository", "region")}[feature]}
+            return self._sync(f"configure-{feature}", lambda e: e.configure_feature(feature, config), "/config", f"{feature.capitalize()} settings saved. Deploy the changes to send them to the hosts.")
         if path == "/config/apply":
             return job("Deploy changed configs", lambda e: e.apply_config(), "config")
         if path == "/rollback/run":
@@ -1030,13 +1076,15 @@ class FleetWeb:
             need(f"RESTORE {snapshot}")
             return job("Restore", lambda e: ControlActions(e).restore(form["node"], snapshot, form["confirm"], overwrite_live=form.get("overwrite") == "1", operation=form.get("operation") or None), "restore")
         if path == "/ha/check":
-            plan = {k: form.get(k, "").strip() for k in ("name", "host", "ssh_port", "replication_address", "active_replication_address")}
+            plan = {k: form.get(k, "").strip() for k in ("name", "host", "ssh_user", "ssh_port", "replication_address", "active_replication_address")}
             if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,40}", plan["name"]):
                 raise ValidationError("The standby name may use lowercase letters, digits, and dashes only")
             try:
                 ipaddress.ip_address(plan["host"])
             except ValueError as exc:
                 raise ValidationError("Enter the standby's public IPv4 address, for example 203.0.113.11") from exc
+            if not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", plan["ssh_user"] or "root"):
+                raise ValidationError("The SSH user may use lowercase letters, digits, dashes, and underscores only")
             if not (plan["ssh_port"].isdigit() and 1 <= int(plan["ssh_port"]) <= 65535):
                 raise ValidationError("The SSH port must be a number from 1 to 65535")
             self.ha_plan = plan
@@ -1054,7 +1102,7 @@ class FleetWeb:
             action = path.split("/", 2)[2]
             if action == "add-standby":
                 need("ADD STANDBY")
-                plan = {k: form.get(k, "").strip() for k in ("name", "host", "ssh_port", "replication_address", "active_replication_address")}
+                plan = {k: form.get(k, "").strip() for k in ("name", "host", "ssh_user", "ssh_port", "replication_address", "active_replication_address")}
                 if not plan["host"]:
                     raise ValidationError("Enter the standby's public address in step 1")
                 if not form.get("skip_dns"):
@@ -1062,7 +1110,7 @@ class FleetWeb:
                     bad = [r["name"] for r in mg.ha_records(state, plan["name"], plan["host"]) if not self.ha_results.get(r["name"], (False, ""))[0]]
                     if bad:
                         raise ValidationError(f"Point these names first (1.1.1.1 does not see them yet): {', '.join(bad)}. Run the DNS check in step 1, or choose to continue without DNS.")
-                options = {"host": plan["host"], "name": plan["name"] or None, "ssh_port": int(plan["ssh_port"] or 22),
+                options = {"host": plan["host"], "name": plan["name"] or None, "ssh_port": int(plan["ssh_port"] or 22), "ssh_user": plan["ssh_user"] or "root",
                            "replication_address": plan["replication_address"] or None, "active_replication_address": plan["active_replication_address"] or None}
                 return job("Add standby", lambda e: json.dumps(ha_action(e, "add-standby", **options)), "ha")
             need(action.upper())
@@ -1226,7 +1274,8 @@ def make_server(web: FleetWeb, host: str = LOOPBACK, port: int = 8765) -> http.s
             except _Render as page:
                 return self._send(200, page.html)
             except (FleetError, ValueError, KeyError) as exc:
-                return self._send(400, web.layout("", "Action failed", f'<p class="empty" role="alert">{esc(exc)}</p>{error_help(str(exc))}<p><a href="/deploy">Back to Deploy</a></p>'))
+                message = friendly_error(exc)
+                return self._send(400, web.layout("", "Action failed", f'<p class="empty" role="alert">{esc(message)}</p>{error_help(message)}<p><a href="/deploy">Back to Deploy</a></p>'))
             self.send_response(303)
             self.send_header("Location", target + (("?" + urllib.parse.urlencode({"msg": msg})) if msg else ""))
             self.end_headers()
