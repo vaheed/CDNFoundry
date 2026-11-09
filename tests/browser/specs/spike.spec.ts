@@ -46,6 +46,23 @@ test.describe('domains', () => {
         await expect(page).toHaveScreenshot('domain-detail.png', { fullPage: true });
     });
 
+    test('delete domain asks for confirmation and can be cancelled', async ({ page }) => {
+        await signIn(page, 'admin', 'admin@browser.test', adminPassword);
+        await page.goto('/admin/domains');
+        await settle(page);
+        await page.getByText('alpha-browser.example').first().click();
+        await settle(page);
+        await page.getByRole('button', { name: 'Domain actions', exact: true }).click();
+        await page.getByTestId('domain-delete-action').click();
+        const dialog = page.getByRole('dialog');
+        await expect(dialog.getByText('Delete alpha-browser.example?')).toBeVisible();
+        await expect(dialog.getByText(/removed after \d+ days/)).toBeVisible();
+        await expectAccessible(page);
+        await dialog.getByRole('button', { name: 'Cancel' }).click();
+        await expect(dialog).toBeHidden();
+        await expect(page.getByTestId('domain-status')).not.toHaveText(/Deprovisioning/);
+    });
+
     test('domain user sees only assigned domains', async ({ page }) => {
         await signIn(page, 'app', 'user@browser.test', userPassword);
         await page.goto('/app/domains');
