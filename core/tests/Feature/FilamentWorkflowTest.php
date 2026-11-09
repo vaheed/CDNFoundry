@@ -531,6 +531,25 @@ class FilamentWorkflowTest extends TestCase
         Queue::assertPushed(ReconcileEdgeDomain::class, fn (ReconcileEdgeDomain $job): bool => $job->domainId === $domain->id);
     }
 
+    public function test_domain_can_be_deleted_from_the_domain_page_and_the_action_then_disappears(): void
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        $domain = Domain::query()->create(['name' => 'delete-ui.example.test', 'display_name' => 'Delete UI', 'revision' => 1, 'lifecycle_state' => 'active']);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->assertActionVisible('deleteDomain')
+            ->callAction('deleteDomain')
+            ->assertHasNoActionErrors()
+            ->assertActionHidden('deleteDomain');
+
+        $this->assertSame('deprovisioning', $domain->refresh()->lifecycle_state->value);
+        $this->assertDatabaseHas('operations', ['type' => 'domain.deprovision', 'status' => 'pending']);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'domain.deprovisioning_started']);
+    }
+
     public function test_domain_maintenance_is_a_clear_reversible_action(): void
     {
         Queue::fake();

@@ -8,6 +8,7 @@ use App\Filament\Domain\Resources\Domains\DomainResource;
 use App\Filament\Domain\Resources\Domains\Widgets\DomainKpiStrip;
 use App\Filament\Domain\Resources\Domains\Widgets\DomainNeedsAttention;
 use App\Http\Controllers\DnsDeploymentController;
+use App\Http\Controllers\DomainController;
 use App\Http\Controllers\WafController;
 use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\ImportDnsZone;
@@ -503,6 +504,23 @@ class ViewDomain extends ViewRecord
                         EnsureManagedCertificates::dispatch($this->record->id)->afterCommit();
                     }
                 }),
+            Action::make('deleteDomain')->label('Delete domain')->icon('phosphor-trash')->color('danger')->requiresConfirmation()
+                ->extraAttributes(['data-testid' => 'domain-delete-action'])
+                ->modalHeading(fn (): string => "Delete {$this->record->name}?")
+                ->modalDescription(function (): string {
+                    $days = app(PlatformSettings::class)->integer('dns_lifecycle', 'deprovision_delay_days');
+
+                    return "Traffic and DNS for this domain stop being served, and its zone, records, and certificates are removed after {$days} days.";
+                })
+                ->modalSubmitActionLabel('Delete domain')
+                ->visible(fn (): bool => $this->record->lifecycle_state !== DomainLifecycleState::Deprovisioning && Gate::allows('delete', $this->record))
+                ->action(function (): void {
+                    $response = app(DomainController::class)->destroy(request(), $this->record);
+                    $operation = $response->getData(true)['data'];
+                    $this->record->refresh();
+                    Notification::make()->info()->title('Domain deletion queued')
+                        ->body("Operation {$operation['operation_id']} is removing the zone. The domain shows as Deprovisioning until it finishes.")->send();
+                }),
             Action::make('disable')->icon('phosphor-prohibit')->color('danger')->requiresConfirmation()
                 ->visible(fn (): bool => in_array($this->record->lifecycle_state, [DomainLifecycleState::PendingVerification, DomainLifecycleState::Active], true))
                 ->action(function (): void {
@@ -563,7 +581,7 @@ class ViewDomain extends ViewRecord
             ->all();
 
         return [
-            ActionGroup::make($group(['verifyNameservers', 'forceVerifyNameservers', 'reconcileDns', 'activate', 'disable', 'importZone', 'exportZone']))
+            ActionGroup::make($group(['verifyNameservers', 'forceVerifyNameservers', 'reconcileDns', 'activate', 'disable', 'deleteDomain', 'importZone', 'exportZone']))
                 ->label('Domain actions')
                 ->icon('phosphor-globe')
                 ->color('gray')
