@@ -839,7 +839,7 @@ def main() -> None:
             _, state_pools = call("GET", "/api/admin/edge-pools", token=token)
             pool_flags = [
                 {key: pool.get(key) for key in ("id", "name", "enabled", "withdrawn", "kind", "minimum_ready_cells")}
-                for pool in state_pools["data"]
+                for pool in state_pools["data"]["data"]
             ]
             print(f"moved_cname_diagnostics placement={state_placement['data']} deployment={state_deployment['data']} pools={pool_flags}", flush=True)
             raise
