@@ -129,6 +129,21 @@ class OpsDashboardTest extends TestCase
             ->assertSee('Invalid investigation filter');
     }
 
+    public function test_platform_inventory_counts_what_the_control_database_holds(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $domain = Domain::query()->create(['name' => 'inventory.example.test', 'display_name' => 'Inventory', 'lifecycle_state' => 'active', 'waf_profile' => 'balanced']);
+        Edge::query()->create(['name' => 'inventory-edge', 'country_code' => 'DE', 'continent_code' => 'EU']);
+
+        Livewire::actingAs($admin)->test(PlatformInventoryWidget::class)
+            ->assertSee('Proxied hostnames')
+            ->assertSee('WAF protected domains')
+            ->assertSee(config('release.version'))
+            ->assertSeeHtml('data-testid="platform-inventory"');
+        $this->assertSame(1, Domain::query()->where('waf_profile', '<>', 'off')->count());
+        $this->assertNotNull($domain->id);
+    }
+
     public function test_dashboard_is_full_width_native_filament_and_widgets_poll_independently(): void
     {
         $admin = User::factory()->admin()->create();
@@ -136,7 +151,7 @@ class OpsDashboardTest extends TestCase
 
         $page = new AdminDashboard;
         $this->assertSame(Width::Full, $page->getMaxContentWidth());
-        $this->assertCount(4, $page->getWidgets());
+        $this->assertCount(12, $page->getWidgets());
         $this->assertSame(['default' => 1, 'xl' => 12], $page->getColumns());
         $this->assertSame('full', $page->getFiltersForm()->getComponents()[0]->getColumnSpan('default'));
         $range = $page->getFiltersForm()->getComponents()[0]->getChildSchema()->getComponents()[0];

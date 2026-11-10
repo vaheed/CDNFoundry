@@ -8,7 +8,6 @@ use App\Models\Edge;
 use App\Support\PlatformSettings;
 use Filament\Actions\Action;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
 use Illuminate\Database\Eloquent\Builder;
@@ -17,7 +16,7 @@ class EdgeHealthTable extends TableWidget
 {
     use UsesOpsDashboardContext;
 
-    protected static ?int $sort = 6;
+    protected static ?int $sort = 8;
 
     protected int|string|array $columnSpan = ['default' => 12, 'xl' => 7];
 
@@ -33,33 +32,28 @@ class EdgeHealthTable extends TableWidget
         }
 
         return $table
-            ->heading('Edge health and capacity')
-            ->description('Runtime health and the highest reported cell resource usage. An idle edge can still have memory or storage pressure.')
-            ->query($query)
+            ->heading('Edge health')
+            ->query($query->limit(8))
             ->poll('10s')
+            ->paginated(false)
             ->columns([
-                TextColumn::make('name')->searchable()->sortable()->url(fn (Edge $record): string => EdgeResource::getUrl('view', ['record' => $record], panel: 'admin')),
-                TextColumn::make('country_code')->label('Region')->formatStateUsing(fn (string $state, Edge $record): string => $state.' / '.$record->continent_code)->sortable(),
+                TextColumn::make('name')->label('PoP')->weight('medium')->limit(24)->tooltip(fn (Edge $record): ?string => strlen($record->name) > 24 ? $record->name : null)
+                    ->url(fn (Edge $record): string => EdgeResource::getUrl('view', ['record' => $record], panel: 'admin')),
+                TextColumn::make('country_code')->label('Region'),
                 TextColumn::make('operational_state')->label('State')->state(fn (Edge $record): string => $this->edgeState($record))->badge()
+                    ->tooltip(fn (Edge $record): ?string => data_get($record->capacity, 'last_rejection.reason'))
                     ->color(fn (string $state): string => match ($state) {
                         'Healthy' => 'success', 'Drained', 'Disabled' => 'gray', 'Stale' => 'warning', default => 'danger',
                     }),
                 TextColumn::make('capacity_percent')->label('Peak resource')->state(fn (Edge $record): string => $this->capacitySummary($record)['label'])->badge()
                     ->tooltip(fn (Edge $record): string => $this->capacitySummary($record)['detail'])
                     ->color(fn (string $state): string => $this->capacityTone($state)),
-                TextColumn::make('last_heartbeat_at')->label('Heartbeat')->since()->dateTimeTooltip('Y-m-d H:i:s P e')->placeholder('Never')->sortable(),
-                TextColumn::make('active_sequence')->label('Revision')->numeric()->sortable(),
-                TextColumn::make('capacity.last_rejection.reason')->label('Current issue')->placeholder('None')->limit(38)->tooltip(fn (Edge $record): ?string => data_get($record->capacity, 'last_rejection.reason')),
-            ])
-            ->filters([
-                TernaryFilter::make('enabled'),
-                TernaryFilter::make('drained'),
+                TextColumn::make('last_heartbeat_at')->label('Heartbeat')->since()->dateTimeTooltip('Y-m-d H:i:s')->placeholder('Never'),
             ])
             ->headerActions([
-                Action::make('allEdges')->label('All edges')->icon('phosphor-arrow-square-out')->url(EdgeResource::getUrl(panel: 'admin')),
+                Action::make('allEdges')->label('All edges')->icon('phosphor-arrow-square-out')->color('gray')->size('sm')->url(EdgeResource::getUrl(panel: 'admin')),
             ])
-            ->defaultSort('name')
-            ->paginationPageOptions([10, 25, 50]);
+            ->defaultSort('name');
     }
 
     private function edgeState(Edge $edge): string

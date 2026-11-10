@@ -5,6 +5,33 @@ All notable changes are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). The root `VERSION` file is the
 single source of truth; `make version-check` enforces it.
 
+## [Unreleased]
+
+### Added
+
+- Platform setting `proxy_defaults.diagnostic_response_headers` (off by default) controls the `Server` and `X-CDNF-*`
+  response headers on proxied responses. The `Server` header no longer carries a version.
+- Acknowledge a failed operation (Operations page, bulk action, and `POST /api/admin/operations/{operation}/acknowledge`)
+  so a reviewed failure stops raising Degraded. A later success of the same operation type for the same domain also
+  resolves it.
+- Detail tables behind every dashboard drill-down on Traffic and telemetry (traffic, cache, origin, DNS).
+- The admin Overview now also shows a Platform inventory (domains, proxied hostnames, certificates, ready cells, WAF
+  coverage, release, nameservers), the traffic and error charts, edge health, cache, DNS, queue lanes, and data freshness.
+
+### Changed
+
+- Timestamps no longer print the timezone offset or name; the platform setting defines the zone.
+
+### Fixed
+
+- The Global traffic and Global DNS tables fit their panel with fixed columns instead of scrolling sideways.
+- Admin dashboard charts and totals stopped at the last complete hour, so they trailed real time by up to an hour
+  (more with a half-hour timezone). The hour in progress is now charted and labelled "so far".
+- The failed-operations tile and `cdnfoundry_operations_failed_recent` counted failures that were already recovered
+  or acknowledged.
+- Enabling managed WAF on a service pool failed with "The waf runtime version field is required"; the release is now
+  filled from the pinned image when the toggle is switched on.
+
 ## [2.0.6] - 2026-11-10
 
 Makes Geo-DNS and the Grafana dashboards work on a fresh fleet, and adds automatic nameserver checks, registration

@@ -7,9 +7,17 @@ use App\Filament\Admin\Resources\Edges\EdgeResource;
 use App\Filament\Admin\Resources\Operations\OperationResource;
 use App\Filament\Admin\Resources\Users\UserResource;
 use App\Filament\Admin\Widgets\ActiveConditionsWidget;
+use App\Filament\Admin\Widgets\CacheEfficiencyWidget;
+use App\Filament\Admin\Widgets\DataFreshnessWidget;
+use App\Filament\Admin\Widgets\DnsHealthWidget;
+use App\Filament\Admin\Widgets\EdgeHealthTable;
+use App\Filament\Admin\Widgets\ErrorLatencyChart;
 use App\Filament\Admin\Widgets\OperationsTimelineWidget;
 use App\Filament\Admin\Widgets\OpsKpiOverview;
+use App\Filament\Admin\Widgets\PlatformInventoryWidget;
+use App\Filament\Admin\Widgets\QueueHealthWidget;
 use App\Filament\Admin\Widgets\ServiceStatusBanner;
+use App\Filament\Admin\Widgets\TrafficOverviewChart;
 use App\Filament\Domain\Resources\Domains\DomainResource;
 use App\Models\AuditLog;
 use App\Models\DnsCluster;
@@ -83,8 +91,16 @@ class AdminDashboard extends Dashboard
         return [
             ServiceStatusBanner::class,
             OpsKpiOverview::class,
+            PlatformInventoryWidget::class,
+            TrafficOverviewChart::class,
+            ErrorLatencyChart::class,
             ActiveConditionsWidget::class,
             OperationsTimelineWidget::class,
+            EdgeHealthTable::class,
+            DataFreshnessWidget::class,
+            CacheEfficiencyWidget::class,
+            DnsHealthWidget::class,
+            QueueHealthWidget::class,
         ];
     }
 
@@ -99,7 +115,7 @@ class AdminDashboard extends Dashboard
         $userState = User::query()->selectRaw('COUNT(*) AS total, SUM(CASE WHEN disabled_at IS NULL THEN 1 ELSE 0 END) AS active')->firstOrFail();
         $clusterState = DnsCluster::query()->selectRaw("SUM(CASE WHEN enabled = true THEN 1 ELSE 0 END) AS enabled_count, SUM(CASE WHEN enabled = true AND last_health_status = 'healthy' THEN 1 ELSE 0 END) AS healthy_count")->firstOrFail();
         $edgeState = Edge::query()->selectRaw('SUM(CASE WHEN enabled = true THEN 1 ELSE 0 END) AS enabled_count, SUM(CASE WHEN enabled = true AND drained = false AND last_heartbeat_at IS NOT NULL THEN 1 ELSE 0 END) AS ready_count')->firstOrFail();
-        $operationState = Operation::query()->selectRaw("SUM(CASE WHEN status IN ('pending', 'running') THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed")->firstOrFail();
+        $operationState = Operation::query()->selectRaw("SUM(CASE WHEN status IN ('pending', 'running') THEN 1 ELSE 0 END) AS pending")->firstOrFail();
         $domains = (int) $domainState->total;
         $activeDomains = (int) $domainState->active;
         $users = (int) $userState->total;
@@ -109,7 +125,7 @@ class AdminDashboard extends Dashboard
         $edges = (int) $edgeState->enabled_count;
         $readyEdges = (int) $edgeState->ready_count;
         $pendingOperations = (int) $operationState->pending;
-        $failedOperations = (int) $operationState->failed;
+        $failedOperations = Operation::query()->unresolvedFailures()->count();
 
         return [
             ['label' => 'Domains', 'value' => $domains, 'description' => "{$activeDomains} active", 'tone' => $domains === 0 ? 'neutral' : 'primary', 'url' => DomainResource::getUrl()],

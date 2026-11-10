@@ -12,7 +12,7 @@ class DnsHealthWidget extends Widget
 {
     use UsesOpsDashboardContext;
 
-    protected static ?int $sort = 8;
+    protected static ?int $sort = 11;
 
     protected int|string|array $columnSpan = ['default' => 12, 'xl' => 6];
 

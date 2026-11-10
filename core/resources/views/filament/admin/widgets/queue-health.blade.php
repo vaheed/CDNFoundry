@@ -1,25 +1,23 @@
 <x-filament-widgets::widget>
-    <x-filament::section heading="Queue and worker health" description="Lane depth and oldest ready job" icon="phosphor-queue">
-        <div wire:poll.10s>
+    <x-filament::section heading="Queue lanes" description="Jobs waiting and running per lane. Horizon has the detail." icon="phosphor-queue">
+        <div wire:poll.10s data-testid="queue-health">
             @if (!($state['available'] ?? false))
                 <x-ui.widget-state :state="$state['state'] ?? 'unavailable'" :description="$state['error'] ?? 'Queue evidence could not be loaded.'" />
             @else
-                <div class="cdn-queue-list">
+                <x-ui.data-table caption="Queue lanes" fixed>
+                    <x-slot:header><tr><th class="text-left">Lane</th><th class="text-right">Waiting</th><th class="text-right">Running</th><th class="text-right">Oldest</th></tr></x-slot:header>
                     @foreach ($state['items'] as $lane)
-                        <div class="cdn-queue-row">
-                            <div class="min-w-0">
-                                <div class="cdn-row-title">{{ $lane['label'] }}</div>
-                                <div class="cdn-row-meta"><code>{{ $lane['queue'] }}</code></div>
-                                <div class="cdn-row-meta">Ready <span class="tabular-nums">{{ $lane['ready'] === null ? 'unavailable' : number_format($lane['ready']) }}</span>, running <span class="tabular-nums">{{ $lane['reserved'] === null ? 'unavailable' : number_format($lane['reserved']) }}</span></div>
-                                <div class="cdn-row-meta">Oldest {{ $lane['oldest_job_age_seconds'] === null ? 'unavailable' : \Carbon\CarbonInterval::seconds($lane['oldest_job_age_seconds'])->cascade()->forHumans(['short' => true]) }}</div>
-                            </div>
-                            <x-ui.status-pill :tone="$lane['status'] === 'healthy' ? (($lane['depth'] ?? 0) > 0 ? 'warning' : 'success') : ($lane['status'] === 'degraded' ? 'warning' : 'danger')">
-                                {{ $lane['depth'] === null ? 'Unavailable' : number_format($lane['depth']) }} pending
-                            </x-ui.status-pill>
-                        </div>
+                        @php
+                            $tone = $lane['status'] === 'healthy' ? (($lane['depth'] ?? 0) > 0 ? 'warning' : 'success') : ($lane['status'] === 'degraded' ? 'warning' : 'danger');
+                        @endphp
+                        <tr>
+                            <td class="px-3 py-2" title="{{ $lane['queue'] }}"><span class="cdn-status-pill" data-tone="{{ $tone }}" aria-hidden="true"></span> {{ $lane['label'] }}</td>
+                            <td class="px-3 py-2 text-right"><x-ui.status-pill :tone="$tone">{{ $lane['depth'] === null ? 'n/a' : number_format($lane['depth']) }}</x-ui.status-pill></td>
+                            <td class="px-3 py-2 text-right tabular-nums">{{ $lane['reserved'] === null ? 'n/a' : number_format($lane['reserved']) }}</td>
+                            <td class="px-3 py-2 text-right tabular-nums">{{ $lane['oldest_job_age_seconds'] === null ? 'n/a' : \Carbon\CarbonInterval::seconds($lane['oldest_job_age_seconds'])->cascade()->forHumans(['short' => true, 'parts' => 1]) }}</td>
+                        </tr>
                     @endforeach
-                </div>
-                <p class="cdn-row-meta mt-3">Retry count and throughput: unavailable in this normalized snapshot. Horizon remains the detailed administrator drill-down.</p>
+                </x-ui.data-table>
             @endif
         </div>
     </x-filament::section>

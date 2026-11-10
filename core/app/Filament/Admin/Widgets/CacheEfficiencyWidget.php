@@ -11,7 +11,7 @@ class CacheEfficiencyWidget extends Widget
 {
     use UsesOpsDashboardContext;
 
-    protected static ?int $sort = 7;
+    protected static ?int $sort = 10;
 
     protected int|string|array $columnSpan = ['default' => 12, 'xl' => 6];
 

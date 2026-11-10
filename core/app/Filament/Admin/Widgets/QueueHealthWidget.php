@@ -10,7 +10,7 @@ class QueueHealthWidget extends Widget
 {
     use UsesOpsDashboardContext;
 
-    protected static ?int $sort = 9;
+    protected static ?int $sort = 12;
 
     protected int|string|array $columnSpan = 'full';
 

@@ -10,9 +10,9 @@ class DataFreshnessWidget extends Widget
 {
     use UsesOpsDashboardContext;
 
-    protected static ?int $sort = 11;
+    protected static ?int $sort = 9;
 
-    protected int|string|array $columnSpan = ['default' => 12, 'xl' => 4];
+    protected int|string|array $columnSpan = ['default' => 12, 'xl' => 5];
 
     protected string $view = 'filament.admin.widgets.data-freshness';
 
