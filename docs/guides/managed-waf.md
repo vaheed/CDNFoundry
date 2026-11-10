@@ -111,7 +111,8 @@ design switched the whole request to monitor mode, and an attacker could add a
 literal parameter name to bypass CRS.
 
 Exclusions saved earlier stay visible and can be deleted, but the edge artifact
-always carries an empty list. To handle a false positive, choose **Observe** for
+always carries an empty list. The domain page shows the **WAF exclusions** tab
+only while such exclusions exist. To handle a false positive, choose **Observe** for
 the domain, or ask an administrator to adjust the platform ruleset.
 
 ## Telemetry
