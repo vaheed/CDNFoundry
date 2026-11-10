@@ -112,7 +112,7 @@
                     <x-filament::button tag="a" icon="phosphor-download-simple" :href="route('app.analytics.usage.csv', $state['domain'])">Usage CSV export</x-filament::button>
                 </div>
                 <x-ui.data-table caption="Finalized domain usage intervals">
-                    <x-slot:header><tr><th>Interval ({{ $display->displayTimezone() }})</th><th class="text-right">Requests</th><th class="text-right">Transfer</th><th class="text-right">DNS</th><th>State</th></tr></x-slot:header>
+                    <x-slot:header><tr><th>Interval</th><th class="text-right">Requests</th><th class="text-right">Transfer</th><th class="text-right">DNS</th><th>State</th></tr></x-slot:header>
                             @forelse ($state['usage'] as $row)
                                 <tr><td class="px-3 py-2 whitespace-nowrap">{{ $display->formatTimestamp($row['interval']) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format($row['requests']) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes($row['bytes']) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format($row['dns_queries']) }}</td><td class="px-3 py-2"><span class="cdn-status-pill" data-tone="{{ $row['status'] === 'finalized' ? 'success' : 'warning' }}">{{ str($row['status'])->headline() }}</span></td></tr>
                             @empty

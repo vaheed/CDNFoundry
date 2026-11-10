@@ -6,6 +6,7 @@ use App\Filament\Admin\Pages\Telemetry;
 use App\Models\User;
 use App\Ops\Data\OpsDashboardContext;
 use App\Support\PlatformSettings;
+use Carbon\CarbonImmutable;
 use Filament\Widgets\Concerns\InteractsWithPageFilters;
 
 trait UsesOpsDashboardContext
@@ -25,9 +26,20 @@ trait UsesOpsDashboardContext
         return OpsDashboardContext::fromFilters($this->pageFilters, $user);
     }
 
-    public function dashboardTimestamp(?string $timestamp, string $format = 'Y-m-d H:i:s P e'): string
+    public function dashboardTimestamp(?string $timestamp, string $format = 'Y-m-d H:i:s'): string
     {
         return app(PlatformSettings::class)->formatTimestamp($timestamp, $format);
+    }
+
+    /** Hour label in the display timezone; the hour still in progress says so. */
+    public function bucketLabel(?string $bucket): string
+    {
+        if ($bucket === null) {
+            return 'Unknown';
+        }
+        $label = $this->dashboardTimestamp($bucket, 'M j H:i');
+
+        return CarbonImmutable::parse($bucket, 'UTC')->equalTo(CarbonImmutable::now('UTC')->startOfHour()) ? $label.' (so far)' : $label;
     }
 
     protected function telemetryUrl(array $extra = []): string

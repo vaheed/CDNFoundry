@@ -11,10 +11,12 @@ use App\Models\UsageRollup;
 use App\Models\User;
 use App\Support\AnalyticsStore;
 use Carbon\CarbonImmutable;
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 class AnalyticsApiTest extends TestCase
@@ -30,6 +32,20 @@ class AnalyticsApiTest extends TestCase
         $this->assertSame(24, $page->trafficLimit);
         $page->showFewerTraffic();
         $this->assertSame(12, $page->trafficLimit);
+    }
+
+    public function test_every_drilldown_view_renders_its_own_detail_tables(): void
+    {
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $admin = User::factory()->admin()->create();
+        Http::fake([config('services.clickhouse.url').'*' => Http::response(json_encode(['hostname' => 'shop.example.test', 'requests' => 7, 'bytes_out' => 2048, 'status' => 502, 'path' => '/cart', 'cache_status' => 'MISS', 'qname' => 'shop.example.test', 'qtype' => 'A', 'queries' => 3]))]);
+        $expected = ['traffic' => 'Busiest hostnames', 'cache' => 'Paths that miss or bypass the cache', 'origin' => 'Origin error reasons', 'dns' => 'Most queried names'];
+
+        foreach ($expected as $view => $heading) {
+            Livewire::actingAs($admin)->withQueryParams(['view' => $view])->test(Telemetry::class)
+                ->assertSee($heading)->assertSee('shop.example.test');
+        }
+        Livewire::actingAs($admin)->test(Telemetry::class)->assertDontSee('Busiest hostnames');
     }
 
     public function test_dns_scope_excludes_nested_domains_and_history_before_the_current_owner(): void

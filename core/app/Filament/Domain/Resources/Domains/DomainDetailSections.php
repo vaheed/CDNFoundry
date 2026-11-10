@@ -63,7 +63,7 @@ class DomainDetailSections
         $settings = PlatformDnsSetting::query()->find(1);
         $timezone = app(PlatformSettings::class);
         $revisions = EdgeRevision::query()->where('domain_id', $domain->id)->where('status', 'validated')->latest('revision')->limit(10)->get()
-            ->map(fn (EdgeRevision $revision): string => "#{$revision->revision}   ".$timezone->formatTimestamp($revision->created_at, 'Y-m-d H:i:s T'))->all();
+            ->map(fn (EdgeRevision $revision): string => "#{$revision->revision}   ".$timezone->formatTimestamp($revision->created_at, 'Y-m-d H:i:s'))->all();
 
         return ['title' => 'Delivery', 'rows' => [
             self::row('Placement', $placement?->state, 'badge', empty: 'Not placed'),
@@ -88,7 +88,7 @@ class DomainDetailSections
                 $deployment->cluster->name,
                 ['Desired #'.$deployment->desired_revision, 'Active #'.$deployment->deployed_revision],
                 'chips',
-                help: $deployment->deployed_at === null ? null : 'Deployed '.$timezone->formatTimestamp($deployment->deployed_at, 'Y-m-d H:i:s T'),
+                help: $deployment->deployed_at === null ? null : 'Deployed '.$timezone->formatTimestamp($deployment->deployed_at, 'Y-m-d H:i:s'),
                 badge: $deployment->status,
             );
             if (auth()->user()?->isAdmin() === true && filled($deployment->last_error)) {
@@ -139,7 +139,7 @@ class DomainDetailSections
         $timezone = app(PlatformSettings::class);
         $limits = SecurityConfig::compile($domain)['limits'];
         $events = $domain->securityEvents()->latest('occurred_at')->limit(10)->get()
-            ->map(fn ($event): string => "{$event->reason_code}   ".$timezone->formatTimestamp($event->occurred_at, 'Y-m-d H:i:s T'))->all();
+            ->map(fn ($event): string => "{$event->reason_code}   ".$timezone->formatTimestamp($event->occurred_at, 'Y-m-d H:i:s'))->all();
 
         return ['title' => 'Security', 'rows' => [
             self::row('Profile', ($domain->security_settings ?? SecurityConfig::defaults())['profile'], 'badge'),

@@ -423,7 +423,7 @@ class ViewDomain extends ViewRecord
                 ->action(fn () => $this->changeSecurityState('recovering', EdgePool::query()->where('enabled', true)->where('withdrawn', false)->where('kind', 'shared')->orderBy('id')->firstOrFail())),
             Action::make('rollbackProxy')->icon('phosphor-arrow-counter-clockwise')->label('Rollback proxy revision')->color('warning')->requiresConfirmation()->schema([
                 Select::make('revision')->options(fn (): array => EdgeRevision::query()->where('domain_id', $this->record->id)->where('status', 'validated')->where('revision', '<', $this->record->revision)->latest('revision')->limit(50)->get()
-                    ->mapWithKeys(fn (EdgeRevision $revision): array => [$revision->revision => "#{$revision->revision} · {$revision->created_at->copy()->setTimezone(app(PlatformSettings::class)->displayTimezone())->format('Y-m-d H:i:s P e')}"])->all())->required(),
+                    ->mapWithKeys(fn (EdgeRevision $revision): array => [$revision->revision => "#{$revision->revision} · {$revision->created_at->copy()->setTimezone(app(PlatformSettings::class)->displayTimezone())->format('Y-m-d H:i:s')}"])->all())->required(),
             ])->visible(fn (): bool => EdgeRevision::query()->where('domain_id', $this->record->id)->where('status', 'validated')->where('revision', '<', $this->record->revision)->exists())
                 ->action(function (array $data): void {
                     $prior = EdgeRevision::query()->where('domain_id', $this->record->id)->where('revision', $data['revision'])->where('status', 'validated')->firstOrFail();

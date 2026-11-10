@@ -127,6 +127,76 @@ final class AnalyticsStore
         );
     }
 
+    /**
+     * Detail tables behind a dashboard drill-down. Hourly aggregates cover the whole range; the raw
+     * event tables are bounded to the raw window the caller passes. Every query has a small LIMIT.
+     *
+     * @return list<array{title: string, description: string, columns: array<string, string>, rows: list<array<string, mixed>>}>
+     */
+    public function investigation(?Domain $domain, array $range, array $rawRange, string $view, ?string $statusFamily = null): array
+    {
+        $scope = $domain === null ? '1' : 'domain_id = {domain_id:UInt64}';
+        $aggregate = fn (string $select, string $group, string $order, string $extra = '1'): array => $this->query(
+            "SELECT {$select} FROM cdnf.edge_hourly WHERE {$scope} AND ({$extra}) AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64} GROUP BY {$group} ORDER BY {$order} LIMIT 15",
+            $this->parameters($range, $domain),
+        );
+        $raw = fn (string $select, string $group, string $order, string $extra = '1', string $source = 'edge_events', ?string $sourceScope = null): array => $this->query(
+            "SELECT {$select} FROM cdnf.{$source} WHERE ".($sourceScope ?? $scope)." AND ({$extra}) AND occurred_at >= {from:DateTime64} AND occurred_at < {to:DateTime64} GROUP BY {$group} ORDER BY {$order} LIMIT 15",
+            $this->parameters($rawRange, $domain),
+        );
+        $status = match ($statusFamily) {
+            '4xx' => 'status >= 400 AND status < 500',
+            '5xx' => 'status >= 500 AND status < 600',
+            default => '1',
+        };
+        $window = 'the whole range';
+        $rawWindow = 'the latest '.max(1, (int) ceil($rawRange['from']->diffInHours($rawRange['to']))).' hours';
+
+        return match ($view) {
+            'traffic' => [
+                ['title' => 'Busiest hostnames', 'description' => "Requests and egress by hostname over {$window}.", 'columns' => ['hostname' => 'Hostname', 'requests' => 'Requests', 'bytes_out' => 'Egress bytes'],
+                    'rows' => $aggregate('hostname, sum(requests) AS requests, sum(bytes_out) AS bytes_out', 'hostname', 'requests DESC', "hostname != '' AND {$status}")],
+                ['title' => 'Status codes', 'description' => "Responses by HTTP status over {$window}.", 'columns' => ['status' => 'Status', 'requests' => 'Requests'],
+                    'rows' => $aggregate('status, sum(requests) AS requests', 'status', 'requests DESC', $status)],
+                ['title' => 'Countries', 'description' => "Where requests came from over {$window}.", 'columns' => ['country' => 'Country', 'continent' => 'Continent', 'requests' => 'Requests', 'bytes_out' => 'Egress bytes'],
+                    'rows' => $aggregate('country, continent, sum(requests) AS requests, sum(bytes_out) AS bytes_out', 'country, continent', 'requests DESC', $status)],
+                ['title' => 'Edges', 'description' => "Requests served by each edge over {$window}.", 'columns' => ['edge_id' => 'Edge', 'requests' => 'Requests', 'bytes_out' => 'Egress bytes'],
+                    'rows' => $aggregate('edge_id, sum(requests) AS requests, sum(bytes_out) AS bytes_out', 'edge_id', 'requests DESC', $status)],
+                ['title' => 'Most requested paths', 'description' => "Paths by request count in {$rawWindow}.", 'columns' => ['hostname' => 'Hostname', 'path' => 'Path', 'requests' => 'Requests', 'bytes_out' => 'Egress bytes'],
+                    'rows' => $raw('hostname, path, count() AS requests, sum(bytes_out) AS bytes_out', 'hostname, path', 'requests DESC', "event_type = 'request' AND {$status}")],
+            ],
+            'cache' => [
+                ['title' => 'Cache outcomes', 'description' => "How requests were answered over {$window}.", 'columns' => ['cache_status' => 'Cache status', 'requests' => 'Requests', 'bytes_out' => 'Egress bytes'],
+                    'rows' => $aggregate('cache_status, sum(requests) AS requests, sum(bytes_out) AS bytes_out', 'cache_status', 'requests DESC')],
+                ['title' => 'Hostnames with the most misses and bypasses', 'description' => "Hostnames that reached the origin most often over {$window}.", 'columns' => ['hostname' => 'Hostname', 'requests' => 'Uncached requests'],
+                    'rows' => $aggregate('hostname, sum(requests) AS requests', 'hostname', 'requests DESC', "hostname != '' AND upper(cache_status) IN ('MISS', 'BYPASS', 'EXPIRED')")],
+                ['title' => 'Paths that miss or bypass the cache', 'description' => "Candidates for a longer cache time in {$rawWindow}.", 'columns' => ['hostname' => 'Hostname', 'path' => 'Path', 'cache_status' => 'Cache status', 'requests' => 'Requests'],
+                    'rows' => $raw('hostname, path, cache_status, count() AS requests', 'hostname, path, cache_status', 'requests DESC', "event_type = 'request' AND upper(cache_status) IN ('MISS', 'BYPASS', 'EXPIRED')")],
+            ],
+            'origin' => [
+                ['title' => 'Origin failures by hostname', 'description' => "Requests that failed at the origin or returned 5xx in {$rawWindow}.", 'columns' => ['hostname' => 'Hostname', 'failures' => 'Failures', 'origin_error' => 'Most common error'],
+                    'rows' => $raw('hostname, count() AS failures, topK(1)(origin_error)[1] AS origin_error', 'hostname', 'failures DESC', "event_type = 'request' AND (status >= 500 OR origin_error != '')")],
+                ['title' => 'Origin error reasons', 'description' => "What the edge recorded when the origin failed, in {$rawWindow}.", 'columns' => ['origin_error' => 'Reason', 'requests' => 'Requests'],
+                    'rows' => $raw('origin_error, count() AS requests', 'origin_error', 'requests DESC', "origin_error != ''")],
+                ['title' => 'Slowest origins', 'description' => "Average origin response time per hostname in {$rawWindow}.", 'columns' => ['hostname' => 'Hostname', 'average_ms' => 'Average (ms)', 'samples' => 'Samples'],
+                    'rows' => $raw('hostname, round(avg(origin_latency_ms)) AS average_ms, count() AS samples', 'hostname', 'average_ms DESC', 'origin_latency_ms IS NOT NULL')],
+                ['title' => 'Failed paths', 'description' => "Paths with the most 5xx responses in {$rawWindow}.", 'columns' => ['hostname' => 'Hostname', 'path' => 'Path', 'status' => 'Status', 'requests' => 'Requests'],
+                    'rows' => $raw('hostname, path, status, count() AS requests', 'hostname, path, status', 'requests DESC', "event_type = 'request' AND status >= 500")],
+            ],
+            'dns' => [
+                ['title' => 'Query types and responses', 'description' => "DNS answers by type and response code over {$window}.", 'columns' => ['qtype' => 'Type', 'rcode' => 'Response', 'queries' => 'Queries'],
+                    'rows' => $this->query('SELECT qtype, rcode, sum(queries) AS queries FROM cdnf.dns_hourly WHERE '.($domain === null ? '1' : $this->dnsScope('interval_start', true)).' AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64} GROUP BY qtype, rcode ORDER BY queries DESC LIMIT 15', $this->parameters($range, $domain))],
+                ['title' => 'Most queried names', 'description' => "Names queried most in {$rawWindow}.", 'columns' => ['qname' => 'Name', 'qtype' => 'Type', 'queries' => 'Queries'],
+                    'rows' => $raw('qname, qtype, count() AS queries', 'qname, qtype', 'queries DESC', '1', 'dns_events', $domain === null ? '1' : $this->dnsScope('occurred_at', false))],
+                ['title' => 'Failing names', 'description' => "Names answered with SERVFAIL or REFUSED in {$rawWindow}.", 'columns' => ['qname' => 'Name', 'rcode' => 'Response', 'queries' => 'Queries'],
+                    'rows' => $raw('qname, rcode, count() AS queries', 'qname, rcode', 'queries DESC', "upper(rcode) IN ('SERVFAIL', 'REFUSED')", 'dns_events', $domain === null ? '1' : $this->dnsScope('occurred_at', false))],
+                ['title' => 'Resolver networks', 'description' => "Countries the queries came from in {$rawWindow}.", 'columns' => ['country' => 'Country', 'queries' => 'Queries'],
+                    'rows' => $raw('country, count() AS queries', 'country', 'queries DESC', '1', 'dns_events', $domain === null ? '1' : $this->dnsScope('occurred_at', false))],
+            ],
+            default => throw ValidationException::withMessages(['view' => 'The analytics view is invalid.']),
+        };
+    }
+
     public function topUrls(Domain $domain, array $range): array
     {
         return $this->query('SELECT path, count() AS requests, sum(bytes_out) AS bytes_out FROM cdnf.edge_events WHERE domain_id = {domain_id:UInt64} AND occurred_at >= {from:DateTime64} AND occurred_at < {to:DateTime64} GROUP BY path ORDER BY requests DESC, path LIMIT 100', $this->parameters($range, $domain));

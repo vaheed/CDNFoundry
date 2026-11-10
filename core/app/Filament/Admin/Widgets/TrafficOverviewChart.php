@@ -10,7 +10,7 @@ class TrafficOverviewChart extends ChartWidget
 {
     use UsesOpsDashboardContext;
 
-    protected static ?int $sort = 3;
+    protected static ?int $sort = 4;
 
     protected int|string|array $columnSpan = ['default' => 12, 'xl' => 6];
 
@@ -95,6 +95,6 @@ class TrafficOverviewChart extends ChartWidget
     /** @param array<int, array<string, mixed>> $rows */
     private function labels(array $rows): array
     {
-        return array_map(fn (array $row): string => isset($row['bucket']) ? $this->dashboardTimestamp($row['bucket'], 'M j H:i P') : 'Unknown', $rows);
+        return array_map(fn (array $row): string => $this->bucketLabel($row['bucket'] ?? null), $rows);
     }
 }

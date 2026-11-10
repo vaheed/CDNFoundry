@@ -66,9 +66,11 @@ final readonly class OpsDashboardContext
             $errors[] = 'Administrator access is required for global operations data.';
         }
 
-        // The overview intentionally uses hourly aggregate tables instead of
-        // scanning raw events. Compare only complete, equivalent buckets.
-        $to = CarbonImmutable::now('UTC')->startOfHour();
+        // The overview uses hourly aggregate tables instead of scanning raw events. The range ends
+        // at the close of the current hour so the hour in progress is charted (labelled "so far");
+        // ending at its start would hide up to an hour of traffic. The comparison range stays
+        // aligned to whole hours.
+        $to = CarbonImmutable::now('UTC')->startOfHour()->addHour();
         $seconds = max(self::RANGES[$range], 3600);
 
         return new self(

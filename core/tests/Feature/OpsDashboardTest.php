@@ -7,6 +7,7 @@ use App\Filament\Admin\Resources\Operations\OperationResource;
 use App\Filament\Admin\Widgets\DnsHealthWidget;
 use App\Filament\Admin\Widgets\EdgeHealthTable;
 use App\Filament\Admin\Widgets\OpsKpiOverview;
+use App\Filament\Admin\Widgets\PlatformInventoryWidget;
 use App\Filament\Admin\Widgets\ServiceStatusBanner;
 use App\Filament\Admin\Widgets\TrafficOverviewChart;
 use App\Models\Domain;
@@ -41,8 +42,9 @@ class OpsDashboardTest extends TestCase
         ], $admin);
 
         $this->assertTrue($context->isValid());
-        $this->assertSame('2026-07-31T12:00:00+00:00', $context->from->toIso8601String());
-        $this->assertSame('2026-08-01T12:00:00+00:00', $context->to->toIso8601String());
+        // The range closes at the end of the current hour so the hour in progress is charted.
+        $this->assertSame('2026-07-31T13:00:00+00:00', $context->from->toIso8601String());
+        $this->assertSame('2026-08-01T13:00:00+00:00', $context->to->toIso8601String());
         $this->assertFalse($context->compare);
         $this->assertSame($domain->id, $context->domainId);
         $this->assertSame($edge->id, $context->edgeId);
@@ -67,11 +69,11 @@ class OpsDashboardTest extends TestCase
         $this->assertTrue($utc->to->equalTo($context->to));
         Http::fake([config('services.clickhouse.url').'*' => Http::response('')]);
         $widget = Livewire::actingAs($admin)->test(TrafficOverviewChart::class)->instance();
-        $this->assertSame('2026-08-01 15:30:00 +03:30 Asia/Tehran', $widget->dashboardTimestamp('2026-08-01 12:00:00'));
+        $this->assertSame('2026-08-01 15:30:00', $widget->dashboardTimestamp('2026-08-01 12:00:00'));
         $this->assertSame('Unavailable', $widget->dashboardTimestamp(null));
         $settings->update('display', ['timezone' => 'America/New_York'], $admin);
-        $this->assertSame('Nov 1 01:30 -04:00', $widget->dashboardTimestamp('2026-11-01 05:30:00', 'M j H:i P'));
-        $this->assertSame('Nov 1 01:30 -05:00', $widget->dashboardTimestamp('2026-11-01 06:30:00', 'M j H:i P'));
+        $this->assertSame('Nov 1 01:30', $widget->dashboardTimestamp('2026-11-01 05:30:00', 'M j H:i'));
+        $this->assertSame('Nov 1 01:30', $widget->dashboardTimestamp('2026-11-01 06:30:00', 'M j H:i'));
     }
 
     public function test_metric_comparisons_and_formatting_do_not_invent_a_zero_baseline(): void

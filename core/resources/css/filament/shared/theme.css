@@ -900,6 +900,53 @@ body,
     background: var(--cdn-tint);
 }
 
+/* A fixed table fits its container: the first column takes the slack, number columns keep a set width,
+   and a long cell is cut with an ellipsis instead of adding a scrollbar. */
+.cdn-table-wrap--fit {
+    overflow-x: visible;
+}
+
+.cdn-data-table--fixed {
+    table-layout: fixed;
+}
+
+.cdn-data-table--fixed th,
+.cdn-data-table--fixed td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cdn-data-table--fixed th + th,
+.cdn-data-table--fixed td + td {
+    width: 6.5rem;
+}
+
+.cdn-fact-grid {
+    display: grid;
+    gap: 0 var(--cdn-space-6);
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.cdn-fact-grid > div {
+    display: grid;
+    min-width: 0;
+    gap: 0.125rem;
+    padding-block: 0.5rem;
+    border-top: 1px solid var(--cdn-hairline);
+}
+
+.cdn-fact-grid dt {
+    color: var(--cdn-text-subtle);
+    font-size: 0.75rem;
+}
+
+.cdn-fact-grid dd {
+    color: var(--cdn-text-strong);
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
 /* ---------------------------------------------------------------- layer cards: sections and panels */
 
 .fi-section,
@@ -2182,4 +2229,18 @@ a.cdn-stat-card:hover {
 
 .fi-sc-wizard .fi-sc-wizard-header-step:not(.fi-active):not(.fi-completed) .fi-sc-wizard-header-step-number {
     color: var(--cdn-text-subtle);
+}
+
+
+/* Overview table widgets stay short: one line per row, no oversized cells. */
+.fi-wi-table .fi-ta-cell {
+    padding-block: 0.25rem;
+}
+
+.fi-wi-table .fi-ta-cell > * {
+    padding-block: 0.25rem;
+}
+
+.fi-wi-table .fi-ta-header-cell {
+    padding-block: 0.375rem;
 }

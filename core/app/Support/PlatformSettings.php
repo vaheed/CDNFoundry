@@ -29,7 +29,7 @@ final class PlatformSettings
         return $this->loaded['display'] === null ? 'UTC' : (string) $this->get('display', 'timezone');
     }
 
-    public function formatTimestamp(string|\DateTimeInterface|null $timestamp, string $format = 'Y-m-d H:i:s P e'): string
+    public function formatTimestamp(string|\DateTimeInterface|null $timestamp, string $format = 'Y-m-d H:i:s'): string
     {
         return filled($timestamp)
             ? CarbonImmutable::parse($timestamp, 'UTC')->setTimezone($this->displayTimezone())->format($format)

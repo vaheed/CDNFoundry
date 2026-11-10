@@ -28,7 +28,7 @@
                     @elseif ($row['kind'] === 'badge')
                         <x-ui.status-pill :tone="$row['tone'] ?? $tone((string) $value)" appearance="dot">{{ ucfirst(str_replace('_', ' ', (string) $value)) }}</x-ui.status-pill>
                     @elseif ($row['kind'] === 'time')
-                        <time class="cdn-mono" datetime="{{ $value }}" title="{{ \Carbon\CarbonImmutable::parse($value)->diffForHumans() }}">{{ app(\App\Support\PlatformSettings::class)->formatTimestamp($value, 'Y-m-d H:i:s T') }}</time>
+                        <time class="cdn-mono" datetime="{{ $value }}" title="{{ \Carbon\CarbonImmutable::parse($value)->diffForHumans() }}">{{ app(\App\Support\PlatformSettings::class)->formatTimestamp($value, 'Y-m-d H:i:s') }}</time>
                     @elseif ($row['kind'] === 'chips')
                         <ul class="cdn-chips">
                             @foreach ($value as $chip)

@@ -32,7 +32,7 @@
             </div>
         </x-filament::section>
 
-        <x-filament::section heading="Telemetry status" :description="'Finalized through ' . $display->formatTimestamp($state['meta']['finalized_until'] ?? null, 'Y-m-d H:i T')" icon="phosphor-pulse">
+        <x-filament::section heading="Telemetry status" :description="'Finalized through ' . $display->formatTimestamp($state['meta']['finalized_until'] ?? null, 'Y-m-d H:i')" icon="phosphor-pulse">
             <div class="flex flex-wrap gap-3">
                 <x-ui.status-pill :tone="$state['available'] ? 'success' : 'danger'">ClickHouse {{ $state['available'] ? 'available' : 'unavailable' }}</x-ui.status-pill>
                 <x-ui.status-pill :tone="$state['buffer']['available'] ? 'success' : 'warning'">Vector metrics {{ $state['buffer']['available'] ? 'available' : 'unavailable' }}</x-ui.status-pill>
@@ -50,6 +50,32 @@
         </x-filament::section>
 
         @if ($state['available'])
+            @if ($state['filters']['view'])
+                <x-filament::section :heading="str($state['filters']['view'])->headline() . ' details'" description="Detail tables for the selected focus, filtered by the range and domain above." icon="phosphor-magnifying-glass" data-testid="telemetry-investigation">
+                    <div class="cdn-dashboard-columns">
+                        @foreach ($state['investigation'] as $table)
+                            <div class="min-w-0">
+                                <div class="cdn-row-title">{{ $table['title'] }}</div>
+                                <p class="cdn-row-meta mb-2">{{ $table['description'] }}</p>
+                                <x-ui.data-table :caption="$table['title']" fixed>
+                                    <x-slot:header><tr>@foreach ($table['columns'] as $key => $label)<th class="{{ in_array($key, ['requests', 'queries', 'bytes_out', 'failures', 'samples', 'average_ms'], true) ? 'text-right' : 'text-left' }}">{{ $label }}</th>@endforeach</tr></x-slot:header>
+                                    @forelse ($table['rows'] as $row)
+                                        <tr>@foreach ($table['columns'] as $key => $label)
+                                            @php $value = $row[$key] ?? ''; @endphp
+                                            @if (in_array($key, ['requests', 'queries', 'failures', 'samples', 'average_ms'], true))<td class="px-3 py-2 text-right tabular-nums">{{ number_format((float) $value) }}</td>
+                                            @elseif ($key === 'bytes_out')<td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes($value) }}</td>
+                                            @else<td class="px-3 py-2" @if (strlen((string) $value) > 24) title="{{ $value }}" @endif>{{ $value === '' ? 'None' : $value }}</td>@endif
+                                        @endforeach</tr>
+                                    @empty
+                                        <tr><td colspan="{{ count($table['columns']) }}" class="px-3 py-6 text-center text-gray-500">Nothing was recorded for this table in the selected range.</td></tr>
+                                    @endforelse
+                                </x-ui.data-table>
+                            </div>
+                        @endforeach
+                    </div>
+                </x-filament::section>
+            @endif
+
             <div class="cdn-stat-grid">
                 @foreach ([
                     ['label' => 'Requests', 'value' => number_format((int) ($summary['requests'] ?? 0)), 'description' => null, 'tone' => 'success'],
@@ -70,10 +96,10 @@
 
             <div class="cdn-dashboard-columns">
                 <x-filament::section heading="Global traffic" icon="phosphor-chart-bar">
-                    <x-ui.data-table caption="Global hourly traffic">
-                        <x-slot:header><tr><th>Hour ({{ $display->displayTimezone() }})</th><th class="text-right">Requests</th><th class="text-right">Transfer</th></tr></x-slot:header>
+                    <x-ui.data-table caption="Global hourly traffic" fixed>
+                        <x-slot:header><tr><th>Hour</th><th class="text-right">Requests</th><th class="text-right">Transfer</th></tr></x-slot:header>
                                 @forelse ($state['traffic']['items'] as $row)
-                                    <tr><td class="px-3 py-2 whitespace-nowrap">{{ $display->formatTimestamp($row['bucket'] ?? null) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format((int) ($row['requests'] ?? 0)) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes(((int) ($row['bytes_in'] ?? 0)) + ((int) ($row['bytes_out'] ?? 0))) }}</td></tr>
+                                    <tr><td class="px-3 py-2" title="{{ $display->formatTimestamp($row['bucket'] ?? null) }}">{{ $display->formatTimestamp($row['bucket'] ?? null, 'M j, H:i') }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format((int) ($row['requests'] ?? 0)) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes(((int) ($row['bytes_in'] ?? 0)) + ((int) ($row['bytes_out'] ?? 0))) }}</td></tr>
                                 @empty
                                     <tr><td colspan="3" class="px-3 py-6 text-center text-gray-500">No traffic was recorded in this range.</td></tr>
                                 @endforelse
@@ -91,7 +117,7 @@
                 </x-filament::section>
 
                 <x-filament::section heading="Global DNS" icon="phosphor-globe">
-                    <x-ui.data-table caption="Global DNS responses">
+                    <x-ui.data-table caption="Global DNS responses" fixed>
                         <x-slot:header><tr><th>Type</th><th>Response</th><th class="text-right">Queries</th></tr></x-slot:header>
                                 @forelse ($state['dns'] as $row)
                                     <tr><td class="px-3 py-2 font-medium">{{ $row['qtype'] ?? 'Unknown' }}</td><td class="px-3 py-2">{{ $row['rcode'] ?? 'Unknown' }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format((int) ($row['queries'] ?? 0)) }}</td></tr>

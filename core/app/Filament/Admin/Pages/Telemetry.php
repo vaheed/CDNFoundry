@@ -73,8 +73,8 @@ class Telemetry extends Page
                     Select::make('domain_id')->label('Domain (optional)')
                         ->options(fn (): array => Domain::query()->orderBy('name')->limit(500)->pluck('name', 'id')->all())
                         ->searchable(),
-                    DateTimePicker::make('from')->label(fn (): string => 'From ('.app(PlatformSettings::class)->displayTimezone().')')->seconds(false)->required(),
-                    DateTimePicker::make('to')->label(fn (): string => 'To ('.app(PlatformSettings::class)->displayTimezone().')')->seconds(false)->required()->after('from'),
+                    DateTimePicker::make('from')->label(fn (): string => 'From')->seconds(false)->required(),
+                    DateTimePicker::make('to')->label(fn (): string => 'To')->seconds(false)->required()->after('from'),
                 ])
                 ->fillForm(fn (): array => [
                     'from' => CarbonImmutable::now('UTC')->subHour()->startOfHour(),
@@ -129,6 +129,7 @@ class Telemetry extends Page
             'summary' => [],
             'traffic' => ['items' => [], 'has_more' => false, 'expanded' => false],
             'dns' => [],
+            'investigation' => [],
             'compression' => ['items' => [], 'has_more' => false, 'expanded' => false],
             'logs' => ['errors' => [], 'security' => [], 'requests' => []],
             'buffer' => $this->bufferStatus(),
@@ -179,6 +180,9 @@ class Telemetry extends Page
                     'has_more' => count($result['items']) > $limit || $result['next_cursor'] !== null,
                     'expanded' => $limit > 5,
                 ];
+            }
+            if ($investigationView !== null) {
+                $state['investigation'] = $store->investigation($domain, $range, $rawRange, $investigationView, $statusFamily);
             }
             $state['available'] = true;
         } catch (Throwable) {
