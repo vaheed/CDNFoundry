@@ -5,7 +5,11 @@ All notable changes are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). The root `VERSION` file is the
 single source of truth; `make version-check` enforces it.
 
-## [Unreleased]
+## [2.0.7] - 2026-11-10
+
+Hides edge diagnostic headers by default, lets administrators acknowledge reviewed failures, fixes managed WAF on a
+service pool, and makes the admin overview and telemetry drill-downs show real detail. See the
+[release notes](docs/operations/releases/v2.0.7.md).
 
 ### Added
 

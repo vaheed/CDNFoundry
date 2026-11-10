@@ -112,7 +112,7 @@ func TestControlRequestsRejectPlaintextAndRedirects(t *testing.T) {
 }
 
 func TestVersionCommand(t *testing.T) {
-	if version != "2.0.6" {
+	if version != "2.0.7" {
 		t.Fatalf("unexpected release version %q", version)
 	}
 }
