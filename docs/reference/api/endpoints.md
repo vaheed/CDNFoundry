@@ -200,6 +200,7 @@ for authentication, pagination, response, and retry behaviour.
 | `GET` | `/admin/logs/edges` | Required | No | `get.admin.logs.edges` |
 | `GET` | `/admin/logs/errors` | Required | No | `get.admin.logs.errors` |
 | `GET` | `/admin/logs/security` | Required | No | `get.admin.logs.security` |
+| `POST` | `/admin/operations/{operation}/acknowledge` | Required | Supported | `post.admin.operations.operation.acknowledge` |
 | `POST` | `/admin/operations/{operation}/retry` | Required | Supported | `post.admin.operations.operation.retry` |
 | `GET` | `/admin/operations/{operation}` | Required | No | `get.admin.operations.operation` |
 | `GET` | `/admin/operations` | Required | No | `get.admin.operations` |

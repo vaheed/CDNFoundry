@@ -14,11 +14,14 @@ use App\Jobs\VerifyDomainNameservers;
 use App\Models\AuditLog;
 use App\Models\Operation;
 use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
+use Filament\Actions\BulkActionGroup;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Collection;
 
 class OperationResource extends Resource
 {
@@ -41,6 +44,22 @@ class OperationResource extends Resource
     protected static string|\UnitEnum|null $navigationGroup = 'Operate';
 
     protected static ?int $navigationSort = 10;
+
+    /** Mark failed operations as reviewed so they stop raising health alarms; the history stays. */
+    public static function acknowledge(iterable $operations): int
+    {
+        $count = 0;
+        foreach ($operations as $operation) {
+            if ($operation->status !== 'failed' || $operation->acknowledged_at !== null) {
+                continue;
+            }
+            $operation->update(['acknowledged_at' => now(), 'acknowledged_by' => auth()->id()]);
+            AuditLog::record(auth()->user(), 'operation.failure_acknowledged', $operation, [], request()->ip());
+            $count++;
+        }
+
+        return $count;
+    }
 
     public static function failedUrl(): string
     {
@@ -66,6 +85,7 @@ class OperationResource extends Resource
                 }),
                 TextColumn::make('actor.email')->label('Requested by')->placeholder('System')->searchable()->sortable()->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('attempts')->numeric()->sortable()->alignEnd()->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('acknowledged_at')->label('Acknowledged')->since()->placeholder('Not acknowledged')->toggleable(),
                 TextColumn::make('error')->searchable()->limit(40)->tooltip(fn (Operation $record): ?string => strlen((string) $record->error) > 40 ? $record->error : null),
                 TextColumn::make('created_at')->label('Requested')->dateTime()->since()->sortable(),
                 TextColumn::make('started_at')->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),
@@ -89,12 +109,20 @@ class OperationResource extends Resource
                 SelectFilter::make('actor')->relationship('actor', 'email')->searchable()->preload(),
             ])
             ->recordActions([
+                Action::make('acknowledge')->icon('phosphor-check')
+                    ->tooltip('Mark this failure as reviewed. It stops counting as degraded health; the record stays.')
+                    ->visible(fn (Operation $record): bool => $record->status === 'failed' && $record->acknowledged_at === null)
+                    ->requiresConfirmation()
+                    ->action(function (Operation $record): void {
+                        self::acknowledge([$record]);
+                        Notification::make()->success()->title('Failure acknowledged')->send();
+                    }),
                 Action::make('retry')->icon('phosphor-arrow-clockwise')
                     ->visible(fn (Operation $record): bool => $record->status === 'failed')
                     ->requiresConfirmation()
                     ->action(function (Operation $record): void {
                         abort_unless(array_key_exists($record->type, self::TYPES), 422, 'Unsupported operation type.');
-                        $record->update(['status' => 'pending', 'error' => null, 'finished_at' => null]);
+                        $record->update(['status' => 'pending', 'error' => null, 'finished_at' => null, 'acknowledged_at' => null, 'acknowledged_by' => null]);
                         AuditLog::record(auth()->user(), 'operation.retry_requested', $record, [], request()->ip());
                         match ($record->type) {
                             'platform_dns_identity.update' => ApplyPlatformDnsSettings::dispatch($record->getKey()),
@@ -108,6 +136,14 @@ class OperationResource extends Resource
                         };
                         Notification::make()->success()->title('Operation queued for retry')->send();
                     }),
+            ])
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    BulkAction::make('acknowledge')->label('Acknowledge failures')->icon('phosphor-check')->requiresConfirmation()
+                        ->action(function (Collection $records): void {
+                            Notification::make()->success()->title(self::acknowledge($records).' failure(s) acknowledged')->send();
+                        })->deselectRecordsAfterCompletion(),
+                ]),
             ])
             ->defaultSort('created_at', 'desc')
             ->poll('10s')

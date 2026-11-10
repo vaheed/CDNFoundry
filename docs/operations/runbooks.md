@@ -244,7 +244,7 @@ Every alert links here. To find a runbook from an alert's name, look it up in th
 
 **Likely causes:** One or more operations failed inside the failed-operations window. The alert clears when the window passes.
 
-**First action:** Open **Operations**, filter by failed, and read the stable error code. Repair the dependency the code names, then retry.
+**First action:** Open **Operations**, filter by failed, and read the stable error code. Repair the dependency the code names, then retry. A failure that a later run already fixed resolves by itself; for one you have reviewed and accepted, use **Acknowledge** so it stops raising Degraded (the record stays).
 
 ## Certificate expiring {#certificate-expiry}
 

@@ -39,6 +39,14 @@ While it runs, the status is `pending` or `running`. In the admin panel, open
 
 - Administrators can list all operations, read failures, and retry supported types,
   such as `usage.rebuild` (`POST /api/admin/operations/{operation}/retry`).
+- A failed operation counts as an active health problem until it is resolved. It
+  resolves by itself when a later operation of the same type succeeds for the same
+  domain (or, for a global operation, at all). An administrator can also
+  **acknowledge** it (`POST /api/admin/operations/{operation}/acknowledge`, or the
+  Acknowledge action on the Operations page). Acknowledging keeps the record and its
+  error, records who did it in the audit log, and stops the failure from raising
+  Degraded in the admin dashboard, Grafana, and alerts. Retrying clears the
+  acknowledgement, so a new failure alarms again.
 - Every request that changes state or queues work writes an audit entry with the
   actor and the operation ID.
 - A domain user can read an operation only through its domain. Every user assigned

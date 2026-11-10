@@ -47,11 +47,22 @@ class OperationController extends Controller
         return OperationResource::collection(Operation::query()->latest()->cursorPaginate(50));
     }
 
+    public function acknowledge(Request $request, Operation $operation): JsonResponse
+    {
+        abort_unless($operation->status === 'failed', 409, 'Only failed operations can be acknowledged.');
+        if ($operation->acknowledged_at === null) {
+            $operation->update(['acknowledged_at' => now(), 'acknowledged_by' => $request->user()->getKey()]);
+            AuditLog::record($request->user(), 'operation.failure_acknowledged', $operation, [], $request->ip());
+        }
+
+        return response()->json(['data' => OperationResource::make($operation->refresh())->resolve()]);
+    }
+
     public function retry(Request $request, Operation $operation): JsonResponse
     {
         abort_unless($operation->status === 'failed', 409, 'Only failed operations can be retried.');
         abort_unless(in_array($operation->type, ['platform_dns_identity.update', 'system_settings.update', 'domain.nameservers_verify', 'dns.zone_reconcile', 'dns.zone_import', 'dns.cluster_test', 'dns.global_reconcile', 'edge.global_reconcile', 'edges.global_reconcile', 'tls.global_reconcile', 'purges.global_reconcile', 'usage.global_reconcile', 'usage.rebuild', 'backup.create', 'backup.restore', 'backup.delete', 'edge.domain_reconcile', 'edge.origin_test'], true), 422, 'Unsupported operation type.');
-        $operation->update(['status' => 'pending', 'error' => null, 'finished_at' => null]);
+        $operation->update(['status' => 'pending', 'error' => null, 'finished_at' => null, 'acknowledged_at' => null, 'acknowledged_by' => null]);
         AuditLog::record($request->user(), 'operation.retry_requested', $operation, [], $request->ip());
         match ($operation->type) {
             'platform_dns_identity.update' => ApplyPlatformDnsSettings::dispatch($operation->getKey()),

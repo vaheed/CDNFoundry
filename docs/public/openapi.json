@@ -3939,6 +3939,71 @@
                 }
             }
         },
+        "/admin/operations/{operation}/acknowledge": {
+            "post": {
+                "operationId": "post.admin.operations.operation.acknowledge",
+                "tags": [
+                    "Administrator"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "operation",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "maxProperties": 100,
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
         "/admin/operations/{operation}/retry": {
             "post": {
                 "operationId": "post.admin.operations.operation.retry",

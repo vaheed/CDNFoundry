@@ -69,8 +69,8 @@ class MetricsController extends Controller
         $failureSince = now()->subMinutes(app(PlatformSettings::class)->integer('operations', 'failed_operations_window_minutes'));
         $lines[] = '# HELP cdnfoundry_operations_failed_recent Operations that failed inside the failed-operations window.';
         $lines[] = '# TYPE cdnfoundry_operations_failed_recent gauge';
-        $lines[] = 'cdnfoundry_operations_failed_recent '.Operation::query()->where('status', 'failed')
-            ->where(fn ($query) => $query->where('finished_at', '>=', $failureSince)->orWhere(fn ($query) => $query->whereNull('finished_at')->where('updated_at', '>=', $failureSince)))->count();
+        $lines[] = 'cdnfoundry_operations_failed_recent '.Operation::query()->unresolvedFailures()
+            ->where(fn ($query) => $query->where('finished_at', '>=', $failureSince)->orWhere(fn ($query) => $query->whereNull('finished_at')->where('operations.updated_at', '>=', $failureSince)))->count();
         $lines[] = '# HELP cdnfoundry_failed_jobs_recent Queue jobs that failed inside the failed-operations window.';
         $lines[] = '# TYPE cdnfoundry_failed_jobs_recent gauge';
         $lines[] = 'cdnfoundry_failed_jobs_recent '.DB::table('failed_jobs')->where('failed_at', '>=', $failureSince)->count();

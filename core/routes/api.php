@@ -189,6 +189,7 @@ Route::middleware(['auth:sanctum', 'account.active', 'token.scope', 'throttle:ac
         Route::delete('/backups/{backup}', [BackupController::class, 'destroy'])->middleware('idempotent');
         Route::get('/operations', [OperationController::class, 'index']);
         Route::get('/operations/{operation}', [OperationController::class, 'show']);
+        Route::post('/operations/{operation}/acknowledge', [OperationController::class, 'acknowledge'])->middleware('idempotent');
         Route::post('/operations/{operation}/retry', [OperationController::class, 'retry'])->middleware('idempotent');
         Route::get('/system/settings/dns', [PlatformDnsSettingsController::class, 'show']);
         Route::patch('/system/settings/dns', [PlatformDnsSettingsController::class, 'update'])->middleware('idempotent');

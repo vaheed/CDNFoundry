@@ -28,24 +28,29 @@ class Operation extends Model
 
     protected function casts(): array
     {
-        return ['input' => 'array', 'result' => 'array', 'started_at' => 'immutable_datetime', 'finished_at' => 'immutable_datetime'];
+        return ['input' => 'array', 'result' => 'array', 'started_at' => 'immutable_datetime', 'finished_at' => 'immutable_datetime', 'acknowledged_at' => 'immutable_datetime'];
     }
 
-    /** Keep failure history, but exclude verification failures with a later successful check of the same domain. */
+    /**
+     * Keep failure history, but exclude failures an operator acknowledged and failures a later
+     * successful operation of the same type for the same domain (or the same global type) superseded.
+     */
     public function scopeUnresolvedFailures(Builder $query): Builder
     {
-        return $query->where('operations.status', 'failed')->where(function (Builder $query): void {
-            $query->where('operations.type', '!=', 'domain.nameservers_verify')
-                ->orWhereNull('operations.input->domain_id')
-                ->orWhereNotExists(function ($recovered): void {
-                    $recovered->selectRaw('1')->from('operations as recovered')
-                        ->whereColumn('recovered.type', 'operations.type')
-                        ->where('recovered.status', 'succeeded')
-                        ->whereColumn('recovered.input->domain_id', 'operations.input->domain_id')
-                        ->whereColumn('recovered.created_at', '>=', 'operations.created_at')
-                        ->whereColumn('recovered.finished_at', '>', 'operations.finished_at');
-                });
-        });
+        return $query->where('operations.status', 'failed')->whereNull('operations.acknowledged_at')
+            ->whereNotExists(function ($recovered): void {
+                $recovered->selectRaw('1')->from('operations as recovered')
+                    ->whereColumn('recovered.type', 'operations.type')
+                    ->where('recovered.status', 'succeeded')
+                    ->where(fn ($same) => $same->whereColumn('recovered.input->domain_id', 'operations.input->domain_id')
+                        ->orWhere(fn ($global) => $global->whereNull('recovered.input->domain_id')->whereNull('operations.input->domain_id')))
+                    ->whereColumn('recovered.finished_at', '>', 'operations.finished_at');
+            });
+    }
+
+    public function acknowledgedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'acknowledged_by');
     }
 
     public function actor(): BelongsTo
