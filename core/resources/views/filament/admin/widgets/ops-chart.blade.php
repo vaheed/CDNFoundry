@@ -41,7 +41,9 @@
                     <summary>Accessible data summary</summary>
                     <p>{{ count($displayState['current'] ?? []) }} hourly points. Source through {{ $this->dashboardTimestamp($displayState['source_timestamp'] ?? null) }}. Use Traffic and telemetry for tabular detail.</p>
                 </details>
-                <a class="cdn-widget-link" href="{{ $this->getDrilldownUrl() }}">Open detailed analytics <span aria-hidden="true">→</span></a>
+                @if ($this->showDrilldown)
+                    <a class="cdn-widget-link" href="{{ $this->getDrilldownUrl() }}">Open detailed analytics <span aria-hidden="true">→</span></a>
+                @endif
             @endif
         </div>
     </x-filament::section>

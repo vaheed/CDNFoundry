@@ -54,12 +54,12 @@
                 <x-filament::section :heading="str($state['filters']['view'])->headline() . ' details'" description="Detail tables for the selected focus, filtered by the range and domain above." icon="phosphor-magnifying-glass" data-testid="telemetry-investigation">
                     <div class="cdn-dashboard-columns">
                         @foreach ($state['investigation'] as $table)
-                            <div class="min-w-0">
+                            <div @class(['min-w-0', 'lg:col-span-2' => array_key_exists('path', $table['columns']) || array_key_exists('qname', $table['columns']) || array_key_exists('origin_error', $table['columns'])])>
                                 <div class="cdn-row-title">{{ $table['title'] }}</div>
                                 <p class="cdn-row-meta mb-2">{{ $table['description'] }}</p>
                                 <x-ui.data-table :caption="$table['title']" fixed>
                                     <x-slot:header><tr>@foreach ($table['columns'] as $key => $label)<th class="{{ in_array($key, ['requests', 'queries', 'bytes_out', 'failures', 'samples', 'average_ms'], true) ? 'text-right' : 'text-left' }}">{{ $label }}</th>@endforeach</tr></x-slot:header>
-                                    @forelse ($table['rows'] as $row)
+                                    @forelse (array_slice($table['rows'], 0, 10) as $row)
                                         <tr>@foreach ($table['columns'] as $key => $label)
                                             @php $value = $row[$key] ?? ''; @endphp
                                             @if (in_array($key, ['requests', 'queries', 'failures', 'samples', 'average_ms'], true))<td class="px-3 py-2 text-right tabular-nums">{{ number_format((float) $value) }}</td>
@@ -90,8 +90,8 @@
             </div>
 
             <div class="cdn-dashboard-columns">
-                @livewire(\App\Filament\Admin\Widgets\TrafficOverviewChart::class, ['pageFilters' => ['range' => $state['filters']['range'], 'compare' => true, 'domain_id' => $state['filters']['domain']?->id, 'edge_id' => $state['filters']['edge']]], key('telemetry-traffic-'.$state['filters']['range'].'-'.($state['filters']['domain']?->id ?? 'all').'-'.($state['filters']['edge'] ?? 'all')))
-                @livewire(\App\Filament\Admin\Widgets\ErrorLatencyChart::class, ['pageFilters' => ['range' => $state['filters']['range'], 'compare' => true, 'domain_id' => $state['filters']['domain']?->id, 'edge_id' => $state['filters']['edge']]], key('telemetry-errors-'.$state['filters']['range'].'-'.($state['filters']['domain']?->id ?? 'all').'-'.($state['filters']['edge'] ?? 'all')))
+                @livewire(\App\Filament\Admin\Widgets\TrafficOverviewChart::class, ['showDrilldown' => false, 'pageFilters' => ['range' => $state['filters']['range'], 'compare' => true, 'domain_id' => $state['filters']['domain']?->id, 'edge_id' => $state['filters']['edge']]], key('telemetry-traffic-'.$state['filters']['range'].'-'.($state['filters']['domain']?->id ?? 'all').'-'.($state['filters']['edge'] ?? 'all')))
+                @livewire(\App\Filament\Admin\Widgets\ErrorLatencyChart::class, ['showDrilldown' => false, 'pageFilters' => ['range' => $state['filters']['range'], 'compare' => true, 'domain_id' => $state['filters']['domain']?->id, 'edge_id' => $state['filters']['edge']]], key('telemetry-errors-'.$state['filters']['range'].'-'.($state['filters']['domain']?->id ?? 'all').'-'.($state['filters']['edge'] ?? 'all')))
             </div>
 
             <div class="cdn-dashboard-columns">
@@ -119,12 +119,22 @@
                 <x-filament::section heading="Global DNS" icon="phosphor-globe">
                     <x-ui.data-table caption="Global DNS responses" fixed>
                         <x-slot:header><tr><th>Type</th><th>Response</th><th class="text-right">Queries</th></tr></x-slot:header>
-                                @forelse ($state['dns'] as $row)
+                                @forelse ($state['dns']['items'] as $row)
                                     <tr><td class="px-3 py-2 font-medium">{{ $row['qtype'] ?? 'Unknown' }}</td><td class="px-3 py-2">{{ $row['rcode'] ?? 'Unknown' }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format((int) ($row['queries'] ?? 0)) }}</td></tr>
                                 @empty
                                     <tr><td colspan="3" class="px-3 py-6 text-center text-gray-500">No DNS activity was recorded in this range.</td></tr>
                                 @endforelse
                     </x-ui.data-table>
+                    @if ($state['dns']['has_more'] || $state['dns']['expanded'])
+                        <div class="mt-3 flex justify-end gap-2">
+                            @if ($state['dns']['has_more'])
+                                <x-filament::button size="sm" color="gray" icon="phosphor-caret-down" wire:click="showMoreDns" data-testid="telemetry-dns-more">Show more</x-filament::button>
+                            @endif
+                            @if ($state['dns']['expanded'])
+                                <x-filament::button size="sm" color="gray" icon="phosphor-caret-up" wire:click="showFewerDns">Show fewer</x-filament::button>
+                            @endif
+                        </div>
+                    @endif
                 </x-filament::section>
             </div>
 
