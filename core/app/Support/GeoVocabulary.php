@@ -35,6 +35,22 @@ final class GeoVocabulary
         return array_map(fn (string $code): string => self::CONTINENT_NAMES[$code].' ('.$code.')', array_combine(self::CONTINENTS, self::CONTINENTS));
     }
 
+    public static function countryName(?string $code): string
+    {
+        $code = strtoupper((string) $code);
+        if (! self::isCountry($code)) {
+            return 'Unknown';
+        }
+        $name = class_exists(\Locale::class) ? \Locale::getDisplayRegion('-'.$code, 'en') : '';
+
+        return $name !== '' && $name !== $code ? $name : $code;
+    }
+
+    public static function continentName(?string $code): string
+    {
+        return self::CONTINENT_NAMES[strtoupper((string) $code)] ?? 'Unknown';
+    }
+
     public static function isCountry(?string $code): bool
     {
         return is_string($code) && in_array(strtoupper($code), self::countries(), true);
