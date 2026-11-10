@@ -34,6 +34,14 @@ local function telemetry_proof_value()
     return telemetry_proof
 end
 
+-- Diagnostic headers (X-CDNF-* and Server) are shown only when the platform
+-- setting is on. Snapshots that predate the setting keep showing them.
+local function diagnostic_headers_enabled()
+    local host = (ngx.var.host or ""):lower():gsub("%.$", "")
+    local config = state.hosts[host]
+    return not (config and config.settings and config.settings.diagnostic_headers == false)
+end
+
 local function security_reject(status, reason)
     local dictionary = ngx.shared.runtime_limits
     dictionary:incr("capacity:rejected_requests", 1, 0)
@@ -45,7 +53,7 @@ local function security_reject(status, reason)
         events:set("host:" .. tostring(ngx.ctx.security_domain), ngx.ctx.security_hostname or "", 3600)
         events:set("time:" .. tostring(ngx.ctx.security_domain) .. ":" .. reason, ngx.time(), 3600)
     end
-    ngx.header["X-CDNF-Security-Reason"] = reason
+    if diagnostic_headers_enabled() then ngx.header["X-CDNF-Security-Reason"] = reason else ngx.header["Server"] = nil end
     ngx.var.cdn_security_reason = reason
     ngx.var.cdn_security_action = "block"
     return ngx.exit(status)
@@ -904,6 +912,12 @@ function M.cache_status()
     local admission_bypass = ngx.var.cdn_cache_no_store == "1" and ngx.var.upstream_cache_status ~= "HIT"
     ngx.header["X-CDNF-Cache"] = (ngx.var.cdn_cache_bypass == "1" or no_store or admission_bypass)
         and "BYPASS" or (ngx.var.upstream_cache_status or "MISS")
+    if not diagnostic_headers_enabled() then
+        -- The access log reads the upstream copies of these headers, so telemetry is unchanged.
+        for _, name in ipairs({"X-CDNF-Cache", "X-CDNF-Origin", "X-CDNF-Origin-Transition", "X-CDNF-Error", "X-CDNF-Security-Reason", "Server"}) do
+            ngx.header[name] = nil
+        end
+    end
 end
 
 function M.compression_response()
@@ -1068,7 +1082,7 @@ end
 
 function M.origin_failure()
     if ngx.var.cdn_security_reason ~= "" then
-        ngx.header["X-CDNF-Security-Reason"] = ngx.var.cdn_security_reason
+        if diagnostic_headers_enabled() then ngx.header["X-CDNF-Security-Reason"] = ngx.var.cdn_security_reason end
         return ngx.exit(503)
     end
     -- The internal 444 lets the outer cache apply stale-if-error. It must

@@ -227,7 +227,9 @@ response, so a successful retry is not an origin failure. Exhausting retries
 records one failed request. Nginx still refuses to replay a POST that was
 already sent to an origin.
 
-Two response headers show what happened:
+Two response headers show what happened when an administrator turns on
+**Expose diagnostic response headers** in Platform settings (off by default, see
+[Proxy defaults](../reference/platform-settings.md#proxy-defaults)):
 
 - `X-CDNF-Origin` is `primary` or `backup`.
 - `X-CDNF-Origin-Transition` is `none`, `primary_failure_threshold`,

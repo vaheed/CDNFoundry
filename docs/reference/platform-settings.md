@@ -214,10 +214,21 @@ proxy-loop destinations. The blocked lists add to the built-in rules.
 | `redirect_https` | false | boolean |
 | `http_versions` | `1.1`, `2` | one or both |
 | `retry_count` | 0 | 0–2 |
+| `diagnostic_response_headers` | false | boolean |
 
-`proxy_defaults` values are copied into the edge snapshot only when a domain has
-no explicit value of its own. `retry_count` applies to failed idempotent origin
-connections.
+`enabled`, `redirect_https`, `http_versions`, and `retry_count` are copied into the
+edge snapshot only when a domain has no explicit value of its own. `retry_count`
+applies to failed idempotent origin connections.
+
+`diagnostic_response_headers` is one platform-wide switch and no domain can
+override it. When it is off (the default) the edge removes `Server`,
+`X-CDNF-Cache`, `X-CDNF-Origin`, `X-CDNF-Origin-Transition`, `X-CDNF-Error`, and
+`X-CDNF-Security-Reason` from every response, so clients cannot see the edge
+software, the cache result, or which origin answered. Turn it on while you debug
+caching or origin failover. Telemetry, the access log, and Grafana are unaffected,
+because they read the same values on the edge before the headers are removed.
+Changing it queues a global edge reconciliation, so it reaches every edge as one
+signed revision. The `Server` header never shows a version, whatever the setting.
 
 ## API examples
 

@@ -270,6 +270,7 @@ class EdgeProxyTest extends TestCase
         $this->assertDatabaseHas('domain_edge_placements', ['domain_id' => $domain->id, 'state' => 'deploying']);
         $this->assertSame(2, EdgeRevision::query()->where('domain_id', $domain->id)->count());
         $compression = EdgeRevision::query()->where('domain_id', $domain->id)->latest('revision')->firstOrFail()->snapshot['compression'];
+        $this->assertFalse(EdgeRevision::query()->where('domain_id', $domain->id)->latest('revision')->firstOrFail()->snapshot['settings']['diagnostic_headers'], 'Diagnostic response headers are hidden unless the platform setting turns them on.');
         $this->assertSame('standard', $compression['profile_name']);
         $this->assertTrue($compression['gzip']);
         $this->assertFalse($compression['brotli']);
