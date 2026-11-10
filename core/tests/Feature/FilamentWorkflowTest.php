@@ -320,7 +320,8 @@ class FilamentWorkflowTest extends TestCase
         Livewire::test(EditServicePool::class, ['record' => $pool->id])
             ->assertSee('Offer managed WAF protection')
             ->assertDontSee('WAF readiness')
-            ->fillForm(['waf_capable' => true, 'waf_runtime_version' => 'operator-should-not-type-this'])
+            ->set('data.waf_capable', true)
+            ->assertSet('data.waf_runtime_version', config('security.waf.ruleset'))
             ->call('save')
             ->assertHasNoFormErrors();
 

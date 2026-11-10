@@ -23,6 +23,7 @@ use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -54,11 +55,12 @@ class EdgePoolResource extends Resource
             Toggle::make('waf_capable')
                 ->label(FilamentHelp::label('Offer managed WAF protection', 'Enable this only when the pool cells run the already-qualified CDNFoundry WAF image. This does not enable WAF for every domain.'))
                 ->helperText('After this is enabled, each domain independently chooses Off, Observe, Recommended, or High sensitivity.')
-                ->default(false)->live(),
+                ->default(false)->live()
+                ->afterStateUpdated(fn (bool $state, Set $set) => $set('waf_runtime_version', $state ? config('security.waf.ruleset') : null)),
             TextInput::make('waf_runtime_version')
                 ->label(FilamentHelp::label('Managed WAF release', 'Filled automatically from the pinned CDNFoundry image. Operators do not need to find or type a version.'))
                 ->readOnly()->dehydrated()
-                ->maxLength(80)->nullable()->visible(fn (Get $get): bool => (bool) $get('waf_capable'))->required(fn (Get $get): bool => (bool) $get('waf_capable')),
+                ->maxLength(80)->nullable()->visible(fn (Get $get): bool => (bool) $get('waf_capable')),
             Select::make('routing_mode')->label(FilamentHelp::label('Routing mode', 'Simple Anycast only binds and publishes the shared pair. CDNFoundry never announces or withdraws BGP routes; the network operator/provider owns routing.'))->options(['geo_unicast' => 'Geo-Unicast', 'simple_anycast' => 'Simple Anycast'])->required()->default('geo_unicast')->live(),
             TextInput::make('anycast_ipv4')->label(FilamentHelp::label('Anycast IPv4', 'One distinct Anycast address pair belongs to one pool. Create a second pool only for a second distinct pair.'))->ipv4()->nullable()->visible(fn (Get $get): bool => $get('routing_mode') === 'simple_anycast'),
             TextInput::make('anycast_ipv6')->label(FilamentHelp::label('Anycast IPv6', 'At least one address is required. Every explicitly attached edge binds this same pair after local readiness is acknowledged.'))->ipv6()->nullable()->visible(fn (Get $get): bool => $get('routing_mode') === 'simple_anycast'),
