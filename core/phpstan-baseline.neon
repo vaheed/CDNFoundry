@@ -156,11 +156,6 @@ parameters:
 			count: 1
 			path: app/Filament/Admin/Pages/AdminDashboard.php
 
-		-
-			message: '#^Access to an undefined property App\\Models\\Operation\:\:\$failed\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Filament/Admin/Pages/AdminDashboard.php
 
 		-
 			message: '#^Access to an undefined property App\\Models\\Operation\:\:\$pending\.$#'

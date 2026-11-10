@@ -18,7 +18,7 @@ class OperationResource extends JsonResource
             'result' => $this->result, 'error' => $this->error, 'attempts' => $this->attempts,
             'created_at' => $this->created_at?->toIso8601String(), 'started_at' => $this->started_at?->toIso8601String(),
             'finished_at' => $this->finished_at?->toIso8601String(),
-            'acknowledged_at' => $this->acknowledged_at?->toIso8601String(),
+            'acknowledged_at' => $this->resource->getAttribute('acknowledged_at')?->toIso8601String(),
         ];
     }
 }
