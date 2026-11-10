@@ -2,19 +2,32 @@
 
 namespace App\Filament\Domain\Pages;
 
-use App\Models\Domain;
-use App\Models\UsageRollup;
+use App\Filament\Domain\Widgets\AnalyticsBreakdowns;
+use App\Filament\Domain\Widgets\AnalyticsDomainTable;
+use App\Filament\Domain\Widgets\AnalyticsRecentLogs;
+use App\Filament\Domain\Widgets\AnalyticsResponsesChart;
+use App\Filament\Domain\Widgets\AnalyticsSummary;
+use App\Filament\Domain\Widgets\AnalyticsTrafficChart;
+use App\Filament\Domain\Widgets\AnalyticsUsage;
+use App\Filament\Domain\Widgets\Concerns\AnalyticsFilterOptions;
 use App\Support\AnalyticsStore;
-use App\Support\PlatformSettings;
-use Carbon\CarbonImmutable;
-use Filament\Actions\Action;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
-use Filament\Pages\Page;
-use Illuminate\Database\Eloquent\Builder;
-use Throwable;
+use Filament\Pages\Dashboard;
+use Filament\Pages\Dashboard\Concerns\HasFiltersForm;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Schema;
 
-class Analytics extends Page
+/** Analytics across every domain assigned to the user, narrowed by date range and domains. */
+class Analytics extends Dashboard
 {
+    use HasFiltersForm;
+
+    protected static string $routePath = 'analytics';
+
+    protected static ?string $title = 'Analytics';
+
     protected static string|\BackedEnum|null $navigationIcon = 'phosphor-chart-bar';
 
     protected static ?string $navigationLabel = 'Analytics and logs';
@@ -23,92 +36,66 @@ class Analytics extends Page
 
     protected static ?int $navigationSort = 10;
 
-    protected string $view = 'filament.domain.pages.analytics';
+    public function mount(): void
+    {
+        // Links that name one domain (?domain=ID) open the page narrowed to it.
+        $domain = request()->integer('domain');
+        if ($domain > 0 && blank($this->filters['domains'] ?? null)) {
+            $this->filters = [...($this->filters ?? []), 'domains' => [(string) $domain]];
+            $this->getFiltersForm()->fill($this->filters);
+        }
+    }
 
-    protected function getHeaderActions(): array
+    public function persistsFiltersInSession(): bool
+    {
+        return false;
+    }
+
+    public function getSubheading(): ?string
+    {
+        return AnalyticsFilterOptions::assignedDomains()->exists() ? null : 'No domains are assigned to your account yet.';
+    }
+
+    public function filtersForm(Schema $schema): Schema
+    {
+        return $schema->components([
+            Section::make()->compact()->columnSpanFull()
+                ->columns(['default' => 1, 'md' => 2, 'xl' => 4])
+                ->extraAttributes(['data-testid' => 'analytics-filters'])
+                ->schema([
+                    Select::make('range')->label('Time range')->options(AnalyticsFilterOptions::RANGES)
+                        ->default('24h')->selectablePlaceholder(false)->native(false),
+                    DatePicker::make('from')->label('From')->native(false)->displayFormat('Y-m-d')
+                        ->minDate(now()->subDays(AnalyticsFilterOptions::HOURLY_RETENTION_DAYS))->maxDate(now())
+                        ->visible(fn (Get $get): bool => $get('range') === 'custom'),
+                    DatePicker::make('to')->label('To')->native(false)->displayFormat('Y-m-d')
+                        ->minDate(now()->subDays(AnalyticsFilterOptions::HOURLY_RETENTION_DAYS))->maxDate(now())
+                        ->visible(fn (Get $get): bool => $get('range') === 'custom'),
+                    Select::make('domains')->label('Domains')->placeholder('All domains')->multiple()->searchable()->native(false)
+                        ->maxItems(AnalyticsStore::MAX_SCOPE_DOMAINS)
+                        ->options(fn (): array => AnalyticsFilterOptions::assignedDomains()->orderBy('name')->limit(50)->pluck('name', 'domains.id')->all())
+                        ->getSearchResultsUsing(fn (string $search): array => AnalyticsFilterOptions::assignedDomains()->where('name', 'like', '%'.$search.'%')->orderBy('name')->limit(50)->pluck('name', 'domains.id')->all())
+                        ->getOptionLabelsUsing(fn (array $values): array => AnalyticsFilterOptions::assignedDomains()->whereKey($values)->pluck('name', 'domains.id')->all())
+                        ->columnSpan(fn (Get $get): int => $get('range') === 'custom' ? 1 : 3),
+                ]),
+        ]);
+    }
+
+    public function getWidgets(): array
     {
         return [
-            Action::make('selectDomain')
-                ->label($this->selectedDomain() === null ? 'Select domain' : 'Switch domain')
-                ->icon('phosphor-magnifying-glass')
-                ->schema([
-                    Select::make('domain_id')->label('Assigned domain')->required()->searchable()->native(false)
-                        ->getSearchResultsUsing(fn (string $search): array => $this->domainQuery()->where('name', 'like', '%'.$search.'%')->orderBy('name')->limit(50)->pluck('name', 'domains.id')->all())
-                        ->getOptionLabelUsing(fn (mixed $value): ?string => $this->domainQuery()->whereKey($value)->value('name')),
-                ])
-                ->fillForm(fn (): array => ['domain_id' => $this->selectedDomain()?->id])
-                ->action(fn (array $data) => redirect(static::getUrl(['domain' => $data['domain_id']], panel: 'app'))),
+            AnalyticsSummary::class,
+            AnalyticsTrafficChart::class,
+            AnalyticsResponsesChart::class,
+            AnalyticsDomainTable::class,
+            AnalyticsBreakdowns::class,
+            AnalyticsRecentLogs::class,
+            AnalyticsUsage::class,
         ];
     }
 
-    public function getStateProperty(): array
+    public function getColumns(): int|array
     {
-        $domain = $this->selectedDomain();
-        if ($domain === null) {
-            return ['domain' => null, 'available' => true, 'views' => [], 'meta' => [], 'logs' => [], 'usage' => []];
-        }
-        $store = app(AnalyticsStore::class);
-        $to = CarbonImmutable::now('UTC');
-        $range = ['from' => $to->subDay(), 'to' => $to, 'raw' => false];
-        $rawRange = ['from' => $to->subHour(), 'to' => $to, 'raw' => true];
-        try {
-            $summary = $store->summary($domain, $range);
-            $views = [
-                'Request and bandwidth timeseries' => $store->aggregate($domain, $range, 'timeseries'),
-                'Status codes' => $store->aggregate($domain, $range, 'status-codes'),
-                'Cache ratio' => $store->aggregate($domain, $range, 'cache'),
-                'Countries and continents' => $store->aggregate($domain, $range, 'countries'),
-                'Hostnames' => $store->aggregate($domain, $range, 'hostnames'),
-                'Top URLs (last hour)' => $store->topUrls($domain, $rawRange),
-                'Origin health and latency' => $store->aggregate($domain, $range, 'origin'),
-                'Edge distribution' => $store->aggregate($domain, $range, 'edges'),
-                'Compression savings (last hour)' => $store->aggregate($domain, $rawRange, 'compression'),
-                'DNS activity' => $store->aggregate($domain, $range, 'dns'),
-            ];
-            $logs = [];
-            foreach (['requests', 'dns', 'errors', 'security'] as $stream) {
-                $logs[$stream] = array_slice($store->logs($domain, $rawRange, $stream, null)['items'], 0, 10);
-            }
-
-            return ['domain' => $domain, 'available' => true, 'meta' => $store->metadata($range), 'summary' => $summary, 'views' => $views, 'logs' => $logs, 'usage' => $this->recentUsage($domain)];
-        } catch (Throwable) {
-            return [
-                'domain' => $domain, 'available' => false, 'summary' => [], 'views' => [], 'logs' => [],
-                'usage' => $this->recentUsage($domain),
-                'meta' => [
-                    'from' => $range['from']->toIso8601String(), 'to' => $range['to']->toIso8601String(),
-                    'partial' => true,
-                    'finalization_delay_minutes' => app(PlatformSettings::class)->integer('telemetry', 'finalization_delay_minutes'),
-                ],
-            ];
-        }
-    }
-
-    private function recentUsage(Domain $domain): array
-    {
-        return UsageRollup::query()->whereBelongsTo($domain)->where('status', 'finalized')->latest('interval_start')->limit(5)->get()
-            ->map(fn (UsageRollup $row): array => [
-                'interval' => $row->interval_start->toIso8601String(),
-                'requests' => $row->requests,
-                'bytes' => $row->bytes_in + $row->bytes_out,
-                'dns_queries' => $row->dns_queries,
-                'status' => $row->status,
-            ])->all();
-    }
-
-    private function selectedDomain(): ?Domain
-    {
-        $requested = request()->integer('domain');
-
-        if ($requested < 1) {
-            return null;
-        }
-
-        return $this->domainQuery()->whereKey($requested)->first();
-    }
-
-    private function domainQuery(): Builder
-    {
-        return Domain::query()->whereHas('users', fn (Builder $query): Builder => $query->where('users.id', auth()->id()));
+        return ['default' => 1, 'xl' => 2];
     }
 }
