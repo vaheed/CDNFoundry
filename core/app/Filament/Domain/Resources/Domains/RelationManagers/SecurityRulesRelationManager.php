@@ -2,6 +2,7 @@
 
 namespace App\Filament\Domain\Resources\Domains\RelationManagers;
 
+use App\Filament\Domain\Resources\Domains\RelationManagers\Concerns\SyncsDomainPage;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
 use App\Models\Domain;
@@ -30,6 +31,8 @@ use Illuminate\Validation\ValidationException;
 
 class SecurityRulesRelationManager extends RelationManager
 {
+    use SyncsDomainPage;
+
     protected static string $relationship = 'securityRules';
 
     public static function getBadge(Model $ownerRecord, string $pageClass): ?string

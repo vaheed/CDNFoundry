@@ -48,11 +48,13 @@ use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Enums\Width;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\HtmlString;
 use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\On;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ViewDomain extends ViewRecord
@@ -74,6 +76,27 @@ class ViewDomain extends ViewRecord
         Gate::authorize('view', $domain);
 
         return $domain;
+    }
+
+    /** Every action re-reads the domain and tells the header widgets and the open tab, so no change needs a reload. */
+    public function callMountedAction(array $arguments = []): mixed
+    {
+        $result = parent::callMountedAction($arguments);
+        $this->refreshDomain(includeTabs: true);
+
+        return $result;
+    }
+
+    /** A tab or the polling KPI strip saw the domain change: re-read it and refresh the other views. */
+    #[On('domain-updated')]
+    public function refreshDomain(bool $includeTabs = false): void
+    {
+        try {
+            $this->record->refresh();
+        } catch (ModelNotFoundException) {
+            return;
+        }
+        $this->dispatch('domain-refreshed', tabs: $includeTabs);
     }
 
     public function getTitle(): string

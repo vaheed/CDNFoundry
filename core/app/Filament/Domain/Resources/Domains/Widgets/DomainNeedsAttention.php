@@ -6,6 +6,7 @@ use App\Enums\DomainLifecycleState;
 use App\Models\Domain;
 use Filament\Widgets\Widget;
 use Illuminate\Database\Eloquent\Model;
+use Livewire\Attributes\On;
 
 /** Lists only what is wrong with one domain; renders nothing when everything is fine. */
 class DomainNeedsAttention extends Widget
@@ -15,6 +16,9 @@ class DomainNeedsAttention extends Widget
     protected string $view = 'filament.domain.widgets.domain-needs-attention';
 
     protected int|string|array $columnSpan = 'full';
+
+    #[On('domain-refreshed')]
+    public function refreshProblems(): void {}
 
     protected function getViewData(): array
     {

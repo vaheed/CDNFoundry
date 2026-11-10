@@ -2,6 +2,7 @@
 
 namespace App\Filament\Domain\Resources\Domains\RelationManagers;
 
+use App\Filament\Domain\Resources\Domains\RelationManagers\Concerns\SyncsDomainPage;
 use App\Enums\DomainLifecycleState;
 use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\ReconcileDnsZone;
@@ -49,6 +50,8 @@ use Illuminate\Validation\ValidationException;
 
 class DnsRecordsRelationManager extends RelationManager
 {
+    use SyncsDomainPage;
+
     protected static string $relationship = 'dnsRecords';
 
     protected static ?string $modelLabel = 'DNS record';
