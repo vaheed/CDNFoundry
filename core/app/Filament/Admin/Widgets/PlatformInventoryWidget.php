@@ -56,9 +56,7 @@ class PlatformInventoryWidget extends Widget
                 'Release' => config('release.version'),
                 'Platform domain' => $identity?->platform_domain,
                 'Proxy hostname' => $identity?->proxy_hostname,
-                'Service pools enabled' => number_format((int) $pools->enabled),
                 'Countries with a PoP' => number_format((int) $edges->countries),
-                'Managed WAF ruleset' => config('security.waf.ruleset'),
             ], fn (mixed $value): bool => filled($value)),
         ];
     }
