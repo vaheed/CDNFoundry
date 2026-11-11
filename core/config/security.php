@@ -3,6 +3,8 @@
 return [
     // Space- or comma-separated CIDRs allowed to reach the panels, the API, Horizon, and the status page. Empty means no restriction.
     'management_networks' => env('MANAGEMENT_NETWORKS', ''),
+    // enforce, report-only, or off. The panels and the API send one Content-Security-Policy.
+    'content_security_policy' => env('CONTENT_SECURITY_POLICY', 'enforce'),
     'waf' => [
         'ruleset' => env('WAF_RULESET_VERSION', 'owasp-crs/4.26.0-modsecurity/3.0.14'),
     ],
