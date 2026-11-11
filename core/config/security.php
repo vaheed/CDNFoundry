@@ -1,6 +1,8 @@
 <?php
 
 return [
+    // Space- or comma-separated CIDRs allowed to reach the panels, the API, Horizon, and the status page. Empty means no restriction.
+    'management_networks' => env('MANAGEMENT_NETWORKS', ''),
     'waf' => [
         'ruleset' => env('WAF_RULESET_VERSION', 'owasp-crs/4.26.0-modsecurity/3.0.14'),
     ],
