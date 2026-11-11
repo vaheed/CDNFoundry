@@ -221,7 +221,7 @@ class OpsDashboardTest extends TestCase
         $this->assertArrayNotHasKey('pools', $columns);
     }
 
-    public function test_domain_analytics_waits_for_an_authorized_search_selection(): void
+    public function test_domain_analytics_covers_only_assigned_domains_and_ignores_foreign_selection(): void
     {
         $user = User::factory()->create();
         $other = User::factory()->create();
@@ -232,14 +232,14 @@ class OpsDashboardTest extends TestCase
         Http::fake();
 
         $this->actingAs($user)->get('/app/analytics')->assertOk()
-            ->assertSee('Select a domain')
+            ->assertSee('All domains')
             ->assertDontSee($private->name);
-        Http::assertNothingSent();
 
         $this->actingAs($user)->get('/app/analytics?domain='.$private->id)->assertOk()
-            ->assertSee('Select a domain')
             ->assertDontSee($private->name);
-        Http::assertNothingSent();
+        Http::assertNotSent(fn ($request): bool => str_contains($request->body(), $private->name)
+            || str_contains($request->body(), 'domain_id = '.$private->id)
+            || str_contains($request->body(), 'domain_id IN ('.$private->id.')'));
     }
 
     public function test_telemetry_drilldown_validates_and_applies_status_family_to_raw_logs(): void

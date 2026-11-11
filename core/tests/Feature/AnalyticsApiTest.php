@@ -4,6 +4,9 @@ namespace Tests\Feature;
 
 use App\Enums\DomainLifecycleState;
 use App\Filament\Admin\Pages\Telemetry;
+use App\Filament\Domain\Widgets\AnalyticsRecentLogs;
+use App\Filament\Domain\Widgets\AnalyticsSummary;
+use App\Filament\Domain\Widgets\AnalyticsUsage;
 use App\Jobs\BuildUsageRollups;
 use App\Models\Domain;
 use App\Models\Operation;
@@ -203,9 +206,12 @@ class AnalyticsApiTest extends TestCase
         ]);
 
         $this->actingAs($user)->get("/app/analytics?domain={$domain->id}")->assertOk()
-            ->assertSee($domain->name)->assertSee('Live window included')
-            ->assertSee('Request and bandwidth timeseries')->assertSee('Compression savings (last hour)')->assertSee('DNS activity')->assertSee('Recent logs')->assertSee('Usage CSV export')
+            ->assertSee($domain->name)
             ->assertDontSee("/api/domains/{$domain->id}/logs", false);
+        $filters = ['pageFilters' => ['range' => '24h', 'domains' => [(string) $domain->id]]];
+        Livewire::actingAs($user)->test(AnalyticsSummary::class, $filters)->assertSee($domain->name)->assertSee('Requests')->assertSee('provisional');
+        Livewire::actingAs($user)->test(AnalyticsUsage::class, $filters)->assertSee('Finalized usage');
+        Livewire::actingAs($user)->test(AnalyticsRecentLogs::class, $filters)->assertSee('Recent events');
         $this->actingAs($admin)->get('/admin/telemetry')->assertOk()
             ->assertSee('Apply filters')->assertSee('All domains')->assertSee('All edges')->assertSee('24 hours')->assertDontSee('15 minutes (hourly source)')
             ->assertSeeHtml('class="cdn-filter-select"')
