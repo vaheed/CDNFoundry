@@ -5,6 +5,14 @@ All notable changes are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). The root `VERSION` file is the
 single source of truth; `make version-check` enforces it.
 
+## [Unreleased]
+
+### Security
+
+- The core image is rebuilt on PHP 8.5.12 and ships `docker/php/cdnfoundry.ini`: `expose_php`, `display_errors`, and
+  `session.upload_progress.enabled` are off, so no response carries `X-Powered-By` or an inline PHP error. Errors go to
+  the container log.
+
 ## [2.0.7] - 2026-11-10
 
 Hides edge diagnostic headers by default, lets administrators acknowledge reviewed failures, fixes managed WAF on a
