@@ -65,4 +65,3 @@ You want to change CDNFoundry.
 2. [Developer setup](../development/index.md) and the [project layout](../development/project-layout.md).
 3. [Testing](../development/testing.md): the checks that must pass.
 4. [Documentation rules](../contributing/documentation.md): how to write a page.
-5. [Roadmap](../roadmap.md): what is planned.

@@ -7,7 +7,7 @@ description: Read-only audit of the CDNFoundry dev branch at d4c4fb7 — re-veri
 
 This audit covers the `dev` branch at commit `d4c4fb7` (version file `1.2.1`). It changed no source, configuration, migration, or test. Its findings are merged into the [roadmap](../roadmap.md), which is the finding register. This page keeps the evidence.
 
-It builds on the [2.0 roadmap](../roadmap.md). That roadmap already lists findings C1–C4, H1–H9, M1–M15, and L1–L6 from an earlier audit. This audit re-checks each of them against the current code and adds new findings, numbered **A1–A47**. It then ranks everything into small, independently shippable changes that fit the existing roadmap phases.
+It builds on the 2.0 roadmap. That roadmap already lists findings C1–C4, H1–H9, M1–M15, and L1–L6 from an earlier audit. This audit re-checks each of them against the current code and adds new findings, numbered **A1–A47**. It then ranks everything into small, independently shippable changes that fit the existing roadmap phases.
 
 How to read the evidence:
 

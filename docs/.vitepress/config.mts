@@ -222,8 +222,7 @@ const community = [
     text: 'Community',
     items: [
       { text: 'Contribution guide', link: '/contributing/' },
-      { text: 'Documentation', link: '/contributing/documentation' },
-      { text: 'Roadmap', link: '/roadmap' }
+      { text: 'Documentation', link: '/contributing/documentation' }
     ]
   },
   {
@@ -284,7 +283,6 @@ export default defineConfig({
     // llms.txt: a plain index of every page for AI assistants (https://llmstxt.org).
     const lines = ['# CDNFoundry', '', '> Self-hosted private CDN: authoritative DNS, edge delivery, TLS, caching, security, and telemetry.', '']
     for (const page of [...siteConfig.pages].sort()) {
-      if (page.startsWith('roadmap')) continue
       const source = readFileSync(`${siteConfig.srcDir}/${page}`, 'utf8')
       const front = /^---\n([\s\S]*?)\n---/.exec(source)?.[1] ?? ''
       const field = (name: string) => new RegExp(`^${name}:\\s*(.+)$`, 'm').exec(front)?.[1]?.replace(/^["']|["']$/g, '')
@@ -369,7 +367,7 @@ export default defineConfig({
       { text: 'Deploy and operate', link: '/deployment/', activeMatch: '^/(deployment|operations|troubleshooting)/' },
       { text: 'Reference', link: '/reference/', activeMatch: '^/reference/' },
       { text: 'Architecture', link: '/architecture/', activeMatch: '^/(architecture|security)/' },
-      { text: 'Community', link: '/contributing/', activeMatch: '^/(contributing|development|roadmap)' },
+      { text: 'Community', link: '/contributing/', activeMatch: '^/(contributing|development)' },
       { text: 'Versions', items: versionLinks }
     ],
     sidebar: {
@@ -383,8 +381,7 @@ export default defineConfig({
       '/architecture/': architecture,
       '/security/': architecture,
       '/contributing/': community,
-      '/development/': community,
-      '/roadmap': community
+      '/development/': community
     },
     socialLinks: [
       { icon: 'github', link: 'https://github.com/vaheed/CDNFoundry' }

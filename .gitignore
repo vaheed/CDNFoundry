@@ -1,6 +1,7 @@
 /.env.dev
 /.dev/
 /edge-agent/edge-agent
+/docs/roadmap.md
 /docs/node_modules/
 /docs/.vitepress/cache/
 /docs/.vitepress/dist/
