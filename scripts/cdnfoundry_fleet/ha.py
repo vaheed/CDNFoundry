@@ -304,6 +304,7 @@ if [ "$(id -u)" != "0" ]; then
 fi
 ./ha/permissions.sh
 ./validate.sh
+./firewall.sh
 exec ./ha/start-standby.sh
 """
     return None

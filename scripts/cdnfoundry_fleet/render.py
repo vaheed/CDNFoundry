@@ -11,6 +11,7 @@ from typing import Any
 from . import ha, management as mg
 from .certs import PKI
 from .common import RenderError, atomic_write, quote_env, sync_tree, sync_directory, exchange_directories
+from .firewall import fleet_addresses, render_firewall_script
 from .compose import (
     bind_mount_sources,
     dump_yaml,
@@ -120,6 +121,7 @@ class Renderer:
                 atomic_write(tmp / "tls" / filename, text, mode)
             atomic_write(tmp / "README.md", self._node_readme(state, node, filtered), 0o600)
             atomic_write(tmp / "validate.sh", self._validate_script(node, filtered), 0o700)
+            atomic_write(tmp / "firewall.sh", render_firewall_script(state, node), 0o700)
             atomic_write(tmp / "start.sh", self._start_script(state, node), 0o700)
             atomic_write(tmp / "stop.sh", self._stop_script(), 0o700)
             previous = destination.with_name(destination.name + ".previous")
@@ -1192,6 +1194,7 @@ docker compose --env-file .env.prod ps
             return
         self.output_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         lines = ["# CDNFoundry fleet startup order", ""]
+./firewall.sh
         order = self.start_order(state)
         for index, group in enumerate(order, 1):
             lines.append(f"## {index}. {group['label']}")
