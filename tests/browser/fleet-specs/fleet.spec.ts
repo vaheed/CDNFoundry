@@ -223,3 +223,23 @@ test('the config page saves the backup setting and refuses a log host that does 
     await expect(page.getByRole('alert')).toContainText('existing log host');
     await expectAccessible(page);
 });
+
+test('management networks take several CIDRs and are added and removed one at a time', async ({ page }) => {
+    await page.goto('/config');
+    await expect(page.getByTestId('management-networks-open')).toBeVisible();
+    await page.getByTestId('management-network-input').fill('198.51.100.0/24, 2001:db8::/32 203.0.113.7');
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(page.locator('.flash')).toContainText('Management networks updated');
+    const table = page.getByRole('region', { name: 'Management networks' });
+    await expect(table.locator('code')).toHaveText(['198.51.100.0/24', '2001:db8::/32', '203.0.113.7/32']);
+    await noHorizontalOverflow(page);
+    await expectAccessible(page);
+    await page.getByRole('button', { name: 'Remove 203.0.113.7/32' }).click();
+    await expect(table.locator('code')).toHaveText(['198.51.100.0/24', '2001:db8::/32']);
+    await page.getByTestId('management-network-input').fill('0.0.0.0/0');
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('0.0.0.0/0');
+    await page.getByRole('button', { name: 'Remove 198.51.100.0/24' }).click();
+    await page.getByRole('button', { name: 'Remove 2001:db8::/32' }).click();
+    await expect(page.getByTestId('management-networks-open')).toBeVisible();
+});

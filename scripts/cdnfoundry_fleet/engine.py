@@ -192,10 +192,27 @@ class FleetEngine:
         return list(self.state()["global"].get("management_networks", []))
 
     def set_management_networks(self, networks: str) -> None:
-        """Networks allowed to reach the panels, the API, Horizon, and Grafana. Empty removes the restriction. The next config run carries a change to the hosts."""
+        """Replace the whole list. Empty removes the restriction. The next config run carries a change to the hosts."""
         state = self.state()
         state["global"]["management_networks"] = validate_management_networks(networks)
         self.store._write(state)
+
+    def change_management_networks(self, add: str = "", remove: str = "") -> list[str]:
+        """Add and remove networks at any time without retyping the rest. Each argument holds one or more CIDRs or addresses.
+
+        A bare address means one host (/32 or /128). Removing a network that is not listed is an error, so a typo is
+        never silently accepted. Removing the last network lifts the restriction, which is reported to the caller.
+        """
+        state = self.state()
+        current = list(state["global"].get("management_networks", []))
+        wanted_remove = validate_management_networks(remove)
+        missing = [item for item in wanted_remove if item not in current]
+        if missing:
+            raise ValidationError(f"Not in the management networks: {', '.join(missing)}")
+        updated = validate_management_networks([*[item for item in current if item not in wanted_remove], *validate_management_networks(add)])
+        state["global"]["management_networks"] = updated
+        self.store._write(state)
+        return updated
 
     def features(self) -> dict[str, dict[str, Any]]:
         """The monitoring, central log, and backup settings of the plan."""

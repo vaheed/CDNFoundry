@@ -633,6 +633,23 @@ class FleetWeb:
                  "<p>A test message called Watchdog arrives every minute on purpose. If it stops arriving, alerting is broken, so have your notifier warn you when it goes quiet. You can change the address later on <a href=\"/config\">Config</a>.</p></details>")
         return f"{about}<p>{status}</p>{form}"
 
+    def _management_networks_section(self) -> str:
+        """Who may open the panels, the API, Horizon, and Grafana. Entries are added and removed one at a time, at any time."""
+        networks = self.read(lambda e: e.management_networks())
+        if networks:
+            rows = [[f"<code>{esc(item)}</code>",
+                     self.action_form("/management-networks/remove", "Remove", inline=True,
+                                      fields=f'<input type="hidden" name="network" value="{esc(item)}">')
+                     .replace("<button>", f'<button data-testid="management-network-remove" aria-label="Remove {esc(item)}">')]
+                    for item in networks]
+            listing = table(["Network", ""], rows, label="Management networks")
+        else:
+            listing = '<p class="empty" data-testid="management-networks-open">No restriction. Anyone can reach the panels and the API.</p>'
+        add = self.action_form("/management-networks/add", "Add", fields=(
+            '<label>Add networks<input name="networks" required autocomplete="off" placeholder="203.0.113.0/24, 2001:db8::/32" data-testid="management-network-input">'
+            '<span class="hint">One or more CIDRs or single addresses, separated by spaces or commas. Every fleet node address is allowed automatically.</span></label>'))
+        return f"{listing}{add}"
+
     def _resume_panel(self, order: list[str], done: set[str]) -> str:
         """Leaving the page never stops an install. Coming back shows it running, or offers to continue where it stopped."""
         running = next((j for j in self.jobs.values() if j.state == "running" and j.title.startswith(("Deploy", "Continue"))), None)
@@ -832,7 +849,7 @@ class FleetWeb:
                 form_html = self.action_form("/upgrade/plan", f"Show the plan for {target}", primary=True)
             return 200, self.layout(path, "Upgrade", head + form_html + self._manual_release("/upgrade/plan" if current else "/upgrade/first", "/upgrade"), flash)
         if path == "/config":
-            body = ("<h2>Features</h2>" + self._features_section(state) + "<h2>Alert webhook</h2>" + self._alert_section("/config") + "<h2>Deploy changes</h2>"
+            body = ("<h2>Features</h2>" + self._features_section(state) + "<h2>Management networks</h2>" + self._management_networks_section() + "<h2>Alert webhook</h2>" + self._alert_section("/config") + "<h2>Deploy changes</h2>"
                     "<p>Compares the bundles Fleet would render now with what each node runs, validates them on the node, and swaps them in one node at a time.</p>"
                     + self.action_form("/config/apply", "Show changes and deploy", primary=True))
             return 200, self.layout(path, "Config", body, flash)
@@ -894,6 +911,10 @@ class FleetWeb:
 
         if path == "/alert-webhook":
             return self._sync("alert-webhook", lambda e: e.set_alert_webhook(form.get("url", "")), form.get("next", "/deploy") if form.get("next") in {"/deploy", "/config"} else "/deploy", "Alert webhook saved")
+        if path == "/management-networks/add":
+            return self._sync("management-networks", lambda e: e.change_management_networks(add=form.get("networks", "")), "/config", "Management networks updated")
+        if path == "/management-networks/remove":
+            return self._sync("management-networks", lambda e: e.change_management_networks(remove=form.get("network", "")), "/config", "Management network removed")
         if path == "/live/refresh":
             threading.Thread(target=self.live.refresh, daemon=True).start()
             return "/", "Probing every host now. The numbers update in a few seconds."

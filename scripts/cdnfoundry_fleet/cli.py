@@ -284,7 +284,9 @@ def parser() -> argparse.ArgumentParser:
     alert = sub.add_parser("alert-webhook", parents=[command_common], help="show or set where Alertmanager sends alerts (an https:// URL; optional, and an empty value turns notifications off)")
     alert.add_argument("--url", help="The https:// URL to save, or an empty value to turn notifications off; omit to show the current one")
     mgmt = sub.add_parser("management-networks", parents=[command_common], help="show or set the networks allowed to reach the panels, the API, Horizon, and Grafana (CIDRs; an empty value removes the restriction)")
-    mgmt.add_argument("--networks", help="Space- or comma-separated CIDRs to save, or an empty value to remove the restriction; omit to show the current ones")
+    mgmt.add_argument("--networks", help="Replace the whole list with these space- or comma-separated CIDRs, or with an empty value to remove the restriction; omit to show the current ones")
+    mgmt.add_argument("--add", action="append", default=[], help="Add one or more CIDRs or addresses to the list (space- or comma-separated; repeat the option as needed)")
+    mgmt.add_argument("--remove", action="append", default=[], help="Remove one or more listed CIDRs or addresses (space- or comma-separated; repeat the option as needed)")
     hw = sub.add_parser("inventory", parents=[command_common], help="show the hardware and system of every host, as last read; --refresh reads them over SSH first")
     hw.add_argument("--node", action="append", default=[], help="Node name; repeat for several (default: every node)")
     hw.add_argument("--refresh", action="store_true", help="Read the hosts over SSH now and record the result")
@@ -1197,8 +1199,12 @@ def _engine_command_body(args: argparse.Namespace, store: FleetState, output_dir
         print(json.dumps({"alert_webhook_url": engine.alert_webhook()}))
         return EXIT_OK
     if args.command == "management-networks":
+        if args.networks is not None and (args.add or args.remove):
+            raise ValidationError("Use --networks to replace the list, or --add and --remove to change it, not both")
         if args.networks is not None:
             engine.set_management_networks(args.networks)
+        elif args.add or args.remove:
+            engine.change_management_networks(" ".join(args.add), " ".join(args.remove))
         print(json.dumps({"management_networks": engine.management_networks()}))
         return EXIT_OK
     if args.command == "inventory":

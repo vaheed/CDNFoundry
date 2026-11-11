@@ -568,3 +568,26 @@ def test_the_standby_form_asks_for_the_ssh_user_and_refuses_a_bad_one(served) ->
     add_node(web, port)
     code, body, _ = post(port, "/ha/check", {"csrf": web.csrf, "name": "control-2", "host": "203.0.113.11", "ssh_user": "Bad User", "ssh_port": "22"})
     assert code == 400 and "SSH user" in body
+
+
+def test_management_networks_are_added_and_removed_one_at_a_time_from_the_config_page(served) -> None:
+    web, port = served
+    add_node(web, port)
+    page = get(port, "/config")[1]
+    assert "Management networks" in page and "No restriction" in page and 'action="/management-networks/add"' in page
+    status, body, _ = post(port, "/management-networks/add", {"csrf": web.csrf, "networks": "0.0.0.0/0"})
+    assert status == 400 and "0.0.0.0/0" in body
+    status, _, r = post(port, "/management-networks/add", {"csrf": web.csrf, "networks": "198.51.100.0/24, 2001:db8::/32 203.0.113.7"})
+    assert status == 303 and r.getheader("Location").startswith("/config")
+    page = get(port, "/config")[1]
+    for entry in ("198.51.100.0/24", "2001:db8::/32", "203.0.113.7/32"):
+        assert f"<code>{entry}</code>" in page
+    assert page.count('action="/management-networks/remove"') == 3 and "No restriction" not in page
+    status, _, _ = post(port, "/management-networks/remove", {"csrf": web.csrf, "network": "203.0.113.7/32"})
+    assert status == 303
+    page = get(port, "/config")[1]
+    assert "<code>203.0.113.7/32</code>" not in page and "<code>198.51.100.0/24</code>" in page
+    status, body, _ = post(port, "/management-networks/remove", {"csrf": web.csrf, "network": "192.0.2.0/24"})
+    assert status == 400 and "Not in the management networks" in body
+    status, body, _ = post(port, "/management-networks/add", {"csrf": "wrong", "networks": "192.0.2.0/24"})
+    assert status == 400
