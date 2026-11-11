@@ -290,6 +290,7 @@ class Renderer:
             # A PoP that also runs a DNS node lets its agent drive the node's local PowerDNS API.
             "EDGE_DNS_API_URL": "http://pdns-auth:8081" if node["role"] == "dns-edge" else "",
             "EDGE_DNS_API_KEY": self._optional_node_secret("pdns-api-key", node) if node["role"] == "dns-edge" else "",
+            "MANAGEMENT_NETWORKS": self._management_networks(state),
             "CONTROL_PUBLIC_IPV4_ALLOWLIST": self._control_allowlist(state),
             "EDGE_PUBLIC_IPV4_ALLOWLIST": self._edge_allowlist(state),
             "LOG_SOURCE_IPV4_ALLOWLIST": self._all_public_ipv4(state),
@@ -520,6 +521,15 @@ class Renderer:
             if service_name in services:
                 current = services[service_name].setdefault("ports", [])
                 current.extend(f"[{bind}]:{port}:{port}/{protocol}" for port, protocol in ports)
+
+    @staticmethod
+    def _management_networks(state: dict[str, Any]) -> str:
+        """Operator networks plus every fleet address, so the hosts keep probing and scraping one another. Empty when unrestricted."""
+        configured = state["global"].get("management_networks") or []
+        if not configured:
+            return ""
+        v4, v6 = fleet_addresses(state)
+        return " ".join([*configured, *(f"{a}/32" for a in v4), *(f"{a}/128" for a in v6)])
 
     def _control_allowlist(self, state: dict[str, Any], *, family: int = 4) -> str:
         field = f"public_ipv{family}"
@@ -1184,6 +1194,7 @@ for runtime_path in docker generated; do
     fi
 done
 ./validate.sh
+./firewall.sh
 {enrollment_validation}{migration}
 {activation}
 docker compose --env-file .env.prod ps
@@ -1194,7 +1205,6 @@ docker compose --env-file .env.prod ps
             return
         self.output_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         lines = ["# CDNFoundry fleet startup order", ""]
-./firewall.sh
         order = self.start_order(state)
         for index, group in enumerate(order, 1):
             lines.append(f"## {index}. {group['label']}")

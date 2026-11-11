@@ -21,7 +21,7 @@ from .progress import Tracker, plan_steps
 from .render import Renderer
 from . import management as mg
 from .ssh import SshError, SshTransport, Target, load_targets, save_target
-from .state import FleetState, validate_alert_webhook
+from .state import FleetState, validate_alert_webhook, validate_management_networks
 
 RELEASES = "releases"
 INVENTORY = "inventory"
@@ -186,6 +186,15 @@ class FleetEngine:
         """Where Alertmanager sends alerts. Optional; empty turns notifications off. The next config run carries a change to the hosts."""
         state = self.state()
         state["global"]["alert_webhook_url"] = validate_alert_webhook(url.strip())
+        self.store._write(state)
+
+    def management_networks(self) -> list[str]:
+        return list(self.state()["global"].get("management_networks", []))
+
+    def set_management_networks(self, networks: str) -> None:
+        """Networks allowed to reach the panels, the API, Horizon, and Grafana. Empty removes the restriction. The next config run carries a change to the hosts."""
+        state = self.state()
+        state["global"]["management_networks"] = validate_management_networks(networks)
         self.store._write(state)
 
     def features(self) -> dict[str, dict[str, Any]]:

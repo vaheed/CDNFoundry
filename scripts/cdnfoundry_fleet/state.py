@@ -77,6 +77,27 @@ def validate_alert_webhook(value: Any) -> str:
     return text
 
 
+MANAGEMENT_NETWORK_LIMIT = 64
+
+
+def validate_management_networks(value: Any) -> list[str]:
+    """CIDRs allowed to reach the panels, the API, Horizon, Grafana, and the status page. Empty means no restriction."""
+    items = value.replace(",", " ").split() if isinstance(value, str) else list(value or [])
+    networks: list[str] = []
+    for item in items:
+        try:
+            network = ipaddress.ip_network(str(item).strip(), strict=False)
+        except ValueError as exc:
+            raise ValidationError(f"global.management_networks has an invalid network: {item}") from exc
+        if network.prefixlen == 0:
+            raise ValidationError("global.management_networks must not contain 0.0.0.0/0 or ::/0; leave the list empty to remove the restriction")
+        if str(network) not in networks:
+            networks.append(str(network))
+    if len(networks) > MANAGEMENT_NETWORK_LIMIT:
+        raise ValidationError(f"global.management_networks accepts at most {MANAGEMENT_NETWORK_LIMIT} networks")
+    return networks
+
+
 if os.name == "nt":
     import msvcrt
 
@@ -151,6 +172,7 @@ class FleetState:
                 "release": validate_release(global_cfg["release"]),
                 "acme_email": str(global_cfg.get("acme_email", "")),
                 "alert_webhook_url": validate_alert_webhook(global_cfg.get("alert_webhook_url", "")),
+                "management_networks": validate_management_networks(global_cfg.get("management_networks", [])),
                 "ipv6": validate_bool(global_cfg.get("ipv6", False), "global.ipv6"),
             },
             "features": {
