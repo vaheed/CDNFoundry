@@ -319,6 +319,14 @@ List the hosts in the plan.
 
 No options beyond the shared ones.
 
+## management-networks
+
+Show or set the networks allowed to reach the panels, the API, Horizon, and Grafana (CIDRs; an empty value removes the restriction).
+
+| Option | Meaning |
+| --- | --- |
+| `--networks` `NETWORKS` | Space- or comma-separated CIDRs to save, or an empty value to remove the restriction; omit to show the current ones |
+
 ## management-tls
 
 Certificates for the control, grafana, and telemetry names.

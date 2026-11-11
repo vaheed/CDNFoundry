@@ -56,12 +56,12 @@ Facts that change how results must be read:
 - Both PoPs are in the same network. This is two edge hosts, not two
   failure domains. No multi-PoP conclusion can be drawn from this fleet.
 - No IPv6 anywhere. Every IPv6 behavior is **blocked** on staging.
-- No host firewall: `ufw` is inactive and `DOCKER-USER` is empty on every
-  host, so every published container port is reachable from the internet.
+- No host firewall on any host, so every published container listener was
+  reachable from the internet.
 - Staging has one real domain, one proxied hostname, and 16 cells.
-- The host name given in the report for the DNS and edge ports does not
+- The host name given in the report for the DNS and edge listeners does not
   exist in the fleet definition, the control database, or public DNS. The
-  reported ports were found on both PoPs.
+  reported listeners were found on both PoPs.
 
 ### Checked and not defects
 
@@ -69,7 +69,7 @@ Facts that change how results must be read:
 | --- | --- |
 | Cookie "No HttpOnly" on `XSRF-TOKEN` | **False positive.** The cookie is Laravel's CSRF token and must be readable by the page script. It is `Secure; SameSite=Lax`. The session cookie is `Secure; HttpOnly; SameSite=Lax`. |
 | "Timestamp disclosure" on `/js/filament/support/support.js` | **False positive.** Ordinary `Last-Modified` and `ETag` of a static asset (image build time). |
-| `9100/tcp` labelled `jetdirect` | **False positive label.** It is Prometheus node-exporter. The exposure itself is real (item 1.2). |
+| A scanner label that guessed a printer service for one listener | **False positive label.** It is the host metrics exporter. The exposure itself is real (item 1.2). |
 | `/api/health?format=json` sets session cookies | **Reported, not reproduced.** The audit saw no `Set-Cookie` on `/api/health`, `/api/ready`, or `/up`. HTML routes (`/`, `/horizon`) do set them. |
 | Stack traces on error pages | **Not reproduced.** `APP_DEBUG=false`; 404, 405, 403 and malformed requests return generic pages or stable JSON codes. Related hardening gaps are in item 1.4. |
 | "CSP wildcard directive" and "CSP script-src unsafe-inline" | **Same single finding** as the missing policy (item 1.5), not three defects. The header is only `upgrade-insecure-requests`. |
@@ -101,42 +101,54 @@ Neither is phase work.
 
 ## Phase 1: Close the management and infrastructure exposure
 
-The control host and both PoPs publish internal services to the internet,
-and the control plane runs a PHP release with published security fixes
-outstanding. This is first because it is exploitable from outside without
-any account.
+The control host and both PoPs published internal services to the internet,
+and the control plane ran a PHP release with published security fixes
+outstanding. This came first because it was exploitable from outside without
+any account. Port numbers, product versions, addresses, and hostnames are left
+out of this phase on purpose; the operator pages name every listener.
 
 | # | Finding | Evidence | Direction | Proof of completion |
 | --- | --- | --- | --- | --- |
-| 1.1 | **PHP is three patch releases behind a published security release and advertises its version.** | **Confirmed.** `php -v` in the deployed core image: `8.5.9`. `core/Dockerfile` pins `php:8.5-fpm-alpine` by digest to that build. php.net lists 8.5.12 (21 Oct 2026) as a security release. `expose_php=On`, `display_errors=On`, `session.upload_progress.enabled=On` in the running FPM. `X-Powered-By: PHP/8.5.9` is on every PHP response (`/`, 404, `/api/*`, `/up`, `/horizon`). The two CVE identifiers come from the owner's report; the audit verified the version gap, not exploitability. | Re-pin the base image to 8.5.12 or later through the normal release path. Ship a production `php.ini` with `expose_php=Off`, `display_errors=Off`, `session.upload_progress.enabled=Off`. Run the full suite on the new image before release. | `php -v` on staging shows the fixed version; no response on any path carries `X-Powered-By`; CI green on the new digest. |
-| 1.2 | **Metrics and admin listeners are open to the internet.** | **Reproduced** from outside. See the port table below. | Bind exporters to the private or loopback address by default in Fleet's render, and have Fleet install a default-deny host firewall rule set (`DOCKER-USER`) that admits each internal port only from the control and PoP addresses it already knows. No new service. | An outside scan of every fleet host shows only 22 (or the operator's SSH policy), 53, 80, 443, and the edge-control port; Prometheus targets stay `up`. |
-| 1.3 | **`/admin`, `/app`, and the API are reachable by anyone.** The API lives at `/api` and `/api/admin`; `/api/v1` does not exist (404). | **Reproduced.** `/admin` and `/app` answer `302` to public login pages (`200`, about 32 kB). `/api/domains` and `/api/admin/edges` answer `401` from anywhere. Grafana's login is public on its own hostname, with `/api/health` (version and commit) and `/metrics` answering `200` unauthenticated. | Add a trusted-network allowlist for the panels, `/api`, `/horizon`, and Grafana at the Caddy layer (config already has the allowlist pattern for telemetry) and the same list at the application as defense in depth. Keep public only what needs it: `/api/health`, and the edge-control listener for PoPs. Decide explicitly whether the public `/health` status page stays public; today it shows internal component state ("Backups: Degraded", standby, queues). A login redirect is not a denial. | From outside the allowlist: `/admin`, `/app`, `/api/*` (except health), `/horizon`, Grafana return `403` with no redirect, no login form, and no session cookie. From inside: unchanged. |
-| 1.4 | **Version and state leaks on error paths.** | **Reproduced.** A malformed request returns an nginx page with `nginx/1.31.3`; `:8443` sends `Server: nginx/1.31.3`; `version.bind` on both nameservers returns the exact PowerDNS build. The control log shows `headers already sent` errors, consistent with `display_errors=On`. | `server_tokens off` on the web and edge-control images, a fixed `version-string` for PowerDNS, the `php.ini` from 1.1. | No response from any public listener names a product version. |
-| 1.5 | **No real Content-Security-Policy; wildcard CORS on the whole API.** | **Reproduced.** CSP is `upgrade-insecure-requests` only. Every `/api` response, including authenticated routes, sends `Access-Control-Allow-Origin: *`; a preflight from an arbitrary origin is granted `Authorization`. The API uses bearer tokens and sends no `Allow-Credentials`, so this is not a session-riding hole today, but nothing needs it. HSTS has no `includeSubDomains`. | A panel CSP that Filament can run under (report-only first, then enforced). Remove wildcard CORS; allow only configured origins. | CSP has `default-src` and `script-src` without wildcards; a cross-origin preflight is refused; the browser suite passes with CSP enforced. |
-| 1.6 | **Hardening left from the previous roadmap.** The core container's default user is root. | **Confirmed** (`id` in the running core container). The user of the FPM worker and Horizon processes was not checked. | Run every core-image process as an unprivileged user. | No process in a core-image container runs as root. |
+| 1.1 | **PHP was behind a published security release and advertised its version.** | **Confirmed.** The deployed core image pinned an older patch release than the newest security release. The running FPM had `expose_php`, `display_errors`, and `session.upload_progress.enabled` on, and every PHP response carried `X-Powered-By`. The audit verified the version gap, not exploitability. | Re-pin the base image to the newest patch release. Ship a production `php.ini` with the three settings off. | The deployed image reports the fixed release; no response on any path carries `X-Powered-By`; CI is green on the new digest. |
+| 1.2 | **Metrics and admin listeners were open to the internet.** | **Reproduced** from outside. See the listener inventory below. | Bind exporters to the private or loopback address by default in Fleet's render, and have Fleet install a default-deny host firewall in `DOCKER-USER` that admits each internal listener only from the fleet's own addresses. No new service. | An outside scan of every fleet host shows only SSH, DNS, HTTP, HTTPS, and the edge-control listener; Prometheus targets stay `up`. |
+| 1.3 | **The panels, the API, and Grafana were reachable by anyone.** | **Reproduced.** The panels answered with redirects to public login pages. API paths answered `401` from anywhere. Grafana's login was public on its own hostname, and its health endpoint (version and commit) and metrics answered without authentication. | Add a management-network allowlist for the panels, the API, Horizon, and Grafana at the Caddy layer and the same list in the application. Keep public only the health probes and the edge-control listener. Decide explicitly about the public status page. | From outside the allowlist, every management path returns `403` with no redirect, no login form, and no session cookie. From inside: unchanged. |
+| 1.4 | **Version and state leaks on error paths.** | **Reproduced.** A malformed request returned an nginx page naming its version, the edge-control listener sent a versioned `Server` header, and `version.bind` on both nameservers returned the exact PowerDNS build. The control log showed `headers already sent` errors, consistent with `display_errors` being on. | `server_tokens off` on the web and edge-control images, a fixed `version-string` for PowerDNS, and the `php.ini` from 1.1. | No response from any public listener names a product version. |
+| 1.5 | **No real Content-Security-Policy; wildcard CORS on the whole API.** | **Reproduced.** The policy was `upgrade-insecure-requests` only. Every `/api` response sent `Access-Control-Allow-Origin: *`, and a preflight from an arbitrary origin was granted `Authorization`. The API uses bearer tokens and sends no `Allow-Credentials`, so this was not a session-riding hole, but nothing needed it. HSTS had no `includeSubDomains`. | A panel policy Filament can run under. Remove wildcard CORS; allow only configured origins. | The policy has `default-src` and `script-src` without wildcards; a cross-origin preflight is refused; the browser suite passes with the policy enforced. |
+| 1.6 | **Hardening left from the previous roadmap.** The core container's default user was root. | **Confirmed.** | Run every core-image process as an unprivileged user. | No process in a core-image container runs as root. |
 
-Port inventory (all verified by connecting from outside and by `ss` and
-`docker ps` on the host; every one is published by `docker-proxy` on
-all interfaces, with no firewall in front):
+Listener inventory (every one was reached from outside and confirmed on the
+host; every one was published on all interfaces with no firewall in front):
 
-| Port | Host | Actual service | Authentication | Risk |
-| --- | --- | --- | --- | --- |
-| 8083/tcp | Both PoPs | DNSdist built-in web server | `/` and `/api` need basic auth (`401`). `/metrics` and `/jsonstat` answer `200` without it. | Query and backend statistics to anyone; an admin API one password away from the internet. |
-| 9100/tcp | Both PoPs and control (three separate services) | node-exporter, plain HTTP | None | Kernel, disk, network, and process detail of every host. |
-| 8443/tcp | Control | edge-control nginx, mutual TLS for edge agents | `/edge/v1/*` needs an edge certificate (`401` without). `/healthz` is open. | Intended to be reachable by PoPs. Not a defect; narrow it to PoP addresses in 1.2. |
-| 9105/tcp | Both PoPs | Edge gateway metrics | None | Connection counters and active revision. |
-| 9598, 9599/tcp | All three hosts | Vector exporters | None | Pipeline internals. No customer hostnames were found in the output. |
-| 5300/tcp+udp | Control | PowerDNS primary (zone transfer source) | AXFR refused from outside; ordinary queries answered | The "private" primary is public. AGENTS.md requires PowerDNS to stay private. |
-| 8444/tcp | Control | Telemetry ingest (Caddy, address allowlist) | Refused from outside | Working as designed. |
+| Listener | Host | Authentication | Risk |
+| --- | --- | --- | --- |
+| DNSdist statistics | Both PoPs | The admin routes needed credentials; the statistics routes answered without them. | Query and backend statistics to anyone. |
+| Host metrics exporter | Both PoPs and control | None | Kernel, disk, network, and process detail of every host. |
+| Edge-control mutual TLS | Control | A client certificate for every route except its health route. | Intended to be reachable by PoPs. Not a defect. |
+| Edge gateway metrics | Both PoPs | None | Connection counters and active revision. |
+| Vector exporters | All three hosts | None | Pipeline internals. No customer hostnames were found. |
+| PowerDNS primary (zone transfers) | Control | Zone transfers refused from outside; ordinary queries answered. | The "private" primary was public, against the contract. |
+| Telemetry ingest | Control | Refused from outside by an address allowlist. | Working as designed. |
 
 **Blocked:** default-credential checks. The audit made no login attempts.
-Generated Grafana, database, and API secrets are present in the fleet state (confirmed by file name only);
-the first-administrator path should be re-checked inside this phase with
-the owner present.
+Generated secrets are present in the fleet state (confirmed by file name
+only); the first-administrator path should be re-checked with the owner
+present.
+
+### What changed
+
+| # | Change | Where |
+| --- | --- | --- |
+| 1.1 | Base image re-pinned to the newest patch release by digest. `cdnfoundry.ini` turns the three settings off. | `core/Dockerfile`, `core/docker/php/` |
+| 1.2 | `firewall.sh` is generated per node and run by `start.sh` before any container. It judges Docker-published listeners in `DOCKER-USER` and the host-network gateway metrics in `INPUT`, admits only fleet addresses, and returns after a reboot through a systemd unit. | `scripts/cdnfoundry_fleet/firewall.py` |
+| 1.3 | `management_networks` in the fleet state (several CIDRs, no catch-all, add or remove one entry at a time from the CLI or the Config page). Caddy and the application refuse everything else with a bare `403`. The status page moved behind the list; health probes and the edge listener stay open. | `deploy/production/Caddyfile*`, `RestrictToManagementNetworks`, Fleet |
+| 1.4 | `server_tokens off`, PowerDNS `version-string`, PHP settings. | `docker/nginx/`, `docker/pdns/` |
+| 1.5 | One policy with a per-request nonce, enforced by default (`report-only` and `off` selectable). API CORS allows only `CORS_ALLOWED_ORIGINS`. HSTS covers subdomains. The default avatar is drawn locally, because Filament's stock provider sent each user's initials to a third-party service on every page. | `SendContentSecurityPolicy`, `config/cors.php`, `InitialsAvatarProvider` |
+| 1.6 | The entrypoint drops root for every command, including the FPM master, which logs through a named pipe copied to stderr. | `core/docker/php/entrypoint.sh` |
 
 **Gate:** an outside scan and path sweep, run from a host outside the
 allowlist and stored with the release, shows no management path, no metrics
-endpoint, no version string, and a patched PHP.
+endpoint, no version string, and a patched PHP. See the completion record
+below for what has and has not been run.
 
 ## Phase 2: Cache isolation and key correctness
 

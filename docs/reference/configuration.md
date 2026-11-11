@@ -33,6 +33,9 @@ Limits that the software enforces are listed in the [limits reference](limits.md
 | `SESSION_SECURE_COOKIE` | HTTPS control | Secure-cookie flag; production default `true` |
 | `CONTROL_BIND` | control | Host publication for web; default `127.0.0.1:8080` |
 | `CONTROL_HOSTNAME` | control | Public browser/API hostname in independent management DNS |
+| `MANAGEMENT_NETWORKS` | control | Space-separated CIDRs allowed to reach the panels, the API, Horizon, Grafana, and the status page. Everyone else gets a bare `403`. Empty restricts nothing. Fleet writes it from `management_networks` plus the fleet's node addresses |
+| `CORS_ALLOWED_ORIGINS` | control | Space-separated browser origins allowed to call the API. Empty allows none; there is no wildcard |
+| `CONTENT_SECURITY_POLICY` | control | `enforce` (default), `report-only`, or `off` for the panels' and API's `Content-Security-Policy` |
 | `TELEMETRY_HOSTNAME` | control/telemetry | Public telemetry-ingest hostname in independent management DNS |
 | `CONTROL_PUBLIC_IPV4_ALLOWLIST` | gateways | Exact control/worker sources allowed through the control and telemetry gateways |
 | `CONTROL_PUBLIC_IPV6_ALLOWLIST` | gateways | Optional IPv6 control/worker sources for the same gateways |
