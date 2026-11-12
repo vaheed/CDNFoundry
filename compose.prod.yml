@@ -299,6 +299,24 @@ services:
       retries: 3
       start_period: 60s
 
+  # The only container that sends to Telegram, Discord, Slack, and webhooks, and so the only one that needs outbound
+  # access to them. It runs the core image as a worker for the single `notifications` queue lane; a slow provider
+  # delays only its own channel. It runs beside Horizon because it needs the same database and Redis.
+  notifier:
+    logging: *bounded-logging
+    <<: *core
+    profiles: [control]
+    command: [sh, -c, "php artisan cdnf:control:guard && exec php artisan queue:work redis --queue=notifications --sleep=3 --max-time=3600 --memory=128"]
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    stop_grace_period: 40s
+    healthcheck:
+      test: [CMD-SHELL, "pgrep -f 'queue:work redis --queue=notifications' >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
   scheduler:
     logging: *bounded-logging
     <<: *core
@@ -915,12 +933,11 @@ services:
     image: prom/alertmanager:v0.34.1@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a
     profiles: [telemetry]
     entrypoint: [/bin/sh, /usr/local/bin/alertmanager-start]
-    environment:
-      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL}
     volumes:
       - ./docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - ./docker/alertmanager/start.sh:/usr/local/bin/alertmanager-start:ro
-    networks: [telemetry]
+      - ${METRICS_TOKEN_FILE:?METRICS_TOKEN_FILE is required}:/run/secrets/metrics-token:ro
+    networks: [telemetry, control]
     restart: unless-stopped
     healthcheck:
       test: [CMD, wget, -qO-, http://127.0.0.1:9093/-/ready]
