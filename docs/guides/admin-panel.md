@@ -23,7 +23,7 @@ domain, user, edge, or page.
 | [Operate](#operate) | Operations |
 | [Infrastructure](#infrastructure) | Service pools, Edges, System DNS identity, DNS primary |
 | [Customers](#customers) | Users, Domains |
-| [Governance](#governance) | API tokens, Platform settings, Audit logs |
+| [Governance](#governance) | API tokens, Notifications, Platform settings, Audit logs |
 
 ## Observe
 
@@ -117,6 +117,11 @@ sees, plus the users assigned to it. See [Domains](domains.md) and
 
 Your own tokens for the [API](../reference/api/index.md). A token is shown once,
 when you create it. You can limit a token to some domains and give it an expiry.
+
+### Notifications
+
+Platform channels for Telegram, Discord, Slack, and signed webhooks. They receive every
+alert and every domain event. See [Notifications](notifications.md).
 
 ### Platform settings
 

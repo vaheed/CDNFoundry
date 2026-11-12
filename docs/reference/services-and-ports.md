@@ -19,7 +19,7 @@ profile of `compose.prod.yml`.
 
 | Profile | Services |
 | --- | --- |
-| `control` | `caddy`, `core`, `web`, `edge-control`, `horizon`, `scheduler`, `control-db`, `redis`, `cache`, `pdns-db`, `pdns-primary`, `mmdb-updater`, `node-exporter` |
+| `control` | `caddy`, `core`, `web`, `edge-control`, `horizon`, `notifier`, `scheduler`, `control-db`, `redis`, `cache`, `pdns-db`, `pdns-primary`, `mmdb-updater`, `node-exporter` |
 | `dns` | `pdns-auth`, `dnsdist`, `vector`, `node-exporter`, `mmdb-updater` |
 | `telemetry` | `telemetry-gateway`, `clickhouse`, `vector`, `loki`, `prometheus`, `grafana`, `alertmanager`, `blackbox`, `node-exporter`, and one-shot setup services (`loki-data-init`, `grafana-plugins-init`, `grafana-control-db-provision`, `grafana-bootstrap`) |
 | `edge` | `cell-01` through `cell-08`, `edge-agent`, `edge-gateway`, `edge-gateway-state-init`, `vector`, `node-exporter`, `mmdb-updater` |

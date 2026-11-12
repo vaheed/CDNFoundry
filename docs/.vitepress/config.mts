@@ -86,7 +86,8 @@ const guides = [
       { text: 'Respond to an incident', link: '/guides/incident-response' },
       { text: 'Security', link: '/guides/security' },
       { text: 'Managed WAF', link: '/guides/managed-waf' },
-      { text: 'Analytics and usage', link: '/guides/analytics' }
+      { text: 'Analytics and usage', link: '/guides/analytics' },
+      { text: 'Notifications', link: '/guides/notifications' }
     ]
   }
 ]

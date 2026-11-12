@@ -7,6 +7,18 @@ single source of truth; `make version-check` enforces it.
 
 ## [Unreleased]
 
+### Added
+
+- Notifications: one `notifier` container delivers alerts and domain events to Telegram, Discord, Slack, and an
+  administrator-only signed webhook. Administrators and, when a platform switch allows it, domain users add their own
+  channels, with per-channel rate limits, digests, and automatic pausing after repeated failures.
+- A private Alertmanager receiver in the control plane. It stores nothing and queues one message per alert group.
+
+### Removed
+
+- `ALERT_WEBHOOK_URL`, the Fleet `alert-webhook` command, and the Fleet web alert webhook field. Add notification
+  channels in the panel instead.
+
 ## [2.0.8] - 2026-11-12
 
 Locks the control surfaces down by default, separates automatic security state from configuration revisions, shows

@@ -14,13 +14,14 @@ instead. See the [admin panel tour](admin-panel.md).
 
 <Screenshot name="app-domains" alt="The Domains list in the domain panel." />
 
-The menu has three screens.
+The menu has three screens, and a fourth when an administrator turns on notification channels.
 
 | Screen | Use it to |
 | --- | --- |
 | [Domains](#domains) | List your domains and open one to manage it |
 | [Analytics and logs](#analytics-and-logs) | See traffic, cache, and errors for a domain |
 | [API tokens](#api-tokens) | Create tokens to use the API from scripts |
+| [Notifications](notifications.md) | Send events for your domains to Telegram, Discord, or Slack |
 
 ## Domains
 

@@ -107,6 +107,7 @@ runs them through `cdnfoundry-fleet control ...` (see
 | --- | --- | --- |
 | `cdnf:edge:complete-placement-drains {--limit=100}` | Promotes ready target pools after DNS drain, advances desired revisions, records audit events, and queues edge reconciliation. Limit is clamped to 1–1,000. | Every minute |
 | `cdnf:edge:dispatch-origin-checks {--limit=100}` | Dispatches a jittered, bounded batch of explicitly enabled origin checks. Limit is clamped to 1–500 and at most five checks are selected per domain. | Every minute |
+| `cdnf:notifications:origin-errors` | Reads the one-minute traffic rollup and queues one `origin.errors_high` notification for each domain whose origin errors reach the platform threshold over five minutes, then waits an hour for that domain. Reads telemetry only; stores nothing. | Every five minutes |
 | `cdnf:edge:prune-revisions {--limit=1000}` | Permanently removes expired derived edge revisions and artifacts while retaining active and rollback-protected state. Limit is clamped to 1–10,000. | Daily at 02:30 |
 | `cdnf:scheduler:check {--max-age=150}` | Exits non-zero unless the scheduler recorded its heartbeat within the allowed seconds. Used as the scheduler container health check. | Every 30 seconds by Compose |
 | `cdnf:edge:promote-placements {--chunk=100} {--chunks=50}` | Promotes deploying placements whose healthy PoPs have acknowledged (the quorum), paging through every deploying placement in chunks. A PoP that has not acknowledged within the promotion grace window stops counting and catches up on its own. | Every minute |
@@ -171,6 +172,7 @@ or internal non-command work, which is intentionally not renamed here.
 | `cdnf:edge:promote-placements` | Every minute | Promote placements by quorum |
 | `cdnf:edge:reconcile-stale-placements` | Every minute | Retry stale placements |
 | `cdnf:edge:dispatch-origin-checks` | Every minute | Queue due opt-in origin checks |
+| `cdnf:notifications:origin-errors` | Every five minutes | Notify on origin error spikes |
 | `cdnf:edge:prune-revisions` | Daily at 02:30 | Remove expired derived revision history |
 | `cdnf:health:publish` | Every minute | Refresh the sanitized public status page snapshot |
 | `cdnf:tls:dispatch-maintenance` | Hourly | Maintain managed certificates and alerts |

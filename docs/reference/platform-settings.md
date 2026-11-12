@@ -30,7 +30,7 @@ requests or scheduled work. They do not rewrite every domain.
 
 Each table below lists the field name used in the API and commands, the default,
 and the allowed range. Ranges are inclusive. The API group names are `display`,
-`operations`, `telemetry`, `observability`, `dns_lifecycle`, `domain_monitoring`, `revision_history`,
+`operations`, `telemetry`, `observability`, `dns_lifecycle`, `domain_monitoring`, `notifications`, `revision_history`,
 `rate_limits`, `edge_runtime`, `origin_safety`, and `proxy_defaults`.
 
 The platform DNS zone and its nameservers have their own settings endpoint,
@@ -143,6 +143,23 @@ serving traffic.
 - `mismatch_confirmations` and `confirmation_spacing_minutes`: the number of consecutive checks that must show a different delegation, and the time between them, before a domain is un-verified. A failed lookup never counts.
 - `registration_check_days`: how often each registration expiry is looked up. A domain within the warning window is checked daily.
 - `registration_warning_days`: panels highlight an expiry inside this window, and users get a reminder when it starts and again at 14, 7, 1, and 0 days.
+
+## Notifications
+
+| Field | Default | Allowed |
+| --- | --- | --- |
+| `domain_user_channels` | off | on or off |
+| `max_channels_per_user` | 5 | 1–20 |
+| `max_platform_channels` | 20 | 1–100 |
+| `channel_messages_per_minute` | 6 | 1–60 |
+| `pause_after_failures` | 10 | 3–100 |
+| `origin_error_percent` | 20 | 1–100 |
+| `origin_error_min_requests` | 100 | 10–100,000 |
+
+- `domain_user_channels`: lets domain users add Telegram, Discord, and Slack channels for their assigned domains. When turned off, user channels stop sending within a minute and are kept.
+- `channel_messages_per_minute`: further events inside the minute are merged into one digest message.
+- `pause_after_failures`: a channel whose deliveries fail this many times in a row is paused until its owner resumes it.
+- `origin_error_percent` and `origin_error_min_requests`: a domain whose origin errors reach this share of at least this many requests over five minutes sends one notification, then waits an hour. See [Notifications](../guides/notifications.md).
 
 ## Revision history
 

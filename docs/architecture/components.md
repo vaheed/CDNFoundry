@@ -67,7 +67,8 @@ domain change creates no Nginx server block and no reload. See
 | `clickhouse` | Raw events plus materialized aggregates (for example `edge_hourly` and `dns_hourly`) |
 | `loki` | Operational logs with limited retention, on local filesystem storage |
 | `prometheus` | Metrics and alert rules |
-| `alertmanager` | Alert routing |
+| `alertmanager` | Alert routing to the control plane's private alert receiver |
+| `notifier` | Laravel queue worker for the `notifications` lane; the only sender to Telegram, Discord, Slack, and webhooks |
 | `node-exporter` | Host resource and clock metrics |
 | `grafana` | Provisioned read-only dashboards in folders such as overview, NOC, SOC, and platform admin |
 | `grafana-control-db-provision` | One-shot job that creates the restricted PostgreSQL role for Grafana. Safe to repeat |
