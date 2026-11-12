@@ -35,6 +35,8 @@ Schedule::command('cdnf:health:publish')->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:waf:expire-exclusions')->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:usage:finalize')->hourlyAt(20)->withoutOverlapping();
 Schedule::command('cdnf:audit:prune')->dailyAt('03:10')->withoutOverlapping();
+Schedule::command('cdnf:security-events:prune')->dailyAt('03:20')->withoutOverlapping();
+Schedule::command('cdnf:operations:prune')->dailyAt('03:30')->withoutOverlapping();
 // The monthly usage report waits a day after month end, so the last hour's rollup is final. The operations report is weekly.
 Schedule::command('cdnf:reports:build usage')->monthlyOn(2, '03:40')->withoutOverlapping();
 Schedule::command('cdnf:reports:build operations')->weeklyOn(1, '06:00')->withoutOverlapping();

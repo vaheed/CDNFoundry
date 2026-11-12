@@ -376,11 +376,17 @@ class EdgeAgentController extends Controller
                 if ($domain === null || (($event['hostname'] ?? null) !== null && ! $domain->dnsRecords()->where('mode', 'proxied')->where('name', $event['hostname'])->exists())) {
                     return;
                 }
-                SecurityEvent::query()->create([
-                    'domain_id' => $domain->id, 'edge_id' => $edge->id, 'hostname' => $event['hostname'] ?? null,
-                    'state' => $domain->security_state, 'reason_code' => $event['reason_code'],
-                    'details' => ['count' => $event['count']], 'occurred_at' => CarbonImmutable::createFromTimestamp($event['occurred_at']),
+                // One row per domain, edge, reason, and hour: later reports in the hour raise the count, never add rows.
+                $occurredAt = CarbonImmutable::createFromTimestamp($event['occurred_at']);
+                $stored = SecurityEvent::query()->firstOrNew([
+                    'domain_id' => $domain->id, 'edge_id' => $edge->id, 'reason_code' => $event['reason_code'],
+                    'bucket_at' => $occurredAt->startOfHour(),
                 ]);
+                $stored->fill([
+                    'hostname' => $event['hostname'] ?? $stored->hostname, 'state' => $domain->security_state,
+                    'details' => ['count' => max((int) ($stored->details['count'] ?? 0), $event['count'])],
+                    'occurred_at' => $stored->occurred_at === null ? $occurredAt : $occurredAt->max($stored->occurred_at),
+                ])->save();
                 $settings = $domain->security_settings ?? SecurityConfig::defaults();
                 $escalates = ! in_array($event['reason_code'], SecurityConfig::NON_ESCALATING_REASONS, true);
                 if ($escalates && $event['count'] >= 50 && $domain->security_state === 'normal') {
