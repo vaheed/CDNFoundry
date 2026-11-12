@@ -2,8 +2,8 @@
 
 namespace App\Jobs;
 
-use App\Actions\PlanDomainEdgeCells;
 use App\Actions\ChangeAutomaticSecurityState;
+use App\Actions\PlanDomainEdgeCells;
 use App\Actions\PromoteReadyEdgePlacements;
 use App\Enums\DomainLifecycleState;
 use App\Models\Domain;

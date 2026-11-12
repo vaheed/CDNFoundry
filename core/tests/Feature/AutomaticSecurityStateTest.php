@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\ChangeAutomaticSecurityState;
 use App\Actions\RecordSecurityReport;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
@@ -126,7 +127,7 @@ class AutomaticSecurityStateTest extends TestCase
         $cell = $other->cells()->create(['slot' => 1, 'status' => 'ready']);
         DomainEdgeCell::query()->create(['domain_id' => $domain->id, 'edge_id' => $other->id, 'replica' => 1, 'active_cell_id' => $cell->id, 'desired_revision' => 3, 'state' => 'active']);
 
-        \App\Actions\ChangeAutomaticSecurityState::dispatchOverlay($domain->refresh());
+        ChangeAutomaticSecurityState::dispatchOverlay($domain->refresh());
 
         $task = EdgeTask::query()->where('edge_id', $other->id)->where('type', 'security_overlay')->sole();
         $this->assertSame('suspected', $task->payload['state']);

@@ -3,6 +3,9 @@
 namespace Tests\Feature;
 
 use App\Actions\EvaluateEndpointPublication;
+use App\Http\Controllers\EdgeAgentController;
+use App\Jobs\ReconcilePlatformDnsIdentity;
+use App\Models\AuditLog;
 use App\Models\Edge;
 use App\Models\EdgePool;
 use App\Models\EdgePoolEndpoint;
@@ -12,6 +15,7 @@ use App\Support\EdgeCertificateAuthority;
 use App\Support\PlatformDnsZone;
 use App\Support\SystemHealth;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -119,19 +123,19 @@ class PopFailStaticTest extends TestCase
 
         // A domain revision moves the agent's sequence ahead of the gateway map for a moment: the gateway still
         // serves its previous valid map, but the agent reports the listener as not yet matching.
-        $request = \Illuminate\Http\Request::create('/edge/v1/heartbeat', 'POST', [
+        $request = Request::create('/edge/v1/heartbeat', 'POST', [
             'agent_version' => '1.2.0', 'listener_ready' => false, 'active_sequence' => 0,
             'cells' => [['name' => 'cell-01', 'status' => 'ready', 'capacity' => ['active_connections' => 0]]],
             'gateway' => ['ready' => true, 'active_revision' => 1],
         ]);
         $request->attributes->set('edge', $first->edge);
-        app(\App\Http\Controllers\EdgeAgentController::class)->heartbeat($request);
+        app(EdgeAgentController::class)->heartbeat($request);
 
         $this->assertContains($first->refresh()->dns_reason, ['gateway_not_ready', 'gateway_not_acknowledged'], 'the endpoint is reported as converging');
         $this->assertSame(['198.51.100.61', '198.51.100.62'], $this->published($pool), 'the address set did not change');
-        $this->assertSame(0, \App\Models\AuditLog::query()->where('action', 'edge.endpoint_withdrawn')->count());
+        $this->assertSame(0, AuditLog::query()->where('action', 'edge.endpoint_withdrawn')->count());
         $this->assertSame(1, PlatformDnsSetting::query()->findOrFail(1)->revision, 'the zone serial did not move');
-        Queue::assertNotPushed(\App\Jobs\ReconcilePlatformDnsIdentity::class);
+        Queue::assertNotPushed(ReconcilePlatformDnsIdentity::class);
 
         // A gateway that cannot serve at all is a real signal and still leaves DNS while another PoP is healthy.
         $first->edge->update(['capacity' => ['listener_ready' => false, 'gateway' => ['ready' => false]]]);
