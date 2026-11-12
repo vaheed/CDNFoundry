@@ -42,6 +42,30 @@ local function diagnostic_headers_enabled()
     return not (config and config.settings and config.settings.diagnostic_headers == false)
 end
 
+-- The control plane sends the state it sets from edge reports as a small overlay per domain, apart from the signed
+-- snapshot. A cell enforces the stricter value of snapshot and overlay for every limit.
+local overlay_cache = {}
+local function effective_limits(config, security)
+    local limits = security.limits or {}
+    local raw = ngx.shared.runtime_limits:get("overlay:" .. tostring(config.domain_id or config.domain))
+    if not raw then return limits end
+    local cached = overlay_cache[raw]
+    if cached and cached.base == limits then return cached.merged end
+    local overlay = cjson.decode(raw)
+    if type(overlay) ~= "table" or type(overlay.limits) ~= "table" then return limits end
+    local merged = {}
+    for name, value in pairs(limits) do merged[name] = value end
+    for name, value in pairs(overlay.limits) do
+        local current = tonumber(merged[name])
+        if tonumber(value) and (current == nil or tonumber(value) < current) then merged[name] = value end
+    end
+    local count = 0
+    for _ in pairs(overlay_cache) do count = count + 1 end
+    if count >= 256 then overlay_cache = {} end
+    overlay_cache[raw] = { base = limits, merged = merged }
+    return merged
+end
+
 local function security_reject(status, reason)
     local dictionary = ngx.shared.runtime_limits
     dictionary:incr("capacity:rejected_requests", 1, 0)
@@ -283,7 +307,7 @@ function M.select_certificate()
         error("unknown TLS SNI")
     end
     local security = config.security or {}
-    local limits = security.limits or {}
+    local limits = effective_limits(config, security)
     local second = ngx.time()
     local budget = tonumber(limits.tls_handshakes_per_second) or 50
     local handshakes = ngx.shared.domain_limits:incr("security:tls:domain:" .. tostring(config.domain) .. ":" .. second, 1, 0, 2)
@@ -645,7 +669,7 @@ function M.access()
     local body_result = request_body_safety(config)
     if body_result then return body_result end
     local security = config.security or {}
-    local limits = security.limits or {}
+    local limits = effective_limits(config, security)
     local emergency = emergency_actions(dictionary)
     if emergency.return_maintenance_response then return security_reject(503, "edge_emergency_mode") end
     if security.state == "quarantined" then return security_reject(429, "domain_quarantined") end
@@ -788,7 +812,7 @@ function M.origin_access()
     ngx.ctx.security_domain = config.domain_id or config.domain
     ngx.ctx.security_hostname = host
     local security = config.security or {}
-    local limits = security.limits or {}
+    local limits = effective_limits(config, security)
     local emergency = emergency_actions(dictionary)
     local cache_mode = config.cache and config.cache.mode or "normal"
     if emergency.serve_cache_only or emergency.serve_stale_only or cache_mode == "cache_only" or cache_mode == "stale_only" then
@@ -1196,6 +1220,7 @@ function M.passive_failures()
             name = os.getenv("EDGE_CELL_NAME") or "unknown",
             status = drained and "drained" or "ready",
             purges_restored = ngx.shared.cache_purges:get("purge:restored") == true,
+            overlays_restored = ngx.shared.runtime_limits:get("overlay:restored") == true,
 			capacity = {
 				assigned_domain_count = assigned,
 				active_revision = state.sequence,
@@ -1230,7 +1255,8 @@ function M.control()
     if #raw == 0 or #raw > 128 * 1024 then return ngx.exit(400) end
     local command = cjson.decode(raw)
     if type(command) ~= "table" or type(command.task_id) ~= "string" or #command.task_id > 64
-        or (command.action ~= "drain" and command.action ~= "undrain" and command.action ~= "restart" and command.action ~= "cache_purge" and command.action ~= "cache_purges_restored" and command.action ~= "emergency_mode") then
+        or (command.action ~= "drain" and command.action ~= "undrain" and command.action ~= "restart" and command.action ~= "cache_purge" and command.action ~= "cache_purges_restored" and command.action ~= "emergency_mode"
+            and command.action ~= "security_overlay" and command.action ~= "security_overlays_restored") then
         return ngx.exit(400)
     end
     if command.action == "emergency_mode" then
@@ -1240,6 +1266,20 @@ function M.control()
         local supported = {disable_request_bodies=true,allow_get_head_only=true,disable_origin_retries=true,
             serve_cache_only=true,serve_stale_only=true,return_maintenance_response=true,disable_compression=true}
         for _, action in ipairs(command.actions) do if not supported[action] then return ngx.exit(400) end end
+    end
+    if command.action == "security_overlay" then
+        local states = { normal = true, suspected = true, restricted = true, recovering = true }
+        if type(command.domain_id) ~= "number" or command.domain_id < 1 or command.domain_id % 1 ~= 0
+            or type(command.sequence) ~= "number" or command.sequence < 1 or command.sequence % 1 ~= 0
+            or not states[command.state] then return ngx.exit(400) end
+        if command.limits ~= nil and command.limits ~= cjson.null then
+            if type(command.limits) ~= "table" then return ngx.exit(400) end
+            local count = 0
+            for name, value in pairs(command.limits) do
+                count = count + 1
+                if type(name) ~= "string" or #name > 64 or type(value) ~= "number" or value < 0 or count > 64 then return ngx.exit(400) end
+            end
+        end
     end
     if command.action == "cache_purge" then
         if type(command.domain) ~= "string" or #command.domain == 0 or #command.domain > 253
@@ -1271,6 +1311,21 @@ function M.control()
             dictionary:incr("control:restart_generation", 1, 0)
         elseif command.action == "cache_purges_restored" then
             ngx.shared.cache_purges:set("purge:restored", true)
+        elseif command.action == "security_overlays_restored" then
+            dictionary:set("overlay:restored", true)
+        elseif command.action == "security_overlay" then
+            -- A lower sequence is an obsolete message; a normal state removes the overlay.
+            local key = "overlay:" .. tostring(command.domain_id)
+            local current = cjson.decode(dictionary:get(key) or "null")
+            if type(current) ~= "table" or command.sequence >= (tonumber(current.sequence) or 0) then
+                if command.state == "normal" then
+                    dictionary:delete(key)
+                else
+                    local limits = (type(command.limits) == "table") and command.limits or nil
+                    local ok, err = dictionary:safe_set(key, cjson.encode({ sequence = command.sequence, state = command.state, limits = limits }))
+                    if not ok then ngx.log(ngx.ERR, "security overlay not stored: ", err); return ngx.exit(507) end
+                end
+            end
         elseif command.action == "emergency_mode" then
             if command.active then
                 dictionary:set("emergency:active", cjson.encode(command.actions))
