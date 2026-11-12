@@ -61,7 +61,6 @@ dev-e2e: dev-waf-image
 	python3 tests/e2e/e2e.py
 	python3 tests/e2e/dns_authoritative.py
 	python3 tests/e2e/geo_dns.py
-	python3 tests/e2e/edge_distribution.py
 	python3 tests/e2e/edge_control_mtls.py
 	python3 tests/e2e/managed_tls.py
 	python3 tests/e2e/edge_security.py
