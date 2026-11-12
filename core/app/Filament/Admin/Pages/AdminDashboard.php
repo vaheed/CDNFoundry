@@ -232,6 +232,7 @@ class AdminDashboard extends Dashboard
             'clickhouse' => 'Check ClickHouse health and follow the telemetry outage runbook.',
             'vector' => 'Check Vector health, sources, disk buffers, and ClickHouse delivery.',
             'host_clock' => 'Check Prometheus node time metrics and synchronize hosts with NTP.',
+            'alert_receiver' => 'Alerts fire but nobody is told. Set the alert webhook with `cdnfoundry-fleet alert-webhook` or on the Fleet Deploy page, then apply the config.',
             'mmdb' => 'Run the MMDB updater and verify the database file is readable and current.',
             'edges', 'edge_control', 'edge_listeners', 'edge_cells', 'service_pools' => 'Open Edge network, inspect the named edge/pool, then verify heartbeat, gateway, and assigned cell readiness.',
             'edge_configuration', 'edge_placements' => 'Inspect failed operations and deployment rejections, then reconcile only the affected domain or edge.',

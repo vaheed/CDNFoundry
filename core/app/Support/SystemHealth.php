@@ -104,6 +104,7 @@ final class SystemHealth
         $components['clickhouse'] = $this->probe(fn () => Http::connectTimeout(1)->timeout(2)->get(config('services.clickhouse.url').'/ping')->throw());
         $components['vector'] = $this->probe(fn () => Http::connectTimeout(1)->timeout(2)->get(config('services.vector.metrics_url'))->throw());
         $components['host_clock'] = $this->clock();
+        $components['alert_receiver'] = $this->alertReceiver();
         $components['control_ha'] = $this->controlHighAvailability();
         $components['mmdb'] = $this->mmdb();
 
@@ -331,6 +332,19 @@ final class SystemHealth
             'scanned_cells' => min(1000, $cells->count()),
             'scan_truncated' => $truncated,
         ]);
+    }
+
+    /** Alerts that fire into a configuration with no receiver reach nobody; that is a failed check, not a quiet success. */
+    private function alertReceiver(): array
+    {
+        try {
+            $configuration = (string) data_get(Http::connectTimeout(1)->timeout(2)->get(config('services.alertmanager.url').'/api/v2/status')->throw()->json(), 'config.original', '');
+        } catch (Throwable $exception) {
+            return $this->state('unavailable', ['error_code' => class_basename($exception)]);
+        }
+        $configured = str_contains($configuration, 'webhook_configs') || str_contains($configuration, 'email_configs');
+
+        return $this->state($configured ? 'healthy' : 'degraded', ['receiver_configured' => $configured] + ($configured ? [] : ['error_code' => 'alerts_have_no_receiver']));
     }
 
     private function state(string $status, array $details): array

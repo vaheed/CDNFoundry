@@ -689,6 +689,8 @@ class FleetEngine:
 
             ok = subprocess.run(["openssl", "x509", "-noout", "-checkend", str(30 * 86400)], input=ingress.read_bytes(), capture_output=True, check=False).returncode == 0
             extra.append(Check("fleet", "Standby control certificate valid for 30 days", ok, "" if ok else "run `control refresh-ingress`"))
+        if not state["global"].get("alert_webhook_url", ""):
+            extra.append(Check("fleet", "Alerts have a receiver", False, "alerts fire and reach nobody; run `alert-webhook --url https://...` and apply the config"))
         return checks + extra
 
     def security_status(self) -> list[dict[str, Any]]:

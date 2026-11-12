@@ -29,6 +29,7 @@ return [
         // Snapshots kept by the daily prune: one per day, week, and month for this many of each.
         'keep_daily' => max(1, (int) env('BACKUP_KEEP_DAILY', 14)), 'keep_weekly' => max(0, (int) env('BACKUP_KEEP_WEEKLY', 8)), 'keep_monthly' => max(0, (int) env('BACKUP_KEEP_MONTHLY', 6)),
     ],
+    'alertmanager' => ['url' => env('ALERTMANAGER_URL', 'http://alertmanager:9093')],
     'prometheus' => ['url' => env('PROMETHEUS_URL', 'http://prometheus:9090')],
     'grafana' => ['explore_url' => env('GRAFANA_EXPLORE_URL')],
     'acme' => [

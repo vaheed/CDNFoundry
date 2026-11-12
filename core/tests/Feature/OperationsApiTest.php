@@ -130,6 +130,21 @@ class OperationsApiTest extends TestCase
             ->assertJsonPath('data.components.host_clock.details.warning_seconds', 5);
     }
 
+    public function test_alert_receiver_is_a_failed_check_until_alertmanager_has_one(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $silent = "route:\n  receiver: default\nreceivers:\n- name: default\n";
+        Http::fake(['http://alertmanager:9093/api/v2/status' => Http::response(['config' => ['original' => $silent]]), '*' => Http::response('Ok.', 200)]);
+        $this->actingAs($admin)->getJson('/api/admin/system/components')->assertOk()
+            ->assertJsonPath('data.components.alert_receiver.status', 'degraded')
+            ->assertJsonPath('data.components.alert_receiver.details.error_code', 'alerts_have_no_receiver');
+
+        Http::fake(['http://alertmanager:9093/api/v2/status' => Http::response(['config' => ['original' => $silent."  webhook_configs:\n  - url_file: /tmp/x\n"]]), '*' => Http::response('Ok.', 200)]);
+        $this->actingAs($admin)->getJson('/api/admin/system/components')->assertOk()
+            ->assertJsonPath('data.components.alert_receiver.status', 'healthy')
+            ->assertJsonPath('data.components.alert_receiver.details.receiver_configured', true);
+    }
+
     public function test_failed_jobs_are_bounded_redacted_audited_and_deletable(): void
     {
         $admin = User::factory()->admin()->create();

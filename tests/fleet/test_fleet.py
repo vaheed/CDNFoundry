@@ -715,6 +715,7 @@ def test_cli_parser_exposes_all_commands_and_help() -> None:
         "web",
         "inventory",
         "alert-webhook",
+        "management-networks",
         "watch",
         "public-key",
         "set-release",
@@ -1313,6 +1314,11 @@ def test_status_and_doctor_are_actionable(source_repo: Path, tmp_path: Path) -> 
     assert doctor.returncode == 3
     assert "FAIL  control-1: SSH access stored" in doctor.stdout and "run node-ssh" in doctor.stdout
     assert "Doctor result: problems found" in doctor.stdout
+    # No webhook means alerts fire into nothing; doctor reports that as a failed check until one is set.
+    assert "FAIL  fleet: Alerts have a receiver" in doctor.stdout and "alert-webhook" in doctor.stdout
+    subprocess.run(common + ["alert-webhook", "--url", "https://alerts.example.com/cdnfoundry"], check=True, text=True, stdout=subprocess.PIPE)
+    configured = subprocess.run(common + ["doctor"], check=False, text=True, stdout=subprocess.PIPE)
+    assert "Alerts have a receiver" not in configured.stdout
 
 
 def test_optional_extra_env_is_preserved_for_manual_edge_registration(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
