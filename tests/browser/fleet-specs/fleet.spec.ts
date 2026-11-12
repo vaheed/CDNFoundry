@@ -239,6 +239,7 @@ test('management networks take several CIDRs and are added and removed one at a 
     await page.getByTestId('management-network-input').fill('0.0.0.0/0');
     await page.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('0.0.0.0/0');
+    await page.goto('/config');
     await page.getByRole('button', { name: 'Remove 198.51.100.0/24' }).click();
     await page.getByRole('button', { name: 'Remove 2001:db8::/32' }).click();
     await expect(page.getByTestId('management-networks-open')).toBeVisible();
