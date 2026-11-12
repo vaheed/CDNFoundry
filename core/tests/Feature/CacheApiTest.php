@@ -45,6 +45,44 @@ class CacheApiTest extends TestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'cache.settings_updated', 'subject_id' => (string) $domain->id]);
     }
 
+    public function test_path_rules_and_cookie_prefixes_are_typed_bounded_and_delivered(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $url = "/api/domains/{$domain->id}/cache";
+        $rule = ['match' => 'prefix', 'value' => '/static/', 'action' => 'ttl', 'ttl_seconds' => 86400];
+
+        $this->assertSame([], CachePolicy::defaults()['path_rules']);
+        foreach ([
+            [['match' => 'prefix', 'value' => 'static', 'action' => 'bypass']],
+            [['match' => 'prefix', 'value' => '/a', 'action' => 'ttl']],
+            [['match' => 'prefix', 'value' => '/a', 'action' => 'bypass', 'ttl_seconds' => 60]],
+            [['match' => 'regex', 'value' => '/a', 'action' => 'bypass']],
+            [['match' => 'suffix', 'value' => '.js', 'action' => 'purge']],
+            [['match' => 'suffix', 'value' => '.js?x', 'action' => 'bypass']],
+            [[...$rule, 'extra' => 'x']],
+            array_fill(0, 17, ['match' => 'suffix', 'value' => '.css', 'action' => 'bypass']),
+        ] as $invalid) {
+            $this->actingAs($user)->patchJson($url, [...$this->settings(), 'path_rules' => $invalid])->assertUnprocessable();
+        }
+        $this->assertSame(1, $domain->refresh()->revision);
+
+        $accepted = [$rule, ['match' => 'suffix', 'value' => '.php', 'action' => 'bypass']];
+        $this->actingAs($user)->patchJson($url, [...$this->settings(), 'path_rules' => $accepted, 'ignore_cookie_names' => ['_ga', '_ga_*']])->assertAccepted();
+        $this->assertSame($accepted, $domain->refresh()->cache_settings['path_rules']);
+        $this->assertSame(['_ga', '_ga_*'], $domain->cache_settings['ignore_cookie_names']);
+        $this->actingAs($user)->patchJson($url, [...$this->settings(), 'ignore_cookie_names' => ['*']])->assertUnprocessable();
+        $this->actingAs(User::factory()->create())->patchJson($url, [...$this->settings(), 'path_rules' => $accepted])->assertNotFound();
+    }
+
+    public function test_every_cookie_preset_name_passes_the_cookie_rule(): void
+    {
+        foreach (CachePolicy::COOKIE_PRESETS as $preset) {
+            foreach ($preset['names'] as $name) {
+                $this->assertSame(1, preg_match('/^[A-Za-z0-9_.-]{1,63}\*?$/', $name), $name);
+            }
+        }
+    }
+
     public function test_development_mode_has_a_bounded_visible_expiry(): void
     {
         [$user, $domain] = $this->ownedDomain();
