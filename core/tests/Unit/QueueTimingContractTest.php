@@ -27,12 +27,12 @@ class QueueTimingContractTest extends TestCase
 
     public function test_every_job_runs_on_a_lane_with_a_supervisor_and_a_health_entry(): void
     {
-        // The notifications lane has no Horizon supervisor: the notifier container is its only worker, so Horizon never needs egress to the providers, so Horizon never needs egress to the providers.
-        $lanes = [...collect(config('horizon.defaults'))->flatMap(fn (array $supervisor) => $supervisor['queue'])->all(), 'notifications'];
+        // The notifications and log-push lanes have no Horizon supervisor: the notifier and log-pusher containers are their only workers, so Horizon never needs egress to the providers.
+        $lanes = [...collect(config('horizon.defaults'))->flatMap(fn (array $supervisor) => $supervisor['queue'])->all(), 'notifications', 'log-push'];
         $this->assertEqualsCanonicalizing($lanes, SystemHealth::QUEUES);
 
         foreach (glob(app_path('Jobs/*.php')) as $file) {
-            $this->assertSame(1, preg_match("/onQueue\\('(\\w+)'\\)/", (string) file_get_contents($file), $match), basename($file).' must name its lane.');
+            $this->assertSame(1, preg_match("/onQueue\\('([\\w-]+)'\\)/", (string) file_get_contents($file), $match), basename($file).' must name its lane.');
             $this->assertContains($match[1], $lanes, basename($file).' uses a lane no supervisor serves.');
         }
     }

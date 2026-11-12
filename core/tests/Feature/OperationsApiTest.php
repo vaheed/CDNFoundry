@@ -69,7 +69,7 @@ class OperationsApiTest extends TestCase
         foreach (['queue_workers', 'mmdb', 'edge_listeners', 'edge_cells', 'service_pools', 'edge_configuration', 'edge_placements', 'edge_capacity', 'emergency_modes', 'dns_deployments', 'purges'] as $component) {
             $this->assertContains($response->json("data.components.{$component}.status"), ['healthy', 'degraded', 'unavailable']);
         }
-        $this->assertSame(['interactive', 'dns', 'edge', 'verification', 'tls', 'purge', 'bulk_maintenance', 'notifications'], array_keys($response->json('data.queues')));
+        $this->assertSame(['interactive', 'dns', 'edge', 'verification', 'tls', 'purge', 'bulk_maintenance', 'notifications', 'log-push'], array_keys($response->json('data.queues')));
     }
 
     public function test_component_health_detects_runtime_drift_pressure_and_stale_mmdb(): void

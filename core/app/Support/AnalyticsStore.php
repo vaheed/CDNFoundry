@@ -307,6 +307,22 @@ final class AnalyticsStore
             ['from' => $from->format('Y-m-d H:i:s'), 'to' => $to->format('Y-m-d H:i:s'), 'minimum' => $minimumRequests]);
     }
 
+    /**
+     * The next rows of one domain's dataset after a cursor, oldest first. The caller supplies only allowlisted fields and an
+     * integer domain id; events newer than `$until` are left for the next run so late-arriving inserts are not skipped.
+     *
+     * @param  list<string>  $fields
+     * @return list<array<string, mixed>>
+     */
+    public function rowsAfter(string $table, string $condition, array $fields, int $domainId, string $afterAt, string $afterId, CarbonImmutable $until, int $limit): array
+    {
+        $columns = implode(', ', array_map(fn (string $field): string => $field, $fields));
+
+        return $this->query("SELECT toString(occurred_at) AS occurred_at, toString(event_id) AS event_id, {$columns} FROM {$table} WHERE domain_id = {domain:UInt64} AND {$condition} "
+            .'AND (occurred_at, event_id) > ({afterAt:DateTime64(3)}, {afterId:UUID}) AND occurred_at <= {until:DateTime64(3)} ORDER BY occurred_at, event_id LIMIT {limit:UInt32}',
+            ['domain' => $domainId, 'afterAt' => $afterAt, 'afterId' => $afterId, 'until' => $until->format('Y-m-d H:i:s.v'), 'limit' => $limit]);
+    }
+
     /** @return list<array{hostname: string, blocked: int|string}> */
     public function topAttackedHostnames(CarbonImmutable $from, CarbonImmutable $to): array
     {

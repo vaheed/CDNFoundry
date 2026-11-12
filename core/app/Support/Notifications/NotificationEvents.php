@@ -15,6 +15,7 @@ final class NotificationEvents
         'dns.deployment_failed' => 'DNS deployment failed',
         'security.state_changed' => 'Security state changed',
         'origin.errors_high' => 'Origin errors above threshold',
+        'log_push.failing' => 'Log push failing',
     ];
 
     /** @return array<string, string> */

@@ -32,6 +32,8 @@ return [
     'alertmanager' => ['url' => env('ALERTMANAGER_URL', 'http://alertmanager:9093')],
     // The notifier's provider base address, honored only outside production so qualification can use a fake receiver.
     'notifier' => ['test_provider_url' => env('NOTIFIER_TEST_PROVIDER_URL')],
+    // A CA file for qualification against a fake receiver with a private certificate. It is never honored in production.
+    'log_push' => ['test_ca_file' => env('LOG_PUSH_TEST_CA_FILE')],
     'prometheus' => ['url' => env('PROMETHEUS_URL', 'http://prometheus:9090')],
     'grafana' => ['explore_url' => env('GRAFANA_EXPLORE_URL')],
     'acme' => [

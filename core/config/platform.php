@@ -131,6 +131,18 @@ return [
                 'origin_error_min_requests' => ['type' => 'integer', 'label' => 'Origin error minimum requests', 'default' => 100, 'description' => 'A domain needs at least this many requests in the five minutes before its origin error share is judged.', 'rules' => ['required', 'integer', 'between:10,100000']],
             ],
         ],
+        'log_push' => [
+            'label' => 'Log push',
+            'description' => 'Lets domain users send the logs of their own domains to an endpoint they control. Central platform logs are not affected.',
+            'fields' => [
+                'domain_user_log_push' => ['type' => 'boolean', 'label' => 'Domain users can push logs to their own endpoint', 'default' => false, 'description' => 'When off, every push stops within a minute and the destinations are kept.', 'rules' => ['required', 'boolean']],
+                'max_destinations_per_domain' => ['type' => 'integer', 'label' => 'Destinations per domain', 'default' => 2, 'description' => 'Maximum log push destinations one domain may have.', 'rules' => ['required', 'integer', 'between:1,5']],
+                'max_destinations' => ['type' => 'integer', 'label' => 'Destinations on the platform', 'default' => 2000, 'description' => 'Maximum log push destinations across all domains. It bounds the worker time spent each minute.', 'rules' => ['required', 'integer', 'between:1,20000']],
+                'batch_rows' => ['type' => 'integer', 'label' => 'Rows per batch', 'default' => 5000, 'description' => 'Maximum rows in one delivery. A batch is compressed before it is sent.', 'rules' => ['required', 'integer', 'between:100,50000']],
+                'max_batches_per_run' => ['type' => 'integer', 'label' => 'Batches per destination per minute', 'default' => 5, 'description' => 'A destination that is behind catches up over several minutes instead of holding the worker.', 'rules' => ['required', 'integer', 'between:1,20']],
+                'failure_notify_after' => ['type' => 'integer', 'label' => 'Notify after failures', 'default' => 5, 'description' => 'A destination that fails this many deliveries in a row sends one "log push failing" notification.', 'rules' => ['required', 'integer', 'between:1,100']],
+            ],
+        ],
         'rate_limits' => [
             'label' => 'API rate limits',
             'description' => 'Per-identity request limits that protect interactive and runtime API lanes.',

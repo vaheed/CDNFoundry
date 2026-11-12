@@ -223,6 +223,11 @@ class Domain extends Model
         return self::query()->whereIn('name', $ancestors)->exists();
     }
 
+    public function logPushDestinations(): HasMany
+    {
+        return $this->hasMany(LogPushDestination::class);
+    }
+
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class)->withPivot('created_at');
