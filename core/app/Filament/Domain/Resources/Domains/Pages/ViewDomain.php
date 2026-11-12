@@ -7,6 +7,7 @@ use App\Actions\DispatchCachePurge;
 use App\Enums\DomainLifecycleState;
 use App\Filament\Domain\Resources\Domains\DomainResource;
 use App\Filament\Domain\Resources\Domains\Widgets\DomainKpiStrip;
+use App\Filament\Domain\Resources\Domains\Widgets\DomainIncidentBanner;
 use App\Filament\Domain\Resources\Domains\Widgets\DomainNeedsAttention;
 use App\Http\Controllers\DnsDeploymentController;
 use App\Http\Controllers\DomainController;
@@ -137,7 +138,7 @@ class ViewDomain extends ViewRecord
 
     protected function getHeaderWidgets(): array
     {
-        return [DomainKpiStrip::class, DomainNeedsAttention::class];
+        return [DomainKpiStrip::class, DomainIncidentBanner::class, DomainNeedsAttention::class];
     }
 
     public function getHeaderWidgetsColumns(): int|array
@@ -427,6 +428,25 @@ class ViewDomain extends ViewRecord
                         'strict' => 'High-sensitivity protection will block more aggressively; watch for false positives.',
                     })->send();
                 }),
+            Action::make('startIncident')->icon('phosphor-shield-warning')->label('Start incident profile')->color('danger')
+                ->modalHeading('Start the incident profile?')
+                ->modalDescription('For the time you choose, the domain gets tighter request limits, the web application firewall in blocking mode, restricted methods and body size, and a browser challenge. It protects your origin and the cells from request floods; it cannot absorb traffic that saturates a host or link.')
+                ->schema([Select::make('duration_minutes')->label(FilamentHelp::label('Duration', 'How long the protections stay on. They turn off by themselves at the end; you can end them sooner.'))
+                    ->options([15 => '15 minutes', 30 => '30 minutes', 60 => '1 hour', 180 => '3 hours', 720 => '12 hours', 1440 => '24 hours'])->default(60)->required()])
+                ->visible(fn (): bool => ! \App\Support\IncidentProfile::active($this->record))
+                ->action(function (array $data): void {
+                    \App\Actions\StartIncidentProfile::execute($this->record, auth()->user(), (int) $data['duration_minutes'], request()->ip());
+                    $this->refreshDomain(includeTabs: true);
+                    Notification::make()->warning()->title('Incident profile started')->body('The protections are on their way to the cells and end on their own.')->send();
+                }),
+            Action::make('endIncident')->icon('phosphor-shield-check')->label('End incident profile')->color('success')->requiresConfirmation()
+                ->modalHeading('End the incident profile now?')
+                ->visible(fn (): bool => \App\Support\IncidentProfile::active($this->record))
+                ->action(function (): void {
+                    \App\Actions\EndIncidentProfile::execute($this->record, auth()->user(), 'manual', request()->ip());
+                    $this->refreshDomain(includeTabs: true);
+                    Notification::make()->success()->title('Incident profile ended')->send();
+                }),
             Action::make('startMaintenance')->icon('phosphor-wrench')->label('Start maintenance')->color('warning')->requiresConfirmation()->schema([
                 TextInput::make('body')->label('503 response message')->default('Service temporarily unavailable')->maxLength(4096)->required(),
             ])->visible(fn (): bool => ! is_array($this->record->proxy_settings['maintenance'] ?? null))
@@ -632,7 +652,7 @@ class ViewDomain extends ViewRecord
                 ->icon('phosphor-lock')
                 ->color('gray')
                 ->button(),
-            ActionGroup::make($group(['securitySettings', 'wafProfile', 'startMaintenance', 'endMaintenance', 'protectSecurity', 'quarantineSecurity', 'returnSecurityToNormal']))
+            ActionGroup::make($group(['securitySettings', 'wafProfile', 'startIncident', 'endIncident', 'startMaintenance', 'endMaintenance', 'protectSecurity', 'quarantineSecurity', 'returnSecurityToNormal']))
                 ->label('Security')
                 ->icon('phosphor-shield-check')
                 ->color('gray')
