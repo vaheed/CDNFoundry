@@ -12,7 +12,7 @@ class DataFreshnessWidget extends Widget
 
     protected static ?int $sort = 9;
 
-    protected int|string|array $columnSpan = ['default' => 12, 'xl' => 5];
+    protected int|string|array $columnSpan = ['default' => 1, 'xl' => 5];
 
     protected string $view = 'filament.admin.widgets.data-freshness';
 

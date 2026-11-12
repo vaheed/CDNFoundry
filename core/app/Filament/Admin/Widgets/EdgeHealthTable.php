@@ -18,7 +18,7 @@ class EdgeHealthTable extends TableWidget
 
     protected static ?int $sort = 8;
 
-    protected int|string|array $columnSpan = ['default' => 12, 'xl' => 7];
+    protected int|string|array $columnSpan = ['default' => 1, 'xl' => 7];
 
     public function table(Table $table): Table
     {

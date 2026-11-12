@@ -139,7 +139,7 @@
             </div>
 
             <x-filament::section heading="Compression savings" :description="'Latest ' . $state['meta']['raw_window_hours'] . ' hours'" icon="phosphor-arrows-in">
-                <x-ui.data-table class="[&_.cdn-data-table]:min-w-[48rem]">
+                <x-ui.data-table caption="Compression savings by encoding" class="[&_.cdn-data-table]:min-w-[48rem]" role="region" tabindex="0" aria-label="Compression savings by encoding">
                     <x-slot:header><tr><th class="text-left">Encoding / profile</th><th class="text-left">Fallback</th><th class="text-right">Requests</th><th class="text-right">Delivered</th><th class="text-right">Saved</th><th class="text-right">Savings</th></tr></x-slot:header>
                     @forelse ($state['compression']['items'] as $row)
                         @php

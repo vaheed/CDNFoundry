@@ -13,7 +13,7 @@ class CacheEfficiencyWidget extends Widget
 
     protected static ?int $sort = 10;
 
-    protected int|string|array $columnSpan = ['default' => 12, 'xl' => 6];
+    protected int|string|array $columnSpan = ['default' => 1, 'xl' => 6];
 
     protected string $view = 'filament.admin.widgets.cache-efficiency';
 
