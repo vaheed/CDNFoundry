@@ -277,6 +277,9 @@ class FleetEngine:
             outcome = self.bootstrap(name, country=country, continent=continent, log=say)
             if not outcome.ok:
                 return outcome
+        if any(state["nodes"][n]["role"] == "control" for n in pending):
+            if not ControlActions(self).ensure_recovery_point(say):
+                say("Backups are disabled: this install has no recovery point. Run configure-backups, then backup-now.")
         return None
 
     def _render(self, state: dict[str, Any]) -> dict[str, tuple[str, str]]:
@@ -689,6 +692,13 @@ class FleetEngine:
 
             ok = subprocess.run(["openssl", "x509", "-noout", "-checkend", str(30 * 86400)], input=ingress.read_bytes(), capture_output=True, check=False).returncode == 0
             extra.append(Check("fleet", "Standby control certificate valid for 30 days", ok, "" if ok else "run `control refresh-ingress`"))
+        if state["features"]["backups"]["mode"] != "disabled" and any(v["role"] == "control" for v in state["nodes"].values()):
+            try:
+                verified = ControlActions(self).verified_backup_count()
+            except FleetError:
+                verified = -1
+            if verified == 0:
+                extra.append(Check("fleet", "A verified backup exists", False, "the recovery point is nothing; run `backup-now`"))
         if not state["global"].get("alert_webhook_url", ""):
             extra.append(Check("fleet", "Alerts have a receiver", False, "alerts fire and reach nobody; run `alert-webhook --url https://...` and apply the config"))
         return checks + extra
@@ -723,6 +733,33 @@ class ControlActions:
         name, target = self._control(state, None)
         r = self.e.transport.run(target, f"cd {actions.REMOTE_ROOT} && docker compose --env-file .env.prod exec -T core php artisan cdnf:backups:create --wait", check=True)
         return r.stdout.strip()[-300:]
+
+    def verified_backup_count(self) -> int:
+        """How many backups the control database records as succeeded and verified against the repository."""
+        state = self.e.state()
+        _, target = self._control(state, None)
+        r = self.e.transport.run(target, f"cd {actions.REMOTE_ROOT} && docker compose --env-file .env.prod exec -T core php artisan tinker --execute='echo DB::table(\"backups\")->where(\"status\", \"succeeded\")->whereNotNull(\"verified_at\")->count();'")
+        try:
+            return int(r.stdout.strip().splitlines()[-1]) if r.ok and r.stdout.strip() else -1
+        except ValueError:
+            return -1
+
+    def ensure_recovery_point(self, log: Callable[[str], None] | None = None) -> bool:
+        """Take the first backup and confirm it is recorded as verified. A fleet whose only recovery point is "nothing" is not ready.
+
+        Returns False when backups are disabled by choice, which the caller reports as a warning rather than success. Raises when
+        a backup was expected and did not verify.
+        """
+        say = log or self.e.say
+        if self.e.state()["features"]["backups"]["mode"] == "disabled":
+            return False
+        if self.verified_backup_count() > 0:
+            return True
+        say("No verified backup exists yet; taking the first one before reporting the install ready")
+        self.backup_now()
+        if self.verified_backup_count() < 1:
+            raise ValidationError("The first backup finished but is not recorded as verified. The install is not ready: fix the backup repository, then run `backup-now`")
+        return True
 
     def restore_plan(self, node: str, snapshot: str, overwrite_live: bool) -> dict[str, Any]:
         state = self.e.state()
