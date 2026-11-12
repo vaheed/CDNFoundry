@@ -31,7 +31,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->prepend(RestrictToManagementNetworks::class);
+        // Appended, never prepended: it judges $request->ip(), which is the proxy hop until TrustProxies has run.
+        // Global middleware still runs before the session and every route group, so a refusal sets no cookie.
+        $middleware->append(RestrictToManagementNetworks::class);
         $middleware->append(SendContentSecurityPolicy::class);
         $middleware->append(AttachRequestContext::class);
         $middleware->append(RecordRequestMetrics::class);
