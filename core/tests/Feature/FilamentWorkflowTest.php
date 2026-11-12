@@ -475,12 +475,33 @@ class FilamentWorkflowTest extends TestCase
             ->callAction('cacheSettings', data: [
                 'enabled' => true, 'edge_ttl_seconds' => 600, 'browser_ttl_seconds' => 120,
                 'maximum_object_bytes' => 104857600, 'respect_origin_headers' => true,
-                'query_policy' => 'include_all', 'query_parameters' => [], 'ignore_cookie_names' => ['session_id'],
+                'query_policy' => 'include_all', 'query_parameters' => [], 'ignore_cookie_names' => ['session_id', '_ga_*'],
+                'path_rules' => [
+                    ['match' => 'prefix', 'value' => '/static/', 'action' => 'ttl', 'ttl_seconds' => 86400],
+                    ['match' => 'suffix', 'value' => '.php', 'action' => 'bypass', 'ttl_seconds' => null],
+                ],
                 'status_ttl_seconds' => ['200' => 600, '404' => 30], 'admission_requests' => 2,
                 'stale_if_error_seconds' => 30, 'stale_while_revalidate_seconds' => 15,
                 'mode' => 'normal', 'maximum_variants_per_resource' => 16,
             ])->assertHasNoActionErrors();
         $this->assertSame(600, $domain->refresh()->cache_settings['edge_ttl_seconds']);
+        $this->assertSame(['session_id', '_ga_*'], $domain->cache_settings['ignore_cookie_names']);
+        $this->assertSame([
+            ['match' => 'prefix', 'value' => '/static/', 'action' => 'ttl', 'ttl_seconds' => 86400],
+            ['match' => 'suffix', 'value' => '.php', 'action' => 'bypass', 'ttl_seconds' => null],
+        ], $domain->cache_settings['path_rules']);
+        $component()->callAction('cacheSettings', data: [
+            ...$domain->cache_settings,
+            'path_rules' => [['match' => 'prefix', 'value' => 'static', 'action' => 'bypass', 'ttl_seconds' => null]],
+        ])->assertHasActionErrors(['path_rules.0.value']);
+        $component()->callAction('cacheSettings', data: [
+            ...$domain->cache_settings,
+            'path_rules' => [['match' => 'prefix', 'value' => '/a/', 'action' => 'ttl', 'ttl_seconds' => '']],
+        ])->assertHasActionErrors(['path_rules.0.ttl_seconds']);
+        $component()->callAction('cacheSettings', data: [
+            ...$domain->cache_settings,
+            'path_rules' => [['match' => 'prefix', 'value' => 'static', 'action' => 'bypass', 'ttl_seconds' => '']],
+        ])->assertHasActionErrors(['path_rules.0.value']);
 
         $component()->callAction('developmentMode', data: ['duration_minutes' => 30])->assertHasNoActionErrors();
         $this->assertTrue($domain->refresh()->cache_development_mode_until->isFuture());

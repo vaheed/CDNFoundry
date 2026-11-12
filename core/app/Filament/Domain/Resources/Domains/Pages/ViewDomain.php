@@ -41,6 +41,7 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Radio;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
@@ -48,6 +49,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Enums\Width;
@@ -260,26 +262,56 @@ class ViewDomain extends ViewRecord
                     ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
                     EnsureManagedCertificates::dispatch($this->record->id)->afterCommit();
                 }),
-            Action::make('cacheSettings')->label('Cache settings')->icon('phosphor-database')->schema([
-                Toggle::make('enabled')->label('Cache enabled')->required(),
-                TextInput::make('edge_ttl_seconds')->label('Edge TTL (seconds)')->numeric()->minValue(0)->maxValue(31536000)->required(),
-                TextInput::make('browser_ttl_seconds')->label('Browser TTL (seconds)')->numeric()->minValue(0)->maxValue(31536000)->required(),
-                Select::make('maximum_object_bytes')->label('Maximum object size')->options([
-                    1048576 => '1 MiB', 10485760 => '10 MiB', 104857600 => '100 MiB', 536870912 => '512 MiB', 1073741824 => '1 GiB',
-                ])->required(),
-                Toggle::make('respect_origin_headers')->label('Respect origin cache headers')->required(),
-                Select::make('query_policy')->label('Query policy')->options([
-                    'include_all' => 'Include all', 'ignore_all' => 'Ignore all',
-                    'include_selected' => 'Include selected', 'ignore_selected' => 'Ignore selected',
-                ])->required(),
-                TagsInput::make('query_parameters')->label('Selected query parameter names')->rules(['array', 'max:32']),
-                TagsInput::make('ignore_cookie_names')->label('Ignored cookie names')->helperText('A request with any other cookie bypasses the cache.')->rules(['array', 'max:32']),
-                KeyValue::make('status_ttl_seconds')->label('Status TTLs')->keyLabel('Approved status')->valueLabel('TTL seconds')->reorderable(false),
-                TextInput::make('admission_requests')->label('Requests before admission')->numeric()->minValue(1)->maxValue(10)->required(),
-                TextInput::make('stale_if_error_seconds')->label('Stale-if-error (seconds)')->numeric()->minValue(0)->maxValue(86400)->required(),
-                TextInput::make('stale_while_revalidate_seconds')->label('Stale-while-revalidate (seconds)')->numeric()->minValue(0)->maxValue(86400)->required(),
-                Select::make('mode')->options(['normal' => 'Normal', 'cache_only' => 'Cache only', 'stale_only' => 'Stale only'])->required(),
-                TextInput::make('maximum_variants_per_resource')->label('Maximum variants/resource/minute')->numeric()->minValue(1)->maxValue(128)->required(),
+            Action::make('cacheSettings')->label('Cache settings')->icon('phosphor-database')->extraAttributes(['data-testid' => 'cache-settings-action'])->schema([
+                Section::make('Lifetime')->schema([
+                    Toggle::make('enabled')->label(FilamentHelp::label('Cache enabled', 'Turn off to send every request to the origin.'))->required(),
+                    TextInput::make('edge_ttl_seconds')->label(FilamentHelp::label('Edge TTL (seconds)', 'How long the edge keeps a response before asking the origin again.'))->numeric()->minValue(0)->maxValue(31536000)->placeholder('3600')->required(),
+                    TextInput::make('browser_ttl_seconds')->label(FilamentHelp::label('Browser TTL (seconds)', 'How long visitors keep a response in their own browser.'))->numeric()->minValue(0)->maxValue(31536000)->placeholder('300')->required(),
+                    Select::make('maximum_object_bytes')->label(FilamentHelp::label('Maximum object size', 'Larger responses are streamed and never stored.'))->options([
+                        1048576 => '1 MiB', 10485760 => '10 MiB', 104857600 => '100 MiB', 536870912 => '512 MiB', 1073741824 => '1 GiB',
+                    ])->placeholder('100 MiB')->required(),
+                    Toggle::make('respect_origin_headers')->label(FilamentHelp::label('Respect origin cache headers', 'When on, the origin\'s Cache-Control or Expires sets the edge lifetime. A path rule with a TTL still wins.'))->required(),
+                ]),
+                Section::make('Request matching')->schema([
+                    Select::make('query_policy')->label(FilamentHelp::label('Query policy', 'Which query parameters make two URLs different cache entries.'))->options([
+                        'include_all' => 'Include all', 'ignore_all' => 'Ignore all',
+                        'include_selected' => 'Include selected', 'ignore_selected' => 'Ignore selected',
+                    ])->placeholder('Include all')->required(),
+                    TagsInput::make('query_parameters')->label(FilamentHelp::label('Selected query parameter names', 'Used by the two "selected" policies. Type a name and press Enter.'))->placeholder('page')->rules(['array', 'max:32']),
+                    Select::make('cookie_presets')->label(FilamentHelp::label('Add analytics cookies', 'Adds the usual cookie names of a tool to the ignored list below, so visitors carrying them are still served from the cache.'))
+                        ->native()->dehydrated(false)->placeholder('Choose a tool')->extraAttributes(['data-testid' => 'cache-cookie-presets'])
+                        ->options(array_map(fn (array $preset): string => $preset['label'], CachePolicy::COOKIE_PRESETS))
+                        ->live()->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
+                            if (! isset(CachePolicy::COOKIE_PRESETS[$state])) {
+                                return;
+                            }
+                            $set('ignore_cookie_names', collect($get('ignore_cookie_names') ?? [])
+                                ->merge(CachePolicy::COOKIE_PRESETS[$state]['names'])->unique()->take(32)->values()->all());
+                            $set('cookie_presets', null);
+                        }),
+                    TagsInput::make('ignore_cookie_names')->label(FilamentHelp::label('Ignored cookie names', 'A request with any other cookie bypasses the cache. A name ending in * matches every cookie that starts with it.'))->placeholder('_ga_*')->rules(['array', 'max:32'])->nestedRecursiveRules(['regex:/^[A-Za-z0-9_.-]{1,63}\*?$/']),
+                    Repeater::make('path_rules')->label(FilamentHelp::label('Path rules', 'The first rule that matches the path wins. Bypass skips the cache. TTL sets the edge lifetime for that path and replaces the origin\'s own lifetime.'))
+                        ->maxItems(CachePolicy::MAX_PATH_RULES)->addActionLabel('Add path rule')->defaultItems(0)->columns(['default' => 1, 'md' => 4])->schema([
+                            Select::make('match')->label('Match')->options(['prefix' => 'Starts with', 'suffix' => 'Ends with'])->default('prefix')->native()->required(),
+                            TextInput::make('value')->label('Path')->placeholder('/static/')->maxLength(128)->regex('/^[A-Za-z0-9\/_.~%-]{1,128}$/')
+                                ->rule(fn (Get $get): \Closure => function (string $attribute, mixed $value, \Closure $fail) use ($get): void {
+                                    if ($get('match') === 'prefix' && is_string($value) && ! str_starts_with($value, '/')) {
+                                        $fail('A path prefix must start with /.');
+                                    }
+                                })->required(),
+                            Select::make('action')->label('Action')->options(['bypass' => 'Bypass cache', 'ttl' => 'Set edge TTL'])->default('ttl')->native()->required(),
+                            TextInput::make('ttl_seconds')->label(FilamentHelp::label('TTL (seconds)', 'Used only when the action is Set edge TTL. Ignored for Bypass cache.'))->numeric()->minValue(1)->maxValue(31536000)->placeholder('86400')
+                                ->requiredIf('action', 'ttl'),
+                        ]),
+                ]),
+                Section::make('Advanced')->collapsed()->schema([
+                    KeyValue::make('status_ttl_seconds')->label(FilamentHelp::label('Status TTLs', 'Edge lifetime per response status. 0 means that status is never stored.'))->keyLabel('Approved status')->valueLabel('TTL seconds')->keyPlaceholder('404')->valuePlaceholder('60')->reorderable(false),
+                    TextInput::make('admission_requests')->label(FilamentHelp::label('Requests before admission', 'How many requests for one URL must arrive before it is stored. 2 keeps one-off URLs out of the cache.'))->numeric()->minValue(1)->maxValue(10)->placeholder('2')->required(),
+                    TextInput::make('stale_if_error_seconds')->label(FilamentHelp::label('Stale-if-error (seconds)', 'How long an expired copy may be served while the origin is failing.'))->numeric()->minValue(0)->maxValue(86400)->placeholder('60')->required(),
+                    TextInput::make('stale_while_revalidate_seconds')->label(FilamentHelp::label('Stale-while-revalidate (seconds)', 'How long an expired copy may be served while one request refreshes it.'))->numeric()->minValue(0)->maxValue(86400)->placeholder('30')->required(),
+                    Select::make('mode')->label(FilamentHelp::label('Mode', 'Normal fetches from the origin on a miss. Cache only and stale only never reach the origin.'))->options(['normal' => 'Normal', 'cache_only' => 'Cache only', 'stale_only' => 'Stale only'])->placeholder('Normal')->required(),
+                    TextInput::make('maximum_variants_per_resource')->label(FilamentHelp::label('Maximum variants/resource/minute', 'Caps how many different versions of one URL are stored per minute.'))->numeric()->minValue(1)->maxValue(128)->placeholder('32')->required(),
+                ]),
             ])->fillForm(fn (): array => CachePolicy::normalize($this->record->cache_settings))
                 ->action(function (array $data): void {
                     $settings = [
@@ -288,6 +320,10 @@ class ViewDomain extends ViewRecord
                         'respect_origin_headers' => (bool) $data['respect_origin_headers'], 'query_policy' => $data['query_policy'],
                         'query_parameters' => array_values($data['query_parameters'] ?? []),
                         'ignore_cookie_names' => array_values($data['ignore_cookie_names'] ?? []),
+                        'path_rules' => collect($data['path_rules'] ?? [])->map(fn (array $rule): array => [
+                            'match' => $rule['match'], 'value' => $rule['value'], 'action' => $rule['action'],
+                            'ttl_seconds' => $rule['action'] === 'ttl' ? (int) $rule['ttl_seconds'] : null,
+                        ])->values()->all(),
                         'status_ttl_seconds' => $data['status_ttl_seconds'], 'admission_requests' => (int) $data['admission_requests'],
                         'stale_if_error_seconds' => (int) $data['stale_if_error_seconds'],
                         'stale_while_revalidate_seconds' => (int) $data['stale_while_revalidate_seconds'],
