@@ -18,6 +18,8 @@ final class SecurityConfig
     public const NON_ESCALATING_REASONS = [
         'domain_restricted', 'domain_quarantined', 'edge_emergency_mode', 'invalid_method',
         'unknown_host', 'unknown_sni', 'sni_host_mismatch',
+        // The incident profile working: it never pushes the domain toward a stricter automatic state.
+        'incident_method', 'incident_body_size', 'challenge_required', 'challenge_invalid',
     ];
 
     /** Automatic escalation looks at the rate over a short window, never at a lifetime counter. */

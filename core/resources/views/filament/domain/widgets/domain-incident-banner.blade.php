@@ -11,7 +11,7 @@
                     <li class="cdn-condition-row" data-tone="{{ $protection['enforced'] ? 'success' : 'neutral' }}" data-testid="incident-protection">
                         <div class="min-w-0">
                             <div class="cdn-row-title">{{ $protection['label'] }}</div>
-                            <div class="cdn-row-meta">{{ $protection['enforced'] ? 'Active' : 'Sent to the cells; takes effect with the updated cell runtime' }}</div>
+                            <div class="cdn-row-meta">{{ $protection['enforced'] ? 'Active' : 'Not enforced yet' }}</div>
                         </div>
                     </li>
                 @endforeach

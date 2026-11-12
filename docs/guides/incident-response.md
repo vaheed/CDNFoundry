@@ -49,11 +49,20 @@ is on, with who started it, when it ends, and each protection. Starting and endi
 configuration revision, and each is recorded in the audit log. Users who chose the **Incident profile started** and **ended**
 events in [notifications](notifications.md) get a message for each.
 
-::: warning What is enforced today
-The profile's request limits are enforced on the cells now. The firewall mode, the method and body restriction, and the browser
-challenge are delivered to the cells in the same overlay, and the banner marks them "takes effect with the updated cell runtime"
-until that runtime enforces them.
-:::
+The cell enforces every protection from the overlay and ends the profile by its own clock, so it stops on time even if the control
+plane is unreachable.
+
+**The browser challenge.** A visitor's page load without a token gets a short page that asks the browser to solve a small
+computation (about a second on a current device) and then continues on its own. The answer is single use and is bound to the
+visitor's address and browser; the token it earns works until the profile ends or for an hour, whichever is sooner, and is
+the only cookie the profile sets. Requests that are not page loads (scripts, bots, API clients) and have no token are refused.
+Paths under `/api/` and `/.well-known/`, and visitors that one of your own allow rules matches, are not challenged. The page
+explains itself to screen readers and tells a visitor without JavaScript what to do. The check needs HTTPS, because browsers
+only offer the cryptography it uses on secure pages. Each address can be issued only a limited number of challenges a minute, so
+the challenge cannot be turned into a flood of its own.
+
+Refusals are recorded as security events with the reasons `incident_method`, `incident_body_size`, `challenge_required`, and
+`challenge_invalid`. They show the profile working and never raise the domain's automatic security state.
 
 This protects your origin and the cells from request floods. It cannot absorb traffic that saturates a host, a link, or an
 upstream. The same actions are in the API under `/api/domains/{domain}/incident`.

@@ -34,7 +34,7 @@ class IncidentProfilePanelTest extends TestCase
 
         Livewire::test(DomainIncidentBanner::class, ['record' => $domain])
             ->assertSee('Incident profile is on')->assertSee('Responder One')
-            ->assertSee('Protected request and connection limits')->assertSee('takes effect with the updated cell runtime')
+            ->assertSee('Protected request and connection limits')->assertDontSee('Not enforced yet')
             ->assertSee('cannot absorb traffic that saturates a host, a link, or an upstream');
         Livewire::test(ViewDomain::class, ['record' => $domain->id])
             ->assertActionHidden('startIncident')->assertActionVisible('endIncident')

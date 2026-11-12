@@ -128,8 +128,9 @@ restricted or quarantined is never changed automatically.
 
 A domain's own protections never count against it. A request refused by a customer
 block rule (`domain_restricted`), a method restriction (`invalid_method`), an
-emergency mode (`edge_emergency_mode`), or an unknown host or SNI is still recorded as
-an event, but it does not raise the rate.
+emergency mode (`edge_emergency_mode`), an incident profile refusal (`incident_method`,
+`incident_body_size`, `challenge_required`, `challenge_invalid`), or an unknown host or SNI is
+still recorded as an event, but it does not raise the rate.
 
 Edge-reported security events keep one row per domain, edge, reason, and hour, and a
 daily job deletes events beyond `security_event_retention_days`. Every automatic
