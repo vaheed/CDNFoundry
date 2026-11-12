@@ -73,6 +73,22 @@ func (g *gateway) reject(reason rejectionReason) {
 	g.rejectedByReason[reason].Add(1)
 }
 
+// rejectHandshake is reject for a connection on the TLS port that never completed a handshake the
+// gateway could route. The same refusal is also counted separately here so the edge agent can report
+// failed handshakes (never visible to a cell) to telemetry without counting refused plain HTTP.
+func (g *gateway) rejectFor(protocol string, reason rejectionReason) {
+	if protocol == "https" {
+		g.rejectHandshake(reason)
+		return
+	}
+	g.reject(reason)
+}
+
+func (g *gateway) rejectHandshake(reason rejectionReason) {
+	g.reject(reason)
+	g.tlsRejectedByReason[reason].Add(1)
+}
+
 type gateway struct {
 	configPath                  string
 	stateDir                    string
@@ -82,6 +98,7 @@ type gateway struct {
 	accepted                    atomic.Uint64
 	rejected                    atomic.Uint64
 	rejectedByReason            [rejectionReasonCount]atomic.Uint64
+	tlsRejectedByReason         [rejectionReasonCount]atomic.Uint64
 	errors                      atomic.Uint64
 	active                      atomic.Int64
 	reloads                     atomic.Uint64
@@ -437,19 +454,19 @@ func (g *gateway) handle(listener string, client net.Conn) error {
 		name, prefix, err = readHTTP(client)
 	}
 	if err != nil {
-		g.reject(rejectedInvalidHello)
+		g.rejectFor(protocol, rejectedInvalidHello)
 		return err
 	}
 	localHost, _, _ := net.SplitHostPort(client.LocalAddr().String())
 	ip := net.ParseIP(localHost)
 	table := g.table.Load()
 	if table == nil || ip == nil {
-		g.reject(rejectedUnavailable)
+		g.rejectFor(protocol, rejectedUnavailable)
 		return errors.New("gateway unavailable")
 	}
 	target := table.routes[protocol+"|"+ip.String()+"|"+name]
 	if target == "" {
-		g.reject(rejectedUnknownRoute)
+		g.rejectFor(protocol, rejectedUnknownRoute)
 		if protocol == "http" {
 			// Answer a plain-HTTP request for a host that is not routed here, so a health probe can tell a serving
 			// PoP from a dead one. The answer is a fixed 421; TLS clients still get a closed connection.
@@ -467,7 +484,7 @@ func (g *gateway) handle(listener string, client net.Conn) error {
 			now = g.clock
 		}
 		if !g.handshakes.allow(sourceKey(client.RemoteAddr())+"|"+name, budget, now()) {
-			g.reject(rejectedHandshakeBudget)
+			g.rejectHandshake(rejectedHandshakeBudget)
 			return errors.New("TLS handshake budget exceeded")
 		}
 	}
@@ -720,6 +737,7 @@ func (g *gateway) serveMetrics(ctx context.Context) {
 		}
 		for reason, name := range rejectionReasonNames {
 			fmt.Fprintf(writer, "cdnfoundry_gateway_connections_rejected_by_reason_total{reason=%q} %d\n", name, g.rejectedByReason[reason].Load())
+			fmt.Fprintf(writer, "cdnfoundry_gateway_tls_handshakes_rejected_by_reason_total{reason=%q} %d\n", name, g.tlsRejectedByReason[reason].Load())
 		}
 		if table != nil {
 			fmt.Fprintf(writer, "cdnfoundry_gateway_generation_info{generation_id=%q} 1\n", table.generationID)

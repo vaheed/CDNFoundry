@@ -105,6 +105,8 @@ type client struct {
 	controlLoaded                      bool
 	controlDialed                      string
 	seedAddresses                      []string
+	telemetryURL                       string
+	tlsFailures                        tlsFailureReporter
 }
 type manifest struct {
 	Sequence                              uint64  `json:"sequence"`
@@ -126,6 +128,7 @@ func main() {
 		runtimeDir: required("EDGE_RUNTIME_DIR"), statusToken: env("EDGE_STATUS_TOKEN", ""),
 		gatewayBindings:  env("EDGE_GATEWAY_BINDINGS", ""),
 		gatewayStatusURL: env("EDGE_GATEWAY_STATUS_URL", ""),
+		telemetryURL:     env("EDGE_TELEMETRY_URL", ""),
 		statusURLs:       splitNonempty(env("EDGE_CELL_STATUS_URLS", "")), http: &http.Client{Timeout: 15 * time.Second},
 		dnsAPIURL: env("EDGE_DNS_API_URL", ""), dnsAPIKey: env("EDGE_DNS_API_KEY", ""), dnsHTTP: &http.Client{Timeout: 10 * time.Second},
 	}
@@ -1783,6 +1786,7 @@ func (c *client) gatewayStatus() map[string]any {
 	if err != nil || len(body) > 64<<10 {
 		return status
 	}
+	c.reportTLSFailures(string(body))
 	names := map[string]string{
 		"cdnfoundry_gateway_ready": "ready", "cdnfoundry_gateway_active_revision": "active_revision",
 		"cdnfoundry_gateway_routes": "routes", "cdnfoundry_gateway_listeners": "listeners",

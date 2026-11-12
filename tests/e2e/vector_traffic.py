@@ -77,6 +77,7 @@ def main() -> None:
                 if kind == 'edge':
                     assert rows[0]['path'] == '/qualified'
                     assert rows[0]['edge_id'] == (args.edge_id or 'cell-01')
+                    assert rows[0]['cell'] == 'cell-01', 'the serving cell survives the collector replacing edge_id'
                     assert 'synthetic-secret' not in target.read_text()
                 else:
                     assert rows[0]['qname'] == 'www.qualification.test'
@@ -107,6 +108,24 @@ def main() -> None:
             written = (root/'result/edge.json').read_text()
             assert 'syslog-genuine.test' in written and 'telemetry_proof' not in written
             assert 'syslog-forged.test' not in written, 'Vector accepted a forged syslog event'
+            # A failed handshake at the gateway never reaches a cell. The edge agent posts it as a bounded
+            # array of tls events; they must arrive as tls rows named by reason. A line the runtime emitted
+            # with empty numeric fields is dropped as a known shape and never becomes a row.
+            events = [{'occurred_at': '2026-11-12T00:00:00Z', 'event_type': 'tls', 'tls_error': 'gateway_invalid_hello',
+                       'hostname': '', 'domain_id': 0, 'status': 0, 'security_action': 'allow'} for _ in range(2)]
+            request = urllib.request.Request('http://127.0.0.1:'+hostport, data=json.dumps(events).encode(),
+                                             headers={'Content-Type': 'application/json', 'Authorization': AUTHORIZATION})
+            with opener.open(request, timeout=3) as response:
+                assert response.status == 200
+            sender.sendto(b'<190>cdnfoundry_edge: {"domain_id":,"hostname":"empty-fields.test","asn":,"waf_rule_id":,"telemetry_proof":""}', ('127.0.0.1', udp_port))
+            for _ in range(40):
+                rows = [json.loads(line) for line in (root/'result/edge.json').read_text().splitlines()]
+                if len([row for row in rows if row.get('tls_error') == 'gateway_invalid_hello']) >= 2:
+                    break
+                time.sleep(0.25)
+            tls_rows = [row for row in rows if row.get('event_type') == 'tls' and row.get('tls_error') == 'gateway_invalid_hello']
+            assert len(tls_rows) == 2 and all(row['status'] == 0 for row in tls_rows), tls_rows
+            assert not [row for row in rows if row.get('hostname') == 'empty-fields.test']
             cases = [
                 ('success', '200', None, '0.125', '', 125),
                 ('redirect', '302', None, '0.020', '', 20),

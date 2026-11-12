@@ -132,6 +132,14 @@ func TestEachRejectionPathCountsInItsOwnSeries(t *testing.T) {
 			t.Fatalf("expected exactly one %q rejection, got %v (total %d)", name, got, g.rejected.Load())
 		}
 	}
+	tlsCount := func(g *gateway, name string) uint64 {
+		for reason, candidate := range rejectionReasonNames {
+			if candidate == name {
+				return g.tlsRejectedByReason[reason].Load()
+			}
+		}
+		return 0
+	}
 	listen := func(t *testing.T) net.Listener {
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
@@ -179,6 +187,9 @@ func TestEachRejectionPathCountsInItsOwnSeries(t *testing.T) {
 		send(t, listener, "this is not TLS")
 		settle(g)
 		expect(g, "invalid_hello")
+		if tlsCount(g, "invalid_hello") != 1 {
+			t.Fatal("a refused connection on the TLS port is a failed handshake")
+		}
 	})
 	t.Run("unknown route", func(t *testing.T) {
 		g := &gateway{}
@@ -188,6 +199,9 @@ func TestEachRejectionPathCountsInItsOwnSeries(t *testing.T) {
 		send(t, listener, "GET / HTTP/1.1\r\nHost: nowhere.test\r\n\r\n")
 		settle(g)
 		expect(g, "unknown_route")
+		if tlsCount(g, "unknown_route") != 0 {
+			t.Fatal("a refused plain HTTP request is not a failed handshake")
+		}
 	})
 	t.Run("handshake budget", func(t *testing.T) {
 		upstream := listen(t)
@@ -210,6 +224,9 @@ func TestEachRejectionPathCountsInItsOwnSeries(t *testing.T) {
 		send(t, listener, hello)
 		settle(g)
 		expect(g, "handshake_budget")
+		if tlsCount(g, "handshake_budget") != 1 {
+			t.Fatal("an exhausted handshake budget is a failed handshake")
+		}
 	})
 	t.Run("gateway unavailable", func(t *testing.T) {
 		g := &gateway{}
