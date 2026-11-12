@@ -33,6 +33,7 @@ alerts such as a stale edge heartbeat never reach a domain user.
 | DNS deployment failed | A zone reconciliation used its whole retry budget |
 | Security state changed | The automatic security state of a domain changed |
 | Origin errors above threshold | Origin errors reached the platform threshold over five minutes |
+| Log push failing | A [log push](log-push.md) destination failed several deliveries in a row |
 | Platform alert (administrators only) | Alertmanager sent an alert |
 
 ## Add a channel as an administrator

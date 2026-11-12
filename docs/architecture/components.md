@@ -68,6 +68,7 @@ domain change creates no Nginx server block and no reload. See
 | `loki` | Operational logs with limited retention, on local filesystem storage |
 | `prometheus` | Metrics and alert rules |
 | `alertmanager` | Alert routing to the control plane's private alert receiver |
+| `log-pusher` | Laravel queue worker for the `log-push` lane; reads one domain's rows from ClickHouse and is the only sender to customer log endpoints |
 | `notifier` | Laravel queue worker for the `notifications` lane; the only sender to Telegram, Discord, Slack, and webhooks |
 | `node-exporter` | Host resource and clock metrics |
 | `grafana` | Provisioned read-only dashboards in folders such as overview, NOC, SOC, and platform admin |

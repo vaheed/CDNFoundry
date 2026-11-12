@@ -3971,6 +3971,272 @@
                 }
             }
         },
+        "/admin/notification-channels": {
+            "get": {
+                "operationId": "get.admin.notification-channels",
+                "tags": [
+                    "Administrator"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/Cursor"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "post.admin.notification-channels",
+                "tags": [
+                    "Administrator"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "maxProperties": 100,
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
+        "/admin/notification-channels/{channel}": {
+            "delete": {
+                "operationId": "delete.admin.notification-channels.channel",
+                "tags": [
+                    "Administrator"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "channel",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
+        "/admin/notification-channels/{channel}/resume": {
+            "post": {
+                "operationId": "post.admin.notification-channels.channel.resume",
+                "tags": [
+                    "Administrator"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "channel",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "maxProperties": 100,
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
+        "/admin/notification-channels/{channel}/test": {
+            "post": {
+                "operationId": "post.admin.notification-channels.channel.test",
+                "tags": [
+                    "Administrator"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "channel",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "maxProperties": 100,
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
         "/admin/operations": {
             "get": {
                 "operationId": "get.admin.operations",
@@ -4591,6 +4857,8 @@
                                 "domain_monitoring",
                                 "dns_lifecycle",
                                 "revision_history",
+                                "notifications",
+                                "log_push",
                                 "rate_limits",
                                 "edge_runtime",
                                 "origin_safety",
@@ -4636,6 +4904,8 @@
                                 "domain_monitoring",
                                 "dns_lifecycle",
                                 "revision_history",
+                                "notifications",
+                                "log_push",
                                 "rate_limits",
                                 "edge_runtime",
                                 "origin_safety",
@@ -7616,6 +7886,315 @@
                 }
             }
         },
+        "/domains/{domain}/log-push": {
+            "get": {
+                "operationId": "get.domains.domain.log-push",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/Cursor"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "post.domains.domain.log-push",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "maxProperties": 100,
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
+        "/domains/{domain}/log-push/{destination}": {
+            "delete": {
+                "operationId": "delete.domains.domain.log-push.destination",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "name": "destination",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "patch.domains.domain.log-push.destination",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "name": "destination",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "maxProperties": 100,
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
+        "/domains/{domain}/log-push/{destination}/test": {
+            "post": {
+                "operationId": "post.domains.domain.log-push.destination.test",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "name": "destination",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "maxProperties": 100,
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
         "/domains/{domain}/logs/dns": {
             "get": {
                 "operationId": "get.domains.domain.logs.dns",
@@ -9671,6 +10250,272 @@
                 "responses": {
                     "200": {
                         "$ref": "#/components/responses/Success"
+                    }
+                }
+            }
+        },
+        "/notification-channels": {
+            "get": {
+                "operationId": "get.notification-channels",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/Cursor"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "post.notification-channels",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "maxProperties": 100,
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
+        "/notification-channels/{channel}": {
+            "delete": {
+                "operationId": "delete.notification-channels.channel",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "channel",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
+        "/notification-channels/{channel}/resume": {
+            "post": {
+                "operationId": "post.notification-channels.channel.resume",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "channel",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "maxProperties": 100,
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
+        "/notification-channels/{channel}/test": {
+            "post": {
+                "operationId": "post.notification-channels.channel.test",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "channel",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "maxProperties": 100,
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
                     }
                 }
             }

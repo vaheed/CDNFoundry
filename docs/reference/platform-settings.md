@@ -30,7 +30,7 @@ requests or scheduled work. They do not rewrite every domain.
 
 Each table below lists the field name used in the API and commands, the default,
 and the allowed range. Ranges are inclusive. The API group names are `display`,
-`operations`, `telemetry`, `observability`, `dns_lifecycle`, `domain_monitoring`, `notifications`, `revision_history`,
+`operations`, `telemetry`, `observability`, `dns_lifecycle`, `domain_monitoring`, `notifications`, `log_push`, `revision_history`,
 `rate_limits`, `edge_runtime`, `origin_safety`, and `proxy_defaults`.
 
 The platform DNS zone and its nameservers have their own settings endpoint,
@@ -160,6 +160,22 @@ serving traffic.
 - `channel_messages_per_minute`: further events inside the minute are merged into one digest message.
 - `pause_after_failures`: a channel whose deliveries fail this many times in a row is paused until its owner resumes it.
 - `origin_error_percent` and `origin_error_min_requests`: a domain whose origin errors reach this share of at least this many requests over five minutes sends one notification, then waits an hour. See [Notifications](../guides/notifications.md).
+
+## Log push
+
+| Field | Default | Allowed |
+| --- | --- | --- |
+| `domain_user_log_push` | off | on or off |
+| `max_destinations_per_domain` | 2 | 1–5 |
+| `max_destinations` | 2,000 | 1–20,000 |
+| `batch_rows` | 5,000 | 100–50,000 |
+| `max_batches_per_run` | 5 | 1–20 |
+| `failure_notify_after` | 5 | 1–100 |
+
+- `domain_user_log_push`: lets domain users push the logs of their own domains to an endpoint they control. When turned off, every push stops within a minute and the destinations are kept. Central platform logs are not affected. See [Log push](../guides/log-push.md).
+- `max_destinations`: bounds the worker time spent each minute across all domains.
+- `batch_rows` and `max_batches_per_run`: one delivery carries at most this many rows, and a destination that is behind sends at most this many deliveries a minute, so it catches up over several minutes.
+- `failure_notify_after`: a destination that fails this many deliveries in a row sends one "log push failing" notification.
 
 ## Revision history
 

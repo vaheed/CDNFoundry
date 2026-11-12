@@ -21,6 +21,7 @@ The menu has three screens, and a fourth when an administrator turns on notifica
 | [Domains](#domains) | List your domains and open one to manage it |
 | [Analytics and logs](#analytics-and-logs) | See traffic, cache, and errors for a domain |
 | [API tokens](#api-tokens) | Create tokens to use the API from scripts |
+| [Log push](log-push.md) | On a domain page: send that domain's logs to your own endpoint |
 | [Notifications](notifications.md) | Send events for your domains to Telegram, Discord, or Slack |
 
 ## Domains

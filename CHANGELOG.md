@@ -12,6 +12,10 @@ single source of truth; `make version-check` enforces it.
 - Notifications: one `notifier` container delivers alerts and domain events to Telegram, Discord, Slack, and an
   administrator-only signed webhook. Administrators and, when a platform switch allows it, domain users add their own
   channels, with per-channel rate limits, digests, and automatic pausing after repeated failures.
+- Log push: when an administrator allows it, a domain user sends the HTTP requests, security events, and DNS queries of
+  their own domains to an HTTPS endpoint or S3-compatible storage. One shared `log-pusher` worker reads each
+  destination's own rows from ClickHouse by cursor; nothing runs per domain, and serving and central telemetry are
+  unaffected.
 - A private Alertmanager receiver in the control plane. It stores nothing and queues one message per alert group.
 
 ### Removed
