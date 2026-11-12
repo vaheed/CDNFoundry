@@ -17,6 +17,7 @@ use Filament\Notifications\Notification;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use App\Support\Notifications\EventPublisher;
 use RuntimeException;
 
 class DispatchManagedTlsMaintenance extends Command
@@ -62,6 +63,7 @@ class DispatchManagedTlsMaintenance extends Command
                     Notification::make()->danger()->title('TLS certificate expiring')
                         ->body("Domain {$certificate->domain->name}: certificate {$certificate->id} expires {$certificate->expires_at->toIso8601String()}.")
                         ->sendToDatabase($admins);
+                    EventPublisher::publish('certificate.expiring', $certificate->domain, "Certificate for {$certificate->domain->name} is expiring", 'It expires '.$certificate->expires_at->toDateString().'.');
                     $certificate->update(['alerted_at' => now()]);
                 });
             TlsOrder::query()->where('status', 'failed')->whereNull('alerted_at')->latest()->limit($limit)->get()
@@ -69,6 +71,8 @@ class DispatchManagedTlsMaintenance extends Command
                     Notification::make()->danger()->title('Managed TLS issuance failed')
                         ->body("Domain {$order->domain_id}: ".mb_substr($order->last_error ?? 'Unknown ACME error', 0, 500))
                         ->sendToDatabase($admins);
+                    $failedDomain = Domain::query()->find($order->domain_id);
+                    EventPublisher::publish('certificate.failed', $failedDomain, 'Certificate issuance failed'.($failedDomain ? " for {$failedDomain->name}" : ''), mb_substr($order->last_error ?? 'Unknown ACME error', 0, 300));
                     $order->update(['alerted_at' => now()]);
                 });
         }

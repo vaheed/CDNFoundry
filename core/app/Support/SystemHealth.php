@@ -26,7 +26,7 @@ use Throwable;
 
 final class SystemHealth
 {
-    public const QUEUES = ['interactive', 'dns', 'edge', 'verification', 'tls', 'purge', 'bulk_maintenance'];
+    public const QUEUES = ['interactive', 'dns', 'edge', 'verification', 'tls', 'purge', 'bulk_maintenance', 'notifications'];
 
     public const PUBLIC_CACHE_KEY = 'service_health:public_snapshot';
 

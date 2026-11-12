@@ -34,6 +34,7 @@ use App\Http\Controllers\DomainLogController;
 use App\Http\Controllers\GeoDnsController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\NameserverController;
+use App\Http\Controllers\NotificationChannelController;
 use App\Http\Controllers\OperationController;
 use App\Http\Controllers\ProxyController;
 use App\Http\Controllers\SecurityController;
@@ -57,6 +58,11 @@ Route::middleware(['auth:sanctum', 'account.active', 'token.scope', 'throttle:ac
     Route::post('/me/tokens', [TokenController::class, 'store'])->middleware('idempotent');
     Route::delete('/me/tokens/{token}', [TokenController::class, 'destroy'])->middleware('idempotent');
     Route::get('/operations/{operation}', [OperationController::class, 'show']);
+    Route::get('/notification-channels', [NotificationChannelController::class, 'index']);
+    Route::post('/notification-channels', [NotificationChannelController::class, 'store'])->middleware('idempotent');
+    Route::delete('/notification-channels/{channel}', [NotificationChannelController::class, 'destroy'])->middleware('idempotent');
+    Route::post('/notification-channels/{channel}/resume', [NotificationChannelController::class, 'resume'])->middleware('idempotent');
+    Route::post('/notification-channels/{channel}/test', [NotificationChannelController::class, 'test'])->middleware(['throttle:origin-test', 'idempotent']);
     Route::get('/domains', [DomainController::class, 'index']);
     Route::post('/domains', [DomainController::class, 'store'])->middleware('idempotent');
     Route::get('/domains/{domain}', [DomainController::class, 'show']);
@@ -142,6 +148,11 @@ Route::middleware(['auth:sanctum', 'account.active', 'token.scope', 'throttle:ac
     Route::get('/domains/{domain}/usage/export', [UsageController::class, 'export']);
 
     Route::prefix('admin')->middleware('admin')->group(function (): void {
+        Route::get('/notification-channels', [NotificationChannelController::class, 'index'])->name('admin.notification-channels.index');
+        Route::post('/notification-channels', [NotificationChannelController::class, 'store'])->middleware('idempotent')->name('admin.notification-channels.store');
+        Route::delete('/notification-channels/{channel}', [NotificationChannelController::class, 'destroy'])->middleware('idempotent')->name('admin.notification-channels.destroy');
+        Route::post('/notification-channels/{channel}/resume', [NotificationChannelController::class, 'resume'])->middleware('idempotent')->name('admin.notification-channels.resume');
+        Route::post('/notification-channels/{channel}/test', [NotificationChannelController::class, 'test'])->middleware(['throttle:origin-test', 'idempotent'])->name('admin.notification-channels.test');
         Route::get('/analytics/summary', [AdminAnalyticsController::class, 'summary']);
         Route::get('/analytics/traffic', [AdminAnalyticsController::class, 'view'])->defaults('view', 'traffic');
         Route::get('/analytics/volume/edges', [AdminAnalyticsController::class, 'view'])->defaults('view', 'volume-edges');

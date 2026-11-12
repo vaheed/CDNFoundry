@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\UsageController as AdminUsageController;
+use App\Http\Controllers\AlertmanagerReceiverController;
 use App\Http\Controllers\EdgeAgentController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\MetricsController;
@@ -40,6 +41,10 @@ Route::get('/', function () {
 });
 Route::get('/health', [HealthController::class, 'page'])->name('service-health');
 Route::get('/metrics', MetricsController::class);
+// Alertmanager's private receiver; it answers 404 without the monitoring token.
+Route::post('/internal/alertmanager', AlertmanagerReceiverController::class)->withoutMiddleware([
+    EncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, ShareErrorsFromSession::class, PreventRequestForgery::class,
+]);
 // Public and secret-free: lets a node and an operator learn the epoch before starting services.
 Route::get('/control-state', [HealthController::class, 'controlState'])->withoutMiddleware([
     EncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, ShareErrorsFromSession::class, PreventRequestForgery::class,

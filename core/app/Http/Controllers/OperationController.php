@@ -32,6 +32,10 @@ class OperationController extends Controller
 {
     public function show(Request $request, Operation $operation): JsonResource
     {
+        // The account that asked for a channel test may read its result.
+        if ($operation->type === 'notification.test' && ($operation->input['user_id'] ?? null) === $request->user()->getKey()) {
+            return OperationResource::make($operation);
+        }
         if (! $request->user()->isAdmin() || $request->user()->tokenDomainIds() !== null) {
             // Any member of the operation's domain may read it, including a coalesced
             // operation another member started. Global operations are administrator-only.

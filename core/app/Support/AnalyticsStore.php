@@ -300,6 +300,13 @@ final class AnalyticsStore
             ['from' => $from->format('Y-m-d H:i:s.u'), 'to' => $to->format('Y-m-d H:i:s.u')]);
     }
 
+    /** @return list<array{domain_id: int|string, requests: int|string, origin_errors: int|string}> */
+    public function originErrorsByDomain(CarbonImmutable $from, CarbonImmutable $to, int $minimumRequests): array
+    {
+        return $this->query('SELECT domain_id, sum(requests) AS requests, sum(origin_errors) AS origin_errors FROM cdnf.edge_traffic_1m WHERE interval_start >= {from:DateTime} AND interval_start < {to:DateTime} AND domain_id != 0 GROUP BY domain_id HAVING requests >= {minimum:UInt64} AND origin_errors > 0 ORDER BY origin_errors DESC LIMIT 1000',
+            ['from' => $from->format('Y-m-d H:i:s'), 'to' => $to->format('Y-m-d H:i:s'), 'minimum' => $minimumRequests]);
+    }
+
     /** @return list<array{hostname: string, blocked: int|string}> */
     public function topAttackedHostnames(CarbonImmutable $from, CarbonImmutable $to): array
     {

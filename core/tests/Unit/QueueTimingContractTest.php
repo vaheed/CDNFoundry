@@ -27,7 +27,8 @@ class QueueTimingContractTest extends TestCase
 
     public function test_every_job_runs_on_a_lane_with_a_supervisor_and_a_health_entry(): void
     {
-        $lanes = collect(config('horizon.defaults'))->flatMap(fn (array $supervisor) => $supervisor['queue'])->all();
+        // The notifications lane has no Horizon supervisor: the notifier container is its only worker, so Horizon never needs egress to the providers, so Horizon never needs egress to the providers.
+        $lanes = [...collect(config('horizon.defaults'))->flatMap(fn (array $supervisor) => $supervisor['queue'])->all(), 'notifications'];
         $this->assertEqualsCanonicalizing($lanes, SystemHealth::QUEUES);
 
         foreach (glob(app_path('Jobs/*.php')) as $file) {

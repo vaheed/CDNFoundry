@@ -29,7 +29,7 @@ class SystemSettingsTest extends TestCase
         $admin = User::factory()->admin()->create();
         $response = $this->actingAs($admin)->getJson('/api/admin/system/settings')->assertOk();
 
-        $this->assertCount(11, $response->json('data'));
+        $this->assertCount(12, $response->json('data'));
         $settings = collect($response->json('data'));
         $dnsLifecycle = $settings->firstWhere('group', 'dns_lifecycle');
         $this->assertSame(7, $dnsLifecycle['fields'][0]['value']);
@@ -38,7 +38,7 @@ class SystemSettingsTest extends TestCase
         $this->assertNotNull($settings->firstWhere('group', 'telemetry'));
         $this->assertNotNull($settings->firstWhere('group', 'operations'));
         $this->assertNull($settings->firstWhere('group', 'observability')['fields'][0]['value']);
-        $this->assertDatabaseCount('system_settings', 11);
+        $this->assertDatabaseCount('system_settings', 12);
     }
 
     public function test_shared_timezone_is_validated_audited_and_admin_only(): void

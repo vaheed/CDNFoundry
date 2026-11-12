@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Models\DomainEdgeCell;
 use App\Models\EdgeTask;
+use App\Support\Notifications\EventPublisher;
 use App\Support\SecurityConfig;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -33,6 +34,7 @@ class ChangeAutomaticSecurityState
                 'security_overlay_sequence' => $locked->security_overlay_sequence + 1,
             ]);
             self::dispatchOverlay($locked);
+            EventPublisher::publish('security.state_changed', $locked, "Security state of {$locked->name} changed to {$state}", "It was {$previous}. Cause: {$cause}.");
             AuditLog::record(null, 'security.automatic_state_changed', $locked, [
                 'from' => $previous, 'to' => $state, 'cause' => $cause, 'overlay_sequence' => $locked->security_overlay_sequence, ...$context,
             ]);

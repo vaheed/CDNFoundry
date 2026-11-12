@@ -30,6 +30,8 @@ return [
         'keep_daily' => max(1, (int) env('BACKUP_KEEP_DAILY', 14)), 'keep_weekly' => max(0, (int) env('BACKUP_KEEP_WEEKLY', 8)), 'keep_monthly' => max(0, (int) env('BACKUP_KEEP_MONTHLY', 6)),
     ],
     'alertmanager' => ['url' => env('ALERTMANAGER_URL', 'http://alertmanager:9093')],
+    // The notifier's provider base address, honored only outside production so qualification can use a fake receiver.
+    'notifier' => ['test_provider_url' => env('NOTIFIER_TEST_PROVIDER_URL')],
     'prometheus' => ['url' => env('PROMETHEUS_URL', 'http://prometheus:9090')],
     'grafana' => ['explore_url' => env('GRAFANA_EXPLORE_URL')],
     'acme' => [

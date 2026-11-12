@@ -17,6 +17,7 @@ use App\Models\Domain;
 use App\Models\EdgeArtifact;
 use App\Models\Operation;
 use App\Models\User;
+use App\Support\Notifications\EventPublisher;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use RuntimeException;
@@ -168,6 +169,7 @@ class DomainNameserverVerification
                 AuditLog::record($actor, 'domain.nameservers_force_verified', $locked, ['name' => $locked->name], $ipAddress);
             }
             if ($activated) {
+                EventPublisher::publish('domain.verified', $locked, "{$locked->name} is verified and active", 'Its nameservers point to the platform.');
                 AuditLog::record($actor, 'domain.activated', $locked, [
                     'revision' => $locked->revision,
                     'automatic' => true,
