@@ -81,7 +81,7 @@ MANAGEMENT_NETWORK_LIMIT = 64
 
 
 def validate_management_networks(value: Any) -> list[str]:
-    """CIDRs allowed to reach the panels, the API, Horizon, Grafana, and the status page. Empty means no restriction."""
+    """CIDRs allowed to reach the administrator panel, the administrator API, Horizon, and Grafana. Empty means no restriction."""
     items = value.replace(",", " ").split() if isinstance(value, str) else list(value or [])
     networks: list[str] = []
     for item in items:

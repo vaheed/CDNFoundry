@@ -357,7 +357,8 @@ CDNFoundry publishes no throughput numbers, because capacity depends on your har
 | --- | --- | --- |
 | DNSdist on DNS hosts | UDP and TCP 53 | Internet |
 | Edge HTTP and HTTPS | TCP 80 and 443 | Internet or your customer networks |
-| Control panel, API, Horizon, and Grafana | TCP 80 and 443 | Your operators: the fleet's `management_networks`. Health probes stay open |
+| Customer panel, customer API, and status page | TCP 80 and 443 | Internet |
+| Administrator panel and API, Horizon, metrics, and Grafana | TCP 80 and 443 | Your operators: the fleet's `management_networks` |
 | Edge control (mTLS) | TCP 8443 | Edge node addresses only |
 | DNS primary transfers | TCP and UDP 5300 | DNS node addresses only |
 | Node exporter, DNSdist statistics, gateway and Vector metrics | TCP 9100, 8083, 9105, 9598, 9599 | Fleet node addresses only |

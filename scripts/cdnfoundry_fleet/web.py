@@ -634,7 +634,7 @@ class FleetWeb:
         return f"{about}<p>{status}</p>{form}"
 
     def _management_networks_section(self) -> str:
-        """Who may open the panels, the API, Horizon, and Grafana. Entries are added and removed one at a time, at any time."""
+        """Who may open the administrator panel, the administrator API, Horizon, and Grafana. Entries are added and removed one at a time, at any time."""
         networks = self.read(lambda e: e.management_networks())
         if networks:
             rows = [[f"<code>{esc(item)}</code>",
@@ -644,7 +644,7 @@ class FleetWeb:
                     for item in networks]
             listing = table(["Network", ""], rows, label="Management networks")
         else:
-            listing = '<p class="empty" data-testid="management-networks-open">No restriction. Anyone can reach the panels and the API.</p>'
+            listing = '<p class="empty" data-testid="management-networks-open">No restriction. Anyone can reach the administrator panel.</p>'
         add = self.action_form("/management-networks/add", "Add", fields=(
             '<label>Add networks<input name="networks" required autocomplete="off" placeholder="203.0.113.0/24, 2001:db8::/32" data-testid="management-network-input">'
             '<span class="hint">One or more CIDRs or single addresses, separated by spaces or commas. Every fleet node address is allowed automatically.</span></label>'))

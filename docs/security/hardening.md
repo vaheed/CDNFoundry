@@ -56,21 +56,33 @@ Every connection times out. From a fleet host, Prometheus targets stay `up`.
 
 ## Management networks
 
-The panels, the API, Horizon, Grafana, and the status page answer only the
-networks you list in the fleet's `management_networks`. Set them with
-`cdnfoundry-fleet management-networks --networks "203.0.113.0/24 2001:db8::/32"`
-and deploy the configuration. The fleet's own node addresses are added for you.
+Two surfaces share the control hostname, and they are treated differently.
 
-- Everyone else gets a bare `403`: no redirect, no login form, no cookie.
-- Left open on purpose: `/up`, `/api/health`, `/api/ready`, and the PoP-facing edge-control
-  listener. Grafana has no open path.
+- **Open to everyone:** the customer panel (`/app`), the customer API, the status
+  page, and the health probes. Customers sign in from anywhere. Their sign-in is
+  throttled, and the policies scope them to their own domains.
+- **Management networks only:** the administrator panel (`/admin`), the administrator
+  API (`/api/admin`), Horizon, the metrics endpoint, the control-state page, and
+  Grafana. One stolen credential there controls the platform.
+
+Set the networks with
+`cdnfoundry-fleet management-networks --add "203.0.113.0/24 2001:db8::/32"`, and
+change one entry at a time later with `--add` and `--remove`. Deploy the
+configuration to apply it. The fleet's own node addresses are added for you.
+
+- Everyone else gets a bare `403` on the restricted paths: no redirect, no login
+  form, no cookie. Grafana has no open path at all.
+- Add only the networks where administrators work. Do not add customer ranges.
 - The control plane checks the same list again (`MANAGEMENT_NETWORKS`), so a
-  misconfigured proxy cannot reopen the panels.
+  misconfigured proxy cannot reopen the administrator panel.
 - An empty list restricts nothing. Set it on every production install, from a
   network you can still reach after the change.
+- An administrator account can still sign in at `/app` and use the customer API
+  from anywhere. Keep administrator API tokens short-lived and rotate them.
 
-**Check it worked:** from a network outside the list, `/admin`, `/app`, `/api/domains`,
-`/horizon`, and Grafana each return `403`, and no `Set-Cookie` header appears.
+**Check it worked:** from a network outside the list, `/admin`, `/api/admin/edges`,
+`/horizon`, `/metrics`, and Grafana each return `403` with no `Set-Cookie` header,
+while `/app` and `/health` still load.
 
 ## Browser security
 

@@ -283,7 +283,7 @@ def parser() -> argparse.ArgumentParser:
     vr.add_argument("--password-file", required=True, help="File that holds the backup repository password")
     alert = sub.add_parser("alert-webhook", parents=[command_common], help="show or set where Alertmanager sends alerts (an https:// URL; optional, and an empty value turns notifications off)")
     alert.add_argument("--url", help="The https:// URL to save, or an empty value to turn notifications off; omit to show the current one")
-    mgmt = sub.add_parser("management-networks", parents=[command_common], help="show or set the networks allowed to reach the panels, the API, Horizon, and Grafana (CIDRs; an empty value removes the restriction)")
+    mgmt = sub.add_parser("management-networks", parents=[command_common], help="show or set the networks allowed to reach the administrator panel, the administrator API, Horizon, and Grafana (CIDRs; an empty value removes the restriction)")
     mgmt.add_argument("--networks", help="Replace the whole list with these space- or comma-separated CIDRs, or with an empty value to remove the restriction; omit to show the current ones")
     mgmt.add_argument("--add", action="append", default=[], help="Add one or more CIDRs or addresses to the list (space- or comma-separated; repeat the option as needed)")
     mgmt.add_argument("--remove", action="append", default=[], help="Remove one or more listed CIDRs or addresses (space- or comma-separated; repeat the option as needed)")

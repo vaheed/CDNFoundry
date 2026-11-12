@@ -229,8 +229,8 @@ log line by line, and a step with no output for 30 seconds is reported with its 
 webhook Alertmanager starts with receivers that send nothing, and `--url ""` turns notifications off again. A change
 reaches the hosts with the next `apply-config`.
 
-`cdnfoundry-fleet management-networks [--networks "CIDR ..."]` shows or sets the networks allowed to reach the panels, the API,
-Horizon, Grafana, and the status page. Every other client gets a bare `403`. The fleet's own node addresses are added to
+`cdnfoundry-fleet management-networks [--networks "CIDR ..."]` shows or sets the networks allowed to reach the administrator panel, the
+administrator API, Horizon, and Grafana. Every other client gets a bare `403` there; the customer panel, the customer API, and the status page stay open. The fleet's own node addresses are added to
 the list automatically, `0.0.0.0/0` and `::/0` are refused, and `--networks ""` removes the restriction. A change reaches
 the hosts with the next `apply-config`.
 

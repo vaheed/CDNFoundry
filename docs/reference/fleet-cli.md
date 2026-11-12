@@ -321,11 +321,13 @@ No options beyond the shared ones.
 
 ## management-networks
 
-Show or set the networks allowed to reach the panels, the API, Horizon, and Grafana (CIDRs; an empty value removes the restriction).
+Show or set the networks allowed to reach the administrator panel, the administrator API, Horizon, and Grafana (CIDRs; an empty value removes the restriction).
 
 | Option | Meaning |
 | --- | --- |
-| `--networks` `NETWORKS` | Space- or comma-separated CIDRs to save, or an empty value to remove the restriction; omit to show the current ones |
+| `--networks` `NETWORKS` | Replace the whole list with these space- or comma-separated CIDRs, or with an empty value to remove the restriction; omit to show the current ones |
+| `--add` `ADD` | Add one or more CIDRs or addresses to the list (space- or comma-separated; repeat the option as needed) |
+| `--remove` `REMOVE` | Remove one or more listed CIDRs or addresses (space- or comma-separated; repeat the option as needed) |
 
 ## management-tls
 
