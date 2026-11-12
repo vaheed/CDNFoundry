@@ -41,6 +41,12 @@ class LogPushPanelTest extends TestCase
         $destination = LogPushDestination::query()->firstOrFail();
         $this->assertSame($domain->id, $destination->domain_id);
 
+        // A refused address is reported on its field, and nothing is saved.
+        Livewire::test(LogPushRelationManager::class, ['ownerRecord' => $domain, 'pageClass' => ViewDomain::class])
+            ->callTableAction('addDestination', data: ['name' => 'Loopback', 'kind' => 'https', 'datasets' => ['http_requests'], 'url' => 'https://127.0.0.1/ingest', 'auth' => 'hmac'])
+            ->assertHasTableActionErrors(['url']);
+        $this->assertSame(1, LogPushDestination::query()->count());
+
         // Switching off keeps the destination and the tab, and hides the actions that would start work.
         $this->switchOn(false);
         $this->assertTrue(LogPushRelationManager::canViewForRecord($domain, ViewDomain::class));

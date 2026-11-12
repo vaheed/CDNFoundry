@@ -95,17 +95,22 @@ class LogPushRelationManager extends RelationManager
 
     private function create(array $data): void
     {
-        $validated = DestinationData::validate($data);
-        $domain = $this->getOwnerRecord();
-        \Illuminate\Support\Facades\DB::transaction(function () use ($domain, $validated): void {
-            \App\Models\Domain::query()->lockForUpdate()->findOrFail($domain->id);
-            DestinationData::assertRoom($domain);
+        try {
+            $validated = DestinationData::validate($data);
+            $domain = $this->getOwnerRecord();
+            \Illuminate\Support\Facades\DB::transaction(function () use ($domain, $validated): void {
+                \App\Models\Domain::query()->lockForUpdate()->findOrFail($domain->id);
+                DestinationData::assertRoom($domain);
             $destination = new LogPushDestination(['domain_id' => $domain->id, 'kind' => $validated['kind'], 'name' => $validated['name'], 'datasets' => $validated['datasets'], 'destination_hint' => $validated['hint'],
                 'truncate_client_ip' => $validated['truncate'], 'status' => 'active', 'cursors' => [], 'consecutive_failures' => 0, 'failures_total' => 0, 'rows_pushed' => 0, 'bytes_pushed' => 0]);
             $destination->storeSecrets($validated['secrets']);
             $destination->save();
             AuditLog::record(auth()->user(), 'log_push.created', $domain, ['destination_id' => $destination->id, 'kind' => $destination->kind, 'datasets' => $destination->datasets], request()->ip());
-        });
+            });
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            // The modal's fields live under the action's state path, so a server-side refusal appears beside the field that caused it.
+            throw \Illuminate\Validation\ValidationException::withMessages(collect($exception->errors())->mapWithKeys(fn (array $messages, string $key): array => ["mountedActions.0.data.{$key}" => $messages])->all());
+        }
         $notice = Notification::make()->success()->title('Destination added');
         if ($validated['signing_secret'] !== null) {
             $notice->persistent()->body('Signing secret, shown only once: '.$validated['signing_secret']);
