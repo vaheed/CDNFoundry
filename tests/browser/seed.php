@@ -66,9 +66,10 @@ foreach (['edge-tehran-a', 'edge-tehran-b', 'edge-frankfurt-a', 'edge-with-a-ver
 }
 // The fourth edge has not reported for two days but the other PoPs still reach it: stale control link, serving edge.
 // The third edge is reached by nobody: fresh heartbeat, not serving.
+// Probe results count only while recent, and the suite runs for many minutes, so the fixture is dated ahead.
 foreach ([0, 1] as $observer) {
-    EdgeProbeResult::query()->create(['observer_edge_id' => $edges[$observer][0]->id, 'target_edge_id' => $edges[3][0]->id, 'address' => '192.0.2.44', 'ok' => true, 'checked_at' => now()]);
-    EdgeProbeResult::query()->create(['observer_edge_id' => $edges[$observer][0]->id, 'target_edge_id' => $edges[2][0]->id, 'address' => '192.0.2.43', 'ok' => false, 'checked_at' => now()]);
+    EdgeProbeResult::query()->create(['observer_edge_id' => $edges[$observer][0]->id, 'target_edge_id' => $edges[3][0]->id, 'address' => '192.0.2.44', 'ok' => true, 'checked_at' => now()->addYear()]);
+    EdgeProbeResult::query()->create(['observer_edge_id' => $edges[$observer][0]->id, 'target_edge_id' => $edges[2][0]->id, 'address' => '192.0.2.43', 'ok' => false, 'checked_at' => now()->addYear()]);
 }
 
 $showcase = $domains['alpha-browser.example'];
