@@ -20,7 +20,7 @@ final class CachePolicy
         return [
             'enabled' => true, 'edge_ttl_seconds' => 3600, 'browser_ttl_seconds' => 300,
             'maximum_object_bytes' => 104857600, 'respect_origin_headers' => true,
-            'query_policy' => 'include_all', 'query_parameters' => [], 'bypass_cookie_names' => [],
+            'query_policy' => 'include_all', 'query_parameters' => [], 'ignore_cookie_names' => [],
             'status_ttl_seconds' => self::DEFAULT_TTLS, 'admission_requests' => 2,
             'stale_if_error_seconds' => 60, 'stale_while_revalidate_seconds' => 30,
             'mode' => 'normal', 'maximum_variants_per_resource' => 32,
@@ -33,6 +33,8 @@ final class CachePolicy
         if (array_key_exists('include_query_string', $settings) && ! array_key_exists('query_policy', $settings)) {
             $settings['query_policy'] = $settings['include_query_string'] ? 'include_all' : 'ignore_all';
         }
+
+        unset($settings['bypass_cookie_names']);
 
         return [...self::defaults(), ...$settings];
     }
@@ -48,8 +50,8 @@ final class CachePolicy
             'query_policy' => ['required', Rule::in(['include_all', 'ignore_all', 'include_selected', 'ignore_selected'])],
             'query_parameters' => ['present', 'array', 'max:32'],
             'query_parameters.*' => ['required', 'regex:/^[A-Za-z0-9_.~-]{1,64}$/', 'distinct'],
-            'bypass_cookie_names' => ['present', 'array', 'max:32'],
-            'bypass_cookie_names.*' => ['required', 'regex:/^[A-Za-z0-9_-]{1,64}$/', 'distinct'],
+            'ignore_cookie_names' => ['present', 'array', 'max:32'],
+            'ignore_cookie_names.*' => ['required', 'regex:/^[A-Za-z0-9_-]{1,64}$/', 'distinct'],
             'status_ttl_seconds' => ['required', 'array', 'max:16'],
             'status_ttl_seconds.*' => ['required', 'integer', 'between:0,31536000'],
             'admission_requests' => ['required', 'integer', 'between:1,10'],

@@ -500,13 +500,20 @@ local function request_cache_key(domain, host, cache)
     return base .. "|e" .. epoch .. "|g" .. generation .. "|p" .. ngx.md5(policy), ttl, base
 end
 
-local function cookie_bypassed(names)
+-- A request that carries any cookie is personal until the domain says otherwise:
+-- it bypasses the cache unless every cookie name is on the ignore list.
+local function cookie_bypassed(ignored_names)
     local raw = ngx.var.http_cookie or ""
     if raw == "" then return false end
-    local present = {}
-    for name in raw:gmatch("%s*([^=;%s]+)%s*=") do present[name] = true end
-    for _, name in ipairs(names or {}) do if present[name] then return true end end
-    return false
+    local ignored = {}
+    for _, name in ipairs(ignored_names or {}) do ignored[name] = true end
+    local found = false
+    for name in raw:gmatch("%s*([^=;%s]+)%s*=") do
+        found = true
+        if not ignored[name] then return true end
+    end
+    -- A Cookie header with no parsable name is still a cookie.
+    return not found
 end
 
 local function accepts_encoding(raw, encoding)
@@ -617,6 +624,7 @@ end
 
 function M.access()
     ngx.req.clear_header("X-CDN-Client-Address")
+    ngx.req.clear_header("X-CDN-Cache-Bypass")
     ngx.var.cdn_telemetry_proof = telemetry_proof_value()
     local dictionary = ngx.shared.runtime_limits
     dictionary:incr("capacity:requests:" .. ngx.time(), 1, 0, 2)
@@ -723,7 +731,7 @@ function M.access()
     local cacheable = cache.enabled == true and cache_ttl > 0
         and (ngx.req.get_method() == "GET" or ngx.req.get_method() == "HEAD")
         and not ngx.var.http_authorization and not ngx.var.http_range
-        and not cookie_bypassed(cache.bypass_cookie_names)
+        and not cookie_bypassed(cache.ignore_cookie_names)
         and development_until <= ngx.time()
         and #cache_key <= (tonumber(limits.maximum_cache_key_length) or 4096)
     local profile = cache.profile or {}
@@ -865,6 +873,13 @@ function M.prepare_cache_response()
     local cache = config.cache or {}
     local status = tonumber(ngx.status) or 0
     local headers = ngx.header
+    -- A request the cache bypassed (a cookie, Authorization, a range) is never
+    -- stored, so its response keeps exactly the origin's cache headers. Adding
+    -- "public" here would let a downstream cache keep a personal response.
+    if ngx.var.http_x_cdn_cache_bypass == "1" then
+        headers["X-CDNF-No-Store"] = "1"
+        return
+    end
     local cache_control = cache_control_directives(headers["Cache-Control"])
     local status_ttls = cache.status_ttl_seconds or {["200"] = cache.edge_ttl_seconds or 0}
     local status_ttl = tonumber(status_ttls[tostring(status)])

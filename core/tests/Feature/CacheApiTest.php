@@ -19,6 +19,15 @@ class CacheApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_stored_bypass_cookie_names_are_dropped_and_no_cookie_is_ignored_by_default(): void
+    {
+        $this->assertSame([], CachePolicy::defaults()['ignore_cookie_names']);
+        $settings = CachePolicy::normalize(['bypass_cookie_names' => ['session_id'], 'edge_ttl_seconds' => 60]);
+        $this->assertArrayNotHasKey('bypass_cookie_names', $settings);
+        $this->assertSame([], $settings['ignore_cookie_names']);
+        $this->assertSame(60, $settings['edge_ttl_seconds']);
+    }
+
     public function test_cache_settings_are_bounded_authorized_and_revisioned(): void
     {
         [$user, $domain] = $this->ownedDomain();
@@ -27,8 +36,8 @@ class CacheApiTest extends TestCase
         $this->actingAs($stranger)->getJson("/api/domains/{$domain->id}/cache")->assertNotFound();
         $this->actingAs($user)->getJson("/api/domains/{$domain->id}/cache")
             ->assertOk()->assertJsonPath('data.settings.edge_ttl_seconds', 3600)->assertJsonPath('data.cache_epoch', 1);
-        $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/cache", [...$this->settings(), 'bypass_cookie_names' => array_fill(0, 33, 'cookie')])
-            ->assertUnprocessable()->assertJsonValidationErrors('bypass_cookie_names');
+        $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/cache", [...$this->settings(), 'ignore_cookie_names' => array_fill(0, 33, 'cookie')])
+            ->assertUnprocessable()->assertJsonValidationErrors('ignore_cookie_names');
         $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/cache", $this->settings())
             ->assertAccepted()->assertJsonPath('data.settings.query_policy', 'include_all');
 
@@ -209,6 +218,6 @@ class CacheApiTest extends TestCase
 
     private function settings(): array
     {
-        return ['enabled' => true, 'edge_ttl_seconds' => 120, 'browser_ttl_seconds' => 60, 'maximum_object_bytes' => 1048576, 'respect_origin_headers' => true, 'include_query_string' => true, 'bypass_cookie_names' => ['session_id'], 'stale_if_error_seconds' => 30];
+        return ['enabled' => true, 'edge_ttl_seconds' => 120, 'browser_ttl_seconds' => 60, 'maximum_object_bytes' => 1048576, 'respect_origin_headers' => true, 'include_query_string' => true, 'ignore_cookie_names' => ['session_id'], 'stale_if_error_seconds' => 30];
     }
 }
