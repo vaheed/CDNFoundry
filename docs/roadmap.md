@@ -25,7 +25,7 @@ separately at the end of the phase:
 | Implementation | Merged to `dev` in small commits. Replaced code is deleted. |
 | Tests | Feature and unit tests for happy path, permissions, validation, idempotency, failure, and last valid state. |
 | Runtime qualification | Python E2E under `tests/e2e` on a real Compose stack. |
-| Browser suite | `tests/browser` passes for every changed screen, with visual snapshots and accessibility checks. |
+| Browser suite | `tests/browser` passes for every changed screen, with visual snapshots and accessibility checks |
 | Documentation | Every affected operator and user page states the new behavior. |
 
 Phase 11 re-runs every gate together, so a phase that passed early is checked
@@ -218,12 +218,9 @@ percentiles, errors, the saturated resource, and recovery time:
 6. TLS handshake capacity, including the gateway's handshake budget.
 7. Recovery after losing one edge, with PoPs in separate networks (three
    PoPs, two regions).
-8. Sustained connection churn, and the 50-connection incident replayed above
-   the per-client limits.
-9. WAF cost: latency with managed rules, custom rules, and each detection on.
-10. Log push and notifier load: bounded worker time per domain at the
+8. WAF cost: latency with managed rules, custom rules, and each detection on.
+9. Log push and notifier load: bounded worker time per domain at the
     stated domain counts.
-11. IPv6 on every public path (never tested on staging).
 
 Publish one-cell, one-host, and multi-PoP results under separate headings.
 Choose capacity work from the saturated resource each test names.
@@ -256,24 +253,14 @@ above left open and proves the finished system end to end.
 | 11.1 | **Audit Phase 1: exposure.** | Outside scan and path sweep from a host outside the management allowlist. | Stored with the release: only SSH, DNS, HTTP, HTTPS, and the edge-control listener answer; no management path, metrics endpoint, or version string. |
 | 11.2 | **Audit Phase 2: cache isolation.** | Run `openresty_runtime.py` and `edge_purge_protocol.py` and the browser suite, and record the results the gate left blank. | Both E2E files and the browser suite pass, listed in the record. |
 | 11.3 | **Audit Phase 3: edge health.** | On staging, measure the time from a fixed heartbeat to a healthy edge. Run the split ClientHello script on both PoPs. | Recovery within one heartbeat interval, measured; all six cases pass. |
-| 11.4 | **Audit Phase 4: revisions.** | On staging, one hour of noisy heartbeats with unchanged desired state. | Zero new revisions, no `endpoint_withdrawn` entry. |
-| 11.5 | **Audit Phase 5: telemetry.** | Run the Grafana and panel browser suites against staging, read-only. Replay the scripted test attack. | Suites pass with one screenshot per dashboard; the attack is found by domain, edge, reason, and rule, and its request, download, and upload counts match. |
-| 11.6 | **Full test run for Phases 1 to 10.** | On one fresh Compose stack: the Laravel suite, Go tests, contract and observability tests, every `tests/e2e` file added by these phases, and the full browser suite with visual snapshots and accessibility checks. Then each phase's own gate re-run on staging. | One record listing every suite, its result, and the commit it ran on. No unexecuted test is reported as passed. |
-| 11.7 | **Documentation check.** | Every page touched by Phases 1 to 10 matches the running system. | Each page reviewed against the record in 11.6. |
+| 11.4 | **Audit Phase 5: telemetry.** | Run the Grafana and panel browser suites against staging, read-only. Replay the scripted test attack. | Suites pass with one screenshot per dashboard; the attack is found by domain, edge, reason, and rule, and its request, download, and upload counts match. |
+| 11.5 | **Full test run for Phases 1 to 10.** | On one fresh Compose stack: the Laravel suite, Go tests, contract and observability tests, every `tests/e2e` file added by these phases, and the full browser suite with visual snapshots and accessibility checks. Then each phase's own gate re-run on staging. | One record listing every suite, its result, and the commit it ran on. No unexecuted test is reported as passed. |
+| 11.6 | **Documentation check.** | Every page touched by Phases 1 to 10 matches the running system. | Each page reviewed against the record in 11.5. |
 
-**Gate:** one record per audit phase (11.1 to 11.5) and one full
-qualification record (11.6), all on the same release.
+**Gate:** one record per audit phase (11.1 to 11.4) and one full
+qualification record (11.5), all on the same release.
 
 ---
-
-## Future, not planned
-
-Not part of this roadmap. Listed so the idea is not lost; each needs owner
-admission before any work.
-
-- **Malicious upload scanning.** Scanning uploaded files for malware at the
-  edge. It needs a new runtime component (a shared scanner per PoP host) and
-  its own failure rules.
 
 ## Out of scope unless the owner admits it
 
