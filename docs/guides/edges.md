@@ -17,6 +17,8 @@ An edge is one point of presence (PoP): a host that serves traffic through bound
 | Placement | Pool/cell state in PostgreSQL |
 | Movement | Target acknowledged before source drain |
 | Eligibility | Heartbeat, listener readiness, drain, emergency, and capacity |
+| Control last heard | When the control plane last received a heartbeat from the edge |
+| Serving | Whether other PoPs can reach the edge, from their recent probes (`Serving`, `Not serving`, or `Unknown`). Independent of the heartbeat |
 
 ```mermaid
 sequenceDiagram

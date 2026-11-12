@@ -37,6 +37,22 @@ request, or the identity state is lost, rotate the identity and use a new token.
 
 ## Heartbeat is stale
 
+A stale heartbeat means the control plane has not heard from the edge. It does not
+mean the edge stopped serving. The Edges list and the edge page show a second fact
+beside it, **Serving**, taken from the probes other PoPs run against the edge:
+`Serving` when most recent probes succeed, `Not serving` when most fail, and
+`Unknown` when fewer than the required vantage points have reported. A stale
+heartbeat with `Serving` points at the agent or the control path; a stale
+heartbeat with `Not serving` points at the edge itself. The public health page lists
+the edge control link as its own check, separate from edge nodes.
+
+The control plane records liveness from the authenticated heartbeat alone. The
+`noisy_domains` and `passive_origins` lists are advisory: an entry that fails
+validation is dropped and counted (`advisory_entries_dropped` in the edge's reported
+capacity, and a warning in the control log) and never rejects the heartbeat. A
+repeated `422` on `/edge/v1/heartbeat` therefore means a required field is wrong, not
+a reason code.
+
 Check these on the edge host:
 
 - the agent container is running;

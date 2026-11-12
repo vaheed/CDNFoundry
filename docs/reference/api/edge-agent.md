@@ -99,6 +99,14 @@ rejected connections, errors, and rejected candidates. Values are bounded
 integers and carry no hostnames or customer data. `listener_ready` is true only
 when the gateway is ready and its revision equals the agent's active sequence.
 
+The control plane records `last_heartbeat_at` for any heartbeat whose required
+fields are valid. `noisy_domains` entries (`domain_id`, optional `hostname`,
+`reason_code`, `count`, `occurred_at`) and `passive_origins` entries are advisory:
+an invalid entry, such as an unknown reason code, is dropped and counted rather than
+failing the request. The accepted reason codes are the list in
+`core/resources/contracts/security-event-reasons.json`, which `tests/contract`
+checks against every reason the cell runtime can raise.
+
 ## Task contract
 
 Current tasks cover origin tests, DNS probes, cache purge, cell
