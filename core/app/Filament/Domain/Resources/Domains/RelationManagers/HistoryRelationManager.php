@@ -32,7 +32,7 @@ class HistoryRelationManager extends RelationManager
                     'automatic' => $query->whereNull('actor_id'),
                     default => $query,
                 }),
-        ])->defaultSort('created_at', 'desc')->defaultPaginationPageOption(10)->paginated([10, 25, 50]);
+        ])->deferFilters(false)->defaultSort('created_at', 'desc')->defaultPaginationPageOption(10)->paginated([10, 25, 50]);
     }
 
     private static function label(string $action): string

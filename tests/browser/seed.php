@@ -137,6 +137,13 @@ foreach (range(1, 45) as $n) {
     ]);
 }
 foreach (range(1, 40) as $n) {
-    AuditLog::record($admin, ['domain.updated', 'tls.mode_updated', 'user.created', 'cache.purged'][$n % 4], $showcase, ['revision' => $n], '127.0.0.1');
+    AuditLog::record($admin, ['domain.updated', 'tls.mode_updated', 'user.created', 'cache.purged'][$n % 4], $showcase, ['revision' => $n], '127.0.0.1')
+        ->forceFill(['created_at' => now()->subMinutes($n + 5)])->save();
 }
+
+// Changes the platform made on its own: events in the history, never configuration revisions.
+AuditLog::record(null, 'security.automatic_state_changed', $showcase, ['from' => 'normal', 'to' => 'suspected', 'cause' => 'event_rate', 'events_in_window' => 64, 'window_minutes' => 5, 'overlay_sequence' => 1])
+    ->forceFill(['created_at' => now()->subMinutes(2)])->save();
+AuditLog::record(null, 'security.automatic_state_changed', $showcase, ['from' => 'suspected', 'to' => 'normal', 'cause' => 'quiet_period', 'quiet_minutes' => 10, 'overlay_sequence' => 2])
+    ->forceFill(['created_at' => now()->subMinute()])->save();
 echo "browser seed complete\n";
