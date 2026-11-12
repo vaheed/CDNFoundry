@@ -49,7 +49,9 @@ local function security_reject(status, reason)
     if ngx.ctx.security_domain then
         local events = ngx.shared.security_limits
         local key = "event:" .. tostring(ngx.ctx.security_domain) .. ":" .. reason
-        events:incr(key, 1, 0)
+        -- Every key of one event expires together, so a reason that stops occurring
+        -- leaves the next heartbeat instead of repeating forever.
+        events:incr(key, 1, 0, 3600)
         events:set("host:" .. tostring(ngx.ctx.security_domain), ngx.ctx.security_hostname or "", 3600)
         events:set("time:" .. tostring(ngx.ctx.security_domain) .. ":" .. reason, ngx.time(), 3600)
     end

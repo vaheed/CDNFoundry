@@ -1,0 +1,28 @@
+{
+  "reasons": [
+    "unknown_host",
+    "unknown_sni",
+    "sni_host_mismatch",
+    "invalid_method",
+    "malformed_request",
+    "malformed_request_body",
+    "header_too_large",
+    "body_too_large",
+    "waf_body_limit",
+    "header_timeout",
+    "body_timeout",
+    "client_rate_exceeded",
+    "domain_rate_exceeded",
+    "client_connections_exceeded",
+    "domain_connections_exceeded",
+    "tls_handshake_rate_exceeded",
+    "origin_capacity_exceeded",
+    "origin_circuit_open",
+    "cache_abuse_detected",
+    "cache_mode_origin_disabled",
+    "too_many_query_arguments",
+    "domain_restricted",
+    "domain_quarantined",
+    "edge_emergency_mode"
+  ]
+}

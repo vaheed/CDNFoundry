@@ -11,13 +11,13 @@ final class SecurityConfig
 {
     public const MANUAL_PROFILE = 'manual';
 
-    public const REASON_CODES = [
-        'unknown_host', 'unknown_sni', 'sni_host_mismatch', 'invalid_method', 'malformed_request', 'header_too_large',
-        'body_too_large', 'header_timeout', 'body_timeout', 'client_rate_exceeded',
-        'domain_rate_exceeded', 'client_connections_exceeded', 'domain_connections_exceeded',
-        'tls_handshake_rate_exceeded', 'origin_capacity_exceeded', 'origin_circuit_open',
-        'cache_abuse_detected', 'domain_restricted', 'domain_quarantined', 'edge_emergency_mode',
-    ];
+    /** The reason codes an edge cell may report; the same file is checked against the Lua runtime in tests/contract. */
+    public static function reasonCodes(): array
+    {
+        static $codes = null;
+
+        return $codes ??= json_decode((string) file_get_contents(resource_path('contracts/security-event-reasons.json')), true, 8, JSON_THROW_ON_ERROR)['reasons'];
+    }
 
     public static function defaults(string $profile = 'standard'): array
     {

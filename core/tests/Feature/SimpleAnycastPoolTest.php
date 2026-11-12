@@ -210,6 +210,34 @@ class SimpleAnycastPoolTest extends TestCase
         app(EdgeAgentController::class)->heartbeat($future);
     }
 
+    public function test_an_unknown_reason_or_missing_hostname_never_fails_the_heartbeat(): void
+    {
+        Queue::fake();
+        $edge = $this->edge('advisory-pop', 'IR', 'AS');
+        $edge->cells()->create(['slot' => 1, 'status' => 'unassigned']);
+        $domain = Domain::query()->create(['name' => 'advisory.test', 'display_name' => 'Advisory', 'lifecycle_state' => 'active', 'revision' => 1]);
+        $now = now()->timestamp;
+        $request = Request::create('/edge/v1/heartbeat', 'POST', [
+            'agent_version' => '1.2.0', 'listener_ready' => false, 'active_sequence' => 0,
+            'cells' => [['name' => 'cell-01', 'status' => 'stopped', 'capacity' => ['active_connections' => 0]]],
+            'noisy_domains' => [
+                ['domain_id' => $domain->id, 'hostname' => 'advisory.test', 'reason_code' => 'a_reason_nobody_listed', 'count' => 3, 'occurred_at' => $now],
+                ['domain_id' => $domain->id, 'reason_code' => 'malformed_request_body', 'count' => 3, 'occurred_at' => $now],
+                ['domain_id' => 999999, 'hostname' => 'gone.test', 'reason_code' => 'client_rate_exceeded', 'count' => 3, 'occurred_at' => $now],
+                'not-an-object',
+            ],
+            'passive_origins' => [['domain' => 'advisory.test', 'hostname' => 'advisory.test', 'failure_count' => 0, 'last_status' => 502, 'last_failed_at' => $now]],
+        ]);
+        $request->attributes->set('edge', $edge);
+
+        $this->assertSame(200, app(EdgeAgentController::class)->heartbeat($request)->getStatusCode());
+
+        $edge->refresh();
+        $this->assertTrue($edge->last_heartbeat_at->greaterThan(now()->subMinute()));
+        $this->assertSame(3, $edge->capacity['advisory_entries_dropped']);
+        $this->assertCount(2, $edge->capacity['noisy_domains']);
+    }
+
     public function test_stale_heartbeat_cannot_lower_a_newer_durable_sequence(): void
     {
         Queue::fake();
