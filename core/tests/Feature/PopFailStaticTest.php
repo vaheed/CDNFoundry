@@ -10,6 +10,7 @@ use App\Models\EdgeProbeResult;
 use App\Models\PlatformDnsSetting;
 use App\Support\EdgeCertificateAuthority;
 use App\Support\PlatformDnsZone;
+use App\Support\SystemHealth;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -72,6 +73,33 @@ class PopFailStaticTest extends TestCase
 
         EdgeProbeResult::query()->where('observer_edge_id', $observers[1]->id)->update(['ok' => true]);
         $this->assertContains('198.51.100.31', $this->published($pool), 'recovery republishes the PoP');
+    }
+
+    public function test_a_stale_heartbeat_and_a_passing_probe_quorum_are_two_separate_facts(): void
+    {
+        $pool = $this->pool();
+        [$target] = $this->endpoint($pool, 'quiet-but-serving', '198.51.100.51');
+        $edge = $target->edge;
+        $edge->update(['last_heartbeat_at' => now()->subHours(2)]);
+        $this->assertNull($edge->servingByProbes(), 'no probe evidence yet');
+        $this->assertSame('Unknown', $edge->servingLabel());
+
+        foreach ([$this->observer(), $this->observer()] as $observer) {
+            $this->probe($observer, $edge, '198.51.100.51', true);
+        }
+        $edge->refresh();
+        $this->assertFalse($edge->controlLinkFresh());
+        $this->assertTrue($edge->servingByProbes());
+        $this->assertSame('Serving', $edge->servingLabel());
+
+        $health = app(SystemHealth::class)->components();
+        $this->assertSame('degraded', $health['edge_control']['status']);
+        $this->assertSame(0, $health['edges']['details']['stale_not_serving']);
+        $this->assertSame(1, $health['edges']['details']['stale']);
+
+        EdgeProbeResult::query()->update(['ok' => false]);
+        $this->assertSame('Not serving', $edge->refresh()->servingLabel());
+        $this->assertSame(1, app(SystemHealth::class)->components()['edges']['details']['stale_not_serving']);
     }
 
     public function test_expired_probe_results_do_not_count(): void

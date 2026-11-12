@@ -34,7 +34,7 @@ final class SystemHealth
 
     private const PUBLIC_GROUPS = [
         'dns' => ['label' => 'DNS', 'description' => 'Authoritative service and zone delivery', 'checks' => ['authoritative_dns' => 'Nameservers', 'dns_deployments' => 'Zone changes']],
-        'edge' => ['label' => 'Edge delivery', 'description' => 'Serving capacity and configuration', 'checks' => ['edges' => 'Edge nodes', 'edge_listeners' => 'Listeners', 'edge_cells' => 'Serving cells', 'service_pools' => 'Service pools', 'edge_configuration' => 'Configuration', 'edge_placements' => 'Placement', 'edge_capacity' => 'Capacity']],
+        'edge' => ['label' => 'Edge delivery', 'description' => 'Serving capacity and configuration', 'checks' => ['edges' => 'Edge nodes', 'edge_control' => 'Control link', 'edge_listeners' => 'Listeners', 'edge_cells' => 'Serving cells', 'service_pools' => 'Service pools', 'edge_configuration' => 'Configuration', 'edge_placements' => 'Placement', 'edge_capacity' => 'Capacity']],
         'tls' => ['label' => 'TLS', 'description' => 'Certificate issuance and renewal', 'checks' => ['tls' => 'Certificates']],
         'cache' => ['label' => 'Cache and origin', 'description' => 'Purge and runtime task delivery', 'checks' => ['purges' => 'Cache purges', 'runtime_tasks' => 'Runtime tasks']],
         'security' => ['label' => 'Security', 'description' => 'Emergency controls and IP intelligence', 'checks' => ['emergency_modes' => 'Emergency modes', 'mmdb' => 'GeoIP data']],
@@ -109,8 +109,12 @@ final class SystemHealth
 
         $heartbeatSeconds = app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds');
         $enabledEdges = Edge::query()->where('enabled', true)->count();
-        $staleEdges = Edge::query()->where('enabled', true)->where(fn ($query) => $query->whereNull('last_heartbeat_at')->orWhere('last_heartbeat_at', '<', now()->subSeconds($heartbeatSeconds)))->count();
-        $components['edges'] = $this->state($enabledEdges === 0 ? 'degraded' : ($staleEdges > 0 ? 'degraded' : 'healthy'), ['enabled' => $enabledEdges, 'stale' => $staleEdges]);
+        $staleEdgeRows = Edge::query()->where('enabled', true)->where(fn ($query) => $query->whereNull('last_heartbeat_at')->orWhere('last_heartbeat_at', '<', now()->subSeconds($heartbeatSeconds)))->get();
+        $staleEdges = $staleEdgeRows->count();
+        // An edge the control plane has not heard from but that other PoPs still reach is serving; only the control link is down.
+        $staleAndNotServing = $staleEdgeRows->filter(fn (Edge $edge): bool => $edge->servingByProbes() !== true)->count();
+        $components['edges'] = $this->state($enabledEdges === 0 || $staleAndNotServing > 0 ? 'degraded' : 'healthy', ['enabled' => $enabledEdges, 'stale' => $staleEdges, 'stale_not_serving' => $staleAndNotServing]);
+        $components['edge_control'] = $this->state($staleEdges > 0 ? 'degraded' : 'healthy', ['stale' => $staleEdges]);
         $listenerFailures = Edge::query()->where('enabled', true)->where('drained', false)
             ->where(fn ($query) => $query->whereNull('capacity->listener_ready')->orWhere('capacity->listener_ready', '!=', true))->count();
         $components['edge_listeners'] = $this->state($listenerFailures > 0 ? 'degraded' : 'healthy', ['not_ready' => $listenerFailures]);
