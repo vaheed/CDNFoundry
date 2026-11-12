@@ -31,6 +31,33 @@ start maintenance for their own domain.
 
 ## Apply a control
 
+### Incident profile on a domain
+
+The incident profile is one temporary bundle of protections for one domain, and a domain user can turn it on for their own
+domains. Open the domain, choose **Domain actions, Security, Start incident profile**, and pick how long it stays on (15
+minutes to 24 hours).
+
+For that time the domain gets:
+
+- protected request and connection limits for each client;
+- the web application firewall in blocking mode at high sensitivity;
+- only `GET`, `HEAD`, `OPTIONS`, and `POST`, with request bodies up to 1 MiB;
+- a browser challenge before a visitor reaches the origin.
+
+The profile ends by itself when its time is up, or sooner with **End incident profile**. The domain page shows a banner while it
+is on, with who started it, when it ends, and each protection. Starting and ending it each send one overlay to the cells and no
+configuration revision, and each is recorded in the audit log. Users who chose the **Incident profile started** and **ended**
+events in [notifications](notifications.md) get a message for each.
+
+::: warning What is enforced today
+The profile's request limits are enforced on the cells now. The firewall mode, the method and body restriction, and the browser
+challenge are delivered to the cells in the same overlay, and the banner marks them "takes effect with the updated cell runtime"
+until that runtime enforces them.
+:::
+
+This protects your origin and the cells from request floods. It cannot absorb traffic that saturates a host, a link, or an
+upstream. The same actions are in the API under `/api/domains/{domain}/incident`.
+
 ### Under Attack mode, quarantine, and maintenance on a domain
 
 <DocTabs :labels="['Panel', 'API']">

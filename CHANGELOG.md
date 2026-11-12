@@ -16,6 +16,10 @@ single source of truth; `make version-check` enforces it.
   their own domains to an HTTPS endpoint or S3-compatible storage. One shared `log-pusher` worker reads each
   destination's own rows from ClickHouse by cursor; nothing runs per domain, and serving and central telemetry are
   unaffected.
+- Incident profile: a domain user turns on one time-limited bundle of protections for their own domain (tighter limits,
+  firewall blocking, restricted methods and body size, a browser challenge). It expires on its own, ends early in one click,
+  travels as a single overlay with no configuration revision, and is audited. Request limits are enforced now; the other
+  protections are delivered and take effect with the updated cell runtime.
 - A private Alertmanager receiver in the control plane. It stores nothing and queues one message per alert group.
 
 ### Removed
