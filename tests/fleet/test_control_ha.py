@@ -1,6 +1,7 @@
 """The two-node control plane in the fleet generator: what is rendered, what the commands run, and in what order."""
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -125,6 +126,15 @@ def standby_added(store: FleetState, repo: Path, tmp_path: Path, certificate: tu
     return instance, runner
 
 
+def digest_without_firewall(path: Path) -> str:
+    """Bundle digest ignoring firewall.sh, the one file that lists every fleet address."""
+    digest = hashlib.sha256()
+    for item in sorted(p for p in path.rglob("*") if p.is_file() and p.name != "firewall.sh"):
+        digest.update(str(item.relative_to(path)).encode())
+        digest.update(item.read_bytes())
+    return digest.hexdigest()
+
+
 def test_a_second_control_node_is_refused_without_the_standby_workflow(store: FleetState) -> None:  # noqa: F811
     add(store, node("control-1", "control", "192.0.2.10"))
     with pytest.raises(ValidationError, match="control add-standby"):
@@ -137,8 +147,8 @@ def test_add_standby_runs_in_order_and_reaches_ready(store: FleetState, repo: Pa
     order = [runner.index("start.sh", "control-1"), runner.index("cdnf:control:manage addresses"), runner.index("ha/prepare-source.sh"),
              runner.index("push", "control-2"), runner.index("ha/seed-standby.sh"), runner.index("ha/status.sh")]
     assert order == sorted(order), runner.commands()
-    # Edges and DNS hosts are never touched: no push, no command.
-    assert not {name for name, _ in runner.calls} & {"edge-1", "dns-1"}
+    # Edge and DNS hosts only receive a refreshed bundle (their firewall admits the new control address); no other command runs there.
+    assert {command for name, command in runner.calls if name in {"edge-1", "dns-1"}} <= {"push", "./start.sh"}
     assert "--addresses=192.0.2.10,192.0.2.11" in runner.commands()[runner.index("cdnf:control:manage addresses")]
     state = store.load()
     assert ha.section(state)["mode"] == "two-node" and ha.role_of(state, "control-2") == "standby"
@@ -147,18 +157,19 @@ def test_add_standby_runs_in_order_and_reaches_ready(store: FleetState, repo: Pa
     assert instance.check(state)["ha"] == "ready"
 
 
-def test_add_standby_does_not_change_an_edge_or_dns_bundle(store: FleetState, repo: Path, tmp_path: Path, certificate: tuple[Path, Path]) -> None:  # noqa: F811
+def test_add_standby_changes_only_the_edge_and_dns_firewall_allowlist(store: FleetState, repo: Path, tmp_path: Path, certificate: tuple[Path, Path]) -> None:  # noqa: F811
     fleet(store)
     output = tmp_path / "bundles"
     with store.locked():
         Renderer(repo, store, output).render(store.load())
-    before = {name: bundle_digest(output / name) for name in ("edge-1", "dns-1")}
+    before_without_firewall = {name: digest_without_firewall(output / name) for name in ("edge-1", "dns-1")}
     standby_added_after = FakeRunner()
     instance = control(store, repo, tmp_path, standby_added_after)
     with store.locked():
         instance.add_standby("192.0.2.11", name="control-2", replication_address="10.9.0.2", active_replication_address="10.9.0.1",
                              certificate=certificate[0], key=certificate[1])
-    assert {name: bundle_digest(output / name) for name in ("edge-1", "dns-1")} == before
+    # Only the firewall allowlist changes (it admits the new control address); every other file stays byte-identical.
+    assert {name: digest_without_firewall(output / name) for name in ("edge-1", "dns-1")} == before_without_firewall
 
 
 def test_both_control_addresses_reach_every_allowlist_and_the_peer_configuration(store: FleetState, repo: Path, tmp_path: Path, certificate: tuple[Path, Path]) -> None:  # noqa: F811
@@ -347,7 +358,7 @@ def test_remove_standby_returns_to_one_node(store: FleetState, repo: Path, tmp_p
     state = store.load()
     assert "control-2" not in state["nodes"] and ha.section(state)["mode"] == "none"
     assert "CONTROL_PEER_ADDRESSES" not in env_values(tmp_path / "bundles/control-1/.env.prod") or not env_values(tmp_path / "bundles/control-1/.env.prod")["CONTROL_PEER_ADDRESSES"]
-    assert not {name for name, _ in runner.calls} & {"edge-1", "dns-1"}
+    assert {command for name, command in runner.calls if name in {"edge-1", "dns-1"}} <= {"push", "./start.sh"}
 
 
 def test_the_control_group_is_in_the_command_line(tmp_path: Path) -> None:

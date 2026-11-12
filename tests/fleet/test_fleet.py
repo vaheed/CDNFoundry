@@ -529,6 +529,8 @@ def test_generated_start_uses_host_enrollment_without_editing_script(store: Flee
     # Exercise generated activation and its Compose boundary. Configuration,
     # PKI and actual service startup have their separate qualification jobs.
     (bundle / "validate.sh").write_text("#!/bin/sh\nexit 0\n")
+    # The host firewall is qualified in test_firewall.py; applying it here would change the machine running the tests.
+    (bundle / "firewall.sh").write_text("#!/bin/sh\nexit 0\n")
     binary = tmp_path / "bin"
     binary.mkdir()
     # Host ownership is qualified against real container users in the runtime
@@ -1548,7 +1550,12 @@ def test_production_compose_uses_env_file_contract_and_control_has_mmdb_updater(
     for overlay in (root / "deploy/production").glob("*.yml"):
         compose_text += overlay.read_text(encoding="utf-8")
     assert "${" in compose_text
-    assert ":-" not in compose_text
+    # Only these optional settings may fall back to a documented default; everything else must come from the env file.
+    optional_defaults = ("${CORS_ALLOWED_ORIGINS:-}", "${CONTENT_SECURITY_POLICY:-enforce}", "${MANAGEMENT_NETWORKS:-0.0.0.0/0 ::/0}")
+    unexplained = compose_text
+    for allowed in optional_defaults:
+        unexplained = unexplained.replace(allowed, "")
+    assert ":-" not in unexplained
     assert "${CDNF_CORE_IMAGE:?" in compose_text
     assert "grafana/grafana:12.4.11@sha256:" in compose_text
     assert "${CDNF_GRAFANA_IMAGE" not in compose_text
